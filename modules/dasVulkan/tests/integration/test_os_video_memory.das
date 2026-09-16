@@ -17,9 +17,7 @@ def test_os_video_memory(t : T?) {
     let phys = select_physical_device(instance)
     var idp = VkPhysicalDeviceIDProperties()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(idp)
-    }
+    p2.pNext = unsafe(addr<void?>(idp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     let os = os_video_memory(phys)
     let answered = os.budget > 0ul

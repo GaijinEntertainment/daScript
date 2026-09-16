@@ -215,39 +215,37 @@ struct public HdrResources {
 }
 
 def public finalize(var r : HdrResources) {
-    unsafe {
-        delete r.readback
-        delete r.desc_pool
-        delete r.composite_pipeline
-        delete r.composite_pipe_layout
-        delete r.composite_set_layouts
-        delete r.up_pipeline
-        delete r.down_pipeline
-        delete r.bright_pipeline
-        delete r.post_pipe_layout
-        delete r.post_set_layouts
-        delete r.scene_pipeline
-        delete r.scene_pipe_layout
-        delete r.scene_set_layouts
-        delete r.ubo
-        delete r.inst_buf
-        delete r.cube_ib
-        delete r.cube_vb
-        delete r.sampler_linear_clamp
-        delete r.fb_composite
-        delete r.fb_post_load
-        delete r.fb_post_clear
-        delete r.fb_scene
-        delete r.rp_composite
-        delete r.rp_post_load
-        delete r.rp_post_clear
-        delete r.rp_scene
-        delete r.readback_8bit
-        delete r.ldr_color
-        delete r.bloom
-        delete r.hdr_depth
-        delete r.hdr_color
-    }
+    delete r.readback
+    delete r.desc_pool
+    delete r.composite_pipeline
+    delete r.composite_pipe_layout
+    delete r.composite_set_layouts
+    delete r.up_pipeline
+    delete r.down_pipeline
+    delete r.bright_pipeline
+    delete r.post_pipe_layout
+    delete r.post_set_layouts
+    delete r.scene_pipeline
+    delete r.scene_pipe_layout
+    delete r.scene_set_layouts
+    delete r.ubo
+    delete r.inst_buf
+    delete r.cube_ib
+    delete r.cube_vb
+    delete r.sampler_linear_clamp
+    delete r.fb_composite
+    delete r.fb_post_load
+    delete r.fb_post_clear
+    delete r.fb_scene
+    delete r.rp_composite
+    delete r.rp_post_load
+    delete r.rp_post_clear
+    delete r.rp_scene
+    delete r.readback_8bit
+    delete r.ldr_color
+    delete r.bloom
+    delete r.hdr_depth
+    delete r.hdr_color
 }
 
 struct public HdrContext {
@@ -259,12 +257,10 @@ struct public HdrContext {
 }
 
 def public finalize(var ctx : HdrContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 // ===== build =====
@@ -1069,12 +1065,10 @@ def public render_hdr_frame(var ctx : HdrContext; time, camera_t : float) : arra
         region.dstOffsets[1].x = HDR_W
         region.dstOffsets[1].y = HDR_H
         region.dstOffsets[1].z = 1
-        unsafe {
-            vkCmdBlitImage(boost_value_to_vk(cmd),
-                boost_value_to_vk(ctx.res.ldr_color.image),     VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                boost_value_to_vk(ctx.res.readback_8bit.image), VkImageLayout.TRANSFER_DST_OPTIMAL,
-                1u, addr(region), VkFilter.NEAREST)
-        }
+        vkCmdBlitImage(boost_value_to_vk(cmd),
+            boost_value_to_vk(ctx.res.ldr_color.image),     VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            boost_value_to_vk(ctx.res.readback_8bit.image), VkImageLayout.TRANSFER_DST_OPTIMAL,
+            1u, unsafe(addr(region)), VkFilter.NEAREST)
         // readback_8bit -> TRANSFER_SRC_OPTIMAL so copy_image_to_buffer can read it.
         transition_image(cmd, ctx.res.readback_8bit.image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
             transfer_write, transfer_read, transfer_stage, transfer_stage)

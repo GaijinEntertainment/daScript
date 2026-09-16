@@ -248,17 +248,13 @@ def private staging_roundtrip(var device : Device; phys : VkPhysicalDevice; var 
         run_cmd_sync(device, pool, queue) $(cmd) {
             var region : VkBufferCopy
             region.size = uint64(db.bytes)
-            unsafe {
-                vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(stage), boost_value_to_vk(db.buf), 1u, addr(region))
-            }
+            vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(stage), boost_value_to_vk(db.buf), 1u, unsafe(addr(region)))
         }
     } else {
         run_cmd_sync(device, pool, queue) $(cmd) {
             var region : VkBufferCopy
             region.size = uint64(db.bytes)
-            unsafe {
-                vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(db.buf), boost_value_to_vk(stage), 1u, addr(region))
-            }
+            vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(db.buf), boost_value_to_vk(stage), 1u, unsafe(addr(region)))
         }
         unsafe {
             vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(smem), 0ul, uint64(db.bytes), mf, addr(mapped)), null)

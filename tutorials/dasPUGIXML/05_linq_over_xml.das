@@ -122,13 +122,11 @@ def reverse_iteration() {
         print("\n")
         // Fused _fold reverse: the last two cars, reversed, as typed rows — the
         // macro walks backward and stops after 2, never touching cars #1/#2.
-        unsafe {
-            let last_two <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(2).to_array())
-            print("  last 2 (reversed): {[for (c in last_two); c.make]}\n")
-            // reverse |> take(1) is the last car in a single backward step.
-            let newest <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(1).to_array())
-            print("  last car: #{newest[0].id} {newest[0].make}\n")
-        }
+        let last_two <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(2).to_array())
+        print("  last 2 (reversed): {[for (c in last_two); c.make]}\n")
+        // reverse |> take(1) is the last car in a single backward step.
+        let newest <- _fold(from_xml_node(doc.document_element, type<Car>).reverse().take(1).to_array())
+        print("  last car: #{newest[0].id} {newest[0].make}\n")
     }
 }
 

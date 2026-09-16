@@ -48,9 +48,7 @@ def test_get_agent_context_callable(t : T?) {
     t |> run("get_debug_agent_context returns callable context") @(t : T?) {
         ensure_lifecycle()
         // If this doesn't throw, the context is valid
-        unsafe {
-            invoke_in_context(get_debug_agent_context("lifecycle"), "lifecycle_noop")
-        }
+        unsafe(invoke_in_context(get_debug_agent_context("lifecycle"), "lifecycle_noop"))
         t |> equal(true, true)
     }
 }

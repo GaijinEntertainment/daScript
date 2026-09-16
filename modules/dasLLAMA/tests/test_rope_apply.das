@@ -268,9 +268,7 @@ def private part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : 
     ref_neox(v, want, pos, hs, rot, n, theta, fscale, mscale, ff, false)
     var got : array<float>
     copy_vec(v, got, n)
-    unsafe {
-        rope_scaled_neox_part(addr(got[0]), pos, hs, rot, n, theta, fscale, false, null, mscale)
-    }
+    rope_scaled_neox_part(unsafe(addr(got[0])), pos, hs, rot, n, theta, fscale, false, null, mscale)
     cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_part hs={int(hs)} rot={int(rot)} pos={int(pos)}")
     var compact : array<float>
     compact |> resize(nh * rot)
@@ -314,9 +312,7 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     ref_neox(v, want, pos, hs, rot, n, theta, fscale, mscale, ff, false)
     var direct : array<float>
     copy_vec(v, direct, n)
-    unsafe {
-        rope_scaled_neox_part(addr(direct[0]), pos, hs, rot, n, theta, fscale, false, null, mscale)
-    }
+    rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, fscale, false, null, mscale)
     var ct : array<float>
     var st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, rot)
@@ -370,9 +366,7 @@ def test_rope_apply_dispatch(t : T?) {
             }
             var pform : array<float>
             copy_vec(v, pform, n)
-            unsafe {
-                rope_apply(addr(pform[0]), pos, hs, n, 10000.0, 1.0, false, null, neox, 1.19)
-            }
+            rope_apply(unsafe(addr(pform[0])), pos, hs, n, 10000.0, 1.0, false, null, neox, 1.19)
             cmp_exact(t, pform, leaf, n, "rope_apply(ptr, neox={neox}) == the leaf")
             var aform : array<float>
             copy_vec(v, aform, n)
@@ -442,9 +436,7 @@ def private ff_gate(t : T?; pos, hs, nh : int64; neox : bool) {
     }
     var got : array<float>
     copy_vec(v, got, n)
-    unsafe {
-        rope_apply(addr(got[0]), pos, hs, n, 500000.0, 1.0, true, ff_ptr(ff), neox, 1.0)
-    }
+    rope_apply(unsafe(addr(got[0])), pos, hs, n, 500000.0, 1.0, true, ff_ptr(ff), neox, 1.0)
     cmp_bar(t, got, want, n, ROPE_BAR, "freq-factors (neox={neox}) hs={int(hs)} pos={int(pos)}")
     var ones : array<float>
     ones |> resize(hs / 2l)

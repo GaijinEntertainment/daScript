@@ -149,19 +149,17 @@ class SerializableMacro : AstStructureAnnotation {
         }
 
         // Get body as ExprBlock so we can append statements
-        unsafe {
-            var blk = reinterpret<ExprBlock?>(fn.body)
+        var blk = unsafe(reinterpret<ExprBlock?>(fn.body))
 
-            // Append one print group per serializable field
-            for (fld in st.fields) {
-                // Skip _version + non-serializable types (only known after inference)
-                if (fld.name == "_version"
-                        || fld._type.baseType == Type.tLambda
-                        || fld._type.baseType == Type.tFunction) continue
-                blk.list |> emplace_new <| qmacro(print($v("  {fld.name} = ")))
-                blk.list |> emplace_new <| qmacro(print("{obj.$f(fld.name)}"))
-                blk.list |> emplace_new <| qmacro(print($v("\n")))
-            }
+        // Append one print group per serializable field
+        for (fld in st.fields) {
+            // Skip _version + non-serializable types (only known after inference)
+            if (fld.name == "_version"
+                    || fld._type.baseType == Type.tLambda
+                    || fld._type.baseType == Type.tFunction) continue
+            blk.list |> emplace_new <| qmacro(print($v("  {fld.name} = ")))
+            blk.list |> emplace_new <| qmacro(print("{obj.$f(fld.name)}"))
+            blk.list |> emplace_new <| qmacro(print($v("\n")))
         }
 
         // Mark as patched and trigger re-inference

@@ -429,12 +429,11 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
 
     match (subrule_variant) {
         if (Rule(nonterminal = $v(nonterm))) {
-            unsafe {// Moving values that contain smart pointers is generally unsafe
-                   // But here we know that the contained variant is nonterminal (string) and cannot
-                   // possibly contain valid smart pointer. Therefore it should be safe to overwrite it.
-                subrule_.rule <- Rule(bound_nonterminal =  (nonterm, handle))
-                return
-            }
+            // Moving values that contain smart pointers is generally unsafe
+            // But here we know that the contained variant is nonterminal (string) and cannot
+            // possibly contain valid smart pointer. Therefore it should be safe to overwrite it.
+            subrule_.rule <- Rule(bound_nonterminal =  (nonterm, handle))
+            return
         }
 
         if (Rule(terminal = $v(term))) {

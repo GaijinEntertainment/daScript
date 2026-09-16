@@ -189,24 +189,18 @@ def main {
         for (step in scenario.steps) {
             if (!empty(step.feed)) terminal_feed_bytes(terminal, step.feed)
             if (step.resize != null) {
-                unsafe {
-                    terminal_resize(terminal, step.resize.columns, step.resize.rows)
-                }
+                terminal_resize(terminal, step.resize.columns, step.resize.rows)
             }
             if (!empty(step.checkpoint)) {
-                unsafe {
-                    check(checkpoint_index < length(expected.checkpoints),
-                        "extra checkpoint {scenario.id}/{step.checkpoint}")
-                    check(expected.checkpoints[checkpoint_index].checkpoint == step.checkpoint,
-                        "checkpoint order {scenario.id}/{step.checkpoint}")
-                    assert_checkpoint(terminal, expected.checkpoints[checkpoint_index], scenario.id)
-                    checkpoint_index++
-                }
+                check(checkpoint_index < length(expected.checkpoints),
+                    "extra checkpoint {scenario.id}/{step.checkpoint}")
+                check(expected.checkpoints[checkpoint_index].checkpoint == step.checkpoint,
+                    "checkpoint order {scenario.id}/{step.checkpoint}")
+                assert_checkpoint(terminal, expected.checkpoints[checkpoint_index], scenario.id)
+                checkpoint_index++
             }
         }
-        unsafe {
-            check(checkpoint_index == length(expected.checkpoints),
-                "missing checkpoint {scenario.id}")
-        }
+        check(checkpoint_index == length(expected.checkpoints),
+            "missing checkpoint {scenario.id}")
     }
 }

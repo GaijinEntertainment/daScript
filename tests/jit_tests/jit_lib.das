@@ -13,20 +13,17 @@ let SHARED_FIXTURE = "{get_das_root()}/tests-cpp/big/standalone_ctx/standalone_i
 
 
 def private spawn(cmd : string; var lines : array<string>) : int {
-    var rc : int
-    unsafe {
-        rc = popen_timeout("{cmd} 2>&1", 600.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = strip(fgets(f))
-                if (!(ln |> empty())) {
-                    lines |> push("{ln}")
-                }
+    let rc = unsafe(popen_timeout("{cmd} 2>&1", 600.0) $(f) {
+        if (f == null) {
+            return
+        }
+        while (!feof(f)) {
+            let ln = strip(fgets(f))
+            if (!(ln |> empty())) {
+                lines |> push("{ln}")
             }
         }
-    }
+    })
     return rc
 }
 

@@ -145,9 +145,7 @@ def test_struct_pointer(t : T?) {
         let ok = sscan_json("\{\"inner\":\{\"x\":7,\"y\":1.0\},\"tag\":\"ptr\"\}", v)
         t |> success(ok)
         t |> success(v.inner != null, "ptr not null")
-        unsafe {
-            t |> equal(v.inner.x, 7)
-        }
+        t |> equal(v.inner.x, 7)
         t |> equal(v.tag, "ptr")
     }
     t |> run("null pointer") @(t : T?) {
@@ -180,10 +178,8 @@ def test_arrays(t : T?) {
         t |> success(v.ptrs[0] != null, "ptrs[0] not null")
         t |> success(v.ptrs[1] == null, "ptrs[1] null")
         t |> success(v.ptrs[2] != null, "ptrs[2] not null")
-        unsafe {
-            t |> equal(v.ptrs[0].x, 10)
-            t |> equal(v.ptrs[2].x, 30)
-        }
+        t |> equal(v.ptrs[0].x, 10)
+        t |> equal(v.ptrs[2].x, 30)
     }
     t |> run("empty arrays") @(t : T?) {
         var v : WithArrays
@@ -282,10 +278,8 @@ def test_deep_nesting(t : T?) {
         t |> success(ok)
         t |> equal(v.name, "deep")
         t |> success(v.l2 != null, "l2 not null")
-        unsafe {
-            t |> success(v.l2.l3 != null, "l3 not null")
-            t |> equal(v.l2.l3.value, 777)
-        }
+        t |> success(v.l2.l3 != null, "l3 not null")
+        t |> equal(v.l2.l3.value, 777)
     }
 }
 
@@ -300,12 +294,10 @@ def test_array_of_struct_ptrs(t : T?) {
         let ok = sscan_json("\{\"messages\":[\{\"id\":1,\"text\":\"hi\",\"from\":\"alice\"\},\{\"id\":2,\"text\":\"bye\",\"from\":\"bob\"\}]\}", v)
         t |> success(ok)
         t |> equal(length(v.messages), 2)
-        unsafe {
-            t |> equal(v.messages[0].id, 1l)
-            t |> equal(v.messages[0].text, "hi")
-            t |> equal(v.messages[0]._from, "alice")
-            t |> equal(v.messages[1].id, 2l)
-        }
+        t |> equal(v.messages[0].id, 1l)
+        t |> equal(v.messages[0].text, "hi")
+        t |> equal(v.messages[0]._from, "alice")
+        t |> equal(v.messages[1].id, 2l)
     }
 }
 
@@ -363,9 +355,7 @@ def test_round_trip(t : T?) {
         t |> equal(dst.name, "test")
         t |> equal(dst.flag, true)
         t |> success(dst.inner != null, "rt inner")
-        unsafe {
-            t |> equal(dst.inner.x, 7)
-        }
+        t |> equal(dst.inner.x, 7)
         t |> equal(length(dst.items), 3)
         t |> equal(dst.items[1], 20)
     }

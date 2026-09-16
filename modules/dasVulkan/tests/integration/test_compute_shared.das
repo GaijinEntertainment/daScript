@@ -90,10 +90,8 @@ def private run_compute_shared() : array<uint> {   // nolint:STYLE038 - flat com
     var dslci = VkDescriptorSetLayoutCreateInfo()
     dslci.bindingCount = 1u
     var set_layout : VkDescriptorSetLayout
-    unsafe {
-        dslci.pBindings = addr(binding)
-        vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
-    }
+    dslci.pBindings = unsafe(addr(binding))
+    vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
     var pool_size : VkDescriptorPoolSize
     pool_size.type_ = VkDescriptorType.STORAGE_BUFFER
     pool_size.descriptorCount = 1u
@@ -101,10 +99,8 @@ def private run_compute_shared() : array<uint> {   // nolint:STYLE038 - flat com
     dpci.maxSets = 1u
     dpci.poolSizeCount = 1u
     var desc_pool : VkDescriptorPool
-    unsafe {
-        dpci.pPoolSizes = addr(pool_size)
-        vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
-    }
+    dpci.pPoolSizes = unsafe(addr(pool_size))
+    vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
     var dsai = VkDescriptorSetAllocateInfo()
     dsai.descriptorPool = desc_pool
     dsai.descriptorSetCount = 1u
@@ -129,10 +125,8 @@ def private run_compute_shared() : array<uint> {   // nolint:STYLE038 - flat com
     var plci = VkPipelineLayoutCreateInfo()
     plci.setLayoutCount = 1u
     var pipe_layout : VkPipelineLayout
-    unsafe {
-        plci.pSetLayouts = addr(set_layout)
-        vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
-    }
+    plci.pSetLayouts = unsafe(addr(set_layout))
+    vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
     stage.module_ = boost_value_to_vk(shader)
@@ -150,10 +144,8 @@ def private run_compute_shared() : array<uint> {   // nolint:STYLE038 - flat com
     var inscope pool <- create_command_pool(device, poolci)
     run_cmd_sync(device, pool, queue) $(cmd) {
         vkCmdBindPipeline(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipeline)
-        unsafe {
-            vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout,
-                0u, 1u, addr(desc_set), 0u, null)
-        }
+        vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout,
+            0u, 1u, unsafe(addr(desc_set)), 0u, null)
         vkCmdDispatch(boost_value_to_vk(cmd), 1u, 1u, 1u)
     }
 

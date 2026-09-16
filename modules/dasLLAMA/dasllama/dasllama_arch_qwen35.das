@@ -887,33 +887,27 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
     let vtq4 = s.kv_dtype_v == KVDtype.tq4
     if (ktq4 || vtq4) {   // tq4 basis change (attention_std_prefill's twin); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-                tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-            }
-            if (vtq4) {
-                tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-            }
+        let sgp = unsafe(addr < float const? >(s.kv_signs[0]))
+        if (ktq4) {
+            tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
+            tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
+        }
+        if (vtq4) {
+            tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
         }
         prof_add("tq4_rot", ts_rot)
     }
     let ts_kv = prof_ticks()
     let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
-    unsafe {
-        kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-            addr < KVRun const? >(s.kv_runs[0]), store_nrun, start_pos, npos, kv_dim)
-    }
+    kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
+        unsafe(addr < KVRun const? >(s.kv_runs[0])), store_nrun, start_pos, npos, kv_dim)
     prof_add("kv_store", ts_kv)
     let ts_attn = prof_ticks()
     prefill_attention(s, kcl, vcl, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
                       false, 0l, c.attn_logit_softcap, null)
     prof_add("attn", ts_attn)
     if (vtq4) {   // un-rotate every position's xb before the out-gate (gate is in the original basis)
-        unsafe {
-            tq4_unrotate_batch(s.xb_b, npos, qd, head_size, addr < float const? >(s.kv_signs[0]))
-        }
+        tq4_unrotate_batch(s.xb_b, npos, qd, head_size, unsafe(addr < float const? >(s.kv_signs[0])))
     }
     // threaded + exp4: serial scalar loop was npos·qd (2.1M @pp512) libm exps, ~10ms all-lane hole/layer
     let ts_gate = prof_ticks()

@@ -435,9 +435,7 @@ def match_copy(var cmdm : CmdLocate; cmd : Cmd) {
     if (cmd.rtti != "CmdLocate") {
         return false
     }
-    unsafe {
-        cmdm = reinterpret<CmdLocate const&>(cmd)
-    }
+    cmdm = unsafe(reinterpret<CmdLocate const&>(cmd))
     return true
 }
 

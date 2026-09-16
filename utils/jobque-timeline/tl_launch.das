@@ -44,9 +44,7 @@ def public split_args(s : string) : array<string> {
                 in_quote = !in_quote
             } elif (!in_quote && (c == ' ' || c == '\t' || c == '\n' || c == '\r')) {
                 if (!empty(cur)) {
-                    unsafe {
-                        out |> push(string(cur))
-                    }
+                    out |> push(string(cur))
                     cur |> clear()
                 }
             } else {
@@ -55,9 +53,7 @@ def public split_args(s : string) : array<string> {
         }
     }
     if (!empty(cur)) {
-        unsafe {
-            out |> push(string(cur))
-        }
+        out |> push(string(cur))
     }
     delete cur
     return <- out
@@ -155,9 +151,7 @@ def public launch_pump(var L : LaunchRail) : bool {
                 finished = true
             } else {
                 var line = ""
-                unsafe {
-                    line = clone_string(m.text)
-                }
+                line = clone_string(m.text)
                 L.tail |> push(line)
                 if (length(L.tail) > 60) {
                     L.tail |> erase(0)
@@ -166,9 +160,7 @@ def public launch_pump(var L : LaunchRail) : bool {
         }
     }
     if (finished) {
-        unsafe {
-            channel_remove(L.ch)
-        }
+        unsafe(channel_remove(L.ch))
         L.ch = null
     }
     return finished

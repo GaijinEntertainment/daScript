@@ -118,9 +118,7 @@ def private aligned_f32(@scratch var arr : array<float>; n : int64) : float? {
     var p = unsafe(addr(arr[0]))
     let mis = int64(unsafe(reinterpret<uint64>(p)) & uint64(PROBE_ALIGN - 1l))
     if (mis != 0l) {
-        unsafe {
-            p = p + (PROBE_ALIGN - mis) / 4l
-        }
+        p = unsafe(p + (PROBE_ALIGN - mis) / 4l)
     }
     return p
 }
@@ -131,17 +129,13 @@ let STREAM_STAGGER = (4096l + 64l) / 4l   // floats: 4KB + one cache line
 // one bench never share a page offset - the same geometry every run, and not the all-aliased one
 def private aligned_stream(@scratch var arr : array<float>; n : int64; slot : int) : float? {
     var p = aligned_f32(arr, n + STREAM_STAGGER * 8l)
-    unsafe {
-        p = p + STREAM_STAGGER * int64(slot)
-    }
+    p = unsafe(p + STREAM_STAGGER * int64(slot))
     return p
 }
 
 def private reset_stream(var dp : float?; d0 : array<float>) {
-    unsafe {
-        for (j in range64(length(d0))) {
-            dp[j] = d0[j]
-        }
+    for (j in range64(length(d0))) {
+        unsafe(dp[j]) = d0[j]
     }
 }
 
@@ -743,10 +737,8 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
     var inscope sb : array<float>
     var dp = aligned_stream(db, N, 0)
     var sp = aligned_stream(sb, N, 1)
-    unsafe {
-        for (j in range64(N)) {
-            sp[j] = s[j]
-        }
+    for (j in range64(N)) {
+        unsafe(sp[j]) = s[j]
     }
 
     var inscope names : array<string>
@@ -1977,10 +1969,8 @@ def bench_quantize() : string {
             let f = vs[i]._1
             let t0 = ref_time_ticks()
             for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
-                unsafe {
-                    for (p in range64(npos)) {
-                        invoke(f, srcp + p * N, N, qp, sp, p * N, p * nb)
-                    }
+                for (p in range64(npos)) {
+                    invoke(f, unsafe(srcp + p * N), N, qp, sp, p * N, p * nb)
                 }
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
@@ -2186,10 +2176,8 @@ def bench_gemm_tile() : string {
     for (i in range(nv)) {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
-        unsafe {
-            for (j in range64(4l * NN)) {
-                cp[j] = 0.0f
-            }
+        for (j in range64(4l * NN)) {
+            unsafe(cp[j]) = 0.0f
         }
         let f = vs[i]._1
         invoke(f, cp, ap, bp, 0l, 0l, K, NN)

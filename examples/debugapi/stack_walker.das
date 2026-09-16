@@ -199,10 +199,8 @@ class DiagnosticAgent : DapiDebugAgent {
 
     def override onVariable(var ctx : Context; category, name : string;
                             info : TypeInfo; data : void?) : void {
-        unsafe {
-            let value = sprint_data(data, addr(info), print_flags.singleLine)
-            print("  reported {category}: {name} = {value}\n")
-        }
+        let value = sprint_data(data, unsafe(addr(info)), print_flags.singleLine)
+        print("  reported {category}: {name} = {value}\n")
     }
 }
 

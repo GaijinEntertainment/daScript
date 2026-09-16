@@ -1158,9 +1158,7 @@ def private resize_buffer(var buffer : TerminalBuffer; old_columns, old_rows,
     for (logical in range(length(buffer.history))) {
         let index = history_index(buffer, logical)
         let old_count = length(buffer.history[index].cells)
-        unsafe {
-            buffer.history[index].cells |> resize(columns)
-        }
+        buffer.history[index].cells |> resize(columns)
         for (column in range(old_count, columns)) {
             buffer.history[index].cells[column] = blank_cell(logical, column)
         }

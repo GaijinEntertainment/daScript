@@ -113,6 +113,7 @@ class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
     ascii_strings : bool = false
+    with_module_is_unsafe : bool = false
     warning_count : int = 0
     collect_warnings : bool = false
     warnings : array<string>
@@ -2680,6 +2681,7 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprLet(expr : ExprLet?) : void {
         //! Mirror `isLocalOrGlobal` check from ast_infer_type.cpp:4989 — `let v & = E` requires unsafe at statement level when `E` is non-local-non-temporary. Mark the let's frame so the enclosing `unsafe { ... }` block can detect it (STYLE025 must stay silent when narrowing would leave the let-ref binding unsatisfied).
         if (expr.genFlags.generated) return
+        if (declaration_owns_unsafe(expr)) mark_unsafe_in_stack()
         for (v in expr.variables) {
             continue if (
                 v._type == null ||
@@ -2702,11 +2704,34 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override preVisitExprDelete(expr : ExprDelete?) : void {
-        if (!expr.genFlags.generated) mark_unsafe_in_stack()
+        if (expr.genFlags.generated) return
+        if (expr.subexpr == null || expr.subexpr._type == null || !expr.subexpr._type.isSafeToDelete) {
+            mark_unsafe_in_stack()
+        }
     }
 
     def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool {
         return expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
+    }
+
+    def variable_owns_unsafe(v : VariablePtr) : bool {
+        let vt = v._type
+        return false if (v.flags.generated || vt == null)
+        return ((!vt.flags.ref && (vt.hasClasses
+                || (vt.isStructure && vt.structType != null && vt.structType.flags.isClass)))
+            || (!vt.isLocal && !vt.isGoodBlockType)
+            || (vt.flags.smartPtr && !v.flags.inScope)
+            || (v.flags.inScope && vt.isPointer && vt.firstType != null
+                && vt.firstType.isStructure && vt.firstType.structType != null
+                && vt.firstType.structType.flags.isClass))
+    }
+
+    def declaration_owns_unsafe(expr : ExpressionPtr) : bool {
+        return false if (!(expr is ExprLet))
+        for (v in (expr as ExprLet).variables) {
+            return true if (variable_owns_unsafe(v))
+        }
+        return false
     }
 
     //! `unsafe(delete p)` does not parse, so a block holding a delete anywhere in it has no narrow
@@ -2734,7 +2759,11 @@ class StyleLintVisitor : AstVisitor {
     def lowered_unsafe_delete(expr : ExprCall?) : bool {
         return false if (expr.func == null || length(expr.arguments) != 1)
         let fname = string(expr.func.name)
-        return (expr.func.flags.generated && fname == "finalize") || starts_with(fname, "builtin`finalize`")
+        let is_finalize = ((expr.func.flags.generated && fname == "finalize")
+            || starts_with(fname, "builtin`finalize`") || starts_with(fname, "builtin`finalize_dim`"))
+        return false if (!is_finalize)
+        let at = expr.arguments[0]._type
+        return at == null || !at.isSafeToDelete
     }
 
     def override preVisitExprAddr(expr : ExprAddr?) : void {
@@ -2894,6 +2923,16 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    def is_module_with(expr : ExpressionPtr) : bool {
+        return expr is ExprWith && !empty((expr as ExprWith).moduleName)
+    }
+
+    def override preVisitExprWith(var expr : ExprWith?) : void {
+        if (with_module_is_unsafe && !expr.genFlags.generated && !empty(expr.moduleName)) {
+            mark_unsafe_in_stack()
+        }
+    }
+
     def override visitExprUnsafe(var expr : ExprUnsafe?) : ExpressionPtr {
         let n = length(unsafe_block_stack)
         if (n > 0) {
@@ -2913,6 +2952,8 @@ class StyleLintVisitor : AstVisitor {
                   blk.list[0] is ExprNew ||
                   blk.list[0] is ExprClone ||
                   is_lowered_unsafe_clone(blk.list[0]) ||
+                  declaration_owns_unsafe(blk.list[0]) ||
+                  is_module_with(blk.list[0]) ||
                   block_holds_delete(blk))
                 && !frame.has_non_local_let_ref) {
             var narrowable = true
@@ -2998,6 +3039,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     let empty_enabled : table<string>
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
@@ -3037,6 +3079,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
@@ -3068,6 +3111,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {

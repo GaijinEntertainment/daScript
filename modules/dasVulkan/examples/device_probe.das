@@ -4,7 +4,7 @@ options _comment_hygiene = true
 require vulkan
 
 [export]
-def main() {   // nolint:STYLE038 - flat example scaffold
+def main() {
     if (volkInitialize() != 0) {
         print("no Vulkan\n")
         return
@@ -14,9 +14,7 @@ def main() {   // nolint:STYLE038 - flat example scaffold
     ai.apiVersion = (1u << 22u) | (3u << 12u)
     var ici : VkInstanceCreateInfo
     ici.sType = VkStructureType.INSTANCE_CREATE_INFO
-    unsafe {
-        ici.pApplicationInfo = addr(ai)
-    }
+    ici.pApplicationInfo = unsafe(addr(ai))
     var instance : VkInstance
     if (vkCreateInstance(ici, null, instance) != VkResult.SUCCESS) {
         print("instance failed\n")
@@ -33,9 +31,7 @@ def main() {   // nolint:STYLE038 - flat example scaffold
     }
     var devices : array<VkPhysicalDevice>
     devices |> resize(int(count))
-    unsafe {
-        vkEnumeratePhysicalDevices(instance, count, addr(devices[0]))
-    }
+    vkEnumeratePhysicalDevices(instance, count, unsafe(addr(devices[0])))
     let phys = devices[0]
 
     // find a graphics queue family -- exercises bitfield field access
@@ -43,9 +39,7 @@ def main() {   // nolint:STYLE038 - flat example scaffold
     vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, null)
     var qprops : array<VkQueueFamilyProperties>
     qprops |> resize(int(qcount))
-    unsafe {
-        vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, addr(qprops[0]))
-    }
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, unsafe(addr(qprops[0])))
     var gfx_family = -1
     for (i in range(int(qcount))) {
         if (qprops[i].queueFlags.graphics) {
@@ -64,15 +58,11 @@ def main() {   // nolint:STYLE038 - flat example scaffold
     qci.sType = VkStructureType.DEVICE_QUEUE_CREATE_INFO
     qci.queueFamilyIndex = uint(gfx_family)
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(priority)
-    }
+    qci.pQueuePriorities = unsafe(addr(priority))
     var dci : VkDeviceCreateInfo
     dci.sType = VkStructureType.DEVICE_CREATE_INFO
     dci.queueCreateInfoCount = 1u
-    unsafe {
-        dci.pQueueCreateInfos = addr(qci)
-    }
+    dci.pQueueCreateInfos = unsafe(addr(qci))
     var device : VkDevice
     if (vkCreateDevice(phys, dci, null, device) != VkResult.SUCCESS) {
         print("device failed\n")

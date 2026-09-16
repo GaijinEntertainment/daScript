@@ -1536,11 +1536,9 @@ def private whisper_force_ts_rule(w : WhisperModel; var logits : array<float>) {
 // filter suite and the force-timestamp rule (plog = logit − this)
 def private logits_lse(logits : array<float>) : float {
     let n = long_length(logits)
-    unsafe {
-        let p = addr<float const?>(logits[0])
-        let m = hmax(p, n)
-        return log(exp_sum4(p, n, m)) + m
-    }
+    let p = unsafe(addr<float const?>(logits[0]))
+    let m = hmax(p, n)
+    return log(exp_sum4(p, n, m)) + m
 }
 
 // greedy argmax over all filtered logits + argmax over the timestamp region (tid); plog uses
@@ -1576,11 +1574,9 @@ def private sample_greedy(w : WhisperModel; logits : array<float>; lse : float) 
 // reads p[nosp] off the prompt decode before any filtering
 def private token_prob(logits : array<float>; id : int) : float {
     let n = long_length(logits)
-    unsafe {
-        let p = addr<float const?>(logits[0])
-        let m = hmax(p, n)
-        return exp(logits[id] - m) / exp_sum4(p, n, m)
-    }
+    let p = unsafe(addr<float const?>(logits[0]))
+    let m = hmax(p, n)
+    return exp(logits[id] - m) / exp_sum4(p, n, m)
 }
 
 // Build and emit one segment off toks[i0..i1) at [t0, t1] — text = concat of the text-range

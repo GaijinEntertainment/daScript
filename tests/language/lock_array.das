@@ -13,17 +13,13 @@ def test_lock_array(t : T?) {
     }
     lock_data(arr) $(data, _size) {
         for (j in range(10)) {
-            unsafe {
-                t |> equal(data[j], j)
-            }
+            t |> equal(unsafe(data[j]), j)
         }
     }
     var arr2 <- [for (x in range(10)); x]
     lock_data(arr2) $(data, _size) {
         for (j in range(10)) {
-            unsafe {
-                data[j] = j * 2
-            }
+            unsafe(data[j]) = j * 2
         }
     }
     for (j in range(10)) {

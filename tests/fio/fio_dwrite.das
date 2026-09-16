@@ -95,9 +95,7 @@ def test_dwrite(t : T?) {
             }
             var bp = unsafe(reinterpret<uint8?>(band))
             for (i in range(take)) {
-                unsafe {
-                    bp[i] = dwrite_pattern(total + i)
-                }
+                unsafe(bp[i]) = dwrite_pattern(total + i)
             }
             ok = ok && unsafe(dwrite_commit(w, uint64(take)))
             total += take
@@ -131,9 +129,7 @@ def test_dwrite(t : T?) {
             }
             var bp = unsafe(reinterpret<uint8?>(band))
             for (i in range(100)) {
-                unsafe {
-                    bp[i] = dwrite_pattern(total + i)
-                }
+                unsafe(bp[i]) = dwrite_pattern(total + i)
             }
             ok = ok && unsafe(dwrite_commit(w, 100ul))
             total += 100

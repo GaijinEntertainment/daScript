@@ -8,18 +8,14 @@ def make13(var a : int?) {
 
 def makeAll13(var a : int?; count : int) {
     for (i in range(count)) {
-        unsafe {
-            a[i] = 13
-        }
+        unsafe(a[i]) = 13
     }
 }
 
 def addAll(var a : int?; count : int) {
     var c = 0
     for (i in range(count)) {
-        unsafe {
-            c += a[i]
-        }
+        c += unsafe(a[i])
     }
     return c
 }
@@ -28,9 +24,7 @@ def ptrAdd(var a : int?; count : int) {
     var c = 0
     for (_i in range(count)) {
         c += *a
-        unsafe {
-            ++ a
-        }
+        unsafe { ++ a }   // nolint:STYLE025 - unsafe(++ a) does not authorize the lowered i_das_ptr_inc call
     }
     return c
 }

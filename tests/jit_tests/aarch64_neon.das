@@ -32,14 +32,12 @@ def ref_sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4 {
 
 def ref_sdot4_w(acc : int4; w : int4; x : int8 const?) : int4 {
     var r = acc
-    unsafe {
-        for (j in range(4)) {
-            var s = 0
-            for (e in range(4)) {
-                s += packed_byte_sx(w[j], e) * int(x[4 * j + e])
-            }
-            r[j] += s
+    for (j in range(4)) {
+        var s = 0
+        for (e in range(4)) {
+            s += packed_byte_sx(w[j], e) * int(unsafe(x[4 * j + e]))
         }
+        r[j] += s
     }
     return r
 }
@@ -60,14 +58,12 @@ def ref_sdot4_laneq(acc : int4; w : int8 const?; x : int8 const?; lane : int) : 
 
 def ref_sdot4_laneq_w(acc : int4; w : int4; x : int8 const?; lane : int) : int4 {
     var r = acc
-    unsafe {
-        for (j in range(4)) {
-            var s = 0
-            for (e in range(4)) {
-                s += packed_byte_sx(w[j], e) * int(x[4 * lane + e])
-            }
-            r[j] += s
+    for (j in range(4)) {
+        var s = 0
+        for (e in range(4)) {
+            s += packed_byte_sx(w[j], e) * int(unsafe(x[4 * lane + e]))
         }
+        r[j] += s
     }
     return r
 }

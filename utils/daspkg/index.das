@@ -305,9 +305,7 @@ def cmd_search(root, query : string; json : bool = false) : int {
         var infos : array<PackageInfo>
         for (r in results) {
             if (index |> key_exists(r.name)) {
-                unsafe {
-                    infos |> emplace(make_package_info(r.name, index[r.name]))
-                }
+                unsafe(infos |> emplace(make_package_info(r.name, index[r.name])))
             }
         }
         print(sprint_json(infos, false))
@@ -316,9 +314,7 @@ def cmd_search(root, query : string; json : bool = false) : int {
     }
     for (r in results) {
         if (index |> key_exists(r.name)) {
-            unsafe {
-                format_entry(r.name, index[r.name])
-            }
+            unsafe(format_entry(r.name, index[r.name]))
             print("\n")
         }
     }
@@ -343,9 +339,7 @@ def cmd_search_all(root : string; json : bool = false) : int {
         var infos : array<PackageInfo>
         for (name in names) {
             if (index |> key_exists(name)) {
-                unsafe {
-                    infos |> emplace(make_package_info(name, index[name]))
-                }
+                unsafe(infos |> emplace(make_package_info(name, index[name])))
             }
         }
         print(sprint_json(infos, false))
@@ -354,9 +348,7 @@ def cmd_search_all(root : string; json : bool = false) : int {
     }
     for (name in names) {
         if (index |> key_exists(name)) {
-            unsafe {
-                format_entry(name, index[name])
-            }
+            unsafe(format_entry(name, index[name]))
             print("\n")
         }
     }
@@ -586,9 +578,7 @@ def private tag_index_lines(names : array<string>; entries : array<IndexEntry>) 
     }
     for (t in tag_names) {
         if (all_tags |> key_exists(t)) {
-            unsafe {
-                lines |> push("{t}\t{join(all_tags[t], ", ")}")
-            }
+            unsafe(lines |> push("{t}\t{join(all_tags[t], ", ")}"))
         }
     }
     return <- lines

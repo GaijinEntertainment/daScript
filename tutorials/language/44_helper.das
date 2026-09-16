@@ -16,9 +16,7 @@ def compute(x : int) {
 
 [export]
 def store_via_ptr(val : int; var dst : int?) {
-    unsafe {
-        *dst = val * 10
-    }
+    *dst = val * 10
 }
 
 [export]

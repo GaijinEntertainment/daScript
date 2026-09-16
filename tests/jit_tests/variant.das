@@ -77,9 +77,7 @@ def ask_variant_index {
 [sideeffects]
 def change_variant_index {
     var f = FooT(b = 1.)
-    unsafe {
-        set_variant_index(f, 0)
-    }
+    unsafe(set_variant_index(f, 0))
     return f as a
 }
 

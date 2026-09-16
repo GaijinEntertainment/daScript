@@ -57,9 +57,7 @@ def create_shader_module(device : VkDevice; var code : array<uint>) : VkShaderMo
     var sci : VkShaderModuleCreateInfo
     sci.sType = VkStructureType.SHADER_MODULE_CREATE_INFO
     sci.codeSize = uint64(long_length(code) * 4l)
-    unsafe {
-        sci.pCode = addr(code[0])
-    }
+    sci.pCode = unsafe(addr(code[0]))
     var sm : VkShaderModule
     check(vkCreateShaderModule(device, sci, null, sm), "create shader module")
     return sm
@@ -78,9 +76,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     ai.apiVersion = (1u << 22u) | (3u << 12u)
     var ici : VkInstanceCreateInfo
     ici.sType = VkStructureType.INSTANCE_CREATE_INFO
-    unsafe {
-        ici.pApplicationInfo = addr(ai)
-    }
+    ici.pApplicationInfo = unsafe(addr(ai))
     var instance : VkInstance
     check(vkCreateInstance(ici, null, instance), "create instance")
     volkLoadInstance(instance)
@@ -93,18 +89,14 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     }
     var devices : array<VkPhysicalDevice>
     devices |> resize(int(count))
-    unsafe {
-        vkEnumeratePhysicalDevices(instance, count, addr(devices[0]))
-    }
+    vkEnumeratePhysicalDevices(instance, count, unsafe(addr(devices[0])))
     let phys = devices[0]
 
     var qcount = 0u
     vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, null)
     var qprops : array<VkQueueFamilyProperties>
     qprops |> resize(int(qcount))
-    unsafe {
-        vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, addr(qprops[0]))
-    }
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, unsafe(addr(qprops[0])))
     var gfx = -1
     for (i in range(int(qcount))) {
         if (qprops[i].queueFlags.graphics) {
@@ -122,15 +114,11 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     qci.sType = VkStructureType.DEVICE_QUEUE_CREATE_INFO
     qci.queueFamilyIndex = uint(gfx)
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(priority)
-    }
+    qci.pQueuePriorities = unsafe(addr(priority))
     var dci : VkDeviceCreateInfo
     dci.sType = VkStructureType.DEVICE_CREATE_INFO
     dci.queueCreateInfoCount = 1u
-    unsafe {
-        dci.pQueueCreateInfos = addr(qci)
-    }
+    dci.pQueueCreateInfos = unsafe(addr(qci))
     var device : VkDevice
     check(vkCreateDevice(phys, dci, null, device), "create device")
     volkLoadDevice(device)
@@ -197,20 +185,14 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     var subpass : VkSubpassDescription
     subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
     subpass.colorAttachmentCount = 1u
-    unsafe {
-        subpass.pColorAttachments = addr(color_ref)
-    }
+    subpass.pColorAttachments = unsafe(addr(color_ref))
 
     var rp_ci : VkRenderPassCreateInfo
     rp_ci.sType = VkStructureType.RENDER_PASS_CREATE_INFO
     rp_ci.attachmentCount = 1u
-    unsafe {
-        rp_ci.pAttachments = addr(attach)
-    }
+    rp_ci.pAttachments = unsafe(addr(attach))
     rp_ci.subpassCount = 1u
-    unsafe {
-        rp_ci.pSubpasses = addr(subpass)
-    }
+    rp_ci.pSubpasses = unsafe(addr(subpass))
     var render_pass : VkRenderPass
     check(vkCreateRenderPass(device, rp_ci, null, render_pass), "create render pass")
 
@@ -219,9 +201,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     fb_ci.sType = VkStructureType.FRAMEBUFFER_CREATE_INFO
     fb_ci.renderPass = render_pass
     fb_ci.attachmentCount = 1u
-    unsafe {
-        fb_ci.pAttachments = addr(color_view)
-    }
+    fb_ci.pAttachments = unsafe(addr(color_view))
     fb_ci.width = uint(WIDTH)
     fb_ci.height = uint(HEIGHT)
     fb_ci.layers = 1u
@@ -261,13 +241,9 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     var vpstate : VkPipelineViewportStateCreateInfo
     vpstate.sType = VkStructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO
     vpstate.viewportCount = 1u
-    unsafe {
-        vpstate.pViewports = addr(viewport)
-    }
+    vpstate.pViewports = unsafe(addr(viewport))
     vpstate.scissorCount = 1u
-    unsafe {
-        vpstate.pScissors = addr(scissor)
-    }
+    vpstate.pScissors = unsafe(addr(scissor))
 
     var raster : VkPipelineRasterizationStateCreateInfo
     raster.sType = VkStructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO
@@ -288,9 +264,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     var blend : VkPipelineColorBlendStateCreateInfo
     blend.sType = VkStructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO
     blend.attachmentCount = 1u
-    unsafe {
-        blend.pAttachments = addr(blend_att)
-    }
+    blend.pAttachments = unsafe(addr(blend_att))
 
     var pl_ci : VkPipelineLayoutCreateInfo
     pl_ci.sType = VkStructureType.PIPELINE_LAYOUT_CREATE_INFO
@@ -351,9 +325,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     cb_ai.level = VkCommandBufferLevel.PRIMARY
     cb_ai.commandBufferCount = 1u
     var cmd : VkCommandBuffer
-    unsafe {
-        check(vkAllocateCommandBuffers(device, cb_ai, addr(cmd)), "alloc command buffer")
-    }
+    check(vkAllocateCommandBuffers(device, cb_ai, unsafe(addr(cmd))), "alloc command buffer")
 
     var begin : VkCommandBufferBeginInfo
     begin.sType = VkStructureType.COMMAND_BUFFER_BEGIN_INFO
@@ -371,9 +343,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     rp_begin.renderArea.extent.width = uint(WIDTH)
     rp_begin.renderArea.extent.height = uint(HEIGHT)
     rp_begin.clearValueCount = 1u
-    unsafe {
-        rp_begin.pClearValues = addr(clear)
-    }
+    rp_begin.pClearValues = unsafe(addr(clear))
     vkCmdBeginRenderPass(cmd, rp_begin, VkSubpassContents.INLINE)
     vkCmdBindPipeline(cmd, VkPipelineBindPoint.GRAPHICS, pipeline)
     vkCmdDraw(cmd, 3u, 1u, 0u, 0u)
@@ -386,29 +356,21 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     region.imageExtent.width = uint(WIDTH)
     region.imageExtent.height = uint(HEIGHT)
     region.imageExtent.depth = 1u
-    unsafe {
-        vkCmdCopyImageToBuffer(cmd, color_image, VkImageLayout.TRANSFER_SRC_OPTIMAL, readback, 1u, addr(region))
-    }
+    vkCmdCopyImageToBuffer(cmd, color_image, VkImageLayout.TRANSFER_SRC_OPTIMAL, readback, 1u, unsafe(addr(region)))
     check(vkEndCommandBuffer(cmd), "end command buffer")
 
     // ----- submit + wait -----
     var submit : VkSubmitInfo
     submit.sType = VkStructureType.SUBMIT_INFO
     submit.commandBufferCount = 1u
-    unsafe {
-        submit.pCommandBuffers = addr(cmd)
-    }
-    unsafe {
-        check(vkQueueSubmit(queue, 1u, addr(submit), null), "queue submit")
-    }
+    submit.pCommandBuffers = unsafe(addr(cmd))
+    check(vkQueueSubmit(queue, 1u, unsafe(addr(submit)), null), "queue submit")
     check(vkQueueWaitIdle(queue), "wait idle")
 
     // ----- read back pixels -----
     var mapped : void? = null
     let map_flags : VkMemoryMapFlags
-    unsafe {
-        check(vkMapMemory(device, buf_mem, 0ul, buf_size, map_flags, addr(mapped)), "map memory")
-    }
+    check(vkMapMemory(device, buf_mem, 0ul, buf_size, map_flags, unsafe(addr(mapped))), "map memory")
     var pixels : array<uint8>
     pixels |> resize(WIDTH * HEIGHT * 4)
     unsafe {

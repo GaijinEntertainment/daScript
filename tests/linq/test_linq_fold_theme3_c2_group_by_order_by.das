@@ -185,20 +185,18 @@ def populate_c2_decs() {
 def test_c2_decs_order_by_desc(t : T?) {
     t |> run("C2-decs: from_decs_template + _group_by + _select(count) + _order_by_descending + to_array — decs adapter feeds inline sort") @(tt : T?) {
         populate_c2_decs()
-        unsafe {
-            let rows <- _fold(from_decs_template(type<C2Sale>)
-                |> _group_by(_.region)
-                |> _select((R = _._0, N = _._1 |> count()))
-                |> _order_by_descending(_.N)
-                |> to_array())
-            tt |> equal(length(rows), 3)
-            tt |> equal(rows[0].R, "R")
-            tt |> equal(rows[0].N, 4)
-            tt |> equal(rows[1].R, "S")
-            tt |> equal(rows[1].N, 2)
-            tt |> equal(rows[2].R, "T")
-            tt |> equal(rows[2].N, 1)
-        }
+        let rows <- _fold(from_decs_template(type<C2Sale>)
+            |> _group_by(_.region)
+            |> _select((R = _._0, N = _._1 |> count()))
+            |> _order_by_descending(_.N)
+            |> to_array())
+        tt |> equal(length(rows), 3)
+        tt |> equal(rows[0].R, "R")
+        tt |> equal(rows[0].N, 4)
+        tt |> equal(rows[1].R, "S")
+        tt |> equal(rows[1].N, 2)
+        tt |> equal(rows[2].R, "T")
+        tt |> equal(rows[2].N, 1)
         restart()
     }
 }
@@ -234,22 +232,20 @@ def populate_c2_decs_join() {
 def test_c2_decs_join_order_by(t : T?) {
     t |> run("C2-decs-join: from_decs_template(Car) + _join(Dealer) + _group_by(Region) + _select(count) + _order_by + to_array — isDecsJoin adapter + inline sort, single pass end-to-end") @(tt : T?) {
         populate_c2_decs_join()
-        unsafe {
-            let rows <- _fold(from_decs_template(type<C2JoinCar>)
-                |> _join(from_decs_template(type<C2JoinDealer>),
-                         $(l, r) => l.dealer_id == r.id,
-                         $(l, r) => (Region = r.region, CarId = l.id))
-                |> _group_by(_.Region)
-                |> _select((R = _._0, N = _._1 |> count()))
-                |> _order_by(_.N)
-                |> to_array())
-            // south(2), north(4) ascending.
-            tt |> equal(length(rows), 2)
-            tt |> equal(rows[0].R, "south")
-            tt |> equal(rows[0].N, 2)
-            tt |> equal(rows[1].R, "north")
-            tt |> equal(rows[1].N, 4)
-        }
+        let rows <- _fold(from_decs_template(type<C2JoinCar>)
+            |> _join(from_decs_template(type<C2JoinDealer>),
+                     $(l, r) => l.dealer_id == r.id,
+                     $(l, r) => (Region = r.region, CarId = l.id))
+            |> _group_by(_.Region)
+            |> _select((R = _._0, N = _._1 |> count()))
+            |> _order_by(_.N)
+            |> to_array())
+        // south(2), north(4) ascending.
+        tt |> equal(length(rows), 2)
+        tt |> equal(rows[0].R, "south")
+        tt |> equal(rows[0].N, 2)
+        tt |> equal(rows[1].R, "north")
+        tt |> equal(rows[1].N, 4)
         restart()
     }
 }

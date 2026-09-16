@@ -20,9 +20,7 @@ def main() {
 
     var ci : VkInstanceCreateInfo
     ci.sType = VkStructureType.INSTANCE_CREATE_INFO
-    unsafe {
-        ci.pApplicationInfo = addr(app_info)
-    }
+    ci.pApplicationInfo = unsafe(addr(app_info))
 
     var instance : VkInstance
     let crc = vkCreateInstance(ci, null, instance)
@@ -40,9 +38,7 @@ def main() {
     if (count > 0u) {
         var devices : array<VkPhysicalDevice>
         devices |> resize(int(count))
-        unsafe {
-            vkEnumeratePhysicalDevices(instance, count, addr(devices[0]))
-        }
+        vkEnumeratePhysicalDevices(instance, count, unsafe(addr(devices[0])))
         for (d in devices) {
             var props : VkPhysicalDeviceProperties
             vkGetPhysicalDeviceProperties(d, props)

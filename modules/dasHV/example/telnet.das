@@ -35,19 +35,14 @@ class TelnetServer : Server {
     }
     def override onData(msg : uint8?; size : int) {
         for (i in range(size)) {
-            var ch : uint8
-            unsafe {
-                ch = msg[i]
-            }
+            let ch = unsafe(msg[i])
             let ich = int(ch)
             if (ich == '\r') {
                 continue
             } elif (ich == '\n') {
                 print("`{string(current_string)}` length={length(current_string)}\n")
                 var new_msg = "length = {length(current_string)}\n"
-                unsafe {
-                    self.send(reinterpret<uint8?>(new_msg), length(new_msg))
-                }
+                self.send(unsafe(reinterpret<uint8?>(new_msg)), length(new_msg))
                 var str = string(current_string)
                 if (str == "quit") {
                     done = true

@@ -30,20 +30,17 @@ def test_jit_compile_only(t : T?) {
     var sawCompileOnly = false
     var sawResult = false
     var sawDllCache = false
-    var rc : int
-    unsafe {
-        rc = popen_timeout(cmd, 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = fgets(f)
-                sawCompileOnly ||= find(ln, "LLVM JIT: compile-only") >= 0
-                sawResult ||= find(ln, "COMPILE_ONLY_RESULT 402") >= 0
-                sawDllCache ||= find(ln, "DLL cache") >= 0
-            }
+    let rc = unsafe(popen_timeout(cmd, 300.0) $(f) {
+        if (f == null) {
+            return
         }
-    }
+        while (!feof(f)) {
+            let ln = fgets(f)
+            sawCompileOnly ||= find(ln, "LLVM JIT: compile-only") >= 0
+            sawResult ||= find(ln, "COMPILE_ONLY_RESULT 402") >= 0
+            sawDllCache ||= find(ln, "DLL cache") >= 0
+        }
+    })
     t |> equal(rc, 0)
     t |> success(sawCompileOnly)   // the compile-only path ran to the escape
     t |> success(sawResult)        // interpreted execution still produced the right answer

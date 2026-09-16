@@ -36,21 +36,19 @@ struct public SdfRenderer {
 }
 
 def public finalize(var r : SdfRenderer) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline
-        delete r.pipe_layout
-        delete r.desc_pool       // frees the descriptor set allocated from it
-        delete r.set_layout
-        delete r.srgb_image
-        delete r.srgb_memory
-        delete r.view
-        delete r.image
-        delete r.memory
-        delete r.pool
-        delete r.device
-        delete r.instance
-    }
+    delete r.readback
+    delete r.pipeline
+    delete r.pipe_layout
+    delete r.desc_pool       // frees the descriptor set allocated from it
+    delete r.set_layout
+    delete r.srgb_image
+    delete r.srgb_memory
+    delete r.view
+    delete r.image
+    delete r.memory
+    delete r.pool
+    delete r.device
+    delete r.instance
 }
 
 //! Initialize Vulkan, build the storage image + compute pipeline for sdf_spv, and allocate a host
@@ -177,7 +175,7 @@ def public build_sdf_renderer() : SdfRenderer {   // nolint:STYLE038 - flat one-
     plci.pPushConstantRanges |> emplace(pcr)
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
     delete plci.pPushConstantRanges
-    unsafe { delete plci.pSetLayouts }   // the [weak_copy(set_layout)] literal we built above (handles are non-owning)
+    delete plci.pSetLayouts   // the [weak_copy(set_layout)] literal we built above (handles are non-owning)
     var inscope pipeline <- create_compute_pipeline(device, pipe_layout, shader)
 
     let buf_size = uint64(SDF_DIM * SDF_DIM * 4)
@@ -235,12 +233,10 @@ def public render_sdf_frame(var r : SdfRenderer; time : float) : array<uint8> {
         region.dstOffsets[1].x = SDF_DIM
         region.dstOffsets[1].y = SDF_DIM
         region.dstOffsets[1].z = 1
-        unsafe {
-            vkCmdBlitImage(boost_value_to_vk(cmd),
-                boost_value_to_vk(r.image),      VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                boost_value_to_vk(r.srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
-                1u, addr(region), VkFilter.NEAREST)
-        }
+        vkCmdBlitImage(boost_value_to_vk(cmd),
+            boost_value_to_vk(r.image),      VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            boost_value_to_vk(r.srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
+            1u, unsafe(addr(region)), VkFilter.NEAREST)
         // srgb_image -> TRANSFER_SRC so copy_image_to_buffer can read it
         transition_image(cmd, r.srgb_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
             transfer_write, transfer_read, xfer, xfer)

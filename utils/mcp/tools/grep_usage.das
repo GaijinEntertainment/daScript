@@ -102,16 +102,14 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
         cmd = "{cd_root}{sg} run -p \"{symbol}\" -l daslang --globs \"{glob_filter}\" --json \"{search_dir}\""
     }
     var raw_json : string
-    unsafe {
-        popen(cmd) $(f) {
-            if (f == null) return
-            raw_json = build_string() $(var w) {
-                while (!feof(f)) {
-                    write(w, fgets(f))
-                }
+    unsafe(popen(cmd) $(f) {
+        if (f == null) return
+        raw_json = build_string() $(var w) {
+            while (!feof(f)) {
+                write(w, fgets(f))
             }
         }
-    }
+    })
     raw_json = strip_ast_grep_banner(raw_json)
     if (empty(raw_json) || raw_json == "[]") return make_tool_result("No matches found for '{symbol}' in {search_dir}")
     // parse JSON array from ast-grep
@@ -155,9 +153,7 @@ def private format_grep_matches(symbol : string; var by_file : table<string; arr
     let total = length(by_file)
     var match_count = 0
     for (fp in file_order) {
-        unsafe {
-            match_count += length(by_file[fp])
-        }
+        match_count += length(unsafe(by_file[fp]))
     }
     return build_string() $(var w) {
         write(w, "Found {match_count} match")
@@ -171,10 +167,8 @@ def private format_grep_matches(symbol : string; var by_file : table<string; arr
         write(w, "\n\n")
         for (fp in file_order) {
             write(w, "{fp}:\n")
-            unsafe {
-                for (entry in by_file[fp]) {
-                    write(w, "{entry}\n")
-                }
+            for (entry in unsafe(by_file[fp])) {
+                write(w, "{entry}\n")
             }
             write(w, "\n")
         }

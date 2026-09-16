@@ -117,7 +117,7 @@ def public build_compute_image(device : Device; phys : VkPhysicalDevice; var wor
     plci.pPushConstantRanges |> emplace(pcr)
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
     delete plci.pPushConstantRanges   // owned input freed once the layout has copied the range
-    unsafe { delete plci.pSetLayouts }   // the [weak_copy(set_layout)] literal we built above (handles non-owning)
+    delete plci.pSetLayouts   // the [weak_copy(set_layout)] literal we built above (handles non-owning)
     var inscope pipeline <- create_compute_pipeline(device, pipe_layout, shader)
 
     return <- ComputeImage(image <- image, memory <- imem, view <- view, set_layout <- set_layout,

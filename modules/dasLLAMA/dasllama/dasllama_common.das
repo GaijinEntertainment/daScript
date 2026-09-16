@@ -2496,9 +2496,7 @@ def eval_(t : Model; var s : Session; tokens : array<int64>) {
 var private g_tensor_crowns : table<string>
 
 def public set_metal_tensor_crowns(list : string) {
-    unsafe {
-        delete g_tensor_crowns
-    }
+    delete g_tensor_crowns
     for (f in split(list, ",")) {
         if (!empty(f)) {
             g_tensor_crowns |> insert(f)

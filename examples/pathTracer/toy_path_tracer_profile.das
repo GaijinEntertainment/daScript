@@ -39,8 +39,6 @@ def main {
         }
     }
     let path = "{get_das_root()}/examples/pathTracer/path_tracer.png"
-    unsafe {
-        stbi_write_png(path, width, height, 4, addr(pixels[0]), width * 4)
-        print("image saved to {path}\n")
-    }
+    stbi_write_png(path, width, height, 4, unsafe(addr(pixels[0])), width * 4)
+    print("image saved to {path}\n")
 }

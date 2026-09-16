@@ -177,23 +177,21 @@ def test_custom_serialize(t : T?) {
         t |> equal(loaded.b, 1.0)
     }
     t |> run("Color array uses custom serialize") @(t : T?) {
-        unsafe {
-            var colors <- [Color(r = 1.0, g = 0.0, b = 0.0), Color(r = 0.0, g = 1.0, b = 0.0)]
-            var writer = new MemSerializer()
-            var warch = Archive(reading = false, stream = writer)
-            warch |> serialize(colors)
-            var data <- writer->extractData()
-            // 4 bytes array length + 2 × 3 bytes = 10
-            t |> equal(length(data), 10)
-            var reader = new MemSerializer(data)
-            var rarch = Archive(reading = true, stream = reader)
-            var loaded : array<Color>
-            rarch |> serialize(loaded)
-            t |> equal(length(loaded), 2)
-            t |> equal(loaded[0].r, 1.0)
-            t |> equal(loaded[0].g, 0.0)
-            t |> equal(loaded[1].g, 1.0)
-            t |> equal(loaded[1].b, 0.0)
-        }
+        var colors <- [Color(r = 1.0, g = 0.0, b = 0.0), Color(r = 0.0, g = 1.0, b = 0.0)]
+        var writer = new MemSerializer()
+        var warch = Archive(reading = false, stream = writer)
+        warch |> serialize(colors)
+        var data <- writer->extractData()
+        // 4 bytes array length + 2 × 3 bytes = 10
+        t |> equal(length(data), 10)
+        var reader = new MemSerializer(data)
+        var rarch = Archive(reading = true, stream = reader)
+        var loaded : array<Color>
+        rarch |> serialize(loaded)
+        t |> equal(length(loaded), 2)
+        t |> equal(loaded[0].r, 1.0)
+        t |> equal(loaded[0].g, 0.0)
+        t |> equal(loaded[1].g, 1.0)
+        t |> equal(loaded[1].b, 0.0)
     }
 }

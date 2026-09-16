@@ -842,9 +842,7 @@ def test_remove_from_index_json(t : T?) {
         var error : string
         var js = read_json(result, error)
         t |> success(js != null)
-        unsafe {
-            t |> equal(length(js.value as _array), 0)
-        }
+        unsafe(t |> equal(length(js.value as _array), 0))
     }
     t |> run("preserves other entries") @(t : T?) {
         var input = add_to_index_json("[]", "pkg1", "github.com/user/pkg1", "First")

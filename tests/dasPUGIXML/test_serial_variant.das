@@ -20,7 +20,7 @@ struct WithVariant {
 def test_xml_serialize_variant_int(t : T?) {
     t |> run("serialize variant (int case) to XML") <| @(t : T?) {
         var v : IntOrString
-        unsafe { v.i_val = 42; }
+        unsafe(v.i_val) = 42
         with_doc() $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "val")
@@ -101,7 +101,7 @@ def test_from_xml_variant_string(t : T?) {
 def test_roundtrip_variant_int(t : T?) {
     t |> run("roundtrip variant (int case)") <| @(t : T?) {
         var original : IntOrString
-        unsafe { original.i_val = 123; }
+        unsafe(original.i_val) = 123
         let xml_str = to_XML(original, "val")
         parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)

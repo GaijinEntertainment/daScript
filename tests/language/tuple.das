@@ -58,15 +58,13 @@ def test_tuple(t : T?) {  // nolint:STYLE038 - flat list of independent test arm
         tp._0 = 1
         tp._1 = 2.0
         tp._2 = "3"
-        unsafe {
-            var pq = addr(tp)
-            t |> equal(pq._0, 1)
-            t |> equal(pq._1, 2.0)
-            t |> equal(pq._2, "3")
-            t |> equal(pq?._0 ?? 0, 1)
-            t |> equal(pq?._1 ?? 0.0, 2.0)
-            t |> equal(pq?._2 ?? "nothing", "3")
-        }
+        var pq = unsafe(addr(tp))
+        t |> equal(pq._0, 1)
+        t |> equal(pq._1, 2.0)
+        t |> equal(pq._2, "3")
+        t |> equal(pq?._0 ?? 0, 1)
+        t |> equal(pq?._1 ?? 0.0, 2.0)
+        t |> equal(pq?._2 ?? "nothing", "3")
     }
     t |> run("heap allocated tuple") @(t : T?) {
         var qq = new <tuple<int; float>>

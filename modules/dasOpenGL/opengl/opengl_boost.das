@@ -165,15 +165,11 @@ def glUniformAny(location : int; value : int4) {
 }
 
 def glUniformMatrix4fv(location : int; value : float4x4) {
-    unsafe {
-        glUniformMatrix4fv(location, 1, false, addr(value[0][0]))
-    }
+    glUniformMatrix4fv(location, 1, false, unsafe(addr(value[0][0])))
 }
 
 def glUniformMatrix3fv(location : int; value : float3x3) {
-    unsafe {
-        glUniformMatrix3fv(location, 1, false, addr(value[0][0]))
-    }
+    glUniformMatrix3fv(location, 1, false, unsafe(addr(value[0][0])))
 }
 
 [expect_any_array(arr)]
@@ -265,9 +261,7 @@ def std140_release_all() {
 }
 
 def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; offset : int) {
-    unsafe {
-        glVertexAttribPointer(index, size, tp, normalized, stride, reinterpret<void?>(offset))
-    }
+    glVertexAttribPointer(index, size, tp, normalized, stride, unsafe(reinterpret<void?>(offset)))
 }
 
 def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; ptrd : void?; offset : int) {

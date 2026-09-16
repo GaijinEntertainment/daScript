@@ -263,26 +263,24 @@ struct public MsaaResources {
 }
 
 def public finalize(var r : MsaaResources) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline_1x
-        delete r.pipeline_msaa
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.sampler
-        delete r.tex_view
-        delete r.tex_image
-        delete r.tex_memory
-        delete r.ubo
-        delete r.ib
-        delete r.vb
-        delete r.depth_1x
-        delete r.color_1x
-        delete r.depth_msaa
-        delete r.color_resolve
-        delete r.color_msaa
-    }
+    delete r.readback
+    delete r.pipeline_1x
+    delete r.pipeline_msaa
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.sampler
+    delete r.tex_view
+    delete r.tex_image
+    delete r.tex_memory
+    delete r.ubo
+    delete r.ib
+    delete r.vb
+    delete r.depth_1x
+    delete r.color_1x
+    delete r.depth_msaa
+    delete r.color_resolve
+    delete r.color_msaa
 }
 
 struct public MsaaContext {
@@ -294,12 +292,10 @@ struct public MsaaContext {
 }
 
 def public finalize(var ctx : MsaaContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Build the MSAA cube's render resources. The pool's queue family must equal `queue`'s family --

@@ -212,9 +212,7 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     var inscope pool <- create_command_pool(device, cpci)
     run_cmd_sync(device, pool, queue) $(cmd) {
         cmd_bind_pipeline(cmd, pipeline, VkPipelineBindPoint.COMPUTE)
-        unsafe {
-            vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, boost_value_to_vk(pipe_layout), 0u, 1u, addr(raw_set), 0u, null)
-        }
+        vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, boost_value_to_vk(pipe_layout), 0u, 1u, unsafe(addr(raw_set)), 0u, null)
         cmd_dispatch(cmd, groups, 1u, 1u)
     }
 

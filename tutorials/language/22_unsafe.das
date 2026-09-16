@@ -22,8 +22,8 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 
     print("addr:\n")
     var x = 42
-    unsafe {
-        var p = addr(x)       // p is int?
+    {
+        var p = unsafe(addr(x))       // p is int?
         print("  *p = {*p}\n")
 
         // Modify through pointer
@@ -36,9 +36,9 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // deref(p) is the same as *p.
 
     print("deref:\n")
-    unsafe {
+    {
         var y = 7
-        var p = addr(y)
+        var p = unsafe(addr(y))
         print("  *p = {*p}\n")
         print("  deref(p) = {deref(p)}\n")
     }
@@ -46,9 +46,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // Null pointer dereference panics (can be caught with try/recover):
     try {
         var p : int?    // null pointer
-        unsafe {
-            print("  {*p}\n")       // panics
-        }
+        print("  {*p}\n")       // panics
     } recover {
         print("  caught null dereference\n")
     }
@@ -57,9 +55,9 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // Pointers are nullable. Check with != null or ??.
 
     print("null check:\n")
-    unsafe {
+    {
         var a = 42
-        var p = addr(a)
+        var p = unsafe(addr(a))
         var q : int?            // null
 
         if (p != null) {
@@ -102,9 +100,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("unsafe expression:\n")
     var z = 99
     let ptr = unsafe(addr(z))
-    unsafe {
-        print("  unsafe(addr(z)) = {*ptr}\n")
-    }
+    print("  unsafe(addr(z)) = {*ptr}\n")
 
     // === addr<T?> — typed address-of ===
     // addr<T?>(x) is sugar for reinterpret<T?>(addr(x)): take the address,
@@ -114,9 +110,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("addr<T?>:\n")
     var w = 1.0
     let bits = unsafe(addr<int?>(w))
-    unsafe {
-        print("  1.0 bits via addr<int?>: 0x{*bits:08x}\n")   // same 0x3f800000
-    }
+    print("  1.0 bits via addr<int?>: 0x{*bits:08x}\n")   // same 0x3f800000
 
     // === When unsafe is required ===
     //

@@ -703,7 +703,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                 bSingles |> push(build_iso_cmd([clone_string(file)], cmdPrefix, cmdSuffix))
             }
             let bCmd = build_iso_cmd(bFiles, cmdPrefix, cmdSuffix)
-            unsafe { delete bFiles }
+            delete bFiles
             batches |> emplace(IsoInput(uris <- bUris, batchCmd = clone_string(bCmd), singleCmds <- bSingles))
             bidx = hi
         }

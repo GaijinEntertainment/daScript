@@ -121,6 +121,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isBitfield)>("isBitfield","isBitfield");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::isLocal>("isLocal", "isLocal");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::hasClasses>("hasClasses", "hasClasses");
+            addProperty<bool (TypeDecl::*)() const, &ManagedType::isSafeToDelete>("isSafeToDelete", "isSafeToDelete");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::hasNonTrivialCtor>("hasNonTrivialCtor", "hasNonTrivialCtor");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::hasNonTrivialDtor>("hasNonTrivialDtor", "hasNonTrivialDtor");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::hasNonTrivialCopy>("hasNonTrivialCopy", "hasNonTrivialCopy");

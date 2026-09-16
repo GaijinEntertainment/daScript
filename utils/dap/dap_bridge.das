@@ -293,10 +293,8 @@ class public DapClient : Client {
     }
 
     def override onData(buf : uint8?; size : int) {
-        unsafe {
-            for (i in range(size)) {
-                buffer |> push(buf[i])
-            }
+        for (i in range(size)) {
+            buffer |> push(unsafe(buf[i]))
         }
         while (!empty(buffer)) {
             var parsed = parse_dap_frame(buffer, false)

@@ -21,9 +21,7 @@ def private llvm_macro_context {
 //! the whole codegen pipeline for a simulated program; `ok` is `run_jit`'s answer
 [export]
 def public run_jit_codegen(prog : Program?; var ctx : Context?; var ok : bool?) {
-    unsafe {
-        *ok = run_jit(prog, ctx)
-    }
+    *ok = run_jit(prog, ctx)
 }
 
 //! the in-memory engine's teardown; the finalizer in `llvm_jit_link` delegates here

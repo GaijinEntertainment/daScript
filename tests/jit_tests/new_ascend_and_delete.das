@@ -57,9 +57,7 @@ def return_smart_ptr(t : T?) {
     var ptr <- makeTestObjectSmart()
     t |> equal(1u, countTestObjectSmart(ptr))
     t |> equal(1, getTotalTestObjectSmart())
-    unsafe {
-        delete ptr
-    }
+    delete ptr
     t |> equal(null, ptr)
     t |> equal(0, getTotalTestObjectSmart())
 }
@@ -95,9 +93,7 @@ def move_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     var D <- inside_move_test(t)
     t |> equal(1, getTotalTestObjectSmart())
-    unsafe {
-        delete D
-    }
+    delete D
     t |> equal(0, getTotalTestObjectSmart())
 }
 
@@ -124,21 +120,15 @@ def ref_count_test(t : T?) {
     t |> success(fptr == sptr)
     t |> equal(3u, smart_ptr_use_count(sptr))
     t |> equal(1, getTotalTestObjectSmart())
-    unsafe {
-        delete sptr                             // ref_count = 2
-    }
+    delete sptr                             // ref_count = 2
     t |> equal(1, getTotalTestObjectSmart())
     t |> equal(0u, smart_ptr_use_count(sptr))
     t |> equal(2u, smart_ptr_use_count(qptr))
-    unsafe {
-        delete qptr                             // ref_count = 1
-    }
+    delete qptr                             // ref_count = 1
     t |> equal(1, getTotalTestObjectSmart())
     t |> equal(0u, smart_ptr_use_count(qptr))
     t |> equal(1u, smart_ptr_use_count(fptr))
-    unsafe {
-        delete fptr                             // physical delete
-    }
+    delete fptr                             // physical delete
     t |> equal(0, getTotalTestObjectSmart())
     t |> equal(0u, smart_ptr_use_count(fptr))
 }
@@ -151,9 +141,7 @@ def access_test(t : T?) {
     t |> equal(1234, D)
     ptr ?. fooData ?? D = 13        // ?? lvalue
     t |> equal(13, ptr.fooData)
-    unsafe {
-        delete ptr
-    }
+    delete ptr
     D = ptr ?. fooData ?? 2
     t |> equal(2, D)
     unsafe {
@@ -162,10 +150,8 @@ def access_test(t : T?) {
     }
     t |> success(ptr.first.fooData == 1234)
     t |> success(ptr ?. first ?. fooData ?? 13 == 1234)
-    unsafe {
-        delete ptr.first
-        delete ptr
-    }
+    delete ptr.first
+    delete ptr
     t |> equal(0, getTotalTestObjectSmart())
 }
 

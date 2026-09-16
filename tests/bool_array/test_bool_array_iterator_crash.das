@@ -11,9 +11,7 @@ require daslib/rtti
 // Benchmark that prints context name and tries to iterate BoolArray
 [benchmark]
 def benchmark_context_check(b : B?) {
-    unsafe {
-        to_log(LOG_INFO, "benchmark_context_check: context name = '{this_context().name}'\n")
-    }
+    to_log(LOG_INFO, "benchmark_context_check: context name = '{this_context().name}'\n")
     var a : BoolArray
     for (i in 0 .. 10) {
         a.push(i % 2 == 0)

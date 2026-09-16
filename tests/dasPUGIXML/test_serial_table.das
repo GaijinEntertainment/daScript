@@ -72,9 +72,7 @@ def test_from_xml_table_string_string(t : T?) {
             t |> success(ok)
             var tab <- from_XML(doc.document_element, type<table<string; string>>)
             t |> equal(length(tab), 1)
-            unsafe {
-                t |> equal(tab["name"], "Alice")
-            }
+            unsafe(t |> equal(tab["name"], "Alice"))
         }
     }
 }

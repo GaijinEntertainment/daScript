@@ -23,9 +23,7 @@ require math
 def private rope_freq_j(j, head_size : int64; theta : float; ffp : float const?) : float {
     var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
     if (ffp != null) {
-        unsafe {
-            freq /= ffp[j]
-        }
+        freq /= unsafe(ffp[j])
     }
     return freq
 }

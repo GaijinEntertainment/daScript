@@ -24,10 +24,7 @@ def main {
     accum |> resize(WIDTH * HEIGHT)
     let nThreads = get_total_hw_threads()
     let t0 = ref_time_ticks()
-    var pbb : array<float3>?
-    unsafe {
-        pbb = addr(accum)
-    }
+    var pbb = unsafe(addr(accum))
     with_job_status(nThreads) $(status) {
         let chunk = (HEIGHT + nThreads - 1) / nThreads
         for (c in range(nThreads)) {
@@ -56,8 +53,6 @@ def main {
         let b = uint(clamp(srgb.z, 0.0, 1.0) * 255.0 + 0.5)
         pixels |> push(r | (g << 8u) | (b << 16u) | 0xFF000000)
     }
-    unsafe {
-        stbi_write_png("pt_reference.png", WIDTH, HEIGHT, 4, addr(pixels[0]), WIDTH * 4)
-    }
+    stbi_write_png("pt_reference.png", WIDTH, HEIGHT, 4, unsafe(addr(pixels[0])), WIDTH * 4)
     print("wrote pt_reference.png\n")
 }

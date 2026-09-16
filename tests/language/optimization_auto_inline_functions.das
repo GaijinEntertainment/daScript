@@ -466,9 +466,7 @@ def target_upcast_param(var k : WrKid) {
 
 [export]
 def target_reinterpret_param(var w : WrTwin) {
-    unsafe {
-        poke_n(reinterpret<WrPlain>(w))
-    }
+    poke_n(unsafe(reinterpret<WrPlain>(w)))
 }
 
 [export]

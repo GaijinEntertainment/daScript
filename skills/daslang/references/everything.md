@@ -3848,6 +3848,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `TypeDecl.isBitfield` - Returns whether the given type is a bitfield type.
 - `TypeDecl.isLocal` - Returns whether the given type is a local type that can be allocated on the stack.
 - `TypeDecl.hasClasses` - Returns whether the type definition contains any class types.
+- `TypeDecl.isSafeToDelete` - Returns whether a value of the given type is safe to delete, meaning that deleting it does not require an unsafe block.
 - `TypeDecl.hasNonTrivialCtor` - Returns whether the type definition contains any non-trivial constructors.
 - `TypeDecl.hasNonTrivialDtor` - Returns whether the type definition contains any non-trivial destructors.
 - `TypeDecl.hasNonTrivialCopy` - Returns whether the type definition contains any non-trivial copy operations.

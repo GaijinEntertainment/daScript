@@ -29,9 +29,7 @@ def public select_physical_device(instance : Instance) : VkPhysicalDevice {
     }
     var devices : array<VkPhysicalDevice>
     devices |> resize(int(count))
-    unsafe {
-        vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, addr(devices[0]))
-    }
+    vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, unsafe(addr(devices[0])))
     // prefer a discrete GPU
     var best = devices[0]
     for (d in devices) {
@@ -50,9 +48,7 @@ def public select_graphics_queue_family(phys : VkPhysicalDevice) : uint {
     vkGetPhysicalDeviceQueueFamilyProperties(phys, count, null)
     var props : array<VkQueueFamilyProperties>
     props |> resize(int(count))
-    unsafe {
-        vkGetPhysicalDeviceQueueFamilyProperties(phys, count, addr(props[0]))
-    }
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, count, unsafe(addr(props[0])))
     for (i in range(int(count))) {
         if (props[i].queueFlags.graphics) {
             return uint(i)
@@ -137,9 +133,7 @@ def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     }
     var mf = VkPhysicalDeviceMeshShaderFeaturesEXT()   // sType pre-filled by the ctor
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(mf)
-    }
+    f2.pNext = unsafe(addr<void?>(mf))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return mf.meshShader != 0u && mf.taskShader != 0u
 }
@@ -152,9 +146,7 @@ def public create_instance(application_name : string; api_version : uint; extens
         ai.pApplicationName = application_name
     }
     var ci = VkInstanceCreateInfo()
-    unsafe {
-        ci.pApplicationInfo = addr(ai)
-    }
+    ci.pApplicationInfo = unsafe(addr(ai))
     var exts <- [for (e in extensions); e]
     if (instance_extension_available("VK_KHR_portability_enumeration")) {
         if (find_index(exts, "VK_KHR_portability_enumeration") < 0) {
@@ -166,9 +158,7 @@ def public create_instance(application_name : string; api_version : uint; extens
     // Vulkan wants); ppEnabledExtensionNames is bound as void? so reinterpret to it.
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkInstance
     vk_check(vkCreateInstance(ci, null, h), null)
@@ -209,9 +199,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
     unsafe {
@@ -222,9 +210,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -242,9 +228,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     features13.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
@@ -256,9 +240,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -276,9 +258,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     features12.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
@@ -290,9 +270,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -310,9 +288,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
@@ -324,9 +300,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -354,9 +328,7 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
         qc = VkDeviceQueueCreateInfo()
         qc.queueFamilyIndex = qf
         qc.queueCount = 1u
-        unsafe {
-            qc.pQueuePriorities = addr(prio)
-        }
+        qc.pQueuePriorities = unsafe(addr(prio))
     }
     features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
     var ci = VkDeviceCreateInfo()
@@ -369,9 +341,7 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -426,9 +396,7 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
 def public cooperative_matrix_supported(phys : VkPhysicalDevice) : bool {
     var fcm = VkPhysicalDeviceCooperativeMatrixFeaturesKHR()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fcm)
-    }
+    f2.pNext = unsafe(addr<void?>(fcm))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return fcm.cooperativeMatrix != 0u
 }
@@ -462,9 +430,7 @@ def public pipeline_exec_props_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_KHR_pipeline_executable_properties")) return false
     var fpe = VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fpe)
-    }
+    f2.pNext = unsafe(addr<void?>(fpe))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return fpe.pipelineExecutableInfo != 0u
 }
@@ -481,9 +447,7 @@ let private OSVM_ADAPTER_SHARED = 3
 def public os_video_memory(phys : VkPhysicalDevice) : tuple<budget : uint64; usage : uint64; adapter_dedicated : uint64; adapter_shared : uint64> {
     var idp = VkPhysicalDeviceIDProperties()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(idp)
-    }
+    p2.pNext = unsafe(addr<void?>(idp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     if (idp.deviceLUIDValid == 0u) {
         return (budget = 0ul, usage = 0ul, adapter_dedicated = 0ul, adapter_shared = 0ul)
@@ -505,9 +469,7 @@ def public os_video_memory(phys : VkPhysicalDevice) : tuple<budget : uint64; usa
 def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var q13 = VkPhysicalDeviceVulkan13Features()
     var q2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        q2.pNext = addr<void?>(q13)
-    }
+    q2.pNext = unsafe(addr<void?>(q13))
     vkGetPhysicalDeviceFeatures2(phys, q2)
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -546,9 +508,7 @@ def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_f
 def public subgroup_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceSubgroupProperties {
     var sp = VkPhysicalDeviceSubgroupProperties()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(sp)
-    }
+    p2.pNext = unsafe(addr<void?>(sp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     return sp
 }
@@ -568,9 +528,7 @@ def public subgroup_compute_ops_supported(phys : VkPhysicalDevice) : bool {
 def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
     var fdot = VkPhysicalDeviceShaderIntegerDotProductFeatures()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fdot)
-    }
+    f2.pNext = unsafe(addr<void?>(fdot))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return fdot.shaderIntegerDotProduct != 0u
 }
@@ -716,9 +674,7 @@ def public memory_priority_supported(phys : VkPhysicalDevice) : bool {
     }
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
     var q2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        q2.pNext = addr<void?>(qmp)
-    }
+    q2.pNext = unsafe(addr<void?>(qmp))
     vkGetPhysicalDeviceFeatures2(phys, q2)
     return qmp.memoryPriority != 0u
 }
@@ -754,9 +710,7 @@ def public cooperative_matrix2_fa_supported(phys : VkPhysicalDevice) : bool {
     if (!cooperative_matrix2_supported(phys)) return false
     var fcm2 = VkPhysicalDeviceCooperativeMatrix2FeaturesNV()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fcm2)
-    }
+    f2.pNext = unsafe(addr<void?>(fcm2))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return (fcm2.cooperativeMatrixReductions != 0u && fcm2.cooperativeMatrixConversions != 0u
         && fcm2.cooperativeMatrixPerElementOperations != 0u)
@@ -770,9 +724,7 @@ def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) 
     if (!cooperative_matrix2_supported(phys) || !device_extension_available(phys, "VK_NV_cooperative_matrix_decode_vector")) return false
     var fdv = VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fdv)
-    }
+    f2.pNext = unsafe(addr<void?>(fdv))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return fdv.cooperativeMatrixDecodeVector != 0u
 }
@@ -782,9 +734,7 @@ def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) 
 def public cooperative_matrix2_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceCooperativeMatrix2PropertiesNV {
     var cp = VkPhysicalDeviceCooperativeMatrix2PropertiesNV()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(cp)
-    }
+    p2.pNext = unsafe(addr<void?>(cp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     return cp
 }
@@ -796,9 +746,7 @@ def public cooperative_vector_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_NV_cooperative_vector")) return false
     var fcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(fcv)
-    }
+    f2.pNext = unsafe(addr<void?>(fcv))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return fcv.cooperativeVector != 0u
 }
@@ -812,9 +760,7 @@ def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
     if (qcount == 0u) return -1
     var qprops : array<VkQueueFamilyProperties>
     qprops |> resize(int(qcount))
-    unsafe {
-        vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, addr(qprops[0]))
-    }
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, unsafe(addr(qprops[0])))
     var found = -1
     for (q, qi in qprops, count()) {
         if (found < 0 && q.queueFlags.transfer && !q.queueFlags.graphics && !q.queueFlags.compute) {
@@ -966,9 +912,7 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
 def public timeline_semaphore_supported(phys : VkPhysicalDevice) : bool {
     var q12 = VkPhysicalDeviceVulkan12Features()
     var q2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        q2.pNext = addr<void?>(q12)
-    }
+    q2.pNext = unsafe(addr<void?>(q12))
     vkGetPhysicalDeviceFeatures2(phys, q2)
     return q12.timelineSemaphore != 0u
 }
@@ -985,9 +929,7 @@ def public external_memory_host_min_alignment(phys : VkPhysicalDevice) : uint64 
     }
     var emh = VkPhysicalDeviceExternalMemoryHostPropertiesEXT()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(emh)
-    }
+    p2.pNext = unsafe(addr<void?>(emh))
     vkGetPhysicalDeviceProperties2(phys, p2)
     return emh.minImportedHostPointerAlignment
 }
@@ -1016,9 +958,7 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     var base : VkPhysicalDeviceFeatures
     base.multiDrawIndirect = 1u
     var f11 : VkPhysicalDeviceVulkan11Features
@@ -1035,9 +975,7 @@ def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family :
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -1055,9 +993,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     var qci = VkDeviceQueueCreateInfo()
     qci.queueFamilyIndex = queue_family
     qci.queueCount = 1u
-    unsafe {
-        qci.pQueuePriorities = addr(prio)
-    }
+    qci.pQueuePriorities = unsafe(addr(prio))
     meshFeatures.sType = VkStructureType.PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = 1u
@@ -1069,9 +1005,7 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
     append_portability_subset(phys, exts)
     if (!empty(exts)) {
         ci.enabledExtensionCount = uint(length(exts))
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var h : VkDevice
     vk_check(vkCreateDevice(phys, ci, null, h), null)
@@ -1172,9 +1106,7 @@ def public get_device_queue(device : Device; queue_family, index : uint) : VkQue
 def public create_shader_module(device : Device; var code : array<uint8>) : ShaderModule {
     var ci = VkShaderModuleCreateInfo()
     ci.codeSize = uint64(long_length(code))
-    unsafe {
-        ci.pCode = addr<uint?>(code[0])
-    }
+    ci.pCode = unsafe(addr<uint?>(code[0]))
     var h : VkShaderModule
     vk_check(vkCreateShaderModule(boost_value_to_vk(device), ci, null, h), null)
     var b = vk_value_to_boost(h)
@@ -1188,9 +1120,7 @@ def public create_shader_module(device : Device; var code : array<uint8>) : Shad
 def public create_shader_module(device : Device; var code : array<uint>) : ShaderModule {
     var ci = VkShaderModuleCreateInfo()
     ci.codeSize = uint64(long_length(code) * 4l)
-    unsafe {
-        ci.pCode = addr(code[0])
-    }
+    ci.pCode = unsafe(addr(code[0]))
     var h : VkShaderModule
     vk_check(vkCreateShaderModule(boost_value_to_vk(device), ci, null, h), null)
     var b = vk_value_to_boost(h)
@@ -1822,9 +1752,7 @@ def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
     }
     var q13 = VkPhysicalDeviceVulkan13Features()
     var q2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        q2.pNext = addr<void?>(q13)
-    }
+    q2.pNext = unsafe(addr<void?>(q13))
     vkGetPhysicalDeviceFeatures2(phys, q2)
     return q13.subgroupSizeControl != 0u && q13.computeFullSubgroups != 0u
 }
@@ -2060,12 +1988,10 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
             region.dstOffsets[1].x = w
             region.dstOffsets[1].y = h
             region.dstOffsets[1].z = 1
-            unsafe {
-                vkCmdBlitImage(boost_value_to_vk(cmd),
-                    boost_value_to_vk(image),      VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                    boost_value_to_vk(srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
-                    1u, addr(region), VkFilter.NEAREST)
-            }
+            vkCmdBlitImage(boost_value_to_vk(cmd),
+                boost_value_to_vk(image),      VkImageLayout.TRANSFER_SRC_OPTIMAL,
+                boost_value_to_vk(srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
+                1u, unsafe(addr(region)), VkFilter.NEAREST)
             transition_image(cmd, srgb_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
                 transfer_write, to_read, xfer, xfer)
             copy_image_to_buffer(cmd, srgb_image, readback, w, h)
@@ -2295,9 +2221,7 @@ def public run_cmd_sync(device : Device; pool : CommandPool; queue : VkQueue; bl
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw_cmd : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), ai, addr(raw_cmd)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), ai, unsafe(addr(raw_cmd))), null)
     let cmd = vk_value_to_boost(raw_cmd)   // non-owning wrapper (pool-freed below)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
@@ -2310,9 +2234,7 @@ def public run_cmd_sync(device : Device; pool : CommandPool; queue : VkQueue; bl
         vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
     }
     vk_check(vkQueueWaitIdle(queue), null)
-    unsafe {
-        vkFreeCommandBuffers(boost_value_to_vk(device), boost_value_to_vk(pool), 1u, addr(raw_cmd))
-    }
+    vkFreeCommandBuffers(boost_value_to_vk(device), boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
 }
 
 //! begin/end a render pass around the block, clearing to `clear`
@@ -2325,10 +2247,8 @@ def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; fra
     rp.clearValueCount = 1u
     var c = clear
     let raw_cmd = boost_value_to_vk(cmd)
-    unsafe {
-        rp.pClearValues = addr(c)
-        vkCmdBeginRenderPass(raw_cmd, rp, VkSubpassContents.INLINE)
-    }
+    rp.pClearValues = unsafe(addr(c))
+    vkCmdBeginRenderPass(raw_cmd, rp, VkSubpassContents.INLINE)
     invoke(blk)
     vkCmdEndRenderPass(raw_cmd)
 }
@@ -2345,10 +2265,8 @@ def public record_render_pass(cmd : CommandBuffer; render_pass : RenderPass; fra
     rp.renderArea = area
     rp.clearValueCount = uint(length(clears))
     let raw_cmd = boost_value_to_vk(cmd)
-    unsafe {
-        rp.pClearValues = addr(clears[0])
-        vkCmdBeginRenderPass(raw_cmd, rp, VkSubpassContents.INLINE)
-    }
+    rp.pClearValues = unsafe(addr(clears[0]))
+    vkCmdBeginRenderPass(raw_cmd, rp, VkSubpassContents.INLINE)
     invoke(blk)
     vkCmdEndRenderPass(raw_cmd)
 }
@@ -2362,9 +2280,7 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
                             blk : block<() : void>) {
     var info = RenderingInfo(renderArea = area, layerCount = layer_count, viewMask = 0u,
         pColorAttachments <- color_attachments)
-    unsafe {
-        info.pDepthAttachment = addr(depth_attachment)
-    }
+    info.pDepthAttachment = unsafe(addr(depth_attachment))
     cmd_begin_rendering(cmd, info)
     invoke(blk)
     cmd_end_rendering(cmd)
@@ -2388,9 +2304,7 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
 def public with_mapped_memory(device : Device; memory : DeviceMemory; blk : block<(ptr : void?) : void>) {
     var mapped : void? = null
     let flags : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, VK_WHOLE_SIZE, flags, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, VK_WHOLE_SIZE, flags, unsafe(addr(mapped))), null)
     invoke(blk, mapped)
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
 }
@@ -2408,9 +2322,7 @@ def public with_push_staging(size : uint; blk : block<(ptr : void?) : void>) {
     if (int(size) > length(g_push_staging)) {
         g_push_staging |> resize(int(size))
     }
-    unsafe {
-        invoke(blk, addr<void?>(g_push_staging[0]))
-    }
+    invoke(blk, unsafe(addr<void?>(g_push_staging[0])))
 }
 
 //! Write a single typed value at a byte offset into mapped device memory (one memcpy of sizeof<TT>), for
@@ -2427,9 +2339,7 @@ def public write_field(ptr : void?; offset : uint; var value : auto(TT) const) {
 def public map_memory_to_array(device : Device; memory : DeviceMemory; size : uint64; blk : block<(data : array<uint8>) : void>) {
     var mapped : void? = null
     let flags : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, unsafe(addr(mapped))), null)
     // array is int-indexed, so a >2GB mapping cannot be represented here at all — assert rather
     // than resize truncated and then memcpy the full width, which would run past the allocation
     assert(size <= uint64(0x7FFFFFFF), "map_memory_to_array: mapping exceeds the int-indexed array cap")
@@ -2544,10 +2454,8 @@ def public copy_image_to_buffer(cmd : CommandBuffer; image : Image; buffer : Hos
     region.imageExtent.width = uint(width)
     region.imageExtent.height = uint(height)
     region.imageExtent.depth = 1u
-    unsafe {
-        vkCmdCopyImageToBuffer(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            boost_value_to_vk(buffer.buffer), 1u, addr(region))
-    }
+    vkCmdCopyImageToBuffer(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        boost_value_to_vk(buffer.buffer), 1u, unsafe(addr(region)))
 }
 
 // ===== pipeline executable introspection (VK_KHR_pipeline_executable_properties) =====
@@ -2688,9 +2596,7 @@ def public create_address_buffer(device : Device; phys : VkPhysicalDevice; size 
     flags_info.flags.device_address = true
     var mai = MemoryAllocateInfo(allocationSize = req.size,
         memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
-    unsafe {
-        mai.next = addr<void?>(flags_info)
-    }
+    mai.next = unsafe(addr<void?>(flags_info))
     var inscope memory <- allocate_memory(device, mai)
     vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(buffer), boost_value_to_vk(memory), 0ul), null)
     let bdai = BufferDeviceAddressInfo(buffer = weak_copy(buffer))
@@ -2721,9 +2627,7 @@ def public upload_bytes(buf : AddressBuffer; device : Device; var data : array<a
 def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceRayTracingPipelinePropertiesKHR {
     var rtp = VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(rtp)
-    }
+    p2.pNext = unsafe(addr<void?>(rtp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     rtp.pNext = null   // don't leak the dangling chain pointer to the caller
     return rtp
@@ -2736,10 +2640,8 @@ def public get_ray_tracing_shader_group_handles(device : Device; pipeline : Pipe
                                                 first_group : uint; group_count : uint; handle_size : uint) : array<uint8> {
     var data : array<uint8>
     data |> resize(int(group_count * handle_size))
-    unsafe {
-        vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
-            first_group, group_count, uint64(long_length(data)), addr<void?>(data[0])), null)
-    }
+    vk_check(vkGetRayTracingShaderGroupHandlesKHR(boost_value_to_vk(device), boost_value_to_vk(pipeline),
+        first_group, group_count, uint64(long_length(data)), unsafe(addr<void?>(data[0]))), null)
     return <- data
 }
 
@@ -2783,9 +2685,7 @@ def public create_ray_tracing_pipeline(device : Device; layout : PipelineLayout;
     var no_op : DeferredOperationKHR
     var no_cache : PipelineCache
     var pipes <- create_ray_tracing_pipelines_k_h_r(device, no_op, no_cache, infos)
-    unsafe {
-        delete infos
-    }
+    delete infos
     var p <- pipes[0]
     delete pipes
     return <- p
@@ -2942,9 +2842,7 @@ def private build_accel_structure(device : Device; phys : VkPhysicalDevice; pool
     run_cmd_sync(device, pool, queue) $(cmd) {
         cmd_build_acceleration_structures_k_h_r(cmd, infos, ranges)
     }
-    unsafe {
-        delete infos
-    }
+    delete infos
     delete ranges
     let dai = AccelerationStructureDeviceAddressInfoKHR(accelerationStructure = weak_copy(handle))
     let address = get_acceleration_structure_device_address_k_h_r(device, dai)

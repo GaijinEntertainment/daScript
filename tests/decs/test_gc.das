@@ -92,9 +92,7 @@ def test_gc_arrays(t : T?) {
         }
     }
     before_gc()
-    unsafe {
-        heap_collect(true, true)
-    }
+    unsafe(heap_collect(true, true))
     after_gc()
     t |> run("after gc") @(t : T?) {
         query() $(values : array<int>; i : int) {
@@ -122,9 +120,7 @@ def test_gc_strings(t : T?) {
         t |> equal(i, 3)
     }
     before_gc()
-    unsafe {
-        heap_collect(true, true)
-    }
+    unsafe(heap_collect(true, true))
     after_gc()
     t |> run("after string gc") @(t : T?) {
         var j = 0
@@ -197,9 +193,7 @@ def test_gc_stress(t : T?) {   // nolint:STYLE037,STYLE038 - one randomized stre
         }
         if ((random_int(seed) % 100) < 50) {
             before_gc()
-            unsafe {
-                heap_collect(true, true)
-            }
+            unsafe(heap_collect(true, true))
             after_gc()
         }
         commit()
@@ -238,9 +232,7 @@ def test_gc_stress(t : T?) {   // nolint:STYLE037,STYLE038 - one randomized stre
             data |> mem_archive_load(decsState)
         } else {
             before_gc()
-            unsafe {
-                heap_collect(true, true)
-            }
+            unsafe(heap_collect(true, true))
             after_gc()
         }
         query() $(values : array<int2>; i : int) {

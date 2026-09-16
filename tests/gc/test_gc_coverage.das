@@ -28,9 +28,7 @@ var g_big : array<int>
 var g_garbage_sink : Holder?
 
 def collect() {
-    unsafe {
-        heap_collect(true, true)
-    }
+    unsafe(heap_collect(true, true))
 }
 
 def make_garbage(n : int) {

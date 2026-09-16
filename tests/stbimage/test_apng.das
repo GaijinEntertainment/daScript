@@ -107,10 +107,7 @@ def test_apng_basic(t : T?) {
         for (frame in range(4)) {
             var pixels : array<uint8>
             make_gradient_frame(pixels, W, H, frame)
-            var ok : int
-            unsafe {
-                ok = stbi_apng_frame(writer, addr(pixels[0]), W * 4, 100)
-            }
+            let ok = stbi_apng_frame(writer, unsafe(addr(pixels[0])), W * 4, 100)
             tt |> equal(ok, 1)
         }
         let end_ok = stbi_apng_end(writer)
@@ -200,9 +197,7 @@ def test_apng_drop_accounting(t : T?) {
         }
         // Submit 40 frames as fast as possible — queue cap is 4, so we expect drops.
         for (_i in range(40)) {
-            unsafe {
-                stbi_apng_frame(writer, addr(pixels[0]), W * 4, 33)
-            }
+            stbi_apng_frame(writer, unsafe(addr(pixels[0])), W * 4, 33)
         }
         let dropped_before_end = stbi_apng_dropped(writer)
         let end_ok = stbi_apng_end(writer)
@@ -285,16 +280,12 @@ def test_apng_dropped_zero_when_keeping_up(t : T?) {
         var pixels : array<uint8>
         pixels |> resize(W * H * 4)
         for (_frame in range(3)) {
-            unsafe {
-                stbi_apng_frame(writer, addr(pixels[0]), W * 4, 100)
-            }
+            stbi_apng_frame(writer, unsafe(addr(pixels[0])), W * 4, 100)
             sleep(50u)   // ms — give worker time to drain
         }
         let dropped = stbi_apng_dropped(writer)
         tt |> equal(dropped, 0)
-        unsafe {
-            stbi_apng_end(writer)
-        }
+        stbi_apng_end(writer)
         remove(fname)
     }
 }

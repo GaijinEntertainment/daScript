@@ -62,9 +62,7 @@ def bind_span(blob : PlaneF; span : TtsSpan; var a : array<float>) {
 //! Forget a borrowed view or delete an owned buffer - the one teardown for a weight array.
 def release_weight(var a : array<float>) {
     if (lock_count(a) != 0) {
-        unsafe {
-            _builtin_forget_temp_array(a)
-        }
+        unsafe(_builtin_forget_temp_array(a))
     } else {
         delete a
     }
@@ -117,9 +115,7 @@ def bind_span_q8(qplane : PlaneI8; span : TtsSpan; var a : array<int8>) {
 //! `release_weight` for an int8 quant array.
 def release_weight_q8(var a : array<int8>) {
     if (lock_count(a) != 0) {
-        unsafe {
-            _builtin_forget_temp_array(a)
-        }
+        unsafe(_builtin_forget_temp_array(a))
     } else {
         delete a
     }
@@ -138,9 +134,7 @@ def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) 
 //! `release_weight` for a byte plane (a K-quant quant or scale plane).
 def release_weight_u8(var a : array<uint8>) {
     if (lock_count(a) != 0) {
-        unsafe {
-            _builtin_forget_temp_array(a)
-        }
+        unsafe(_builtin_forget_temp_array(a))
     } else {
         delete a
     }
@@ -1019,9 +1013,7 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
                 }
             }
         }
-        unsafe {
-            invoke(g_mm_q8q8_batch, yp + r0 * cout, wqp, wsp, xstp, xssp, kc, cout, rows)
-        }
+        invoke(g_mm_q8q8_batch, unsafe(yp + r0 * cout), wqp, wsp, xstp, xssp, kc, cout, rows)
         if (nbias > 0l) {
             maybe_parallel_for(0, int(rows), lanes_for_work(rows * cout, 0)) $(rb, re) {
                 unsafe {

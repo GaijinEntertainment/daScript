@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xbf8412b8bfc82374ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6eeb529c1bd2a8ful
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -157,11 +157,15 @@ def private add_debug_module_flags(debug_info : bool; target_triple : string) {
     LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, div_key, uint64(long_length(div_key)),
         LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 3ul, 0)))
     // host_jit_triple() is "" on MSVC hosts — LLVM's default triple is the actual host answer
-    let triple = (target_triple |> empty()) ? LLVMGetDefaultTargetTriple() : target_triple
+    let triple_owned = target_triple |> empty()
+    let triple = triple_owned ? LLVMGetDefaultTargetTriple() : target_triple
     if (triple |> find("windows") != -1) {
         let cv_key = "CodeView"
         LLVMAddModuleFlag(g_mod, LLVMModuleFlagBehavior.Warning, cv_key, uint64(long_length(cv_key)),
             LLVMValueAsMetadata(LLVMConstInt(LLVMInt32TypeInContext(g_ctx), 1ul, 0)))
+    }
+    if (triple_owned) {
+        LLVMDisposeMessage(triple)
     }
 }
 

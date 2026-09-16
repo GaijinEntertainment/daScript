@@ -22,19 +22,17 @@ def private spawn_child(cmd : string; var lines : array<string>) : int {
     if (get_platform_name() == "windows") {
         full = "\"{full}\""   // cmd.exe strips the first and last quote of a line that opens with one
     }
-    unsafe {
-        rc = popen_timeout(full, 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = strip(fgets(f))
-                if (!empty(ln)) {
-                    lines |> push("{ln}")
-                }
+    rc = unsafe(popen_timeout(full, 300.0) $(f) {
+        if (f == null) {
+            return
+        }
+        while (!feof(f)) {
+            let ln = strip(fgets(f))
+            if (!empty(ln)) {
+                lines |> push("{ln}")
             }
         }
-    }
+    })
     return rc
 }
 

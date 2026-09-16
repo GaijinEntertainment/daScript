@@ -1,0 +1,1 @@
+Returns whether a value of the given type is safe to delete, meaning that deleting it does not require an unsafe block. Raw pointers to a typed value, blocks and lambdas are never safe to delete, and a structure, tuple, variant, array or table is safe only when everything it holds is.

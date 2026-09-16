@@ -239,29 +239,27 @@ struct public GltfVkModel {
 }
 
 def public finalize(var m : GltfVkModel) {
-    unsafe {
-        delete m.pipeline_index
-        delete m.pipelines
-        delete m.desc_sets
-        delete m.desc_pool
-        delete m.pipe_layout_skinned
-        delete m.pipe_layout_rigid
-        delete m.set_layouts_skinned
-        delete m.set_layouts_rigid
-        delete m.frag
-        delete m.vert_skinned
-        delete m.vert_rigid
-        delete m.skin_ubos
-        delete m.mat_ubos
-        delete m.cam_ubo
-        delete m.env_tex
-        delete m.default_sampler
-        delete m.flat_normal_tex
-        delete m.white_tex
-        delete m.samplers
-        delete m.textures
-        delete m.meshes
-    }
+    delete m.pipeline_index
+    delete m.pipelines
+    delete m.desc_sets
+    delete m.desc_pool
+    delete m.pipe_layout_skinned
+    delete m.pipe_layout_rigid
+    delete m.set_layouts_skinned
+    delete m.set_layouts_rigid
+    delete m.frag
+    delete m.vert_skinned
+    delete m.vert_rigid
+    delete m.skin_ubos
+    delete m.mat_ubos
+    delete m.cam_ubo
+    delete m.env_tex
+    delete m.default_sampler
+    delete m.flat_normal_tex
+    delete m.white_tex
+    delete m.samplers
+    delete m.textures
+    delete m.meshes
 }
 
 // ===== private helpers =====
@@ -660,9 +658,7 @@ def private emplace_env_write(var writes : array<WriteDescriptorSet>; model : Gl
 //! the mip chain the roughness lookup needs. Takes ownership of `env`; call between frames (device idle).
 //! `GltfPbrLight.environment` scales it per frame; without an environment the flat ambient is used.
 def public gltf_vk_set_environment(var model : GltfVkModel; device : Device; var env : Texture) {
-    unsafe {
-        delete model.env_tex
-    }
+    delete model.env_tex
     model.env_tex <- env
     model.env_max_lod = (model.env_tex.width > 0
         ? floor(log2(float(max(model.env_tex.width, model.env_tex.height)))) : 0.0)

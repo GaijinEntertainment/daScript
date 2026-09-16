@@ -22,9 +22,7 @@ def test_opt_ptr_view_semantics(t : T?) {
     var st : PipelineShaderStageCreateInfo      // null module -- never handed to a driver
     st.stage.vertex = true
     gp.pStages <- [st]
-    unsafe {
-        gp.pViewportState = addr(vp)
-    }
+    gp.pViewportState = unsafe(addr(vp))
     t |> success(gp.pViewportState != null, "opt-ptr field set before viewing")
 
     let vk1 = vk_view_create_unsafe(gp)

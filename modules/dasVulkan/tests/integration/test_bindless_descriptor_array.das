@@ -243,9 +243,7 @@ def private render_one_id(id : int) : array<uint8> {   // nolint:STYLE038 - flat
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, pipe_layout, 0u, sets, no_dyn)
             var pcf : VkShaderStageFlags
             pcf.fragment = true
-            unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, addr<void?>(pushed[0]))
-            }
+            vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, 4u, unsafe(addr<void?>(pushed[0])))
             cmd_draw(cmd, 3u)
         }
         copy_image_to_buffer(cmd, target.image, readback, TEX_W, TEX_H)

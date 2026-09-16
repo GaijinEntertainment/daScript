@@ -278,10 +278,7 @@ def test_persistent_que_frame_loop(t : T?) {
         let PASSES = 25
         var data : array<int>
         data |> resize(N)
-        var pdata : array<int>?
-        unsafe {
-            pdata = addr(data)
-        }
+        var pdata = unsafe(addr(data))
         var every_pass_ready = true
         for (_p in range(PASSES)) {
             var status = job_status_create()
@@ -299,9 +296,7 @@ def test_persistent_que_frame_loop(t : T?) {
                 }
             }
             every_pass_ready = every_pass_ready && poll_ready(status)
-            unsafe {
-                job_status_remove(status)
-            }
+            unsafe(job_status_remove(status))
         }
         t |> success(every_pass_ready, "every pass reached isReady")
         var advanced = 0
@@ -326,10 +321,7 @@ def test_persistent_que_empty_band(t : T?) {
         let BANDS = 8          // more bands than elements: 6 of them get nothing
         var data : array<int>
         data |> resize(N)
-        var pdata : array<int>?
-        unsafe {
-            pdata = addr(data)
-        }
+        var pdata = unsafe(addr(data))
         var status = job_status_create()
         status |> append(BANDS)
         let chunk = (N + BANDS - 1) / BANDS
@@ -351,9 +343,7 @@ def test_persistent_que_empty_band(t : T?) {
             }
         }
         t |> success(poll_ready(status), "the wait group balances when bands outnumber work")
-        unsafe {
-            job_status_remove(status)
-        }
+        unsafe(job_status_remove(status))
         t |> equal(data[0], 1)
         t |> equal(data[1], 1)
         destroy_job_que()

@@ -78,7 +78,7 @@ def public vk_live_set_target(device : Device; phys : VkPhysicalDevice; queue : 
     g_last_index = -1       // a freshly registered target has no presented frame yet
     g_frames_rendered = 0
     if (g_readback_cap > 0ul) {   // drop a readback buffer from a previous target (possibly a different device)
-        unsafe { delete g_readback }
+        delete g_readback
         g_readback_cap = 0ul
     }
 }
@@ -98,7 +98,7 @@ def private ensure_readback(nbytes : uint64) {
         return
     }
     if (g_readback_cap > 0ul) {
-        unsafe { delete g_readback }
+        delete g_readback
     }
     g_readback <- create_host_buffer(g.device, g.phys, nbytes)   // 3-arg overload = transfer_dst usage
     g_readback_cap = nbytes
@@ -170,7 +170,7 @@ def private set_live_viewport(cmd : CommandBuffer; width, height : int) {
     delete scis
 }
 
-def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;   // nolint:STYLE038 - flat frame-record scaffold
+def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;
                               dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
     //! acquire -> record (render pass + `blk`) -> submit -> present on the `vk_live_set_target` target;
     //! drop-in for vulkan_window's `draw_frame` that also tracks the presented image and feeds the APNG
@@ -195,9 +195,7 @@ def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear 
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw_cmd : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(dev, ai, addr(raw_cmd)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
     let cmd = vk_value_to_boost(raw_cmd)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
@@ -238,9 +236,7 @@ def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear 
         presented = vkQueuePresentKHR(g.queue, present)
     }
     vk_check(vkQueueWaitIdle(g.queue), null)
-    unsafe {
-        vkFreeCommandBuffers(dev, boost_value_to_vk(g.pool), 1u, addr(raw_cmd))
-    }
+    vkFreeCommandBuffers(dev, boost_value_to_vk(g.pool), 1u, unsafe(addr(raw_cmd)))
 
     // SUBOPTIMAL is still a usable present; out-of-date or any other error -> false so the caller recreates.
     // Only count the frame as presented (track last-index + capture) when present actually succeeded.
@@ -511,9 +507,7 @@ struct RecordStatusResult {
 def record_status(_input : JsonValue?) : JsonValue? {
     var dropped = 0
     if (recorder_active) {
-        unsafe {
-            dropped = stbi_apng_dropped(recorder.writer)
-        }
+        dropped = stbi_apng_dropped(recorder.writer)
     }
     return JV(RecordStatusResult(
         active    = recorder_active,
