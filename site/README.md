@@ -18,6 +18,7 @@ site/
 |   +-- dasllama.js         # dasLLAMA page renderer (bars + tables + receipts, all derived from the records)
 |   +-- dasllama/
 |   |   +-- bench_records.json  # COMMITTED - merged per-box stores, written by gen_site_records
+|   |   +-- bench_cells.json    # COMMITTED - the first-paint projection of the merge, same writer
 |   +-- performance.js      # data-queries page renderer (matrix + engine board, INTERP/JIT toggles, derived from the records)
 |   +-- performance_bench.json  # COMMITTED - written by benchmarks/sql/_update_results.das --site-json
 |   +-- performance_engines.json  # COMMITTED - written by examples/benchmarks/sql/_update_results.das --site-json
@@ -276,8 +277,11 @@ sample. No broken links, consistent Forge chrome on every page.
 
 `site/dasllama.html` renders entirely from `site/files/dasllama/bench_records.json` - every
 row is a das measurement paired with its reference run, every ratio derived in
-`files/dasllama.js`, nothing hand-placed. The JSON is generated from the per-box record
-stores and COMMITTED (no CI fetch):
+`files/dasllama.js`, nothing hand-placed. The first paint reads `bench_cells.json` beside it -
+the same merge minus the receipt fields (command, environment, tune stamps, input hashes, the
+full hardware line, ASR transcripts), a fifth of the bytes - and the full store loads once, on
+the first receipt a visitor opens. Both files come from the per-box record stores in one run
+and are COMMITTED (no CI fetch); `test_site_records.das` fails when either drifts:
 
 ```bash
 bin/daslang modules/dasLLAMA/performance/gen_site_records.das

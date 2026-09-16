@@ -5,6 +5,10 @@
 #
 # Paste inside the `daslang.io { ... }` block, ahead of `root`/`file_server`.
 
+# Every response leaves compressed: dasllama.html's record store alone is 1.5 MB of
+# JSON on disk and ~110 KB gzipped, and every css/js/html asset compresses 4-5x.
+encode zstd gzip
+
 # dasweb-playground (sample store + share links) — loopback service :8101
 handle /s/* {
 	reverse_proxy 127.0.0.1:8101

@@ -5,6 +5,10 @@
 #
 # Paste inside the `dasllama.io { ... }` block, ahead of `root`/`file_server`.
 
+# Every response leaves compressed: the pages ship JSON record stores and the css/js
+# beside them uncompressed on disk, and a text asset compresses 5-15x on the wire.
+encode zstd gzip
+
 # Keep the home page on one canonical URL. The static file remains index.html,
 # but requests that name explicitly are permanently redirected to the site root.
 redir /index.html / 308

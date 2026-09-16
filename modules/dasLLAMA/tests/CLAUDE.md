@@ -705,8 +705,10 @@ the `--exclude` filter's semantics, and a dry run of the runner with a no-op chi
 Requires `run` by bare same-dir name.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
-against the committed `site/files/dasllama/bench_records.json` (what daslang.io/dasllama.html
-renders); red means a records commit skipped `gen_site_records`.
+against the committed `site/files/dasllama/bench_records.json` and its first-paint projection
+`bench_cells.json` (what daslang.io/dasllama.html renders); red means a records commit skipped
+`gen_site_records`. Plus the projection contract: the render fields survive, the receipt-only
+fields are absent from the text.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`

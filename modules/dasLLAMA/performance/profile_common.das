@@ -342,20 +342,18 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
 //! fallback, and the line loop has never dropped output, so it stays.
 def run_capture_argv(args : array<string>) : string {
     var acc = ""
-    unsafe {
-        popen_argv(args, 0.0, $(f) {
-            if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
-                return
+    unsafe(popen_argv(args, 0.0, $(f) {
+        if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
+            return
+        }
+        while (true) {
+            let line = fgets(f)
+            if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
+                break
             }
-            while (true) {
-                let line = fgets(f)
-                if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
-                    break
-                }
-                acc = "{acc}{line}"
-            }
-        })
-    }
+            acc = "{acc}{line}"
+        }
+    }))
     return strip(acc)
 }
 
@@ -391,13 +389,11 @@ def argv_line(args : array<string>) : string {
 // pipe to EOF (the fio fallback for non-regular files), so the whole stream arrives.
 def run_capture(cmd : string; first_line : bool) : string {
     var out = ""
-    unsafe {
-        popen(cmd) $(f) {
-            if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
-                out = fread(f)
-            }
+    unsafe(popen(cmd) $(f) {
+        if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
+            out = fread(f)
         }
-    }
+    })
     out = strip(out)
     if (first_line) {
         let nl = find(out, "\n")
@@ -2113,7 +2109,11 @@ def read_bench_records(path : string; var models : array<BenchModel>) : bool {
 }
 
 def write_bench_records(path : string; models : array<BenchModel>) {
-    let text = sprint_json(models, true)
+    write_records_text(path, sprint_json(models, true))
+}
+
+//! One record file, written whole; a file that cannot be opened is logged, never silent.
+def write_records_text(path : string; text : string) {
     var wrote = false
     fopen(path, "wb") $(f) {
         if (f != null) {

@@ -8,15 +8,93 @@ require profile_common
 require daslib/tune             // [tune_policy]: provisioning only — never auto-tune
 require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 
-// Merge every per-box record store (performance/records/<box>.json) into the one file the site
-// renders: site/files/dasllama/bench_records.json. Boxes never collide on the run key (box is part
-// of it), so the merge is a pure upsert; run after any gen_bench_records sweep, commit both.
+// Merge every per-box record store (performance/records/<box>.json) into the files the site
+// renders: site/files/dasllama/bench_records.json (the full merge) and bench_cells.json (its
+// first-paint projection, see SiteModel). Boxes never collide on the run key (box is part
+// of it), so the merge is a pure upsert; run after any gen_bench_records sweep, commit all three.
 // Hand-authored annotations (records/annotations.json) merge LAST — they live outside the sweep
 // output so a re-profile can never wipe an explanation.
 //   bin/daslang modules/dasLLAMA/performance/gen_site_records.das [-- --verify]
 
 let RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let SITE_PATH = "site/files/dasllama/bench_records.json"
+let SITE_CELLS_PATH = "site/files/dasllama/bench_cells.json"
+
+//! What dasllama.html renders before a visitor opens a receipt: the merge minus the receipt
+//! fields — the command, its environment, the tune stamps, the exec format, the reference
+//! version line, the input hashes, the full hardware line, an ASR row's transcript. Every key
+//! here holds what `bench_records.json` holds at the same path; the page fetches that full
+//! store once, on the first receipt opened, and never for a first paint.
+struct SiteTest {
+    @optional tok_s : double
+    @optional ms : double
+    @optional audio_s : double
+}
+
+struct SiteFile {
+    role : string
+    name : string
+}
+
+struct SiteHardware {
+    cpu : string
+}
+
+struct SiteRun {
+    engine : string
+    backend : string
+    flavor : string
+    box : string
+    threads : int
+    date : string
+    hardware : SiteHardware
+    tests : table<string; SiteTest>
+    @optional workload : string
+    @optional source : string
+    @optional sha : string
+    @optional version : string
+    @optional files : array<SiteFile>
+    @optional comment : string
+    @optional void_clips : string
+}
+
+struct SiteModel {
+    gguf : string
+    runs : array<SiteRun>
+    @optional arch : string
+    @optional size_bytes : int64
+    @optional note : string
+}
+
+def private site_run(r : BenchRun) : SiteRun {
+    var out = SiteRun(engine = r.engine, backend = r.backend, flavor = r.flavor, box = r.box,
+        threads = r.threads, date = r.date, hardware = SiteHardware(cpu = r.hardware.cpu),
+        workload = r.workload, source = r.source, sha = r.sha, version = r.version,
+        comment = r.comment, void_clips = r.void_clips)
+    for (k, t in keys(r.tests), values(r.tests)) {
+        out.tests[k] = SiteTest(tok_s = t.tok_s, ms = t.ms, audio_s = t.audio_s)
+    }
+    out.files <- [for (f in r.files); SiteFile(role = f.role, name = f.name)]
+    return <- out
+}
+
+//! The projection of the whole merge (`SiteModel`), as the text `bench_cells.json` holds.
+def site_cells_json(models : array<BenchModel>) : string {
+    var cells : array<SiteModel>
+    cells |> reserve(length(models))
+    for (m in models) {
+        var sm = SiteModel(gguf = m.gguf, arch = m.arch, size_bytes = m.size_bytes, note = m.note)
+        sm.runs |> reserve(length(m.runs))
+        for (r in m.runs) {
+            var sr <- site_run(r)
+            sm.runs |> emplace(sr)
+        }
+        cells |> emplace(sm)
+    }
+    let text = sprint_json(cells, true)
+    delete cells
+    return text
+}
 
 [CommandLineArgs]
 struct GenSiteArgs {
@@ -76,18 +154,19 @@ def main : int {
         return 1
     }
     if (cfg.verify) {
-        let want = sprint_json(merged, true)
-        let got = fread(SITE_PATH)
-        if (got != want) {
-            to_log(LOG_ERROR, "gen_site_records: {SITE_PATH} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit both\n")
-            return 1
+        for (path, want in [SITE_PATH, SITE_CELLS_PATH], [sprint_json(merged, true), site_cells_json(merged)]) {
+            if (fread(path) != want) {
+                to_log(LOG_ERROR, "gen_site_records: {path} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit all three\n")
+                return 1
+            }
         }
         let total = length(merged)
-        to_log(LOG_INFO, "gen_site_records: verify OK - {SITE_PATH} matches the {total}-model merge\n")
+        to_log(LOG_INFO, "gen_site_records: verify OK - {SITE_PATH} and {SITE_CELLS_PATH} match the {total}-model merge\n")
         return 0
     }
     write_bench_records(SITE_PATH, merged)
+    write_records_text(SITE_CELLS_PATH, site_cells_json(merged))
     let total = length(merged)
-    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} - {total} model(s)\n")
+    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} and {SITE_CELLS_PATH} - {total} model(s)\n")
     return 0
 }
