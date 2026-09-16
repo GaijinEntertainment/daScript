@@ -11,6 +11,61 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-16) - the browser gets its FMA and an int8 dot, and the spin loop stops
+  crossing into JS.** Four levers on the parrot page (Pocket TTS, zen2 box, Chrome with the window
+  verified in front before AND after each run, 7 workers + team dispatch, `DASLLAMA_ALLOW_UNTUNED=1`
+  so the figures are the fallback bodies'). One, `+relaxed-simd` joins the wasm feature string:
+  `f32x4.relaxed_madd` is the only multiply-add wasm has, so without it every contracted
+  multiply-add split back into `mul` + `add` - 8728 contractions across the module once on
+  (`SIMDTernary` 1457 -> 10185). Two, `dot_k4q8` stopped walking its 32 weights one at a time: both
+  nibbles land in a SIGNED `byte16` (`q & 15`, `(q >> 4) & 15` - 0..15 is non-negative, so both are
+  valid int8) and feed `idot`, which every target already lowers for itself, so one body needs no
+  target branch. The measure button's three runs went 1.1x -> 1.7x real time (per chunk, rtf
+  0.892-0.947 -> 0.565-0.613; per stage ms, prompt 656-716 -> 313-349, backbone 1545-1731 ->
+  812-909, codec 3739-4216 -> 2545-2822; head, which is not K-quant, 145-166 -> 153-173, the
+  control). Three, spinning workers: 1.7x -> 2.3x, the two arms taken in ONE page session with the
+  lab's spin checkbox flipped in place (`set_jobque_worker_spin`), so one process and one
+  instrument. Four, the spin loop's two JS crossings per iteration - `steady_clock::now()` for the
+  deadline and `this_thread::yield()` for the pause - are now a strided read and a counted volatile
+  loop; clock time across all threads fell 25034 ms -> 5089 ms in a 15 s window. That last one did
+  NOT move wall time here and is not expected to on this box: 64 cores against 8 busy threads, so a
+  spinning worker's waste is free. It is the core-scarce box where it should pay.
+
+  Provenance, **direction-grade** and **out-of-process**: the kernel lever compares two wasm builds
+  (two commits), and every browser figure is read from a console line outside the timed program.
+  Box: the zen2 Windows box, 64 logical cores, `performance/defaults/x86-avx2` in force. Harness:
+  the parrot lab's own measure button (three silent says a press), reading the engine's
+  `dasLLAMA tts: ... rtf` line from the page console; the artifact is the wasm64 release of
+  `examples/dasLLAMA/parrot` built by `daspkg release wasm`, served locally to Chrome. Flags: the
+  wasm cross target (not `-jit`, not AOT), `DASLLAMA_ALLOW_UNTUNED=1` so `DAS_TUNE_POLICY` served
+  the reference bodies, 7 workers with team dispatch on. The window was verified in the foreground
+  before AND after each run. The contraction count is `wasm-opt --metrics` over the two builds'
+  `parrot.wasm`. The clock-time split is a Chrome CPU profile of one measure run, aggregated per
+  thread by node self time. NOT board-grade: no `performance/records/zen2.json` cell backs any of
+  it, and an rtf read from a page console is not an `lcpp_bench` figure.
+
+- **REVERSED (2026-09-16) - "a browser's job queue workers park instead of spinning" (2026-09-10,
+  below) rested on two premises this arc falsified, and the browser now spins.** That entry
+  measured spinning as HARMFUL on the M-series box (1.1x spinning against 1.4x parked) and set
+  `dasllama_jobque_spin_default` to 0 under emscripten. It was measured (a) against the scalar
+  `dot_k4q8`, which made every parallel section about twice as long as it now is, and (b) with a
+  spin loop that crossed into JS twice an iteration - `steady_clock::now()` for the deadline and
+  `sched_yield` inside the pause - which is most of what a spinning web worker was costing the
+  caller. Both are gone. On the zen2 box spinning wins, 1.7x against 2.3x. The emscripten `[init]`
+  that zeroed the window is deleted: a browser now takes the one 30 ms default every other target
+  takes, and `setup_dasllama_jobque` pushes it with no platform test. Ruling (Boris): a slower
+  M-series result is acceptable - the box is faster to begin with and most visitors are on a PC. A
+  box that prefers parking still has the knobs (`jobque_spin_us` in a profile, the setter).
+
+- **OWED - the playback underrun counter is browser-only.** `sound_playback_underrun_frames`
+  answers a real count under emscripten with pthreads and a hard 0 everywhere else, because the
+  ring and its producer compile only there - native, null-device and non-pthread wasm run the
+  mixer straight off the device callback and have no ring to underrun. A script therefore cannot
+  tell "no underruns" from "this target does not count them". The native implementation is owed:
+  a device-callback path can still miss its own deadline, and counting that would make the same
+  question answerable on a desktop. It is also the lever that would make the whole ring path
+  testable off a browser, which is why the browser mixer has no test today.
+
 - **LANDED (2026-09-14) - the gemma family at parity on the KHR cooperative-matrix arm.** A card
   without `VK_NV_cooperative_matrix2` (or the mode forced, `DASLLAMA_COOPMAT=mm`) ran every gemma
   prefill at 0.33 to 0.82 of llama.cpp b10660's own KHR path (`GGML_VK_DISABLE_COOPMAT2=1`, the
@@ -99,7 +154,8 @@ what it costs today and what the fix would change.
   within 3%). Team dispatch stays on there (0.69 against 0.72 rtf off, the head 98 against 140
   ms). One worker instead of eight, parked or spinning, reads 0.7x (prompt 1370 / backbone 3080
   / codec 5800), so the pool does pay - 2.2x from one to eight - once nothing spins. The
-  emscripten default is now 0 (`dasllama_jobque_spin_default`); the desktop keeps its window.
+  emscripten default was set to 0 here (`dasllama_jobque_spin_default`) - REVERSED 2026-09-16, see
+  the entry above; the desktop keeps its window.
   Provenance, direction-grade: the m1 box (10 cores, the `m1.tune.json` profile); the browser
   figures are the engine's own per-synthesis timing line (`dasLLAMA tts: ... rtf`) read from the
   page's console, the wasm64 release of `examples/dasLLAMA/parrot` served locally to Chrome under

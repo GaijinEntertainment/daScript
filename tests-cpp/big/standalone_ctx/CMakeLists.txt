@@ -119,11 +119,14 @@ if(TARGET libDaScriptDyn_runtime AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     target_compile_options(standalone_init_fixture_shared PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fno-rtti>
         $<$<CXX_COMPILER_ID:MSVC>:/GR->)
+    # $<1:...> is what keeps the library where the generated bindings say it is: a plain path
+    # gains a per-config subdirectory under a multi-config generator, and the -bindings_library
+    # above wrote the config-less one into the .das the host requires.
     set_target_properties(standalone_init_fixture_shared PROPERTIES
         PREFIX ""
         OUTPUT_NAME standalone_init_fixture
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}>"
+        RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}>"
         BUILD_RPATH "${PROJECT_SOURCE_DIR}/lib"
         FOLDER "tests-cpp/big")
     SETUP_CPP11(standalone_init_fixture_shared)

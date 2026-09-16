@@ -85,3 +85,14 @@ def test_record_to_wav_roundtrip(t : T?) {
         sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate
     }
 }
+
+// The playback twin of sound_record_overflow_frames. Only the threaded WebAssembly build mixes on
+// a worker thread and can underrun its ring; every other target mixes on the device callback and
+// answers 0. This cell is what the native arm and the binding itself answer to - a counter never
+// registered, or one whose native arm returned something other than 0, fails here.
+[test]
+def test_playback_underrun_counter(t : T?) {
+    t |> run("the playback underrun counter reads zero on a target that mixes on the device callback") @(t : T?) {
+        t |> equal(sound_playback_underrun_frames(), 0l)
+    }
+}

@@ -49,8 +49,8 @@ def test_spm_encode_respects_model_bos_eos(t : T?) {
 
 [test]
 def test_facade_jobque_spin_knob(t : T?) {
-    t |> run("the spin window reads the desktop default before any set, and the facade setter reaches the engine") @(t : T?) {
-        t |> equal(get_jobque_spin_us(), 30000l, "the desktop default is the 30 ms window (a browser's is 0)")
+    t |> run("the spin window reads the default before any set, and the facade setter reaches the engine") @(t : T?) {
+        t |> equal(get_jobque_spin_us(), 30000l, "the default is the 30 ms window, on every platform including a browser")
         set_jobque_spin_us(1234l)
         t |> equal(get_jobque_spin_us(), 1234l, "the facade setter lands on the engine knob")
         set_jobque_spin_us(30000l)

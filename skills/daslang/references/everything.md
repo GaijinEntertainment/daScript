@@ -1857,6 +1857,7 @@ Module audio
 - `mixer_context` - Get the audio mixer thread's context.
 - `sound_finalize` - Shut down the audio device and release resources.
 - `sound_initalize` - Initialize the audio device with a mixer callback.
+- `sound_playback_underrun_frames` - Number of output frames the device played as silence because the mixer had not refilled the ring in time.
 - `sound_set_null_device` - Forces the audio system to use miniaudio's null backend — a timer-driven playback device with no real hardware — on the next audio_system_create / with_audio_system.
 
 ### Capture

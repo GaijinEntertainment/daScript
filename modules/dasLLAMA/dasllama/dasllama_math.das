@@ -258,6 +258,7 @@ def private register_trace_categories() {
 //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
 //! batched dispatch, spin-before-park window, join-poll level. Call INSIDE `with_job_que` (or
 //! after `create_job_que`) — the queue must exist. Engine spelling of `setup_dasllama_jobque`.
+[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
 def setup_dasllama_jobque_() {
     set_jobque_fork_pool(true, true)
     set_jobque_batch_dispatch(true)
@@ -289,13 +290,6 @@ def dasllama_jobque_threads_cap() {
         set_jobque_threads(cores)
         set_gemv_lane_cap(perf)
         set_phase_decode_workers(max(perf - 1, 1))
-    }
-}
-
-[init, arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-park")]
-def dasllama_jobque_spin_default() {
-    if (get_running_platform_name() == "emscripten") {   // the RUNNING platform: the compile-time name is the cross-compile's host
-        g_jobque_spin_us = 0l
     }
 }
 

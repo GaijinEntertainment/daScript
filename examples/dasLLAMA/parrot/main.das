@@ -53,6 +53,7 @@ let VOICE_NAME = "you"
 let READ_OUT_STATUS = "read out - change the text and say again, or record a new voice"
 let PEAK_COLUMN = 240   //! samples per waveform column: 10 ms at the model's rate
 let MEASURE_RUNS = 3    //! the measure button says the text this many times, silently
+let ENGINE_SPIN_WINDOW_US = 30000   //! the window the SPIN toggle turns on when the engine reports 0 - a box profile parked it
 
 //! the frame thread's requests to the speech thread, as archived records
 struct Ask {
@@ -153,7 +154,7 @@ var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_frames = 0
 var g_jobs_max = 1
-var g_spin_window_us = 30000
+var g_spin_window_us = ENGINE_SPIN_WINDOW_US
 var g_jobs_applied = -1
 var g_team_applied = true
 var g_spin_applied = true
@@ -222,6 +223,7 @@ def rebuild_voice_names() {
     g_voice_names |> push_clone_from(g_roster)
 }
 
+[arch(at = "../ARCHITECTURE.md#parrot-panels")]
 def on_ready(var a : Answer) {
     g_ready = true
     g_mic_rate = a.rate
@@ -234,8 +236,9 @@ def on_ready(var a : Answer) {
     JOBS.bounds = (1, g_jobs_max)
     JOBS.value = clamp(get_jobque_worker_limit(), 1, g_jobs_max)   // the limit reads as a huge number when unset
     TEAM.value = get_jobque_team_mode()
-    SPIN.value = get_jobque_spin_us() > 0l   // the engine's default for the platform: parked in a browser
-    g_spin_window_us = SPIN.value ? int(get_jobque_spin_us()) : 30000   // the window the toggle turns back on: the box's own, or the desktop's in a browser
+    let engine_spin_us = get_jobque_spin_us()
+    SPIN.value = engine_spin_us > 0l
+    g_spin_window_us = engine_spin_us > 0l ? int(engine_spin_us) : ENGINE_SPIN_WINDOW_US
     g_jobs_applied = JOBS.value
     g_team_applied = TEAM.value
     g_spin_applied = SPIN.value
@@ -922,10 +925,17 @@ def draw_output_panel() {
     }
 }
 
+[arch(at = "../ARCHITECTURE.md#parrot-panels")]
 def draw_lab_panel() {
     text("model  {g_args.tts_model}")
     text("rate  {g_mic_rate} Hz   voices  {length(g_roster)}   clones  {g_can_clone ? "yes" : "no"}")
     text("platform  {get_running_platform_name()}   cores  {get_total_hw_cores()}")
+    let underrun_frames = sound_playback_underrun_frames()
+    if (underrun_frames > 0l) {
+        with_style((ImGuiCol.Text, RED)) {
+            text("audio underruns  {underrun_frames} frames of silence - the mixer is not refilling the ring before the device drains it")
+        }
+    }
     spacing()
     text("job queue  ({g_jobs_max} workers in the pool)")
     checkbox(SINGLE, (text = "single thread - no dispatch at all"))

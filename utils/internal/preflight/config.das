@@ -84,6 +84,7 @@ def public tier_runs(tier : string; full : bool) : bool {
 let public SWEEP_EXCLUDED <- {
     "examples/crash/" => "the native `crash` module, built only under its CMake option",
     "examples/daStrudel/sfx_lab/" => "a project-root example: its modules resolve through -project_root",
+    "examples/dasLLAMA/library/" => "requires dasllama_lib_c, which the EXCLUDE_FROM_ALL dasllama_lib_jit target writes",
     "examples/daspkg/" => "daspkg package examples: roots resolve through daspkg install",
     "examples/fatman/" => "WASM-only programs",
     "examples/games/sequence/" => "GLFW-gated: the sequence gate compiles and runs it",

@@ -220,17 +220,18 @@ measured race - records the fast-tier-only "uncapped" default rather than a meas
 hybrid box ignores it and keeps the fast-tier cap; a non-zero value is a measured choice and
 applies.
 
-### 2.18a A browser's workers park {#browser-workers-park}
+### 2.18a A browser's workers spin, like every other target's {#browser-workers-spin}
 
-The spin-before-park window (`g_jobque_spin_us`, 30 ms on a desktop) keeps a worker hot through
-the serial gaps of a token; in a browser the workers are web workers, and one that spins holds a
-core the caller's own thread is competing for, so the window costs more than the wake it saves.
-Pocket TTS in Chrome (wasm64, eight workers in the pool) generates at 1.1x real time with the
-window and the renderer at 800% CPU, and at 1.4x with the workers parked at ~112% - the same
-text, three runs each; team dispatch keeps its small edge there, and the pool still pays (one
-worker reads 0.7x). The engine's `[init]` therefore sets the window to 0 when the platform is
-emscripten (`dasllama_jobque_spin_default`); a box profile's `jobque_spin_us` and the setter still
-override it, and a program reads the value in force through `get_jobque_spin_us`. The pool's size
+The spin-before-park window (`g_jobque_spin_us`, 30 ms) keeps a worker hot through the serial gaps
+of a token, and a browser takes it on the same terms as a desktop: `setup_dasllama_jobque` pushes
+the one value to the queue on every platform, and nothing special-cases emscripten. A browser did
+park for a while, on a measurement that no longer holds - what made a spinning web worker expensive
+was the spin loop itself crossing into JS twice an iteration (`src/misc/ARCHITECTURE.md` sec.8),
+and parallel sections about twice as long as the K-quant dot now makes them. With both gone,
+spinning is the faster arm where it was measured: Pocket TTS in Chrome reads 1.7x real time parked
+against 2.3x spinning, the same text, three runs each. A slower box may still prefer parking, and
+the knobs are unchanged for it - a box profile's `jobque_spin_us` and the setter override the
+default, and a program reads the value in force through `get_jobque_spin_us`. The pool's size
 is the runtime's (`src/misc/job_que.cpp`): the browser's reported cores, capped and floored by
 `DAS_MAX_HW_JOBS` and `DAS_MIN_WEB_JOBS` (eight and four unless the build overrides them), minus
 one for the computing main thread - seven workers on a real box, the pool

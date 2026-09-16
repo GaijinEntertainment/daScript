@@ -55,3 +55,10 @@ The portable tier picks its dot form on the target at compile time. On wasm SIMD
 auto-vectorized template dot is the slow form - the ISA carries no int8 dot for LLVM to find,
 while the `idot4` builtin lowers there to the ISA's own widening multiply-adds - so a wasm target
 takes `dot_q8q8_idot4_ps`. Every other target keeps the template.
+
+The K-quant dot needs no such pick. `dot_k4q8` splits a packed byte into its two nibbles on a
+SIGNED `byte16` - `q & 15` and `(q >> 4) & 15`, both non-negative, so both are valid int8 - and
+feeds `idot`, which every target lowers for itself. One body, no target branch, and the lattice op
+carries the per-target knowledge instead of this file. Nothing here competes with the x64 kernel
+the tune grid crowns: that one walks the repacked grp planes (`k4q8_gemv_gen`), a different
+layout, and reaches `dot_k4q8` only on the disk-order arm.

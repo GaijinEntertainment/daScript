@@ -58,6 +58,7 @@ namespace das {
     int32_t dasAudio_record_available ( void );
     bool dasAudio_is_recording ( void );
     int64_t dasAudio_record_overflow_frames ( void );
+    int64_t dasAudio_playback_underrun_frames ( void );
     int32_t dasAudio_record_device_count ( Context * context, LineInfoArg * at );
     char * dasAudio_record_device_name ( int32_t index, Context * context, LineInfoArg * at );
     bool dasAudio_record_device_is_default ( int32_t index );
