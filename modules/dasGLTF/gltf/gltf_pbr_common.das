@@ -10,6 +10,25 @@ require math
 // globals — so both shader emitters (dasGlsl -> GLSL, dasSpirv -> SPIR-V) lower them as user
 // shader functions; callers sample textures and pass the values in.
 
+def gltf_shadow_pcf_weights(fraction : float) : float4 {
+    //! Combined weights of three adjacent bilinear comparison taps. Four nearest
+    //! depth comparisons reproduce them without interpolating raw depth values.
+    //! The weights shift continuously as the receiver crosses a shadow texel.
+    return float4(1.0 - fraction, 1.0, 1.0, fraction) / 3.0
+}
+
+def gltf_shadow_receiver_gradient(dx, dy : float3) : float2 {
+    //! Depth slope in shadow UV coordinates, independent of the camera-screen basis.
+    let determinant = dx.x * dy.y - dx.y * dy.x
+    if (abs(determinant) < 0.000000000001) { return float2(0.0) }
+    return float2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / determinant
+}
+
+def gltf_shadow_receiver_depth(receiver : float3; uv, gradient : float2; bias : float) : float {
+    //! Compare at each PCF texel's position on the receiver plane, not the center depth.
+    return receiver.z + dot(gradient, uv - receiver.xy) - bias
+}
+
 def gltf_ggx_distribution(n, h : float3; roughness : float) : float {
     //! Trowbridge-Reitz GGX normal distribution.
     let a = roughness * roughness

@@ -1,0 +1,1 @@
+Compress one tightly packed RGBA8 image into GPU texture blocks, replicating edge pixels when a dimension is not divisible by four. ``format`` selects BC1 (0), BC3 (1), BC4 from red (2), or BC5 from red and green (3); dimensions must be 1 through 32768, ``pixels`` must contain exactly ``width * height * 4`` bytes, and ``output`` must not alias ``pixels``.

@@ -60,6 +60,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [functional](#functional) - The FUNCTIONAL module implements lazy iterator adapters and higher-order function utilities including `filter`, `map`, `reduce`, `fold`, `scan`, `flatten`, `flat_map`, `enumerate`, `chain`, `pairwise`, `iterate`, `islice`, `cycle`, `repeat`, `sorted`, `sum`, `any`, `all`, `tap`, `for_each`, `find`, `find_index`, and `partition`.
 - [fuzzer](#fuzzer) - The FUZZER module implements fuzz testing infrastructure for daslang programs.
 - [generic_return](#generic_return) - The GENERIC_RETURN module provides the `[generic_return]` annotation that allows generic functions to automatically deduce their return type from the body.
+- [gltf_processed](#gltf_processed) - Backend-neutral glTF preprocessing that packs and optionally encodes geometry, compresses textures, and persists validated monolithic or split-file assets.
 - [gltf_types](#gltf_types) - dasGLTF loads `glTF 2.0`_ models — `.glb` (binary), `.gltf` (JSON), external or base64-embedded buffers — into a **backend-neutral scene**, with no new native code (it builds on `json_boost`, `base64`, `fio`, `stbimage` and `math`).
 - [if_not_null](#if_not_null) - The IF_NOT_NULL module provides a null-safe call macro.
 - [instance_function](#instance_function) - The INSTANCE_FUNCTION module provides the `[instance_function]` annotation for creating bound method-like functions.
@@ -84,6 +85,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [math_bits](#math_bits) - The MATH_BITS module provides bit-level reinterpretation between integer and floating point representations — `int_bits_to_float`, `uint_bits_to_float`, `float_bits_to_int`, `float_bits_to_uint` (plus the 64-bit `double` forms and 2/3/4-lane vector overloads) — as well as the `cast_to_*` helpers that pack and unpack values through a `float4` payload.
 - [math_boost](#math_boost) - The MATH_BOOST module adds geometric types (`AABB`, `AABR`, `Ray`), intersection tests (`is_intersecting`), plane helpers (`plane_dot`, `plane_normalize`, `plane_from_point_normal`, `planar_shadow`), color space conversion (`linear_to_SRGB`, `RGBA_TO_UCOLOR`, `UCOLOR_TO_RGBA`), and view/projection matrix construction (`look_at_lh`, `look_at_rh`, `perspective_rh`, `ortho_rh`).
 - [md_boost](#md_boost) - The MD_BOOST module provides Markdown generation helpers: GitHub-flavored table rendering with aligned columns and per-column alignment, plus small text utilities (bold, cell-separator escaping).
+- [meshoptimizer](#meshoptimizer) - Checked array bindings for meshoptimizer 1.2 vertex remapping, vertex-cache and vertex-fetch optimization, and vertex and index buffer codecs.
 - [module_group](#module_group) - The MODULE_GROUP module calls into every member of a module group.
 - [network](#network) - The NETWORK module implements networking facilities including HTTP client/server and low-level socket operations.
 - [only_nttp](#only_nttp) - The ONLY_NTTP module provides the `[only_nttp]` function annotation — a guard for benchmark kernels.
@@ -135,6 +137,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [temp_strings](#temp_strings) - The TEMP_STRINGS module provides temporary string construction that avoids heap allocations.
 - [templates](#templates) - The TEMPLATES module implements template instantiation utilities for daslang code generation.
 - [templates_boost](#templates_boost) - The TEMPLATES_BOOST module extends template utilities with high-level macros for common code generation patterns, including template function generation, type-parameterized struct creation, and compile-time code expansion.
+- [texture_blocks](#texture_blocks) - Portable BC1, BC3, BC4, and BC5 texture compression with complete mip chains, deterministic cache keys, serialized validation, and RGBA8 decoding.
 - [toml](#toml) - The TOML module parses `TOML 1.0`_ into the same `JsonValue?` tree shape produced by `daslib/json`, so existing `json_boost` accessors (`v ?? def`, `from_JV`, etc.) work on TOML inputs as-is.
 - [tty](#tty) - The TTY module answers whether a stream is attached to a real terminal, and how wide that terminal is.
 - [type_traits](#type_traits) - The TYPE_TRAITS module provides compile-time type introspection and manipulation.
@@ -1356,12 +1359,42 @@ Low-level image I/O and resizing bindings for stb_image, stb_image_write, and st
 - `stbir_resize_uint8_linear` - Resize a uint8 image in linear color space.
 - `stbir_resize_uint8_srgb` - Resize a uint8 image with sRGB gamma correction.
 
+### Texture block compression
+
+- `stb_compress_blocks` - Compress one tightly packed RGBA8 image into GPU texture blocks, replicating edge pixels when a dimension is not divisible by four.
+
 ### Animated PNG (APNG) writer
 
 - `stbi_apng_begin` - Begin streaming APNG encoding to `filename`.
 - `stbi_apng_dropped` - Return the running count of frames dropped because the encoder thread's bounded queue was full.
 - `stbi_apng_end` - Finalize the APNG file: drain the encoder thread, backpatch the `acTL` frame count, write `IEND`, and free the writer.
 - `stbi_apng_frame` - Queue one frame on `writer`.
+
+## meshoptimizer
+
+Checked array bindings for meshoptimizer 1.2 vertex remapping, vertex-cache and vertex-fetch optimization, and vertex and index buffer codecs. The API accepts triangle-list `uint` indices and packed vertex bytes with a nonzero, 4-byte-aligned stride of at most 256 bytes.
+
+
+### Vertex remapping
+
+- `meshopt_generate_remap` - Build a vertex remap table from triangle-list `indices` and packed `vertices`, returning the number of unique vertices.
+- `meshopt_remap_indices` - Apply a vertex remap table to triangle-list `indices` and resize `output` to the index count.
+- `meshopt_remap_vertices` - Apply `remap` to packed `vertices` and resize `output` to `count * stride` bytes.
+
+### Mesh optimization
+
+- `meshopt_optimize_cache` - Reorder triangle-list `indices` in place to improve post-transform vertex-cache locality while preserving each triangle's orientation.
+- `meshopt_optimize_fetch` - Reorder `indices` and packed `vertices` in place for sequential vertex fetch, discard unreferenced vertices, and return the resulting vertex count.
+
+### Vertex codec
+
+- `meshopt_decode_vertices` - Decode `count` packed vertex records of `stride` bytes into `output` and return true on success.
+- `meshopt_encode_vertices` - Encode packed vertex records into the meshoptimizer vertex codec and resize `output` to the encoded byte count.
+
+### Index codec
+
+- `meshopt_decode_indices` - Decode exactly `count` triangle-list indices into `output` and return true on success.
+- `meshopt_encode_indices` - Encode triangle-list `indices` with the meshoptimizer index codec and resize `output` to the encoded byte count.
 
 ## raster
 
@@ -2941,6 +2974,72 @@ dasGLTF loads `glTF 2.0`_ models — `.glb` (binary), `.gltf` (JSON), external o
 - `gltf_read_comp_float` - Read one component at byte offset `o` as float, applying glTF `normalized` integer→float conversion (unsigned: /max; signed: max(v/max, -1)).
 - `gltf_read_comp_uint` - Read one component at byte offset `o` as uint (index accessors: u8/u16/u32).
 - `gltf_type_ncomp` - Number of components for a glTF accessor `type` string (SCALAR/VECn/MATn).
+
+## texture_blocks
+
+Portable BC1, BC3, BC4, and BC5 texture compression with complete mip chains, deterministic cache keys, serialized validation, and RGBA8 decoding.
+
+
+### Constants
+
+- `BLOCK_TEXTURE_VERSION`
+
+### Structures
+
+- `BlockMip` - One block-compressed mip level and its logical pixel dimensions.
+- `BlockTexture` - A complete BC-compressed texture with a deterministic content key and mip chain.
+
+### Compression and caching
+
+- `block_texture_key` - Compute the deterministic cache key for tightly packed RGBA8 pixels and their compression settings.
+- `cached_block_texture` - Load a valid content-keyed `.das_tex` entry from `directory`, or compress and atomically populate it on a miss.
+- `compress_block_texture` - Compress tightly packed RGBA8 pixels into BC1/BC3/BC4/BC5 (`format` 0..3), generating a box-filtered mip chain through 1x1.
+
+### Validation and decoding
+
+- `block_texture_valid` - Return true when version, dimensions, format, mip count, and every encoded byte size satisfy the serialized block-texture contract.
+- `decode_block_mip` - Decode one BC mip to tightly packed RGBA8 pixels.
+
+## gltf_processed
+
+Backend-neutral glTF preprocessing that packs and optionally encodes geometry, compresses textures, and persists validated monolithic or split-file assets.
+
+
+### Constants
+
+- `DAS_GLTF_VERSION`
+- `DAS_GLTF_PROCESSOR_VERSION`
+- `VERTEX_UV`
+- `VERTEX_TANGENT`
+- `VERTEX_SKIN`
+- `VERTEX_UV1`
+- `VERTEX_COLOR`
+
+### Structures
+
+- `ProcessingProfile` - Controls which optional vertex streams and storage encodings survive preprocessing.
+- `ProcessedPrimitive` - Portable packed geometry for one primitive, optionally meshoptimizer-encoded.
+- `ProcessedMesh` - A named mesh containing portable processed primitives.
+- `ProcessedAsset` - Backend-neutral processed glTF data: scene metadata, packed geometry, and BC textures.
+- `ProcessedCatalogEntry` - Identifies one processed asset and the key that produced it.
+- `ProcessedCatalog` - Versioned list of processed assets for tooling and package manifests.
+- `ProcessedManifest` - Split-file manifest for geometry and independently shared texture payloads.
+
+### Validation and persistence
+
+- `load_and_process_gltf` - Load an existing processed file by extension, otherwise parse and process a source glTF.
+- `load_processed` - Load and validate a `.das_glb` binary or split `.das_gltf` manifest.
+- `processed_valid` - Check serialized version, size limits, packed strides and raw byte counts, compressed textures, and scene references.
+- `save_processed` - Save a validated asset as one `.das_glb` binary or as a `.das_gltf` manifest plus geometry and texture files.
+
+### Geometry processing
+
+- `process_gltf` - Convert a loaded scene into backend-neutral processed geometry and block textures.
+- `process_primitive` - Pack one glTF primitive according to `flags`, deduplicate triangle vertices, and optionally optimize ordering and encode storage.
+- `processed_indices` - Return decoded uint32 indices for `p`, rejecting codec failures and indices outside the declared vertex range with a panic.
+- `processed_stride` - Return the packed vertex stride for the `VERTEX_*` attribute bit mask.
+- `processed_vertex_bytes` - Return decoded packed vertex bytes for `p`.
+- `unpack_processed_geometry` - Reconstruct ordinary `GltfPrimitive` vertex and index arrays from a processed asset while cloning its scene metadata.
 
 ## spirv_reflect
 

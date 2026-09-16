@@ -113,6 +113,7 @@ require daslib/remove_call_args
 require daslib/stringify
 require peg/peg
 require gltf/gltf_boost
+require gltf/gltf_processed
 require daslib/temp_strings
 require daslib/type_traits
 require daslib/typemacro_boost
@@ -130,6 +131,7 @@ require openai/openai_vision
 require pugixml/PUGIXML_boost
 require stbimage/stbimage_boost
 require stbimage/stbimage_ttf
+require meshoptimizer
 require audio/audio_boost
 require audio/audio_wav
 require audio/audio_record
@@ -1574,9 +1576,21 @@ def document_module_stbimage(_root : string) {
         group_by_regex("Write to memory", mod, %regex~(stbi_write_png_to_memory|stbi_write_bmp_to_memory|stbi_write_tga_to_memory|stbi_write_jpg_to_memory)$%%),
         group_by_regex("Write settings", mod, %regex~(stbi_flip_vertically_on_write|stbi_write_set_.*|stbi_write_get_.*)$%%),
         group_by_regex("Image resizing", mod, %regex~(stbir_resize|stbir_resize_uint8_srgb|stbir_resize_uint8_linear|stbir_resize_float_linear)$%%),
+        group_by_regex("Texture block compression", mod, %regex~stb_compress_blocks$%%),
         group_by_regex("Animated PNG (APNG) writer", mod, %regex~stbi_apng_(begin|frame|end|dropped)$%%)
     )
     document("Image loading, writing, and resizing (stb_image)", mod, "stbimage.rst", groups)
+}
+
+def document_module_meshoptimizer(_root : string) {
+    var mod = get_module("meshoptimizer")
+    var groups <- array<DocGroup>(
+        group_by_regex("Vertex remapping", mod, %regex~meshopt_(generate_remap|remap_vertices|remap_indices)$%%),
+        group_by_regex("Mesh optimization", mod, %regex~meshopt_optimize_(cache|fetch)$%%),
+        group_by_regex("Vertex codec", mod, %regex~meshopt_(encode|decode)_vertices$%%),
+        group_by_regex("Index codec", mod, %regex~meshopt_(encode|decode)_indices$%%)
+    )
+    document("Mesh remapping, optimization, and buffer codecs (meshoptimizer)", mod, "meshoptimizer.rst", groups)
 }
 
 def document_module_raster(_root : string) {
@@ -1915,6 +1929,26 @@ def document_module_gltf(_root : string) {
     documents("glTF 2.0 loader (dasGLTF): GLB/.gltf parse, accessor decode, node hierarchy, skinning and keyframe animation into a backend-neutral scene", mod, "gltf.rst", groups)
 }
 
+def document_module_texture_blocks(_root : string) {
+    var mod = find_module("texture_blocks")
+    var groups <- array<DocGroup>(
+        group_by_regex("Texture types", mod, %regex~.*(BlockMip|BlockTexture)$%%),
+        group_by_regex("Compression and caching", mod, %regex~.*(block_texture_key|compress_block_texture|cached_block_texture)$%%),
+        group_by_regex("Validation and decoding", mod, %regex~.*(block_texture_valid|decode_block_mip)$%%)
+    )
+    document("Portable BC texture compression, mip generation, caching, validation, and decoding", mod, "texture_blocks.rst", groups)
+}
+
+def document_module_gltf_processed(_root : string) {
+    var mod = find_module("gltf_processed")
+    var groups <- array<DocGroup>(
+        group_by_regex("Processing types", mod, %regex~.*(ProcessingProfile|ProcessedPrimitive|ProcessedMesh|ProcessedAsset|ProcessedCatalogEntry|ProcessedCatalog|ProcessedManifest)$%%),
+        group_by_regex("Validation and persistence", mod, %regex~.*(processed_valid|save_processed|load_processed|load_and_process_gltf)$%%),
+        group_by_regex("Geometry processing", mod, %regex~.*(processed_stride|processed_vertex_bytes|processed_indices|process_primitive|process_gltf|unpack_processed_geometry)$%%)
+    )
+    document("Backend-neutral glTF geometry and texture preprocessing, validation, and persistence", mod, "gltf_processed.rst", groups)
+}
+
 // das2rst compiles tuned libraries to inspect their source API. The explicit
 // documentation context keeps all [tune] transforms and policy machinery inert.
 [export]
@@ -1935,6 +1969,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_dashv(root)
     document_module_openai(root)
     document_module_stbimage(root)
+    document_module_meshoptimizer(root)
     document_module_raster(root)
     document_module_stbtruetype(root)
     document_module_uriparser(root)
@@ -1962,6 +1997,8 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     // document dasPEG module
     document_module_peg(root)
     document_module_gltf(root)
+    document_module_texture_blocks(root)
+    document_module_gltf_processed(root)
     // document dasSpirv reflection module
     document_module_spirv(root)
     // document the dasLLAMA facade module (the engine modules behind it stay undocumented by design)

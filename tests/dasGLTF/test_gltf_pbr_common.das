@@ -113,3 +113,47 @@ def test_environment_helpers(t : T?) {
         near(t, gltf_occlusion_factor(0.0, 0.0), 1.0, 1e-6)
     }
 }
+
+[test]
+def test_shadow_pcf_subtexel_coverage(t : T?) {
+    let left = gltf_shadow_pcf_weights(0.0)
+    let middle = gltf_shadow_pcf_weights(0.5)
+    let right = gltf_shadow_pcf_weights(1.0)
+    near(t, left.x + left.y + left.z + left.w, 1.0, 1e-6)
+    near(t, middle.x + middle.y + middle.z + middle.w, 1.0, 1e-6)
+    near(t, left.z + left.w, 1.0 / 3.0, 1e-6)
+    near(t, middle.z + middle.w, 0.5, 1e-6)
+    near(t, right.z + right.w, 2.0 / 3.0, 1e-6)
+    near(t, right.z + right.w, left.y + left.z + left.w, 1e-6)
+    let coverage = float4(0.0, 1.0, 0.0, 1.0)
+    for (i in range(11)) {
+        let f = float(i) / 10.0
+        let w = gltf_shadow_pcf_weights(f)
+        let explicit_pcf = (lerp(coverage.x, coverage.y, f) +
+            lerp(coverage.y, coverage.z, f) + lerp(coverage.z, coverage.w, f)) / 3.0
+        near(t, dot(w, coverage), explicit_pcf, 1e-6)
+    }
+}
+
+[test]
+def test_shadow_receiver_plane_pcf(t : T?) {
+    let slope = float2(0.31, -0.24)
+    let dx = float3(0.001, 0.0003, dot(slope, float2(0.001, 0.0003)))
+    let dy = float3(-0.0002, 0.001, dot(slope, float2(-0.0002, 0.001)))
+    let gradient = gltf_shadow_receiver_gradient(dx, dy)
+    t |> success(length(gradient - slope) < 0.00001, "recover the geometric depth slope")
+    let rotated = gltf_shadow_receiver_gradient(dy * 2.0, -dx * 0.5)
+    t |> success(length(rotated - slope) < 0.00001, "camera-screen basis does not change the receiver plane")
+    let p = float3(0.4123, 0.571, 0.4)
+    var old_shadowed = 0
+    for (y in range(-2, 3)){for (x in range(-2, 3)){
+        let uv = p.xy + float2(float(x), float(y)) / 2048.0
+        let plane_depth = p.z + dot(slope, uv - p.xy)
+        let reference = gltf_shadow_receiver_depth(p, uv, gradient, 0.00001)
+        t |> success(reference <= plane_depth, "plane must not shadow itself across the filter footprint")
+        t |> success(reference > plane_depth - 0.01, "a separate occluder still casts a shadow")
+        if (p.z - 0.00001 > plane_depth){old_shadowed++}
+    }}
+    t |> success(old_shadowed > 0, "fixture exposes the old constant-reference acne")
+    t |> equal(gltf_shadow_receiver_gradient(float3(0.0), float3(0.0)), float2(0.0))
+}

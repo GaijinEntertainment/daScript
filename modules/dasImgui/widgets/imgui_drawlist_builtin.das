@@ -384,3 +384,18 @@ def public with_drawlist_clip_rect(var dl : ImDrawList?; clip_rect_min : float2;
     invoke(blk)
     *dl |> PopClipRect()
 }
+
+[drawlist_prim]
+def public add_image_id(var dl : ImDrawList?; texture_id : uint64; a, b : float2;
+                        uv_min : float2 = float2(0.0); uv_max : float2 = float2(1.0); color : uint = 0xffffffff) {
+    //! Draw a backend texture by handle and expose its bounds to live inspection.
+    *dl |> AddImage(ImTextureRef(texture_id), a, b, uv_min, uv_max, color)
+    drawlist_register(widget_ident, "add_image", float4(a, b))
+}
+[drawlist_prim]
+def public add_text_wrapped(var dl : ImDrawList?; pos : float2; color : uint; text : string; wrap_width : float) {
+    //! Draw wrapped prose with the current font and publish its visible bounds.
+    *dl |> AddText(GetFont(), GetFontSize(), pos, color, text, wrap_width, null)
+    let size = CalcTextSize(text, false, wrap_width)
+    drawlist_register(widget_ident, "add_text_wrapped", float4(pos, pos + size))
+}

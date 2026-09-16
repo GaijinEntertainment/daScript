@@ -69,12 +69,12 @@ def fload(file : file; size : int64; blk : block<(data : array<uint8>) : void>) 
 
 [generic]
 def fload(f : file; buf : auto(BufType) -const) {
-    var dfh : df_header
+    var dfh : df_header // nolint:LINT003,LINT019 - In generic instantiations, _builtin_read writes this raw output buffer.
     let r1 = _builtin_read(f, dfh, typeinfo sizeof(type<df_header>))
     if (r1 < 0 || dfh.magic != df_magic || dfh.size < 0) return false
     var loaded = false
     _builtin_load(f, int64(dfh.size)) $(data : array<uint8>) {
-        if (length(data) != 0) {
+        if (!empty(data)) {
             binary_load(buf, data)
             loaded = true
         }

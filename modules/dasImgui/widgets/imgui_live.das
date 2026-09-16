@@ -118,6 +118,7 @@ def public live_imgui_render() {
     imgui_gl_render(live_imgui_gl)
 }
 
+[arch(at="../ARCHITECTURE.md#browser-callback-routing")]
 def public live_imgui_shutdown() {
     //! Reload-aware ImGui shutdown — skips during reload so the ctx is reused, runs only on process exit. Call from your script's ``shutdown()``.
     if (live_imgui_ctx != null && !is_reload()) {

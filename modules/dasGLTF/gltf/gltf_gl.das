@@ -32,16 +32,31 @@ struct private GltfGlVertex {
 
 struct GltfGlPrimitive {
     vao, vbo, ebo : uint
+    indexType : uint
+    missingAttributes : uint
+    vertexBytes, indexBytes : uint64
     indexCount    : int
     mode          : uint      // GL_TRIANGLES / GL_LINES / GL_POINTS
     material      : int = -1  // GltfScene.materials index, -1 = default
 }
 
+let GLTF_GL_ATTR_TANGENT = 1u << 2u
+let GLTF_GL_ATTR_UV0 = 1u << 3u
+let GLTF_GL_ATTR_UV1 = 1u << 4u
+let GLTF_GL_ATTR_COLOR0 = 1u << 5u
+let GLTF_GL_ATTR_JOINTS0 = 1u << 6u
+let GLTF_GL_ATTR_WEIGHTS0 = 1u << 7u
+
 struct GltfGlMesh {
     primitives : array<GltfGlPrimitive>
 }
 
+struct GltfGlTextureEntry { texture : uint; references : int; bytes : uint64 }
+struct GltfGlTexturePool { entries : table<uint64; GltfGlTextureEntry> }
 struct GltfGlModel {
+    @do_not_delete texturePool : GltfGlTexturePool?
+    textureKeys : array<uint64>
+    borrowsTextures : bool
     meshes        : array<GltfGlMesh>   // parallel to GltfScene.meshes
     textures      : array<uint>         // GL handle per GltfScene.textures entry (0 = missing)
     whiteTex      : uint                // 1x1 opaque white — base-color/metal-rough/occlusion/emissive default
@@ -92,10 +107,8 @@ def private create_gl_texture(img : GltfImage; sampler : GltfSampler; srgb : boo
     var prev_align : int
     glGetIntegerv(GL_UNPACK_ALIGNMENT, safe_addr(prev_align))
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-    unsafe {
-        glTexImage2D(GL_TEXTURE_2D, 0, internal, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-            addr<void const?>(img.pixels[0]))
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, internal, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+        unsafe(addr<void const?>(img.pixels[0])))
     glPixelStorei(GL_UNPACK_ALIGNMENT, prev_align)
     glGenerateMipmap(GL_TEXTURE_2D)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_wrap(sampler.wrapS))
@@ -112,10 +125,8 @@ def private create_solid_texture(r, g, b, a : uint) : uint {
     glGenTextures(1, safe_addr(tex))
     glBindTexture(GL_TEXTURE_2D, tex)
     var px = [uint8(r), uint8(g), uint8(b), uint8(a)]
-    unsafe {
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA8), 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-            addr<void const?>(px[0]))
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA8), 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+        unsafe(addr<void const?>(px[0])))
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
@@ -158,12 +169,28 @@ def private upload_primitive(prim : GltfPrimitive) : GltfGlPrimitive {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, prim.indices, GL_STATIC_DRAW)
     }
+    glp.vertexBytes = uint64(long_length(verts)) * uint64(typeinfo sizeof(type<GltfGlVertex>)); glp.indexBytes = uint64(long_length(prim.indices)) * 4ul
     glBindVertexArray(0u)
     delete verts
     return glp
 }
 
 // ===== public API =====
+
+//! Upload geometry using textures owned by another model. The texture owner must outlive
+//! the result. Batches retain independent buffer ownership, without duplicating images.
+def upload_gltf_geometry(scene : GltfScene; texture_owner : GltfGlModel) : GltfGlModel {
+    var model = GltfGlModel(borrowsTextures = true, whiteTex = texture_owner.whiteTex, flatNormalTex = texture_owner.flatNormalTex)
+    model.textures <- clone(texture_owner.textures)
+    model.meshes |> reserve(length(model.meshes) + length(scene.meshes))
+    for (mesh in scene.meshes){
+        var glmesh : GltfGlMesh
+        glmesh.primitives |> reserve(length(mesh.primitives))
+        for (prim in mesh.primitives){glmesh.primitives |> emplace(upload_primitive(prim))}
+        model.meshes |> emplace(glmesh)
+    }
+    return <- model
+}
 
 //! Upload a parsed GltfScene to GL: per-primitive VAO/VBO/EBO, one GL texture per glTF texture
 //! (sRGB / linear per usage, mipmapped, sampler wrap/filter), plus white / flat-normal defaults.
@@ -237,8 +264,14 @@ def gltf_gl_resolve_tex(model : GltfGlModel; texIndex : int; fallback : uint) : 
 //! textures first (gltf_pbr does this per node/material).
 def gltf_gl_draw_primitive(glp : GltfGlPrimitive) {
     glBindVertexArray(glp.vao)
+    if ((glp.missingAttributes & GLTF_GL_ATTR_TANGENT) != 0u) { glVertexAttrib4f(2u, 0.0, 0.0, 0.0, 1.0) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_UV0) != 0u) { glVertexAttrib4f(3u, 0.0, 0.0, 0.0, 1.0) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_UV1) != 0u) { glVertexAttrib4f(4u, 0.0, 0.0, 0.0, 1.0) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_COLOR0) != 0u) { glVertexAttrib4f(5u, 1.0, 1.0, 1.0, 1.0) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_JOINTS0) != 0u) { glVertexAttrib4f(6u, 0.0, 0.0, 0.0, 0.0) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_WEIGHTS0) != 0u) { glVertexAttrib4f(7u, 0.0, 0.0, 0.0, 0.0) }
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glp.ebo)
-    glDrawElements(glp.mode, glp.indexCount, GL_UNSIGNED_INT, null)
+    glDrawElements(glp.mode, glp.indexCount, glp.indexType == 0u ? GL_UNSIGNED_INT : glp.indexType, null)
 }
 
 def finalize(var model : GltfGlModel) {
@@ -252,18 +285,33 @@ def finalize(var model : GltfGlModel) {
             if (ebo != 0u) { glDeleteBuffers(1, safe_addr(ebo)) }
         }
     }
-    for (t in model.textures) {
-        var tt = t
-        if (tt != 0u) { glDeleteTextures(1, safe_addr(tt)) }
-    }
-    if (model.whiteTex != 0u) {
-        var w = model.whiteTex
-        glDeleteTextures(1, safe_addr(w))
-    }
-    if (model.flatNormalTex != 0u) {
-        var f = model.flatNormalTex
-        glDeleteTextures(1, safe_addr(f))
+    if (!model.borrowsTextures){
+        if (model.texturePool != null){
+            unsafe{for (key in model.textureKeys){if (key != 0ul && key_exists(model.texturePool.entries, key)){
+                var entry & = model.texturePool.entries[key]; entry.references--
+                if (entry.references == 0){var id = entry.texture; glDeleteTextures(1, safe_addr(id)); erase(model.texturePool.entries, key)}
+            }}}
+        }else{
+        for (t in model.textures) {
+            var tt = t
+            if (tt != 0u) { glDeleteTextures(1, safe_addr(tt)) }
+        }
+        }
+        if (model.whiteTex != 0u) {
+            var w = model.whiteTex
+            glDeleteTextures(1, safe_addr(w))
+        }
+        if (model.flatNormalTex != 0u) {
+            var f = model.flatNormalTex
+            glDeleteTextures(1, safe_addr(f))
+        }
     }
     delete model.meshes
-    delete model.textures
+    delete model.textures; delete model.textureKeys; model.texturePool = null
+}
+
+//! Pools belong to one GL context and must outlive their models.
+def finalize(var pool : GltfGlTexturePool){
+    for (entry in values(pool.entries)){var id = entry.texture; if (id != 0u){glDeleteTextures(1, safe_addr(id))}}
+    delete pool.entries
 }

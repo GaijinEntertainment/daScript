@@ -1,0 +1,1 @@
+Reorder ``indices`` and packed ``vertices`` in place for sequential vertex fetch, discard unreferenced vertices, and return the resulting vertex count. The vertex stride and all triangle-list indices are validated before either array is modified.

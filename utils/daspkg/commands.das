@@ -1078,7 +1078,7 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
 
     // Build the wasm64 runtime + the module archives release wasm links against.
     log("build --wasm: building wasm64 archives...\n")
-    let targets = "libDaScript_runtime libDasModuleOpenGL libDasModuleGlfw libDasModuleStbImage libDasModuleAudio libDasModuleMinfft libDasModuleLiveHost libDasModuleClipboard"
+    let targets = "libDaScript_runtime libDasModuleOpenGL libDasModuleGlfw libDasModuleStbImage libDasModuleMeshOptimizer libDasModuleAudio libDasModuleMinfft libDasModuleLiveHost libDasModuleClipboard"
     var bld_out : string
     let bld_rc = run_cmd("cmake --build \"{build_dir}\" --target {targets}", bld_out)
     if (bld_rc != 0) {
@@ -3037,7 +3037,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
-                                 include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>) : int {
+                                 include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>; include_symbols : bool) : int {
     if (!is_safe_pkg_name(app_name)) {
         to_log(LOG_ERROR, "release wasm: unsafe app name `{app_name}` (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
@@ -3084,7 +3084,8 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
             write(w, " --disable-module {m}")
         }
     }
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
+    let debug_args = include_symbols ? " --jit-debug --jit-stack" : ""
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads{debug_args} --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
@@ -3190,6 +3191,7 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // EXPORTED_RUNTIME_METHODS=FS,ENV: a custom shell stages files into MEMFS and sets the
         // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup).
         w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
+        if (include_symbols) {w |> write(" -g3 --emit-symbol-map")}
         for (a in emcc_args) {
             w |> write(" {a}")
         }
@@ -3281,5 +3283,5 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args)
+    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args, spec.include_symbols)
 }

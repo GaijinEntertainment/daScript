@@ -14,3 +14,6 @@ Image loading, saving, resizing, pixel manipulation, TrueType font rendering, an
    generated/stbtruetype.rst
    generated/stbimage_ttf.rst
    generated/gltf.rst
+   generated/meshoptimizer.rst
+   generated/texture_blocks.rst
+   generated/gltf_processed.rst

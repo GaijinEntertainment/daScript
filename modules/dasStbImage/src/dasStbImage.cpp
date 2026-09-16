@@ -5,6 +5,7 @@
 #include "daScript/simulate/bind_enum.h"
 
 #include "stb_image.h"
+#include "stb_dxt.h"
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
 
@@ -110,6 +111,38 @@ void stbi_write_jpg_to_memory ( int x, int y, int comp, const void * data, int q
     context->invoke(blk, args, nullptr, at);
 }
 
+void stb_compress_blocks(const TArray<uint8_t> & pixels, int width, int height, int format, bool high_quality,
+                         TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
+    if (width <= 0 || height <= 0 || width > 32768 || height > 32768 || format < 0 || format > 3 ||
+        uint64_t(width)*height*4 != pixels.size || pixels.data == output.data) {
+        context->throw_error_at(at, "stb_compress_blocks: invalid RGBA image or aliased output");
+    }
+    const int block_size = (format == 0 || format == 2) ? 8 : 16;
+    const uint64_t size = uint64_t((width+3)/4)*((height+3)/4)*block_size;
+    if (size > INT_MAX) context->throw_error_at(at, "stb_compress_blocks: image too large");
+    builtin_array_reserve(output, int(size), 1, context, at);
+    builtin_array_resize(output, int(size), 1, context, at);
+    unsigned char block[64];
+    auto * dst = reinterpret_cast<unsigned char*>(output.data);
+    for (int y=0; y<height; y+=4) for (int x=0; x<width; x+=4) {
+        for (int by=0; by<4; ++by) for (int bx=0; bx<4; ++bx) {
+            const int sx = x+bx < width ? x+bx : width-1;
+            const int sy = y+by < height ? y+by : height-1;
+            const auto * src = pixels.data + (size_t(sy)*width+sx)*4;
+            const int i = by*4+bx;
+            if (format < 2) {
+                memcpy(block+i*4, src, 4);
+                if (format == 0) block[i*4+3] = 255;
+            } else if (format == 2) block[i] = src[0];
+            else { block[i*2] = src[0]; block[i*2+1] = src[1]; }
+        }
+        if (format < 2) stb_compress_dxt_block(dst,block,format==1,high_quality?STB_DXT_HIGHQUAL:STB_DXT_NORMAL);
+        else if (format == 2) stb_compress_bc4_block(dst,block);
+        else stb_compress_bc5_block(dst,block);
+        dst += block_size;
+    }
+}
+
 class Module_StbImage : public Module {
 public:
     Module_StbImage() : Module("stbimage") {
@@ -117,6 +150,9 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
 
+        addExtern<DAS_BIND_FUN(stb_compress_blocks)>(*this,lib,"stb_compress_blocks",
+            SideEffects::modifyArgument,"das::stb_compress_blocks")
+            ->args({"pixels","width","height","format","high_quality","output","context","at"});
         // ---- stb_image: loading ----
         addExtern<DAS_BIND_FUN(stbi_load)> (*this, lib, "stbi_load",
             SideEffects::worstDefault, "stbi_load")
