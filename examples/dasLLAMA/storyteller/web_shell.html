@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/files/dasllama-io.css">
 <script src="/files/github-star.js" defer></script>
 <!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
-<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async crossorigin="anonymous" src="//gc.zgo.at/count.js"></script>
 <style>
   html, body { margin: 0; height: 100%; background: #12101a; overflow: hidden; }
   body {
@@ -44,11 +44,9 @@
 </head>
 <body>
 <!-- The storyteller's shell: the dasllama.io nav on top (its css and script come from the
-     site root, /files/), then the stage. The shell checks the browser first - the build is
-     wasm64 (memory64) with real Web Workers, so it needs an engine with memory64 (Chrome or
-     Edge 133+, Firefox 134+; Safari has none yet, and every iPhone and iPad browser is Safari's
-     engine) on a cross-origin-isolated page; a browser
-     without either gets the note below and never fetches a byte. Then it reads
+     site root, /files/), then the stage. The shell checks the page first - the build runs its
+     real Web Workers on SharedArrayBuffer, so it needs a cross-origin-isolated page; a page
+     without it gets the note below and never fetches a byte. Then it reads
      models/manifest.json - the list the deploy minted, stamped with the IMAGE_VERSION it minted
      at - and refuses a set minted for another version before fetching a megabyte of it: the
      program would decline the images anyway, this way the reason is on the page. Otherwise it
@@ -86,18 +84,11 @@
   // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
   var PAGE_IMAGE_VERSION = /* @image-version */ 0;
 
-  // wasm64 (memory64): validate a minimal module whose memory section carries the memory64
-  // flag (0x04) - true only where the engine parses it, unlike a Memory descriptor probe an
-  // engine can silently downgrade. Same probe as daslang.io's examples page.
-  var HAS_WASM64 = (function () {
-    try { return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])); }
-    catch (e) { return false; }
-  })();
   // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
   // server sent the cross-origin isolation headers
   var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
   var FORCE = new URLSearchParams(location.search).get('force');
-  var SUPPORTED = FORCE === 'unsupported' ? false : (HAS_WASM64 && HAS_ISOLATION);
+  var SUPPORTED = FORCE === 'unsupported' ? false : HAS_ISOLATION;
 
   function setStatus(text) { document.getElementById('status').textContent = text; }
   function showNote(status, html) {
@@ -121,17 +112,10 @@
   window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
 
   if (!SUPPORTED) {
-    if (FORCE === 'unsupported' || !HAS_WASM64) {
-      showNote('needs a memory64 browser',
-        '<b>This browser cannot run the storyteller.</b><br>The example is dasLLAMA compiled to ' +
-        'WebAssembly memory64, which needs Chrome or Edge 133+ or Firefox 134+ on a desktop. Safari ' +
-        'does not support memory64 yet, and on iPhone and iPad every browser runs on Safari\'s engine.');
-    } else {
-      showNote('needs SharedArrayBuffer',
-        '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
-        'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
-        'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
-    }
+    showNote('needs SharedArrayBuffer',
+      '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
+      'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
+      'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
   } else {
     // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
     // throws "compiled without support for <browser>" at the top of its script): the error

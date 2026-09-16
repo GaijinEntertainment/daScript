@@ -103,6 +103,16 @@ vhost_has() {
     awk '/^dasllama\.io \{/ { b = 1 } b { print } b && /^\}/ { b = 0 }' "$CADDYFILE" | grep -q "$1"
 }
 
+examples_block() {
+    # the `header /examples/* { ... }` block of $1, one directive per line, indentation stripped
+    awk '/^[ \t]*header \/examples\/\*/ { b = 1 } b { sub(/^[ \t]+/, ""); print } b && /^\}/ { b = 0 }' "$1"
+}
+
+examples_block_vhost() {
+    # the same block as the dasllama.io vhost of the shared Caddyfile carries it today
+    awk '/^dasllama\.io \{/ { b = 1 } b { print } b && /^\}/ { b = 0 }' "$CADDYFILE" | examples_block /dev/stdin
+}
+
 splice_vhost_line() {
     # one top-level directive line ($1) into the dasllama.io vhost, right after its opening brace;
     # validated before reload, restored from the timestamped backup on any failure
@@ -140,24 +150,29 @@ caddy_apply() {
             spliced=1
         done < "$lines"
         rm -f "$lines"
-        # ... then the `header /examples/*` isolation block
-        if grep -q "header /examples/\*" "$snippet" && ! vhost_has "header /examples/\*"; then
+        # ... then the `header /examples/*` isolation block: spliced when the vhost lacks it,
+        # replaced when the vhost's copy differs from the snippet's (a header value the snippet
+        # changed - the COEP value - never reaches the box on presence alone)
+        if grep -q "header /examples/\*" "$snippet" && [ "$(examples_block "$snippet")" != "$(examples_block_vhost)" ]; then
             ts=$(date +%Y%m%d-%H%M%S)
             cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
             awk -v snip="$snippet" '
-                /^dasllama\.io \{/ && !done {
-                    print
+                function emit_block(   line, inblock) {
                     inblock = 0
                     while ((getline line < snip) > 0) {
                         if (line ~ /^header \/examples\/\*/) inblock = 1
                         if (inblock) print "\t" line
                         if (inblock && line ~ /^\}/) inblock = 0
                     }
-                    close(snip); done=1; next
+                    close(snip)
                 }
+                /^dasllama\.io \{/ && !invhost { invhost = 1; print; next }
+                invhost && /^\}/ { if (!done) { emit_block(); done = 1 }; invhost = 0; print; next }
+                invhost && /^[ \t]*header \/examples\/\*/ { emit_block(); done = 1; skipping = 1; next }
+                skipping { if ($0 ~ /^[ \t]*\}/) skipping = 0; next }
                 { print }
             ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
-            if ! vhost_has "header /examples/\*"; then
+            if [ "$(examples_block "$snippet")" != "$(examples_block_vhost)" ]; then
                 echo "caddy: header splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
             fi
             if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then

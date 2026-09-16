@@ -21,7 +21,7 @@
   <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
   <div id="ex-load">loading interpreter…</div>
   <script>
-    // Interpreted runner for the /examples player's non-memory64 fallback.
+    // Interpreted runner for the /examples player's ?force=interp path.
     // Loads daslang_static.wasm (the universal wasm32 interpreter the playground
     // uses), mounts the game's source bundle into MEMFS, and callMain's it — the
     // C++ WebLoop drives the exported init/update/shutdown per rAF.

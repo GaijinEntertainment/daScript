@@ -63,13 +63,11 @@ handle /api/sidecar/* {
 	reverse_proxy 127.0.0.1:8201
 }
 
-# The browser examples (/examples/<id>/) are -pthread wasm64 builds: SharedArrayBuffer needs
-# a cross-origin-isolated page, so the two isolation headers ride every response under
-# /examples/. `credentialless` (not require-corp) keeps the analytics script loading; every
-# memory64-capable browser supports it, and the model files are same-origin.
+# /examples/<id>/ shells are -pthread wasm: SharedArrayBuffer needs cross-origin isolation.
+# Their one cross-origin subresource, the analytics script, loads with `crossorigin`.
 header /examples/* {
 	Cross-Origin-Opener-Policy same-origin
-	Cross-Origin-Embedder-Policy credentialless
+	Cross-Origin-Embedder-Policy require-corp
 }
 
 # /admin/* and /shutdown are deliberately absent: they are operator surfaces.

@@ -514,7 +514,7 @@ var public g_jit_check_handled_abi = false
 
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string")]
 def private wasm_target_features() : string {
-    return g_target_wasm_threads ? "+simd128,+relaxed-simd,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+relaxed-simd,+nontrapping-fptoint"
+    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
 }
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
@@ -1128,9 +1128,6 @@ def private find_runtime_lib(override_path : string) : Option<string> {
     return stat(candidate).is_valid ? some(candidate) : none(type<string>)
 }
 
-// Cross-compile a module to wasm64 (memory64) and link a runnable .wasm via emcc against the
-// web/output64 runtime archive (-sMEMORY64=1). triple defaults to wasm64-unknown-emscripten;
-// needs_runtime gates linking libDaScript_runtime.a (true=link if found else warn; false=omit).
 def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : string; path_to_emcc : string; needs_runtime : bool; explicit_runtime : string = ""; emit_object_only : bool = false) : bool {
     var wasm_ok = true
     LLVMInitializeWasmTarget()

@@ -1,13 +1,13 @@
 /* examples.js — daslang apps compiled to WebAssembly, played in-browser.
  *
- * Each game ships as a standalone wasm64 build (host == target pointer width,
- * so the cross-compile is layout-correct). The compiled artifacts live at
+ * Each game ships as a standalone compiled build (cross-compiled as wasm64 so host and
+ * target pointer widths match, then lowered to a 32-bit memory at link time, so every
+ * engine runs it). The compiled artifacts live at
  *   examples/<id>/<id>.{html,js,wasm}
  * and are loaded into an <iframe> player on demand.
  *
- * wasm64 (memory64) is Chrome/Edge/Firefox 133+. On engines without it
- * (Safari, iOS) we fall back to running the same example interpreted in the
- * playground — slower, but universal. */
+ * ?force=interp runs the same example interpreted instead (slower) — a QA path, not a
+ * fallback any browser needs. */
 (function () {
     'use strict';
 
@@ -64,11 +64,7 @@
             controls: 'mouse · imgui widgets',
             poster: 'files/examples/furier-poster.png',
             aspect: 1024 / 1024,
-            // The in-page player is the dasImgui-bundling wasm64 build, so it is
-            // memory64-only (no interpreted fallback in the iframe). The playground,
-            // though, runs the threaded daslang_static interpreter — which now binds
-            // dasImgui — so it can host this sample there: playgroundSlug names it.
-            wasm64Only: true,
+            compiledOnly: true,
             playgroundSlug: 'furier',
             src: 'examples/graphics/furier_opengl_imgui_example.das',
         },
@@ -82,12 +78,7 @@
             controls: 'mouse · imgui widgets · pick a render mode',
             poster: 'files/examples/path_tracer_lab-poster.jpg',
             aspect: 512 / 512,
-            // In-page player: threaded (-pthread) wasm64 bundling dasImgui, running
-            // new_thread / JobQue on real Web Workers — memory64-only, and the page must
-            // be crossOriginIsolated (coi-serviceworker.js). The playground hosts the
-            // same sample on the threaded daslang_static interpreter (playgroundSlug),
-            // which is likewise isolated (the worker drops the memory64 gate for /playground).
-            wasm64Only: true,
+            compiledOnly: true,
             playgroundSlug: 'path_tracer_lab',
             src: 'examples/graphics/path_tracer_lab_opengl_imgui_example.das',
         },
@@ -102,12 +93,7 @@
             controls: 'drag to attract the slime · imgui widgets · worker-thread slider',
             poster: 'files/examples/physarum_lab-poster.jpg',
             aspect: 1024 / 1024,
-            // Same wasm64-only / native-dasImgui story as the path tracer: the in-page player is
-            // the threaded (-pthread) wasm64 build bundling dasImgui + dasAudio, on real Web Workers
-            // and crossOriginIsolated (coi-serviceworker.js). The playground hosts the same sample on
-            // the threaded daslang_static interpreter (playgroundSlug), which binds the in-tree
-            // dasImgui and dasAudio/strudel.
-            wasm64Only: true,
+            compiledOnly: true,
             playgroundSlug: 'physarum_lab',
             src: 'examples/graphics/physarum_lab_opengl_imgui_example.das',
         },
@@ -116,35 +102,14 @@
     DAS_EXAMPLES.forEach(function (ex) {
         ex.gameUrl = 'examples/' + ex.id + '/' + ex.id + '.html';
         ex.srcUrl = ex.src ? (REPO_ROOT + ex.src) : (REPO_BLOB + ex.id + '/main.das');
-        // Examples registered as playground samples get an "open in playground" link.
-        // playgroundSlug names the data.json sample to deep-link (?example=<slug>). The
-        // ImGui showcases set it explicitly: they bind the native dasImgui module (in-tree
-        // since the dasImgui merge), so
-        // their in-page player is wasm64-only, but the threaded daslang_static
-        // interpreter now hosts them in the playground. A plain (non-wasm64-only) sample
-        // defaults to its id; a wasm64-only card with no slug has no playground link.
-        var pgSlug = ex.playgroundSlug || (ex.wasm64Only ? null : ex.id);
+        // playgroundSlug must name a data.json sample. A compiled-only card can still carry one:
+        // the playground's threaded interpreter binds the native module its in-page player bundles.
+        var pgSlug = ex.playgroundSlug || (ex.compiledOnly ? null : ex.id);
         ex.playgroundUrl = pgSlug ? ('/playground/?example=' + pgSlug) : null;
     });
 
-    // ─── wasm64 (memory64) feature detection ────────────────────────────
-    var HAS_WASM64 = (function () {
-        try {
-            // Validate a minimal module declaring a 64-bit (memory64) memory:
-            // \0asm | version | memory section {count=1, flags=0x04 (memory64), min=1}.
-            // More robust than `new WebAssembly.Memory({index:'i64'})`, which can
-            // false-positive on engines that silently ignore the unknown descriptor
-            // field and hand back a wasm32 memory. validate() parses the memory64
-            // flag, so it is true only where the engine truly supports it. (Chrome/Edge/FF 133+.)
-            return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
-        } catch (e) {
-            return false;
-        }
-    })();
-
-    // ?force=interp / ?force=wasm64 forces a path (for QA on a memory64 browser).
     var FORCE = new URLSearchParams(window.location.search).get('force');
-    var USE_WASM64 = FORCE === 'wasm64' ? true : (FORCE === 'interp' ? false : HAS_WASM64);
+    var USE_COMPILED = FORCE !== 'interp';
 
     function esc(s) {
         return String(s == null ? '' : s)
@@ -244,23 +209,17 @@
         if (entering && frame.contentWindow) { try { frame.contentWindow.focus(); } catch (e) {} }
     }
 
-    // wasm64 present → the compiled standalone build; else → the interpreted
-    // runner (daslang_static.wasm, universal wasm32), same game source.
     function runnerUrl(ex) {
-        return USE_WASM64 ? ex.gameUrl : ('examples/_interp.html?g=' + encodeURIComponent(ex.id));
+        return USE_COMPILED ? ex.gameUrl : ('examples/_interp.html?g=' + encodeURIComponent(ex.id));
     }
     function viewportHTML(ex) {
-        // wasm64-only example on an engine without memory64: there is no interpreted
-        // fallback (the native module can't run in the interpreter), so show
-        // a clear note instead of an iframe that would never load.
-        if (ex.wasm64Only && !USE_WASM64) {
+        if (ex.compiledOnly && !USE_COMPILED) {
             return '<div class="forge-ex-player__fallback">' +
                      '<div class="forge-ex-player__fallback-glyph" aria-hidden="true">⚠</div>' +
-                     '<div class="forge-ex-player__fallback-head">Needs a memory64 browser</div>' +
+                     '<div class="forge-ex-player__fallback-head">Compiled only</div>' +
                      '<p class="forge-ex-player__fallback-body">' + esc(ex.name) + ' bundles the Dear ImGui ' +
-                       'module compiled to wasm64 — it runs on Chrome or Edge 133+ and Firefox 134+ (engines with ' +
-                       'WebAssembly memory64). The universal interpreter can’t bind a native module, so ' +
-                       'this one has no interpreted fallback.</p>' +
+                       'module compiled to WebAssembly. The universal interpreter can’t bind a native module, so ' +
+                       'this one has no interpreted form.</p>' +
                      '<a class="forge-ex-player__fallback-btn" href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener">view source ↗</a>' +
                    '</div>';
         }
@@ -271,9 +230,9 @@
     function openPlayer(ex) {
         closePlayer();
 
-        var needs64 = ex.wasm64Only && !USE_WASM64;
-        var statusText = needs64 ? 'needs memory64' : (USE_WASM64 ? 'loading…' : 'loading · interpreted');
-        var statusClass = needs64 ? 'is-fallback' : 'is-loading';
+        var noInterp = ex.compiledOnly && !USE_COMPILED;
+        var statusText = noInterp ? 'compiled only' : (USE_COMPILED ? 'loading…' : 'loading · interpreted');
+        var statusClass = noInterp ? 'is-fallback' : 'is-loading';
 
         var overlay = document.createElement('div');
         overlay.className = 'forge-ex-overlay';
@@ -322,9 +281,9 @@
             if (act === 'close') closePlayer();
             else if (act === 'restart') {
                 var f = document.getElementById('ex-frame');
-                if (!f) return;           // no iframe (e.g. memory64-only note) — nothing to restart
+                if (!f) return;           // no iframe (the compiled-only note) — nothing to restart
                 f.src = f.src;
-                setStatus(USE_WASM64 ? 'loading…' : 'loading · interpreted', 'is-loading');
+                setStatus(USE_COMPILED ? 'loading…' : 'loading · interpreted', 'is-loading');
             } else if (act === 'fullscreen') {
                 var vp = document.getElementById('ex-viewport');
                 if (vp && vp.requestFullscreen) vp.requestFullscreen().catch(function () {});
@@ -334,7 +293,7 @@
         var frame = overlay.querySelector('#ex-frame');
         if (frame) {
             frame.addEventListener('load', function () {
-                setStatus(USE_WASM64 ? 'running' : 'running · interpreted', 'is-running');
+                setStatus(USE_COMPILED ? 'running' : 'running · interpreted', 'is-running');
                 // Focus the game canvas inside the iframe so keyboard input flows, and
                 // guard scroll-keys at runtime (belt-and-suspenders with the shell's own
                 // guard — covers any already-deployed card built before that shell). The

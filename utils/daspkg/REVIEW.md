@@ -14,16 +14,17 @@ utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-te
 repos).
 
 **A diff that changes any code on the `daspkg release` path - `cmd_release`, `cmd_release_wasm`,
-and the `ship_*` / `release_*` helpers they call in `commands.das` - states in the review whether
-the release was run on macOS.** The release layout differs per platform (`.app` bundle vs flat
-directory).
+and the `ship_*` / `release_*` helpers they call in `commands.das` - states in the review which
+platform the release was run on.** The native release layout differs per platform (`.app` bundle
+vs flat directory), and the wasm release links with the emsdk installed on that platform.
 
 **A diff that adds a command also adds its `print_usage` line and its row in the `README.md`
 Commands table, in the same change.**
 
-**A diff that adds a `daspkg` command-line flag also adds its `@clarg_doc` on the new
-`DaspkgArgs` field and its row in the `README.md` Options table, in the same change** - the
-help text renders the annotation, so a field without one is a blank help line.
+**A diff that adds a `daspkg` command-line flag, or changes a flag's `@clarg_doc` text on its
+`DaspkgArgs` field, lands that annotation and the matching row in the `README.md` Options table
+in the same change** - the help text renders the annotation, so a field without one is a blank
+help line.
 
 **A diff that adds a `.das_package` manifest function - a function `daslib/daspkg.das` (repo
 root) exports for a manifest body to call - also adds it to the `README.md` `.das_package`

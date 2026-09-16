@@ -3,21 +3,21 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `site/README.md`.
 
-**A boulder-dash sample file - a `.das` source, a dastest suite, or that sample's
-`ARCHITECTURE.md` - answers to `samples/examples/boulder-dash/REVIEW.md`, wherever the diff
-puts it.**
+**A file of the boulder-dash sample - a `.das` the `boulder-dash` entry of `samples/data.json`
+lists, a dastest suite over one of those files, or that sample's `ARCHITECTURE.md` - answers to
+`samples/examples/boulder-dash/REVIEW.md`, wherever the diff puts it.**
 
 **A diff that changes a file of this folder applies `site/REVIEW.md` (repo root) too.** The
-deploy copies these files into the site (`.github/workflows/pages.yml`, repo root), so
-`site/playground/` never shows the change.
+deploy publishes this folder's `src/` as the site's playground, so a change here changes the
+site with no diff under `site/`.
 
-**A PR whose diff changes `src/` (this folder) states, in the PR body, a run of the
-WASM-staged Playwright suite (`site/tests/playground/`, repo root) against the branch tip,
-naming the passes and any failures; a later edit to `src/` restates the run.** The no-WASM
-lane cannot see a broken runtime path, and a run recorded mid-branch describes a tree that no
-longer ships.
+**A PR whose diff changes `src/` (this folder) states, in the PR body, a run of the full
+Playwright suite (`site/tests/playground/`, repo root) with WASM artifacts staged at
+`site/playground/` - the deployed artifacts count, `src/` is not compiled into them - against
+the branch tip, naming the passes and any failures; a later edit to `src/` restates the run.** A run without those artifacts cannot see a broken runtime path, and a
+run recorded mid-branch describes a tree that no longer ships.
 
-**A PR whose diff changes a bundle under `samples/` - the file set a `data.json` entry lists -
+**A PR whose diff changes a bundle under `samples/` - the file set a `samples/data.json` entry lists -
 states, in the PR body, a run that loaded that bundle on a runtime built from the branch tip -
 the dasweb-verify browser run (`utils/internal/dasweb-verify`, repo root), or the bundle's game
 card or playground page opened and run for a few frames - naming the bundle and the

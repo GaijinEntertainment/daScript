@@ -4,8 +4,18 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-09-11T00:00:00Z</updated>
+<updated>2026-09-16T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>The storyteller, storywish and parrot now run in every browser - Safari and iOS included.</title>
+<link href="https://dasllama.io/#n-2026-09-16-every-browser"/>
+<id>https://dasllama.io/#n-2026-09-16-every-browser</id>
+<updated>2026-09-16T00:00:00Z</updated>
+<content type="html">&lt;p&gt;The three examples were compiled to wasm64, which WebKit does not implement, so Safari and every
+iPhone and iPad browser got a note instead of a story. The engine still cross-compiles as wasm64
+inside - that is what keeps its layouts honest - but the link now lowers the memory to 32-bit,
+and the one SIMD extension WebKit lacks left the build. &lt;a href=&quot;examples.html&quot;&gt;Try it&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>The Qwen family runs on Vulkan.</title>
 <link href="https://dasllama.io/#n-2026-09-11-vulkan-qwen-family"/>

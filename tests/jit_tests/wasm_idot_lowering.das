@@ -1,8 +1,9 @@
 // The signed idot family on the wasm64 cross target lowers to the ISA's exact int8 dot halves -
 // the i16x8 extmul products summed by i32x4.extadd_pairwise_i16x8_s and folded even/odd - and never
 // to the generic widen-multiply chain that runs a fifth as fast there; the relaxed 7-bit dot is
-// refused by design (it wraps at -128, and +relaxed-simd re-means min/max/mad), so the dump carries
-// no relaxed intrinsic either. A host compile of the same fixture emits no wasm intrinsic.
+// refused by design (it wraps at -128, and the feature string carries no +relaxed-simd - WebKit
+// runs none of it), so the dump carries no relaxed intrinsic either. A host compile of the same
+// fixture emits no wasm intrinsic.
 // Compile-only keeps both compiles on this host and never touches the artifact cache, so --jit-dump
 // prints every time.
 options gen2
@@ -12,6 +13,7 @@ require dastest/testing_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
+require math
 
 let FIXTURE = "{get_das_root()}/tests/jit_tests/_wasm_idot_fixture.das"
 let PAIRWISE_ADD = "llvm.wasm.extadd.pairwise.signed"
@@ -73,4 +75,41 @@ def test_wasm_idot_lowering(t : T?) {
         t |> success(length(ln) > 20, "the host dump printed ({length(ln)} lines)")
         t |> success(count_with(ln, "llvm.wasm.") == 0, "no wasm intrinsic on the host")
     }
+    t |> run("the wasm object's target features carry simd128 and no relaxed-simd") @(t : T?) {
+        let dir_r = create_temp_directory_result("wasm_idot_features")
+        if (!(dir_r is value)) {
+            t |> failure("temp dir failed")
+            return
+        }
+        let dir = unsafe(dir_r.value)
+        let obj = "{dir}/idot.o"
+        var ln : array<string>
+        spawn_child("\"{bin}\" -exe -output \"{obj}\" \"{FIXTURE}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object", ln)
+        let features = object_target_features(obj)
+        t |> success(find(features, "simd128") >= 0, "the object's target_features section names simd128: {features}")
+        t |> success(find(features, "relaxed-simd") < 0, "no relaxed opcode can be in a module WebKit must run: {features}")
+        rmdir_rec_result(dir)
+    }
+}
+
+// the object's `target_features` custom section as one text line - each feature name is ASCII
+// inside a binary file, so the bytes are read into an array and every non-printable byte becomes
+// a space before the search
+def private object_target_features(path : string) : string {
+    var bytes : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            return
+        }
+        bytes |> resize(int64(stat(path).size))
+        fread(f, bytes)
+    }
+    let text = build_string() $(w) {
+        for (b in bytes) {
+            let c = int(b)
+            w |> write(c >= 0x20 && c < 0x7f ? to_char(c) : " ")
+        }
+    }
+    let at = find(text, "target_features")
+    return at < 0 ? "" : slice(text, at, min(at + 256, length(text)))
 }

@@ -1,11 +1,8 @@
 // The interpreter/wasm radio in the playground toolbar, and the build flow
 // behind it.
 //
-// The wasm engine compiles the editor's code on the build service, so
-// availability is a property of the BROWSER (wasm64 artifacts need memory64)
-// and the SERVICE (a live toolchain) — not of the loaded sample, the way the
-// retired precompiled-artifact path worked. The service is stubbed via
-// route() so these tests do not need a live backend.
+// The wasm engine compiles the editor's code on the build service, which is
+// stubbed via route() so these tests do not need a live backend.
 
 const { test, expect } = require('./fixtures.js');
 
@@ -77,12 +74,6 @@ test('wasm radio becomes selectable when the service can build', async ({ playgr
     await stubBuildInfo(playground, true);
     await reloadWithStubs(playground);
 
-    // Skipped where the browser cannot run wasm64 at all — the engine is
-    // genuinely unavailable there and the radio is right to stay off.
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
-
     await expect.poll(() => playground.locator(wasmSel).isDisabled(), { timeout: 5_000 }).toBe(false);
 
     // Enabled for a multi-file sample too: content-addressing removed the
@@ -123,10 +114,6 @@ test('a queued build narrates its progress and then runs', async ({ playground }
         body: Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]),
     }));
     await reloadWithStubs(playground);
-
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
 
     await playground.locator(wasmSel).check();
     await playground.locator('#run').click();
@@ -188,10 +175,6 @@ test('module-rail stdout survives a wasm memory grow', async ({ playground }) =>
     }));
     await reloadWithStubs(playground);
 
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
-
     await playground.locator(wasmSel).check();
     await playground.locator('#run').click();
 
@@ -226,10 +209,6 @@ test('a page-kind build runs as an embedded page frame', async ({ playground }) 
         body: '<html><body>page artifact stands</body></html>',
     }));
     await reloadWithStubs(playground);
-
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
 
     await playground.locator(wasmSel).check();
     await playground.locator('#run').click();
@@ -317,10 +296,6 @@ test('a module-kind run clears a previous page frame', async ({ playground }) =>
     });
     await reloadWithStubs(playground);
 
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
-
     await playground.locator(wasmSel).check();
     await playground.locator('#run').click();
     await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(1, { timeout: 15_000 });
@@ -337,10 +312,6 @@ test('a failed build shows the compiler error', async ({ playground }) => {
         { state: 'failed', error: 'error[30101]: this is the user’s own mistake' },
     ]);
     await reloadWithStubs(playground);
-
-    const memory64 = await playground.evaluate(() =>
-        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
-    test.skip(!memory64, 'browser lacks wasm64/memory64');
 
     await playground.locator(wasmSel).check();
     await playground.locator('#run').click();

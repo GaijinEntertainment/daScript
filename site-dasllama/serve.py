@@ -46,7 +46,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # mirrors the `header /examples/*` block of utils/internal/dasllama-ladder/caddy.snippet
         if self.path.startswith("/examples/"):
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
-            self.send_header("Cross-Origin-Embedder-Policy", "credentialless")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         super().end_headers()
 
     def proxy_api(self):

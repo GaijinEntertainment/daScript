@@ -11,25 +11,21 @@
  * and /playground*. The landing page, docs and blog pass through untouched — they don't
  * need isolation and keep their ordinary cross-origin fonts / docsearch behavior.
  *
- * TWO ISOLATION SUBTREES, DIFFERENT REGISTRATION GATES:
- *  - /examples ships only wasm64 (memory64) compiled builds, so isolation is pointless on
- *    an engine without memory64 (the games can't instantiate there anyway). Gated on memory64.
- *  - /playground runs the THREADED wasm32 interpreter (daslang_static, -pthread), which needs
- *    SharedArrayBuffer on EVERY engine — including Safari, which has no memory64 but does have
- *    threads. So /playground isolates regardless of memory64.
+ * TWO ISOLATION SUBTREES, ONE GATE: both /examples (the compiled builds, cross-compiled as
+ * wasm64 and lowered to a 32-bit memory at link time) and /playground (the threaded wasm32
+ * interpreter, daslang_static -pthread) run on every engine and need SharedArrayBuffer on
+ * every engine, so the worker isolates both wherever a service worker can register.
  *
  * COEP VALUE: credentialless lets cross-origin no-cors subresources (Google Fonts, Algolia
  * docsearch) load without per-resource CORP, but Safari/WebKit doesn't support it. So we emit
  * credentialless on Chromium/Firefox and require-corp on Apple WebKit. Under require-corp those
  * cross-origin subresources are blocked (fonts fall back to system, docsearch won't load) — an
- * accepted degradation on Safari/playground until the fonts are self-hosted (follow-up). The
- * /examples gate means Safari never reaches the examples subtree, so its require-corp only ever
- * applies to /playground.
+ * accepted degradation on Safari.
  *
  * Adapted from github.com/gzuidhof/coi-serviceworker (MIT). */
 
 // Only these subtrees get isolated. Root-scoped worker, narrow effect.
-// /files/wasm/ is the interpreter runtime the /examples fallback (_interp.html)
+// /files/wasm/ is the interpreter runtime the /examples ?force=interp runner (_interp.html)
 // spawns its -pthread workers from: a dedicated worker script must itself carry
 // COEP under an isolated owner, or the load dies with ERR_BLOCKED_BY_RESPONSE
 // and the runtime waits on "loading-workers" forever. On a non-isolated page
@@ -40,11 +36,6 @@ function coiInIsolationScope(url) {
          url.pathname.indexOf("/examples/") === 0 ||
          url.pathname.indexOf("/playground") === 0 ||
          url.pathname.indexOf("/files/wasm/") === 0);
-}
-
-// /playground is the threaded wasm32 interpreter — it isolates on every engine (gate dropped).
-function coiIsPlaygroundScope(pathname) {
-    return pathname.indexOf("/playground") === 0;
 }
 
 // Apple WebKit (Safari, iOS) ships SharedArrayBuffer/threads but NOT COEP credentialless, so it
@@ -94,14 +85,6 @@ if (typeof window === "undefined") {
 } else {
     // ─── Window context: register self ──────────────────────────────────
     (function () {
-        // memory64 probe: \0asm | version | memory section { count=1, flags=0x04 (memory64), min=1 }.
-        var hasWasm64 = false;
-        try {
-            hasWasm64 = WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
-        } catch (e) { hasWasm64 = false; }
-        // /playground (threaded wasm32 interpreter) isolates on every engine; /examples
-        // (wasm64 compiled builds) only where memory64 exists — nothing to isolate otherwise.
-        if (!coiIsPlaygroundScope(window.location.pathname) && !hasWasm64) return;
         if (!window.isSecureContext) return;     // service workers need https (localhost counts)
         if (window.crossOriginIsolated) return;  // already isolated — nothing to do
         if (!("serviceWorker" in navigator)) return;

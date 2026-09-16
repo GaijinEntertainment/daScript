@@ -78,7 +78,7 @@ struct DaspkgArgs {
     fat : string = ""
 
     @clarg_name = "wasm"
-    @clarg_doc = "Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
+    @clarg_doc = "Target wasm64 (memory64, lowered to a 32-bit memory at link so every browser runs it): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
     wasm : bool
 
     @clarg_name = "wasm-lib-dir"
@@ -3175,7 +3175,9 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
             w |> write(" \"{a}\"")
         }
         w |> write(" \"{runtime_archive}\"")
-        // Release defaults: wasm64 + WebGL2/ES3 + modern wasm EH + filesystem + threads. -pthread
+        // Release defaults: wasm64 lowered to a 32-bit memory (-sMEMORY64=2: the objects and archives
+        // keep 8-byte pointers, and an engine without memory64 - WebKit - runs the module) + WebGL2/ES3
+        // + modern wasm EH + filesystem + threads. -pthread
         // matches the threaded runtime archive (new_thread / JobQue map to Web Workers); the pool is
         // pre-sized for the DAS_MAX_HW_JOBS-capped worker count. A -pthread module only instantiates
         // cross-origin-isolated, so the host page must send COOP same-origin + COEP require-corp.
@@ -3190,7 +3192,7 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // emscripten fork needed — the wrap + shim live in libDaScript_runtime.a (like the malloc lock).
         // EXPORTED_RUNTIME_METHODS=FS,ENV: a custom shell stages files into MEMFS and sets the
         // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup).
-        w |> write(" -sMEMORY64=1 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
+        w |> write(" -sMEMORY64=2 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
         if (include_symbols) {w |> write(" -g3 --emit-symbol-map")}
         for (a in emcc_args) {
             w |> write(" {a}")

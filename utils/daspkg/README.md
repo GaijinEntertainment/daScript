@@ -59,7 +59,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
-| `--wasm` | Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime and module archives, `release wasm` ships compiled `.wasm` artifacts |
+| `--wasm` | Target wasm64 (memory64, lowered to a 32-bit memory at link so every browser runs it): `build --wasm` builds the wasm64 runtime and module archives, `release wasm` ships compiled `.wasm` artifacts |
 | `--wasm-lib-dir <path>` | Directory holding the wasm64 archives `release wasm` links (default `<das_root>/web/output64/lib`) |
 | `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
 | `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints - an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
