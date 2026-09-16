@@ -2,6 +2,7 @@
 
 
 #include "stb_image.h"
+#include "stb_dxt.h"
 #include "stb_image_write.h"
 #include "stb_image_resize2.h"
 
@@ -22,6 +23,7 @@ extern "C" {
 }
 
 namespace das {
+    void stb_compress_blocks(const TArray<uint8_t> & pixels, int width, int height, int format, bool high_quality, TArray<uint8_t> & output, Context * context, LineInfoArg * at);
     // write-to-memory wrappers
     void stbi_write_png_to_memory ( int x, int y, int comp, const void * data, int stride_bytes,
         const TBlock<void,TTemporary<const TArray<uint8_t>>> & blk, Context * context, LineInfoArg * at );

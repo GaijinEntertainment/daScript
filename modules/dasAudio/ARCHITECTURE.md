@@ -3,6 +3,25 @@
 **Who reads this: me.** Durable facts about why the audio system is shaped the way it is -
 readable cold, no history, no PR numbers.
 
+## Threaded WebAssembly output
+
+The AudioWorklet only consumes float PCM from a preallocated single-producer,
+single-consumer ring and zero-fills an underrun. A regular pthread runs `mix_audio`,
+including command-stream draining, decoder allocation and daslang context locking.
+The worker produces 128-frame blocks into a 512-frame ring (about 10.7 ms at 48 kHz).
+It sleeps briefly when the ring is full; the worklet never waits for it.
+
+This separation is required for correctness: an Emscripten AudioWorklet is a Wasm
+Worker, and the hybrid runtime can initialize it with no pthread pointer. C++ mutex
+ownership then sees thread ID zero, so a mutex acquired by that worklet need not
+exclude a main-thread producer. Draining `Stream` there can race with `Stream::push`.
+Do not put the command queue, allocator, context locks or script execution back in
+that callback even when a particular browser/toolchain appears to tolerate it.
+
+Start the ring/producer before starting the device. On teardown, stop/join the
+producer, stop the device, then free the ring and mixer context. Native, null-device
+and single-threaded WASM backends retain the direct callback path.
+
 ## The audio callback must never wait on a game thread
 
 `data_callback` (`src/dasAudio.cpp`) runs on miniaudio's realtime thread and has a buffer

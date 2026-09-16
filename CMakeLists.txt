@@ -36,6 +36,7 @@ option(DAS_IMGUI_DISABLED "Disable dasImgui (Dear ImGui bindings + widget DSL; n
 option(DAS_VULKAN_DISABLED "Disable dasVulkan (Vulkan bindings generated from vk.xml; headers + volk vendored, no SDK needed)" OFF)
 option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
+option(DAS_MESHOPTIMIZER_DISABLED "Disable dasMeshOptimizer (mesh processing and buffer codecs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 option(DAS_METAL_DISABLED "Disable dasMetal (native Metal compute binding, Apple only)" OFF)
 option(DAS_ACCELERATE_DISABLED "Disable dasAccelerate (Accelerate BLAS binding — AMX/SME, Apple only)" OFF)

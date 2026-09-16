@@ -1,7 +1,7 @@
 # dasImgui Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`CLAUDE.md`.
+`ARCHITECTURE.md`.
 
 **Never add or change a dasImgui test file - a `.das` file that declares a `[test]` function or
 is named `test_*.das`, `failed_imgui_*.das`, or `record_*.das` - outside `modules/dasImgui/tests`

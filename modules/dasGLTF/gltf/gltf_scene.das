@@ -118,12 +118,19 @@ def evaluate_animation(var scene : GltfScene; animation : int; t : float) {
     //! Nodes given by an explicit `matrix` are never animation targets (glTF forbids it), so only touched
     //! (hence TRS-defined) nodes are recomposed — matrix-defined nodes keep their parsed local.
     if (animation < 0 || animation >= length(scene.animations)) return
-    let nch = length(scene.animations[animation].channels)
+    evaluate_animation(scene, scene.animations[animation], t)
+}
+
+def evaluate_animation(var scene : GltfScene; clip : GltfAnimation; t : float) {
+    //! Evaluate `clip` at `t` seconds into `scene`, allowing multiple scene instances to share
+    //! animation data without cloning it. Channel targets update node TRS values, animated local
+    //! matrices are recomposed, and world transforms are refreshed; invalid channels are skipped.
+    let nch = length(clip.channels)
     for (ci in range(nch)) {
-        let ch = scene.animations[animation].channels[ci]
+        let ch = clip.channels[ci]
         if (ch.targetNode < 0 || ch.targetNode >= length(scene.nodes) ||
-            ch.sampler < 0 || ch.sampler >= length(scene.animations[animation].samplers)) continue
-        let val = eval_sampler(scene.animations[animation].samplers[ch.sampler], t,
+            ch.sampler < 0 || ch.sampler >= length(clip.samplers)) continue
+        let val = eval_sampler(clip.samplers[ch.sampler], t,
             ch.targetPath == GltfPath.rotation)
         if (ch.targetPath == GltfPath.translation) {
             scene.nodes[ch.targetNode].translation = val.xyz
@@ -137,7 +144,7 @@ def evaluate_animation(var scene : GltfScene; animation : int; t : float) {
     // Second pass: recompose the local of each animated node from its finalized TRS (recompose is
     // idempotent, so a node driven by multiple channels is fine).
     for (ci in range(nch)) {
-        let tn = scene.animations[animation].channels[ci].targetNode
+        let tn = clip.channels[ci].targetNode
         if (tn >= 0 && tn < length(scene.nodes)) {
             scene.nodes[tn].local = compose(scene.nodes[tn].translation,
                 scene.nodes[tn].rotation, scene.nodes[tn].scale)

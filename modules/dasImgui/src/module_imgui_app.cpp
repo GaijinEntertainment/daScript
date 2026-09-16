@@ -5,6 +5,9 @@
 #include <GLFW/glfw3.h>
 
 #include "../imgui/backends/imgui_impl_glfw.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+#endif
 
 using namespace das;
 
@@ -29,6 +32,41 @@ MAKE_EXTERNAL_TYPE_FACTORY(ImDrawData,ImDrawData);
 
 DAS_MOD_API void glfw_error_callback(int error, const char* description) {
     printf("Glfw Error %d: %s\n", error, description);
+}
+
+#if defined(__EMSCRIPTEN__) && !defined(EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3)
+static ImGuiContext * g_emscripten_callback_owner = nullptr;
+#endif
+
+#ifdef __EMSCRIPTEN__
+static void install_imgui_browser_callbacks(GLFWwindow * window) {
+    ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
+#ifndef EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3
+    g_emscripten_callback_owner = ImGui::GetCurrentContext();
+#endif
+}
+#endif
+
+// modules/dasImgui/ARCHITECTURE.md sec.1
+DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool install_callbacks ) {
+    const bool ok = ImGui_ImplGlfw_InitForOpenGL(window, install_callbacks);
+#ifdef __EMSCRIPTEN__
+    if ( ok && install_callbacks )
+        install_imgui_browser_callbacks(window);
+#endif
+    return ok;
+}
+
+// modules/dasImgui/ARCHITECTURE.md sec.1
+DAS_MOD_API void das_imgui_shutdown_glfw() {
+#if defined(__EMSCRIPTEN__) && !defined(EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3)
+    if (g_emscripten_callback_owner == ImGui::GetCurrentContext()) {
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, nullptr);
+        emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, false, nullptr);
+        g_emscripten_callback_owner = nullptr;
+    }
+#endif
+    ImGui_ImplGlfw_Shutdown();
 }
 
 // =====================================================================
@@ -68,11 +106,16 @@ DAS_MOD_API void das_imgui_synth_input_char ( uint32_t cp ) {
 // Caller toggles only on a state change, honoring ImGui_ImplGlfw's
 // InstalledCallbacks invariant (Install asserts when already installed, and
 // vice-versa). Must run on the render/main thread — glfwSet*Callback requires it.
+// modules/dasImgui/ARCHITECTURE.md sec.1
 DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled ) {
     GLFWwindow * w = glfwGetCurrentContext();
     if ( !w ) return;
     if ( enabled ) ImGui_ImplGlfw_InstallCallbacks(w);
     else ImGui_ImplGlfw_RestoreCallbacks(w);
+#ifdef __EMSCRIPTEN__
+    if ( enabled ) install_imgui_browser_callbacks(w);
+    else emscripten_set_wheel_callback("#canvas", nullptr, false, nullptr);
+#endif
 }
 
 // Set a defined Arrow cursor on the window at init, before the first frame. The GLFW
@@ -115,14 +158,14 @@ public:
         lib.addModule(mod_imgui);
 #if USE_GENERATED
         // GLFW
-        addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_InitForOpenGL)>(*this,lib,"ImGui_ImplGlfw_InitForOpenGL",
-            SideEffects::worstDefault, "ImGui_ImplGlfw_InitForOpenGL");
+        addExtern<DAS_BIND_FUN(das_imgui_init_glfw_for_opengl)>(*this,lib,"ImGui_ImplGlfw_InitForOpenGL",
+            SideEffects::worstDefault, "das_imgui_init_glfw_for_opengl");
         addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_InitForVulkan)>(*this,lib,"ImGui_ImplGlfw_InitForVulkan",
             SideEffects::worstDefault, "ImGui_ImplGlfw_InitForVulkan");
         addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_InitForOther)>(*this,lib,"ImGui_ImplGlfw_InitForOther",
             SideEffects::worstDefault, "ImGui_ImplGlfw_InitForOther");
-        addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_Shutdown)>(*this,lib,"ImGui_ImplGlfw_Shutdown",
-            SideEffects::worstDefault, "ImGui_ImplGlfw_Shutdown");
+        addExtern<DAS_BIND_FUN(das_imgui_shutdown_glfw)>(*this,lib,"ImGui_ImplGlfw_Shutdown",
+            SideEffects::worstDefault, "das_imgui_shutdown_glfw");
         addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_NewFrame)>(*this,lib,"ImGui_ImplGlfw_NewFrame",
             SideEffects::worstDefault, "ImGui_ImplGlfw_NewFrame");
         // Detach/reattach the backend's GLFW input callbacks at runtime — used by
@@ -158,6 +201,8 @@ public:
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"../modules/dasImgui/src/imgui_stub.h\"\n";
         tw << "#include <backends/imgui_impl_glfw.h>\n";
+        tw << "DAS_MOD_API void das_imgui_shutdown_glfw();\n";
+        tw << "DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool install_callbacks );\n";
         tw << "DAS_MOD_API void das_imgui_synth_mouse_pos ( float x, float y );\n";
         tw << "DAS_MOD_API void das_imgui_synth_mouse_button ( int button, bool down );\n";
         tw << "DAS_MOD_API void das_imgui_synth_mouse_wheel ( float dx, float dy );\n";
@@ -173,4 +218,3 @@ REGISTER_DYN_MODULE(Module_imgui_app, Module_imgui_app);
 
 // registering module, so that its available via 'NEED_MODULE' macro
 REGISTER_MODULE(Module_imgui_app);
-
