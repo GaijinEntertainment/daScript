@@ -1026,7 +1026,9 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
         // assumes, which need not be what this target machine emits.
         let dl = LLVMCreateTargetDataLayout(targetMachine)
         LLVMSetModuleDataLayout(mod, dl)
-        LLVMSetTarget(mod, LLVMGetDefaultTargetTriple())
+        let mod_triple = LLVMGetDefaultTargetTriple()
+        LLVMSetTarget(mod, mod_triple)
+        LLVMDisposeMessage(mod_triple)
         LLVMDisposeTargetData(dl)
         let error : string?
         let file = artifact_path(out_path, JitArtifact.object)
