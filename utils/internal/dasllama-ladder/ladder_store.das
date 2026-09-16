@@ -199,14 +199,25 @@ def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; cp
 def private backfill_run_cells(db : SqlRunner) {
     let subs <- _sql(db |> select_from(type<Submission>)
         |> _where(_.Kind == "records" || _.Kind == "official"))
+    var filled = 0
+    var odd = 0
     for (s in subs) {
         let sid = s.Id
         each_record_run(s.Doc) $(_m, r, mi, ri) {
             let cells = run_cells(r)
-            db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+            let n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
                 (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
+            // one document run is one row; anything else is a row an admin delete removed, or
+            // a duplicate - the board would show a default cell there with no other signal
+            if (n != 1) {
+                odd++
+                logger_warning("ladder.store", "backfill: a document run maps to {n} rows, not 1",
+                    JV((submission = sid, model_idx = mi, run_idx = ri, rows = n)))
+            }
+            filled += n
         }
     }
+    logger_info("ladder.store", "backfill run cells", JV((submissions = length(subs), rows = filled, odd = odd)))
 }
 
 //! Every limit the store enforces; the launcher fills it from config.

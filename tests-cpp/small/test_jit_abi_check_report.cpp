@@ -36,7 +36,7 @@ static std::string captureStderr ( Fn && fn ) {
     REQUIRE(DAS_DUP2(DAS_FILENO(tmp), DAS_FILENO(stderr)) >= 0);
     fn();
     fflush(stderr);
-    DAS_DUP2(saved, DAS_FILENO(stderr));
+    REQUIRE(DAS_DUP2(saved, DAS_FILENO(stderr)) >= 0);
     DAS_CLOSE(saved);
     std::string out;
     fseek(tmp, 0, SEEK_SET);
