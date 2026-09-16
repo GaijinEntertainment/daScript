@@ -4604,6 +4604,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->variable = var;
+            if (var->type->isExprType()) {
+                return Visitor::visit(expr);
+            }
             TypeDecl::clone(expr->type, var->type);
             expr->type->ref = true;
             return Visitor::visit(expr);
