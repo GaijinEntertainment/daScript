@@ -351,10 +351,12 @@ jobs:
                 echo "WARNING: $ex wasm build failed — the dasllama.io $ex page will be a placeholder this deploy."
             fi
         done
+        # the probe's stdout must BE the JSON: a stray runtime line ahead of it passes a
+        # substring grep and then fails every mint, which is two placeholder pages, not a red job
         if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/dasLLAMA/wasm/dlim_config --out "$REPO/web/output64/examples" \
            && ( cd web/output64/examples/dlim_config && node dlim_config.js > wasm64.json ) \
-           && grep -q '"backend"' web/output64/examples/dlim_config/wasm64.json; then
+           && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "backend" in json.dumps(d) else 1)' web/output64/examples/dlim_config/wasm64.json; then
             echo "wasm64 DlimConfiguration probe OK: $(tr -d ' \n' < web/output64/examples/dlim_config/wasm64.json | cut -c1-120)..."
         else
             # fatal, unlike an example's own build: without the probe no set can be minted, so a

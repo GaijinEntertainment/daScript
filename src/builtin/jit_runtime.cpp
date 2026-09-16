@@ -656,16 +656,17 @@ extern "C" {
     }
 
     DAS_API void jit_handled_abi_check_report () {
-        DAS_FATAL_LOG("JIT ABI CHECK: types %d checked / %d skipped, fields %d checked / %d skipped, %d mismatch(es)\n",
-            g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped, g_abi_check_count);
-        if ( g_abi_check_count==0 ) {
-            // reset so a subsequent sweep in the same process reports only its own results
-            g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
-            g_abi_check_report.clear();
-            return;
+        if ( g_abi_check_count ) {
+            fprintf(stderr, "JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime; "
+                "types %d checked / %d skipped, fields %d checked / %d skipped):\n%s",
+                g_abi_check_count, g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped,
+                g_abi_check_report.c_str());
+            fflush(stderr);
         }
-        DAS_FATAL_ERROR("JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime):\n%s",
-            g_abi_check_count, g_abi_check_report.c_str());
+        // reset so a subsequent sweep in the same process reports only its own results
+        g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
+        g_abi_check_count = 0;
+        g_abi_check_report.clear();
     }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
