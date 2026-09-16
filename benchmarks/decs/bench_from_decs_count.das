@@ -20,7 +20,7 @@ struct BenchCountRow {
 
 def fixture(n : int) {
     restart()
-    create_entities(n) $(eid : EntityId; i : int; var cmp : ComponentMap) {
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, BenchCountRow(val = i))
     }
 }
@@ -32,7 +32,7 @@ def from_decs_count_m1_hand(b : B?) {
     b |> run("m1_hand_arch_size/{N}", N) {
         var erq : EcsRequest
         erq.req |> push("bench_val")
-        var total = 0
+        var total = 0l
         for_each_archetype(erq) $(arch : Archetype) {
             total += arch.size
         }

@@ -2075,6 +2075,7 @@ install(FILES ${DAS_DASCOV_TEST_FILES} DESTINATION utils/dascov/tests)
 file(GLOB DAS_BENCHCTL_FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/*.das)
 install(FILES ${DAS_BENCHCTL_FILES} DESTINATION utils/benchctl)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/benchctl)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/suite.json DESTINATION utils/benchctl)
 
 # Install lint (unified linter) + its rule-coverage suite, so a shipped SDK can
 # self-check the linter the same way run_utils_tests does in-tree.

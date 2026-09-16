@@ -232,6 +232,7 @@ SET(DAS_UTILS_TO_TEST
     internal/hygiene
     internal/preflight/tests
     internal/ast-fuzz
+    benchctl/tests
     internal/requirefix
     internal/test-release
     daspkg/test_daspkg.das
