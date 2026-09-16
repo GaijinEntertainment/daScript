@@ -1056,6 +1056,10 @@ def public collect_standalone_functions(prog : Program?; strict : bool) : Standa
                     has_no_jit = true
                     to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")
                 }
+                if (!fun.flags.builtIn && fun.moreFlags2.needCallerStackFrame) {
+                    has_no_jit = true
+                    to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' can reach heap_collect, whose locals a compiled frame does not expose as GC roots; there is no interpreter here to fall back to\n")
+                }
                 if (fun.moreFlags.pinvoke) {
                     any_pinvoke = true
                 }
