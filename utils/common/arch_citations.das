@@ -1,12 +1,14 @@
 // The `[arch]` citation scanner: one implementation of LINT026's resolution semantics, shared by
-// the rule that enforces them (`utils/lint/main.das`) and the tools that read them
-// (`utils/mcp/tools/arch_of`, `utils/mcp/tools/arch_sites`). The failure strings live here too,
-// so a citation lint reports and a citation a tool refuses cannot describe themselves
-// differently.
+// the rule that enforces them (`utils/lint/main.das`), the install-time excerpt writer
+// (arch-extract) and the tools that read them (`utils/mcp/tools/arch_of`,
+// `utils/mcp/tools/arch_sites`). The failure strings live here too, so a citation lint reports
+// and a citation a tool refuses cannot describe themselves differently.
 //
-// Everything here reads SOURCE rather than the AST: the annotation is an inert builtin marker, so
-// citing a document costs a build nothing, and a citation must be checkable in a file the reading
-// environment cannot compile.
+// Two spellings, one resolution: `[arch(at="<doc>#<anchor>")]` on a .das declaration, and
+// `// <doc>#<anchor>` inside a `//` comment of a C or C++ source, which has no annotation to
+// carry it. Everything here reads SOURCE rather than the AST: the annotation is an inert builtin
+// marker, so citing a document costs a build nothing, and a citation must be checkable in a file
+// the reading environment cannot compile.
 
 options gen2
 
@@ -102,9 +104,103 @@ def private positions_of_offsets(text : string; offsets : array<int>) : array<Sr
 }
 
 
-// Every citation `text` makes, in file order. `file` is only read for the folder a relative
-// citation resolves against, so it may name a file that is no longer on disk.
+let private CPP_SOURCE_SUFFIXES <- [".c", ".cpp", ".cc", ".cxx", ".mm", ".h", ".hpp", ".inl", ".inc"]
+
+
+// True for a C or C++ source, whose citation is the `// <doc>#<anchor>` pointer form.
+def public is_cpp_source(name : string) : bool {
+    for (s in CPP_SOURCE_SUFFIXES) {
+        return true if (name |> ends_with(s))
+    }
+    return false
+}
+
+
+// True for a file an [arch] walk reads for citations: a .das, or a C/C++ source.
+def public arch_cites_source(name : string) : bool {
+    return name |> ends_with(".das") || is_cpp_source(name)
+}
+
+
+def private is_path_char(c : int) : bool {
+    return is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/' || c == '-'
+}
+
+
+def private is_anchor_char(c : int) : bool {
+    return is_alpha(c) || is_number(c) || c == '_' || c == '-'
+}
+
+
+// A C++ pointer's document is spelled root-relative (`src/ast/ARCHITECTURE.md`), and the root is
+// the first folder, from the citing file's own upward, that the path exists under: a header in
+// include/ reaches src/'s document, a bare `ARCHITECTURE.md` still means the citer's own folder,
+// and a planted fixture tree resolves inside itself. A path found nowhere resolves at the
+// citer's folder, where the forward check reports it missing.
+def private resolve_pointer_doc(folder, rel : string) : string {
+    var dir = arch_path(folder)
+    while (true) {
+        let candidate = arch_path(path_join(dir, rel))
+        let st = stat(candidate)
+        return candidate if (st.is_valid && st.is_reg)
+        let up = dir_name(dir)
+        break if (empty(up) || up == dir)
+        dir = up
+    }
+    return arch_path(path_join(folder, rel))
+}
+
+
+// Every pointer a C or C++ source makes, in file order: `<path>.md#<anchor>` inside a `//`
+// comment, the path the longest run of path characters before `.md`, the anchor the run of
+// anchor characters after `#`. The `//` test inverts the .das rule's: here only text INSIDE the
+// comment is a citation. A block comment is not read.
+def public collect_arch_pointers(file, text : string) : array<ArchCitation> {
+    var out : array<ArchCitation>
+    let folder = dir_name(file)
+    var lineno = 0
+    for (line in split(text, "\n")) {
+        lineno ++
+        let slashes = find(line, "//")
+        continue if (slashes < 0)
+        peek_data(line) $(d) {
+            let len = length(d)
+            var from = slashes + 2
+            while (true) {
+                let ext = find(line, ".md#", from)
+                break if (ext < 0)
+                let hash = ext + 3
+                var start = ext
+                while (start > from && is_path_char(int(d[start - 1]))) {
+                    start --
+                }
+                var stop = hash + 1
+                while (stop < len && is_anchor_char(int(d[stop]))) {
+                    stop ++
+                }
+                from = stop
+                // `.md#` with no name after it is prose; a URL to a document on the web is not a
+                // pointer either: the walk back through `https://host/...` stops at the colon and
+                // leaves a path opening with `/`, and a bare `host.tld/...` opens with a dotted
+                // first segment - a tree path's first segment carries no dot and never a leading slash
+                continue if (stop == hash + 1 || int(d[start]) == '/')
+                let first_slash = find(line, "/", start)
+                continue if (first_slash > start && first_slash < ext && find(line, ".", start) < first_slash)
+                out |> push(ArchCitation(line = lineno, raw = slice(line, start, stop),
+                    anchor = slice(line, hash + 1, stop),
+                    doc = resolve_pointer_doc(folder, slice(line, start, hash))))
+            }
+        }
+    }
+    return <- out
+}
+
+
+// Every citation `text` makes, in file order, in whichever spelling `file`'s language carries.
+// `file` is only read for its extension and the folder a relative citation resolves against, so
+// it may name a file that is no longer on disk.
 def public collect_arch_citations(file, text : string) : array<ArchCitation> {
+    return <- collect_arch_pointers(file, text) if (is_cpp_source(file))
     var out : array<ArchCitation>
     var raws : array<string>
     var offsets : array<int>
@@ -302,6 +398,9 @@ def public citation_outside_subtree(file : string; c : ArchCitation) : bool {
 def public citation_failure_reason(var docs : ArchDocs; file : string; c : ArchCitation) : string {
     let reason = citation_failure_reason(docs, c)
     return reason if (!empty(reason))
+    // a C++ pointer is exempt from the tree rule: the layout puts a header under include/ far
+    // from the src/ folder whose document owns the mechanism it implements
+    return "" if (is_cpp_source(file))
     return "cites a document outside this file's folder tree - restate the mechanism in an architecture doc of this folder's tree and cite that" if (citation_outside_subtree(file, c))
     return ""
 }

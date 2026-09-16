@@ -345,6 +345,77 @@ def test_arch_reverse(t : T?) {
 }
 
 
+// A C++ source carrying `pointers`, one per line inside a `//` comment, plus an `#include`, a
+// block comment and two web URLs that must read as nothing. Pointer N lands on line 3N + 3.
+def private plant_cpp(dir, name : string; pointers : array<string>) {
+    plant(dir, name, build_string() $(var w) {
+        w |> write("#include \"ARCHITECTURE.md#not-a-pointer.h\"\n")
+        w |> write("/* ARCHITECTURE.md#alpha inside a block comment is not read */\n")
+        w |> write("// see https://github.com/example/repo/blob/main/docs/Usage.md#the-web-not-the-tree\n")
+        w |> write("// and github.com/example/repo/blob/main/docs/FAQ.md#a-host-first-segment\n")
+        for (p in pointers) {
+            w |> write("\n// {p} - the mechanism this function implements\nvoid f() \{\}\n")
+        }
+    })
+}
+
+
+[test]
+def test_arch_cpp_pointers(t : T?) {
+    t |> run("a C++ `// <doc>#<anchor>` pointer is a citation: it satisfies the anchor, and a dangling one fires at its line") @(t : T?) {
+        let dir = path_join(tmp_root(), "cpp")
+        mkdir_rec(dir)
+        plant_doc(dir, "ARCHITECTURE.md", ["alpha", "orphan"])
+        plant_cpp(dir, "ok.cpp", ["ARCHITECTURE.md#alpha", "ARCHITECTURE.md#nope"])
+        var out : string
+        let rc = run_lint(dir, out)
+        t |> equal(count_of(out, "\{#alpha\}"), 0, "the pointer counts as alpha's citer\n{out}")
+        t |> equal(count_of(out, "\{#orphan\}"), 1, "the anchor nothing points at is still owed\n{out}")
+        t |> success(find(out, "ok.cpp:9: LINT026: [arch] citation does not resolve - no such anchor") >= 0,
+            "the dangling pointer is named at its own line\n{out}")
+        t |> equal(count_of(out, "not-a-pointer"), 0, "an #include is not a comment, so not a pointer\n{out}")
+        t |> equal(count_of(out, "the-web-not-the-tree"), 0, "a URL with a scheme is a document on the web, not a pointer\n{out}")
+        t |> equal(count_of(out, "a-host-first-segment"), 0, "a bare host.tld/... path is a document on the web, not a pointer\n{out}")
+        t |> equal(count_of(out, "LINT026"), 2, "the block-comment mention reads as nothing\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+    t |> run("a pointer's path is root-relative, walked up from the citing file, and the folder-tree rule does not bind C++") @(t : T?) {
+        let root = path_join(tmp_root(), "cpproot")
+        let inc = path_join(path_join(root, "include"), "deep")
+        let src = path_join(root, "src")
+        mkdir_rec(inc)
+        mkdir_rec(src)
+        plant_doc(src, "ARCHITECTURE.md", ["far"])
+        plant_cpp(inc, "deep.h", ["src/ARCHITECTURE.md#far"])
+        var out : string
+        let rc = run_lint(root, out)
+        t |> equal(count_of(out, "LINT026"), 0, "include/deep/deep.h reaches src/ARCHITECTURE.md through the root above both\n{out}")
+        t |> equal(rc, 0, "and the run is clean\n{out}")
+    }
+    t |> run("negative control - the pointer follows its anchor") @(t : T?) {
+        let dir = path_join(tmp_root(), "cppctl")
+        mkdir_rec(dir)
+        plant_doc(dir, "ARCHITECTURE.md", ["alpha"])
+        plant_cpp(dir, "ok.cpp", ["ARCHITECTURE.md#alpha"])
+        var before : string
+        let rc = run_lint(dir, before)
+        t |> equal(count_of(before, "LINT026"), 0, "a resolving pointer is silent both ways\n{before}")
+        t |> equal(rc, 0, "and the run is clean\n{before}")
+        // mutate: the pointer names a section the document does not declare
+        plant_cpp(dir, "ok.cpp", ["ARCHITECTURE.md#gone"])
+        var swapped : string
+        run_lint(dir, swapped)
+        t |> equal(count_of(swapped, "does not resolve"), 1, "the dangling pointer fires\n{swapped}")
+        t |> equal(count_of(swapped, "\{#alpha\}"), 1, "and the anchor it left is owed\n{swapped}")
+        // restore
+        plant_cpp(dir, "ok.cpp", ["ARCHITECTURE.md#alpha"])
+        var again : string
+        run_lint(dir, again)
+        t |> equal(count_of(again, "LINT026"), 0, "restoring the pointer restores silence\n{again}")
+    }
+}
+
+
 [test]
 def test_arch_modes(t : T?) {
     t |> run("--disable LINT026 silences the forward direction") @(t : T?) {

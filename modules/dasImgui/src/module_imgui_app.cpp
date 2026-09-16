@@ -47,7 +47,7 @@ static void install_imgui_browser_callbacks(GLFWwindow * window) {
 }
 #endif
 
-// modules/dasImgui/ARCHITECTURE.md sec.1
+// modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool install_callbacks ) {
     const bool ok = ImGui_ImplGlfw_InitForOpenGL(window, install_callbacks);
 #ifdef __EMSCRIPTEN__
@@ -57,7 +57,7 @@ DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool inst
     return ok;
 }
 
-// modules/dasImgui/ARCHITECTURE.md sec.1
+// modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API void das_imgui_shutdown_glfw() {
 #if defined(__EMSCRIPTEN__) && !defined(EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3)
     if (g_emscripten_callback_owner == ImGui::GetCurrentContext()) {
@@ -106,7 +106,7 @@ DAS_MOD_API void das_imgui_synth_input_char ( uint32_t cp ) {
 // Caller toggles only on a state change, honoring ImGui_ImplGlfw's
 // InstalledCallbacks invariant (Install asserts when already installed, and
 // vice-versa). Must run on the render/main thread — glfwSet*Callback requires it.
-// modules/dasImgui/ARCHITECTURE.md sec.1
+// modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled ) {
     GLFWwindow * w = glfwGetCurrentContext();
     if ( !w ) return;

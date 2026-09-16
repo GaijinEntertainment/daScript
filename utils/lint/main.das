@@ -318,7 +318,8 @@ def private report_arch_citation(file : string; c : ArchCitation; var docs : Arc
 }
 
 // Both halves of the citation check in one walk: the .md files that declare anchors and the
-// .das files that may cite them. Same pruning as scan_das_files; `seen` folds nested roots.
+// .das and C/C++ sources that may cite them. Same pruning as scan_das_files; `seen` folds
+// nested roots.
 def private scan_arch_folder(path : string; var mds, dases : array<string>; var seen : table<string; void?>) {
     return if (seen |> key_exists(path))
     seen |> insert(path, null)
@@ -332,7 +333,7 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
             scan_arch_folder(full, mds, dases, seen)
         } elif (fst.is_reg && name |> ends_with(".md")) {
             mds |> push(full)
-        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name)) {
+        } elif (fst.is_reg && arch_cites_source(name) && !is_skip_file(name)) {
             dases |> push(full)
         }
     }
@@ -358,7 +359,7 @@ def run_arch_pass(roots : array<string>) : int {
     var cited : table<string>
     for (f in dases) {
         let text = fread(f)
-        continue if (empty(text) || find(text, "arch") < 0)
+        continue if (empty(text) || (find(text, "arch") < 0 && find(text, ".md#") < 0))
         for (c in collect_arch_citations(f, text)) {
             found += report_arch_citation(f, c, docs)
             continue if (empty(c.anchor))

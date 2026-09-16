@@ -50,7 +50,7 @@ def private scan_das_files(path : string; var out : array<string>) {
         return if (!st.is_valid)
         if (st.is_dir) {
             scan_das_files(full, out)
-        } elif (st.is_reg && name |> ends_with(".das")) {
+        } elif (st.is_reg && arch_cites_source(name)) {
             out |> push(full)
         }
     }
@@ -76,7 +76,7 @@ def private collect_cited(files : array<string>; var citedDocs, citedAnchors : t
     var failures = 0
     for (f in files) {
         let text = fread(f)
-        continue if (empty(text) || find(text, "arch") < 0)
+        continue if (empty(text) || (find(text, "arch") < 0 && find(text, ".md#") < 0))
         for (c in collect_arch_citations(f, text)) {
             let reason = citation_failure_reason(docs, f, c)
             if (!empty(reason)) {

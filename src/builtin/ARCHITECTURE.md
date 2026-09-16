@@ -36,7 +36,7 @@ flavor by destination module. The gate (`review_nttp.das`) skips them by `cppNam
 The gate scans the module registry of its own program, so only modules its
 `require` list pulls in are covered - the require list is the coverage list.
 
-## 2. The default module-cache path
+## 2. The default module-cache path {#default-module-cache-path}
 
 `ModuleFileCache::defaultPath` (`module_builtin_ast_serialize.cpp`) returns
 `.jitted_scripts/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
@@ -82,7 +82,7 @@ reads, so a record in use is the newest and a stale variant the oldest. Only the
 directory is pruned - an explicit `-module-cache <path>` is the user's - and the limit variable
 is the one `DAS*` name the record key skips, since it decides nothing about a compile.
 
-## 3. The interpreter's `[extern]` call
+## 3. The interpreter's `[extern]` call {#interpreter-extern-call}
 
 An `[extern]` function (`module_builtin_dasbind.cpp`) is called from the interpreter through
 a wrapper `vec4f (*)(void * fn, vec4f * args)`: the node evaluates every argument into a
@@ -148,7 +148,7 @@ compile, which a served registrar's program takes with it, while the proxy lives
 process. A failed bind on the on-demand path is the call's transform error, the diagnostic
 `apply` would have given.
 
-## 4. A message that crosses the panic jump
+## 4. A message that crosses the panic jump {#message-crosses-panic-jump}
 
 `Context::throw_error_at` formats into a stack buffer and jumps; without C++ exceptions the
 jump is a `longjmp`, which unwinds nothing, so a heap-owning local alive at the call - a
@@ -162,7 +162,7 @@ refusal (`crash_and_burn` in `module_builtin_dasbind.cpp`, thrown at the first c
 inline. The same discipline is the `FMT_THROW` stash in `include/daScript/das_config.h`, where
 the temporary dies when the stash statement ends.
 
-## 5. A spawned child's stdout pipe
+## 5. A spawned child's stdout pipe {#spawned-child-stdout-pipe}
 
 `spawn_process` (`module_builtin_fio.cpp`) hands the child one pipe for stdout and stderr and
 never blocks on it: `process_drain` takes what the pipe holds and returns, and the caller decides
@@ -174,7 +174,7 @@ when asked for the default - a chatty child under the watchdog's tick moves at m
 second through one of those, the pipe's 4 KB four drains a second - so the Windows pipe is
 created at the POSIX capacity, and every platform drains the same bursts.
 
-## 6. What a module-cache record's bytes are
+## 6. What a module-cache record's bytes are {#module-cache-record-bytes}
 
 `module_builtin_ast_serialize.cpp` writes and reads one record per module. Every table below is
 per record: it clears in `AstSerializer::clearNodeIds` at the end of each program, so no record
@@ -240,7 +240,7 @@ bytes written and `serializeProgram` calls it at the end of every program, so `b
 the stream at a quiescent point; a storage that buffers ahead settles what it holds in its own
 `flush()`.
 
-## 7. The serialization profile rail
+## 7. The serialization profile rail {#serialization-profile-rail}
 
 `DAS_SERIALIZE_PROFILE` (`ast_serializer.h`, 0 unless the build defines it) compiles in the
 stream's size and time breakdown; off, every `DAS_SER_PROFILE` expands to nothing and the

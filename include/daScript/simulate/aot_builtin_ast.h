@@ -528,7 +528,7 @@ namespace das {
     DAS_CC_API TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
     DAS_CC_API void notInferred ( Function * func, Context * context, LineInfoArg * at );
     DAS_API void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
-    // src/ast/ARCHITECTURE.md sec.4
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     DAS_CC_API bool ast_is_function_used ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
     DAS_CC_API bool ast_is_variable_used ( const Program * program, const Variable * var, Context * context, LineInfoArg * at );
     DAS_CC_API int32_t ast_function_index ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );

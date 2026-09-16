@@ -1237,7 +1237,7 @@ namespace das {
         }
     }
 
-    // src/ast/ARCHITECTURE.md sec.2
+    // src/ast/ARCHITECTURE.md#module-scan-manifest
     static bool ast_requireGuardAvailable ( yyscan_t scanner, const string & guard ) {
         if ( guard.empty() ) return true;
         if ( guard.find('/') != string::npos ) {
@@ -1264,7 +1264,7 @@ namespace das {
         if ( modalias ) delete modalias;
     }
 
-    // src/ast/ARCHITECTURE.md sec.2
+    // src/ast/ARCHITECTURE.md#module-scan-manifest
     void ast_requireModuleGroup ( yyscan_t scanner, string * group, bool pub, const LineInfo & atName, string * guard ) {
         if ( ast_requireGuardAvailable(scanner, guard) ) {
             for ( const auto & member : getModuleGroupMembers(*group) ) {
@@ -1279,7 +1279,7 @@ namespace das {
         auto info = yyextra->g_Access->getModuleInfo(name, yyextra->g_FileAccessStack.back()->name);
         auto mod = yyextra->g_Program->addModule(info.moduleName);
         if ( !mod ) {
-            // a parse with no prerequisite walk (compile of a string) meets a deferred module here (src/ast/ARCHITECTURE.md sec.2)
+            // a parse with no prerequisite walk (compile of a string) meets a deferred module here (src/ast/ARCHITECTURE.md#module-scan-manifest)
             if ( auto loader = getDeferredModuleLoader(); loader && loader(info.moduleName) ) {
                 mod = yyextra->g_Program->addModule(info.moduleName);
             }

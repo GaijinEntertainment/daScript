@@ -33,7 +33,7 @@
 #else
 #define DAS_ARM64_CALL_SYMBOL "das_arm64_call"
 #endif
-// src/builtin/ARCHITECTURE.md sec.3
+// src/builtin/ARCHITECTURE.md#interpreter-extern-call
 __asm__(
     ".text\n"
     ".p2align 2\n"
@@ -175,7 +175,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     #undef  AX
     #undef  AD
 
-    // src/builtin/ARCHITECTURE.md sec.3
+    // src/builtin/ARCHITECTURE.md#interpreter-extern-call
     struct Arm64Layout {
         struct Slot { uint8_t argIndex, bytes; uint16_t offset; };
         uint8_t gprArg[8] = {}, fprArg[8] = {};
@@ -411,7 +411,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 }
             });
             if ( !crash_and_burn.empty() ) {
-                char message[8192];   // src/builtin/ARCHITECTURE.md sec.4
+                char message[8192];   // src/builtin/ARCHITECTURE.md#message-crosses-panic-jump
                 snprintf(message, sizeof(message), "%s", crash_and_burn.c_str());
                 string().swap(crash_and_burn);
                 context.throw_error_at(debugInfo, "%s", message);

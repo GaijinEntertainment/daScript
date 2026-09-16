@@ -112,7 +112,8 @@ struct PreflightCtx {
     base : string
     changed_das : array<string>
     changed_md : array<string>      // the lint gate reads these beside changed_das, as CI does
-    changed_cpp : array<string>
+    changed_cpp : array<string>         // the translation units the cpp-syntax gate compiles
+    changed_cxx_other : array<string>   // every other changed C-family file - headers, .c, .cxx, .mm - the lint gate's [arch] pass reads; `changed_hdr` counts the core-scope headers
     changed_all : array<string>     // every changed path vs base, any extension, plus untracked files - the reach tests read this
     changed_hdr : int
     jobs : int
@@ -322,7 +323,7 @@ def in_core_scope(path : string) : bool {
     return starts_with(g, "src/") || starts_with(g, "include/") || starts_with(g, "tests-cpp/")
 }
 
-def collect_changed_files(base : string; var das_files, md_files, cpp_files : array<string>&; var hdr_count : int&) {
+def collect_changed_files(base : string; var das_files, md_files, cpp_files, cxx_other : array<string>&; var hdr_count : int&) {
     var seen : table<string>
     let probe = run_argv(["git", "rev-parse", "--verify", "--quiet", base])
     var ranges : array<string>
@@ -346,11 +347,12 @@ def collect_changed_files(base : string; var das_files, md_files, cpp_files : ar
                 md_files |> push(f)
             } elif (ext == ".cpp" || ext == ".cc") {
                 cpp_files |> push(f)
-            } elif (ext == ".h" || ext == ".hpp" || ext == ".inc") {
-                // core-scope only — the sole consumer is the cpp-syntax
+            } elif (ext == ".c" || ext == ".cxx" || ext == ".mm" || ext == ".h" || ext == ".hpp" || ext == ".inc" || ext == ".inl") {
+                cxx_other |> push(f)
+                // the COUNT is core-scope headers only — its consumer is the cpp-syntax
                 // full-sweep trigger, and module headers don't ripple into
                 // core TUs (modules depend on core, not the other way)
-                if (in_core_scope(f)) {
+                if ((ext == ".h" || ext == ".hpp" || ext == ".inc") && in_core_scope(f)) {
                     hdr_count ++
                 }
             }
@@ -598,12 +600,13 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    if (empty(ctx.changed_das) && empty(ctx.changed_md)) {
+    if (empty(ctx.changed_das) && empty(ctx.changed_md) && empty(ctx.changed_cpp) && empty(ctx.changed_cxx_other)) {
         return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .das or .md files changed vs {ctx.base}")
+            detail = "no .das, .md or C/C++ files changed vs {ctx.base}")
     }
     var files <- [for (f in ctx.changed_das); f]
-    files |> push_from(ctx.changed_md)
+    // a C/C++ positional compiles nothing; it arms its folder's [arch] pass, whose pointers it may carry
+    files |> push_from(ctx.changed_md, ctx.changed_cpp, ctx.changed_cxx_other)
     var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
     host_args |> push_from(files)
     host_args |> push("--quiet")
@@ -1782,7 +1785,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     let clang_info = find_clang(cfg.clang, ctx.build_dir)
     ctx.clang = clang_info.exe
     ctx.clang_is_cl = clang_info.is_cl
-    collect_changed_files(cfg.base, ctx.changed_das, ctx.changed_md, ctx.changed_cpp, ctx.changed_hdr)
+    collect_changed_files(cfg.base, ctx.changed_das, ctx.changed_md, ctx.changed_cpp, ctx.changed_cxx_other, ctx.changed_hdr)
     ctx.changed_all <- collect_changed_paths(cfg.base)
 
     let tier = cfg.full ? "full" : "fast"

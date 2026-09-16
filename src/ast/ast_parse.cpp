@@ -251,7 +251,7 @@ namespace das {
                                     continue;
                                 }
                             }
-                            // ARCHITECTURE.md sec.2
+                            // src/ast/ARCHITECTURE.md#module-scan-manifest
                             auto guardAvailable = [&](const string & guard) {
                                 if ( guard.empty() ) return true;
                                 if ( guard.find('/')!=string::npos ) {
@@ -270,7 +270,7 @@ namespace das {
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;
                             };
                             if ( isReq && src[0]=='[' ) {
-                                // ARCHITECTURE.md sec.2
+                                // src/ast/ARCHITECTURE.md#module-scan-manifest
                                 src ++;
                                 while ( src < src_end && isspaceE(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
                                     src ++;
@@ -462,7 +462,7 @@ namespace das {
                     }
                     module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
-                        // ARCHITECTURE.md sec.2
+                        // src/ast/ARCHITECTURE.md#module-scan-manifest
                         if ( auto loader = getDeferredModuleLoader(); loader && loader(mod) ) {
                             module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName);
                             if ( log && module ) {
@@ -704,7 +704,7 @@ namespace das {
         }
     }
 
-    // ARCHITECTURE.md sec.1
+    // src/ast/ARCHITECTURE.md#module-cache-read
     static vector<string> collectRequireNames ( FileInfo * fi, const FileAccessPtr & access ) {
         vector<string> names;
         if ( fi ) {
@@ -828,7 +828,7 @@ namespace das {
             }
             return false;
         }
-        // ARCHITECTURE.md sec.1
+        // src/ast/ARCHITECTURE.md#module-cache-read
         {
             auto currentReq = collectRequireNames(access->getFileInfo(fileName), access);
             sort(savedReq.begin(), savedReq.end());
@@ -1156,7 +1156,7 @@ namespace das {
         program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
         program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
 
-        // ARCHITECTURE.md sec.1
+        // src/ast/ARCHITECTURE.md#module-cache-read
         auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
         uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
         uint64_t finalize0 = serializer_read ? serializer_read->totFinalizeTime : 0;
@@ -1625,7 +1625,7 @@ namespace das {
                 *serializer_write << get<1>(dep);
                 *serializer_write << get<2>(dep);
             }
-            // ARCHITECTURE.md sec.1
+            // src/ast/ARCHITECTURE.md#module-cache-read
             uint32_t reqCount = uint32_t(requireNames.size());
             *serializer_write << reqCount;
             for ( auto & req : requireNames ) {
@@ -1914,7 +1914,7 @@ namespace das {
         }
     }
 
-    // ARCHITECTURE.md sec.3 - what a nested compile rebinds on the environment, put back on every exit;
+    // src/ast/ARCHITECTURE.md#require-after-walk - what a nested compile rebinds on the environment, put back on every exit;
     // a walk nested in a parse or a record read also hides the stream for its duration
     struct LateRequireEnvScope {
         daScriptEnvironment *   env;
@@ -1946,7 +1946,7 @@ namespace das {
         }
     };
 
-    // ARCHITECTURE.md sec.3
+    // src/ast/ARCHITECTURE.md#require-after-walk
     Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
         lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
         verifyCodeOfPoliciesStamp(policies);
@@ -1963,7 +1963,7 @@ namespace das {
             return nullptr;
         }
         LateRequireEnvScope envScope(env);
-        // ARCHITECTURE.md sec.3 - a walk nested in a parse or a record read leaves the stream alone
+        // src/ast/ARCHITECTURE.md#require-after-walk - a walk nested in a parse or a record read leaves the stream alone
         bool nested = (env->g_Program && env->g_Program->isCompiling)
             || (env->serializer_read && env->serializer_read->readingRecord > 0);
         if ( nested ) envScope.hideStream();

@@ -27,7 +27,7 @@ namespace das
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
     void (*g_resetFusionEngineFn) ( bool orphan ) = nullptr;
-    // ARCHITECTURE.md sec.4
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
     }
@@ -3642,13 +3642,13 @@ namespace das
         }
         thisModule->macroContext = get_context(macroStackSize);
         thisModule->macroContext->category = das::Bitfield(uint32_t(das::ContextCategory::macro_context));
-        thisModule->macroContext->contextMutex = new recursive_mutex;    // invoke_in_context locks its target (ARCHITECTURE.md sec.3)
+        thisModule->macroContext->contextMutex = new recursive_mutex;    // invoke_in_context locks its target (src/ast/ARCHITECTURE.md#require-after-walk)
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;
         policies.persistent_heap = policies.macro_context_persistent_heap;
         simulate(*thisModule->macroContext, logs);
-        thisModule->macroContext->thisProgram = nullptr;    // the context outlives this program (ARCHITECTURE.md sec.4)
+        thisModule->macroContext->thisProgram = nullptr;    // the context outlives this program (src/ast/ARCHITECTURE.md#program-scoped-symbol-state)
         policies.aot = oldAot;
         policies.persistent_heap = oldHeap;
         isCompilingMacros = false;

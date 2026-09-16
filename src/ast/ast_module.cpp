@@ -193,7 +193,7 @@ namespace das {
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
     }
 
-    // ARCHITECTURE.md sec.2 - process-wide, like the native paths: a descriptor registers once per process
+    // src/ast/ARCHITECTURE.md#module-scan-manifest - process-wide, like the native paths: a descriptor registers once per process
     static das_map<string, vector<ModuleGroupMember>> g_moduleGroups;
     static mutex g_moduleGroupsMutex;
 
@@ -229,7 +229,7 @@ namespace das {
 
         string notInitialized;
         if ( !InitializeDependencies(notInitialized) ) {
-            // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (ARCHITECTURE.md sec.2)
+            // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (src/ast/ARCHITECTURE.md#module-scan-manifest)
             load_all_deferred_dynamic_modules();
             if ( !InitializeDependencies(notInitialized) ) {
                 DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());

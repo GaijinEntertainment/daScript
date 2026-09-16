@@ -44,10 +44,12 @@ beside the tree's install rules) so LINT026 stays armed in an installed SDK.
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> deleted, git keeps it.
 
-**Before editing a function annotated `[arch(at="<doc>.md#<anchor>")]`, read the section it
-cites.** MCP `arch_of` returns each of a file's citations with its section text; `arch_sites`
-returns a document's anchors with the code citing them, dead anchors and dangling citations
-included. Citation spelling, path resolution, and failure reasons: `skills/mcp_tools.md`.
+**Before editing a function annotated `[arch(at="<doc>.md#<anchor>")]`, or C++ under a
+`// <doc>.md#<anchor>` pointer, read the section it cites** - open the document at the anchor.
+MCP `arch_of` locates every citation a file makes (`file:line symbol -> doc:first-last #anchor`,
+both spellings) and `arch_sites` lists a document's anchors with their line ranges and citers,
+dead anchors and dangling citations included. Citation spelling, path resolution, and failure
+reasons: `skills/mcp_tools.md`.
 
 **An architecture-doc heading that code cites carries the `{#anchor}` its citation names, and
 every anchor is cited.** LINT026 fails a citation naming no such file or anchor, and - in every

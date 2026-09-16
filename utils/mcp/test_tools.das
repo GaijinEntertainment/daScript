@@ -3606,14 +3606,13 @@ def test_arch_of(t : T?) {
         let ok = parse_result(do_arch_of(path_join(dir, "code.das")), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "a readable file is not a tool failure -- text={text}")
-        t |> success(find(text, "code.das:3:") >= 0, "the citation is reported at its own line -- text={text}")
-        t |> success(find(text, "symbol: scan_tokens") >= 0, "the annotated function is named -- text={text}")
-        t |> success(find(text, "## Tokenizer \{#tokenizer\}") >= 0, "the section opens at its heading -- text={text}")
-        t |> success(find(text, "The tokenizer section body.") >= 0, "the section body is returned -- text={text}")
-        t |> success(find(text, "A subsection stays inside its parent.") >= 0,
-            "a deeper heading does not end the section -- text={text}")
-        t |> success(find(text, "The buffers section body.") < 0,
-            "the next same-level heading ends it -- text={text}")
+        t |> success(find(text, "code.das:3  scan_tokens  ->  ") >= 0,
+            "the citation is a locator: its own line, the annotated function, then where it lands -- text={text}")
+        t |> success(find(text, "ARCHITECTURE.md:3-9  #tokenizer") >= 0,
+            "the section is a line range from its heading through its last line - the deeper heading at 7 does not end it, the next same-level one at 11 does -- text={text}")
+        t |> success(find(text, "The tokenizer section body.") < 0,
+            "the text itself is the document's to show; the tool gives coordinates -- text={text}")
+        t |> success(find(text, "#buffers") < 0, "a section nothing cites is not in the answer -- text={text}")
         rmdir_rec(dir)
     }
     t |> run("a dangling citation reports LINT026's reason") <| @(t : T?) {
@@ -3628,7 +3627,8 @@ def test_arch_of(t : T?) {
         parse_result(do_arch_of(path_join(dir, "code.das")), text, is_error)
         t |> success(find(text, "does not resolve - no such anchor") >= 0,
             "lint's own wording, so one tool's answer reads as the other's -- text={text}")
-        t |> success(find(text, "symbol: dangling") >= 0, "the dangling citation still names its symbol -- text={text}")
+        t |> success(find(text, "code.das:7  dangling  ->  does not resolve") >= 0,
+            "the dangling citation still names its line and symbol -- text={text}")
         rmdir_rec(dir)
     }
     t |> run("the symbol filter keeps one citation") <| @(t : T?) {
@@ -3641,8 +3641,9 @@ def test_arch_of(t : T?) {
         var text : string
         var is_error = false
         parse_result(do_arch_of(path_join(dir, "code.das"), "scan_tokens"), text, is_error)
-        t |> success(find(text, "symbol: scan_tokens") >= 0, "the named symbol's citation is kept -- text={text}")
-        t |> success(find(text, "symbol: dangling") < 0, "the other symbol's citation is dropped -- text={text}")
+        t |> success(find(text, "scan_tokens  ->  ") >= 0, "the named symbol's citation is kept -- text={text}")
+        t |> success(find(text, "dangling") < 0, "the other symbol's citation is dropped -- text={text}")
+        t |> success(find(text, "1 citation(s) shown.") >= 0, "and the tally says one -- text={text}")
         rmdir_rec(dir)
     }
     t |> run("a missing file is a tool failure") <| @(t : T?) {
@@ -3661,6 +3662,29 @@ def test_arch_of(t : T?) {
     }
 }
 
+// The C++ arm of arch_of: a `// <doc>#<anchor>` pointer is read from a C++ source and located in
+// the same shape a .das citation is, with no symbol - the tool does not parse C++ declarations.
+[test]
+def test_arch_of_cpp(t : T?) {
+    t |> run("a C++ source is read for its pointers, and lands in the same shape") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_cpp_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        fwrite(path_join(dir, "code.cpp"), "// ARCHITECTURE.md#tokenizer - the pointer form\nvoid f() \{\}\n")
+        var text : string
+        var is_error = false
+        parse_result(do_arch_of(path_join(dir, "code.cpp")), text, is_error)
+        t |> success(!is_error, "a C++ file is a readable source -- text={text}")
+        t |> success(find(text, "code.cpp:1  ->  ") >= 0,
+            "the pointer is located at its line, with no symbol -- text={text}")
+        t |> success(find(text, "ARCHITECTURE.md:3-9  #tokenizer") >= 0, "and lands on the same section -- text={text}")
+        rmdir_rec(dir)
+    }
+}
+
 [test]
 def test_arch_sites(t : T?) {
     t |> run("the census finds the citations planted in the document's subtree") <| @(t : T?) {
@@ -3675,12 +3699,14 @@ def test_arch_sites(t : T?) {
         let ok = parse_result(do_arch_sites(path_join(dir, "ARCHITECTURE.md")), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "an existing document is not a tool failure -- text={text}")
-        t |> success(find(text, "\{#tokenizer\} (line 3) - 1 citation(s)") >= 0,
-            "the cited anchor is grouped at its heading line -- text={text}")
+        t |> success(find(text, "\{#tokenizer\} (lines 3-9) - 1 citation(s)") >= 0,
+            "the cited anchor is grouped with its section's line range -- text={text}")
         t |> success(find(text, "code.das:3  scan_tokens") >= 0,
             "the site names file, line and symbol -- text={text}")
-        t |> success(find(text, "\{#buffers\} (line 11) - no citations") >= 0,
+        t |> success(find(text, "\{#buffers\} (lines 11-13) - no citations") >= 0,
             "an uncited anchor is part of the census -- text={text}")
+        t |> success(find(text, "searched: ") >= 0 && find(text, "searched: ") < find(text, "src"),
+            "the header names the document's own folder first, then the C++ homes -- text={text}")
         t |> success(find(text, "\{#gone\}") >= 0,
             "a citation naming an undeclared anchor is surfaced, not dropped -- text={text}")
         t |> success(find(text, "2 citation(s) in 1 file(s).") >= 0, "the tally counts both -- text={text}")

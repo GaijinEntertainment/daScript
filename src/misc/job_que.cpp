@@ -38,7 +38,7 @@ namespace das {
     }
 
     // One short burst of the CPU's spin-wait hint (worker spin-before-park, see JobQue::job).
-    // src/misc/ARCHITECTURE.md sec.8
+    // src/misc/ARCHITECTURE.md#spin-window-clock-stride
     static inline void jobque_spin_pause() {
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
         for ( int i = 0; i != 64; ++i ) _mm_pause();
@@ -613,7 +613,7 @@ namespace das {
             // Team mode extends the same window: poll the team slot too. The window stays BOUNDED
             // (the ggml hybrid poll/park shape) — after it expires the worker parks, and a team
             // publish that finds parked workers notifies (see teamParallelFor's wake gate).
-            // src/misc/ARCHITECTURE.md sec.8
+            // src/misc/ARCHITECTURE.md#spin-window-clock-stride
             int spinUs = mSpinUs.load(std::memory_order_relaxed);
             bool teamMode = mTeamMode.load(std::memory_order_relaxed) != 0;
             if ( (spinUs > 0 || teamMode) && !mShutdown.load(std::memory_order_relaxed) ) {
