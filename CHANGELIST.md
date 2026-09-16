@@ -133,6 +133,7 @@ A public site and service for the `[tune]` ecosystem: upload a tuned box's sidec
 - **On-demand wasm compilation** (#3628, #3630, #3633) - a fresh pre-warmed throwaway runtime per run, a content-addressed build queue behind a rootless-podman network-none sandboxed builder (`dasweb-buildd`), and standalone graphics/audio pages served from `run.daslang.io`
 - **The sample verifiers** (#3645, #3649, #3679) - a tier-1 batch compile gate over all 39 curated samples per PR, and a nightly playwright leg that drives the live playground per sample per engine (first sweep 70/77, zero false positives)
 - **Stability round** (#3635, #3648, #3650, #3652, #3667, #3714) - canvas size reconciled to the CSS box every frame (retiring three workarounds), wasm memory growth to 2 GB with reported OOM, channel `gather` outside the lock (the "dead window" wedge), the runtime wasm compiled once per page (the browser-tab OOM cliff), and a scripted fail-closed toolchain-bump protocol
+- **Every browser** (#4051) - the compiled web builds link `-sMEMORY64=2` (wasm64 pointers over a memory lowered to 32-bit) and drop `+relaxed-simd`, so the example cards, the playground's wasm engine and the dasllama.io examples run on Safari and iOS; the memory64 gates are gone from both sites, and dasllama.io serves its examples under COEP `require-corp`
 
 - **Threaded game music stays out of the interpreter** (#3837); **the interpreter jobque wedge fixed, the Run button carries load/run status** (#3913)
 

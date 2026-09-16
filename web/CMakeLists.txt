@@ -38,13 +38,14 @@ add_compile_options(-mnontrapping-fptoint)
 # target-ptr-size, so the JIT/AOT cross-compile bakes correct layouts (no
 # pointer-width mismatch). Build the runtime archive with this ON and point
 # DAS_WEB_OUTPUT_DIR at a separate dir (e.g. web/output64) so it does not
-# collide with the wasm32 archive — they are ABI-incompatible. dasLLVM
-# (find_runtime_lib / link_wasm) auto-selects web/output64 + -sMEMORY64=1 for a
-# wasm64-unknown-emscripten target.
+# collide with the wasm32 archive — they are ABI-incompatible. Archives compile
+# -sMEMORY64=1; every link (this file's, dasLLVM link_wasm, daspkg release wasm)
+# passes -sMEMORY64=2: 8-byte pointers over a 32-bit memory, so engines without
+# memory64 (WebKit) run it.
 option(DAS_WASM_MEMORY64 "Build wasm output for memory64 (8-byte pointers)" OFF)
 if(DAS_WASM_MEMORY64)
     add_compile_options(-sMEMORY64=1)
-    add_link_options(-sMEMORY64=1)
+    add_link_options(-sMEMORY64=2)
 endif()
 
 # Threads: build the runtime/modules with -pthread so std::thread (new_thread,

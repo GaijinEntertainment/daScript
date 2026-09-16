@@ -7,19 +7,26 @@ A browser example is a subfolder here with a `web_shell.html` (`ARCHITECTURE.md`
 rules below bind browser examples; a rule naming `library/` binds that folder instead.
 
 **A browser example reads its input inside its own frame - a `glfwSet*Callback` written in
-`.das` is a defect; an example that draws its own text polls each input every frame and
-edge-detects it (`glfwGetKey`, `glfwGetMouseButton`), and one on the imgui harness reads ImGui's
-state.** In the browser build a callback lambda fires outside any frame of the program and the
-program traps (`ARCHITECTURE.md` sec. 3.3).
+`.das` is a defect; an example that draws its own text polls each input every frame and acts
+when it goes down, never on every frame it stays down - a repeat comes from the example's own
+hold timer (`glfwGetKey`, `glfwGetMouseButton`) - and one on the imgui harness reads ImGui's
+state.** In the browser build a callback lambda fires outside any frame
+of the program and the program traps (`ARCHITECTURE.md` sec. 3.3).
 
-**A browser example's `web_shell.html` gives the canvas element `max-width` / `max-height` so the
-element's box is exactly the rendered image - never `object-fit` on a canvas stretched to fill the
-page area around it.** A click maps through the element's box with one ratio per axis, so a
-stretched box mis-maps every click (`ARCHITECTURE.md` sec. 3.3).
+**A browser example whose `main.das` reads the mouse - `glfwGetMouseButton`, or ImGui's mouse
+state through the imgui harness - gives the canvas element `max-width` / `max-height` in its
+`web_shell.html` - never `object-fit` on a canvas stretched to fill the page area around it.** A
+click maps through the element's box with one ratio per axis, so a stretched box mis-maps every
+click (`ARCHITECTURE.md` sec. 3.3).
 
 **A browser example's `web_shell.html` must reload a page the browser restored from its
 back-forward cache - a `pageshow` handler that reloads when `persisted` is set.** Such a page
 comes back with its workers and audio output frozen out of step (`ARCHITECTURE.md` sec. 3.1).
+
+**A browser example's `web_shell.html` never refuses a browser on a WebAssembly feature probe -
+it gates on the page's cross-origin isolation (`crossOriginIsolated`, `SharedArrayBuffer`)
+alone.** The build runs on every engine, so a feature gate only refuses browsers that would have
+run it.
 
 **A diff that plays a second sound creates a new status box (`set_status_update`) for it and
 releases the first when its sound ends - never reuse a box across sounds.** The mixer's last
@@ -43,6 +50,6 @@ writes nothing (`ARCHITECTURE.md` sec. 3.8).
 
 **A diff that adds an entry point to `library/dasllama_lib.das` gives it `[export_c]` and a
 result `daslib/c_api_header.das` can spell in C - a scalar, a string, a pointer, an enum, a
-vector or a POD struct, never an array, a fixed array, a table or a tuple.** An `[export_c]`
+vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.** An `[export_c]`
 whose signature that describer refuses is a hard emit error, not a skipped export
 (`ARCHITECTURE.md` sec. 3.8).

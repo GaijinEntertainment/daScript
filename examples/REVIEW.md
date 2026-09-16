@@ -5,8 +5,8 @@
 **A `.das` in this folder tree that a game's `main.das` requires, directly or through another
 required file, answers to `games/REVIEW.md` too - wherever the diff puts it.**
 
-**A folder with a `web_shell.html`, and every `.das` and `models.json` in it, answers to
-`dasLLAMA/REVIEW.md` too, wherever the diff puts it.**
+**Every file in a folder that holds a `web_shell.html` answers to `dasLLAMA/REVIEW.md` (beside
+this file) too - wherever in this tree that folder sits.**
 
 **A diff that drops `require live/audio_live` from a program states, in the PR body, why that
 program's audio is meant to die with a reload** - `audio_live` is what carries the audio

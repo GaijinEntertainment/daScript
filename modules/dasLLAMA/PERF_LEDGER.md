@@ -11,6 +11,28 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-16) - the browser build runs on every engine; `+relaxed-simd` leaves the
+  wasm feature string.** WebKit implements none of the relaxed opcodes, and the previous entry's
+  `+relaxed-simd` put `f32x4.relaxed_max` (the backend's lowering of an `nnan` vector max, which
+  the previous entry believed it never emitted) into function 298 of every release, so Safari
+  refused the whole module at validation. The feature is gone and the module links
+  `-sMEMORY64=2` (wasm64 pointers, the memory lowered to 32-bit). Cost measured on the storywish
+  page in Chrome (this M5, `DASLLAMA_ALLOW_UNTUNED=1`, one run each, steady-state clips): Pocket
+  TTS rtf 0.167-0.171 with the fused multiply-add, 0.167-0.171 without it - the split
+  `mul` + `add` costs nothing measurable, so the previous entry's first lever bought reach on
+  Chrome only in theory. Prefill and decode of the story model were not measured separately.
+
+  Provenance, **direction-grade** and **out-of-process**: the two readings compare two wasm
+  builds (the feature string with and without `+relaxed-simd`, same tree otherwise), and every
+  figure is read from a console line outside the timed program. Box: the M5 Max Mac (this
+  machine). Harness: the storywish page's own first story, reading the engine's
+  `dasLLAMA tts: ... rtf` line from the Chrome console; the artifact is the wasm64 release of
+  `examples/dasLLAMA/storywish` built by `daspkg release wasm` from the wasm-host worktree,
+  served locally by `site-dasllama/serve.py` to Chrome. Flags: the wasm cross target (not `-jit`,
+  not AOT), `DASLLAMA_ALLOW_UNTUNED=1` so `DAS_TUNE_POLICY` served the reference bodies, the
+  release's 16-worker pool. One story per build, the steady-state clips after the first two.
+  NOT board-grade: no record cell backs it, and an rtf read from a page console is not an
+  `lcpp_bench` figure.
 - **LANDED (2026-09-16) - the browser gets its FMA and an int8 dot, and the spin loop stops
   crossing into JS.** Four levers on the parrot page (Pocket TTS, zen2 box, Chrome with the window
   verified in front before AND after each run, 7 workers + team dispatch, `DASLLAMA_ALLOW_UNTUNED=1`

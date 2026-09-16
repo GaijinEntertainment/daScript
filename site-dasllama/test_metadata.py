@@ -106,6 +106,19 @@ class SiteMetadataTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("redir /index.html / 308", snippet)
 
+    def test_examples_are_isolated_with_require_corp(self):
+        """The -pthread browser examples need a cross-origin-isolated page on every engine, and
+        WebKit implements only `require-corp`; the local preview server mirrors the vhost."""
+        snippet = (
+            REPO_ROOT / "utils" / "internal" / "dasllama-ladder" / "caddy.snippet"
+        ).read_text(encoding="utf-8")
+        serve = (ROOT / "serve.py").read_text(encoding="utf-8")
+        for text, where in ((snippet, "caddy.snippet"), (serve, "serve.py")):
+            self.assertIn("Cross-Origin-Embedder-Policy", text, f"{where} sets COEP on /examples/")
+            self.assertNotIn("credentialless", text, f"{where} sends a COEP value WebKit implements")
+        self.assertIn("Cross-Origin-Embedder-Policy require-corp", snippet)
+        self.assertIn('"Cross-Origin-Embedder-Policy", "require-corp"', serve)
+
 
 EXAMPLE_SHELLS = {
     "storyteller": (REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html", "runStoryteller"),
@@ -117,9 +130,9 @@ EXAMPLE_SHELLS = {
 class ExampleShellTest(unittest.TestCase):
     """Each browser example's page (examples/dasLLAMA/<id>/web_shell.html, served at
     /examples/<id>/) guards the browser before it loads the program: emcc's script tag lands in
-    an inert template and only a browser that passes the memory64 and isolation probes gets a
-    live copy. A shell that moved the placeholder out of the template would run emcc's user-agent
-    check on Safari again and leave the download line up forever. Each shell also reads the
+    an inert template and only a cross-origin-isolated page gets a live copy. A shell that moved
+    the placeholder out of the template would run emcc's own user-agent check before the note and
+    leave the download line up forever. Each shell also reads the
     deploy's models/manifest.json and carries the IMAGE_VERSION slot the deploy stamps
     (examples/dasLLAMA/wasm/mint_models.py --stamp-page), so a set minted for another version is
     refused before it is fetched, and routes a program abort back onto the page."""
@@ -136,8 +149,8 @@ class ExampleShellTest(unittest.TestCase):
             self.assertIn(placeholder, text[start:end], "the placeholder sits inside the loader template")
             # the guard is the only path to a live program tag: it copies the template's src
             self.assertIn("document.getElementById('loader').content.querySelector('script')", text)
-            self.assertLess(text.index("WebAssembly.validate("), text.index(f"function {runner}()"),
-                            "the memory64 probe is decided before the program path")
+            self.assertLess(text.index("self.crossOriginIsolated"), text.index(f"function {runner}()"),
+                            "the isolation probe is decided before the program path")
 
     def test_the_only_live_scripts_are_the_site_files(self):
         for name, text, runner in self.shells():
@@ -145,21 +158,36 @@ class ExampleShellTest(unittest.TestCase):
             scripts = []
             parser.handle_starttag_orig = parser.handle_starttag
 
+            subresources = []
+
             def handle_starttag(tag, attrs):
-                if tag == "script" and dict(attrs).get("src"):
-                    scripts.append(dict(attrs)["src"])
+                a = dict(attrs)
+                if tag == "script" and a.get("src"):
+                    scripts.append(a)
+                url = a.get("src") if tag in ("script", "img") else a.get("href") if tag == "link" else None
+                if url:
+                    subresources.append((tag, url, a))
                 parser.handle_starttag_orig(tag, attrs)
 
             parser.handle_starttag = handle_starttag
             parser.feed(text)
-            for src in scripts:
+            for tag in scripts:
+                src = tag["src"]
                 self.assertTrue(src.startswith("/files/") or src.startswith("//gc.zgo.at/"),
                                 f"a live script tag the guard does not control: {src}")
+            for tag, url, a in subresources:
+                if url.startswith("//") or "://" in url:
+                    # the page is served under COEP require-corp, which silently drops a
+                    # cross-origin load that does not ask for CORS
+                    self.assertEqual(a.get("crossorigin"), "anonymous",
+                                     f"{name}: cross-origin <{tag}> {url} loads without crossorigin")
 
     def test_the_notes_name_what_the_browser_lacks(self):
         for name, text, runner in self.shells():
-            for needle in ("memory64", "Safari", "iPhone", "SharedArrayBuffer", "back to the examples", "force=unsupported"):
+            for needle in ("SharedArrayBuffer", "back to the examples", "force=unsupported"):
                 self.assertIn(needle, text, f"the shell names {needle!r}")
+            for stale in ("memory64", "Safari", "iPhone"):
+                self.assertNotIn(stale, text, f"the shell no longer gates on {stale!r}: the lowered build runs on every engine")
 
     def test_the_model_set_is_read_from_the_manifest_and_version_checked(self):
         for name, text, runner in self.shells():

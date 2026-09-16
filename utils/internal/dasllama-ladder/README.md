@@ -113,6 +113,15 @@ sudo dasllama-deploy.sh install $SHA /tmp/dasllama-ladder-$SHA.tar.gz
 sudo dasllama-deploy.sh caddy                                      # splice /api into the dasllama.io vhost, validate, reload
 ```
 
+`caddy` also carries the `header /examples/*` block: the browser examples served there are
+`-pthread` builds whose Web Workers share memory through `SharedArrayBuffer`, which a browser
+grants only to a cross-origin-isolated page - one whose responses carry
+`Cross-Origin-Opener-Policy same-origin` and `Cross-Origin-Embedder-Policy require-corp`. The
+COEP value is `require-corp` because Safari implements no other; under it the page's only
+cross-origin subresource, the analytics script, loads with `crossorigin`. A later `caddy` run
+replaces the deployed block when the snippet's text differs, so a header value changed in the
+snippet reaches the box.
+
 The unit `provision` writes is **sandboxed** (`ProtectSystem=strict`, all capabilities dropped,
 loopback-only, `ReadWritePaths` limited to the data dir + release tree) - it contains a
 hypothetical parser/runtime RCE to a process that can only write its own db and logs, while the

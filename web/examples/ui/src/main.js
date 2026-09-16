@@ -253,28 +253,11 @@ async function collectAssetUrls() {
     }
 }
 
-// Built artifacts are wasm64 (memory64) — browsers without memory64
-// (Safari/iOS) cannot instantiate them, so the wasm engine stays disabled
-// there no matter what the build service says. Detected once at load.
-const WASM64_SUPPORTED = (() => {
-    try {
-        // Validate a minimal module declaring a 64-bit (memory64) memory:
-        // \0asm | version | memory section {count=1, flags=0x04 (memory64), min=1}.
-        // More robust than `new WebAssembly.Memory({index:'i64'})`, which can
-        // false-positive on engines that silently ignore the unknown descriptor
-        // field and hand back a wasm32 memory. validate() parses the memory64
-        // flag, so it is true only where the engine truly supports it.
-        return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
-    } catch (e) {
-        return false;
-    }
-})();
-
 // Whether the wasm engine can be offered at all. Unlike the retired
 // precompiled-artifact path, this no longer depends on which sample is loaded:
 // builds are content-addressed, so any editor state — including a multi-file
-// one — is buildable. What it does depend on is this browser (wasm64 artifacts
-// need memory64) and the service having a live toolchain to build against.
+// one — is buildable. The artifact is wasm64 lowered to a 32-bit memory at link,
+// so every engine runs it: no browser check, only the build service's toolchain.
 function updateEngineAvailability() {
     const wasmRadio = document.querySelector('input[name=engine][value=wasm]');
     if (!wasmRadio) return;
@@ -288,7 +271,7 @@ function updateEngineAvailability() {
             if (interpRadio) interpRadio.checked = true;
         }
     };
-    if (!WASM64_SUPPORTED || !window.pgWasmBuild) { disableWasm(); return; }
+    if (!window.pgWasmBuild) { disableWasm(); return; }
     window.pgWasmBuild.buildInfo()
         .then(info => { if (info.enabled) wasmRadio.disabled = false; else disableWasm(); })
         .catch(() => disableWasm());

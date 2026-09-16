@@ -66,8 +66,8 @@ folds them into the quad lanes the generic form defines - exact for every int8 l
 first operand widens with ZExt rather than SExt, so the unsigned-by-signed form takes this same
 path instead of the 16-lane generic IR; the i16 product still holds every value that pair can make
 (255 * -128 = -32640), so the fold stays exact there too. The relaxed-SIMD dot
-(`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is NOT what the generic op lowers to, though
-`+relaxed-simd` is in the feature string of sec.12: its second operand is 7-bit, so the sign trick that
+(`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is NOT what the generic op lowers to, and sec.12 keeps
+the feature out of the string: its second operand is 7-bit, so the sign trick that
 would feed it (`dot(w, x) == dot(sign(x)*w, |x|)`) wraps at -128 in either operand and answers the
 wrong sign there - an operand a caller can bound to 7 bits is a different op, not this one.
 
@@ -166,12 +166,14 @@ a rebuild.
 
 ## 12. The wasm target's feature string {#wasm-feature-string}
 
-A wasm cross-compile gets `+simd128,+relaxed-simd,+nontrapping-fptoint`, with
-`+atomics,+bulk-memory` appended on the threaded rail (`wasm_target_features`). `+relaxed-simd` is
-in it for one instruction: `f32x4.relaxed_madd` is the only multiply-add wasm has, so without the
-feature a contracted multiply-add has nothing to become and splits back into `f32x4.mul` plus
-`f32x4.add` - every fused multiply-add of every kernel, gone. The engine chooses whether
-`relaxed_madd` fuses, so a float answer can differ by one rounding from the split form, which is
-the latitude every native FMA target already takes. Nothing else in the feature moves what this
-emitter produces: `f32x4.relaxed_min` / `_max` come only from their explicit builtins, which it
-never emits, and the relaxed dot is ruled out for the idot family by sec.9 above.
+A wasm cross-compile gets `+simd128,+nontrapping-fptoint`, with `+atomics,+bulk-memory` appended
+on the threaded rail (`wasm_target_features`). The string carries no `+relaxed-simd`, and the
+reason is reach, not codegen: WebKit implements none of the relaxed opcodes, so one of them
+anywhere in a module makes Safari and every iOS browser refuse the whole module at validation,
+and the browser builds ship to every engine. What the feature would buy is `f32x4.relaxed_madd`,
+the only multiply-add wasm has; without it a contracted multiply-add splits back into `f32x4.mul`
+plus `f32x4.add`. Measured on the Pocket TTS page in Chrome the split form runs at the same
+real-time factor as the fused one, so nothing is paid for the reach. The feature would also move
+more than the multiply-add: with it on, the backend lowers an `nnan` float min/max on a vector
+to `f32x4.relaxed_min` / `_max`, whose NaN and signed-zero answers are the engine's choice, and
+the relaxed dot stays ruled out for the idot family by sec.9 above whatever the string says.

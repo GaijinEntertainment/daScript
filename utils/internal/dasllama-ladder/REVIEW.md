@@ -32,13 +32,16 @@ fetch, and the loopback `Host` refuses DNS rebinding.
 **Every operator route gates through `is_operator_caller`.**
 
 **A diff that adds a route a public caller needs also adds it to `caddy.snippet`, in the same
-change as its handler; never edit `caddy.snippet` to match the deployed Caddyfile - edit the
-deployed Caddyfile to match `caddy.snippet` instead.**
+change as its handler.**
 
-**A diff that adds a directive at `caddy.snippet`'s top level - a line or block sitting
-directly inside the `dasllama.io { }` block, not nested in another block - also makes
-`dasllama-deploy.sh`'s `caddy_apply` splice it into a deployed `dasllama.io` block that lacks
-it, in the same change.**
+**A diff that changes `caddy.snippet` never does so to match the deployed Caddyfile - the
+deployed Caddyfile is edited to match `caddy.snippet`, through `dasllama-deploy.sh caddy`.**
+
+**A diff that adds or changes a directive at `caddy.snippet`'s top level - a line or block
+sitting directly inside the `dasllama.io { }` block, not nested in another block - also makes
+`dasllama-deploy.sh`'s `caddy_apply` reconcile that directive on the box in the same change:
+splice it when the deployed `dasllama.io` block lacks it, replace it when its deployed text
+differs from the snippet's.** Presence alone leaves a changed value on the box.
 
 **On a route that serves board data, mutates the store, or refuses a caller, a response path
 that does not log one `ladder.req` line through `log_request` is a defect.**
@@ -58,6 +61,10 @@ false, or adds an opener reachable from a non-loopback path, is a defect** - onl
 **In `caddy.snippet` every proxied route other than the `/api/submit/records` and
 `/api/submit/sidecar` matcher carries the `request_body { max_size 64KB }` cap, and that
 matcher carries `max_size 8MB` and no smaller cap.**
+
+**Every `/examples/*` response in `caddy.snippet` carries `Cross-Origin-Opener-Policy
+same-origin` and `Cross-Origin-Embedder-Policy require-corp` - never `credentialless`, which
+Safari does not implement.**
 
 **A file in this directory requires no dasLLAMA, dasLLVM, or model machinery other than the
 engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that**

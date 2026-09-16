@@ -66,10 +66,11 @@ it points.
 the PR body, the URL it fetched for each artifact the copy points at and what the fetch
 returned.**
 
-**A figure in a `_news/*.md` or `_stories/*.md` entry that does not name both the date and the
-build sha of the run it came from - in the entry's own text or its `<!-- figures: ... -->`
-comment - is a defect, and a sha the entry marks as unconfirmed does not count as named** - a
-number without its date reads as a standing claim.
+**A measurement result in a `_news/*.md` or `_stories/*.md` entry - a figure, or words about
+what a run measured: speed, error rate, footprint, size - that does not name the date and the
+build sha of that run, in the entry's own text or in its `<!-- figures: ... -->` comment, is a
+defect, and a sha the entry marks as unconfirmed does not count as named** - a result without
+its date reads as a standing claim.
 
 **An author's query or marker - `[NAME: ...]`, `TODO`, `FIXME` - in a page, or in a
 `_news/*.md` or `_stories/*.md` entry, its `<!-- figures: ... -->` comment included, is a
@@ -82,9 +83,10 @@ string landing in `href`/`src` or fed to `fetch` goes through `safeApiHref()` (a
 allow-list, `#` for anything else) and nothing else; any other string landing as text or as a
 quoted-attribute value is `esc()`-escaped (`< > & " '`).**
 
-**Weakening `test_metadata.py`'s per-page assertions - the test that fails an `.html` page
-without a `<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a
-defect.**
+**A diff to `test_metadata.py` that leaves any page, story page, or browser example shell
+(`examples/dasLLAMA/*/web_shell.html`, repo root) proved less than it was before - a shell
+dropped from a census the file iterates, an assertion deleted, a required property no longer
+asserted anywhere in the file - is a defect.**
 
 **Weakening `REVIEW.das`'s page census - the gate that reports a served file, or the `stories/`
 directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),

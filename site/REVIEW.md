@@ -58,14 +58,15 @@ post) - is a defect.**
 in the same change.** The gate still compiles such a block; it owes no link.
 
 **A PR whose diff changes `playground/` (this folder) or `examples/_interp.html` (this folder)
-states, in the PR body, a run of the WASM-staged Playwright suite (`tests/playground/`, this
-folder) against the branch tip, naming the passes and any failures; a later edit to those
+beyond comments states, in the PR body, a run of the Playwright suite (`tests/playground/`,
+this folder) against the branch tip, naming the passes and any failures; a later edit to those
 files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
 recorded mid-branch describes a tree that no longer ships.
 
-**A stated Playwright run names every playground sample the diff changed (the samples are
-staged from `web/examples/ui/samples/`, repo root): for each, the spec that loaded it, or -
-when no spec loads it - that it was opened and run by hand in the playground.**
+**A stated Playwright run names every playground sample the diff changed - a `.das` under
+`web/examples/ui/samples/` (repo root), or a `.das` under `examples/graphics/` (repo root) that
+the playground stages as a sample: for each, the spec that loaded it, or - when no spec loads
+it - that it was opened and run by hand in the playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
 the diff touches any source compiled into the WASM runtime (`daslang_static` - its `main()`

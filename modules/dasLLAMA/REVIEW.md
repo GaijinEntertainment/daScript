@@ -197,7 +197,7 @@ rig and tool surface: any output another tool parses. A console-only diagnostic 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites; only the reviewer does.
+`[arch]` cites. A dated `PERF_LEDGER.md` row is refuted by a new dated row, never edited.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -208,7 +208,7 @@ charter line naming it a sanctioned public entry point, and the DASLLAMA001 erro
 naming it beside the facade. The allowed set is the table in the lint.
 
 **A STYLE037 or STYLE038 suppression, `// nolint:` or the file's `options _function_length` /
-`_cyclomatic_complexity`, on a function a follow-up ledger entry says can be shortened or split
+`_cyclomatic_complexity`, on a function a `followup_*.md` entry says can be shortened or split
 is a defect - land the ledgered split instead.** The warning keeps the entry visible; an entry
 asking that twin bodies merge into one template does not fire this rule.
 
@@ -267,7 +267,7 @@ one by one - a weight format, a serving lane (the quant form a tensor serves fro
 structure - that the charter does not name, lands, in the same change, the edit that keeps the
 charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.**
 
-**A follow-up ledger row whose work landed in this change is deleted, the rows below keep their
+**A `followup_*.md` row whose work landed in this change is deleted, the rows below keep their
 numbers - text cites rows by number - and when a row lists several items and one landed, that item
 goes and the row stays; every checked-in citation of what was deleted is repointed or dropped.**
 

@@ -39,14 +39,6 @@ jobs:
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
-    # The wasm64 (MEMORY64) modules emscripten emits refuse to load under a node older than 23
-    # ("This emscripten-generated code requires node v23.0.0"); ubuntu-latest ships 22, and the
-    # DlimConfiguration probe below runs one of those modules under the runner's node.
-    - name: "Install node 24 (the wasm64 probe runs under it)"
-      uses: actions/setup-node@v4
-      with:
-        node-version: 24
-
     # The host daslang now builds with dasGlfw/dasOpenGL ON so it can drive the
     # /examples game cross-compile (daspkg release wasm). dasGlfw's
     # find_package(OpenGL REQUIRED) needs the GL + X11 dev headers.
@@ -213,9 +205,9 @@ jobs:
     # WASM build: the wasm32 interpreter playground (daslang_static) + the wasm64
     # compiled path (runtime/module archives, compute samples, and the /examples
     # games). Skipped on a cache hit — the cached web/output + web/output64 are
-    # reused. wasm32 is the universal interpreter fallback; everything COMPILED
-    # is wasm64 (the cross-compile is layout-correct only when host ptr width ==
-    # target ptr width).
+    # reused. Everything COMPILED is cross-compiled as wasm64 (layout-correct only
+    # when host ptr width == target ptr width) and lowered to a 32-bit memory at
+    # link (-sMEMORY64=2), so it runs on every engine, WebKit included.
     - name: "Build WASM (Emscripten): playground + wasm64 examples"
       if: steps.wasm-cache.outputs.cache-hit != 'true'
       run: |
@@ -241,7 +233,7 @@ jobs:
         # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the example .das
         #    sources staged into site/playground. THREADED build (-pthread + the imgui family),
         #    so new_thread / JobQue map to Web Workers and every playground sample runs
-        #    cross-origin-isolated (coi-serviceworker drops the memory64 gate for /playground).
+        #    cross-origin-isolated (coi-serviceworker).
         #    stage_site_playground also generates the furier + path_tracer_lab samples from the
         #    canonical examples/graphics sources. If the imgui-family build breaks (an external's
         #    master regressed), degrade rather than blocking every deploy: drop the clones and
@@ -298,8 +290,8 @@ jobs:
         #    drives its .das_package release_wasm_build to produce the 3 wasm64
         #    archives on demand — no daspkg install step (the example declares
         #    no deps). Non-fatal — a wasm-build hiccup must not red the whole
-        #    deploy; the furier card is skipped at stage time below (examples.js
-        #    shows a "needs memory64" note when the iframe is unavailable).
+        #    deploy; the furier card is skipped at stage time below (a placeholder
+        #    page stands in for the iframe).
         if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/furier --out "$REPO/web/output64/examples"; then
             echo "furier wasm build OK"
@@ -545,9 +537,9 @@ jobs:
         fi
 
         # /examples/ runtime: the interpreted runner harness + per-game artifacts.
-        # Each game dir holds BOTH the compiled wasm64 build (loaded in an iframe on
-        # memory64 engines) AND the .das sources + HUD font the interpreted fallback
-        # (_interp.html) mounts on Safari/iOS. The page UI (examples.html, posters,
+        # Each game dir holds BOTH the compiled build (loaded in an iframe on every
+        # engine) AND the .das sources + HUD font the interpreted runner
+        # (_interp.html) mounts under ?force=interp. The page UI (examples.html, posters,
         # files/examples.js) was already staged above via cp site/examples.html +
         # cp -r site/files.
         mkdir -p _site/examples
@@ -568,11 +560,11 @@ jobs:
             cp modules/dasStbImage/fonts/droidsansmono.ttf "_site/examples/$g/"
         done
 
-        # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the compiled
+        # furier — the ImGui-in-wasm showcase. Compiled-only: it bundles the compiled
         # dasImgui module, which the universal interpreter can't bind, so there is NO
-        # interpreted fallback (no .das sources to stage). The card is always listed
+        # interpreted form (no .das sources to stage). The card is always listed
         # in examples.js, so stage the compiled build only when ALL THREE outputs are
-        # present; otherwise stage a small placeholder furier.html so a memory64 engine
+        # present; otherwise stage a small placeholder furier.html so the player
         # loads a friendly "being rebuilt" note instead of 404-ing the iframe (and
         # flipping the player to a bogus "running" on the 404 page's load event).
         mkdir -p _site/examples/furier

@@ -133,7 +133,8 @@ Options:
 - ``--quick`` -- on ``release``, accept a complete existing ``[tune]``
   sidecar instead of re-minting (``--paranoid`` is accepted for
   compatibility; the tuner runs one margin-decided protocol).
-- ``--wasm`` -- on ``build``, target wasm64 (memory64).
+- ``--wasm`` -- on ``build``, target wasm64 (memory64, lowered to a 32-bit
+  memory at link so every browser runs the artifact).
 - ``--wasm-lib-dir <path>`` -- directory holding the wasm64 archives;
   default ``<das_root>/web/output64/lib``.
 

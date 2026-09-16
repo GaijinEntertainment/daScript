@@ -592,10 +592,9 @@ namespace das {
         // STANDALONE_WASM build with growth imports NOTHING from env, so wasmtime is
         // unaffected. Measured on that emsdk: usable heap 120MB -> 2040MB.
         const std::string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
-        // -sMEMORY64=1: wasm64 (memory64) target — 8-byte pointers. The object and
-        // runtime archive must also be wasm64 (built with -sMEMORY64=1); the linker
-        // setting must match or wasm-ld rejects the mixed-ABI inputs.
-        const char * mem64Arg = memory64 ? " -sMEMORY64=1" : "";
+        // -sMEMORY64=2: wasm64 (8-byte pointer) object + runtime archive, memory lowered
+        // to 32-bit at link so engines without memory64 (WebKit) run the module too.
+        const char * mem64Arg = memory64 ? " -sMEMORY64=2" : "";
         // Windows: wrap the whole command in an extra outer quote pair
         // (`""emcc.bat" ... 2>&1"`). popen → cmd.exe strips the outermost pair,
         // leaving the inner quoted argv intact; without this wrap cmd.exe mangles

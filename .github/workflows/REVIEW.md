@@ -2,15 +2,16 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 Architecture doc: `skills/internal/preflight.md` (repo root). A per-PR check is a step, a
-matrix cell, or a workflow trigger whose failure turns a branch or a published artifact red
-before a human merges or ships it - a `pull_request` lane's step and a branch-push lane's
-smoke alike.
+matrix cell, or a workflow trigger whose failure means the tree or a published artifact is
+wrong, and that turns the lane red before a human merges or ships it - a `pull_request` lane's
+step and a branch-push lane's smoke alike. A provisioning step - a toolchain install, a version
+pin - is not itself a per-PR check.
 
-**A diff that weakens a per-PR check is a defect: deleting it while no per-PR lane still
-runs its cases, stopping its failure from failing the lane (`continue-on-error`, a trailing
-`|| true`, a swallowed exit code), shrinking what it checks, or narrowing its condition to
-anything but a `matrix.role` condition that still runs it on every pull request or the
-nightly cron.**
+**A diff that weakens a per-PR check is a defect: deleting it, or a step it depends on, while
+no per-PR lane still runs its cases, stopping its failure from failing the lane
+(`continue-on-error`, a trailing `|| true`, a swallowed exit code), shrinking what it checks, or
+narrowing its condition to anything but a `matrix.role` condition that still runs it on every
+pull request.**
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 
@@ -29,10 +30,10 @@ preflight gate - a check `preflight` runs locally before a push - that keeps it 
 (`skills/internal/preflight.md` sec."extended_checks.yml") or states the platform no per-PR
 cell has.** A per-PR job fits 35 minutes; what does not fit moves.
 
-**A diff that adds or changes a per-PR check states a run of that check's command, on the
-lane's platform, in its PR body or commit message; a green run of that lane on the PR's head
-commit is that evidence.** A check that fails for a non-defect turns a green branch red for
-everyone.
+**A diff that adds or changes a per-PR check, or adds, changes, or removes a step a per-PR
+check depends on, states a run of that check's command, on the lane's platform, in its PR body
+or commit message; a green run of that lane on the PR's head commit is that evidence.** A check
+that fails for a non-defect turns a green branch red for everyone.
 
 **A step in `pages.yml` that names more than one id under `examples/games/` spells them as a
 `for g in <ids>; do` loop, never inline.** `examples/games/REVIEW.das` (repo root) reads the
