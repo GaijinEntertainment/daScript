@@ -31,9 +31,11 @@ struct Submission {
     ClientIp : string
 }
 
-//! One measured run, flattened for filtering; the verbatim BenchRun lives in the
-//! submission Doc at (ModelIdx, RunIdx). Identity per METHODOLOGY.md: (Gguf, Box,
-//! Engine, Backend, Flavor, Workload) — official re-imports replace on it.
+//! One measured run, flattened for filtering, plus the two cells and the cpu label the
+//! board paints from — so a page renders its rows and pairs from this table alone; the
+//! verbatim BenchRun lives in the submission Doc at (ModelIdx, RunIdx), read for a receipt.
+//! Identity per METHODOLOGY.md: (Gguf, Box, Engine, Backend, Flavor, Workload) — official
+//! re-imports replace on it.
 [sql_table(name = "runs"),
  sql_index(fields = ("DasllamaVersion")),
  sql_index(fields = ("SubmissionId")),
@@ -63,6 +65,9 @@ struct Run {
     Source : string             // stamped by the store, never by the submitter
     Verified : int = 0
     CreatedAt : int64
+    Pp512 : double = 0.0lf      // tests.pp512.tok_s; 0 = the run did not measure it
+    Tg128 : double = 0.0lf      // tests.tg128.tok_s; 0 = the run did not measure it
+    Cpu : string = ""           // hardware.cpu, the board's machine label
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
@@ -148,6 +153,49 @@ def ladder_migration_001(db : SqlRunner) {
         "ClientIp TEXT NOT NULL)")
     db |> exec("CREATE INDEX idx_sidecars_DasllamaVersion_Box ON sidecars (DasllamaVersion, Box)")
     db |> exec("CREATE INDEX idx_sidecars_DasllamaVersion_Platform_Arch_Cpu ON sidecars (DasllamaVersion, Platform, Arch, Cpu)")
+}
+
+[sql_migration(version = 2, description = "runs carry the pp512/tg128 cells and the cpu label; backfilled from the documents")]
+def ladder_migration_002(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN Pp512 REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN Tg128 REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN Cpu TEXT NOT NULL DEFAULT ''")
+    backfill_run_cells(db)
+}
+
+//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Cpu` hold.
+def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; cpu : string> {
+    return (
+        pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
+        tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
+        cpu = r?["hardware"]?["cpu"] ?? "")
+}
+
+//! Every run row of every record submission re-reads its cells from the document it came
+//! from — the one-time fill behind migration 2, for rows inserted before the columns existed.
+def private backfill_run_cells(db : SqlRunner) {
+    let subs <- _sql(db |> select_from(type<Submission>)
+        |> _where(_.Kind == "records" || _.Kind == "official"))
+    for (s in subs) {
+        var jerr = ""
+        var doc = read_json(s.Doc, jerr)
+        if (doc == null || !(doc is _array)) {
+            continue
+        }
+        var mi = 0
+        for (m in doc as _array) {
+            var ri = 0
+            for (r in m?["runs"] as _array) {
+                let cells = run_cells(r)
+                let sid = s.Id
+                db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
+                ri++
+            }
+            mi++
+        }
+        delete_json(doc)
+    }
 }
 
 //! Every limit the store enforces; the launcher fills it from config.
@@ -316,6 +364,7 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
     for (m in doc as _array) {
         var ri = 0
         for (r in m?["runs"] as _array) {
+            let cells = run_cells(r)
             rows |> emplace(Run(
                 SubmissionId = submission_id,
                 ModelIdx = mi,
@@ -342,7 +391,10 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 TuneSha = r?["tune_sha"] ?? "",
                 Source = source,
                 Verified = verified,
-                CreatedAt = now))
+                CreatedAt = now,
+                Pp512 = cells.pp512,
+                Tg128 = cells.tg128,
+                Cpu = cells.cpu))
             ri++
         }
         mi++

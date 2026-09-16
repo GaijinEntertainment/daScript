@@ -23,8 +23,10 @@ The anatomy mirrors `utils/internal/dasweb-playground`.
 
 ### 1.1 Routes
 
-Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]`,
-`GET /api/submission/:id` (the verbatim receipt), `GET /api/sidecars[?version=N]` (the
+Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]` (the
+board: every run's filter columns plus its `pp512`/`tg128` cells and `cpu` label, so a page
+paints and pairs from this one response), `GET /api/submission/:id` (the verbatim receipt,
+fetched only for a receipt a visitor opens), `GET /api/sidecars[?version=N]` (the
 browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
 lookup ladder - a `box` switches modes and then version is required), `GET /api/sidecar/:sha`
 (download), `POST /api/submit/records`, `POST /api/submit/sidecar`. Loopback-only:
@@ -46,8 +48,10 @@ Three tables, one migration stream (`ladder_migration_*`):
 - `submissions` - one row per accepted upload, the document kept **verbatim** (`Doc`),
   content-hashed (`DocSha`, unique - byte-identical resubmits dedup). Kinds: `records`,
   `sidecar`, `official`.
-- `runs` - one row per BenchRun, flat columns for filtering; the truth stays in the
-  submission `Doc` at (`ModelIdx`, `RunIdx`). Identity per `modules/dasLLAMA/METHODOLOGY.md`
+- `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128` cells
+  and the `Cpu` label the board paints from; the truth stays in the submission `Doc` at
+  (`ModelIdx`, `RunIdx`). Migration 2 added the three columns and backfilled them from the
+  documents. Identity per `modules/dasLLAMA/METHODOLOGY.md`
   is (`Gguf`, `Box`, `Engine`, `Backend`, `Flavor`, `Workload`); official imports replace on
   it, community rows append.
 - `sidecars` - content-addressed by the document's own sha256; identity columns come from

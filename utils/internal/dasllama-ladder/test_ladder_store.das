@@ -24,7 +24,31 @@ def private ident_a : BoxIdentity {
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 1)
+            t |> equal(current_schema_version(db), 2)
+        }
+    }
+    t |> run("migration 2 backfills the cells of rows inserted before the columns existed") @(tt : T?) {
+        with_sqlite(":memory:") $(db) {
+            // a v1 store: the shipped first migration, stamped applied, with a submission and its
+            // two run rows inserted in the v1 shape (no cell columns to fill)
+            ladder_migration_001(db)
+            baseline(db, 1)
+            let doc = records_doc()
+            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (7, 'records', 'sha7', ?, 1000, '10.0.0.1')", doc)
+            for (ri in range(2)) {
+                db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+                    "VALUES (7, 0, ?, 'test-model-Q8_0.gguf', ?, 'cpu', ?, 'testbox', 8, '2026-08-10', 'community', 1000)",
+                    ri, ri == 0 ? "das" : "llama.cpp", ri == 0 ? "tuned" : "clean-cpu")
+            }
+            tt |> equal(migrate_to_latest(db), 1, "one pending migration applied")
+            tt |> equal(current_schema_version(db), 2)
+            let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.RunIdx))
+            tt |> equal(length(rows), 2)
+            tt |> equal(rows[0].Pp512, 100.0lf)
+            tt |> equal(rows[1].Pp512, 80.0lf)
+            tt |> equal(rows[0].Tg128, 0.0lf, "a cell the run did not measure stays 0")
+            tt |> equal(rows[0].Cpu, "Test CPU 9000")
+            tt |> equal(rows[1].Cpu, "Test CPU 9000")
         }
     }
 }
@@ -198,12 +222,21 @@ def test_put_records(t : T?) {
                 tt |> equal(r.Verified, 0)
                 tt |> equal(r.Gguf, "test-model-Q8_0.gguf")
             }
-            // the das row carries its stamps into the filter columns
+            // the das row carries its stamps into the filter columns, and its cells + cpu label
             let das_rows <- list_runs(db, 3)
             tt |> equal(length(das_rows), 1)
             tt |> equal(das_rows[0].Engine, "das")
             tt |> equal(das_rows[0].TuneSha, "cafe0123beef")
             tt |> equal(das_rows[0].Threads, 8)
+            tt |> equal(das_rows[0].Pp512, 100.0lf)
+            tt |> equal(das_rows[0].Tg128, 0.0lf)
+            tt |> equal(das_rows[0].Cpu, "Test CPU 9000")
+            // the reference row carries its own cells: the board pairs from this table alone
+            for (r in rows) {
+                if (r.Engine == "llama.cpp") {
+                    tt |> equal(r.Pp512, 80.0lf)
+                }
+            }
             // put_records redacts paths, which re-serializes the JSON — so the stored copy is
             // the redacted form (records_doc carries no paths, so redaction only normalizes it)
             tt |> equal(get_submission_doc(db, put.submission_id), redact_record_paths(doc))
