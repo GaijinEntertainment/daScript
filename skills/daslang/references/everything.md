@@ -4019,11 +4019,12 @@ The AST module provides access to the abstract syntax tree representation of das
 - `find_enum_name` - Finds the name corresponding to an enumeration value in the specified type.
 - `find_enum_value` - Finds the integer value corresponding to an enumeration name in the specified type.
 - `find_matching_variable` - Searches the program for global variables matching the given name that are visible from the specified function's scope.
+- `find_method_function` - Returns the function a class method field points at - the override the class declares, else the inherited one - or null for a data field, an unknown name, or a null structure.
 - `find_module` - Finds a module by name in the specified program.
 - `find_module_function_via_rtti` - Finds a function by name in the specified module using RTTI.
 - `find_module_via_rtti` - Finds a module by name in the specified program using RTTI.
 - `find_struct_field_parent` - Finds and returns the parent structure in the inheritance chain that originally declares the field with the given name.
-- `find_structure_field` - Returns the FieldDeclaration for a specific field of a structure type, or null if not found.
+- `find_structure_field` - Returns the FieldDeclaration for a specific field of a structure type, or null if not found or the structure is null.
 - `find_unique_structure` - Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
 - `find_variable` - Finds a variable by name in the specified module.
 
@@ -4874,6 +4875,13 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `source_name` - The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
 - `spells_name` - True when `line_text` spells `name` as a whole word starting exactly at `col`.
 - `word_at` - The identifier the 0-based byte column `col` is on in `line_text`, with its start column; a caret right after a word is on it, as in an editor, and the word is empty when `col` is on none.
+
+### Class members
+
+- `field_at` - Where the field `name` of `st` is declared - the parent's line for an inherited field; a zero position when there is no such field.
+- `field_name_at` - Where a field access spells its field name - a method call's name sits past the `->` its node spans; a zero position for any other node.
+- `is_own_field` - True for a field the source declares in its struct's or class's own body - an override included - not one the compiler made (`__rtti`, `__finalize`) or a parent's copy.
+- `value_struct` - The struct a field access reads its field from - through a pointer when `value` is one; null for any other value.
 
 ### Result inspection
 

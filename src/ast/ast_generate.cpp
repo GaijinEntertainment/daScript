@@ -206,8 +206,12 @@ namespace das {
 
     /* a->b(args) is short for invoke(a.b, cast<auto> deref(a), args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b, bool no_promo ) {
+        return makeInvokeMethod(at, at, a, b, no_promo);
+    }
+
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, const LineInfo & atField, Expression * a, const string & b, bool no_promo ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
-        auto pAt = new ExprField(at, a, b, no_promo);
+        auto pAt = new ExprField(at, atField, a, b, no_promo);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
         auto pTypeAuto = new ExprTypeDecl(at, new TypeDecl(Type::autoinfer, at));

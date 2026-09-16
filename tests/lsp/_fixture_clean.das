@@ -6,6 +6,7 @@
 options gen2
 
 class LspProbeBase {
+    probe_count : int = 0
     def probe_speak() : string => "base"
 }
 
@@ -34,6 +35,10 @@ enum LspProbeColor {
 
 def lsp_probe_paint(c : LspProbeColor) : int => int(c)
 
+struct LspProbeOther {
+    probe_count : int
+}
+
 typedef LspProbePair = tuple<first : int; second : int>
 
 let LSP_PROBE_LIMIT = 3
@@ -54,6 +59,10 @@ def main() {
     print("{d->probe_speak()}\n")
     var f = new LspProbeFinalized()
     print("{f->probe_speak()}\n")
+    let spoken = d->probe_speak()
+    print("{spoken} {d.probe_count}\n")
+    var other : LspProbeOther
+    other.probe_count = 1
     let base = 10
     let add = @(x : int) : int => x + base
     print("{add(1)}\n")

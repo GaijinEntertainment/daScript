@@ -60,3 +60,23 @@ def count_up() : iterator<int> {
         return false
     }
 }
+
+def kennel(var d : Dog?) : int {
+    let heard = d->speak()
+    return d.age + length(heard)
+}
+
+class Puppy : Dog {
+    def bark() : string => "yip"
+    def override speak() : string => bark()
+}
+
+struct Greeter {
+    cb : function<(name : string) : string> = @@greet
+}
+
+def captured() : int {
+    let base = 10
+    let plus = @(x : int) : int => x + base
+    return plus(1)
+}

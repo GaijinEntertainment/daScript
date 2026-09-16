@@ -223,7 +223,7 @@ def test_synthesized_members(t : T?) {
                 }
             }
             t2 |> success(synthesized > 0, "a class carries synthesized members: {synthesized}")
-            t2 |> equal(user, 12, "add, greet, main, Animal`speak, Cat`speak, no_log, safe_x, use_twice, count_up, the twice and each instances, the generator body - got {user}")
+            t2 |> equal(user, 17, "add, greet, main, Animal`speak, Cat`speak, no_log, safe_x, use_twice, count_up, kennel, Puppy`bark, Puppy`speak, captured, the twice and each instances, the generator and lambda bodies - got {user}")
             var instances = 0
             var generators = 0
             ast::for_each_function(get_this_module(program), "") $(var func : FunctionPtr) {
@@ -381,6 +381,71 @@ def test_type_name_hit(t : T?) {
             t2 |> success(alias.kind == DeclarationKind.alias && alias.alias_type != null, "resolved: {alias.name} kind {alias.kind}")
             t2 |> success(int(alias.at.line) == 12 && alias.at.fileInfo != null && find(string(alias.at.fileInfo.name), "fio") >= 0, "declared in fio at {int(alias.at.line)}")
             t2 |> success(typedef_named(program, "no_such_alias") == null, "an unknown alias is null")
+        }
+    }
+}
+
+[test]
+def test_class_members(t : T?) {
+    t |> run("a method call is a hit on the method's name, never on the conversions the call desugars to") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // let heard = d->speak() at line 65, speak at column 19: the node spans the `->`, the name has its own position
+            let arrow = find_at_cursor(program, "ast_cursor_fixture", 65, 21)
+            t2 |> success(!empty(arrow) && arrow[0].rtti == "ExprField" && arrow[0].name == "speak", "the method field first: {[for (h in arrow); describe(h)]}")
+            // def override speak() : string => bark() at line 71, the implicit-self call at column 37
+            let self_call = find_at_cursor(program, "ast_cursor_fixture", 71, 38)
+            t2 |> success(!empty(self_call) && self_call[0].rtti == "ExprField" && self_call[0].name == "bark", "the implicit self call names its method: {[for (h in self_call); describe(h)]}")
+            for (h in self_call) {
+                t2 |> success(h.rtti != "ExprRef2Value", "the compiler's ref-to-value conversion is never a hit")
+            }
+            t2 |> success(length(self_call) > 1 && find(describe(self_call[1]), "Expr") >= 0, "the call's conversion nodes follow the named field on the same span: {[for (h in self_call); describe(h)]}")
+            // return d.age + length(heard) at line 66, age at column 13
+            let data = find_at_cursor(program, "ast_cursor_fixture", 66, 14)
+            t2 |> success(!empty(data) && data[0].rtti == "ExprField" && data[0].name == "age", "a data field from its name: {[for (h in data); describe(h)]}")
+        }
+    }
+    t |> run("method_function follows a method field to the override the receiver's class declares, else the inherited one") @(t2 : T?) {
+        compile_fixture() $(program) {
+            let dog = module_find_structure(get_this_module(program), "Dog")
+            let puppy = module_find_structure(get_this_module(program), "Puppy")
+            let point = module_find_structure(get_this_module(program), "Point")
+            t2 |> success(dog != null && puppy != null && point != null, "the fixture declares Dog, Puppy and Point")
+            let inherited = find_method_function(dog, "speak")
+            t2 |> success(inherited != null && inherited.name == "Animal`speak", "Dog inherits speak: {inherited != null ? string(inherited.name) : "null"}")
+            let overridden = find_method_function(puppy, "speak")
+            t2 |> success(overridden != null && overridden.name == "Puppy`speak", "Puppy overrides speak: {overridden != null ? string(overridden.name) : "null"}")
+            t2 |> success(find_method_function(puppy, "age") == null, "a data field is no method")
+            t2 |> success(find_method_function(point, "x") == null && find_method_function(point, "nope") == null && find_method_function(null, "x") == null, "a struct field, an unknown name and no struct are null")
+        }
+    }
+    t |> run("a field is declared once: the class body's own line, shared by every class that inherits it") @(t2 : T?) {
+        compile_fixture() $(program) {
+            let dog = module_find_structure(get_this_module(program), "Dog")
+            let puppy = module_find_structure(get_this_module(program), "Puppy")
+            // age : int = 3 at line 44, column 4
+            let decl = find_declaration_at_cursor(program, "ast_cursor_fixture", 44, 5, "    age : int = 3")
+            t2 |> success(decl.kind == DeclarationKind.field && decl.name == "age" && decl.structure != null && decl.structure.name == "Dog", "the field declaration: {decl.name} of {decl.structure != null ? string(decl.structure.name) : "-"}")
+            t2 |> success(decl.field_type != null && describe(unsafe(reinterpret<TypeDecl?>(decl.field_type))) == "int", "with its type")
+            t2 |> equal(int(field_at(puppy, "age").line), 44, "the inherited copy keeps the parent's position")
+            t2 |> equal(int(field_at(dog, "nope").line), 0, "no such field is a zero position")
+            let own <- [for (fld in puppy.fields); string(fld.name); where is_own_field(fld)]
+            t2 |> success(length(own) == 2 && own[0] == "speak" && own[1] == "bark", "Puppy's own fields are the override it declares and its new method; age is the parent's copy, __rtti and __finalize the compiler's: {own}")
+            let method_line = find_declaration_at_cursor(program, "ast_cursor_fixture", 70, 9, "    def bark() : string => \"yip\"")
+            t2 |> success(method_line.kind == DeclarationKind.func && method_line.name == "bark", "a method's def line is the function, not a field: {method_line.kind}")
+            let off_name = find_declaration_at_cursor(program, "ast_cursor_fixture", 44, 10, "    age : int = 3")
+            t2 |> equal(off_name.kind, DeclarationKind.none, "the cursor on the field's type is not its declaration")
+            t2 |> equal(int(field_at(null, "age").line), 0, "no struct is a zero position")
+        }
+    }
+    t |> run("a captured let is a variable, not a field of the lambda's capture struct; a function-pointer field is no method") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // let base = 10 at line 79, captured by the lambda on line 80
+            let decl = find_declaration_at_cursor(program, "ast_cursor_fixture", 79, 9, "    let base = 10")
+            t2 |> equal(decl.kind, DeclarationKind.none, "the capture struct's field is not a declaration the source spells")
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 79, 9, true, "    let base = 10")
+            t2 |> success(has_variable_hit(hits, "base"), "the let itself is the answer: {[for (h in hits); describe(h)]}")
+            let greeter = module_find_structure(get_this_module(program), "Greeter")
+            t2 |> success(greeter != null && find_method_function(greeter, "cb") == null, "a data field initialized with @@greet is not a method")
         }
     }
 }

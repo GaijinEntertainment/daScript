@@ -157,6 +157,17 @@ struct PlainRequestMsg {
     method : string
 }
 
+struct DocSymbolParams {
+    textDocument : DocId
+}
+
+struct DocSymbolMsg {
+    jsonrpc : string = "2.0"
+    id : int
+    method : string = "textDocument/documentSymbol"
+    params : DocSymbolParams
+}
+
 // ===== wire helpers =====
 
 def private write_frame(w : file; body : string) {
@@ -349,6 +360,14 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
     var enum_char = -1
     var paint_line0 = -1
     var paint_char = -1
+    var count_line0 = -1
+    var count_char = -1
+    var spoken_line0 = -1
+    var spoken_char = -1
+    var count_use_line0 = -1
+    var count_use_char = -1
+    var other_use_line0 = -1
+    var other_use_char = -1
     var enum_use_line0 = -1
     var enum_use_char = -1
     var typedef_line0 = -1
@@ -413,6 +432,18 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
         } elif (clean_lines[i] |> starts_with("def lsp_probe_paint")) {
             paint_line0 = i
             paint_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("    probe_count : int = 0")) {
+            count_line0 = i
+            count_char = find(clean_lines[i], "probe_count")
+        } elif (clean_lines[i] |> starts_with("    let spoken = d->probe_speak()")) {
+            spoken_line0 = i
+            spoken_char = find(clean_lines[i], "probe_speak")
+        } elif (clean_lines[i] |> starts_with("    print(\"\{spoken\} \{d.probe_count\}")) {
+            count_use_line0 = i
+            count_use_char = find(clean_lines[i], "probe_count")
+        } elif (clean_lines[i] |> starts_with("    other.probe_count = 1")) {
+            other_use_line0 = i
+            other_use_char = find(clean_lines[i], "probe_count")
         } elif (clean_lines[i] |> starts_with("    pair.first = int(LspProbeColor")) {
             enum_use_line0 = i
             enum_use_char = find(clean_lines[i], "LspProbeColor")
@@ -451,8 +482,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
     t |> success(self_line0 >= 0 && self_call_char > self_name_char, "fixture contains the one-line self-calling function")
     t |> success(generic_line0 >= 0 && generic_call_char > generic_name_char, "fixture contains the one-line self-calling generic")
     t |> success(enum_line0 >= 0 && paint_line0 >= 0 && enum_use_line0 >= 0 && typedef_line0 >= 0 && pair_line0 >= 0 && global_line0 >= 0 && global_use_line0 >= 0 && yield_line0 >= 0 && let_base_line0 >= 0, "fixture contains the enum, typedef, global, generator and let probes")
+    t |> success(count_line0 >= 0 && spoken_line0 >= 0 && count_use_line0 >= 0 && other_use_line0 >= 0, "fixture contains the field, the method call, the field use and the same-named field of another struct")
     return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0 ||
-        enum_line0 < 0 || paint_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || pair_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0)
+        enum_line0 < 0 || paint_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || pair_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0 || count_line0 < 0 || spoken_line0 < 0 || count_use_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -670,7 +702,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                 t |> success(hover_yield.text |> find("i : int") >= 0, "hover on a generator's loop variable: {hover_yield.text}")
                 t |> success(hover_yield.text |> find("_rename_at_") < 0, "a generator's loop variable shows its source name: {hover_yield.text}")
                 let hover_mid = probe_hover(t, w, r, 26, uri, let_base_line0, let_base_char + 2)
-                t |> success(hover_mid.text |> find("base : int") >= 0, "hover in the middle of a let variable's name: {hover_mid.text}")
+                t |> success(hover_mid.text |> find("base : int") >= 0 && hover_mid.text |> find("field") < 0, "hover in the middle of a let variable's name is the variable, not the lambda's capture field: {hover_mid.text}")
                 t |> equal(hover_mid.character, let_base_char)
 
                 let enum_keys <- probe_references(t, w, r, 27, uri, enum_line0, enum_char + 2)
@@ -696,6 +728,42 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                     params = CursorParams(textDocument = DocId(uri = uri), position = Position0(line = def_line0, character = 6))), false))
                 let prep_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 35
                 t |> equal(prep_def?["result"]?[0]?["name"] ?? "", "lsp_probe_helper", "prepareCallHierarchy on the name in the def line")
+
+                t |> equal(probe_definition(t, w, r, 36, uri, spoken_line0, spoken_char + 2), int2(derived_speak_line0, derived_speak_char), "definition of d->probe_speak() lands on the override the receiver runs")
+                let hover_call = probe_hover(t, w, r, 37, uri, spoken_line0, spoken_char + 2)
+                t |> success(hover_call.text |> find("LspProbeDerived`probe_speak") >= 0, "hover on a method call shows the method: {hover_call.text}")
+                t |> equal(hover_call.character, spoken_char, "the hover range starts at the method name, not the arrow")
+                let speak_keys <- probe_references(t, w, r, 38, uri, base_speak_line0, base_speak_char + 2)
+                t |> equal(length(speak_keys), 2, "references to the base method: its declaration and the call through the class that does not override it, got {speak_keys}")
+                t |> success(speak_keys |> find_index("{base_speak_line0}:{base_speak_char}") >= 0, "base method references include the declaration")
+                let hover_field = probe_hover(t, w, r, 39, uri, count_line0, count_char + 2)
+                t |> success(hover_field.text |> find("probe_count : int") >= 0 && hover_field.text |> find("field") >= 0, "hover on a field's declaration: {hover_field.text}")
+                let count_keys <- probe_references(t, w, r, 40, uri, count_line0, count_char + 2)
+                t |> success(count_keys |> find_index("{count_line0}:{count_char}") >= 0 && count_keys |> find_index("{count_use_line0}:{count_use_char}") >= 0, "references from a field's declaration: itself and d.probe_count, got {count_keys}")
+                write_frame(w, sprint_json(DocSymbolMsg(id = 41, params = DocSymbolParams(textDocument = DocId(uri = uri))), false))
+                let syms = read_until(t, r) $(js) => (js?["id"] ?? -1) == 41
+                var base_children : array<string>
+                let top = syms?["result"]
+                if (top != null && top.value is _array) {
+                    for (sym in top.value as _array) {
+                        continue if ((sym?["name"] ?? "") != "LspProbeBase")
+                        let kids = sym?["children"]
+                        if (kids != null && kids.value is _array) {
+                            for (kid in kids.value as _array) {
+                                base_children |> push(kid?["name"] ?? "")
+                            }
+                        }
+                    }
+                }
+                t |> success(length(base_children) == 2 && base_children[0] == "probe_count" && base_children[1] == "probe_speak", "a class lists its own field and its bare method names, not __rtti, __finalize or the method fields: {base_children}")
+
+                t |> success(count_keys |> find_index("{other_use_line0}:{other_use_char}") < 0, "another struct's same-named field is not a reference, got {count_keys}")
+                let use_keys <- probe_references(t, w, r, 42, uri, count_use_line0, count_use_char + 2)
+                t |> success(use_keys |> find_index("{count_line0}:{count_char}") >= 0 && use_keys |> find_index("{other_use_line0}:{other_use_char}") < 0, "references from a field's use: the declaration, never the other struct's field, got {use_keys}")
+                let call_keys <- probe_references(t, w, r, 43, uri, spoken_line0, spoken_char + 2)
+                t |> success(call_keys |> find_index("{derived_speak_line0}:{derived_speak_char}") >= 0 && call_keys |> find_index("{spoken_line0}:{spoken_char}") >= 0, "references from a method call: the override's declaration and the call, got {call_keys}")
+                let hover_block = probe_hover(t, w, r, 44, uri, call_line0, 0)
+                t |> success(empty(hover_block.text), "hover on the indent before a statement - only the block covers it - answers nothing: {hover_block.text}")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

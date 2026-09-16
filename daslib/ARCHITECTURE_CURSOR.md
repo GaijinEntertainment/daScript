@@ -34,3 +34,15 @@ this file holds sec. 40.
   strips the wrap back to `<name>`.** Nothing fails when one side moves alone: the
   test pins only the daslib half, so a new spelling shows the mangled name in every hover and
   reference.
+
+### 40.3 Class members {#cursor-class-fields}
+
+- **A method call - `a->m(x)`, `a.m(x)`, or a bare `m(x)` inside the class - desugars to
+  `invoke(type<T>.m, cast<auto> deref(a), x)` (`makeInvokeMethod`, `src/ast/ast_generate.cpp`,
+  repo root), every node on the call's span - the `->`/`.` forms on the operator token's, with
+  the method name's own position in the `ExprField`'s `atField` - and `CursorVisitor`
+  (`ast_cursor.das`) never hits the `ExprRef2Value` among them and ranks a named node before a
+  nameless one on the same span.** Nothing fails when one side moves alone: a new conversion
+  kind the C++ emits on that span is admitted with every test green, and only the named-first
+  rank keeps the field ahead of it; `tests/daslib/ast_cursor_test.das` pins the field-first
+  order at one implicit and one `->` site, not the set of nodes behind it.

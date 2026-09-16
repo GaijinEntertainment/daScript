@@ -857,10 +857,14 @@ namespace das {
         return nullptr;
     }
 
-    Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at ) {
-        if ( !structType ) context->throw_error_at(at,"expecting structure");
-        if ( !field ) return nullptr;
+    Structure::FieldDeclaration * ast_findStructureField ( const Structure * structType, const char * field ) {
+        if ( !structType || !field ) return nullptr;
         return (Structure::FieldDeclaration *) structType->findField(field);
+    }
+
+    Function * ast_findMethodFunction ( const Structure * structType, const char * name ) {
+        if ( !structType || !name ) return nullptr;
+        return structType->findMethodFunction(name);
     }
 
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
@@ -1681,7 +1685,10 @@ namespace das {
                 ->args({"enum","value"});
         addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
             SideEffects::none, "ast_findStructureField")
-                ->args({"structPtr","field","context","lineinfo"});
+                ->args({"structPtr","field"});
+        addExtern<DAS_BIND_FUN(ast_findMethodFunction)>(*this, lib,  "find_method_function",
+            SideEffects::none, "ast_findMethodFunction")
+                ->args({"structPtr","name"});
         addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name")
                 ->args({"function","context","line"})->setTempStringResult();

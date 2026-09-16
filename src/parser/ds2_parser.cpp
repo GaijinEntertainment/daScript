@@ -8813,7 +8813,7 @@ yyreduce:
 
   case 476: /* expr_method_call_no_bracket: expr_no_bracket "->" "name" '(' ')'  */
                                                                     {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), (yyvsp[-4].pExpression), *(yyvsp[-2].s));
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-2])), (yyvsp[-4].pExpression), *(yyvsp[-2].s));
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-4]),(yyloc));
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pInvoke;
@@ -8822,7 +8822,7 @@ yyreduce:
 
   case 477: /* expr_method_call_no_bracket: expr_no_bracket "->" "name" '(' expr_list ')'  */
                                                                                          {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), (yyvsp[-5].pExpression), *(yyvsp[-3].s));
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-3])), (yyvsp[-5].pExpression), *(yyvsp[-3].s));
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-5]),(yyloc));
         auto callArgs = sequenceToList((yyvsp[-1].pExpression));
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -8948,7 +8948,7 @@ yyreduce:
 
   case 493: /* expr_field_no_bracket: expr_no_bracket '.' "name" '(' ')'  */
                                                                  {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), (yyvsp[-4].pExpression), *(yyvsp[-2].s));
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-2])), (yyvsp[-4].pExpression), *(yyvsp[-2].s));
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-4]),(yyloc));
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pInvoke;
@@ -8957,7 +8957,7 @@ yyreduce:
 
   case 494: /* expr_field_no_bracket: expr_no_bracket '.' "name" '(' expr_list ')'  */
                                                                                       {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), (yyvsp[-5].pExpression), *(yyvsp[-3].s));
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-3])), (yyvsp[-5].pExpression), *(yyvsp[-3].s));
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-5]),(yyloc));
         auto callArgs = sequenceToList((yyvsp[-1].pExpression));
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -8968,7 +8968,7 @@ yyreduce:
 
   case 495: /* expr_field_no_bracket: expr_no_bracket "!." "name" '(' ')'  */
                                                                     {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), (yyvsp[-4].pExpression), *(yyvsp[-2].s), true);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-2])), (yyvsp[-4].pExpression), *(yyvsp[-2].s), true);
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-4]),(yyloc));
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pInvoke;
@@ -8977,7 +8977,7 @@ yyreduce:
 
   case 496: /* expr_field_no_bracket: expr_no_bracket "!." "name" '(' expr_list ')'  */
                                                                                          {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), (yyvsp[-5].pExpression), *(yyvsp[-3].s), true);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-3])), (yyvsp[-5].pExpression), *(yyvsp[-3].s), true);
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-5]),(yyloc));
         auto callArgs = sequenceToList((yyvsp[-1].pExpression));
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -9026,7 +9026,7 @@ yyreduce:
   case 500: /* expr_field_no_bracket: expr_no_bracket '.' basic_type_declaration '(' ')'  */
                                                                                    {
         auto method_name = das_to_string((yyvsp[-2].type));
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), (yyvsp[-4].pExpression), method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-2])), (yyvsp[-4].pExpression), method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-4]),(yyloc));
         (yyval.pExpression) = pInvoke;
     }
@@ -9035,7 +9035,7 @@ yyreduce:
   case 501: /* expr_field_no_bracket: expr_no_bracket '.' basic_type_declaration '(' expr_list ')'  */
                                                                                                         {
         auto method_name = das_to_string((yyvsp[-3].type));
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), (yyvsp[-5].pExpression), method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-3])), (yyvsp[-5].pExpression), method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,(yylsp[-5]),(yyloc));
         auto callArgs = sequenceToList((yyvsp[-1].pExpression));
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );

@@ -253,23 +253,9 @@ struct Definition {
 }
 
 def private field_value_struct(expr : Expression const?) : Structure const? {
-    var value_type : TypeDecl const?
-    if (expr is ExprField) {
-        let f = expr as ExprField
-        if (f.value != null) {
-            value_type = f.value._type
-        }
-    } elif (expr is ExprSafeField) {
-        let f = expr as ExprSafeField
-        if (f.value != null) {
-            value_type = f.value._type
-        }
-    }
-    // unwrap pointer types (Foo? -> Foo)
-    if (value_type != null && value_type.structType == null && value_type.firstType != null) {
-        value_type = value_type.firstType
-    }
-    return value_type != null ? value_type.structType : null
+    if (expr is ExprField) return value_struct((expr as ExprField).value)
+    if (expr is ExprSafeField) return value_struct((expr as ExprSafeField).value)
+    return null
 }
 
 def private variable_definition(variable : Variable const?) : Definition {
@@ -331,16 +317,14 @@ def private resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : 
         let field_name = string(expr is ExprField ? (expr as ExprField).name : (expr as ExprSafeField).name)
         let st = field_value_struct(expr)
         if (st != null) {
-            for (fld in st.fields) {
-                if (fld.name == field_name) {
-                    return Definition(
-                        found = true,
-                        kind = "field",
-                        name = field_name,
-                        file = lineinfo_file(fld.at),
-                        line = int(fld.at.line),
-                        column = int(fld.at.column))
-                }
+            let method = find_method_function(st, field_name)
+            if (method != null) {
+                return Definition(found = true, kind = "function", name = bare_name(string(method.name)), file = lineinfo_file(method.at),
+                    line = int(method.at.line), column = int(method.at.column), signature = function_signature(method))
+            }
+            let at = field_at(st, field_name)
+            if (int(at.line) > 0) {
+                return Definition(found = true, kind = "field", name = field_name, file = lineinfo_file(at), line = int(at.line), column = int(at.column))
             }
         }
     }
@@ -456,9 +440,6 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
         let hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
         var pick = -1
         for (idx in range(length(hits))) {
-            if (pick < 0) {
-                pick = idx
-            }
             if (!empty(hits[idx].name) || (hits[idx].expr != null && hits[idx].expr._type != null)) {
                 pick = idx
                 break
@@ -475,8 +456,13 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
             res._range = word_range(file, int(hit_at(hit).line), int(hit_at(hit).column), source_name(hit.name))
         } elif (hit.expr != null && to_generic_path(lineinfo_file(hit.expr.at)) == target && int(hit.expr.at.line) > 0) {
             res.hasRange = true
-            res._range = span_range(file, int(hit.expr.at.line), int(hit.expr.at.column),
-                int(hit.expr.at.last_line), int(hit.expr.at.last_column))
+            let at_field = field_name_at(hit.expr)
+            if (int(at_field.line) > 0) {
+                res._range = word_range(file, int(at_field.line), int(at_field.column), hit.name)
+            } else {
+                res._range = span_range(file, int(hit.expr.at.line), int(hit.expr.at.column),
+                    int(hit.expr.at.last_line), int(hit.expr.at.last_column))
+            }
         }
     }
     if (!compiled) {
@@ -502,7 +488,6 @@ struct RefTarget {
     kind : RefTargetKind
     // pointers stored as void? for identity comparison (avoids const mismatch)
     target_ptr : void?
-    field_struct_ptr : void?
     field_name : string
     alias_name : string
     name : string       // bare name — sizes each reference's range
@@ -553,15 +538,9 @@ def private identify_target(program : smart_ptr<Program>; hit : CursorHit) : Ref
         let fname = string(expr is ExprField ? (expr as ExprField).name : (expr as ExprSafeField).name)
         let st = field_value_struct(expr)
         if (st != null) {
-            var t = RefTarget(kind = RefTargetKind.field, field_struct_ptr = to_void(st), field_name = fname, name = fname)
-            for (fld in st.fields) {
-                if (fld.name == fname) {
-                    t.decl_file = lineinfo_file(fld.at)
-                    t.decl_line = int(fld.at.line)
-                    t.decl_column = int(fld.at.column)
-                }
-            }
-            return t
+            let method = find_method_function(st, fname)
+            return function_target(method, int(method.at.column)) if (method != null)
+            return field_target(st, fname)
         }
     }
     if (expr is ExprConstEnumeration) {
@@ -622,6 +601,17 @@ def private structure_target(st : Structure const?; column : int) : RefTarget {
         signature = st.parent != null ? "{head} : {st.parent.name}" : head)
 }
 
+def private field_target(st : Structure const?; name : string; field_type : TypeDecl const? = null) : RefTarget {
+    let at = field_at(st, name)
+    return RefTarget(kind = RefTargetKind.field, field_name = name, name = name,
+        decl_file = lineinfo_file(at), decl_line = int(at.line), decl_column = int(at.column),
+        signature = field_type != null ? "{name} : {describe(unsafe(reinterpret<TypeDecl?>(field_type)))}" : "")
+}
+
+def private same_site(at : LineInfo; target : RefTarget) : bool {
+    return int(at.line) == target.decl_line && int(at.column) == target.decl_column && lineinfo_file(at) == target.decl_file
+}
+
 struct DeclHit {
     target : RefTarget
     word_column : int   //! where the cursor's identifier starts on its line
@@ -645,6 +635,7 @@ def private declaration_target(found : DeclarationHit; column : int) : RefTarget
         let v = found.variable
         return variable_target(v, column, "{v.name} : {describe(v._type)}")
     }
+    if (found.kind == DeclarationKind.field) return field_target(found.structure, found.name, found.field_type)
     return RefTarget()
 }
 
@@ -659,6 +650,7 @@ def private kind_word(kind : RefTargetKind) : string {
     if (kind == RefTargetKind.structure) return "struct"
     if (kind == RefTargetKind.enumeration) return "enum"
     if (kind == RefTargetKind.alias) return "typedef"
+    if (kind == RefTargetKind.field) return "field"
     return "variable"
 }
 
@@ -717,16 +709,22 @@ class RefVisitor : AstVisitor {
         }
     }
 
+    // a field is one declaration across the class hierarchy: a derived class's copy keeps the parent's position
+    def on_target_field(expr : Expression const?; name : string) : bool {
+        let st = field_value_struct(expr)
+        return false if (st == null)
+        if (target.kind == RefTargetKind.func) return to_void(find_method_function(st, name)) == target.target_ptr
+        return target.kind == RefTargetKind.field && name == target.field_name && same_site(field_at(st, name), target)
+    }
+
     def override preVisitExprField(expr : ExprField?) : void {
-        if (target.kind != RefTargetKind.field || expr.name != target.field_name) return
-        if (to_void(field_value_struct(expr)) == target.field_struct_ptr) {
+        if (on_target_field(expr, string(expr.name))) {
             add_ref(expr.atField)
         }
     }
 
     def override preVisitExprSafeField(expr : ExprSafeField?) : void {
-        if (target.kind != RefTargetKind.field || expr.name != target.field_name) return
-        if (to_void(field_value_struct(expr)) == target.field_struct_ptr) {
+        if (on_target_field(expr, string(expr.name))) {
             add_ref(expr.atField)
         }
     }
@@ -875,19 +873,19 @@ def private run_document_symbol(file, project : string) : DocSymbolsResult {
             return if (to_generic_path(f) != target)
             var sym <- make_doc_symbol(f, s.at, string(s.name), "", s.flags.isClass ? SK_CLASS : SK_STRUCT)
             for (fld in s.fields) {
+                continue if (!is_own_field(fld) || fld.flags.classMethod)
                 push_doc_child(sym, f, fld.at, string(fld.name), describe(fld._type), SK_FIELD)
             }
             if (s.flags.isClass) {
                 ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
                     let fn = func
-                    return if (!fn.flags.isClassMethod || empty(fn.arguments) ||
-                        (fn.flags.generated && fn.fromGeneric == null))
+                    return if (!fn.flags.isClassMethod || empty(fn.arguments) || is_synthesized(fn))
                     let self_type = fn.arguments[0]._type
                     return if (self_type == null || self_type.structType == null || self_type.structType.name != s.name)
                     let detail = build_string() $(var w) {
                         write_signature(w, *fn)
                     }
-                    push_doc_child(sym, f, fn.at, string(fn.name), detail, SK_METHOD)
+                    push_doc_child(sym, f, fn.at, bare_name(string(fn.name)), detail, SK_METHOD)
                 }
             }
             res.symbols |> emplace(sym)

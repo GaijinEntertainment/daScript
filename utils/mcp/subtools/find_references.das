@@ -34,14 +34,12 @@ struct RefTarget {
     kind : RefTargetKind
     // all pointers stored as void? for identity comparison (avoids const mismatch)
     target_ptr : void?
-    // for fields: struct identity + name
-    field_struct_ptr : void?
     field_name : string
     // for aliases: the alias name string
     alias_name : string
     // display name
     name : string
-    @safe_when_uninitialized decl_at : LineInfo   //! the declaration's own position when known: a site there is its binding, not a use
+    @safe_when_uninitialized decl_at : LineInfo   //! the declaration's own position when known: a site there is its binding, not a use; for a field it is the identity - the parent's line every class that inherits it shares
 }
 
 def position_key(at : LineInfo) : string {
@@ -57,20 +55,16 @@ def variable_target(variable : Variable const?) : RefTarget {
     return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
 }
 
-// Field target from a field-access value expression (unwraps Foo? → Foo); none-kind when not a struct field
+//! the field `fname` of `st` as a target; a class method field is its function instead
+def field_target(st : Structure const?; fname : string) : RefTarget {
+    let method = find_method_function(st, fname)
+    if (method != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(method), name = string(method.name), decl_at = method.at)
+    return RefTarget(kind = RefTargetKind.field, field_name = fname, name = "{st.name}.{fname}", decl_at = field_at(st, fname))
+}
+
 def field_target_of(value : Expression const?; fname : string) : RefTarget {
-    if (value == null || value._type == null) return RefTarget()
-    var vt = value._type
-    // unwrap pointer types (Foo? → Foo)
-    if (vt.structType == null && vt.firstType != null) {
-        vt = vt.firstType
-    }
-    if (vt.structType == null) return RefTarget()
-    return RefTarget(
-        kind = RefTargetKind.field,
-        field_struct_ptr = to_void(vt.structType),
-        field_name = fname,
-        name = "{vt.structType.name}.{fname}")
+    let st = value_struct(value)
+    return st != null ? field_target(st, fname) : RefTarget()
 }
 
 // ExprCall / ExprAddr / ExprInvoke → function, function-pointer variable, or method field
@@ -136,6 +130,7 @@ def declaration_target(d : DeclarationHit) : RefTarget {
     if (d.kind == DeclarationKind.enumeration) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(d.enumeration), name = d.name, decl_at = d.at)
     if (d.kind == DeclarationKind.alias) return RefTarget(kind = RefTargetKind.alias, alias_name = d.name, name = d.name, decl_at = d.at)
     if (d.kind == DeclarationKind.variable) return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(d.variable), name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.field) return field_target(d.structure, d.name)
     return RefTarget()
 }
 
@@ -244,33 +239,23 @@ class RefVisitor : AstVisitor {
         }
     }
 
-    // ExprField → field reference
+    // a field is one declaration across the class hierarchy: a derived class's copy keeps the parent's position; a method field's sites reference its function
+    def on_target_field(value : Expression const?; name : string) : bool {
+        let st = value_struct(value)
+        return false if (st == null)
+        if (target.kind == RefTargetKind.func) return to_void(find_method_function(st, name)) == target.target_ptr
+        return target.kind == RefTargetKind.field && name == target.field_name && position_key(field_at(st, name)) == position_key(target.decl_at)
+    }
+
     def override preVisitExprField(expr : ExprField?) : void {
-        if (target.kind == RefTargetKind.field) {
-            if (expr.name == target.field_name && expr.value != null && expr.value._type != null) {
-                var vt = expr.value._type
-                if (vt.structType == null && vt.firstType != null) {
-                    vt = vt.firstType
-                }
-                if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
-                    add_ref(expr.atField, "field")
-                }
-            }
+        if (on_target_field(expr.value, string(expr.name))) {
+            add_ref(expr.atField, target.kind == RefTargetKind.func ? "method call" : "field")
         }
     }
 
-    // ExprSafeField → field reference (?.field)
     def override preVisitExprSafeField(expr : ExprSafeField?) : void {
-        if (target.kind == RefTargetKind.field) {
-            if (expr.name == target.field_name && expr.value != null && expr.value._type != null) {
-                var vt = expr.value._type
-                if (vt.structType == null && vt.firstType != null) {
-                    vt = vt.firstType
-                }
-                if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
-                    add_ref(expr.atField, "safe field")
-                }
-            }
+        if (on_target_field(expr.value, string(expr.name))) {
+            add_ref(expr.atField, target.kind == RefTargetKind.func ? "method call" : "safe field")
         }
     }
 

@@ -493,6 +493,15 @@ namespace das {
         return nullptr;
     }
 
+    Function * Structure::findMethodFunction ( const string & name ) const {
+        auto field = findField(name);
+        if ( !field || !field->classMethod || !field->init ) return nullptr;
+        Expression * addr = field->init;
+        if ( addr->rtti_isCast() ) addr = static_cast<ExprCast*>(addr)->subexpr;
+        if ( !addr->rtti_isAddr() ) return nullptr;
+        return static_cast<ExprAddr*>(addr)->func;
+    }
+
     const Structure * Structure::findFieldParent ( const string & na ) const {
         if ( parent ) {
             if ( parent->findField(na) ) {
