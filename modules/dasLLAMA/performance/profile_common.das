@@ -342,20 +342,18 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
 //! fallback, and the line loop has never dropped output, so it stays.
 def run_capture_argv(args : array<string>) : string {
     var acc = ""
-    unsafe {
-        popen_argv(args, 0.0, $(f) {
-            if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
-                return
+    unsafe(popen_argv(args, 0.0, $(f) {
+        if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
+            return
+        }
+        while (true) {
+            let line = fgets(f)
+            if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
+                break
             }
-            while (true) {
-                let line = fgets(f)
-                if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
-                    break
-                }
-                acc = "{acc}{line}"
-            }
-        })
-    }
+            acc = "{acc}{line}"
+        }
+    }))
     return strip(acc)
 }
 
@@ -391,13 +389,11 @@ def argv_line(args : array<string>) : string {
 // pipe to EOF (the fio fallback for non-regular files), so the whole stream arrives.
 def run_capture(cmd : string; first_line : bool) : string {
     var out = ""
-    unsafe {
-        popen(cmd) $(f) {
-            if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
-                out = fread(f)
-            }
+    unsafe(popen(cmd) $(f) {
+        if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
+            out = fread(f)
         }
-    }
+    })
     out = strip(out)
     if (first_line) {
         let nl = find(out, "\n")
@@ -2112,18 +2108,18 @@ def read_bench_records(path : string; var models : array<BenchModel>) : bool {
     return sscan_json(fread(path), models)
 }
 
-def write_bench_records(path : string; models : array<BenchModel>) {
-    let text = sprint_json(models, true)
-    var wrote = false
-    fopen(path, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, text)
-            wrote = true
-        }
-    }
+def write_bench_records(path : string; models : array<BenchModel>) : bool {
+    return write_records_text(path, sprint_json(models, true))
+}
+
+//! One record file, written whole; false (and a log line) when the path cannot be opened -
+//! a caller writing several artifacts fails on the first, never reports a partial set as written.
+def write_records_text(path : string; text : string) : bool {
+    let wrote = fwrite(path, text)
     if (!wrote) {
         to_log(LOG_ERROR, "dasLLAMA bench: could not open {path} for writing - records NOT persisted\n")
     }
+    return wrote
 }
 
 //! Update-or-insert one run; the identity is (box, engine, backend, flavor, workload) — a

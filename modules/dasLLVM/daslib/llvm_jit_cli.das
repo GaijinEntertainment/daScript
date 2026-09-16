@@ -63,7 +63,7 @@ struct public JitCliOptions {
     threads : Option<bool>
 
     @clarg_name = "jit-check-abi"
-    @clarg_doc = "JIT (-exe): emit a startup safe-check that compares every used handled-type's HOST-baked size + field offsets against the TARGET runtime annotation and aborts — reporting ALL divergences — on any mismatch. Diagnostic for the cross-compile C++ ABI layout class (wasm). Off by default."
+    @clarg_doc = "JIT (-exe): emit a startup check that compares every used handled-type's HOST-baked size + field offsets against the TARGET runtime annotation and warns on stderr — reporting ALL divergences — on any mismatch; a clean run prints nothing and the program runs either way. Diagnostic for the cross-compile C++ ABI layout class (wasm). Off by default."
     check_abi : Option<bool>
 
     @clarg_name = "jit-linker-string"

@@ -40,53 +40,53 @@
 <div class="forge-container">
 <div class="forge-ex-grid__list" style="grid-template-columns:repeat(auto-fill,minmax(400px,1fr))">
 
-<a class="forge-ex-card" href="examples/storyteller/storyteller.html" aria-label="open Storyteller">
+<article class="forge-ex-card dio-ex-card">
   <div class="forge-ex-card__screen">
     <img class="forge-ex-card__poster" src="files/examples/storyteller-poster.jpg" alt="Storyteller poster" loading="lazy"/>
     <div class="forge-ex-card__scanlines" aria-hidden="true"></div>
   </div>
   <div class="forge-ex-card__body">
     <div class="forge-ex-card__titlerow">
-      <h3 class="forge-ex-card__name">Storyteller</h3>
+      <h3 class="forge-ex-card__name"><a class="dio-ex-card__open" href="examples/storyteller/storyteller.html" aria-label="open Storyteller">Storyteller</a></h3>
       <span class="forge-ex-card__kind">llm + tts · in the browser</span>
     </div>
-    <p class="forge-ex-card__desc">A small story model writes a children's tale one token at a time while KittenTTS reads it aloud. Both models arrive as prepared <code>.dlim</code> images; the whole engine runs in your browser, the speech thread and the parallel kernels on Web Workers.</p>
+    <p class="forge-ex-card__desc">A small story model writes a children's tale one token at a time while <a class="dio-ex-card__credit" href="https://github.com/KittenML/KittenTTS">KittenTTS</a> reads it aloud. Both models arrive as prepared <code>.dlim</code> images; the whole engine runs in your browser, the speech thread and the parallel kernels on Web Workers.</p>
     <div class="forge-ex-card__tags"><span class="forge-ex-tag">llm</span><span class="forge-ex-tag">tts</span><span class="forge-ex-tag">wasm64</span><span class="forge-ex-tag">threads</span></div>
     <div class="forge-ex-card__foot"><span>space · next story</span><span>Chrome or Edge 133+, Firefox 134+ (memory64)</span></div>
   </div>
-</a>
+</article>
 
-<a class="forge-ex-card" href="examples/storywish/storywish.html" aria-label="open Storywish">
+<article class="forge-ex-card dio-ex-card">
   <div class="forge-ex-card__screen">
     <img class="forge-ex-card__poster" src="files/examples/storywish-poster.jpg" alt="Storywish poster" loading="lazy"/>
     <div class="forge-ex-card__scanlines" aria-hidden="true"></div>
   </div>
   <div class="forge-ex-card__body">
     <div class="forge-ex-card__titlerow">
-      <h3 class="forge-ex-card__name">Storywish</h3>
+      <h3 class="forge-ex-card__name"><a class="dio-ex-card__open" href="examples/storywish/storywish.html" aria-label="open Storywish">Storywish</a></h3>
       <span class="forge-ex-card__kind">llm + tts · in the browser</span>
     </div>
-    <p class="forge-ex-card__desc">Type the words you wish for and a story model trained to take requests - our own 27M llama on the TinyStoriesInstruct corpus, published on Hugging Face as borisbat/dasllama-stories - writes a children's tale that uses them while Pocket TTS reads it aloud in one baked voice, no phoneme front end in the loop. The same wasm64 engine as the storyteller, a 32 MB story image and the speech model's own file.</p>
+    <p class="forge-ex-card__desc">Type the words you wish for and a story model trained to take requests - our own 27M llama on the TinyStoriesInstruct corpus, published on Hugging Face as borisbat/dasllama-stories - writes a children's tale that uses them while <a class="dio-ex-card__credit" href="https://github.com/kyutai-labs/pocket-tts">Kyutai Pocket TTS</a> reads it aloud in one baked voice, no phoneme front end in the loop. The same wasm64 engine as the storyteller, a 32 MB story image and the speech model's own file.</p>
     <div class="forge-ex-card__tags"><span class="forge-ex-tag">llm</span><span class="forge-ex-tag">tts</span><span class="forge-ex-tag">wasm64</span><span class="forge-ex-tag">threads</span></div>
     <div class="forge-ex-card__foot"><span>type · Enter tells the story · Tab asks for dialogue</span><span>Chrome or Edge 133+, Firefox 134+ (memory64)</span></div>
   </div>
-</a>
+</article>
 
-<a class="forge-ex-card" href="examples/parrot/parrot.html" aria-label="open Parrot">
+<article class="forge-ex-card dio-ex-card">
   <div class="forge-ex-card__screen">
     <img class="forge-ex-card__poster" src="files/examples/parrot-poster.jpg" alt="Parrot poster" loading="lazy"/>
     <div class="forge-ex-card__scanlines" aria-hidden="true"></div>
   </div>
   <div class="forge-ex-card__body">
     <div class="forge-ex-card__titlerow">
-      <h3 class="forge-ex-card__name">Parrot</h3>
+      <h3 class="forge-ex-card__name"><a class="dio-ex-card__open" href="examples/parrot/parrot.html" aria-label="open Parrot">Parrot</a></h3>
       <span class="forge-ex-card__kind">voice cloning · in the browser</span>
     </div>
-    <p class="forge-ex-card__desc">Press record and talk for a few seconds. Pocket TTS clones your voice from the take and reads the text in the box - a poem to begin with, or whatever you type - in it; Silero VAD ends the take when you go quiet, and you can record again at any time. The recording stays in the tab: nothing is uploaded. The same wasm64 engine, the speech model's 75 MB file with its codec encoder, and a 1 MB voice-activity model.</p>
+    <p class="forge-ex-card__desc">Press record and talk for a few seconds. <a class="dio-ex-card__credit" href="https://github.com/kyutai-labs/pocket-tts">Kyutai Pocket TTS</a> clones your voice from the take and reads the text in the box - a poem to begin with, or whatever you type - in it; Silero VAD ends the take when you go quiet, and you can record again at any time. The recording stays in the tab: nothing is uploaded. The same wasm64 engine, the speech model's 75 MB file with its codec encoder, and a 1 MB voice-activity model.</p>
     <div class="forge-ex-card__tags"><span class="forge-ex-tag">tts</span><span class="forge-ex-tag">voice cloning</span><span class="forge-ex-tag">wasm64</span><span class="forge-ex-tag">threads</span></div>
     <div class="forge-ex-card__foot"><span>record · talk · say</span><span>Chrome or Edge 133+, Firefox 134+ (memory64)</span></div>
   </div>
-</a>
+</article>
 
 </div>
 <p class="dio-head__lede" style="margin-top:28px;max-width:720px">Source for every example lives under <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/dasLLAMA">examples/dasLLAMA</a> in the repository; the browser builds are made with <code>daspkg release wasm</code> from the same sources.</p>

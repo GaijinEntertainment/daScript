@@ -309,7 +309,7 @@ GPT-Neo, which no GGUF engine runs, so we trained our own: &lt;code&gt;tinystori
 27M-parameter llama on the TinyStoriesInstruct corpus with a 4K vocabulary, 15 minutes on one
 H100. Asked for three words over five word triples, 24 sampled stories each, it puts all three in
 61 of the 120 stories; the official 33M puts them in 60. It
-ships as a 32 MB &lt;code&gt;.dlim&lt;/code&gt; beside a 65 MB Pocket TTS file with one voice inside and no phoneme
+ships as a 32 MB &lt;code&gt;.dlim&lt;/code&gt; beside a 65 MB &lt;a href=&quot;https://github.com/kyutai-labs/pocket-tts&quot;&gt;Kyutai Pocket TTS&lt;/a&gt; file with one voice inside and no phoneme
 packs; you type the words, Enter tells the story, Tab asks for dialogue. The model, the training recipe and the hit-rate numbers are on
 &lt;a href=&quot;https://huggingface.co/borisbat/dasllama-stories&quot;&gt;Hugging Face&lt;/a&gt;. The model sets of both
 examples are now minted by the deploy for the build it ships, so a format bump can no longer
@@ -321,9 +321,9 @@ leave a page silently declining its images. &lt;a href=&quot;examples.html&quot;
 <id>https://dasllama.io/#n-2026-09-10-parrot</id>
 <updated>2026-09-10T00:00:00Z</updated>
 <content type="html">&lt;p&gt;A third dasLLAMA example on the examples page. Press record and talk; Silero VAD ends the take
-when you go quiet, Pocket TTS clones the voice from it, and the text in the box - Frost&#x27;s
+when you go quiet, &lt;a href=&quot;https://github.com/kyutai-labs/pocket-tts&quot;&gt;Kyutai Pocket TTS&lt;/a&gt; clones the voice from it, and the text in the box - Frost&#x27;s
 &quot;Stopping by Woods on a Snowy Evening&quot; to begin with, or whatever you type - is read in that
-voice. The recording stays in the tab. Behind it the English Pocket file shrank from 152 MB to
+voice. The recording stays in the tab. Behind it the English Pocket TTS file shrank from 152 MB to
 75: the backbone and the codec transformers as Q4_K, the flow head Q8_0, the codec encoder
 still inside; on our 200-sentence rig it reads 3.86 WER / 4.295 UTMOS against the q8 file&#x27;s
 3.91 / 4.328, and we could not hear the difference. Storywish now reads through the same form
@@ -347,7 +347,7 @@ kernel on your own box for optimal performance.&lt;/p&gt;</content>
 <id>https://dasllama.io/#n-2026-09-05-storyteller-in-the-browser</id>
 <updated>2026-09-05T00:00:00Z</updated>
 <content type="html">&lt;p&gt;The engine behind the ladder now also ships as a WebAssembly build. &lt;code&gt;daspkg release wasm&lt;/code&gt;
-compiles the storyteller - llama2.c&#x27;s stories15M writing a children&#x27;s tale while KittenTTS nano
+compiles the storyteller - llama2.c&#x27;s stories15M writing a children&#x27;s tale while &lt;a href=&quot;https://github.com/KittenML/KittenTTS&quot;&gt;KittenTTS&lt;/a&gt; nano
 reads it aloud - into one 26 MB wasm64 module, and the two models arrive as prepared &lt;code&gt;.dlim&lt;/code&gt;
 images, 76 MB with the two English front-end packs, the same format the native engine maps. The
 speech thread and the parallel kernels run on Web Workers in the page; nothing is interpreted.

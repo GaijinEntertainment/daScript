@@ -1,8 +1,9 @@
 /* dasllama.io — all three pages render from the ladder service (/api/*, same origin).
-   Nothing here is hand-placed data: every number, row and receipt derives from the API
-   documents, and every command line shown is the cmd recorded inside the submission
-   itself. One script serves home / ladder / sidecars — the page is detected by which
-   mount points exist.
+   Nothing here is hand-placed data: every number and row derives from the /api/runs rows,
+   every receipt from the verbatim submission document it names, and every command line
+   shown is the cmd recorded inside that submission itself. A document loads only for a
+   receipt a visitor opens. One script serves home / ladder / sidecars — the page is
+   detected by which mount points exist.
 
    The table/bars builders are a copy of site/files/dasllama.js's, extended with the
    ladder's needs (das-only rows, source column, preselected filters). Extracting a
@@ -52,23 +53,22 @@
     return '<td class="' + ('dl-num ' + cls).trim() + '">' + fmt(r, 2) + '×</td>';
   }
 
-  /* ── data layer: flat rows joined with their verbatim submissions ──
-     /api/runs carries the filter columns; the measurements and receipts live in the
-     submission document at (model_idx, run_idx), fetched once per submission (the
-     route is cacheable). A row whose document cannot be fetched is dropped rather
-     than rendered half-empty. */
+  /* ── data layer: the flat rows are the board ──
+     /api/runs carries the filter columns, the pp512/tg128 cells and the cpu label of every
+     run — das and reference alike — so the board paints and pairs from that one response.
+     The verbatim submission document at (model_idx, run_idx) is the receipt: fetched once
+     per submission, the first time one of its rows opens (the route is cacheable). */
   function loadBoard() {
-    return api('/api/runs').then(function (board) {
-      var runs = board.runs || [];
-      var ids = {};
-      runs.forEach(function (r) { ids[r.submission_id] = true; });
-      var docs = {};
-      return Promise.all(Object.keys(ids).map(function (id) {
-        return api('/api/submission/' + id)
-          .then(function (doc) { docs[id] = doc; })
-          .catch(function () { /* dropped rows are counted by the caller */ });
-      })).then(function () { return { runs: runs, docs: docs }; });
-    });
+    return api('/api/runs').then(function (board) { return board.runs || []; });
+  }
+
+  var docCache = {};
+  function loadDoc(id) {
+    var key = Number(id) || 0;   // numeric by construction; coerce so it can never carry a path
+    if (!docCache[key]) {
+      docCache[key] = api('/api/submission/' + key).catch(function (e) { delete docCache[key]; throw e; });
+    }
+    return docCache[key];
   }
 
   /* Pairing is methodology-faithful and within one submission only: a ratio appears
@@ -82,26 +82,21 @@
     { backend: 'vulkan', das: 'tuned', ref: 'stock',     label: 'gpu' }
   ];
 
-  function tok(r, k) { return (r.tests && r.tests[k]) ? r.tests[k].tok_s : 0; }
-
-  function buildRows(runs, docs) {
+  function buildRows(runs) {
     var out = [];
     runs.forEach(function (fr) {
       if (fr.engine !== 'das' || fr.workload) return;   // the ladder is LLM rows; audio is a follow-up
-      var doc = docs[fr.submission_id];
-      var model = doc && doc[fr.model_idx];
-      var das = model && model.runs && model.runs[fr.run_idx];
-      if (!das) return;
       var lane = null;
       for (var i = 0; i < LANES.length; i++) {
         if (LANES[i].backend === fr.backend && LANES[i].das === fr.flavor) { lane = LANES[i]; break; }
       }
       var ref = null;
       if (lane) {
-        (model.runs || []).forEach(function (r) {
-          if (r.engine === 'das' || r.box !== das.box) return;
+        runs.forEach(function (r) {
+          if (r.submission_id !== fr.submission_id || r.model_idx !== fr.model_idx) return;
+          if (r.engine === 'das' || r.box !== fr.box) return;
           if (r.backend !== lane.backend || r.flavor !== lane.ref) return;
-          if ((r.workload || '') !== (das.workload || '')) return;
+          if ((r.workload || '') !== (fr.workload || '')) return;
           if (!ref || String(r.date || '').localeCompare(String(ref.date || '')) > 0) ref = r;
         });
       }
@@ -110,16 +105,16 @@
       out.push({
         model: String(fr.gguf).replace(/\.gguf$/, ''), arch: fr.model_arch || '', quant: fr.quant || '',
         size: fr.size_bytes || 0, box: fr.box,
-        boxName: boxLabel(das.hardware && das.hardware.cpu, fr.box),
+        boxName: boxLabel(fr.cpu, fr.box),
         lane: laneLabel, threads: fr.threads || 0,
         source: fr.source || '', verified: !!fr.verified,
         version: fr.dasllama_version || 0, date: fr.date || '',
         submissionId: fr.submission_id,
-        pp_das: tok(das, 'pp512'), pp_ref: ref ? tok(ref, 'pp512') : 0,
-        tg_das: tok(das, 'tg128'), tg_ref: ref ? tok(ref, 'tg128') : 0,
-        pp_ratio: ref ? ratio(tok(das, 'pp512'), tok(ref, 'pp512')) : null,
-        tg_ratio: ref ? ratio(tok(das, 'tg128'), tok(ref, 'tg128')) : null,
-        das: das, ref: ref
+        pp_das: fr.pp512 || 0, pp_ref: ref ? ref.pp512 || 0 : 0,
+        tg_das: fr.tg128 || 0, tg_ref: ref ? ref.tg128 || 0 : 0,
+        pp_ratio: ref ? ratio(fr.pp512, ref.pp512) : null,
+        tg_ratio: ref ? ratio(fr.tg128, ref.tg128) : null,
+        das: fr, ref: ref
       });
     });
     return out;
@@ -150,16 +145,38 @@
     if (r.comment) lines.push('        <span class="dl-receipt-note"><b>note</b>  ' + esc(r.comment) + '</span>');
   }
 
+  // the BenchRun a flat row points at inside its submission document; the flat row itself
+  // when the document does not hold that slot
+  function docRun(doc, fr) {
+    var model = doc && doc[fr.model_idx];
+    var run = model && model.runs && model.runs[fr.run_idx];
+    return run || fr;
+  }
+
   function rowReceipt(r) {
-    var lines = [];
-    sideLines('das      ', r.das, lines);
-    lines.push('');
-    if (r.ref) sideLines('reference', r.ref, lines);
-    else lines.push('<b>reference</b>  none rode along — the absolute numbers stand alone, no parity claimed.');
-    lines.push('');
-    var subId = Number(r.submissionId) || 0;   // numeric by construction; coerce so it can never carry markup
-    lines.push('<a href="/api/submission/' + subId + '">verbatim submission #' + subId + ' ↗</a>');
-    return lines.join('\n');
+    return loadDoc(r.submissionId).then(function (doc) {
+      var lines = [];
+      sideLines('das      ', docRun(doc, r.das), lines);
+      lines.push('');
+      if (r.ref) sideLines('reference', docRun(doc, r.ref), lines);
+      else lines.push('<b>reference</b>  none rode along — the absolute numbers stand alone, no parity claimed.');
+      lines.push('');
+      var subId = Number(r.submissionId) || 0;   // numeric by construction; coerce so it can never carry markup
+      lines.push('<a href="/api/submission/' + subId + '">verbatim submission #' + subId + ' ↗</a>');
+      return lines.join('\n');
+    });
+  }
+
+  // a receipt renders the first time its row opens; a failed document load says so and the
+  // next open retries
+  function fillReceipt(box, row, receiptFn) {
+    if (!box || box.dataset.loaded) return;
+    box.dataset.loaded = '1';
+    box.textContent = 'loading the receipt…';
+    receiptFn(row).then(function (html) { box.innerHTML = html; }, function () {
+      box.dataset.loaded = '';
+      box.textContent = 'the submission did not load — open the row again to retry.';
+    });
   }
 
   function measuredLine(rows) {
@@ -242,10 +259,9 @@
             if (c.cls) cls.push(c.cls);
             return '<td class="' + cls.join(' ') + '">' + out + '</td>';
           }).join('');
-          var rec = spec.receipt ? spec.receipt(r) : null;
           return '<tr class="dl-row" data-row="' + i + '">' + tds + '</tr>' +
-            (rec ? '<tr hidden data-receipt="' + i + '"><td colspan="' + ncol + '">' +
-              '<div class="dl-bench-receipt">' + rec + '</div></td></tr>' : '');
+            (spec.receipt ? '<tr hidden data-receipt="' + i + '"><td colspan="' + ncol + '">' +
+              '<div class="dl-bench-receipt"></div></td></tr>' : '');
         }).join('');
       }
 
@@ -256,7 +272,9 @@
         el.addEventListener('click', function (ev) {
           if (ev.target.closest('a')) return;
           var n = body.querySelector('[data-receipt="' + el.dataset.row + '"]');
-          if (n) n.hidden = !n.hidden;
+          if (!n) return;
+          n.hidden = !n.hidden;
+          fillReceipt(n.querySelector('.dl-bench-receipt'), rows[Number(el.dataset.row)], spec.receipt);
         });
       });
       table.querySelectorAll('.js-sort').forEach(function (th) {
@@ -324,7 +342,7 @@
       var mx = Math.max(it.das, it.ref);
       var dasW = (it.das / mx) * 100, refW = (it.ref / mx) * 100;
       var rcls = it.ratio > 1.005 ? 'dl-win' : (it.ratio < 0.995 ? 'dl-loss' : '');
-      var rec = (receiptFn && it.r) ? receiptFn(it.r) : null;
+      var rec = !!(receiptFn && it.r);
       return '<div class="dl-bar-row' + (rec ? ' js-bar-expand" data-bar="' + i : '') + '">' +
         '<div class="dl-bar-label">' + esc(it.label) + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
         '<div class="dl-bar-pair">' +
@@ -334,13 +352,15 @@
         '<div class="dl-bar-ratio ' + rcls + '">' + fmt(it.ratio, 2) + '×</div>' +
         '</div>' +
         (rec ? '<div class="dl-bar-receipt" hidden data-bar-receipt="' + i + '">' +
-          '<div class="dl-bench-receipt">' + rec + '</div></div>' : '');
+          '<div class="dl-bench-receipt"></div></div>' : '');
     }).join('') + (footNote ? '<div class="dl-empty" style="border-top:1px solid var(--rule);margin-top:6px">' + footNote + '</div>' : '');
     box.querySelectorAll('.js-bar-expand').forEach(function (el) {
       el.addEventListener('click', function (ev) {
         if (ev.target.closest('a')) return;
         var n = box.querySelector('[data-bar-receipt="' + el.dataset.bar + '"]');
-        if (n) n.hidden = !n.hidden;
+        if (!n) return;
+        n.hidden = !n.hidden;
+        fillReceipt(n.querySelector('.dl-bench-receipt'), items[Number(el.dataset.bar)].r, receiptFn);
       });
     });
   }
@@ -733,8 +753,8 @@
   }
 
   if (document.getElementById('ladder-table')) {
-    loadBoard().then(function (b) {
-      mountLadder(buildRows(b.runs, b.docs));
+    loadBoard().then(function (runs) {
+      mountLadder(buildRows(runs));
     }).catch(function () {
       unreachable(document.getElementById('table-wrap'));
       var f = document.getElementById('ladder-filters');
@@ -744,8 +764,8 @@
 
   if (document.getElementById('dio-teaser-bars')) {
     loadBoard()
-      .then(function (res) {
-        mountHome(buildRows(res.runs, res.docs));
+      .then(function (runs) {
+        mountHome(buildRows(runs));
       }).catch(function () {
         unreachable(document.getElementById('dio-teaser-bars'));
       });

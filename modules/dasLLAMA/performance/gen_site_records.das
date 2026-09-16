@@ -8,15 +8,84 @@ require profile_common
 require daslib/tune             // [tune_policy]: provisioning only — never auto-tune
 require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 
-// Merge every per-box record store (performance/records/<box>.json) into the one file the site
-// renders: site/files/dasllama/bench_records.json. Boxes never collide on the run key (box is part
-// of it), so the merge is a pure upsert; run after any gen_bench_records sweep, commit both.
+// Merge every per-box record store (performance/records/<box>.json) into the files the site
+// renders: site/files/dasllama/bench_records.json (the full merge) and bench_cells.json (its
+// first-paint projection, see SiteModel). Boxes never collide on the run key (box is part
+// of it), so the merge is a pure upsert; run after any gen_bench_records sweep, commit all three.
 // Hand-authored annotations (records/annotations.json) merge LAST — they live outside the sweep
 // output so a re-profile can never wipe an explanation.
 //   bin/daslang modules/dasLLAMA/performance/gen_site_records.das [-- --verify]
 
 let RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let SITE_PATH = "site/files/dasllama/bench_records.json"
+let SITE_CELLS_PATH = "site/files/dasllama/bench_cells.json"
+
+//! What dasllama.html renders before a visitor opens a receipt: the merge minus the receipt
+//! fields — the command, its environment, the tune stamps, the exec format, the reference
+//! version line, the input hashes, the full hardware line, an ASR row's transcript. Every key
+//! here holds what `bench_records.json` holds at the same path; the page fetches that full
+//! store once, on the first receipt opened, and never for a first paint.
+struct SiteTest {
+    @optional tok_s : double
+    @optional ms : double
+    @optional audio_s : double
+}
+
+struct SiteFile {
+    role : string
+    name : string
+}
+
+struct SiteHardware {
+    cpu : string
+}
+
+struct SiteRun {
+    engine : string
+    backend : string
+    flavor : string
+    box : string
+    threads : int
+    date : string
+    hardware : SiteHardware
+    tests : table<string; SiteTest>
+    @optional workload : string
+    @optional source : string
+    @optional sha : string
+    @optional version : string
+    @optional files : array<SiteFile>
+    @optional comment : string
+    @optional void_clips : string
+}
+
+struct SiteModel {
+    gguf : string
+    runs : array<SiteRun>
+    @optional arch : string
+    @optional size_bytes : int64
+    @optional note : string
+}
+
+//! The projection of the whole merge (`SiteModel`), as the text `bench_cells.json` holds: the
+//! full store's text re-read into the Site structs, which is what drops every key they do not
+//! declare - the structs are the projection's only spelling.
+def site_cells_json(models : array<BenchModel>) : string {
+    var cells : array<SiteModel>
+    // a re-read that fails or loses a model is the Site structs drifting from the merge's
+    // shape: a loud stop, never an empty projection the drift gate would then pin as correct
+    if (!sscan_json(sprint_json(models, false), cells) || length(cells) != length(models)) {
+        panic("gen_site_records: the Site structs no longer read the merge ({length(cells)} of {length(models)} models) - realign SiteModel with BenchModel")
+    }
+    let text = sprint_json(cells, true)
+    delete cells
+    return text
+}
+
+//! Every file the site merge writes, with its text - one list for the writer, `--verify`, and
+//! the drift gate, so the set cannot drift between them.
+def site_outputs(models : array<BenchModel>) : array<tuple<path : string; text : string>> {
+    return <- [(path = SITE_PATH, text = sprint_json(models, true)), (path = SITE_CELLS_PATH, text = site_cells_json(models))]
+}
 
 [CommandLineArgs]
 struct GenSiteArgs {
@@ -75,19 +144,25 @@ def main : int {
     if (!merge_site_records(merged)) {
         return 1
     }
+    let outputs <- site_outputs(merged)
     if (cfg.verify) {
-        let want = sprint_json(merged, true)
-        let got = fread(SITE_PATH)
-        if (got != want) {
-            to_log(LOG_ERROR, "gen_site_records: {SITE_PATH} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit both\n")
-            return 1
+        for (o in outputs) {
+            if (fread(o.path) != o.text) {
+                to_log(LOG_ERROR, "gen_site_records: {o.path} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit all three\n")
+                return 1
+            }
         }
         let total = length(merged)
-        to_log(LOG_INFO, "gen_site_records: verify OK - {SITE_PATH} matches the {total}-model merge\n")
+        to_log(LOG_INFO, "gen_site_records: verify OK - {SITE_PATH} and {SITE_CELLS_PATH} match the {total}-model merge\n")
         return 0
     }
-    write_bench_records(SITE_PATH, merged)
+    // both or neither reported: a merge that landed in one file and not the other is drift
+    for (o in outputs) {
+        if (!write_records_text(o.path, o.text)) {
+            return 1
+        }
+    }
     let total = length(merged)
-    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} - {total} model(s)\n")
+    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} and {SITE_CELLS_PATH} - {total} model(s)\n")
     return 0
 }

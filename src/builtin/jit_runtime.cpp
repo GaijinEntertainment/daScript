@@ -595,8 +595,8 @@ extern "C" {
     // conditional members). The codegen emits, at startup, one check call per used
     // handled type (size) and per field (offset) carrying the HOST-baked value;
     // each compares against the TARGET runtime annotation and records every
-    // divergence. jit_handled_abi_check_report() dumps them all at once and aborts,
-    // so a single run reveals the full magnitude of the layout disaster.
+    // divergence. jit_handled_abi_check_report() warns on stderr with them all at once
+    // (nothing when clean) and the program runs on - a drift rarely breaks the app.
     static string g_abi_check_report;
     static int    g_abi_check_count = 0;        // mismatches
     static int    g_abi_types_checked = 0;      // type-size checks where the target annotation was found
@@ -656,16 +656,17 @@ extern "C" {
     }
 
     DAS_API void jit_handled_abi_check_report () {
-        DAS_FATAL_LOG("JIT ABI CHECK: types %d checked / %d skipped, fields %d checked / %d skipped, %d mismatch(es)\n",
-            g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped, g_abi_check_count);
-        if ( g_abi_check_count==0 ) {
-            // reset so a subsequent sweep in the same process reports only its own results
-            g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
-            g_abi_check_report.clear();
-            return;
+        if ( g_abi_check_count ) {
+            fprintf(stderr, "JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime; "
+                "types %d checked / %d skipped, fields %d checked / %d skipped):\n%s",
+                g_abi_check_count, g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped,
+                g_abi_check_report.c_str());
+            fflush(stderr);
         }
-        DAS_FATAL_ERROR("JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime):\n%s",
-            g_abi_check_count, g_abi_check_report.c_str());
+        // reset so a subsequent sweep in the same process reports only its own results
+        g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
+        g_abi_check_count = 0;
+        g_abi_check_report.clear();
     }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {

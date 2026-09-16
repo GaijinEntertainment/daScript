@@ -69,10 +69,11 @@ then browse. Without the service the pages show their unreachable/zero states.
 
 Tables, fact tiles, and the sidecar finder render client-side from the `dasllama-ladder`
 service (`utils/internal/dasllama-ladder/README.md` sec.1.1 lists the routes; 127.0.0.1:8201 behind
-Caddy). The ladder joins `/api/runs` with the verbatim `/api/submission/:id` documents -
-measurements, receipts and command lines all come from the submission itself, and pairing
-is within one submission only (a ratio appears when the methodology's reference flavor
-rode along in the same document). The sidecar finder lists `/api/sidecars` and fetches the
+Caddy). The ladder paints from `/api/runs` alone - every run's cells ride its row - and
+pairing is within one submission only (a ratio appears when the methodology's reference
+flavor rode along in the same document). The verbatim `/api/submission/:id` document is the
+receipt: fetched once per submission, the first time one of its rows opens, so receipts and
+command lines still come from the submission itself. The sidecar finder lists `/api/sidecars` and fetches the
 sidecar document on expand. Pages must read sensibly with zero rows (launch state) and
 with the service down.
 

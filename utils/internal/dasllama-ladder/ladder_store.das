@@ -31,9 +31,11 @@ struct Submission {
     ClientIp : string
 }
 
-//! One measured run, flattened for filtering; the verbatim BenchRun lives in the
-//! submission Doc at (ModelIdx, RunIdx). Identity per METHODOLOGY.md: (Gguf, Box,
-//! Engine, Backend, Flavor, Workload) — official re-imports replace on it.
+//! One measured run, flattened for filtering, plus the two cells and the cpu label the
+//! board paints from — so a page renders its rows and pairs from this table alone; the
+//! verbatim BenchRun lives in the submission Doc at (ModelIdx, RunIdx), read for a receipt.
+//! Identity per METHODOLOGY.md: (Gguf, Box, Engine, Backend, Flavor, Workload) — official
+//! re-imports replace on it.
 [sql_table(name = "runs"),
  sql_index(fields = ("DasllamaVersion")),
  sql_index(fields = ("SubmissionId")),
@@ -63,6 +65,9 @@ struct Run {
     Source : string             // stamped by the store, never by the submitter
     Verified : int = 0
     CreatedAt : int64
+    Pp512 : double = 0.0lf      // tests.pp512.tok_s; 0 = the run did not measure it
+    Tg128 : double = 0.0lf      // tests.tg128.tok_s; 0 = the run did not measure it
+    Cpu : string = ""           // hardware.cpu, the board's machine label
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
@@ -148,6 +153,71 @@ def ladder_migration_001(db : SqlRunner) {
         "ClientIp TEXT NOT NULL)")
     db |> exec("CREATE INDEX idx_sidecars_DasllamaVersion_Box ON sidecars (DasllamaVersion, Box)")
     db |> exec("CREATE INDEX idx_sidecars_DasllamaVersion_Platform_Arch_Cpu ON sidecars (DasllamaVersion, Platform, Arch, Cpu)")
+}
+
+[sql_migration(version = 2, description = "runs carry the pp512/tg128 cells and the cpu label; backfilled from the documents")]
+def ladder_migration_002(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN Pp512 REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN Tg128 REAL NOT NULL DEFAULT 0")
+    db |> exec("ALTER TABLE runs ADD COLUMN Cpu TEXT NOT NULL DEFAULT ''")
+    backfill_run_cells(db)
+}
+
+//! Every run of a record document in order, with its model and the (ModelIdx, RunIdx) the
+//! runs table keys on — the one walk behind insert, official replace and the backfill. A text
+//! that is not a top-level array visits nothing; the tree is freed after the walk.
+def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : JsonValue?; mi : int; ri : int) : void>) {
+    var jerr = ""
+    var doc = read_json(doc_text, jerr)
+    if (doc != null && doc is _array) {
+        var mi = 0
+        for (m in doc as _array) {
+            let mruns = m?["runs"]
+            if (mruns != null && mruns is _array) {
+                var ri = 0
+                for (r in mruns as _array) {
+                    invoke(blk, m, r, mi, ri)
+                    ri++
+                }
+            }
+            mi++
+        }
+    }
+    delete_json(doc)
+}
+
+//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Cpu` hold.
+def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; cpu : string> {
+    return (
+        pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
+        tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
+        cpu = r?["hardware"]?["cpu"] ?? "")
+}
+
+//! Every run row of every record submission re-reads its cells from the document it came
+//! from — the one-time fill behind migration 2, for rows inserted before the columns existed.
+def private backfill_run_cells(db : SqlRunner) {
+    let subs <- _sql(db |> select_from(type<Submission>)
+        |> _where(_.Kind == "records" || _.Kind == "official"))
+    var filled = 0
+    var odd = 0
+    for (s in subs) {
+        let sid = s.Id
+        each_record_run(s.Doc) $(_m, r, mi, ri) {
+            let cells = run_cells(r)
+            let n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
+            // one document run is one row; anything else is a row an admin delete removed, or
+            // a duplicate - the board would show a default cell there with no other signal
+            if (n != 1) {
+                odd++
+                logger_warning("ladder.store", "backfill: a document run maps to {n} rows, not 1",
+                    JV((submission = sid, model_idx = mi, run_idx = ri, rows = n)))
+            }
+            filled += n
+        }
+    }
+    logger_info("ladder.store", "backfill run cells", JV((submissions = length(subs), rows = filled, odd = odd)))
 }
 
 //! Every limit the store enforces; the launcher fills it from config.
@@ -298,25 +368,10 @@ def put_sidecar(db : SqlRunner; var doc : string; client_ip : string; policy : L
 // the verbatim truth stays in the submission Doc at (ModelIdx, RunIdx)
 def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; source : string;
                         verified : int; now : int64) : int {
-    var jerr = ""
-    var doc = read_json(doc_text, jerr)
-    if (doc == null || !(doc is _array)) {
-        return 0
-    }
     var rows : array<Run>
-    var total = 0
-    for (m in doc as _array) {
-        let mruns = m?["runs"]
-        if (mruns != null && mruns is _array) {
-            total += length(mruns as _array)
-        }
-    }
-    rows |> reserve(total)
-    var mi = 0
-    for (m in doc as _array) {
-        var ri = 0
-        for (r in m?["runs"] as _array) {
-            rows |> emplace(Run(
+    each_record_run(doc_text) $(m, r, mi, ri) {
+        let cells = run_cells(r)
+        rows |> emplace(Run(
                 SubmissionId = submission_id,
                 ModelIdx = mi,
                 RunIdx = ri,
@@ -342,10 +397,10 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 TuneSha = r?["tune_sha"] ?? "",
                 Source = source,
                 Verified = verified,
-                CreatedAt = now))
-            ri++
-        }
-        mi++
+                CreatedAt = now,
+                Pp512 = cells.pp512,
+                Tg128 = cells.tg128,
+                Cpu = cells.cpu))
     }
     if (!empty(rows)) {
         db |> insert(rows)
@@ -404,24 +459,17 @@ def import_official_store(db : SqlRunner; doc : string; now : int64) : ImportRes
     }
     let sid = add_submission(db, "official", doc_sha, doc, "importer", now)
     // replace-by-identity: drop the official rows this document re-measures
-    var jerr = ""
-    var doc_js = read_json(doc, jerr)
     var replaced = 0
-    if (doc_js != null && doc_js is _array) {
-        for (m in doc_js as _array) {
-            let gguf : string = m?["gguf"] ?? ""
-            for (r in m?["runs"] as _array) {
-                let engine : string = r?["engine"] ?? ""
-                let backend : string = r?["backend"] ?? ""
-                let flavor : string = r?["flavor"] ?? ""
-                let workload : string = r?["workload"] ?? ""
-                let box : string = r?["box"] ?? ""
-                let n = db |> _sql_delete(type<Run>,
-                    _.Source == "official" && _.Gguf == gguf && _.Box == box && _.Engine == engine
-                        && _.Backend == backend && _.Flavor == flavor && _.Workload == workload)
-                replaced += n
-            }
-        }
+    each_record_run(doc) $(m, r, _mi, _ri) {
+        let gguf : string = m?["gguf"] ?? ""
+        let engine : string = r?["engine"] ?? ""
+        let backend : string = r?["backend"] ?? ""
+        let flavor : string = r?["flavor"] ?? ""
+        let workload : string = r?["workload"] ?? ""
+        let box : string = r?["box"] ?? ""
+        replaced += db |> _sql_delete(type<Run>,
+            _.Source == "official" && _.Gguf == gguf && _.Box == box && _.Engine == engine
+                && _.Backend == backend && _.Flavor == flavor && _.Workload == workload)
     }
     let added = insert_runs(db, doc, sid, "official", 1, now)
     logger_info("ladder.store", "import official store",

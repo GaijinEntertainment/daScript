@@ -853,8 +853,8 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     plan.emit_object = cli_opts.emit_object |> unwrap_or(false)
     // --jit-threads: emit a -pthread-compatible wasm object (+atomics,+bulk-memory).
     plan.wasm_threads = cli_opts.threads |> unwrap_or(false)
-    // --jit-check-abi: emit the handled-type host-vs-target layout safe-check into
-    // initialize_modules().
+    // --jit-check-abi: emit the handled-type host-vs-target layout check (a stderr warning on
+    // drift) into initialize_modules().
     plan.check_abi = cli_opts.check_abi |> unwrap_or(false)
     // Extra args appended verbatim to the host linker cmd. CLI > script option.
     plan.linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
