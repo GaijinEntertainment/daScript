@@ -78,9 +78,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39a: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, the kernel
   argument-alignment contract enforced at every dispatch, and the decode layer encoder.
-- `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19, 2.44:
+- `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19, 2.44, 2.44a:
   kernel shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, the
-  MoE region split, and the job queue the engine dispatches on.
+  MoE region split, the job queue the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - sec.2.13-2.16: the padded tower GEMM widths, the family GPU hooks,
   the tower weight lane, and the plain-Model ASR decoders.
 - `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.40-2.41, 2.42a, 2.45: the benchmark

@@ -64,8 +64,10 @@ parrot a text to say or a take to clone, the PCM riding in the record) and pops 
 from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
 a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
 setup - the TTS model path and the voice - rides the same request stream ahead of the first
-request. Parrot's thread answers a say with its chunk count before the first clip, then each
-chunk's text before it synthesizes it and the clip with its stage times after, so the frame
+request, and so does an engine knob the runtime keeps per context: the frame thread cannot reach
+the speech thread's copy of one, so it sends the value and the thread sets it on itself. Parrot's
+thread answers a say with its chunk count before the first clip, then each chunk's text before it
+synthesizes it and the clip with its stage times after, so the frame
 thread can show what is being generated and tell the last clip from a pause. A string captured by the thread's lambda would be a
 pointer into the frame thread's heap, which that thread reuses on its own schedule; a browser
 worker starts slowly enough to read story text where the path was. An archived message is copied
@@ -170,6 +172,9 @@ which also stands the hybrid pool's per-phase parking down - a raw `set_jobque_w
 overridden by it at the next phase) and the live queue's limit, the toggles through
 `set_jobque_team_mode` and `set_jobque_worker_spin`, and the spin toggle starts from the engine's
 default for the platform (`get_jobque_spin_us`: parked in a browser, a 30 ms window on a desktop);
+the single-thread checkbox rides to the speech thread as an ask, because the flag it sets
+(`set_single_thread`) is a context global and the thread's context is its own, and it greys the
+three queue knobs it makes inert;
 the measure button says the text three times with playback off and reports each run's speed as
 times real time - seconds of audio per second of generation, the inverse of the engine's
 real-time factor - the same figure on any box. The output waveform keeps a fixed time scale

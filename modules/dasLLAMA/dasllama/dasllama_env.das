@@ -65,6 +65,9 @@ struct public EngineEnv {
     @clarg_doc = "Let the engine dispatch on a job queue nobody configured with setup_dasllama_jobque: a loud warning instead of the panic. A bare queue decodes ~200x slower, so only a run measuring that regime wants it."
     allow_bare_jobque : bool = false
 
+    @clarg_doc = "Run every kernel on the calling thread: no dispatch to the job queue at all, whatever queue exists (set_single_thread is the runtime spelling). The browser build's baseline and the figure that says what the worker pool buys."
+    single_thread : bool = false
+
     @clarg_doc = "Regenerate the stored parity truth files instead of comparing against them."
     truth_refresh : bool = false
 

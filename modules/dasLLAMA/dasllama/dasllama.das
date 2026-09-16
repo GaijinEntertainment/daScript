@@ -37,6 +37,7 @@ require dasllama/dasllama_config public        // the explicit .dlim bake config
 require dasllama/dasllama_audio_io public      // audio decode (wav/mp3/flac/ogg) to mono f32 PCM at 16 kHz or any asked rate
 require dasllama/dasllama_vision_io public     // image decode to RGB8 VisionImage — the only stbimage seam
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
+require dasllama/dasllama_par                  // the single-thread gate of the dispatch macros (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_resident         // resident slot-switch/pin surface (wrapped below, not re-exported)
 
@@ -511,6 +512,18 @@ def set_jobque_spin_us(v : int64) {
 def get_jobque_spin_us() : int64 {
     //! The spin window in force — ``set_jobque_spin_us``'s read half.
     return get_jobque_spin_us_()
+}
+
+def set_single_thread(on : bool) {
+    //! Run every kernel on the calling thread: no dispatch to the job queue at all, whatever queue exists.
+    //! Takes effect at the next kernel, on THIS context (a ``new_thread`` body sets its own; ``DASLLAMA_SINGLE_THREAD=1``
+    //! sets every context). The browser build's baseline, and the figure that says what the pool buys on any box.
+    set_single_thread_(on)
+}
+
+def get_single_thread() : bool {
+    //! Whether every kernel runs on the calling thread — ``set_single_thread``'s read half.
+    return get_single_thread_()
 }
 
 def select_matmul_backend_for_load() : bool {

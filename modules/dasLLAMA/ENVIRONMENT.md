@@ -28,6 +28,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
 | `DASLLAMA_CALLER_PRIO` | number | 2 (the top notch) | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
 | `DASLLAMA_ALLOW_BARE_JOBQUE` | flag | off | Let the engine dispatch on a job queue nobody configured with setup_dasllama_jobque: a loud warning instead of the panic. A bare queue decodes ~200x slower, so only a run measuring that regime wants it. |
+| `DASLLAMA_SINGLE_THREAD` | flag | off | Run every kernel on the calling thread: no dispatch to the job queue at all, whatever queue exists (set_single_thread is the runtime spelling). The browser build's baseline and the figure that says what the worker pool buys. |
 | `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
 | `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
 | `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
