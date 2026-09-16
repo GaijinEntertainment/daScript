@@ -66,8 +66,8 @@ def test_process_cannot_start(t : T?) {
         var lines = 0
         unsafe(process_drain(p) $(_line) { lines++ })
         t |> equal(lines, 0, "a child that never ran printed nothing")
-        t |> equal(unsafe(process_poll(p)), 127, "poll reads the exec failure as exit 127")
-        t |> equal(unsafe(process_wait(p, 1.0)), 127, "and so does wait")
+        t |> equal(unsafe(process_wait(p, guard(5.0))), 127, "wait reads the exec failure as exit 127")
+        t |> equal(unsafe(process_poll(p)), 127, "and poll re-reads it from the reaped child")
         if (get_running_platform_name() == "windows") {
             t |> equal(unsafe(process_pid(p)), 0, "no process ever existed on Windows, so the pid is 0")
         } else {
