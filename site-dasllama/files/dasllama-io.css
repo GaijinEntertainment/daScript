@@ -30,6 +30,13 @@
 .dio-head h1 em{font-style:italic;font-weight:400;color:var(--amber)}
 .dio-head__lede{margin-top:14px;color:var(--fg-dim);font-size:15px;line-height:1.6;max-width:640px}
 .dio-head__lede a{color:var(--amber);border-bottom:1px solid var(--amber-dim)}
+/* an example card is one link to its page - the name's, stretched over the whole card - with
+   the speech models it credits as real links layered above that stretch */
+.dio-ex-card{position:relative}
+.dio-ex-card__open{color:inherit;text-decoration:none}
+.dio-ex-card__open::after{content:"";position:absolute;inset:0}
+.dio-ex-card__credit{position:relative;z-index:1;color:var(--amber);border-bottom:1px solid var(--amber-dim);text-decoration:none}
+.dio-ex-card__credit:hover{border-bottom-color:var(--amber)}
 .dio-head__aside{font-family:var(--font-mono);font-size:11.5px;color:var(--fg-faint);line-height:1.7;text-align:right}
 .dio-head__aside b{color:var(--fg);font-weight:400}
 
