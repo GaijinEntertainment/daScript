@@ -8,37 +8,25 @@ require daslib/fio
 require strings
 require daslib/strings_boost
 
-//! `arch_of` - the `[arch]` citations one file makes, each with the document section it cites.
+//! `arch_of` - the `[arch]` citations one file makes, each located in the document it cites.
 //!
-//! The read direction of the annotation: given code, show the architecture text it answers for,
-//! so the section can be read without opening the document and counting headings. Resolution is
-//! LINT026's, failures included - a citation this tool cannot follow is one lint will report.
+//! The read direction of the annotation: given code, say WHERE the architecture text it answers
+//! for is - document, heading line and section end - so a read or an edit of the section follows
+//! from the coordinates. One line per citation; the text itself is the document's to show.
+//! Resolution is LINT026's, failures included - a citation this tool cannot follow is one lint
+//! will report. A C/C++ source is read for its `// <doc>#<anchor>` pointers.
 
-// Indent a section so it reads as quoted text rather than as part of the report.
-def private write_section(var w : StringBuilderWriter; body : string) {
-    for (line in split(body, "\n")) {
-        w |> write(empty(line) ? "\n" : "    {line}\n")
-    }
-}
-
+// `<citer>  ->  <doc>:<first>-<last>  #<anchor>`, or the reason it does not resolve.
 def private write_citation(var w : StringBuilderWriter; var docs : ArchDocs;
                            file, rel : string; c : ArchCitation; symbol : string) {
-    w |> write("{rel}:{c.line}: arch(at=\"{c.raw}\")\n")
-    if (!empty(symbol)) {
-        w |> write("  symbol: {symbol}\n")
-    }
+    let who = empty(symbol) ? "{rel}:{c.line}" : "{rel}:{c.line}  {symbol}"
     let reason = citation_failure_reason(docs, file, c)
     if (!empty(reason)) {
-        w |> write("  does not resolve - {reason}\n")
-        if (!empty(c.doc)) {
-            w |> write("  doc: {c.doc}\n")
-        }
+        w |> write("{who}  ->  does not resolve - {reason} (\"{c.raw}\")\n")
         return
     }
-    w |> write("  doc: {c.doc}\n")
-    let body = section_text(c.doc, c.anchor)
-    w |> write("  section:\n")
-    write_section(w, body)
+    let span = section_span(c.doc, c.anchor)
+    w |> write("{who}  ->  {make_relative_path(c.doc, get_das_root())}:{span.x}-{span.y - 1}  #{c.anchor}\n")
 }
 
 def do_arch_of(file : string; symbol : string = "") : string {
@@ -56,7 +44,7 @@ def do_arch_of(file : string; symbol : string = "") : string {
     var shown = 0
     let body = build_string() $(var w) {
         for (c in cites) {
-            let owner = annotated_symbol(lines, c.line)
+            let owner = cited_symbol(arch_path(resolved), lines, c.line)
             continue if (!empty(symbol) && owner != symbol)
             shown ++
             write_citation(w, docs, arch_path(resolved), rel, c, owner)

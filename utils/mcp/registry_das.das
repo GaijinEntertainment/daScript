@@ -405,9 +405,9 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "arch_of",
-            "Read direction of the [arch] annotation: the architecture-document citations a .das file makes, each resolved to its document and the SECTION TEXT under the cited anchor heading (heading line through the last line before the next heading of the same or a higher level). A citation that does not resolve reports LINT026's own reason ('no such file', 'no such anchor', 'anchor appears N times', 'malformed citation'). Reads source, not the AST — works on a file that does not compile.",
+            "Read direction of the [arch] annotation: WHERE each citation a source file makes lands - one line per citation, `<file>:<line> <symbol> -> <doc>:<first>-<last> #<anchor>`, the section's heading line through its last line, so a Read of that range or an Edit in it follows directly. A .das file is read for its [arch(at=...)] annotations, a C/C++ source for its `// <doc>#<anchor>` pointers. A citation that does not resolve reports LINT026's own reason ('no such file', 'no such anchor', 'anchor appears N times', 'malformed citation'). Reads source, not the AST - works on a file that does not compile.",
             {
-                "file" => PropertySchema(_type = "string", description = "Path to the .das file (repo-relative or absolute)"),
+                "file" => PropertySchema(_type = "string", description = "Path to the .das file or C/C++ source - .c, .cpp, .cc, .cxx, .mm, .h, .hpp, .inl, .inc - repo-relative or absolute"),
                 "symbol" => PropertySchema(_type = "string", description = "Optional function/struct/class name — show only the citations annotating it")
             },
             ["file"]),
@@ -417,7 +417,7 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "arch_sites",
-            "Write direction of the [arch] annotation: the census of an architecture document — every .das citing it, with file, line, and the annotated symbol. Searched from the folder that OWNS the document (its own subtree), the scope LINT026's reverse pass walks. Without an anchor, the census is grouped under the document's own headings in document order, uncited anchors included; with one, only that section's citations are listed.",
+            "Write direction of the [arch] annotation: the census of an architecture document - every source citing it, .das annotations and C/C++ `// <doc>#<anchor>` pointers alike, with file, line and the annotated symbol, each anchor with its section's line range. Searched from the folder that OWNS the document (its own subtree), the scope LINT026's reverse pass walks. Without an anchor, the census is grouped under the document's own headings in document order, uncited anchors and citations naming no declared anchor included; with one, only that section's citations are listed.",
             {
                 "doc" => PropertySchema(_type = "string", description = "Path to the .md document, optionally with an anchor: 'utils/lint/ARCHITECTURE.md' or 'utils/lint/ARCHITECTURE.md#citations'")
             },

@@ -110,7 +110,7 @@ one tier the POSIX arm does not: it distrusts a symbol whose offset exceeds
 `kMaxTrustedSymbolOffset`, because `SymFromAddr` answers with a distant neighbour where `dladdr`
 answers with nothing.
 
-## 8. The spin window reads the clock once per stride, for both of the things it needs it for
+## 8. The spin window reads the clock once per stride, for both of the things it needs it for {#spin-window-clock-stride}
 
 A worker in the spin-before-park window (`JobQue::job`, opt-in via `setWorkerSpin`) wants the
 clock twice: to extend the window when it served a team chunk, and to end the window when it

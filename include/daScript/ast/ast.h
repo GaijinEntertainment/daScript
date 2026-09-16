@@ -1106,7 +1106,7 @@ namespace das
 
     DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
-    // src/ast/ARCHITECTURE.md sec.2
+    // src/ast/ARCHITECTURE.md#module-scan-manifest
     typedef bool (*DeferredModuleLoader) ( const string & name );
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();
@@ -1678,7 +1678,7 @@ namespace das
         FileAccessPtr               access;             // the access this program parses through
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
-        // src/ast/ARCHITECTURE.md sec.4
+        // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
         das_hash_set<const Function *>          usedFunctions;
         das_hash_set<const Variable *>          usedVariables;
         das_hash_map<const Function *, int32_t> functionIndices;
@@ -1761,7 +1761,7 @@ namespace das
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
-    // src/ast/ARCHITECTURE.md sec.3
+    // src/ast/ARCHITECTURE.md#require-after-walk
     DAS_CC_API Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access,
         TextWriter & logs, CodeOfPolicies policies = CodeOfPolicies() );
 

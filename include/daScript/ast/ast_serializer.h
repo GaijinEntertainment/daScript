@@ -154,7 +154,7 @@ namespace das {
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually
         das_hash_set<FileInfo*>   doNotDelete;
-    // per-record tables, cleared in clearNodeIds (src/builtin/ARCHITECTURE.md sec.6)
+    // per-record tables, cleared in clearNodeIds (src/builtin/ARCHITECTURE.md#module-cache-record-bytes)
         das_hash_map<FileInfo *, uint32_t>          writeFileInfos;
         vector<FileInfo *>                          readFileInfos;
         FileInfo *          lastWriteFileInfo = nullptr;

@@ -1140,7 +1140,7 @@ namespace debugger {
 
     // pinvoke(context,"function",....)
 
-    // src/builtin/ARCHITECTURE.md sec.4
+    // src/builtin/ARCHITECTURE.md#message-crosses-panic-jump
     DAS_NORETURN_PREFIX static void throw_pinvoke_error ( Context & context, const LineInfo & at, string & text ) DAS_NORETURN_SUFFIX;
     static void throw_pinvoke_error ( Context & context, const LineInfo & at, string & text ) {
         char message[8192];

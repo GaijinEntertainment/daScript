@@ -1261,7 +1261,7 @@ namespace das {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
-    // a member's guard answers as the require's would (src/ast/ARCHITECTURE.md sec.2)
+    // a member's guard answers as the require's would (src/ast/ARCHITECTURE.md#module-scan-manifest)
     static bool moduleGroupMemberAvailable ( const ModuleGroupMember & m ) {
         if ( m.guard.empty() ) return true;
         if ( m.guard.find('/') == string::npos ) return guardModuleAvailable(m.guard);

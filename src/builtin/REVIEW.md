@@ -82,10 +82,10 @@
   cannot represent is misread on the way in and throws on the way out.
 
 - **A diff that changes the function or block a citing comment annotates - a comment naming a
-  section of an architecture document, this folder's (`// src/builtin/ARCHITECTURE.md sec.N`)
-  or another's (`// src/ast/ARCHITECTURE.md sec.N`) - updates that section in the same
-  change.** C++ carries no `[arch]` annotation, so nothing but this rule keeps a cited section
-  true.
+  section of an architecture document, this folder's (`// src/builtin/ARCHITECTURE.md#<anchor>`)
+  or another's (`// src/ast/ARCHITECTURE.md#<anchor>`) - updates that section in the same
+  change.** C++ carries no `[arch]` annotation; LINT026 checks that the pointer resolves, and
+  nothing but this rule keeps the cited section true.
 
 - **In a C++ type das binds through an annotation with `addField` in this folder, a member
   whose size differs between the standard libraries the repo's targets use

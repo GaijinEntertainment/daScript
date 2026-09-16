@@ -266,7 +266,7 @@ namespace das {
         return buf;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.7
+    // src/builtin/ARCHITECTURE.md#serialization-profile-rail
     void AstSerializer::profReport ( TextWriter & tw ) const {
         if ( profNodes.empty() ) return;
         uint64_t total = 0;
@@ -371,7 +371,7 @@ namespace das {
 
     ////////////////////////////////////////////////////////////////////////////
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     void AstSerializer::serializeAdaptiveSize32 ( uint32_t & size ) {
         if ( writing ) {
             uint8_t enc[5];
@@ -454,7 +454,7 @@ namespace das {
         return *this;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::serializeString ( string & str, bool temp ) {
         dtag(HASH_TAG("string"));
         DAS_SER_PROFILE(*this, "string");
@@ -655,7 +655,7 @@ namespace das {
         return ptr->module == thisModule;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     void AstSerializer::writeIdentifications ( Function * & func ) {
         auto & name = writeMangledNames[func];
         if ( name.empty() ) name = func->getMangledName();
@@ -932,7 +932,7 @@ namespace das {
 
     enum TypeRef : uint32_t { TypeRefNull = 0, TypeRefInline = 1, TypeRefFresh = 2, TypeRefFirstEntry = 3 };
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
         dtag(HASH_TAG("TypeDeclPtr"));
         DAS_SER_PROFILE(*this, "TypeDeclPtr");
@@ -1098,7 +1098,7 @@ namespace das {
 
     enum LineShape : uint8_t { LineSameFile = 0x80, LineOneLine = 0x40, LineDeltaMask = 0x3f, LineDeltaBias = 31, LineDeltaEscape = 63 };
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
         dtag(HASH_TAG("LineInfo"));
         DAS_SER_PROFILE(*this, "LineInfo");
@@ -1150,7 +1150,7 @@ namespace das {
         return *this;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( FileInfo * & info ) {
         dtag(HASH_TAG("FileInfo *"));
         DAS_SER_PROFILE(*this, "FileInfo*");
@@ -1383,7 +1383,7 @@ namespace das {
         return *this;
     }
 
-    // a read no prerequisite walk precedes meets a deferred C++ module here (src/ast/ARCHITECTURE.md sec.2)
+    // a read no prerequisite walk precedes meets a deferred C++ module here (src/ast/ARCHITECTURE.md#module-scan-manifest)
     static Module * requireBuiltinModule ( const string & name ) {
         auto m = Module::require(name);
         if ( !m ) {
@@ -1392,7 +1392,7 @@ namespace das {
         return m;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( Module * & module ) {
         DAS_SER_PROFILE(*this, "Module*");
         if ( writing ) {
@@ -2518,7 +2518,7 @@ namespace das {
         ser << expr->typeexpr;
     }
 
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
         dtag(HASH_TAG("ExpressionPtr"));
         DAS_SER_PROFILE(*this, "ExpressionPtr");
@@ -3297,7 +3297,7 @@ namespace das {
     // embedders are built without exception handling, so nothing may escape this
     // rail: contain dasException here (truncated/corrupt cache streams throw from
     // the stream readers) and report failure through the failed/failToCompile flags
-    // src/builtin/ARCHITECTURE.md sec.6
+    // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     void AstSerializer::serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept {
         try {
             serializeProgramImpl(program, libGroup);
@@ -4052,7 +4052,7 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at ) {
         auto prog = make_smart<Program>();
-        prog->access = access;      // the reader's: a stream carries none (src/ast/ARCHITECTURE.md sec.3)
+        prog->access = access;      // the reader's: a stream carries none (src/ast/ARCHITECTURE.md#require-after-walk)
         {
             gc_guard deserialize_gc_scope;
             // same-version streams can still be truncated/corrupt: the stream readers throw

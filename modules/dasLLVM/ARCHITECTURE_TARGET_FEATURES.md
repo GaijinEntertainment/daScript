@@ -1,8 +1,8 @@
 # dasLLVM architecture - target feature truth
 
 Companion of `ARCHITECTURE.md` (contract: `../../ARCHITECTURE_COMMON.md`). Sections 4, 6 and 9 moved
-here with their numbers - a renumber would orphan every `sec.N` pointer to them - and section 10
-continues the numbering, so the index reads in order. Each section is cited by the code
+here with their numbers - rules cite sections by number, and a number is never reused - and
+section 10 continues the numbering, so the index reads in order. Each section is cited by the code
 that embodies it.
 
 ## 4. Host CPU feature truth on aarch64 {#aarch64-feature-truth}

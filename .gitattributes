@@ -27,6 +27,11 @@ tree-sitter-daslang/src/*.c text eol=lf
 tree-sitter-daslang/src/*.json text eol=lf
 tree-sitter-daslang/src/tree_sitter/*.h text eol=lf
 
+# The xxd step (CMakeXxdImpl.txt) regenerates a tracked .das.inc beside its source on every
+# build; the generator writes LF, and this keeps a checkout under autocrlf=true from reading
+# every line as changed and `git add -A` from committing a line-ending flip.
+*.das.inc text eol=lf
+
 # The v1 -> gen2 converter preserves whatever line endings its input had, and
 # its suite proves that by converting an LF fixture and a CRLF twin it builds
 # from that same fixture. Under autocrlf=true the fixtures check out as CRLF,

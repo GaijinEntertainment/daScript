@@ -46,8 +46,9 @@ def annotated_symbol(lines : array<string>; line : int) : string {
     return ""
 }
 
-// Every .das under `path`, pruned the way LINT026's reverse walk prunes: `_`-prefixed and
-// dot-prefixed names are fixtures and tooling, and `builtin.das` is not source anyone cites.
+// Every .das and C/C++ source under `path`, pruned the way LINT026's reverse walk prunes:
+// `_`-prefixed and dot-prefixed names are fixtures and tooling, and `builtin.das` is not source
+// anyone cites.
 def scan_das_tree(path : string; var out : array<string>) {
     fio::dir(path) $(name) {
         return if (arch_walk_skips(name))
@@ -56,8 +57,32 @@ def scan_das_tree(path : string; var out : array<string>) {
         return if (!fst.is_valid)
         if (fst.is_dir) {
             scan_das_tree(full, out)
-        } elif (fst.is_reg && name |> ends_with(".das")) {
+        } elif (fst.is_reg && arch_cites_source(name)) {
             out |> push(full)
         }
     }
+}
+
+// The folders C++ sources live in - src/, include/, and every module's src/ - the homes a
+// document's census reads beyond its own subtree, since a C++ pointer is not bound to it.
+def cpp_roots() : array<string> {
+    let root = arch_path(get_das_root())
+    var out <- ["{root}/src", "{root}/include"]
+    fio::dir("{root}/modules") $(name) {
+        return if (arch_walk_skips(name))
+        let src = "{root}/modules/{name}/src"
+        let st = stat(src)
+        if (st.is_valid && st.is_dir) {
+            out |> push(src)
+        }
+    }
+    return <- out
+}
+
+// The symbol a citation on `line` annotates, for the languages the scan reads: a .das
+// declaration below or above the marker; "" for a C++ source, whose pointer sits inside a
+// comment the declaration grammar here does not parse.
+def cited_symbol(file : string; lines : array<string>; line : int) : string {
+    return "" if (is_cpp_source(file))
+    return annotated_symbol(lines, line)
 }

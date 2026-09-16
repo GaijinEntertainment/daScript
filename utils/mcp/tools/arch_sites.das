@@ -48,7 +48,7 @@ def private collect_sites(folder, doc, anchor : string) : array<Site> {
         for (c in cites) {
             continue if (c.doc != doc || (!empty(anchor) && c.anchor != anchor))
             out |> emplace(Site(file = rel, line = c.line, anchor = c.anchor,
-                symbol = annotated_symbol(lines, c.line)))
+                symbol = cited_symbol(arch_path(f), lines, c.line)))
         }
     }
     return <- out
@@ -65,13 +65,14 @@ def private write_census(var w : StringBuilderWriter; doc : string; sites : arra
     for (a in collect_md_anchors(doc)) {
         continue if (declared |> key_exists(a.name))
         declared |> insert(a.name)
+        let span = section_span(doc, a.name)
         // guarded: reading a mutable table by key would INSERT the anchor as a bucket of its own
         if (!(by_anchor |> key_exists(a.name))) {
-            w |> write("\{#{a.name}\} (line {a.line}) - no citations\n")
+            w |> write("\{#{a.name}\} (lines {span.x}-{span.y - 1}) - no citations\n")
             continue
         }
         let count = length(by_anchor[a.name])
-        w |> write("\{#{a.name}\} (line {a.line}) - {count} citation(s)\n")
+        w |> write("\{#{a.name}\} (lines {span.x}-{span.y - 1}) - {count} citation(s)\n")
         write_sites(w, sites, by_anchor[a.name])
     }
     var orphans : array<string>
@@ -104,14 +105,30 @@ def do_arch_sites(doc : string) : string {
     let st = stat(resolved)
     return make_tool_result("Document not found: {doc_arg}", true) if (!(st.is_valid && st.is_reg))
     let folder = dir_name(resolved)
-    let sites <- collect_sites(folder, resolved, anchor)
+    var sites <- collect_sites(folder, resolved, anchor)
+    // a C++ pointer is not bound to the document's folder tree (a header under include/ cites
+    // src/'s document), so the census also reads the C++ homes outside the subtree
+    var searched_in <- [make_relative_path(folder, get_das_root())]
+    // a site is a citation, not a line: one comment can point at two anchors of this document
+    var seen <- {for (s in sites); "{s.file}:{s.line}#{s.anchor}" => null}
+    let roots <- cpp_roots()
+    searched_in |> reserve(1 + length(roots))
+    for (croot in roots) {
+        searched_in |> push(make_relative_path(croot, get_das_root()))
+        let more <- collect_sites(croot, resolved, anchor)
+        // a C++ root may contain the document's own folder: the same site is not listed twice
+        sites |> push_from([for (s in more); s; where !(seen |> key_exists("{s.file}:{s.line}#{s.anchor}"))])
+        for (s in more) {
+            seen |> insert("{s.file}:{s.line}#{s.anchor}", null)
+        }
+    }
     var files : array<string>
     for (s in sites) {
         continue if (find_index(files, s.file) >= 0)
         files |> push(s.file)
     }
     let title = empty(anchor) ? resolved : "{resolved} \{#{anchor}\}"
-    let searched = make_relative_path(folder, get_das_root())
+    let searched = join(searched_in, ", ")
     return make_tool_result(build_string() $(var w) {
         w |> write("{title}\nsearched: {searched}\n")
         if (empty(anchor)) {
@@ -120,6 +137,9 @@ def do_arch_sites(doc : string) : string {
         } else {
             if (!anchor_declared(resolved, anchor)) {
                 w |> write("note: this document declares no such anchor - a citation naming it does not resolve\n")
+            } else {
+                let span = section_span(resolved, anchor)
+                w |> write("section: lines {span.x}-{span.y - 1}\n")
             }
             w |> write("\n")
             let which <- [for (i in range(length(sites))); i]

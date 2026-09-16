@@ -32,7 +32,12 @@ endif()
 string(REGEX MATCHALL "([^,]+,)([^,]+,)?([^,]+,)?([^,]+,)?([^,]+,)?([^,]+,)?([^,]+,)?([^,]+,)?"
 	SEPARATED_LINES "${FORMATTED_HEX}, ")
 list(JOIN SEPARATED_LINES "\n" FORMATTED_HEX)
-file(WRITE ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};\n")
+# file(WRITE) emits the platform newline, CRLF on Windows, so a tracked .inc never matched its
+# LF checkout there - the skip below could not fire and every build rewrote it. configure_file
+# is the 3.17 way to pin LF (file(CONFIGURE) needs 3.18).
+file(WRITE ${XXD_TMP_DIR}/${INPUT_NAME}.inc.stage "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};\n")
+configure_file(${XXD_TMP_DIR}/${INPUT_NAME}.inc.stage ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp @ONLY NEWLINE_STYLE LF)
+file(REMOVE ${XXD_TMP_DIR}/${INPUT_NAME}.inc.stage)
 file(READ ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp TEMP_CONTENT HEX)
 if(EXISTS ${INPUT_DIR}/${INPUT_NAME}.inc)
 	file(READ ${INPUT_DIR}/${INPUT_NAME}.inc DEST_CONTENT HEX)

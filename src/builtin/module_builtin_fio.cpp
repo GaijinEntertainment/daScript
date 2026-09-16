@@ -1865,7 +1865,7 @@ namespace das {
         sa.bInheritHandle = TRUE;
         sa.lpSecurityDescriptor = NULL;
         HANDLE hRead = NULL, hWrite = NULL;
-        const DWORD spawnPipeBytes = 64 * 1024;   // src/builtin/ARCHITECTURE.md sec.5
+        const DWORD spawnPipeBytes = 64 * 1024;   // src/builtin/ARCHITECTURE.md#spawned-child-stdout-pipe
         if ( !CreatePipe(&hRead, &hWrite, &sa, spawnPipeBytes) ) {
             context->throw_error_at(at, "spawn_process: CreatePipe failed");
             return nullptr;
@@ -2350,7 +2350,7 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
-    // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE.md sec.2)
+    // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE.md#module-scan-manifest)
     static thread_local bool                         g_manifest_recording = false;
     static thread_local bool                         g_manifest_opt_out = false;
     static thread_local vector<DynModuleManifestRow> g_manifest_rows;
@@ -2503,7 +2503,7 @@ namespace das {
         string path, cpp_class, das_name;
         int on_error = 0;
     };
-    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md sec.2
+    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md#module-scan-manifest
     static std::recursive_mutex g_deferred_dynamic_modules_mutex;       // a run-time has_module reads while another thread's compile loads
 
     DAS_API void defer_dynamic_module ( const char * path, const char * cpp_class, int on_error, const char * das_name ) {
@@ -2573,7 +2573,7 @@ namespace das {
         }
     }
 
-    // src/ast/ARCHITECTURE.md sec.2 - a pending row whose artifact is on disk failed on something
+    // src/ast/ARCHITECTURE.md#module-scan-manifest - a pending row whose artifact is on disk failed on something
     // other than a missing file: on a platform that resolves imports at load, a sibling the
     // deferred set still holds
     DAS_API bool pending_dynamic_module_artifact_present() {

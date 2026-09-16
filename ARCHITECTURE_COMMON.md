@@ -31,9 +31,12 @@ and the exception ledger. Nothing else.**
 for different content: append new sections, never renumber.
 
 **A section that code implements carries a `{#anchor}` on its heading, and every anchor is
-cited by an `[arch(at="<doc>#<anchor>")]` on a function in the document's own folder tree.**
-One anchor per heading; the anchor name is stable across rewording, like the section number.
-An anchor no function cites, a citation naming no anchor, and a citation reaching a document
+cited by an `[arch(at="<doc>#<anchor>")]` on a function in the document's own folder tree, or
+by a `// <doc>#<anchor>` pointer in a C or C++ source.** One anchor per heading; the anchor
+name is stable across rewording, like the section number. A C++ pointer's path is root-relative
+(`src/ast/ARCHITECTURE.md#...`), found by walking up from the citing file, and the folder-tree
+rule does not bind it - a header under `include/` answers for a mechanism `src/` documents.
+An anchor no code cites, a citation naming no anchor, and a `.das` citation reaching a document
 outside the citer's folder tree are all lint findings (LINT026), in every folder. A mechanism
 another folder's document states is restated here in prose - a paragraph, not a resolved link -
 and the code cites this document. A section no function implements is narrative and carries no
