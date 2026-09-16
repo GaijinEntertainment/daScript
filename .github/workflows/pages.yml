@@ -356,9 +356,7 @@ jobs:
         if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/dasLLAMA/wasm/dlim_config --out "$REPO/web/output64/examples" \
            && ( cd web/output64/examples/dlim_config && node dlim_config.js > wasm64.json ) \
-           && python3 -c 'import json,sys
-def has_key(o, k): return isinstance(o, dict) and (k in o or any(has_key(v, k) for v in o.values())) or isinstance(o, list) and any(has_key(v, k) for v in o)
-sys.exit(0 if has_key(json.load(open(sys.argv[1])), "backend") else 1)' web/output64/examples/dlim_config/wasm64.json; then
+           && python3 -c 'import json,sys; has_key = lambda o, k: isinstance(o, dict) and (k in o or any(has_key(v, k) for v in o.values())) or isinstance(o, list) and any(has_key(v, k) for v in o); sys.exit(0 if has_key(json.load(open(sys.argv[1])), "backend") else 1)' web/output64/examples/dlim_config/wasm64.json; then
             echo "wasm64 DlimConfiguration probe OK: $(tr -d ' \n' < web/output64/examples/dlim_config/wasm64.json | cut -c1-120)..."
         else
             # fatal, unlike an example's own build: without the probe no set can be minted, so a
