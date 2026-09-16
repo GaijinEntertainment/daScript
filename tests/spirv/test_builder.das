@@ -110,6 +110,10 @@ def test_builder_dedup_and_validate(t : T?) { // nolint:STYLE038 - linear hand-b
 // constants — a stringified key would alias them to one id.
 [test]
 def test_const_float_bitkey(t : T?) {
+    if (HOST_FAST_MATH) {
+        t |> skip("host runtime is built -ffast-math: -fno-signed-zeros folds -0.0 to 0.0, so the two keys are one value")
+        return
+    }
     t |> run("builder: const_float keys by bits (0.0 != -0.0), dedup intact") <| @(t : T?) {
         var m = make_module()
         let zero = 0.0f
