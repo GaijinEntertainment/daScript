@@ -106,6 +106,8 @@ def test_tier_runs(t : T?) {
 def test_sweep_excluded(t : T?) {
     t |> success(sweep_excluded("examples/crash/crash.das"), "an excluded tree's root")
     t |> success(sweep_excluded("utils/internal/ast-fuzz/selftest/broken.das"), "the fuzz fixtures")
+    t |> success(sweep_excluded("examples/dasLLAMA/library/main.das"), "the opt-in library example, whose bindings a build writes")
+    t |> success(!sweep_excluded("examples/dasLLAMA/parrot/main.das"), "its sibling examples are still swept")
     t |> success(!sweep_excluded("examples/crashes/x.das"), "a prefix match is on the whole path segment")
     t |> success(!sweep_excluded("utils/lint/main.das"), "a swept tool root")
     for (why in values(SWEEP_EXCLUDED)) {

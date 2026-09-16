@@ -38,6 +38,7 @@ namespace das {
     }
 
     // One short burst of the CPU's spin-wait hint (worker spin-before-park, see JobQue::job).
+    // src/misc/ARCHITECTURE.md sec.8
     static inline void jobque_spin_pause() {
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
         for ( int i = 0; i != 64; ++i ) _mm_pause();
@@ -47,10 +48,18 @@ namespace das {
         for ( int i = 0; i != 64; ++i ) __builtin_ia32_pause();
 #elif defined(__aarch64__)
         for ( int i = 0; i != 64; ++i ) __asm__ __volatile__("yield");
+#elif defined(__EMSCRIPTEN__)
+        for ( volatile int i = 0; i != 64; ++i ) {}
 #else
         this_thread::yield();
 #endif
     }
+
+#if defined(__EMSCRIPTEN__)
+    constexpr uint32_t JOBQUE_SPIN_DEADLINE_STRIDE = 16u;
+#else
+    constexpr uint32_t JOBQUE_SPIN_DEADLINE_STRIDE = 1u;
+#endif
 }
 
 // Feature tracking statics
@@ -604,10 +613,14 @@ namespace das {
             // Team mode extends the same window: poll the team slot too. The window stays BOUNDED
             // (the ggml hybrid poll/park shape) — after it expires the worker parks, and a team
             // publish that finds parked workers notifies (see teamParallelFor's wake gate).
+            // src/misc/ARCHITECTURE.md sec.8
             int spinUs = mSpinUs.load(std::memory_order_relaxed);
             bool teamMode = mTeamMode.load(std::memory_order_relaxed) != 0;
             if ( (spinUs > 0 || teamMode) && !mShutdown.load(std::memory_order_relaxed) ) {
                 auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(spinUs);
+                const uint32_t deadlineStride = spinUs > 0 ? JOBQUE_SPIN_DEADLINE_STRIDE : 1u;
+                uint32_t spinPasses = 0;
+                bool sawTeamOp = false;
                 for (;;) {
                     if ( mShutdown.load(std::memory_order_relaxed) ) break;
                     // limit drift-out: exit the spin window; the dormant branch at the top of the
@@ -618,11 +631,9 @@ namespace das {
                     }
                     teamMode = mTeamMode.load(std::memory_order_relaxed) != 0;
                     if ( teamMode && runTeamChunks(threadIndex, limitRank, teamSeqSeen) ) {
-                        // saw a new team op (served it, or was rank-gated past it) — fresh spin
-                        // window, same as a fifo raid restarting the loop. Team activity keeps
-                        // the worker hot even when the gate starves it of chunks, so a decode
-                        // stream of gated tiny ops never drains the pool into parked/wake churn.
-                        deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(spinUs);
+                        // served it, or was rank-gated past it: either keeps the worker hot, so a
+                        // decode stream of gated tiny ops never drains the pool into parked/wake churn.
+                        sawTeamOp = true;
                     }
                     // try_lock, NOT lock: every spinner that sees the same count blip races here, and
                     // blocking losers would queue on the mutex — a convoy the dispatcher's next push
@@ -646,7 +657,15 @@ namespace das {
                         if ( gotJob ) break;
                     }
                     jobque_spin_pause();
-                    if ( std::chrono::steady_clock::now() >= deadline ) break;
+                    if ( ++spinPasses % deadlineStride == 0 ) {
+                        auto spinNow = std::chrono::steady_clock::now();
+                        if ( sawTeamOp && spinUs > 0 ) {
+                            deadline = spinNow + std::chrono::microseconds(spinUs);
+                            sawTeamOp = false;
+                        } else if ( spinNow >= deadline ) {
+                            break;
+                        }
+                    }
                 }
             }
             if ( goDormant ) continue;   // top-of-loop dormant branch parks us

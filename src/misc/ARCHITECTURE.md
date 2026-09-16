@@ -109,3 +109,34 @@ offset in hand, `addr2line -f -C -e <module> <offset>` is the whole recovery. Th
 one tier the POSIX arm does not: it distrusts a symbol whose offset exceeds
 `kMaxTrustedSymbolOffset`, because `SymFromAddr` answers with a distant neighbour where `dladdr`
 answers with nothing.
+
+## 8. The spin window reads the clock once per stride, for both of the things it needs it for
+
+A worker in the spin-before-park window (`JobQue::job`, opt-in via `setWorkerSpin`) wants the
+clock twice: to extend the window when it served a team chunk, and to end the window when it
+did not. Both happen at one place and one cadence - `JOBQUE_SPIN_DEADLINE_STRIDE` iterations -
+off a single `steady_clock::now()`; the team-chunk arm only raises a flag the strided read then
+acts on. Keeping the extend out of the loop body is the load-bearing half: in team mode the
+worker does its WORK inside this loop, so a clock read on the served-a-chunk path fires per
+chunk and lands between units of real work rather than in idle spin.
+
+The stride is what that call costs. Native is 1 - the clock is a vDSO read, cheaper than the
+`jobque_spin_pause` burst it guards - which leaves native behaviour exactly as it was, one read
+per iteration. Under emscripten the same call crosses into JS for `performance.now()`, costing
+more than the burst, so the stride is 16. A ZERO window strides 1 whatever the target AND stands
+its team-chunk extend down: team mode enters this loop on its own, so a worker with `spinUs == 0`
+arrives at an already-expired deadline and has to be free to park on the first test. Striding that
+one would hold it for a whole stride; extending a zero-length window on a served chunk would hold
+it for one more iteration. Either is a spin the caller explicitly asked not to have, which is what
+`jobque_spin_us = 0` in a box profile says. What a stride buys is only the resolution of the
+window's trailing edge, which stays far finer than the window itself, and a worker that finds
+work leaves the loop on the work, never on the clock.
+
+`jobque_spin_pause` takes an emscripten arm for the same reason. Every other target has a
+spin-wait hint that costs a few tens of cycles; wasm has none, and the `this_thread::yield()`
+the generic arm would use reaches `sched_yield`, which crosses into JS and reads the clock - a
+loop iteration then costs more than the chunk it is waiting for. A counted volatile loop gives
+the same backoff with nothing but wasm in it. What makes either of these worth doing is that
+this loop is where a team worker does its WORK: the pause sits between one `runTeamChunks` call
+and the next, so its price is latency in front of the next chunk, not idle spin. The window is a
+time budget, so a cheaper iteration does not shorten the window - it buys chunks taken sooner.

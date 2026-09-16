@@ -1586,10 +1586,9 @@ def private idot_sdot_aarch64(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return LLVMBuildCall2(ctx.builder, fnTy, decl, callArgs, "idot4")
 }
 
-// The exact wasm SIMD128 int8 dot: extmul halves + pairwise widening adds + one even/odd fold. Returns
-// null when this LLVM lacks the pairwise intrinsic, so callers fall through to the generic lowering.
-[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
-def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+//! Null when this LLVM lacks `llvm.wasm.extadd.pairwise.signed`: the caller falls through to the generic lowering.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#idot-lowerings")]
+def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?; aUnsigned : bool) : LLVMOpaqueValue? {
     let v8i16 = LLVMVectorType(ctx.types.t_int16, 8u)
     let v4i32 = ctx.types.LLVMInt4Type()
     let id = LLVMLookupIntrinsicID("llvm.wasm.extadd.pairwise.signed")
@@ -1600,8 +1599,10 @@ def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     }
     var fnArgTypes <- [v8i16]
     var fnTy = LLVMFunctionType(v4i32, fnArgTypes)
-    let alo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
-    let ahi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
+    let aloRaw = LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [0, 1, 2, 3, 4, 5, 6, 7], "")
+    let ahiRaw = LLVMBuildShuffleVector(ctx.builder, ctx.types, a, a, [8, 9, 10, 11, 12, 13, 14, 15], "")
+    let alo = aUnsigned ? LLVMBuildZExt(ctx.builder, aloRaw, v8i16, "") : LLVMBuildSExt(ctx.builder, aloRaw, v8i16, "")
+    let ahi = aUnsigned ? LLVMBuildZExt(ctx.builder, ahiRaw, v8i16, "") : LLVMBuildSExt(ctx.builder, ahiRaw, v8i16, "")
     let blo = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [0, 1, 2, 3, 4, 5, 6, 7], ""), v8i16, "")
     let bhi = LLVMBuildSExt(ctx.builder, LLVMBuildShuffleVector(ctx.builder, ctx.types, b, b, [8, 9, 10, 11, 12, 13, 14, 15], ""), v8i16, "")
     var plo <- [LLVMBuildMul(ctx.builder, alo, blo, "idot_lo")]
@@ -1617,12 +1618,12 @@ def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?) : 
     return s
 }
 
-[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#idot-lowerings")]
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_wasm && !aUnsigned) {
+    if (g_target_is_wasm) {
         let v4i32 = ctx.types.LLVMInt4Type()
-        var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1])
+        var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1], aUnsigned)
         if (s != null) {
             let rid = intrinsic_id("llvm.vector.reduce.add")
             var rtys <- [v4i32]
@@ -1666,8 +1667,8 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_wasm && !aUnsigned) {
-        var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx], arguments[aIdx + 1])
+    if (g_target_is_wasm) {
+        var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx], arguments[aIdx + 1], aUnsigned)
         if (s != null) {
             return s
         }

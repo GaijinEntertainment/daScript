@@ -1,7 +1,8 @@
 # dasLLVM architecture - target feature truth
 
-Companion of `ARCHITECTURE.md` (contract: `../../ARCHITECTURE_COMMON.md`). Sections 4 and 6 moved
-here with their numbers; section 10 continues the numbering. Each section is cited by the code
+Companion of `ARCHITECTURE.md` (contract: `../../ARCHITECTURE_COMMON.md`). Sections 4, 6 and 9 moved
+here with their numbers - a renumber would orphan every `sec.N` pointer to them - and section 10
+continues the numbering, so the index reads in order. Each section is cited by the code
 that embodies it.
 
 ## 4. Host CPU feature truth on aarch64 {#aarch64-feature-truth}
@@ -50,6 +51,25 @@ A tier feature usually lands as three parts: its cpuid line there, its name in
 checked against), and - when the emitters branch on it - a `g_target_x64_*` gate. The cpuid line
 is the load-bearing one: a name missing from the table answers false on every box, so the perm
 that requires it declines everywhere and no error names the cause.
+
+## 9. The idot family's target lowerings {#idot-lowerings}
+
+The exact integer dots on the 8-bit lattice have three lowerings, picked by target: one
+`@llvm.aarch64.neon.sdot` where the target has DotProd (`g_target_arm64_dotprod` - the host rail's
+`+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
+(`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
+neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead
+of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form is the ISA's two
+halves of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` (what LLVM makes of `mul(sext, sext)`) and
+`i32x4.extadd_pairwise_i16x8_s`; the pairwise sums land as byte pairs, and one even/odd shuffle-add
+folds them into the quad lanes the generic form defines - exact for every int8 lane. An unsigned
+first operand widens with ZExt rather than SExt, so the unsigned-by-signed form takes this same
+path instead of the 16-lane generic IR; the i16 product still holds every value that pair can make
+(255 * -128 = -32640), so the fold stays exact there too. The relaxed-SIMD dot
+(`i32x4.relaxed_dot_i8x16_i7x16_add_s`) is NOT what the generic op lowers to, though
+`+relaxed-simd` is in the feature string of sec.12: its second operand is 7-bit, so the sign trick that
+would feed it (`dot(w, x) == dot(sign(x)*w, |x|)`) wraps at -128 in either operand and answers the
+wrong sign there - an operand a caller can bound to 7 bits is a different op, not this one.
 
 ## 10. CPU classes and the baseline {#cpu-classes}
 
@@ -143,3 +163,15 @@ the box is not in. `tune_status()` lists one row per clone with its class (`klas
 `log_tune_status` marks the classes this box runs. A profile-covered class needs no sidecar and
 no tuner: the exe carries no grid beyond the reference rows, and a re-tune is a new profile and
 a rebuild.
+
+## 12. The wasm target's feature string {#wasm-feature-string}
+
+A wasm cross-compile gets `+simd128,+relaxed-simd,+nontrapping-fptoint`, with
+`+atomics,+bulk-memory` appended on the threaded rail (`wasm_target_features`). `+relaxed-simd` is
+in it for one instruction: `f32x4.relaxed_madd` is the only multiply-add wasm has, so without the
+feature a contracted multiply-add has nothing to become and splits back into `f32x4.mul` plus
+`f32x4.add` - every fused multiply-add of every kernel, gone. The engine chooses whether
+`relaxed_madd` fuses, so a float answer can differ by one rounding from the split form, which is
+the latitude every native FMA target already takes. Nothing else in the feature moves what this
+emitter produces: `f32x4.relaxed_min` / `_max` come only from their explicit builtins, which it
+never emits, and the relaxed dot is ruled out for the idot family by sec.9 above.

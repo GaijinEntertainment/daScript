@@ -512,9 +512,9 @@ var public g_target_wasm_threads = false
 // mismatch. Diagnoses the MSVC-host vs wasm/clang-target C++ ABI layout class. Opt-in, off by default.
 var public g_jit_check_handled_abi = false
 
-[arch(at = "../ARCHITECTURE.md#idot-lowerings")]
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string")]
 def private wasm_target_features() : string {
-    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
+    return g_target_wasm_threads ? "+simd128,+relaxed-simd,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+relaxed-simd,+nontrapping-fptoint"
 }
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
@@ -603,11 +603,9 @@ def public init_jit_clopts() {
         "-enable-unroll-and-jam=true",
         "-allow-unroll-and-jam=true"
     ]
-    unsafe {
-        LLVMParseCommandLineOptions(length(argv),
-            addr<string const?>(argv[0]),
-            "daslang JIT cl::opts")
-    }
+    LLVMParseCommandLineOptions(length(argv),
+        unsafe(addr<string const?>(argv[0])),
+        "daslang JIT cl::opts")
 }
 
 // Pure target truth, no LLVM state touched: safe and required BEFORE init_jit, whose DisableJitVisitor

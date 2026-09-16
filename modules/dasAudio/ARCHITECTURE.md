@@ -8,8 +8,39 @@ readable cold, no history, no PR numbers.
 The AudioWorklet only consumes float PCM from a preallocated single-producer,
 single-consumer ring and zero-fills an underrun. A regular pthread runs `mix_audio`,
 including command-stream draining, decoder allocation and daslang context locking.
-The worker produces 128-frame blocks into a 512-frame ring (about 10.7 ms at 48 kHz).
-It sleeps briefly when the ring is full; the worklet never waits for it.
+The worklet never waits for it.
+
+The ring's depth is the output LATENCY and there is no way to spend it twice: the producer
+renders ahead, so in steady state the ring is full, and what is buffered is exactly what a
+newly triggered sound waits behind. Depth is therefore a budget, not a safety margin to be
+raised when underruns appear - 20 ms of the DEVICE's own rate (`ma_device.sampleRate`, which a
+browser may resolve away from the rate that was asked for; floored 512 frames, capped 4096).
+
+What that 20 ms buys is one producer turnaround: the worst time `mix_audio` takes for a block
+plus the wake in front of it. That turnaround is BOUNDED, not measured - with the producer woken
+on the drain rather than a clock, 10 ms of depth still corrupts and 20 ms plays clean on the box
+this was fixed on, which puts the worst case above 10 ms and at or under 20. A measurement would
+replace the bound with a number and is the right way to move this depth; another A/B is not. What
+the depth no longer covers is any property of the host, which is what the drain-wake removed.
+
+A full ring parks the producer on `emscripten_futex_wait` against `g_playback_drain_seq`, and the
+worklet bumps that counter and wakes it on every block it frees. The wake, not a timeout, is what
+ends the wait, and this is the whole reason the depth can be small: a producer that SLEEPS is
+bounded below by the host's timer quantum, which `Atomics.wait`'s timeout is quantized to - about
+1 ms on macOS but the 15.6 ms one on Windows, measured in a Worker there at 16.0 ms median and
+16.6 ms worst for a 1 ms request. A sleeping producer therefore needs a ring deeper than that
+quantum or it empties before it can wake, every cycle, whatever the core count or load; that is
+why a 512-frame ring (10.7 ms at 48 kHz) played clean on a Mac and corrupted on Windows. Waiting
+on the drain instead removes the floor, so the depth answers to the mixer's own work and the
+latency a game will accept. The wait keeps a timeout only as a backstop against a lost wake, and
+`emscripten_futex_wake` is a notify - it never blocks, so the worklet may call it.
+
+The ring is FILLED before the device starts - a device started against an empty one
+underruns on its first callback every time, and priming costs no latency that the steady
+state was not going to hold anyway. `sound_playback_underrun_frames` counts the frames the
+worklet filled with silence, the playback twin of `sound_record_overflow_frames`. Without it an
+underrun has no symptom a caller can read: a zero-fill is heard as a click inside the clip,
+not as a device error, so the count is how this failure is told from a bad mix.
 
 This separation is required for correctness: an Emscripten AudioWorklet is a Wasm
 Worker, and the hybrid runtime can initialize it with no pthread pointer. C++ mutex

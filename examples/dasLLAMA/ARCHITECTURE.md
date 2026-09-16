@@ -171,13 +171,18 @@ engine's defaults: the jobs slider goes through the engine's own cap (`set_dispa
 which also stands the hybrid pool's per-phase parking down - a raw `set_jobque_worker_limit` is
 overridden by it at the next phase) and the live queue's limit, the toggles through
 `set_jobque_team_mode` and `set_jobque_worker_spin`, and the spin toggle starts from the engine's
-default for the platform (`get_jobque_spin_us`: parked in a browser, a 30 ms window on a desktop);
+own window (`get_jobque_spin_us`, 30 ms on every platform including a browser), turning back on
+the value it read - or a desktop's 30 ms where a box profile parked it;
 the single-thread checkbox rides to the speech thread as an ask, because the flag it sets
 (`set_single_thread`) is a context global and the thread's context is its own, and it greys the
 three queue knobs it makes inert;
 the measure button says the text three times with playback off and reports each run's speed as
 times real time - seconds of audio per second of generation, the inverse of the engine's
-real-time factor - the same figure on any box. The output waveform keeps a fixed time scale
+real-time factor - the same figure on any box. The lab shows the mixer's underrun count while it
+is nonzero (`sound_playback_underrun_frames`, which only the browser build counts): the mixer
+thread did not refill the output ring before the device drained it, and the device played SILENCE
+for that many frames - the clicking a clip is heard with comes from there, not from the mix. The
+output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 

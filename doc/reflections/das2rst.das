@@ -1669,7 +1669,7 @@ def document_module_stbimage_ttf(_root : string) {
 def document_module_audio(_root : string) {
     var mod = get_module("audio")
     var groups <- array<DocGroup>(
-        group_by_regex("Audio device", mod, %regex~(sound_initalize|sound_finalize|mixer_context|sound_set_null_device|audio_is_single_threaded)$%%),
+        group_by_regex("Audio device", mod, %regex~(sound_initalize|sound_finalize|mixer_context|sound_set_null_device|audio_is_single_threaded|sound_playback_underrun_frames)$%%),
         group_by_regex("Capture", mod, %regex~(sound_record|sound_is_recording)%%),
         group_by_regex("Decoder", mod, %regex~ma_decoder%%),
         group_by_regex("Resampler", mod, %regex~ma_resampler%%),

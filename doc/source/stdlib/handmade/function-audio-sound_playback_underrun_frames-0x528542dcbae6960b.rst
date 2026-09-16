@@ -1,0 +1,1 @@
+Number of output frames the device played as silence because the mixer had not refilled the ring in time. Counted only by the threaded WebAssembly build, which mixes on a worker thread; every other target mixes on the device callback itself and answers 0. Reset to 0 at each sound_initalize.

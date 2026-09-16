@@ -505,7 +505,7 @@ def get_dispatch_worker_limit() : int {
 
 def set_jobque_spin_us(v : int64) {
     //! The workers' spin-before-park window in microseconds (0 = park at once). Latched by
-    //! ``setup_dasllama_jobque`` — set it before that call; the default is 30 ms on a desktop and 0 in a browser.
+    //! ``setup_dasllama_jobque`` — set it before that call; the default is 30 ms on every platform.
     set_jobque_spin_us_(v)
 }
 
