@@ -690,6 +690,7 @@ namespace das {
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;
             auto sef = getSideEffects(expr->func);
             markPassMutableOperand(expr->func, 0, expr->subexpr);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
@@ -699,6 +700,7 @@ namespace das {
     // Op2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;
             auto sef = getSideEffects(expr->func);
             markPassMutableOperand(expr->func, 0, expr->left);
             markPassMutableOperand(expr->func, 1, expr->right);
@@ -716,12 +718,11 @@ namespace das {
     // Op3
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
-            auto sef = expr->func ? getSideEffects(expr->func) : 0;
-            if ( expr->func ) {
-                markPassMutableOperand(expr->func, 0, expr->subexpr);
-                markPassMutableOperand(expr->func, 1, expr->left);
-                markPassMutableOperand(expr->func, 2, expr->right);
-            }
+            if ( !expr->func ) return;
+            auto sef = getSideEffects(expr->func);
+            markPassMutableOperand(expr->func, 0, expr->subexpr);
+            markPassMutableOperand(expr->func, 1, expr->left);
+            markPassMutableOperand(expr->func, 2, expr->right);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 auto condT = expr->subexpr->type;
                 if ( condT->isRefOrPointer() && !condT->constant ) {

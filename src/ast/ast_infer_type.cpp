@@ -2716,6 +2716,7 @@ namespace das {
                     return new ExprConstBool(expr->at, ft != nullptr);
                 } else {
                     if (expr->trait == "safe_has_field") {
+                        reportAstChanged();
                         return new ExprConstBool(expr->at, false);
                     } else {
                         error("typeinfo(has_field<" + expr->subtrait + "> ...) is only defined for structures and handled types, " + describeType(expr->typeexpr), "", "",
@@ -2730,6 +2731,7 @@ namespace das {
                     return new ExprConstBool(expr->at, it != ann.end());
                 } else {
                     if (expr->trait == "struct_safe_has_annotation") {
+                        reportAstChanged();
                         return new ExprConstBool(expr->at, false);
                     } else {
                         error("typeinfo(struct_has_annotation<" + expr->subtrait + "> ...) is only defined for structures, " + describeType(expr->typeexpr), "", "",
@@ -2742,6 +2744,7 @@ namespace das {
                     auto it = find_if(ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr &pa) { return pa->annotation->name == expr->subtrait; });
                     if (it == ann.end()) {
                         if (expr->trait == "struct_safe_has_annotation_argument") {
+                            reportAstChanged();
                             return new ExprConstBool(expr->at, false);
                         } else {
                             error("typeinfo(struct_has_annotation_argument<" + expr->subtrait + ";" + expr->extratrait + "> ...) annotation not found ", "", "",
@@ -2755,6 +2758,7 @@ namespace das {
                     }
                 } else {
                     if (expr->trait == "struct_safe_has_annotation_argument") {
+                        reportAstChanged();
                         return new ExprConstBool(expr->at, false);
                     } else {
                         error("typeinfo(struct_has_annotation_argument<" + expr->subtrait + "> ...) is only defined for structures, " + describeType(expr->typeexpr), "", "",
@@ -4600,6 +4604,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->variable = var;
+            if (var->type->isExprType()) {
+                return Visitor::visit(expr);
+            }
             TypeDecl::clone(expr->type, var->type);
             expr->type->ref = true;
             return Visitor::visit(expr);
