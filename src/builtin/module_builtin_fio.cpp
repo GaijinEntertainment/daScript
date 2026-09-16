@@ -1900,10 +1900,14 @@ namespace das {
         CloseHandle(hWrite);
         if ( hNull != INVALID_HANDLE_VALUE ) CloseHandle(hNull);
         if ( !ok ) {
+            // src/builtin/ARCHITECTURE.md#child-cannot-start
             CloseHandle(hRead);
             if ( hJob ) CloseHandle(hJob);
-            context->throw_error_at(at, "spawn_process: CreateProcess failed");
-            return nullptr;
+            DasSubProcess * dead = new DasSubProcess();
+            dead->stdoutOpen = false;
+            dead->reaped = true;
+            dead->exitCode = 127;
+            return dead;
         }
         if ( hJob && !AssignProcessToJobObject(hJob, pi.hProcess) ) {
             CloseHandle(hJob);      // a job we cannot assign (a restrictive parent job) must not shadow hProcess

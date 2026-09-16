@@ -20,7 +20,7 @@ def private write_meta(dir : string; build_status : string) : string {
 }
 
 def private run_tool(args : array<string>; var output : string&) : int {
-    var argv <- ["bin/daslang", path_join(TOOL_DIR, "main.das"), "--"]
+    var argv <- [get_host_binary(), path_join(TOOL_DIR, "main.das"), "--"]
     argv |> push_from(args)
     return run_and_capture(argv, output, 240.0)
 }

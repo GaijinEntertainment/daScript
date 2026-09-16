@@ -693,9 +693,9 @@ def rmdir_rec_result(path : string) : fs_result_bool {
 typedef process = SubProcess?
 
 def with_process(argv : array<string>; cwd : string; env : array<string>; blk : block<(var p : process) : void>) {
-    //! Spawn `argv` as a long-lived child (no shell; a forward-slash ``argv[0]`` spawns everywhere), run
-    //! `blk` with the live handle, then close it on scope exit - closing kills a child still running (the
-    //! Windows job tree, the POSIX group). `cwd` empty inherits the parent's; `env` is ``KEY=VALUE`` overrides.
+    //! Spawn `argv` as a long-lived child (no shell; a forward-slash ``argv[0]`` spawns everywhere), run `blk` with
+    //! the handle, then close it on scope exit - closing kills a child still running (the Windows job tree, the POSIX
+    //! group). `cwd` empty inherits; `env` is ``KEY=VALUE`` overrides. A binary that cannot start never throws: the handle reads as an exited child, exit 127, no output.
     var p = unsafe(spawn_process(argv, cwd, env))
     invoke(blk, p)
     unsafe(close_process(p))

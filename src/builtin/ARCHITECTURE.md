@@ -251,3 +251,18 @@ counts once. Two histograms - string payloads by text, `TypeDecl` payloads by ma
 carry the dedup estimate, and the record layer (`ast_parse.cpp`) appends one row per record with
 its file, payload size and time. `ModuleFileCache::finish` prints the report through
 `AstSerializer::profReport`, for the reader and the writer alike.
+
+## 8. A child that cannot start is an exited child {#child-cannot-start}
+
+`spawn_process` never throws for a binary it cannot start; the caller reads the failure through
+the same `process_poll` / `process_wait` it reads a real run through, as exit code 127 with no
+output. POSIX gives that shape for free and sets the contract: `fork` succeeds, the exec fails in
+the child, and the child `_exit(127)`s, so the parent holds a live handle to a process that has
+already ended. Windows learns the failure at `CreateProcess`, before any child exists, so
+`spawn_process` builds the handle the POSIX path would have ended up with - reaped, exit 127,
+stdout closed, pid 0, no process or job handle - and every lifecycle call reads it the way it
+reads any reaped child. A throw here would split the two platforms at the one place a supervisor
+could only catch it with `try` / `recover`, and an expected failure is never routed through the
+panic path.
+`process_pid` answers 0 on Windows for such a child and the real pid on POSIX, the one visible
+difference, and the reason a supervisor that needs "did it start at all" reads the exit code.
