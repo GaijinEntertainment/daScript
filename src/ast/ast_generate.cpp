@@ -2296,8 +2296,8 @@ namespace das {
         auto rttiType = new TypeDecl(baseClass);
         rttiType->at = baseClass->at;
         ExpressionPtr finit = new ExprTypeInfo(baseClass->at, "rtti_classinfo", rttiType);
-        if ( baseClass->parent ) {
-            auto fd = (Structure::FieldDeclaration *) baseClass->findField("__rtti");
+        auto fd = baseClass->parent ? (Structure::FieldDeclaration *) baseClass->findField("__rtti") : nullptr;
+        if ( fd ) {
             fd->init = finit;
             fd->parentType = fd->type->isAuto();
             fd->generated = true;
@@ -2323,8 +2323,8 @@ namespace das {
         // template classes stay on open "_::": their stamped instances infer in the consumer
         // module while the stamped finalizer may live elsewhere, so a strict pin can't see it
         ExpressionPtr finit = new ExprAddr(baseClass->at, (baseClass->isTemplate ? "_::" : "__::") + fname);
-        if ( baseClass->parent ) {
-            auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
+        auto fd = baseClass->parent ? (Structure::FieldDeclaration *) baseClass->findField("__finalize") : nullptr;
+        if ( fd ) {
             auto castT = new TypeDecl(Type::autoinfer, baseClass->at);
             fd->init = new ExprCast(baseClass->at, finit, castT);
             fd->parentType = fd->type->isAuto();
