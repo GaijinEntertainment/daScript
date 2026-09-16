@@ -71,7 +71,11 @@ struct SiteModel {
 //! declare - the structs are the projection's only spelling.
 def site_cells_json(models : array<BenchModel>) : string {
     var cells : array<SiteModel>
-    sscan_json(sprint_json(models, false), cells)
+    // a re-read that fails or loses a model is the Site structs drifting from the merge's
+    // shape: a loud stop, never an empty projection the drift gate would then pin as correct
+    if (!sscan_json(sprint_json(models, false), cells) || length(cells) != length(models)) {
+        panic("gen_site_records: the Site structs no longer read the merge ({length(cells)} of {length(models)} models) - realign SiteModel with BenchModel")
+    }
     let text = sprint_json(cells, true)
     delete cells
     return text
