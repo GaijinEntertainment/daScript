@@ -262,6 +262,7 @@ already ended. Windows learns the failure at `CreateProcess`, before any child e
 `spawn_process` builds the handle the POSIX path would have ended up with - reaped, exit 127,
 stdout closed, pid 0, no process or job handle - and every lifecycle call reads it the way it
 reads any reaped child. A throw here would split the two platforms at the one place a supervisor
-cannot catch it without `try` / `recover`, which the runtime does not offer for soft failures.
+could only catch it with `try` / `recover`, and an expected failure is never routed through the
+panic path.
 `process_pid` answers 0 on Windows for such a child and the real pid on POSIX, the one visible
 difference, and the reason a supervisor that needs "did it start at all" reads the exit code.

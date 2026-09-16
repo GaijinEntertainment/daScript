@@ -53,9 +53,9 @@ def wait_for_ready(t : T?; var p : process; ready : string) {
     }
 }
 
-// src/builtin/ARCHITECTURE.md sec.8: a binary that cannot start is an exited child on every
-// platform, never a throw - POSIX gives that through the child's own _exit(127), Windows builds
-// the same handle at CreateProcess
+// src/builtin/ARCHITECTURE.md#child-cannot-start: a binary that cannot start is an exited child
+// on every platform, never a throw - POSIX gives that through the child's own _exit(127), Windows
+// builds the same handle at CreateProcess
 [test]
 def test_process_cannot_start(t : T?) {
     t |> run("an unrunnable binary hands back an exited child: exit 127, no output, no throw") @(t : T?) {
@@ -68,7 +68,7 @@ def test_process_cannot_start(t : T?) {
         t |> equal(lines, 0, "a child that never ran printed nothing")
         t |> equal(unsafe(process_poll(p)), 127, "poll reads the exec failure as exit 127")
         t |> equal(unsafe(process_wait(p, 1.0)), 127, "and so does wait")
-        if (get_platform_name() == "windows") {
+        if (get_running_platform_name() == "windows") {
             t |> equal(unsafe(process_pid(p)), 0, "no process ever existed on Windows, so the pid is 0")
         } else {
             t |> success(unsafe(process_pid(p)) > 0, "POSIX forked a real child that then failed to exec")
