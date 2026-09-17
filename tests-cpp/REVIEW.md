@@ -9,6 +9,7 @@ checklist as well as this one.**
 **A test whose ctest labels include `big`, wherever the diff puts it, answers to the `big/`
 subfolder's checklist as well as this one.**
 
-**A C++ test a diff adds or changes that some lane running the suite cannot fail on - the test
-skips there, or its subject sits behind a `#if` that lane leaves undefined - names in the PR
-the lanes that do run it, with the command.**
+**A diff that adds or changes a C++ test, or adds or changes a gate that decides whether one
+builds, registers, or runs - a doctest skip, a `#if` a configuration leaves undefined, a CMake
+gate on a build option - names in the PR one configuration that does run that test: its
+configure flags and its ctest command.**

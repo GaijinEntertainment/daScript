@@ -98,6 +98,85 @@ def private check_lane_wiring {
     }
 }
 
+struct private SwitchedModule {
+    folder : string
+    switches : array<string>
+    libs : array<string>
+}
+
+def private root_disable_switches : table<string> {
+    var out : table<string>
+    for (name in cmake_command_targets(fread("CMakeLists.txt"), "option")) {
+        if (name |> starts_with("DAS_") && name |> ends_with("_DISABLED")) {
+            out |> insert(name)
+        }
+    }
+    return <- out
+}
+
+//! `Module_<name>` -> the module folder whose CMakeLists calls `ADD_MODULE_CPP(<name>)` and the
+//! root switches that folder keys on; a module no root switch reaches is always built
+def private switched_modules : table<string; SwitchedModule> {
+    var inscope root_switches <- root_disable_switches()
+    var out : table<string; SwitchedModule>
+    for (f in cmakelists_under("modules")) {
+        let text = fread(f)
+        var folder_switches <- [for (tok in keys(prefixed_tokens(text, "DAS_"))); tok; where key_exists(root_switches, tok)]
+        continue if (empty(folder_switches))
+        folder_switches |> sort
+        var folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
+        folder_libs |> sort
+        for (name in cmake_command_targets(text, "add_module_cpp")) {
+            out["Module_{name}"] <- SwitchedModule(folder = dir_name(f), switches := folder_switches, libs := folder_libs)
+        }
+    }
+    return <- out
+}
+
+//! every `Module_X` token a C or C++ source names, counting `register_Module_X` as `Module_X`
+def private registered_modules(text : string) : array<string> {
+    var out <- [for (tok in keys(prefixed_tokens(text, "Module_"))); tok]
+    out |> push_from([for (tok in keys(prefixed_tokens(text, "register_Module_"))); slice(tok, length("register_"), length(tok))])
+    out |> sort
+    return <- out
+}
+
+def private is_gated(switches_named_here : table<string>; targets_named_here : table<string>; switched : SwitchedModule) : bool {
+    for (lib in switched.libs) {
+        return true if (key_exists(targets_named_here, lib))
+    }
+    for (sw in switched.switches) {
+        return true if (key_exists(switches_named_here, sw))
+    }
+    return false
+}
+
+//! a big test that registers a switched module is gated on that module's switch - configured
+//! with `DAS_*_DISABLED=ON`, the test links an entry point nothing builds
+def private check_big_test_gating {
+    var inscope per_module <- switched_modules()
+    for (f in cmakelists_under("tests-cpp/big")) {
+        let text = fread(f)
+        var inscope switches_named_here <- prefixed_tokens(text, "DAS_")
+        var inscope targets_named_here <- prefixed_tokens(text, "libDasModule")
+        let folder = dir_name(f)
+        dir(folder) $(name) {
+            if (name |> ends_with(".c") || name |> ends_with(".cpp")) {
+                let src = path_join(folder, name)
+                for (mod in registered_modules(fread(src))) {
+                    per_module |> get(mod) $(switched) {
+                        if (!is_gated(switches_named_here, targets_named_here, switched)) {
+                            let sw = switched.switches[0]
+                            let lib = empty(switched.libs) ? "its library" : switched.libs[0]
+                            gate_finding(f, "{src} registers {mod}, which {switched.folder} builds only while {sw} is off - gate this folder on {sw} (if({sw}) return()) or on TARGET {lib}, or a configure with {sw}=ON fails at link")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("tests-cpp/REVIEW.das")) {
@@ -105,5 +184,6 @@ def main() : int {
         return 2
     }
     check_lane_wiring()
+    check_big_test_gating()
     return gate_verdict("tests-cpp")
 }
