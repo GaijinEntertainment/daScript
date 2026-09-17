@@ -36,6 +36,15 @@ DAS_MOD_API void glfw_error_callback(int error, const char* description) {
 
 #if defined(__EMSCRIPTEN__) && !defined(EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3)
 static ImGuiContext * g_emscripten_callback_owner = nullptr;
+
+// modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
+static void imgui_browser_mouse_button(GLFWwindow * window, int button, int action, int mods) {
+    if (!g_emscripten_callback_owner) return;
+    double x, y;
+    glfwGetCursorPos(window, &x, &y);
+    ImGui::GetIO(g_emscripten_callback_owner).AddMousePosEvent((float)x, (float)y);
+    ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+}
 #endif
 
 #ifdef __EMSCRIPTEN__
@@ -43,6 +52,7 @@ static void install_imgui_browser_callbacks(GLFWwindow * window) {
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
 #ifndef EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3
     g_emscripten_callback_owner = ImGui::GetCurrentContext();
+    glfwSetMouseButtonCallback(window, imgui_browser_mouse_button);
 #endif
 }
 #endif

@@ -264,6 +264,36 @@ refuses by name; a phoneme model panics here: it has no voice to take.
        let mine <- synthesize(m, "daslang speaks in my voice.", "me")
    }
 
+Prepared voice prompts
+======================
+
+``tts_prepare_voice_prompt`` encodes a reference into a ``TtsVoicePrompt``.
+This step needs a Pocket model with its codec encoder. The value can be serialized
+with ``daslib/json_boost`` and shipped separately from the model weights.
+``tts_voice_prompt_valid`` checks the format, language, sample rate, codec geometry
+and bounded latent frames against the receiving model.
+
+``tts_register_voice_prompt`` copies a prepared prompt into a named voice. It also
+works with a compatible encoder-free Pocket file. An empty name or invalid prompt
+returns false and leaves the previous voice intact. The caller owns its prompt;
+the model builds conditioning state when the voice is first synthesized.
+Matching geometry does not make prompts portable across unrelated model revisions.
+
+The tutorial's ``--clone`` path also demonstrates a JSON round trip and writes
+speech from the restored prompt:
+
+.. code-block:: das
+
+   var inscope prompt <- tts_prepare_voice_prompt(m, clip, c.sample_rate)
+   var inscope restored = TtsVoicePrompt()
+   if (sscan_json(sprint_json(prompt, false), restored)
+           && tts_voice_prompt_valid(m, restored)) {
+       if (tts_register_voice_prompt(m, "prepared", restored)) {
+           let speech <- synthesize(m, "daslang speaks.", "prepared")
+           write_wav_pcm16("prepared.wav", speech.pcm, speech.sample_rate)
+       }
+   }
+
 The weight lanes
 ================
 

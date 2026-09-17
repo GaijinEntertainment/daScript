@@ -2754,3 +2754,37 @@ def test_wasm_archive_staging(t : T?) {
         force_rmdir(root)
     }
 }
+
+[test]
+def test_ship_external_files(t : T?) {
+    let tmp = create_temp_directory_result("daspkg external ")
+    if (!(tmp is value)) {
+        t |> failure("could not create temp directory: {tmp as error}")
+        return
+    }
+    let root = tmp as value
+    let bundle = path_join(root, "bundle")
+    mkdir(bundle)
+    var shipped : array<string>
+    t |> equal(ship_external_files("pkg", bundle, ["README.md@nested/readme.txt", "README.md@", "utils\\daspkg\\README.md@windows\\nested\\readme.txt"], shipped), 0)
+    t |> equal(fread(path_join(bundle, "nested/readme.txt")), fread(path_join(get_das_root(), "README.md")))
+    t |> success(fexist(path_join(bundle, "README.md")), "default destination uses the source filename")
+    t |> equal(length(shipped), 3)
+    t |> success(fexist(path_join(bundle, "windows/nested/readme.txt")), "Windows separators name the same destination on every host")
+    if (length(shipped) == 3) {
+        t |> equal(shipped[2], "windows/nested/readme.txt", "manifest stores normalized separators")
+    }
+    fwrite(path_join(root, "victim.txt"), "untouched")
+    for (entry in ["README.md@../victim.txt", "README.md@nested/../../victim.txt", "README.md@{root}/absolute.txt", "README.md@nested/quote\".txt", "README.md@nested\\..\\..\\victim.txt", "@empty.txt", "README.md", "missing-external-source@missing.txt"]) {
+        var rejected : array<string>
+        t |> equal(ship_external_files("pkg", bundle, [entry], rejected), 1, entry)
+        t |> equal(length(rejected), 0, "rejected entry is not recorded as shipped")
+    }
+    t |> equal(fread(path_join(root, "victim.txt")), "untouched", "destinations cannot escape the bundle")
+    mkdir(path_join(bundle, "directory"))
+    var failed_copy : array<string>
+    t |> equal(ship_external_files("pkg", bundle, ["README.md@directory"], failed_copy), 1, "copy errors propagate")
+    t |> equal(length(failed_copy), 0)
+    let cleanup = rmdir_rec_result(root)
+    t |> success(cleanup is value && cleanup as value, "temp directory removed")
+}

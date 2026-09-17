@@ -132,6 +132,12 @@ def release() {
 }
 ```
 
+`release_include_from(source, dest)` copies an SDK-relative file into the bundle
+on native and WASM releases. Omit `dest` to use the source filename. Both paths
+use relative segments made of letters, digits, `_`, `-`, and `.`. The source can
+use `..` to reach a neighboring tree; destination paths reject `..` segments.
+A missing source or failed copy fails the release.
+
 Use `release_include_if_missing` for editable deployment files. They are copied only when absent,
 excluded from `.daspkg_release.manifest`, and preserved even when upgrading from an older manifest
 that previously treated the same path as release-owned.
@@ -290,3 +296,7 @@ WASM retains generated debug information and function names, with an adjacent
 `.html.symbols` map. Prebuilt archives contribute only their existing debug data.
 Runtime assertions and heap instrumentation remain explicit `release_emcc_arg`
 choices, so requesting symbols alone does not silently enable those checks.
+
+With emsdk active, `node utils/daspkg/test_wasm_external.cjs` checks external-file
+staging and failure propagation through real WASM releases. Set `DASLANG_BIN` and
+`DASLANG_WASM_LIB` to override the local compiler and `web/output64/lib` defaults.

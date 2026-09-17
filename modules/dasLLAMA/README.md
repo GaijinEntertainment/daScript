@@ -455,3 +455,21 @@ Perf is compared with `llama-bench -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-stri
 x86 boxes (16 physical cores, pinned on BOTH sides — das pins via the jobque's hard affinity
 mask; unpinned SMT placement halves lockstep prefill). The per-box methodology lives in
 `performance/profile_common.das`; the site board (daslang.io/dasllama.html, from `performance/records/<box>.json`) is the scoreboard.
+
+### Prepared Pocket voice prompts
+
+An additional cloned voice can be shipped independently from model weights.
+`tts_prepare_voice_prompt(model, mono_pcm, sample_rate)` uses a cloning-capable
+Pocket model to produce a `TtsVoicePrompt`. Serialize that value with
+`daslib/json_boost` and ship it alongside a compatible encoder-free Pocket model.
+At runtime, `tts_register_voice_prompt(model, name, prompt)` registers the owned
+latent data; the backbone conditioning state is built lazily on first synthesis.
+The normal `synthesize(model, text, name)` path then uses the registered voice.
+
+Registration validates the format version, Pocket language/model generation,
+sample rate, codec geometry, frame count and finite latent values. It returns
+`false` without replacing an existing voice when validation fails. The caller
+keeps independent ownership of the supplied prompt. Preparing a prompt requires
+the codec encoder; registering and speaking one does not. Prompts remain specific
+to compatible Pocket model/codec generations and are not portable across arbitrary
+TTS models. Source voice permissions and attribution still apply.

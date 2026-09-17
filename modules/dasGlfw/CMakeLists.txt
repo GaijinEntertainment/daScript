@@ -60,8 +60,10 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		# emcc's JS GLFW so the binding's unconditional registrations link — a
 		# das-visible function absent from the wasm-side module is a startup fatal
 		# for cross-compiled cards (mangled-name extern resolution).
+		# The cursor override also covers ImGui backend calls on touch-only browsers.
 		ADD_DAS_STATIC_MODULE_LIB(libDasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC}
-			${DAS_GLFW_BIND_DIR}/src/glfw_emscripten_stubs.c)
+			${DAS_GLFW_BIND_DIR}/src/glfw_emscripten_stubs.c
+			${DAS_GLFW_BIND_DIR}/src/glfw_emscripten_cursor.c)
 		TARGET_INCLUDE_DIRECTORIES(libDasModuleGlfw PRIVATE ${GLFW_INCLUDE_DIR})
 		SETUP_CPP11(libDasModuleGlfw)
 	ELSE()
