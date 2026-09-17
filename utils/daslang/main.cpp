@@ -1120,7 +1120,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 dumpLeaks = true;
             } else if ( cmd=="-no-dump-leaks" ) {
                 dumpLeaks = false;
-            } else if ( cmd=="h" || cmd=="-help" ) {
+            } else if ( !scriptArgs && (cmd=="h" || cmd=="-help") ) {
                 print_help();
                 return 0;
             } else if ( !scriptArgs) {

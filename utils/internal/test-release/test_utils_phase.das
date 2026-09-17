@@ -51,6 +51,13 @@ def test_judged_rc_and_head(t : T?) {
     t |> equal("expected `Verified!` in output", judged_head(row, 0, "Complete! 3 files"))
     t |> equal("Complete! 3 files", judged_head(row, 2, "Complete! 3 files"), "a real failure shows the child's output")
     t |> equal("Verified! 3 files", judged_head(row, 0, "Verified! 3 files"))
+    let refusal <- ToolCheck(name = "r", want <- ["unknown argument"], expect_rc = 2)
+    t |> equal(0, judged_rc(refusal, 2, "tool: unknown argument --x"), "the expected refusal code with the oracle met is a pass")
+    t |> equal(1, judged_rc(refusal, 2, "tool: started"), "the expected code with the oracle unmet becomes 1")
+    t |> equal(1, judged_rc(refusal, 0, "tool: started"), "exit 0 where a refusal was expected is a failure")
+    t |> equal(3, judged_rc(refusal, 3, "unknown argument"), "another non-zero exit keeps its code")
+    t |> equal("expected exit 2, got 0", judged_head(refusal, 0, "tool: started"))
+    t |> equal("expected `unknown argument` in output", judged_head(refusal, 2, "tool: started"))
 }
 
 [test]

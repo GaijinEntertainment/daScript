@@ -68,20 +68,26 @@ cd "$BUNDLE"
 # running it: nothing ever compiled it, so nothing noticed.
 COMPILE_TESTS=(
     "aot|utils/aot/main.das"
+    "aot-llvm|utils/aot/main_llvm_aot.das"
     "benchctl|utils/benchctl/main.das"
+    "dap|utils/dap/main.das"
     "das-fmt|utils/das-fmt/dasfmt.das"
     "dascov|utils/dascov/main.das"
     "dasllama-convert|utils/dasllama-convert/main.das"
     "dasllama-server|utils/dasllama-server/main.das"
+    "dasllama-server-bench|utils/dasllama-server/server_bench.das"
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
     "gen1-to-gen2|utils/gen1-to-gen2/main.das"
     "jobque-timeline|utils/jobque-timeline/main.das"
     "lint|utils/lint/main.das"
+    "lsp-nav|utils/lsp/subtools/nav.das"
+    "lsp-validate|utils/lsp/subtools/validate.das"
     "mcp|utils/mcp/main.das"
     "mcp-cpp|utils/mcp/cpp_main.das"
     "mcp-setup|utils/mcp/setup.das"
+    "watchdog-das|utils/watchdog/main.das"
     # Not an entry point, but the library an adopting repo's REVIEW.das requires
     # (REVIEW_COMMON.md contract) — a bundle where it does not compile breaks
     # every external gate.
@@ -108,6 +114,7 @@ COMPILE_TESTS=(
 # user's box.
 SHIPPED_EXE_TESTS=(
     "daslang-live|cpp"
+    "watchdog|cpp"
     "benchctl|dasexe"
     "dascov|dasexe"
     "das-fmt|dasexe"
@@ -116,11 +123,6 @@ SHIPPED_EXE_TESTS=(
     "detect-dupe|dasexe"
     "lint|dasexe"
 )
-
-# Stdio launch test for the mcp JSON-RPC server (run from source via daslang —
-# the exe is no longer bundled): the only safe "did it actually start" probe is
-# to feed empty stdin and check for a clean exit. It prints "Starting daslang
-# MCP server" then "stdin closed, shutting down" within ~1s.
 
 PASS=0
 FAIL=0
@@ -217,8 +219,17 @@ done
 
 echo
 echo "Runtime launch:"
+# A stdio JSON-RPC server (the MCP server and the DAP bridge run from source, the watchdog's
+# LSP front in the static exe) is started on empty stdin: a clean exit is the only safe
+# did-it-start probe. The watchdog's own help is captured, not piped, so its exit code counts.
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
+run_check "dap.das (empty stdin)" bash -c \
+    "'$DASLANG' utils/dap/main.das < /dev/null"
+run_check "watchdog --help" bash -c \
+    "out=\"\$('$BUNDLE/bin/watchdog${CPP_SUFFIX}' --help)\" && printf '%s' \"\$out\" | grep -q -- '--stable-seconds'"
+run_check "watchdog --lsp (empty stdin)" bash -c \
+    "'$BUNDLE/bin/watchdog${CPP_SUFFIX}' --lsp < /dev/null"
 
 # Two prebuilt tools past --help. dastest.exe must compile and run a shipped suite
 # (isolated mode also spawns its own workers); lint.exe over daslib must resolve every

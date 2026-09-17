@@ -5,12 +5,17 @@ doc: `CLAUDE.md` (repo root).
 
 A tool is a directory holding a program and the files only that program uses. A directory is
 a tool when `utils/CMakeLists.txt` (beside this file) or the repo root's `CMakeLists.txt`
-builds or ships a program in it, wherever that directory sits; a directory under `utils/` is
+builds or ships a program in it, or when `utils/CMakeLists.txt` runs a `DAS_UTILS_TO_TEST`
+suite against a program in it, wherever that directory sits; a directory under `utils/` is
 also a tool when its `.das_package` declares a program with `release_main` (its own) or
-`release_program` (a companion). A change under `common/` (beside this file) is a change to
-every tool that requires it. An arm is one test case of a tool's suite - a `t |> run(...)` case
-of a `[test]` function. An arm's load-bearing assertions are the ones that prove the change,
-never a skip-path assertion.
+`release_program` (a companion). A tool is shipped when `cmake --install` puts it in the
+bundle: a `DAS_UTILS_SHIPPED_EXES` entry or a C++ executable target in `utils/CMakeLists.txt`
+(beside this file), a C++ executable target in the repo root's `CMakeLists.txt`, or an entry
+point an `install(FILES ...)` rule in the repo root's `CMakeLists.txt` copies as source. A
+change under `common/` (beside this file) is a change to every tool that requires it. An arm
+is one test case `dastest` runs - a `[test]` function, or one `t |> run(...)` case inside one.
+An arm's load-bearing assertions are the ones that prove the change, never a skip-path
+assertion.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. An assertion no CI row can run is one where either no CI row runs the arm, or the arm
 returns or skips before the assertion. An arm that skips unless a host tool is present has
@@ -58,3 +63,8 @@ A run against an already-deployed artifact proves nothing about the diff under r
 **A diff that adds or renames a key in a `watchdog.json` that belongs to a tool, wherever the
 tool sits, names a `WatchdogConfig` field in `watchdog/watchdog.das`, in the same change** -
 the supervisor refuses to start on an unknown key.
+
+**A diff that adds a front to a shipped tool adds a `run_check` row starting that front to
+`ci/smoke_test_bundle.sh` (repo root), in the same change.** A front is a command-line mode
+that makes a program serve a different role or protocol. The bundle gate proves only the
+fronts it starts.

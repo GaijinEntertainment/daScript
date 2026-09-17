@@ -22,7 +22,7 @@ struct Config {
     bundle : string
 
     @clarg_doc = "Seconds allowed per file"
-    timeout : float = 60.0
+    timeout : float = 180.0
 
     @clarg_doc = "Worker processes (0 = auto)"
     jobs : int = 0

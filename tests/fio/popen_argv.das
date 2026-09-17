@@ -56,6 +56,20 @@ def test_popen_argv_unknown_flag_nonzero_exit(t : T?) {
 }
 
 [test]
+def test_help_after_separator_reaches_the_script(t : T?) {
+    t |> run("--help and -h after -- are script arguments, not the driver's") @(t : T?) {
+        let fixture = path_join(get_das_root(), "tests/fio/_fixture_echo_args.das")
+        var output : string
+        let rc = run_argv([das_exe(), fixture, "--", "--help", "-h"], output)
+        t |> equal(rc, 0)
+        t |> success(find(output, "--help\n") >= 0, "the script should see --help: {output}")
+        t |> success(find(output, "-h\n") >= 0, "the script should see -h: {output}")
+        t |> success(find(output, "daslang version") < 0,
+            "the driver must not answer a help flag placed after --: {output}")
+    }
+}
+
+[test]
 def test_popen_argv_unix_dollar_paren_not_expanded(t : T?) {
     t |> run("argv with $(...) is passed literally, not expanded by a shell") @(t : T?) {
         // If popen_argv invoked /bin/sh, "$(echo SHOULDNOTAPPEAR)" would be
