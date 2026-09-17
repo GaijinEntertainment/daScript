@@ -2316,9 +2316,11 @@ namespace das {
 
     ExpressionPtr ExprTryCatch::visit(Visitor & vis) {
         vis.preVisit(this);
-        try_block = try_block->visit(vis);
-        vis.preVisitCatch(this,catch_block);
-        catch_block = catch_block->visit(vis);
+        if ( vis.canVisitTryCatchBody(this) ) {
+            try_block = try_block->visit(vis);
+            vis.preVisitCatch(this,catch_block);
+            catch_block = catch_block->visit(vis);
+        }
         return vis.visit(this);
     }
 

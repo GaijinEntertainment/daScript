@@ -542,7 +542,6 @@ namespace das {
         virtual ExpressionPtr visit(ExprClone *expr) override;
         // ExprTryCatch
         void preVisit(ExprTryCatch *expr) override;
-        ExpressionPtr visit(ExprTryCatch *expr) override;
         // ExprReturn
         bool inferReturnType(TypeDeclPtr &resType, ExprReturn *expr);
         bool isVoidReturnValueSettled(Expression *subexpr) const;

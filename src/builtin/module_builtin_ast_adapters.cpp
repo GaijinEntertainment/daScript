@@ -174,6 +174,18 @@ namespace das {
         }
     }
 
+    bool VisitorAdapter::canVisitTryCatchBody(ExprTryCatch *expr) {
+        if ( auto fnCanVisit = get_canVisitTryCatchBody(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitTryCatchBody", [&]() {
+                result = invoke_canVisitTryCatchBody(context,fnCanVisit,classPtr,expr);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
     bool VisitorAdapter::canVisitMakeArray(ExprMakeArray *expr) {
         if ( auto fnCanVisit = get_canVisitMakeArray(classPtr) ) {
             bool result = true;

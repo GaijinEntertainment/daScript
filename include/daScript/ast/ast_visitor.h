@@ -39,6 +39,7 @@ namespace das {
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) { return false; }
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) { return false; }
         virtual bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) { return true; }
+        virtual bool canVisitTryCatchBody ( ExprTryCatch * expr ) { return true; }
         virtual bool canVisitMakeArray ( ExprMakeArray * expr ) { return true; }
         virtual bool canVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) { return true; }
         virtual bool canVisitCall ( ExprCall * expr ) { return true; }
