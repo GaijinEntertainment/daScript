@@ -2129,22 +2129,17 @@ def private finalize_shipped_binary(src, dst : string; var shipped : array<strin
     ship_symbols_for(src, shipped)
 }
 
-// Copy each declared native shared library from the daslang install tree
-// (`<das_root>/bin/` on Windows, `<das_root>/lib/` on POSIX) into `dst_dir`.
-// Authors declared these via `release_include_dll(...)`; missing files are an
-// error — usually a typo or an out-of-sync install.
-//
-// Resolution order (deterministic so multi-config build trees can't ship the
-// wrong binary nondeterministically):
-//   1. Exact match at `<search_root>/<name>` (an installed layout has this).
-//   2. Build-tree config dirs in fixed preference: Release > RelWithDebInfo >
-//      MinSizeRel > Debug, e.g. `<search_root>/Release/<name>`.
-//   3. Fall through to `**/<name>` and pick the first match.
-// `release_include_from` entries, as "source@dest" (dest empty = source's file name). Source is
-// relative to <das_root>; dest to the bundle root. A missing source fails the release rather than
-// shipping a bundle that is quietly short a file.
-def private ship_external_files(bundle_name, dst_dir : string; external_files : array<string>;
-                                var shipped : array<string>) : int {
+def private valid_external_release_path(path : string; allow_parent : bool) : bool {
+    if (empty(path)) { return false }
+    for (segment in split(path, "/")) {
+        if (allow_parent && segment == "..") { continue }
+        if (!is_safe_pkg_name(segment)) { return false }
+    }
+    return true
+}
+
+def public ship_external_files(bundle_name, dst_dir : string; external_files : array<string>;
+                               var shipped : array<string>) : int {
     let das_root = get_das_root()
     shipped |> reserve(length(shipped) + length(external_files))
     for (entry in external_files) {
@@ -2153,9 +2148,13 @@ def private ship_external_files(bundle_name, dst_dir : string; external_files : 
             to_log(LOG_ERROR, "release: `{bundle_name}` has a malformed release_include_from entry `{entry}` (expected \"source@dest\")\n")
             return 1
         }
-        let source = slice(entry, 0, at)
-        let requested = slice(entry, at + 1)
+        let source = to_generic_path(slice(entry, 0, at))
+        let requested = to_generic_path(slice(entry, at + 1))
         let dest = empty(requested) ? base_name(source) : requested
+        if (!valid_external_release_path(source, true) || !valid_external_release_path(dest, false)) {
+            to_log(LOG_ERROR, "release: `{bundle_name}` has an invalid release_include_from path `{entry}`: use relative name segments; only the source may contain `..`\n")
+            return 1
+        }
         let src = path_join(das_root, source)
         if (!fexist(src)) {
             to_log(LOG_ERROR, "release: `{bundle_name}` declared release_include_from(\"{source}\") but `{src}` does not exist\n")
@@ -3233,7 +3232,6 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
             return 1
         }
     }
-    log("  released {app_name} -> {app_out_dir} ({app_name}.html / .js / .wasm)\n")
     return 0
 }
 
@@ -3285,5 +3283,12 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     }
 
     mkdir_rec(out_dir)
-    return release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args, spec.include_symbols)
+    let result = release_one_wasm_app(root, out_dir, bundle_name, main_script, wasm_lib_dir, runtime_archive, shell_path, spec.include_globs, spec.exclude_globs, spec.wasm_disabled_modules, spec.emcc_args, spec.include_symbols)
+    if (result != 0){return result}
+    var inscope shipped : array<string>
+    let app_out_dir = path_join(out_dir, bundle_name)
+    let staged = ship_external_files(bundle_name, app_out_dir, spec.external_files, shipped)
+    if (staged != 0) { return staged }
+    log("  released {bundle_name} -> {app_out_dir} ({bundle_name}.html / .js / .wasm)\n")
+    return 0
 }

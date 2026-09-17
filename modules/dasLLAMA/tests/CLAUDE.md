@@ -925,7 +925,10 @@ teacher-forced latents of the kq lane held to the q8 lane of the same file at th
 poisoned-expectation control, the f16 twin's distance logged, the exact lane speaking) and the
 one-voice `pocket-tts-en-stuart-kq.gguf` (no codec encoder: `caps()` reports one voice and
 `cloning = false`, the stored voice speaks from its latent frames, `tts_register_voice` refuses
-by name).
+by name). The prepared-prompt transfer cell uses both KQ files and the checked-in
+`modules/dasLLAMA/models/jfk_ask_not.wav`: encode a one-second reference, serialize it,
+destroy the source model, register in the encoder-free model, and assert finite audible
+speech plus lazy conditioning-state creation. It skips if either KQ model is absent.
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the

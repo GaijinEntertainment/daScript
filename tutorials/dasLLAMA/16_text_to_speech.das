@@ -6,6 +6,7 @@ require daslib/jobque_boost
 require daslib/defer
 require daslib/strings_boost
 require daslib/fio
+require daslib/json_boost
 require strings
 
 // Tutorial dasLLAMA-16: Text to Speech
@@ -266,6 +267,18 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
                     let clone_out = path_join(dir_name(out_path), "{stem(base_name(out_path))}-mine.wav")
                     if (write_wav_pcm16(clone_out, mine.pcm, mine.sample_rate)) {
                         print("  wrote {clone_out}\n")
+                    }
+                    var inscope prompt <- tts_prepare_voice_prompt(m, clip, c.sample_rate)
+                    let serialized = sprint_json(prompt, false)
+                    var inscope restored = TtsVoicePrompt()
+                    if (sscan_json(serialized, restored) && tts_voice_prompt_valid(m, restored)) {
+                        if (tts_register_voice_prompt(m, "prepared", restored)) {
+                            let prepared <- synthesize(m, TEXT, "prepared")
+                            let prepared_out = path_join(dir_name(out_path), "{stem(base_name(out_path))}-prepared.wav")
+                            if (write_wav_pcm16(prepared_out, prepared.pcm, prepared.sample_rate)) {
+                                print("  wrote {prepared_out} from a serialized voice prompt\n")
+                            }
+                        }
                     }
                 }
             }

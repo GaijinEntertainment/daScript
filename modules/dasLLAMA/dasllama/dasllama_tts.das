@@ -188,6 +188,66 @@ def tts_register_voice(var m : TtsModel; name : string; pcm : array<float>; samp
     pocket_register_voice(m.pocket, name, pcm, m.pocket_scratch)
 }
 
+struct TtsVoicePrompt {
+    //! Portable Pocket codec latents. Prepare with an encoder-bearing model; register with
+    //! a compatible model, including a compact file without the encoder. Serialization is caller-owned.
+    version : int = 1                         //! Serialized prompt format version.
+    family : string = "pocket"                //! Model family tag.
+    language : string                        //! Language expected by the receiving model.
+    sample_rate : int                        //! Reference audio sample rate in hertz.
+    latent_dim : int64                       //! Number of codec latent values per frame.
+    frame_samples : int64                    //! Number of PCM samples represented by each frame.
+    latents : array<float>                   //! Flattened codec latent frames.
+}
+
+def tts_voice_prompt_valid(m : TtsModel; prompt : TtsVoicePrompt) : bool {
+    //! Validate bounded finite latent frames and the model's language/codec geometry before registration.
+    if (m.kind != TtsKind.pocket || prompt.version != 1 || prompt.family != "pocket" || prompt.language != m.pocket.language || prompt.sample_rate != m.pocket.sample_rate || prompt.sample_rate <= 0 || prompt.latent_dim != m.pocket.latent_dim || prompt.latent_dim <= 0l || prompt.frame_samples != m.pocket.frame_samples || prompt.frame_samples <= 0l || empty(prompt.latents)) {
+        return false
+    }
+    let frames = long_length(prompt.latents) / prompt.latent_dim
+    if (long_length(prompt.latents) % prompt.latent_dim != 0l || frames > (POCKET_MAX_VOICE_SECONDS * int64(prompt.sample_rate) + prompt.frame_samples - 1l) / prompt.frame_samples) {
+        return false
+    }
+    for (v in prompt.latents) {
+        if (!(v >= -1000000.0 && v <= 1000000.0)) { return false }
+    }
+    return true
+}
+
+def tts_prepare_voice_prompt(var m : TtsModel; pcm : array<float>; sample_rate : int) : TtsVoicePrompt {
+    //! Encode a reference once for shipping as a voice prompt. The original model revision's
+    //! language/codec must match the receiving model; incompatible data is rejected on registration.
+    if (m.kind != TtsKind.pocket || sample_rate != m.pocket.sample_rate || empty(pcm) || long_length(pcm) > POCKET_MAX_VOICE_SECONDS * int64(sample_rate)) {
+        panic("dasLLAMA tts: a voice prompt requires a compatible encoder and a nonempty reference of at most 60 seconds")
+    }
+    var prompt = TtsVoicePrompt(language = m.pocket.language, sample_rate = sample_rate, latent_dim = m.pocket.latent_dim, frame_samples = m.pocket.frame_samples)
+    pocket_encode_latents(m.pocket, pcm, m.pocket_scratch, prompt.latents)
+    return <- prompt
+}
+
+def tts_register_voice_prompt(var m : TtsModel; name : string; prompt : TtsVoicePrompt) : bool {
+    //! Add or replace a named prepared voice without a codec encoder. Failure preserves the roster;
+    //! the prompt is copied and its backbone state is built lazily at the first synthesis.
+    if (empty(name) || !tts_voice_prompt_valid(m, prompt)) { return false }
+    var latents <- clone(prompt.latents)
+    if (!pocket_has_voice(m.pocket, name)) { m.pocket.voice_names |> push(clone_string(name)) }
+    if (key_exists(m.pocket.voice_states, name)) {
+        m.pocket.voice_states |> get(name) $(var old) { delete old }
+        m.pocket.voice_states |> erase(name)
+    }
+    if (key_exists(m.pocket.voices, name)) {
+        m.pocket.voices |> get(name) $(var old) { delete old }
+        m.pocket.voices |> erase(name)
+    }
+    if (key_exists(m.pocket.voice_latents, name)) {
+        m.pocket.voice_latents |> get(name) $(var old) { delete old }
+        m.pocket.voice_latents |> erase(name)
+    }
+    m.pocket.voice_latents[name] <- latents
+    return true
+}
+
 def tts_voice_lang(m : TtsModel; voice : string) : string {
     //! The language the front end reads ``voice`` in - a canonical name from ``caps`` or a family
     //! alias, resolved the way ``synthesize`` resolves it. A voice this model cannot drive panics

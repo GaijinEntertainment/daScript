@@ -3213,6 +3213,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 ### Structures
 
 - `TtsModel` - A loaded TTS model: the shared assembly, the family's driver data, and the front-end packs read beside the GGUF.
+- `TtsVoicePrompt` - Portable Pocket codec latents.
 - `TtsCaps` - What a loaded TTS model can do: its voices (canonical names; aliases resolve in the family file), the PCM rate it emits, the languages it speaks, whether it clones a voice from audio, and whether a speed means anything to it.
 - `TtsTimings` - Where a synthesis spent its time, in microseconds of wall clock, model loading excluded: the text front end, then each model stage.
 - `TtsAudio` - Synthesized speech: mono f32 PCM at `sample_rate`, with the time it took.
@@ -3232,7 +3233,10 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 
 ### Voices
 
+- `tts_prepare_voice_prompt` - Encode a reference once for shipping as a voice prompt.
 - `tts_register_voice` - Clone a voice: `pcm` (mono, at the model's own sample rate - `caps().sample_rate`) joins the roster under `name` and speaks from the next synthesis on.
+- `tts_register_voice_prompt` - Add or replace a named prepared voice without a codec encoder.
+- `tts_voice_prompt_valid` - Validate bounded finite latent frames and the model's language/codec geometry before registration.
 
 ### Text front end
 

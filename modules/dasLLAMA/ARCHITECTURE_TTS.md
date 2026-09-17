@@ -117,17 +117,17 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
   before any load), `tts_has_phonemes` (whether `tts_phonemize` has an answer for the model),
   `tts_register_voice` (a clip at the model's own rate joins the roster where `caps` says the
-  model clones; a phoneme family refuses), `caps` (the voices the front
+  model clones; a phoneme family refuses), `TtsVoicePrompt` (owned codec latents) with
+  `tts_prepare_voice_prompt`, `tts_voice_prompt_valid` and `tts_register_voice_prompt`
+  (preparation, validation and lazy voice registration), `caps` (the voices the front
   end can drive - a Kokoro pack's name carries its language, and only the languages the family
   declares are listed or accepted; the rest refuse with the language in the message, or, where
   the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`
   (the language a voice reads in - the resolution `synthesize` runs, aliases included, so a
   caller can phonemize in the dialect the voice will actually be spoken in), the front-end pair
-  `tts_normalize` (the
-  normalization pass alone - the spoken form a synthesis reads, and it consults no pack) and
-  `tts_phonemize` (one already normalized sentence in the front end's own inventory, the
-  string each chunk carries before a family rewrites it into its own symbols; the language
-  form takes a code from `caps` and refuses one the family does not declare), the lane pin
+  `tts_normalize` (the spoken form a synthesis reads; it consults no pack) and `tts_phonemize`
+  (a normalized sentence in the front end's inventory, before a family rewrites its symbols;
+  the language form takes a code from `caps` and refuses undeclared languages), the lane pin
   (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
   chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on

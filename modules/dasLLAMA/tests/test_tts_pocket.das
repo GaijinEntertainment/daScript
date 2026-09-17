@@ -8,6 +8,7 @@ require dasllama/dasllama_spm
 require dasllama/dasllama_gguf
 require dasllama/dasllama_pocket
 require dasllama/dasllama_tts
+require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
@@ -27,6 +28,8 @@ require _model_tier
 // harness/pocket_oracle.py): the unigram tokenizer id-for-id against the reference package on
 // the 200-sentence corpus and on the byte-fallback probes (`_tts_fixtures/pocket_tokens.json`,
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
+// Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
+// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "pocket-tts-en.gguf")
@@ -1024,5 +1027,37 @@ def test_pocket_long_chunk(t : T?) {
         // the next short sentence on the same voice still starts from the voice alone
         var inscope b <- synthesize(m, "And a short one after it.", "alba")
         t |> success(speech_stats(b.pcm).rms > 0.01, "a short sentence after the long one speaks")
+    }
+}
+
+[test]
+def test_pocket_prepared_prompt_transfer(t : T?) {
+    let sender_path = path_join(models_dir(), "pocket-tts-en-kq.gguf")
+    let receiver_path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
+    if (!model_available(t, sender_path) || !model_available(t, receiver_path)) { return }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var serialized = ""
+        {
+            var inscope sender <- load_tts_model(sender_path)
+            var inscope clip <- load_audio_mono("{get_das_root()}/modules/dasLLAMA/models/jfk_ask_not.wav", 24000)
+            t |> success(length(clip) >= 24000, "reference decoded")
+            resize(clip, 24000)
+            var inscope prompt <- tts_prepare_voice_prompt(sender, clip, 24000)
+            t |> success(tts_voice_prompt_valid(sender, prompt))
+            t |> success(!empty(prompt.latents), "encoder produced frames")
+            serialized = sprint_json(prompt, false)
+        }
+        var inscope receiver <- load_tts_model(receiver_path)
+        t |> success(!receiver.pocket.cloning, "receiving file has no encoder")
+        var inscope restored = TtsVoicePrompt()
+        t |> success(sscan_json(serialized, restored))
+        t |> success(tts_register_voice_prompt(receiver, "prepared", restored))
+        t |> success(!key_exists(receiver.pocket.voice_states, "prepared"), "conditioning is lazy")
+        var inscope audio <- synthesize(receiver, "Hello from a prepared voice.", "prepared")
+        let stats = speech_stats(audio.pcm)
+        t |> success(stats.finite && stats.rms > .001, "restored voice produces finite audible speech")
+        t |> success(length(audio.pcm) >= 2400, "nonempty speech")
+        t |> success(key_exists(receiver.pocket.voice_states, "prepared"), "synthesis built conditioning")
     }
 }
