@@ -1991,7 +1991,7 @@ def intrinsic_das_ptr_set_add(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
     value_stride = LLVMBuildSExt(ctx.builder, value_stride, ctx.types.t_int64, "")
     var ptr_value = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "")
     var ptr_value_i8 = LLVMBuildPointerCast(ctx.builder, ptr_value, LLVMPointerType(ctx.types.t_int8, 0u), "")
-    var ptr_value_stride = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, ptr_value_i8, value_stride, "")
+    var ptr_value_stride = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, ptr_value_i8, value_stride, "", false)
     var vptr_value_stride = LLVMBuildPointerCast(ctx.builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
     return LLVMBuildStore(ctx.builder, vptr_value_stride, arguments[0])
 }
@@ -2017,7 +2017,7 @@ def intrinsic_das_ptr_add(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
         ptr_value = LLVMBuildLoad2(ctx.builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "")
     }
     var ptr_value_i8 = LLVMBuildPointerCast(ctx.builder, ptr_value, LLVMPointerType(ctx.types.t_int8, 0u), "")
-    var ptr_value_stride = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, ptr_value_i8, value_stride, "")
+    var ptr_value_stride = LLVMBuildGEP2(ctx.builder, ctx.types.t_int8, ptr_value_i8, value_stride, "", false)
     var vptr_value_stride = LLVMBuildPointerCast(ctx.builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
     return vptr_value_stride
 }
