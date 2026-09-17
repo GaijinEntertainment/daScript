@@ -12,7 +12,7 @@ the module and install beside these.
 |---|---|---|---|---|
 | uriparser | https://github.com/uriparser/uriparser | BSD-3-Clause | URI parsing (`3rdparty/uriparser`) | `URIPARSER.LICENSE` (`3rdparty/uriparser/COPYING`) |
 | dag_noise | Gaijin Entertainment | BSD-3-Clause | noise generators (`include/dag_noise`) | `DAG_NOISE.LICENSE` (`include/dag_noise/LICENSE`) |
-| vecmath | Gaijin Entertainment | BSD-3-Clause | the SIMD vector-math layer (`include/vecmath`); the JIT's aarch64 polynomial rail mirrors its kernels | `VEC_MATH.LICENSE` (`include/vecmath/LICENSE`) |
+| vecmath | https://github.com/GaijinEntertainment/vecmath | BSD-3-Clause | the SIMD vector-math layer (`include/vecmath`); the JIT's aarch64 polynomial rail mirrors its kernels | `VEC_MATH.LICENSE` (`include/vecmath/LICENSE`) |
 | {fmt} | https://github.com/fmtlib/fmt | MIT | formatting (`3rdparty/fmt`) | `FMT.LICENSE` (`3rdparty/fmt/LICENSE`) |
 | fast_float | https://github.com/fastfloat/fast_float | MIT (elected) | float parsing (`include/fast_float`) | `FAST_FLOAT.LICENSE` (`include/fast_float/LICENSE`) |
 | Luau | https://github.com/luau-lang/luau | MIT (Lua.org copyright) | the shortest-float emitter (`src/misc/luau_float2string.cpp`) | `LUAU.LICENSE` (`src/misc/LUAU.LICENSE`) |

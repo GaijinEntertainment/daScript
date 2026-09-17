@@ -8,9 +8,7 @@ transforms, physics, BVH traversal, culling, animation, etc.
 
 A backend file carries a header block stating the backend contract - which SSE/NEON semantics
 it matches and where it deviates - plus one-line mechanism comments at sites whose intrinsic
-choice or lane order is not readable from the code. The header block and the mechanism comments
-are written in this repo and travel upstream to Dagor Engine with the backend, so every backend
-file - including the ones this repo adds - reads like its siblings.
+choice or lane order is not readable from the code.
 
 ## Key Types (dag_vecMathDecl.h)
 - `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON, a clang typed vector on wasm, a 16-byte struct on scalar)
