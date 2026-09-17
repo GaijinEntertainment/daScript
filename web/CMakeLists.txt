@@ -33,11 +33,13 @@ option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 add_compile_options(-msimd128)
 add_compile_options(-mnontrapping-fptoint)
 # vecmath's native wasm backend (include/vecmath/dag_vecMath_wasm.h) selects itself on
-# __wasm_simd128__; no -msse* compat layer is needed. Relaxed SIMD adds the fused
-# f32x4.relaxed_madd behind v_madd/v_nmsub (real FMA on the hardware). One relaxed opcode makes
-# the whole module refuse to instantiate on an engine without the proposal: Chrome 114+,
-# Firefox 145+, Node 21+, wasmtime 15+ have it; Safari only behind a JavaScriptCore flag.
-option(DAS_WASM_RELAXED_SIMD "Build wasm output with relaxed SIMD (fused v_madd; needs an engine with the proposal)" ON)
+# __wasm_simd128__; no -msse* compat layer is needed. Relaxed SIMD would add the fused
+# f32x4.relaxed_madd behind v_madd/v_nmsub, but it stays OFF for the same reason the JIT's
+# feature string carries no +relaxed-simd (modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md
+# sec.12): WebKit implements none of the relaxed opcodes, one of them anywhere in the module
+# makes Safari refuse it at validation, and the browser builds ship to every engine. Opt in
+# only for a target that never reaches Safari.
+option(DAS_WASM_RELAXED_SIMD "Build wasm output with relaxed SIMD (fused v_madd; Safari refuses the module)" OFF)
 if(DAS_WASM_RELAXED_SIMD)
     add_compile_options(-mrelaxed-simd)
 endif()
