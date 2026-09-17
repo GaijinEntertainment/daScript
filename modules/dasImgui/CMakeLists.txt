@@ -432,10 +432,7 @@ ELSEIF(EMSCRIPTEN)
     OPTION(DAS_IMGUI_WASM_PTHREADS "Build the wasm archives threaded (-pthread)" ON)
     MESSAGE(STATUS "dasImgui: emscripten/web build (3 module archives + FreeType; memory64=${DAS_IMGUI_WASM_MEMORY64} pthreads=${DAS_IMGUI_WASM_PTHREADS})")
 
-    # same SIMD feature set as web/CMakeLists.txt: vecmath's wasm backend selects itself on
-    # __wasm_simd128__, and the relaxed-SIMD knob mirrors DAS_WASM_RELAXED_SIMD so v_madd fuses
-    # (or not) on both sides of the archive boundary. OFF by default: Safari refuses a module
-    # with any relaxed opcode (modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md sec.12)
+    # relaxed SIMD is OFF - Safari refuses a module with any relaxed opcode (modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string)
     OPTION(DAS_IMGUI_WASM_RELAXED_SIMD "Build the wasm archives with relaxed SIMD (matches DAS_WASM_RELAXED_SIMD)" OFF)
     SET(IMGUI_WASM_FLAGS
         -fno-rtti

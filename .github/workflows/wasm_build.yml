@@ -151,7 +151,7 @@ jobs:
         cd cmake_temp
         cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_FLEX_BISON_DISABLED=ON -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
         ninja
-        # the vecmath backend battery, both arms as node-runnable pairs (tests-cpp/big/vecmath_backend)
+        # web/ adds the repo tree EXCLUDE_FROM_ALL - plain ninja builds neither target
         ninja test_vecmath_native test_vecmath_scalar
 
     - name: "Test: hello world via Node.js"

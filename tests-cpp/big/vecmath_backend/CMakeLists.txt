@@ -33,14 +33,14 @@ if(NOT DAS_VECMATH_SCALAR)
     add_dependencies(test-small test_vecmath_native)
 endif()
 
-# Under emscripten (the web/ build) the native arm is the wasm SIMD128 backend and both arms
-# become node-runnable .js + .wasm pairs under web/output/tests. The web scope's directory-wide
-# link options embed daslib and disable main (-sINVOKE_RUN=0) for the interpreter binary; a
-# backend test wants neither, so the pair keeps only the exception-model flags every object in
-# that build carries. The wasm_build.yml lane builds and runs both under node.
+# LINK_OPTIONS replaces the web scope's inherited flags: embedded daslib and -sINVOKE_RUN=0 belong to the interpreter binary, not a standalone test.
 if(EMSCRIPTEN)
-    target_compile_definitions(test_vecmath_native PRIVATE EXPECT_WASM=1)
-    foreach(_arm test_vecmath_scalar test_vecmath_native)
+    set(_wasm_arms test_vecmath_scalar)
+    if(NOT DAS_VECMATH_SCALAR)
+        target_compile_definitions(test_vecmath_native PRIVATE EXPECT_WASM=1)
+        list(APPEND _wasm_arms test_vecmath_native)
+    endif()
+    foreach(_arm ${_wasm_arms})
         set_target_properties(${_arm} PROPERTIES
             LINK_OPTIONS "-fwasm-exceptions;-sWASM_LEGACY_EXCEPTIONS=0"
             RUNTIME_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR}/tests)

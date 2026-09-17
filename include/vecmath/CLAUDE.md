@@ -6,6 +6,12 @@ wasm SIMD128 and a scalar per-lane fallback for targets with no SIMD ISA behind 
 unified C API. Used pervasively throughout the Dagor Engine for all performance-critical math:
 transforms, physics, BVH traversal, culling, animation, etc.
 
+These headers are authored here and contributed upstream to Dagor Engine: a backend file follows
+the comment shape of dag_vecMath_pc_sse.h / dag_vecMath_neon.h - a file header block stating the
+backend contract, plus one-line mechanism comments at sites whose intrinsic choice or lane order
+is not readable from the code - and the repo-wide "no new C++ comments" rule does not apply
+inside this folder.
+
 ## Key Types (dag_vecMathDecl.h)
 - `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON, a clang typed vector on wasm, a 16-byte struct on scalar)
 - `vec4i` -- 128-bit integer vector (__m128i / int32x4_t / an int32 typed vector on wasm)

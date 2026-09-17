@@ -365,7 +365,6 @@ VECTORCALL VECMATH_FINLINE vec4f v_div(vec4f a, vec4f b) { return VECMATH_WASM_F
 VECTORCALL VECMATH_FINLINE vec4f v_div_x(vec4f a, vec4f b) { return v_div(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt(vec4f a) { return VECMATH_WASM_F(wasm_f32x4_sqrt(VECMATH_WASM_V(a))); }
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt_x(vec4f a) { return v_sqrt(a); }
-// no estimate instructions in the ISA: every reciprocal form is the exact division
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise(vec4f a) { return v_div(V_C_ONE, a); }
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_est(vec4f a) { return v_div(V_C_ONE, a); }
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a) { return v_div(V_C_ONE, a); }
@@ -383,7 +382,6 @@ VECTORCALL VECMATH_FINLINE vec4f v_abs_diff(vec4f a, vec4f b) { return v_abs(v_s
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_abs_ge(vec4f a, vec4f b) { return v_cmp_ge(v_abs(a), v_abs(b)); }
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_abs_gt(vec4f a, vec4f b) { return v_cmp_gt(v_abs(a), v_abs(b)); }
 
-// every two-source lane permutation is one i8x16.shuffle
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xxyy(vec4f v) { return __builtin_shufflevector(v, v, 0, 0, 1, 1); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xxzz(vec4f v) { return __builtin_shufflevector(v, v, 0, 0, 2, 2); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xyxy(vec4f v) { return __builtin_shufflevector(v, v, 0, 1, 0, 1); }

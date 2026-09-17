@@ -26,3 +26,16 @@ which staging step stopped copying that tree.**
 
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 visitor sends that host and whether the host sets cookies.**
+
+**A diff that changes `DAS_WASM_RELAXED_SIMD` to default on, or adds `-mrelaxed-simd` to a
+build whose output is served, is a defect - leave it off and let the multiply-add split into a
+multiply and an add.** Safari and every iOS browser refuse a whole module carrying one relaxed
+opcode, so the page fails to load rather than running slower
+(`modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md`, the wasm feature string section).
+
+**A diff that changes the wasm SIMD compile flags in this folder's `CMakeLists.txt` -
+`-msimd128`, `-mnontrapping-fptoint`, `-mrelaxed-simd`, or the `DAS_WASM_RELAXED_SIMD`
+default - makes the matching change to `modules/dasImgui/CMakeLists.txt` (repo root) in the
+same change.** The dasImgui wasm archives link into the binary this folder builds, and a
+relaxed-SIMD mismatch fuses `v_madd` on one side of the archive boundary and splits it on
+the other.

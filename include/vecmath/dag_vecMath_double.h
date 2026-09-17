@@ -387,7 +387,7 @@ VECTORCALL VECMATH_FINLINE vec4d vd_cvt_from_vec4i(vec4i a)
   return vd_from_halves(VECMATH_WASM_D(wasm_f64x2_convert_low_i32x4(VECMATH_WASM_V(a))),
                         VECMATH_WASM_D(wasm_f64x2_convert_low_i32x4(VECMATH_WASM_V(v_permi_zwzw(a)))));
 }
-// truncates toward zero, saturating like v_cvti_vec4i on this backend
+// truncates toward zero, saturating like v_cvt_vec4i on this backend
 VECTORCALL VECMATH_FINLINE vec4i vd_cvt_to_vec4i(vec4d a)
 {
   vec4i lo = VECMATH_WASM_I(wasm_i32x4_trunc_sat_f64x2_zero(VECMATH_WASM_V(a.xy)));
