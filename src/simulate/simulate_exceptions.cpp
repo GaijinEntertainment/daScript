@@ -330,41 +330,6 @@ namespace das {
 #endif
     }
 
-    void WIN_EH_NO_ASAN builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at ) {
-        auto aa = context->abiArg; auto acm = context->abiCMRES;
-        char * EP, * SP;
-        context->stack.watermark(EP,SP);
-        #if DAS_ENABLE_EXCEPTIONS
-            try {
-                context->invoke(try_block, nullptr, nullptr, at);
-            } catch ( const dasException & ) {
-                context->abiArg = aa;
-                context->abiCMRES = acm;
-                context->stack.pop(EP,SP);
-                context->stopFlags = 0;
-                context->last_exception = context->exception;
-                context->exception = nullptr;
-                context->invoke(catch_block,nullptr,nullptr, at);
-            }
-        #else
-            jmp_buf ev;
-            jmp_buf * JB = context->throwBuf;
-            context->throwBuf = &ev;
-            if ( !setjmp(ev) ) {
-                context->invoke(try_block,nullptr,nullptr, at);
-            } else {
-                context->throwBuf = JB;
-                context->abiArg = aa;
-                context->abiCMRES = acm;
-                context->stack.pop(EP,SP);
-                context->stopFlags = 0;
-                context->last_exception = context->exception;
-                context->exception = nullptr;
-                context->invoke(catch_block,nullptr,nullptr, at);
-            }
-            context->throwBuf = JB;
-        #endif
-    }
 }
 
 #if defined(_MSC_VER)

@@ -744,6 +744,8 @@ namespace das {
                 SideEffects::none, "das_get_jit_epilogue");
             addExternInline<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
                 SideEffects::none, "das_get_jit_make_block");
+            addExternInline<DAS_BIND_FUN(das_get_jit_try_recover)>(*this, lib, "get_jit_try_recover",
+                SideEffects::none, "das_get_jit_try_recover");
             addExternInline<DAS_BIND_FUN(das_get_jit_ad_by_sid)>(*this, lib, "get_jit_ad_by_sid",
                 SideEffects::none, "das_get_jit_ad_by_sid");
             addExternInline<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",

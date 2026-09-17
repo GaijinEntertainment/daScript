@@ -82,10 +82,11 @@ def public capture_block(expr : ExpressionPtr) : array<CapturedVariable> {
 }
 
 [macro]
-class ColletFinally : AstVisitor {
+class CollectFinally : AstVisitor {
     //! AST visitor that collects finally blocks.
     @do_not_delete blocks : table<ExprBlock?>
     alwaysFor : bool
+    skipTryCatch : bool = false
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         unsafe {
             if (!empty(blk.finalList)) {
@@ -98,14 +99,17 @@ class ColletFinally : AstVisitor {
     def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
         return false
     }
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
+        return !skipTryCatch
+    }
 }
 
 [macro_function]
-def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
-    //! Collect all finally blocks in the expression.
-    //! Returns array of ExprBlock? with all the blocks which have `finally` section
-    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
-    var astVisitor = new ColletFinally(alwaysFor = alwaysFor)
+def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false; skipTryCatch : bool = false) {
+    //! Collect all finally blocks in the expression - array of ExprBlock? with a `finally` section.
+    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions;
+    //! skipTryCatch also stops at a try/recover arm, for a consumer emitting each arm as its own block
+    var astVisitor = new CollectFinally(alwaysFor = alwaysFor, skipTryCatch = skipTryCatch)
     make_visitor(*astVisitor) $(adapter) {
         visit(expr, adapter)
     }
@@ -117,22 +121,27 @@ def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
 }
 
 [macro]
-class ColletLabels : AstVisitor {
+class CollectLabels : AstVisitor {
     //! AST visitor that collects label statements.
     labels : table<int>
+    skipTryCatch : bool = false
     def override preVisitExprLabel(expr : ExprLabel?) : void {
         labels |> insert(expr.labelName)
     }
     def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
         return false
     }
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
+        return !skipTryCatch
+    }
 }
 
 [macro_function]
-def public collect_labels(expr : ExpressionPtr) {
-    //! Collect all labels in the expression. Returns array of integer with label indices
-    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
-    var astVisitor = new ColletLabels()
+def public collect_labels(expr : ExpressionPtr; skipTryCatch : bool = false) {
+    //! Collect all labels in the expression. Returns array of integer with label indices.
+    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions;
+    //! skipTryCatch also stops at a try/recover arm, for a consumer emitting each arm as its own block
+    var astVisitor = new CollectLabels(skipTryCatch = skipTryCatch)
     make_visitor(*astVisitor) $(adapter) {
         visit(expr, adapter)
     }

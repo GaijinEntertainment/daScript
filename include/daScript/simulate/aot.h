@@ -4611,7 +4611,6 @@ namespace das {
         return -1;
     }
 
-    void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
 
     bool das_jit_enabled ( Context * context, LineInfoArg * at );
     bool das_aot_enabled ( Context * context, LineInfoArg * at );

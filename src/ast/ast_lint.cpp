@@ -190,13 +190,6 @@ namespace das {
         if ( expr->rtti_isCall() ) {
             auto call = static_cast<ExprCall*>(expr);
             if ( chainCall(call) ) return true;
-            if ( call->func && call->func->module && call->func->module->name == "$"
-                && call->func->name == "builtin_try_recover"
-                && call->arguments.size() >= 2
-                && call->arguments[0]->rtti_isMakeBlock() ) {
-                auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
-                return subtreeHasSuperCall(mb->block, chainCall);
-            }
             return false;
         }
         if ( expr->rtti_isBlock() ) {
@@ -228,19 +221,6 @@ namespace das {
             auto call = static_cast<ExprCall*>(expr);
             if ( chainCall(call) ) {
                 return SuperCount::onlyFall(1, 1);
-            }
-            // JIT-mode rewrite of try/recover: ast_infer_type_op.cpp:1015 emits
-            // `builtin_try_recover(make_block(try), make_block(catch))` and the typer
-            // appends `context` + `at` (final arity = 4). Match the resolved function on
-            // its source module ($) to avoid colliding with any user shadow. Count super
-            // in the try block only; the recover block is fatal-panic-with-diagnostics,
-            // irrelevant to chain semantics (mirrors the direct ExprTryCatch handler below).
-            if ( call->func && call->func->module && call->func->module->name == "$"
-                && call->func->name == "builtin_try_recover"
-                && call->arguments.size() >= 2
-                && call->arguments[0]->rtti_isMakeBlock() ) {
-                auto mb = static_cast<ExprMakeBlock*>(call->arguments[0]);
-                return countSuperCalls(mb->block, chainCall);
             }
             return SuperCount::onlyFall(0, 0);
         }
@@ -846,21 +826,6 @@ namespace das {
                             break;
                         }
                     }
-                }
-            }
-            if (expr->name == "builtin_try_recover") {
-                DAS_ASSERTF(expr->arguments.size() == 4,
-                    "builtin_try_recover somehow called with wrong number of arguments = %i (%i), expected 2.",
-                    int(expr->arguments.size() - 2), int(expr->arguments.size()));
-                if (!expr->arguments.at(0)->rtti_isMakeBlock() ||
-                    !expr->arguments.at(1)->rtti_isMakeBlock()) {
-                    program->error("builtin_try_recover shouldn't be called directly.",
-                        "", "Use `try { ... } recover { ... }` instead.",
-                        expr->at, CompilationError::invalid_function_argument );
-                } else if (exprReturns(static_cast<ExprMakeBlock*>(expr->arguments.front())->block)) {
-                    program->error("try { ... } recover { ... } can't have return inside in jit mode",
-                        "This feature is not implemented yet.", "",
-                        expr->at, CompilationError::cant_result );
                 }
             }
             for ( size_t i=0, is=expr->arguments.size(); i!=is; ++i ) {

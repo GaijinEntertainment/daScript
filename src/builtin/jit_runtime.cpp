@@ -52,6 +52,7 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         virtual bool rtti_node_isJit() const override { return true; }
+        virtual void * rtti_node_jitFunction() const override { return (void *) func; }
         JitFunction func = nullptr;
         // saved original node
         SimNode * saved_code = nullptr;
@@ -752,6 +753,52 @@ extern "C" {
         context->stack.pop(stackState->EP, stackState->SP);
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4611)  // setjmp + C++ object destruction
+#endif
+
+    DAS_API void WIN_EH_NO_ASAN jit_try_recover ( Block * try_block, Block * catch_block, void * lineInfo, Context * context ) {
+        auto at = (LineInfoArg *) lineInfo;
+        auto aa = context->abiArg; auto acm = context->abiCMRES;
+        char * EP, * SP;
+        context->stack.watermark(EP,SP);
+        #if DAS_ENABLE_EXCEPTIONS
+            try {
+                context->invoke(*try_block, nullptr, nullptr, at);
+            } catch ( const dasException & ) {
+                context->abiArg = aa;
+                context->abiCMRES = acm;
+                context->stack.pop(EP,SP);
+                context->stopFlags = 0;
+                context->last_exception = context->exception;
+                context->exception = nullptr;
+                context->invoke(*catch_block, nullptr, nullptr, at);
+            }
+        #else
+            jmp_buf ev;
+            jmp_buf * JB = context->throwBuf;
+            context->throwBuf = &ev;
+            if ( !setjmp(ev) ) {
+                context->invoke(*try_block, nullptr, nullptr, at);
+            } else {
+                context->throwBuf = JB;
+                context->abiArg = aa;
+                context->abiCMRES = acm;
+                context->stack.pop(EP,SP);
+                context->stopFlags = 0;
+                context->last_exception = context->exception;
+                context->exception = nullptr;
+                context->invoke(*catch_block, nullptr, nullptr, at);
+            }
+            context->throwBuf = JB;
+        #endif
+    }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     DAS_API void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t ad, void * bodyNode, void * jitImpl, void * funcInfo, void * lineInfo, Context * context ) {
         DAS_ASSERTF(lineInfo != nullptr, "Line info should not be null");
 
@@ -884,6 +931,7 @@ extern "C" {
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
     void *das_get_jit_make_block() { return (void *)&jit_make_block; }
+    void *das_get_jit_try_recover() { return (void *)&jit_try_recover; }
     void *das_get_jit_ad_by_sid() { return (void *)&jit_ad_by_sid; }
     void *das_get_jit_debug() { return (void *)&jit_debug; }
     void *das_get_jit_iterator_iterate() { return (void *)&builtin_iterator_iterate; }
