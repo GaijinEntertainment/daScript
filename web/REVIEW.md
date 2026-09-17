@@ -32,6 +32,5 @@ refuse a whole module carrying one relaxed opcode, so the page fails to load rat
 running slower.
 
 **A diff that changes a `-m` feature flag in this folder's `CMakeLists.txt`
-`add_compile_options`, or the `DAS_WASM_RELAXED_SIMD` default, makes the matching change to
-`modules/dasImgui/CMakeLists.txt`'s `IMGUI_WASM_FLAGS` and `DAS_IMGUI_WASM_RELAXED_SIMD` in the
-same change.** Neither build inherits the other's flags.
+`add_compile_options` makes the matching change to `modules/dasImgui/CMakeLists.txt`'s
+`IMGUI_WASM_FLAGS` in the same change.** Neither build inherits the other's flags.

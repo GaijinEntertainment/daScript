@@ -19,12 +19,14 @@ pull request.**
 `permissions` naming only the scopes its own steps use.** A job with no timeout holds its
 runners until GitHub's six-hour ceiling on one hung step.
 
-**A workflow the diff adds, or whose trigger, matrix, or local mirror the diff changes, updates
-two places in `skills/internal/preflight.md` (repo root) in the same change: its row in
-sec."What CI runs (per-PR + nightly)", which names its trigger and what the lane runs, and its
-own section - the heading beginning `## <workflow>.yml`; a lane with one section per matrix arm
-(`build.yml`) corrects the arm the diff changes - which names its local mirror or says it has
-none.** A lane missing or wrong in either place is one nobody mirrors before a push.
+**A workflow the diff adds, or whose trigger, matrix, or local mirror the diff changes, adds or
+corrects its row in sec."What CI runs (per-PR + nightly)" of `skills/internal/preflight.md`
+(repo root) in the same change: the row names its trigger and what the lane runs.** A lane the
+table does not list, or lists wrong, is one nobody mirrors before a push.
+
+**The same diff adds or corrects that workflow's own section there - the heading beginning
+`## <workflow>.yml` - which names its local mirror or says it has none.** A workflow carrying
+one section per job (`build.yml`) gets the section for the job the diff changes.
 
 **A per-PR check leaves the per-PR path only to the nightly cron (`github.event_name ==
 'schedule' || github.event_name == 'workflow_dispatch'`), and the diff either names the
