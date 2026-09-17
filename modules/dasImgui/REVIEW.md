@@ -13,8 +13,7 @@ under `modules/dasImgui/bind/` or `modules/dasImgui/src/`, runs the test suite o
 host OS before the PR: `preflight --only imgui`** (the per-OS exclude split: module `CLAUDE.md`
 sec. Tests).
 
-**A diff that changes the wasm SIMD compile flags in this folder's `CMakeLists.txt` -
-`-msimd128`, `-mnontrapping-fptoint`, `-mrelaxed-simd`, or the `DAS_IMGUI_WASM_RELAXED_SIMD`
-default - makes the matching change to `web/CMakeLists.txt` (repo root) in the same change.**
-The archives link into the binary that file builds, and a relaxed-SIMD mismatch fuses `v_madd`
-on one side of the archive boundary and splits it on the other.
+**A diff that changes a `-m` feature flag in this folder's `CMakeLists.txt` `IMGUI_WASM_FLAGS`,
+or the `DAS_IMGUI_WASM_RELAXED_SIMD` default, makes the matching change to `web/CMakeLists.txt`'s
+`add_compile_options` and `DAS_WASM_RELAXED_SIMD` in the same change.** Neither build inherits
+the other's flags.

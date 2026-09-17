@@ -4,8 +4,8 @@
 // with !_TARGET_SIMD_NEON pin SSE-flavored semantics the scalar backend promises
 // to match (NaN/tie ordering, sign-bit select, out-of-range converts, shift
 // counts past the lane width) - NEON diverges there by its own contract. The wasm
-// backend keeps every SSE row but two it shares with NEON (VECMATH_TEST_PACKED_X_CVT
-// below): _x forms are the packed op, and float->int converts saturate.
+// backend keeps every SSE row but the two contracts it shares with NEON: _x forms are
+// the packed op, and float->int converts saturate.
 
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST)
 #error "the rows pin IEEE answers a fast-math build may fold; both arms are pinned to precise math in CMakeLists.txt"
@@ -36,7 +36,8 @@
 #error this target must select the wasm SIMD128 vecmath backend
 #endif
 #if defined(_TARGET_SIMD_NEON) || defined(_TARGET_SIMD_WASM)
-#define VECMATH_TEST_PACKED_X_CVT 1
+#define VECMATH_TEST_X_IS_PACKED 1
+#define VECMATH_TEST_CVT_SATURATES 1
 #endif
 
 static int g_failed = 0;
@@ -111,7 +112,7 @@ int main()
   check_int("add_x", (long long)f2u(v_extract_x(v_add_x(a, b))), (long long)f2u(3.5f));
   check_int("nmsub_x", (long long)f2u(v_extract_x(v_nmsub_x(a, b, b))), (long long)f2u(-1.0f));
   check_int("sqrt_x", (long long)f2u(v_extract_x(v_sqrt_x(v_make_vec4f(4.0f, 5.0f, 6.0f, 7.0f)))), (long long)f2u(2.0f));
-#if !defined(VECMATH_TEST_PACKED_X_CVT)
+#if !defined(VECMATH_TEST_X_IS_PACKED)
   check_lanes("add_x_keeps_yzw", v_add_x(a, b), f2u(3.5f), f2u(-2.25f), f2u(3.75f), f2u(-0.5f));
   check_lanes("nmsub_x_keeps_c_yzw", v_nmsub_x(a, b, b), f2u(-1.0f), f2u(0.5f), f2u(-1.0f), f2u(4.0f));
   check_lanes("sqrt_x_keeps_yzw", v_sqrt_x(v_make_vec4f(4.0f, 5.0f, 6.0f, 7.0f)), f2u(2.0f), f2u(5.0f), f2u(6.0f), f2u(7.0f));
@@ -132,11 +133,17 @@ int main()
 
   check_lanesi("cvtt", v_cvti_vec4i(a), 1u, 0xFFFFFFFEu, 3u, 0u);
   check_lanesi("cvtr", v_cvt_roundi_ieee(halves), 2u, 0xFFFFFFFEu, 4u, 0xFFFFFFFCu);
-#if !defined(VECMATH_TEST_PACKED_X_CVT)
+#if !defined(VECMATH_TEST_CVT_SATURATES)
   check_lanesi("cvtt_ovf", v_cvti_vec4i(v_make_vec4f(no_fold(3e9f), no_fold(-3e9f), nanf_v, 100.75f)),
                0x80000000u, 0x80000000u, 0x80000000u, 100u);
   check_lanesi("cvtr_ovf", v_cvt_roundi_ieee(v_make_vec4f(3e9f, -3e9f, nanf_v, 100.5f)),
                0x80000000u, 0x80000000u, 0x80000000u, 100u);
+#endif
+#if defined(VECMATH_TEST_CVT_SATURATES)
+  check_lanesi("cvtt_sat", v_cvti_vec4i(v_make_vec4f(no_fold(3e9f), no_fold(-3e9f), nanf_v, 100.75f)),
+               0x7FFFFFFFu, 0x80000000u, 0u, 100u);
+  check_lanesi("cvtr_sat", v_cvt_roundi_ieee(v_make_vec4f(3e9f, -3e9f, nanf_v, 100.5f)),
+               0x7FFFFFFFu, 0x80000000u, 0u, 100u);
 #endif
   check_lanesi("cvt_floori", v_cvt_floori(halves), 2u, 0xFFFFFFFDu, 3u, 0xFFFFFFFCu);
   check_lanes("cvti2f", v_cvti_vec4f(ia), f2u(3.0f), f2u(-7.0f), f2u(123456.0f), f2u(-2000000000.0f));
@@ -493,7 +500,7 @@ int main()
     check_int("vd_from_vec4f", vd_extract_z(d2) == 3.75 ? 1 : 0, 1);
     vec4d di = vd_cvt_from_vec4i(v_make_vec4i(3, -7, 123456, -2000000000));
     check_int("vd_from_vec4i", vd_extract_w(di) == -2000000000.0 ? 1 : 0, 1);
-#if !defined(VECMATH_TEST_PACKED_X_CVT) // NEON and wasm converts saturate; SSE/scalar yield INT32_MIN out of range
+#if !defined(VECMATH_TEST_CVT_SATURATES) // NEON and wasm converts saturate; SSE/scalar yield INT32_MIN out of range
     check_lanesi("vd_to_vec4i_oor", vd_cvt_to_vec4i(vd_make_vec4d(no_fold(3e9), no_fold(-3e9), 1.0, -1.0)),
                  0x80000000u, 0x80000000u, 1u, 0xFFFFFFFFu);
 #endif
@@ -509,6 +516,40 @@ int main()
     check_double("vd_stu_p3_z", outd[2], 3.75);
     check_double("vd_stu_p3_sentinel", outd[3], -1.0);
   }
+
+  // pshufb key semantics: bits 4..6 of a key byte are ignored, bit 7 zeroes the lane
+  check_lanesi("perm_i8_mask", v_perm_i8(v_make_vec4i(0x44332211, int(0x88776655), int(0xCCBBAA99), 0x00FFEEDD),
+                                         v_make_vec4i(0x70605040, int(0x8F8E8D8C), 0x1F1E1D1C, 0x03020100)),
+               0x11111111u, 0u, 0x00FFEEDDu, 0x44332211u);
+  {
+    const vec4i q = v_make_vec4i(0x10, 0, -16, -1); // as u64 lanes: 0x10, 0xFFFFFFFFFFFFFFF0
+    check_lanesi("slli_64", v_slli_64(q, 4), 0x100u, 0u, 0xFFFFFF00u, 0xFFFFFFFFu);
+    check_lanesi("srli_64", v_srli_64(q, 4), 1u, 0u, 0xFFFFFFFFu, 0x0FFFFFFFu);
+  }
+  check_lanesi("mulhi16", v_mulhi16(v_make_vec4i(0x40004000, int(0xC000C000), 0x40004000, int(0xC000C000)), v_splatsi16(0x4000)),
+               0x10001000u, 0xF000F000u, 0x10001000u, 0xF000F000u);
+  check_lanesi("cvt_byte", v_cvt_byte_vec4i(0x04030201u), 1u, 2u, 3u, 4u);
+  check_lanes("perm_zayx", v_perm_zayx(a, b), f2u(3.75f), f2u(2.0f), f2u(-2.25f), f2u(1.5f));
+  check_lanesi("interleave_lo8", v_interleave_lo_i8(v_make_vec4i(0x03020100, 0x07060504, 0, 0), v_make_vec4i(0x13121110, 0x17161514, 0, 0)),
+               0x11011000u, 0x13031202u, 0x15051404u, 0x17071606u);
+  check_int("check_xz_all_true", v_check_xz_all_true(v_cast_vec4f(v_make_vec4i(-1, 0, -1, 0))) ? 1 : 0, 1);
+  check_int("check_xz_all_true_false_dir", v_check_xz_all_true(v_cast_vec4f(v_make_vec4i(-1, -1, 0, -1))) ? 1 : 0, 0);
+  {
+    mat44f m;
+    m.col0 = v_make_vec4f(2, 0, 0, 0);
+    m.col1 = v_make_vec4f(0, 3, 0, 0);
+    m.col2 = v_make_vec4f(1, 0, 4, 0);
+    m.col3 = v_make_vec4f(5, 6, 7, 1);
+    float m43[12] = {0};
+    v_mat_43cu_from_mat44(m43, m);
+    const float want[12] = {2, 0, 0, 0, 3, 0, 1, 0, 4, 5, 6, 7};
+    for (int k = 0; k < 12; k++)
+      if (m43[k] != want[k]) { printf("FAIL mat_43cu_from_mat44 [%d]: got %g want %g\n", k, m43[k], want[k]); g_failed++; break; }
+  }
+#if defined(_TARGET_SIMD_WASM) // NEON narrows a 64-bit convert instead; the wasm arm saturates into 32 bits
+  check_lanesi("vd_to_vec4i_sat", vd_cvt_to_vec4i(vd_make_vec4d(no_fold(3e9), no_fold(-3e9), 1.0, -1.0)),
+               0x7FFFFFFFu, 0x80000000u, 1u, 0xFFFFFFFFu);
+#endif
 
   if (g_failed) { printf("%d vecmath backend checks FAILED\n", g_failed); return 1; }
   printf("all vecmath backend checks passed\n");

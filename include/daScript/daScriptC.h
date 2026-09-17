@@ -22,7 +22,7 @@
 #define DAS_CC_API
 #endif
 //if target is not defined, try to auto-detect target (same order as vecmath/dag_vecMathDecl.h:
-//wasm first, its -msse* compat layer predefines __SSE2__)
+//wasm first, because emscripten's -msse* compat layer predefines __SSE2__)
 #if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
     #if defined(__wasm_simd128__)
         #define _TARGET_SIMD_WASM 1
@@ -56,7 +56,8 @@
     typedef float32x4_t vec4f;
     typedef int32x4_t   vec4i;
 #elif defined(_TARGET_SIMD_WASM)
-    // the same clang typed vectors vecmath/dag_vecMathDecl.h declares, spelled for C too
+    // typedefs, so declaring these in both headers is a legal redeclaration - the scalar
+    // branch declares structs, which is why it needs the guard
     #include <stdint.h>
     typedef float vec4f __attribute__((__vector_size__(16), __aligned__(16)));
     typedef int32_t vec4i __attribute__((__vector_size__(16), __aligned__(16)));

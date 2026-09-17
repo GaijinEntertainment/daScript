@@ -339,7 +339,6 @@ VECTORCALL VECMATH_FINLINE vec4d vd_cross3(vec4d a, vec4d b) {
 VECTORCALL VECMATH_FINLINE vecmath_f64x2 vd_lo(vec4d a) { return a.xy; }
 VECTORCALL VECMATH_FINLINE vecmath_f64x2 vd_hi(vec4d a) { return a.zw; }
 VECTORCALL VECMATH_FINLINE vec4d vd_from_halves(vecmath_f64x2 lo, vecmath_f64x2 hi) { vec4d r; r.xy = lo; r.zw = hi; return r; }
-#define VECMATH_WASM_D(a) ((vecmath_f64x2)(a))
 
 VECTORCALL VECMATH_FINLINE vec4d vd_zero() { vecmath_f64x2 z = VECMATH_WASM_D(wasm_f64x2_const_splat(0.0)); return vd_from_halves(z, z); }
 VECTORCALL VECMATH_FINLINE vec4d vd_splats(double a) { vecmath_f64x2 s = VECMATH_WASM_D(wasm_f64x2_splat(a)); return vd_from_halves(s, s); }

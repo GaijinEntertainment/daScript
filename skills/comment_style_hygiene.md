@@ -33,7 +33,11 @@ added are not.
   rules is fork drift. A folder is vendored when it is a `3rdparty/` tree or its own
   `CLAUDE.md` names an upstream and records the synced revision; inside one, the files
   that `CLAUDE.md` marks as written or maintained here - fork-local hooks, this repo's
-  own docs - answer to these rules, and every file it leaves to upstream does not.
+  own docs - answer to these rules, and every file it leaves to upstream does not. The
+  outbound direction is the same rule: a folder whose `CLAUDE.md` names the upstream project
+  its files are contributed to, and states the comment shape they keep there, answers to that
+  shape for those files (`include/vecmath/`); the deletion test still settles anything the
+  stated shape does not cover.
 
 Rules marked *(lintable)* are mechanical enough for a lint to enforce; where a rule notes
 an existing lint, the lint compels - an unnoted rule is the reviewer's.

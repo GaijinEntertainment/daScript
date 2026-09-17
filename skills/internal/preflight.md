@@ -218,14 +218,24 @@ build then went red.
 
 ## wasm_build.yml
 
-`wasm_build`: emsdk build of `web/` (emsdk `latest`), then under the emsdk node the vecmath
-backend battery - `ninja test_vecmath_native test_vecmath_scalar` in `web/cmake_temp`, then
-`node --experimental-wasm-exnref output/tests/test_vecmath_<arm>.js` for both arms - and the
-`tests/language` suite through `web/test/dastest_wasm.js`. `wasm_cross`: cross-compiles
-utility mains to wasm32 via dasLLVM and runs them under wasmtime, emscripten **pinned to
-5.0.3** (newer clang crashes on `utils/gen1-to-gen2/ds_parser.cpp` diagnostics). Mirror = the same emsdk
-commands on the box (on Windows `EMSDK_PYTHON` must point at a python >= 3.10, the emsdk-bundled
-one is older) or in WSL; for most changes let CI carry the lane.
+`wasm_build`: emsdk build of `web/` (emsdk `latest`), then under the emsdk node
+(`"$EMSDK_NODE"`, the system node may be older) two things - the `tests/language` suite
+through `web/test/dastest_wasm.js`, and the vecmath backend battery, which runs the same C++
+rows twice: `test_vecmath_native` on the wasm SIMD128 backend and `test_vecmath_scalar` on the
+per-lane fallback it is checked against. Build both in `web/cmake_temp`
+(`ninja test_vecmath_native test_vecmath_scalar` - `web/` adds the repo tree
+`EXCLUDE_FROM_ALL`, so plain `ninja` builds neither), then from `web/`:
+
+```
+"$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_native.js
+"$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_scalar.js
+```
+
+`wasm_cross`: cross-compiles utility mains to wasm32 via dasLLVM and runs them under
+wasmtime, emscripten **pinned to 5.0.3** (newer clang crashes on
+`utils/gen1-to-gen2/ds_parser.cpp` diagnostics). Mirror, either lane = that job's own emsdk
+commands verbatim, its version included (on Windows `EMSDK_PYTHON` must point at a python
+>= 3.10, the emsdk-bundled one is older); for most changes let CI carry the lane.
 
 ## build_eastl.yml
 

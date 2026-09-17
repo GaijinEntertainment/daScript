@@ -6,11 +6,10 @@ wasm SIMD128 and a scalar per-lane fallback for targets with no SIMD ISA behind 
 unified C API. Used pervasively throughout the Dagor Engine for all performance-critical math:
 transforms, physics, BVH traversal, culling, animation, etc.
 
-These headers are authored here and contributed upstream to Dagor Engine: a backend file follows
-the comment shape of dag_vecMath_pc_sse.h / dag_vecMath_neon.h - a file header block stating the
-backend contract, plus one-line mechanism comments at sites whose intrinsic choice or lane order
-is not readable from the code - and the repo-wide "no new C++ comments" rule does not apply
-inside this folder.
+A backend file carries a header block stating the backend contract - which SSE/NEON semantics
+it matches and where it deviates - plus one-line mechanism comments at sites whose intrinsic
+choice or lane order is not readable from the code. These headers are authored here and
+contributed upstream to Dagor Engine, so a backend reads like its siblings.
 
 ## Key Types (dag_vecMathDecl.h)
 - `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON, a clang typed vector on wasm, a 16-byte struct on scalar)
@@ -89,9 +88,10 @@ v_triangle*).
   inputs into temporaries before the first store, v_mat44_transpose takes src by value,
   v_mat44_inverse43 copies its input first). Preserve this property when adding functions -
   callers write v_mat44_mul(m, m, rel)
-- v_sel selectors must be canonical per-lane masks (all-ones/zero, as v_cmp_* produce): SSE4.1
-  blendvps reads only the sign bit, but the SSE2 path and NEON vbsl select per bit - a sign-only
-  selector works on the PC build and silently breaks on other targets
+- v_sel/v_seli read only the selector's sign bit on every backend; v_btsel/v_btseli select per
+  bit. Pass a canonical per-lane mask (all-ones/zero, as v_cmp_* produce) to either - a per-bit
+  pattern handed to v_sel picks the whole lane by bit 31 alone, and a sign-only pattern handed
+  to v_btsel takes bit 31 from one source and bits 0-30 from the other
 - v_norm* of a zero or near-zero vector produces inf/NaN lanes; v_norm*_safe(a, def) returns def
   when length^2 fails the unsafe-divisor check
 - Function results are usually fully defined: _x forms define .x only (see suffix scheme) and

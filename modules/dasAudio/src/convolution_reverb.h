@@ -237,12 +237,12 @@ static void conv_reverb_generate_ir(ConvolutionReverb * rev, float * ir_left, fl
 
 // acc[i] += a[i] * b[i] over `count` complex numbers in interleaved [re,im] layout — the
 // per-partition convolution kernel (P calls per block per channel; the reverb's hot loop).
-// Vectorized via dag_vecMath (one path for SSE + NEON): four complex per iteration, deinterleaved
+// Vectorized via dag_vecMath (one path for SSE + NEON + wasm): four complex per iteration, deinterleaved
 // into real/imag lanes so a plain msub/madd computes ar*br-ai*bi and ar*bi+ai*br with no addsub.
-// Every op is SSE2/NEON baseline (v_madd degrades to mul+add without FMA), so there is no runtime
-// CPU dispatch; the scalar fallback only covers targets with no dag_vecMath SIMD backend.
+// Every op is SSE2/NEON/SIMD128 baseline (v_madd degrades to mul+add without FMA), so there is no
+// runtime CPU dispatch; the scalar fallback only covers targets with no dag_vecMath SIMD backend.
 static void conv_reverb_complex_multiply_acc(float * acc, const float * a, const float * b, uint32_t count) {
-#if defined(_TARGET_SIMD_SSE) || defined(_TARGET_SIMD_NEON)
+#if defined(_TARGET_SIMD_SSE) || defined(_TARGET_SIMD_NEON) || defined(_TARGET_SIMD_WASM)
     uint32_t i = 0;
     uint32_t vN = count & ~3u;  // largest multiple of 4
     for (; i < vN; i += 4) {

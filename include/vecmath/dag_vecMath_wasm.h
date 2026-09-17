@@ -13,9 +13,8 @@
 // sign bit, shift counts past the lane width zero-fill (sign-fill for v_srai). Float->int
 // conversions saturate and map NaN to 0 (i32x4.trunc_sat), the NEON contract - SSE's INT_MIN
 // answer has no single-instruction form here. There are no estimate instructions: the _est and
-// _unprecise reciprocal/rsqrt forms are the exact division. v_madd/v_nmsub are the fused
-// f32x4.relaxed_madd/nmadd when the translation unit is built with -mrelaxed-simd (the
-// __wasm_relaxed_simd__ predefine) and VECMATH_NO_FMA is not defined; otherwise mul+add.
+// _unprecise reciprocal/rsqrt forms are the exact division. v_madd/v_nmsub fuse under
+// -mrelaxed-simd: the product is not rounded before the add.
 
 #include <wasm_simd128.h>
 #include <stdint.h>
@@ -23,6 +22,7 @@
 #define VECMATH_WASM_V(a) ((v128_t)(a))
 #define VECMATH_WASM_F(a) ((vec4f)(a))
 #define VECMATH_WASM_I(a) ((vec4i)(a))
+#define VECMATH_WASM_D(a) ((vecmath_f64x2)(a))
 #if defined(__wasm_relaxed_simd__) && !defined(VECMATH_NO_FMA)
   #define VECMATH_WASM_FMA 1
 #else
@@ -176,18 +176,12 @@ VECTORCALL VECMATH_FINLINE vec4i v_subi(vec4i a, vec4i b) { return VECMATH_WASM_
 VECTORCALL VECMATH_FINLINE vec4i v_muli(vec4i a, vec4i b) { return VECMATH_WASM_I(wasm_i32x4_mul(VECMATH_WASM_V(a), VECMATH_WASM_V(b))); }
 
 // pair ops fold (x,y),(z,w) of a into .xy and of b into .zw, the SSE haddps lane order
-VECTORCALL VECMATH_FINLINE vec4f v_min_pairs(vec4f a, vec4f b)
-{ return v_min(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
-VECTORCALL VECMATH_FINLINE vec4f v_max_pairs(vec4f a, vec4f b)
-{ return v_max(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
-VECTORCALL VECMATH_FINLINE vec4f v_add_pairs(vec4f a, vec4f b)
-{ return v_add(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
-VECTORCALL VECMATH_FINLINE vec4i v_addi_pairs(vec4i a, vec4i b)
-{ return v_addi(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
-VECTORCALL VECMATH_FINLINE vec4i v_mini_pairs(vec4i a, vec4i b)
-{ return v_mini(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
-VECTORCALL VECMATH_FINLINE vec4i v_maxi_pairs(vec4i a, vec4i b)
-{ return v_maxi(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
+VECTORCALL VECMATH_FINLINE vec4f v_min_pairs(vec4f a, vec4f b) { return v_min(v_perm_xzac(a, b), v_perm_ywbd(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_max_pairs(vec4f a, vec4f b) { return v_max(v_perm_xzac(a, b), v_perm_ywbd(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_add_pairs(vec4f a, vec4f b) { return v_add(v_perm_xzac(a, b), v_perm_ywbd(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4i v_addi_pairs(vec4i a, vec4i b) { return v_addi(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
+VECTORCALL VECMATH_FINLINE vec4i v_mini_pairs(vec4i a, vec4i b) { return v_mini(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
+VECTORCALL VECMATH_FINLINE vec4i v_maxi_pairs(vec4i a, vec4i b) { return v_maxi(__builtin_shufflevector(a, b, 0, 2, 4, 6), __builtin_shufflevector(a, b, 1, 3, 5, 7)); }
 
 VECTORCALL VECMATH_FINLINE bool v_test_all_bits_zeros(vec4f a) { return !wasm_v128_any_true(VECMATH_WASM_V(a)); }
 VECTORCALL VECMATH_FINLINE bool v_test_all_bits_ones(vec4f a) { return !wasm_v128_any_true(wasm_v128_not(VECMATH_WASM_V(a))); }
@@ -209,11 +203,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_cmp_gt(vec4f a, vec4f b) { return VECMATH_WAS
 VECTORCALL VECMATH_FINLINE vec4i v_cmp_lti(vec4i a, vec4i b) { return VECMATH_WASM_I(wasm_i32x4_lt(VECMATH_WASM_V(a), VECMATH_WASM_V(b))); }
 VECTORCALL VECMATH_FINLINE vec4i v_cmp_gti(vec4i a, vec4i b) { return VECMATH_WASM_I(wasm_i32x4_gt(VECMATH_WASM_V(a), VECMATH_WASM_V(b))); }
 
-VECTORCALL VECMATH_FINLINE vec4f is_neg_special(vec4f a)
-{
-  vec4f msbit = v_msbit();
-  return v_cmp_eqi(VECMATH_WASM_F(wasm_v128_and(VECMATH_WASM_V(a), VECMATH_WASM_V(msbit))), msbit);
-}
+VECTORCALL VECMATH_FINLINE vec4f is_neg_special(vec4f a) { return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31)); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_and(vec4f a, vec4f b) { return VECMATH_WASM_F(wasm_v128_and(VECMATH_WASM_V(a), VECMATH_WASM_V(b))); }
 VECTORCALL VECMATH_FINLINE vec4f v_andnot(vec4f a, vec4f b) { return VECMATH_WASM_F(wasm_v128_andnot(VECMATH_WASM_V(b), VECMATH_WASM_V(a))); }
@@ -366,13 +356,13 @@ VECTORCALL VECMATH_FINLINE vec4f v_div_x(vec4f a, vec4f b) { return v_div(a, b);
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt(vec4f a) { return VECMATH_WASM_F(wasm_f32x4_sqrt(VECMATH_WASM_V(a))); }
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt_x(vec4f a) { return v_sqrt(a); }
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise(vec4f a) { return v_div(V_C_ONE, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_rcp_est(vec4f a) { return v_div(V_C_ONE, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a) { return v_div(V_C_ONE, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_rcp_est_x(vec4f a) { return v_div(V_C_ONE, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise(vec4f a) { return v_div(V_C_ONE, v_sqrt(a)); }
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise_x(vec4f a) { return v_div(V_C_ONE, v_sqrt(a)); }
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est(vec4f a) { return v_div(V_C_ONE, v_sqrt(a)); }
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est_x(vec4f a) { return v_div(V_C_ONE, v_sqrt(a)); }
+VECTORCALL VECMATH_FINLINE vec4f v_rcp_est(vec4f a) { return v_rcp_unprecise(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a) { return v_rcp_unprecise(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_rcp_est_x(vec4f a) { return v_rcp_unprecise(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise(vec4f a) { return v_rcp_unprecise(v_sqrt(a)); }
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise_x(vec4f a) { return v_rsqrt_unprecise(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est(vec4f a) { return v_rsqrt_unprecise(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est_x(vec4f a) { return v_rsqrt_unprecise(a); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_neg(vec4f a) { return VECMATH_WASM_F(wasm_f32x4_neg(VECMATH_WASM_V(a))); }
 VECTORCALL VECMATH_FINLINE vec4i v_negi(vec4i a) { return VECMATH_WASM_I(wasm_i32x4_neg(VECMATH_WASM_V(a))); }
@@ -458,7 +448,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_dot2(vec4f a, vec4f b) { return v_splat_x(v_d
 VECTORCALL VECMATH_FINLINE vec4f v_dot3_x(vec4f a, vec4f b) { return v_hadd3_x(v_mul(a, b)); }
 VECTORCALL VECMATH_FINLINE vec4f v_dot3(vec4f a, vec4f b) { return v_splat_x(v_dot3_x(a, b)); }
 VECTORCALL VECMATH_FINLINE vec4f v_dot4_x(vec4f a, vec4f b) { return v_hadd4_x(v_mul(a, b)); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot4(vec4f a, vec4f b) { return v_hadd4_x(v_mul(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_dot4(vec4f a, vec4f b) { return v_dot4_x(a, b); }
 
 VECTORCALL VECMATH_FINLINE vec3f v_cross3(vec3f a, vec3f b)
 {
@@ -608,7 +598,7 @@ VECTORCALL VECMATH_FINLINE vec4i v_slli(vec4i v, int bits)
 VECTORCALL VECMATH_FINLINE vec4i v_srli(vec4i v, int bits)
 { return (unsigned)bits < 32u ? VECMATH_WASM_I(wasm_u32x4_shr(VECMATH_WASM_V(v), (uint32_t)bits)) : v_zeroi(); }
 VECTORCALL VECMATH_FINLINE vec4i v_srai(vec4i v, int bits)
-{ return VECMATH_WASM_I(wasm_i32x4_shr(VECMATH_WASM_V(v), (unsigned)bits < 31u ? (uint32_t)bits : 31u)); }
+{ return VECMATH_WASM_I(wasm_i32x4_shr(VECMATH_WASM_V(v), (unsigned)bits < 32u ? (uint32_t)bits : 31u)); }
 VECTORCALL VECMATH_FINLINE vec4i v_slli_64(vec4i v, int bits)
 { return (unsigned)bits < 64u ? VECMATH_WASM_I(wasm_i64x2_shl(VECMATH_WASM_V(v), (uint32_t)bits)) : v_zeroi(); }
 VECTORCALL VECMATH_FINLINE vec4i v_srli_64(vec4i v, int bits)
