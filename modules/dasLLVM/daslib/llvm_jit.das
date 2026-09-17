@@ -3589,6 +3589,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprCopy
     def build_copy(tdst : LLVMOpaqueValue?; right : ExpressionPtr) {
         var tsrc = getE(right)
+        if (tsrc == tdst) return     // constructed in place: the copy is a memcpy onto itself
         let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             if (right._type.isWorkhorseType) {
