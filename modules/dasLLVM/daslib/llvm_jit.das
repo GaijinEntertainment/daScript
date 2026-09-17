@@ -5110,9 +5110,7 @@ class public LlvmJitVisitor : AstVisitor {
         var ann_vals : array<LLVMValueRef>
         ann_vals |> reserve(int(vi.annotation_argument_count))
         for (i in range(int(vi.annotation_argument_count))) {
-            unsafe {
-                ann_vals |> push <| create_annotation_argument_info(get_annotation_argument(*vi, i))
-            }
+            ann_vals |> push <| create_annotation_argument_info(get_annotation_argument(*vi, i))
         }
         let n = vi.annotation_argument_count
         let ann_global = LLVMAddGlobal(g_mod, LLVMArrayType(ann_ty, n), "varinfo_annotations")
@@ -5204,12 +5202,7 @@ class public LlvmJitVisitor : AstVisitor {
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         set_globalvar_linkage(struct_info_global)
         enuminfo_cache[ei] = struct_info_global
-        var ann_vals : array<LLVMValueRef>
-        for (i in range(int(ei.annotation_count))) {
-            unsafe {
-                ann_vals |> push <| create_annotation_info_value(get_annotation(*ei, i))    // nolint:PERF006 count known small
-            }
-        }
+        var ann_vals <- [for (i in range(int(ei.annotation_count))); create_annotation_info_value(get_annotation(*ei, i))]
         var (ann_ptr, ann_count) = pack_annotation_list(ann_vals)
         var init_values <- [
             get_string_constant_ptr(g_builder, ei.name),
@@ -5231,12 +5224,7 @@ class public LlvmJitVisitor : AstVisitor {
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
         set_globalvar_linkage(struct_info_global)
         structinfo_cache[si] = struct_info_global
-        var ann_vals : array<LLVMValueRef>
-        for (i in range(int(si.annotation_count))) {
-            unsafe {
-                ann_vals |> push <| create_annotation_info_value(get_annotation(*si, i))    // nolint:PERF006 count known small
-            }
-        }
+        var ann_vals <- [for (i in range(int(si.annotation_count))); create_annotation_info_value(get_annotation(*si, i))]
         var (ann_ptr, ann_count) = pack_annotation_list(ann_vals)
         var init_values <- [
             get_string_constant_ptr(g_builder, si.name),

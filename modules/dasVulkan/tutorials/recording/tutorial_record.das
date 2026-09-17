@@ -56,9 +56,7 @@ def public capture_apng(apng_path : string; w, h, n_frames, frame_ms : int;
         }
         flip_rows_inplace(pixels, w, h)
         var rc = 0
-        unsafe {
-            rc = stbi_apng_frame(writer, addr(pixels[0]), w * 4, frame_ms)
-        }
+        rc = stbi_apng_frame(writer, unsafe(addr(pixels[0])), w * 4, frame_ms)
         delete pixels
         if (rc != 1) {
             to_log(LOG_ERROR, "[record] stbi_apng_frame {f} failed\n")

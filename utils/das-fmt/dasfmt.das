@@ -330,9 +330,7 @@ def main() {
     var files : array<string>
     if (!collect_files(inputPaths, seen, files)) {
         log::error("Unable to collect files list\n")
-        unsafe {
-            fio::exit(1)
-        }
+        unsafe(fio::exit(1))
         return
     }
 
@@ -341,9 +339,7 @@ def main() {
     for (lf in listPaths) {
         if (!collect_files_from_list(lf, seen, files)) {
             log::error("Unable to collect files list\n")
-            unsafe {
-                fio::exit(1)
-            }
+            unsafe(fio::exit(1))
             return
         }
     }
@@ -365,9 +361,7 @@ def main() {
 
     if (strip_failures > 0) {
         log::info("Failed! {strip_failures} file(s) not stripped in {time_dt_hr(get_time_usec(startTime))}")
-        unsafe {
-            fio::exit(1)
-        }
+        unsafe(fio::exit(1))
         return
     }
 
@@ -377,9 +371,7 @@ def main() {
             return
         } else {
             log::info("Verification failed! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
-            unsafe {
-                fio::exit(1)
-            }
+            unsafe(fio::exit(1))
         }
     }
 

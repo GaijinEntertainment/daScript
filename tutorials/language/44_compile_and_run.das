@@ -58,9 +58,7 @@ def hello() \{
                     print("simulate error: {serrors}\n")
                     return
                 }
-                unsafe {
-                    invoke_in_context(context, "hello")
-                }
+                unsafe(invoke_in_context(context, "hello"))
             }
         }
     }
@@ -92,9 +90,7 @@ def compile_from_file() {
                         return
                     }
                     // Call "main" in the child context
-                    unsafe {
-                        invoke_in_context(context, "main")
-                    }
+                    unsafe(invoke_in_context(context, "main"))
                 }
             }
         }
@@ -134,9 +130,7 @@ def greet(name : string) \{
                         print("simulate error: {serrors}\n")
                         return
                     }
-                    unsafe {
-                        invoke_in_context(context, "greet", "World")
-                    }
+                    unsafe(invoke_in_context(context, "greet", "World"))
                 }
             }
         }
@@ -180,9 +174,7 @@ def sum3(a, b, c : int) \{
                 if (!has_function(*context, "nonexistent")) {
                     print("  has_function(\"nonexistent\") = false\n")
                 }
-                unsafe {
-                    invoke_in_context(context, "sum3", 10, 20, 30)
-                }
+                unsafe(invoke_in_context(context, "sum3", 10, 20, 30))
             }
         }
     }
@@ -219,9 +211,7 @@ def read_global_variable() {
                         return
                     }
                     // Call compute(7) — sets global `result` to 7*7+1 = 50
-                    unsafe {
-                        invoke_in_context(context, "compute", 7)
-                    }
+                    unsafe(invoke_in_context(context, "compute", 7))
                     // Read back the global variable "result"
                     let ptr = unsafe(get_context_global_variable(context, "result"))
                     if (ptr != null) {
@@ -334,9 +324,7 @@ def produce(var ch : Channel?) \{
                     }
                     // Create a channel, pass it to the child, drain results
                     with_channel(1) $(ch) {
-                        unsafe {
-                            invoke_in_context(context, "produce", ch)
-                        }
+                        unsafe(invoke_in_context(context, "produce", ch))
                         ch |> for_each_clone() $(val : IntResult#) {
                             print("  channel received: {val.value}\n")
                         }
@@ -396,9 +384,7 @@ def crash() \{
                     return
                 }
                 try {
-                    unsafe {
-                        invoke_in_context(context, "crash")
-                    }
+                    unsafe(invoke_in_context(context, "crash"))
                 } recover {
                     print("  runtime error caught (expected)\n")
                 }

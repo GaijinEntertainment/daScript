@@ -225,32 +225,30 @@ struct public ShadowResources {
 }
 
 def public finalize(var r : ShadowResources) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline_main
-        delete r.pipeline_shadow
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.brick_roughness
-        delete r.brick_ao
-        delete r.brick_normal
-        delete r.brick_albedo
-        delete r.tex_sampler
-        delete r.shadow_sampler
-        delete r.ubo
-        delete r.floor_ib
-        delete r.floor_vb
-        delete r.cube_ib
-        delete r.cube_vb
-        delete r.fb_shadow
-        delete r.fb_color
-        delete r.rp_shadow
-        delete r.rp_color
-        delete r.shadow_map
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.pipeline_main
+    delete r.pipeline_shadow
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.brick_roughness
+    delete r.brick_ao
+    delete r.brick_normal
+    delete r.brick_albedo
+    delete r.tex_sampler
+    delete r.shadow_sampler
+    delete r.ubo
+    delete r.floor_ib
+    delete r.floor_vb
+    delete r.cube_ib
+    delete r.cube_vb
+    delete r.fb_shadow
+    delete r.fb_color
+    delete r.rp_shadow
+    delete r.rp_color
+    delete r.shadow_map
+    delete r.depth
+    delete r.color
 }
 
 //! Self-contained one-shot context for the offscreen oracle + recording driver. Windowed drivers
@@ -265,12 +263,10 @@ struct public ShadowContext {
 }
 
 def public finalize(var ctx : ShadowContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 // ===== pipeline builders =====

@@ -34,7 +34,7 @@ def test_rtti_serializer_round_trip(t : T?) {
                 var restored = false
                 let t0 = ref_time_ticks()
                 var deser = create_ast_deserializer(bytes)
-                deserialize_program(deser) $(dok, _prog, err) {
+                deserialize_program(deser, unsafe(addr(mg))) $(dok, _prog, err) {
                     restored = dok
                     if (!dok) {
                         t |> failure("deserialize_program: {err}")

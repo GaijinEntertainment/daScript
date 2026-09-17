@@ -132,9 +132,7 @@ def create_graphics_pipelines(device : Device; pipelineCache : PipelineCache; va
     var vkout : array<VkPipeline>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -159,9 +157,7 @@ def create_compute_pipelines(device : Device; pipelineCache : PipelineCache; cre
     var vkout : array<VkPipeline>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateComputePipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateComputePipelines(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -227,9 +223,7 @@ def allocate_descriptor_sets(device : Device; var create_info : DescriptorSetAll
     var vkout : array<VkDescriptorSet>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkAllocateDescriptorSets(boost_value_to_vk(device), vci, addr(vkout[0])), result)
-        }
+        vk_check(vkAllocateDescriptorSets(boost_value_to_vk(device), vci, unsafe(addr(vkout[0]))), result)
     }
     var blist : array<DescriptorSet>
     blist |> resize(n)
@@ -282,9 +276,7 @@ def allocate_command_buffers(device : Device; create_info : CommandBufferAllocat
     var vkout : array<VkCommandBuffer>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), vci, addr(vkout[0])), result)
-        }
+        vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), vci, unsafe(addr(vkout[0]))), result)
     }
     var blist : array<CommandBuffer>
     blist |> resize(n)
@@ -328,9 +320,7 @@ def create_shared_swapchains_k_h_r(device : Device; var create_infos : array<Swa
     var vkout : array<VkSwapchainKHR>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateSharedSwapchainsKHR(boost_value_to_vk(device), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateSharedSwapchainsKHR(boost_value_to_vk(device), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -443,9 +433,7 @@ def create_ray_tracing_pipelines_n_v(device : Device; pipelineCache : PipelineCa
     var vkout : array<VkPipeline>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateRayTracingPipelinesNV(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateRayTracingPipelinesNV(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -470,9 +458,7 @@ def create_ray_tracing_pipelines_k_h_r(device : Device; deferredOperation : Defe
     var vkout : array<VkPipeline>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateRayTracingPipelinesKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateRayTracingPipelinesKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -596,9 +582,7 @@ def create_shaders_e_x_t(device : Device; var create_infos : array<ShaderCreateI
     var vkout : array<VkShaderEXT>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateShadersEXT(boost_value_to_vk(device), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateShadersEXT(boost_value_to_vk(device), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw
@@ -678,9 +662,7 @@ def create_data_graph_pipelines_a_r_m(device : Device; deferredOperation : Defer
     var vkout : array<VkPipeline>
     vkout |> resize(n)
     if (n > 0) {
-        unsafe {
-            vk_check(vkCreateDataGraphPipelinesARM(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), addr(vkraw[0]), null, addr(vkout[0])), result)
-        }
+        vk_check(vkCreateDataGraphPipelinesARM(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), boost_value_to_vk(pipelineCache), uint(n), unsafe(addr(vkraw[0])), null, unsafe(addr(vkout[0]))), result)
     }
     for (vkv in create_infos) { vk_view_destroy(vkv) }
     delete vkraw

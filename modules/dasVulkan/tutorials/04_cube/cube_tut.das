@@ -226,24 +226,22 @@ struct public CubeResources {
 //! Reverse-of-creation cleanup (the desc_set is owned by desc_pool so its raw handle just goes
 //! away when the pool destroys; nothing to delete for it explicitly).
 def public finalize(var r : CubeResources) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.sampler
-        delete r.tex_view
-        delete r.tex_image
-        delete r.tex_memory
-        delete r.ubo
-        delete r.ib
-        delete r.vb
-        delete r.framebuffer
-        delete r.render_pass
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.pipeline
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.sampler
+    delete r.tex_view
+    delete r.tex_image
+    delete r.tex_memory
+    delete r.ubo
+    delete r.ib
+    delete r.vb
+    delete r.framebuffer
+    delete r.render_pass
+    delete r.depth
+    delete r.color
 }
 
 //! Self-contained one-shot context for the offscreen oracle + recording driver: owns its own
@@ -258,12 +256,10 @@ struct public CubeContext {
 }
 
 def public finalize(var ctx : CubeContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Build the cube's render resources against a caller-owned (device, phys, queue, pool). Used by both

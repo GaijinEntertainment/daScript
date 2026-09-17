@@ -3533,7 +3533,7 @@ The RTTI module exposes runtime type information and program introspection facil
 - `create_ast_deserializer` - Creates deserializer.
 - `create_ast_serializer` - Creates serializer object.
 - `delete_ast_serializer` - Frees memory for ast_serializer.
-- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the two-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
+- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the three-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
 - `for_each_expected_error` - Iterates through each expected compilation error declared in the `Program` (via `expect`), yielding the error code for each.
 - `for_each_require_declaration` - Iterates through each `require` declaration of the compiled `Program`, yielding the module name, public/private flag, and source `LineInfo`.
 - `serialize_program` - Serializes program to serializer object.
@@ -3848,6 +3848,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `TypeDecl.isBitfield` - Returns whether the given type is a bitfield type.
 - `TypeDecl.isLocal` - Returns whether the given type is a local type that can be allocated on the stack.
 - `TypeDecl.hasClasses` - Returns whether the type definition contains any class types.
+- `TypeDecl.isSafeToDelete` - Returns whether a value of the given type is safe to delete, meaning that deleting it does not require an unsafe block.
 - `TypeDecl.hasNonTrivialCtor` - Returns whether the type definition contains any non-trivial constructors.
 - `TypeDecl.hasNonTrivialDtor` - Returns whether the type definition contains any non-trivial destructors.
 - `TypeDecl.hasNonTrivialCopy` - Returns whether the type definition contains any non-trivial copy operations.

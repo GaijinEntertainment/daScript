@@ -1231,7 +1231,14 @@ DAS_API int32_t jit_lib_run_once ( int32_t * guard, void ** env, void (*fn)() ) 
     das::daScriptEnvironment::ensure();
     *env = das::daScriptEnvironment::getBound();
     *guard = das::daScriptEnvironment::getBound()->modules ? 2 : 1;
-    fn();
+    {
+        das::gc_guard registration_gc_scope;
+        fn();
+        das::Module::foreach([&](das::Module * m) {
+            m->gc_collect(&registration_gc_scope.guard_root);
+            return true;
+        });
+    }
     return 1;
 }
 

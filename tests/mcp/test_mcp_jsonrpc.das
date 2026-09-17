@@ -55,20 +55,17 @@ def private read_complete_line(stdout_r : FILE const?) : string {
 def run_mcp_session(requests : array<string>; var responses : array<string>) : int {
     let exe = get_das_exe()
     let script = mcp_script()
-    var rc : int
-    unsafe {
-        rc = popen_argv_pipe([exe, script]) $(stdin_w, stdout_r) {
-            return if (stdin_w == null || stdout_r == null)
-            for (req in requests) {
-                fprint(stdin_w, "{req}\n")
-                fflush(stdin_w)
-                let line = read_complete_line(stdout_r)
-                if (!empty(line)) {
-                    responses |> push(line)
-                }
+    let rc = unsafe(popen_argv_pipe([exe, script]) $(stdin_w, stdout_r) {
+        return if (stdin_w == null || stdout_r == null)
+        for (req in requests) {
+            fprint(stdin_w, "{req}\n")
+            fflush(stdin_w)
+            let line = read_complete_line(stdout_r)
+            if (!empty(line)) {
+                responses |> push(line)
             }
         }
-    }
+    })
     return rc
 }
 

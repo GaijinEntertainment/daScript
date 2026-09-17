@@ -147,9 +147,7 @@ def test_user_finalizers_never_run_implicitly(t : T?) {
         let after = heap_bytes_allocated()
         t |> equal(g_finalized, 0)
         t |> equal(int(before), int(after))
-        unsafe {
-            delete arr
-        }
+        delete arr
     }
     t |> run("delete remains the full teardown") @(t : T?) {
         var inscope one <- make_probes(1)
@@ -167,9 +165,7 @@ def test_user_finalizers_never_run_implicitly(t : T?) {
         tab |> erase("a")
         tab |> clear()
         t |> equal(g_finalized, 0)
-        unsafe {
-            delete tab
-        }
+        delete tab
     }
 }
 

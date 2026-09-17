@@ -326,10 +326,8 @@ def use_ret_param(i : int) : int {
 def unsafe_addr_local(i : int) : int {
     var p = new Node(x = i, y = i * 2)
     var r = p.x + p.y
-    unsafe {
-        let pp = addr(p)               // taking the address marks the function unsafe -> excluded
-        if (pp == null) { r = -1 }     // never taken; consumes pp without a dead store
-    }
+    let pp = unsafe(addr(p))     // taking the address marks the function unsafe -> excluded
+    if (pp == null) { r = -1 }   // never taken; consumes pp without a dead store
     return r
 }
 

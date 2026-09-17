@@ -23,17 +23,15 @@ def private run_probe(control_env : string) : string {
                : "DAS_TUNE_CONTROL=\"{control_env}\" "))
     let cmd = "{envs}\"{get_das_exe()}\" \"modules/dasLLAMA/tests/_interrupt_probe.das\" -dasroot \"{get_das_root()}\" 2>&1"
     var out = ""
-    unsafe {
-        popen(cmd) $(f) {
-            if (f != null) {
-                out = build_string() $(w) {
-                    while (!feof(f)) {
-                        w |> write(fgets(f))
-                    }
+    unsafe(popen(cmd) $(f) {
+        if (f != null) {
+            out = build_string() $(w) {
+                while (!feof(f)) {
+                    w |> write(fgets(f))
                 }
             }
         }
-    }
+    })
     return out
 }
 

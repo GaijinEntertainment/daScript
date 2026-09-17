@@ -187,27 +187,25 @@ struct public TeapotResources {
 }
 
 def public finalize(var r : TeapotResources) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline_shadow
-        delete r.pipeline_sky
-        delete r.pipeline_floor
-        delete r.pipeline
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.shadow_sampler
-        delete r.sky_vb
-        delete r.floor_vb
-        delete r.ubo
-        delete r.fb_shadow
-        delete r.framebuffer
-        delete r.rp_shadow
-        delete r.render_pass
-        delete r.shadow_map
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.pipeline_shadow
+    delete r.pipeline_sky
+    delete r.pipeline_floor
+    delete r.pipeline
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.shadow_sampler
+    delete r.sky_vb
+    delete r.floor_vb
+    delete r.ubo
+    delete r.fb_shadow
+    delete r.framebuffer
+    delete r.rp_shadow
+    delete r.render_pass
+    delete r.shadow_map
+    delete r.depth
+    delete r.color
 }
 
 struct public TeapotContext {
@@ -219,12 +217,10 @@ struct public TeapotContext {
 }
 
 def public finalize(var ctx : TeapotContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Depth-only mesh-shader pipeline for the shadow pass: task + mesh stages, NO fragment, NO color

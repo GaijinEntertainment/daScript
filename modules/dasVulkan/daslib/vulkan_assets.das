@@ -48,11 +48,9 @@ struct public Texture {
 }
 
 def public finalize(var t : Texture) {
-    unsafe {
-        delete t.view
-        delete t.image
-        delete t.memory
-    }
+    delete t.view
+    delete t.image
+    delete t.memory
 }
 
 // Isolate the dasStbImage `Image` (clashes with vulkan's `Image` name) to this one helper: load a
@@ -174,10 +172,8 @@ def public upload_texture(device : Device; phys : VkPhysicalDevice; queue : VkQu
             blit.dstOffsets[1].x = nw
             blit.dstOffsets[1].y = nh
             blit.dstOffsets[1].z = 1
-            unsafe {
-                vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                    boost_value_to_vk(image), VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, addr(blit), VkFilter.LINEAR)
-            }
+            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
+                boost_value_to_vk(image), VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(blit)), VkFilter.LINEAR)
             mip_barrier(cmd, image, uint(i - 1), 1u, VkImageLayout.TRANSFER_SRC_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
                 to_tread, to_read, xfer, frag_stage)
             mw = nw
@@ -231,10 +227,8 @@ struct public Mesh {
 }
 
 def public finalize(var m : Mesh) {
-    unsafe {
-        delete m.ibuf
-        delete m.vbuf
-    }
+    delete m.ibuf
+    delete m.vbuf
 }
 
 //! Load an OBJ model into vertex + index buffers via the daslang glsl/geom_gen parser (positions +

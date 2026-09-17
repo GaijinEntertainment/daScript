@@ -135,20 +135,18 @@ def private run_half(name : string; paranoid : bool) : bool {
     print("dasllama_tuner: {cmd}\n")
     var rc : int
     var noiseRefused = false
-    unsafe {
-        rc = popen_timeout(full, 3600.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = fgets(f)
-                if (find(ln, "NOISE GATE") >= 0) {
-                    noiseRefused = true
-                }
-                print(ln)
-            }
+    rc = unsafe(popen_timeout(full, 3600.0) $(f) {
+        if (f == null) {
+            return
         }
-    }
+        while (!feof(f)) {
+            let ln = fgets(f)
+            if (find(ln, "NOISE GATE") >= 0) {
+                noiseRefused = true
+            }
+            print(ln)
+        }
+    })
     let elapsed_ms = get_time_usec(t0) / 1000
     g_half_ms[name] = elapsed_ms
     print("dasllama_tuner: {name} finished in {elapsed_ms} ms (rc={rc})\n")

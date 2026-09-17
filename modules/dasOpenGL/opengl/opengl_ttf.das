@@ -50,10 +50,8 @@ def public upload_font_texture(var font : Font) {
     var tex = 0u
     glGenTextures(1, safe_addr(tex))
     glBindTexture(GL_TEXTURE_2D, tex)
-    unsafe {
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), font.bitmap.width, font.bitmap.height,
-            0, GL_RED, GL_UNSIGNED_BYTE, addr(font.bitmap.bytes[0]))
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), font.bitmap.width, font.bitmap.height,
+        0, GL_RED, GL_UNSIGNED_BYTE, unsafe(addr(font.bitmap.bytes[0])))
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     font.tex = uint64(tex)
@@ -86,10 +84,8 @@ def public create_quads(font : Font; text : string; at : float2 = float2(0.)) {
     for (ch in text) {
         let idx = ch - first
         if (idx >= 0 && idx < num_chars) {
-            unsafe {
-                stbtt_GetPackedQuad(addr(font.chardata[0]), bw, bh, idx,
-                    safe_addr(x), safe_addr(y), safe_addr(q), 0)
-            }
+            stbtt_GetPackedQuad(unsafe(addr(font.chardata[0])), bw, bh, idx,
+                safe_addr(x), safe_addr(y), safe_addr(q), 0)
             quads |> push(FontVertex(xy = float2(q.x0, q.y0), uv = float2(q.s0, q.t0)))
             quads |> push(FontVertex(xy = float2(q.x1, q.y0), uv = float2(q.s1, q.t0)))
             quads |> push(FontVertex(xy = float2(q.x1, q.y1), uv = float2(q.s1, q.t1)))

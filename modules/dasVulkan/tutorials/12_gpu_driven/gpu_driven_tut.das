@@ -222,9 +222,7 @@ def public draw_indirect_count_available() : bool {
     var f12 = VkPhysicalDeviceVulkan12Features()
     f12.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
     var f2 = VkPhysicalDeviceFeatures2()
-    unsafe {
-        f2.pNext = addr<void?>(f12)
-    }
+    f2.pNext = unsafe(addr<void?>(f12))
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return f12.drawIndirectCount != 0u
 }
@@ -722,47 +720,45 @@ struct public GpuDrivenResources {
 }
 
 def public finalize(var r : GpuDrivenResources) {
-    unsafe {
-        delete r.readback
-        delete r.desc_pool
-        delete r.god_pipe
-        delete r.god_pl
-        delete r.god_layouts
-        delete r.main_pipe
-        delete r.main_pl
-        delete r.main_layouts
-        delete r.occ_ghost_pipe
-        delete r.occ_solid_pipe
-        delete r.depth_pipe
-        delete r.occ_pl
-        delete r.occ_layouts
-        delete r.down_pipe
-        delete r.mip0_pipe
-        delete r.hzb_pl
-        delete r.hzb_layouts
-        delete r.cull_pipe
-        delete r.cull_pl
-        delete r.cull_layouts
-        delete r.cull_reason
-        delete r.draw_inst
-        delete r.draw_count
-        delete r.draw_cmds
-        delete r.instances
-        delete r.ubo
-        delete r.cube_ib
-        delete r.cube_vb
-        delete r.materials
-        delete r.mat_sampler
-        delete r.depth_sampler
-        delete r.fb_color
-        delete r.fb_depth
-        delete r.rp_color
-        delete r.rp_depth
-        delete r.hzb
-        delete r.occ_depth
-        delete r.out_depth
-        delete r.out_color
-    }
+    delete r.readback
+    delete r.desc_pool
+    delete r.god_pipe
+    delete r.god_pl
+    delete r.god_layouts
+    delete r.main_pipe
+    delete r.main_pl
+    delete r.main_layouts
+    delete r.occ_ghost_pipe
+    delete r.occ_solid_pipe
+    delete r.depth_pipe
+    delete r.occ_pl
+    delete r.occ_layouts
+    delete r.down_pipe
+    delete r.mip0_pipe
+    delete r.hzb_pl
+    delete r.hzb_layouts
+    delete r.cull_pipe
+    delete r.cull_pl
+    delete r.cull_layouts
+    delete r.cull_reason
+    delete r.draw_inst
+    delete r.draw_count
+    delete r.draw_cmds
+    delete r.instances
+    delete r.ubo
+    delete r.cube_ib
+    delete r.cube_vb
+    delete r.materials
+    delete r.mat_sampler
+    delete r.depth_sampler
+    delete r.fb_color
+    delete r.fb_depth
+    delete r.rp_color
+    delete r.rp_depth
+    delete r.hzb
+    delete r.occ_depth
+    delete r.out_depth
+    delete r.out_color
 }
 
 struct public GpuDrivenContext {
@@ -774,12 +770,10 @@ struct public GpuDrivenContext {
 }
 
 def public finalize(var ctx : GpuDrivenContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 // ===== build =====
@@ -1143,9 +1137,7 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
 
     // ===== pass 3: cull =====
     // zero the draw count, then make it visible to the cull shader
-    unsafe {
-        vkCmdFillBuffer(raw, boost_value_to_vk(res.draw_count.buffer), 0ul, 4ul, 0u)
-    }
+    vkCmdFillBuffer(raw, boost_value_to_vk(res.draw_count.buffer), 0ul, 4ul, 0u)
     {
         var bb : BufferMemoryBarrier
         bb.srcAccessMask.transfer_write = true

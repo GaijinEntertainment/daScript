@@ -72,11 +72,9 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     // when it goes out of scope. No manual delete needed.
 
     print("=== var inscope ===\n")
-    unsafe {
-        var inscope pt = new Point(x = 1.0, y = 2.0)
-        print("  pt.x = {pt.x}, pt.y = {pt.y}\n")
-        // pt is automatically deleted at end of scope
-    }
+    var inscope pt = new Point(x = 1.0, y = 2.0)
+    print("  pt.x = {pt.x}, pt.y = {pt.y}\n")
+    // pt is automatically deleted at end of scope
 
     // === addr() — pointer to existing variable ===
     //
@@ -85,12 +83,10 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("=== addr ===\n")
     var a = 42
-    unsafe {
-        var pa = addr(a)          // pa is int?
-        print("  *pa = {*pa}\n")
-        *pa = 100                 // modify through pointer
-        print("  a = {a}\n")      // a is now 100
-    }
+    var pa = unsafe(addr(a))  // pa is int?
+    print("  *pa = {*pa}\n")
+    *pa = 100                 // modify through pointer
+    print("  a = {a}\n")      // a is now 100
 
     // === safe_addr() — without unsafe ===
     //
@@ -108,12 +104,10 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     // They panic if the pointer is null.
 
     print("=== deref ===\n")
-    unsafe {
-        var c = 5
-        var pc = addr(c)
-        print("  *pc = {*pc}\n")
-        print("  deref(pc) = {deref(pc)}\n")
-    }
+    var c = 5
+    var pc = unsafe(addr(c))
+    print("  *pc = {*pc}\n")
+    print("  deref(pc) = {deref(pc)}\n")
 
     // For struct pointers, field access auto-dereferences:
     //   p.x  is the same as  (*p).x
@@ -130,9 +124,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     // Catch null dereference with try/recover:
     try {
-        unsafe {
-            print("  {*np}\n")      // panics — np is null
-        }
+        print("  {*np}\n")      // panics — np is null
     } recover {
         print("  caught null deref\n")
     }
@@ -160,9 +152,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     print("  after move: pt2.x = {pt2.x}, pt2.y = {pt2.y}\n")
 
     var val = 21
-    unsafe {
-        double_value(addr(val))
-    }
+    double_value(unsafe(addr(val)))
     print("  after double: val = {val}\n")
 
     // === Pointer arithmetic (unsafe) ===
@@ -210,12 +200,10 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("=== intptr ===\n")
     var e = 42
-    unsafe {
-        var pe = addr(e)
-        let address = intptr(pe)
-        print("  address != 0: {address != uint64(0)}\n")
-        print("  same pointer: {intptr(pe) == address}\n")
-    }
+    var pe = unsafe(addr(e))
+    let address = intptr(pe)
+    print("  address != 0: {address != uint64(0)}\n")
+    print("  same pointer: {intptr(pe) == address}\n")
 
     // === reinterpret — raw bit cast ===
     //

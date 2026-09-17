@@ -12,9 +12,7 @@ def make_lam() : lambda<(var a : int?&) : bool> {
         if (idx >= length(g_src)) {
             return false
         }
-        unsafe {
-            a = addr(g_src[idx])
-        }
+        a = unsafe(addr(g_src[idx]))
         idx++
         return true
     }

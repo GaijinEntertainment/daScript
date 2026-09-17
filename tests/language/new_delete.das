@@ -112,9 +112,7 @@ def test_delete_string(t : T?) {
     let w0 = heap_bytes_allocated()
     var a = "{deref(getPtr())}"
     // assert(a=="0")
-    unsafe {
-        delete_string(a)
-    }
+    unsafe(delete_string(a))
     let w1 = heap_bytes_allocated()
     t |> equal(w0, w1)
     t |> equal(a, "")
@@ -125,9 +123,7 @@ def test_delete_string_array(t : T?) {
     let w0 = heap_bytes_allocated()
     var a = fixed_array<string>("{deref(getPtr())}_1", "{deref(getPtr())}_2", "{deref(getPtr())}_3")
     for (AA in a) {
-        unsafe {
-            delete_string(AA)
-        }
+        unsafe(delete_string(AA))
     }
     let w1 = heap_bytes_allocated()
     t |> equal(w0, w1)

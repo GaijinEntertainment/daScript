@@ -427,9 +427,7 @@ def w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
             w.ok = false
             return
         }
-        unsafe {
-            memcpy(mem_at(w.chunk_base, w.cur), p, nbytes)
-        }
+        unsafe(memcpy(mem_at(w.chunk_base, w.cur), p, nbytes))
     } elif (!unsafe(dwrite_append(w.dwrite_h, p, nbytes))) {
         w.ok = false   // a dead save stays dead — don't keep pushing bytes at a full disk
         return
@@ -444,9 +442,7 @@ def w_zeros(var w : ImgWriter; n : uint64) {
     var z : array<uint8>
     z |> reserve(int64(n))
     z |> resize(int64(n))
-    unsafe {
-        w_append(w, addr<void?>(z[0]), n)
-    }
+    w_append(w, unsafe(addr<void?>(z[0])), n)
     delete z
 }
 
@@ -602,9 +598,7 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
         var at = 0
         for (n, s in lens, a) {
             if (n > 0) {
-                unsafe {
-                    s = string(temp_array(addr<uint8?>(blob[at]), n, type<uint8>))
-                }
+                s = string(unsafe(temp_array(unsafe(addr<uint8?>(blob[at])), n, type<uint8>)))
             } else {
                 s = ""
             }
@@ -1432,9 +1426,7 @@ def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var section
     while (b0 < sh.blocks && w.ok) {
         let n = min(METAL_BAND_BLOCKS, sh.blocks - b0)
         metal_blob_fill_blocks(t, b0, n, band)
-        unsafe {
-            w_append(w, addr<void?>(band[0]), uint64(n * sh.stride))
-        }
+        w_append(w, unsafe(addr<void?>(band[0])), uint64(n * sh.stride))
         b0 += n
     }
     delete band

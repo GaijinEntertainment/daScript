@@ -29,10 +29,8 @@ def populate(n : int) {
 def test_theme6_silenced_no_warn_cascade_correct(t : T?) {
     t |> run("Theme 6: `_no_linq_perf_warn` suppresses warning, cascade still correct") @(tt : T?) {
         populate(20)
-        unsafe {
-            let c = _fold(from_decs_template(type<Theme6SilencedRow>)._select(_.val)._skip_while(_ < 5).count())
-            tt |> equal(c, 15)
-        }
+        let c = _fold(from_decs_template(type<Theme6SilencedRow>)._select(_.val)._skip_while(_ < 5).count())
+        tt |> equal(c, 15)
         restart()
     }
 }

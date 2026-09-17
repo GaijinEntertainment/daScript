@@ -15,19 +15,16 @@ require strings
 def private run_split_child(cmd : string; hit_marker : string) : tuple<rc : int; sawResult : bool; sawMarker : bool> {
     var sawResult = false
     var sawMarker = false
-    var rc : int
-    unsafe {
-        rc = popen_timeout(cmd, 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = fgets(f)
-                sawResult ||= find(ln, "SPLIT_RESULT 340 19 36 33 -1") >= 0
-                sawMarker ||= find(ln, hit_marker) >= 0
-            }
+    let rc = unsafe(popen_timeout(cmd, 300.0) $(f) {
+        if (f == null) {
+            return
         }
-    }
+        while (!feof(f)) {
+            let ln = fgets(f)
+            sawResult ||= find(ln, "SPLIT_RESULT 340 19 36 33 -1") >= 0
+            sawMarker ||= find(ln, hit_marker) >= 0
+        }
+    })
     return (rc = rc, sawResult = sawResult, sawMarker = sawMarker)
 }
 

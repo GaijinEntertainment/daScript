@@ -7,10 +7,6 @@ let neg_inf = -1.0 / 0.0    // nolint:LINT006
 let neg_nan = inf / inf     // nolint:LINT007 — inf/inf is how a nan is produced here
 let nan = -(inf / inf)      // nolint:LINT007
 
-// A host may build the runtime with -ffinite-math-only (dagor does). That folds every nan
-// comparison to a constant, so the compare semantics below are not the ones that host
-// asked for - detect it and skip. is_nan / is_finite are exempt: they answer IEEE on every
-// host (test_is_nan_and_is_finite_hold_on_every_host), so the probe is a compare, never is_nan.
 def private host_folds_nan_compares() : bool {
     let a = opaque(unsafe(reinterpret<double>(0x7FF8000000000000ul)))
     let b = opaque(unsafe(reinterpret<double>(0x7FF8000000000000ul)))
@@ -79,8 +75,8 @@ def test_abs_clears_the_sign_of_zero(t : T?) {
 
 [test]
 def test_inf_and_nan(t : T?) {
-    if (host_folds_nan_compares()) {
-        t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
+    if (HOST_FAST_MATH || host_folds_nan_compares()) {
+        t |> skip("host runtime is built -ffast-math/-ffinite-math-only: nan compares fold")
         return
     }
     t |> run("inf and neg inf") @@(t : T?) {

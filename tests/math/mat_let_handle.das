@@ -59,8 +59,6 @@ def get_col3(s : S?&) : float3 {
 def test_mat_field_idx_through_ptr(t : T?) {
     var s : S
     s.m[3] = float3(1.0, 2.0, 3.0)
-    unsafe {
-        var p : S? = addr(s)
-        t |> equal(get_col3(p), float3(1.0, 2.0, 3.0))
-    }
+    var p : S? = unsafe(addr(s))
+    t |> equal(get_col3(p), float3(1.0, 2.0, 3.0))
 }

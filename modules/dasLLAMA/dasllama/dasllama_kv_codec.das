@@ -393,19 +393,13 @@ def kv_head_off(p : TQ4B const?; elems : int64) : int64 => elems / 32l * 18l
 // Bulk one-row dequant into f32 scratch — the flash pack's per-row primitive (and any future
 // codec's bulk-dequant seam: q8_0 adds a cvt overload here, never a new pack shape).
 def kv_row_to_f32(var d : float?; p : float const?; base, n : int64) {
-    unsafe {
-        copy_floats(d, p + base, n)
-    }
+    copy_floats(d, unsafe(p + base), n)
 }
 def kv_row_to_f32(var d : float?; p : uint16 const?; base, n : int64) {
-    unsafe {
-        cvt_f16_to_f32(d, p + base, n)
-    }
+    cvt_f16_to_f32(d, unsafe(p + base), n)
 }
 def kv_row_to_f32(var d : float?; p : uint8 const?; base, n : int64) {
-    unsafe {
-        cvt_q8kv_to_f32(d, p + base, n)
-    }
+    cvt_q8kv_to_f32(d, unsafe(p + base), n)
 }
 def kv_row_to_f32(var d : float?; p : TQ4B const?; base, n : int64) {
     unsafe {

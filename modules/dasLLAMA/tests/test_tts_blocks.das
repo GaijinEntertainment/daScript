@@ -1396,10 +1396,8 @@ def test_rope_rows_and_var_scale_norm(t : T?) {
     var inscope rx : array<float>
     rand_fill(r, rx, 6l * 64l, 1.0)
     var inscope want_rope := rx
-    unsafe {
-        for (row in range64(6l)) {
-            rope_scaled(addr(want_rope[row * 64l]), 100l + row, 16l, 64l, 10000.0, 1.0, false, null)
-        }
+    for (row in range64(6l)) {
+        rope_scaled(unsafe(addr(want_rope[row * 64l])), 100l + row, 16l, 64l, 10000.0, 1.0, false, null)
     }
     rope_rows(rx, 6l, 64l, 16l, 100l, 10000.0)
     var rope_diffs = 0

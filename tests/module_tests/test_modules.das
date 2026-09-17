@@ -57,9 +57,7 @@ def run_module_test(base_path, main_file : string; use_project : bool) : bool {
                     if (!sok) {
                         return
                     }
-                    unsafe {
-                        invoke_in_context(context, "test")
-                    }
+                    unsafe(invoke_in_context(context, "test"))
                     result = true
                 }
             }
@@ -127,9 +125,7 @@ def run_module_test_option_ignored(base_path, main_file, ignored_opt, applied_op
                     if (!sok) {
                         return
                     }
-                    unsafe {
-                        invoke_in_context(context, "test")
-                    }
+                    unsafe(invoke_in_context(context, "test"))
                     result = true
                 }
             }

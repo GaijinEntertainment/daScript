@@ -69,6 +69,17 @@ def good_narrowed_expression_form() : void {
     unsafe(my_unsafe_void(5))                         // expression form — no STYLE025
 }
 
+class FixtureWidget {
+    x : int
+}
+
+def good_stack_class_declaration() : void {
+    unsafe {
+        let w = FixtureWidget()
+        print("{w.x}\n")
+    }
+}
+
 def good_nested_addr_block() : void {
     // Block form is required when nested `addr(x)` needs unsafeDepth to
     // propagate — STYLE025 should NOT fire here.

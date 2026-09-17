@@ -2830,6 +2830,11 @@ unsafe, the block scope is too broad. Narrow it to the expression form
 ``unsafe(<sub-expr>)`` wrapping just the operation that requires it. When two
 or more statements need unsafe the block is justified and stays silent.
 
+The rule also stays silent where no narrow form exists. A declaration owns its
+own permission and ``unsafe()`` wraps an expression, so a stack-constructed
+class local, a ``smart_ptr`` local without ``inscope``, and an ``inscope``
+local whose generated delete is unsafe all keep the block.
+
 .. das-doc: alt
 .. code-block:: das
 

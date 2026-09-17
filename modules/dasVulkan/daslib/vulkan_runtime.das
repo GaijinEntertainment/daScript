@@ -16,9 +16,7 @@ require vulkan public
 //! `out != null` -> write the result through the pointer; the caller decides.
 def public vk_check(r : VkResult; var out : VkResult?) {
     if (out != null) {
-        unsafe {
-            *out = r
-        }
+        *out = r
     } elif (r != VkResult.SUCCESS) {
         panic("Vulkan call failed: {r}")
     }

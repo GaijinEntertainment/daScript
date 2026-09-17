@@ -896,9 +896,7 @@ def private stream_zero_fill(gap : int64; var zeros : array<uint8>;
     }
     while (left > 0l) {
         let chunk = min(left, long_length(zeros))
-        unsafe {
-            invoke(append, addr<void?>(zeros[0]), uint64(chunk))
-        }
+        invoke(append, unsafe(addr<void?>(zeros[0])), uint64(chunk))
         left -= chunk
     }
 }

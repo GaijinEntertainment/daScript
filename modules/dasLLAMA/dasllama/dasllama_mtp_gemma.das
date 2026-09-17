@@ -463,9 +463,7 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
         let sub = (hq / kv_mul) * hs
         for (j in range64(lo, anchor)) {
             let prow = kv_phys_row(s, j)
-            unsafe {
-                kv_load_row(kcl, s.kv_dtype_k, kv_dim, prow, sub, hs, addr(kvrow[0]))
-            }
+            kv_load_row(kcl, s.kv_dtype_k, kv_dim, prow, sub, hs, unsafe(addr(kvrow[0])))
             var acc = 0.0
             for (i in range64(hs)) {
                 acc += q[qoff + i] * kvrow[i]
@@ -478,9 +476,7 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
         }
         for (j in range64(lo, anchor)) {
             let prow = kv_phys_row(s, j)
-            unsafe {
-                kv_load_row(vcl, s.kv_dtype_v, kv_dim, prow, sub, hs, addr(kvrow[0]))
-            }
+            kv_load_row(vcl, s.kv_dtype_v, kv_dim, prow, sub, hs, unsafe(addr(kvrow[0])))
             let w = scores[j - lo]
             for (i in range64(hs)) {
                 attn[qoff + i] += w * kvrow[i]

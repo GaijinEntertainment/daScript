@@ -109,10 +109,8 @@ def public run_compute(n : int) : array<uint> {   // nolint:STYLE038 - flat comm
     var dslci = VkDescriptorSetLayoutCreateInfo()
     dslci.bindingCount = 1u
     var set_layout : VkDescriptorSetLayout
-    unsafe {
-        dslci.pBindings = addr(binding)
-        vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
-    }
+    dslci.pBindings = unsafe(addr(binding))
+    vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
     var pool_size : VkDescriptorPoolSize
     pool_size.type_ = VkDescriptorType.STORAGE_BUFFER
     pool_size.descriptorCount = 1u
@@ -120,10 +118,8 @@ def public run_compute(n : int) : array<uint> {   // nolint:STYLE038 - flat comm
     dpci.maxSets = 1u
     dpci.poolSizeCount = 1u
     var desc_pool : VkDescriptorPool
-    unsafe {
-        dpci.pPoolSizes = addr(pool_size)
-        vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
-    }
+    dpci.pPoolSizes = unsafe(addr(pool_size))
+    vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
     var dsai = VkDescriptorSetAllocateInfo()
     dsai.descriptorPool = desc_pool
     dsai.descriptorSetCount = 1u
@@ -147,10 +143,8 @@ def public run_compute(n : int) : array<uint> {   // nolint:STYLE038 - flat comm
     var plci = VkPipelineLayoutCreateInfo()
     plci.setLayoutCount = 1u
     var pipe_layout : VkPipelineLayout
-    unsafe {
-        plci.pSetLayouts = addr(set_layout)
-        vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
-    }
+    plci.pSetLayouts = unsafe(addr(set_layout))
+    vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
     stage.module_ = boost_value_to_vk(shader)
@@ -167,9 +161,7 @@ def public run_compute(n : int) : array<uint> {   // nolint:STYLE038 - flat comm
     var inscope pool <- create_command_pool(device, poolci)
     run_cmd_sync(device, pool, queue) $(cmd) {
         vkCmdBindPipeline(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipeline)
-        unsafe {
-            vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout, 0u, 1u, addr(desc_set), 0u, null)
-        }
+        vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout, 0u, 1u, unsafe(addr(desc_set)), 0u, null)
         cmd_dispatch(cmd, uint(n / 64), 1u, 1u)
     }
     var mapped : void? = null
@@ -308,9 +300,7 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {  
     var inscope pool <- create_command_pool(device, pool_info(gfx))
     run_cmd_sync(device, pool, queue) $(cmd) {
         vkCmdBindPipeline(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipeline)
-        unsafe {
-            vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, boost_value_to_vk(pipe_layout), 0u, 1u, addr(raw_set), 0u, null)
-        }
+        vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, boost_value_to_vk(pipe_layout), 0u, 1u, unsafe(addr(raw_set)), 0u, null)
         cmd_dispatch(cmd, uint(n / 64), 1u, 1u)
     }
 
@@ -1074,9 +1064,7 @@ def public render_textured_quad() : array<uint8> {   // nolint:STYLE038 - flat c
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, pipe_layout, 0u, sets, no_dyn)
             var pcf : VkShaderStageFlags
             pcf.fragment = true
-            unsafe {
-                vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, push_size, addr<void?>(tint[0]))
-            }
+            vkCmdPushConstants(raw_cmd, boost_value_to_vk(pipe_layout), pcf, 0u, push_size, unsafe(addr<void?>(tint[0])))
             cmd_draw(cmd, 6u)
         }
         copy_image_to_buffer(cmd, target.image, readback, TRI_W, TRI_H)

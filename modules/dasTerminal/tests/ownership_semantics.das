@@ -7,7 +7,7 @@ require strings
 
 [export]
 def main {
-    unsafe { heap_collect(true, true) }
+    unsafe(heap_collect(true, true))
     var inscope terminal <- terminal_create(240, 100)
     let live_grid_bytes = heap_bytes_allocated()
 

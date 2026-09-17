@@ -258,55 +258,53 @@ struct public DeferredResources {
 }
 
 def public finalize(var r : DeferredResources) {
-    unsafe {
-        delete r.readback
-        delete r.desc_pool
-        delete r.lighting_pipeline
-        delete r.lighting_pipe_layout
-        delete r.lighting_set_layouts
-        delete r.ssao_pipeline
-        delete r.ssao_pipe_layout
-        delete r.ssao_set_layouts
-        delete r.gbuffer_pipeline
-        delete r.gbuffer_pipe_layout
-        delete r.gbuffer_set_layouts
-        delete r.shadow_pipeline
-        delete r.shadow_pipe_layout
-        delete r.shadow_set_layouts
-        delete r.fb_lighting
-        delete r.fb_ssao
-        delete r.fb_gbuffer
-        delete r.fb_shadow
-        delete r.rp_lighting
-        delete r.rp_ssao
-        delete r.rp_gbuffer
-        delete r.rp_shadow
-        delete r.gbuffer_sampler
-        delete r.floor_roughness
-        delete r.floor_ao
-        delete r.floor_normal
-        delete r.floor_albedo
-        delete r.cat_sampler
-        delete r.cat_arm
-        delete r.cat_normal
-        delete r.cat_albedo
-        delete r.env_sampler
-        delete r.env_tex
-        delete r.shadow_sampler
-        delete r.scene_ubo
-        delete r.xform_ubo
-        delete r.floor_ib
-        delete r.floor_vb
-        delete r.cube_ib
-        delete r.cube_vb
-        delete r.shadow_map
-        delete r.depth
-        delete r.final_color
-        delete r.ssao_img
-        delete r.g_worldpos
-        delete r.g_normal
-        delete r.g_albedo
-    }
+    delete r.readback
+    delete r.desc_pool
+    delete r.lighting_pipeline
+    delete r.lighting_pipe_layout
+    delete r.lighting_set_layouts
+    delete r.ssao_pipeline
+    delete r.ssao_pipe_layout
+    delete r.ssao_set_layouts
+    delete r.gbuffer_pipeline
+    delete r.gbuffer_pipe_layout
+    delete r.gbuffer_set_layouts
+    delete r.shadow_pipeline
+    delete r.shadow_pipe_layout
+    delete r.shadow_set_layouts
+    delete r.fb_lighting
+    delete r.fb_ssao
+    delete r.fb_gbuffer
+    delete r.fb_shadow
+    delete r.rp_lighting
+    delete r.rp_ssao
+    delete r.rp_gbuffer
+    delete r.rp_shadow
+    delete r.gbuffer_sampler
+    delete r.floor_roughness
+    delete r.floor_ao
+    delete r.floor_normal
+    delete r.floor_albedo
+    delete r.cat_sampler
+    delete r.cat_arm
+    delete r.cat_normal
+    delete r.cat_albedo
+    delete r.env_sampler
+    delete r.env_tex
+    delete r.shadow_sampler
+    delete r.scene_ubo
+    delete r.xform_ubo
+    delete r.floor_ib
+    delete r.floor_vb
+    delete r.cube_ib
+    delete r.cube_vb
+    delete r.shadow_map
+    delete r.depth
+    delete r.final_color
+    delete r.ssao_img
+    delete r.g_worldpos
+    delete r.g_normal
+    delete r.g_albedo
 }
 
 struct public DeferredContext {
@@ -318,12 +316,10 @@ struct public DeferredContext {
 }
 
 def public finalize(var ctx : DeferredContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 // ===== build =====

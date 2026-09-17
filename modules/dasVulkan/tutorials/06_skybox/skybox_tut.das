@@ -254,30 +254,28 @@ struct public SkyboxResources {
 }
 
 def public finalize(var r : SkyboxResources) {
-    unsafe {
-        delete r.readback
-        delete r.floor_pipeline
-        delete r.sphere_pipeline
-        delete r.pipeline
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.sky_sampler
-        delete r.sky_view
-        delete r.sky_image
-        delete r.sky_memory
-        delete r.ubo
-        delete r.floor_ib
-        delete r.floor_vb
-        delete r.sphere_ib
-        delete r.sphere_vb
-        delete r.ib
-        delete r.vb
-        delete r.framebuffer
-        delete r.render_pass
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.floor_pipeline
+    delete r.sphere_pipeline
+    delete r.pipeline
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.sky_sampler
+    delete r.sky_view
+    delete r.sky_image
+    delete r.sky_memory
+    delete r.ubo
+    delete r.floor_ib
+    delete r.floor_vb
+    delete r.sphere_ib
+    delete r.sphere_vb
+    delete r.ib
+    delete r.vb
+    delete r.framebuffer
+    delete r.render_pass
+    delete r.depth
+    delete r.color
 }
 
 struct public SkyboxContext {
@@ -289,12 +287,10 @@ struct public SkyboxContext {
 }
 
 def public finalize(var ctx : SkyboxContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Foreground (sphere/floor) pipeline: vertex + fragment, pos+normal vertex input (stride 24), depth

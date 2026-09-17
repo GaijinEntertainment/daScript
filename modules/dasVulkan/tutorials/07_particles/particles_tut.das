@@ -226,23 +226,21 @@ struct public ParticlesResources {
 }
 
 def public finalize(var r : ParticlesResources) {
-    unsafe {
-        delete r.readback
-        delete r.gpipeline
-        delete r.gpipe_layout
-        delete r.gdesc_pool
-        delete r.gset_layouts
-        delete r.cpipeline
-        delete r.cpipe_layout
-        delete r.cdesc_pool
-        delete r.cset_layouts
-        delete r.ubo
-        delete r.particle_buf
-        delete r.framebuffer
-        delete r.render_pass
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.gpipeline
+    delete r.gpipe_layout
+    delete r.gdesc_pool
+    delete r.gset_layouts
+    delete r.cpipeline
+    delete r.cpipe_layout
+    delete r.cdesc_pool
+    delete r.cset_layouts
+    delete r.ubo
+    delete r.particle_buf
+    delete r.framebuffer
+    delete r.render_pass
+    delete r.depth
+    delete r.color
 }
 
 struct public ParticlesContext {
@@ -254,12 +252,10 @@ struct public ParticlesContext {
 }
 
 def public finalize(var ctx : ParticlesContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Build the offscreen targets, the two pipelines (compute + graphics), and the once-seeded particle
@@ -488,13 +484,11 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
     var bmbs : array<VkBufferMemoryBarrier>
     bmbs |> push(bmb)
     let no_dep : VkDependencyFlags
-    unsafe {
-        vkCmdPipelineBarrier(raw_cmd, src_stage, dst_stage,
-            no_dep,
-            0u, null,
-            1u, addr(bmbs[0]),
-            0u, null)
-    }
+    vkCmdPipelineBarrier(raw_cmd, src_stage, dst_stage,
+        no_dep,
+        0u, null,
+        1u, unsafe(addr(bmbs[0])),
+        0u, null)
     delete bmbs
 
     // 3) Graphics pass: bind the SAME particle buffer (the bytes the compute just wrote) at

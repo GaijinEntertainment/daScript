@@ -66,24 +66,18 @@ def test_variant(t : T?) {  // nolint:STYLE038 - flat list of independent test a
 
     t |> success(u is i_value)
     t |> equal(u as i_value, 0x3f800000)
-    unsafe {
-        set_variant_index(u, typeinfo variant_index<f_value>(u))        // unsafe operation
-    }
+    unsafe(set_variant_index(u, typeinfo variant_index<f_value>(u)))        // unsafe operation
     t |> equal(u as f_value, 1.0)
 
     t |> equal(u ?as f_value ?? 2.0, 1.0)
     t |> equal(u ?as i_value ?? 1u, 1u)
 
     u as f_value = 2.0
-    unsafe {
-        set_variant_index(u, typeinfo variant_index<i_value>(u))        // unsafe operation
-    }
+    unsafe(set_variant_index(u, typeinfo variant_index<i_value>(u)))        // unsafe operation
     t |> equal(u as i_value, 0x40000000)
 
     u as i_value = 0x3f800000
-    unsafe {
-        set_variant_index(u, typeinfo variant_index<f_value>(u))        // unsafe operation
-    }
+    unsafe(set_variant_index(u, typeinfo variant_index<f_value>(u)))        // unsafe operation
     t |> equal(u as f_value, 1.0)
 
     var paniced = false
@@ -105,9 +99,7 @@ def test_variant(t : T?) {  // nolint:STYLE038 - flat list of independent test a
     t |> success(paniced_r2v)
     t |> equal((u as f_value) + 1.0, 2.0)
 
-    unsafe {
-        t |> equal(u.f_value, 1.0)
-    }
+    t |> equal(unsafe(u.f_value), 1.0)
     u = U_F(i_value = 0x40000000)
     t |> equal(u as i_value, 0x40000000)
     u = U_F(f_value = 1.0)

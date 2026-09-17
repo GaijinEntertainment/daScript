@@ -429,9 +429,7 @@ class GlslExport : AstVisitor {
     inout_stub : string
     inout_decl : string
     def GlslExport(var w : StringBuilderWriter; sht : ShaderType; ver : int; cls : int3; cp : ShaderExportCaps) {
-        unsafe {
-            writer = addr(w)
-        }
+        writer = unsafe(addr(w))
         shaderType = sht
         version = ver
         compute_local_size = cls
@@ -661,9 +659,7 @@ class GlslExport : AstVisitor {
     def describe_subexpression(expr : ExpressionPtr) {
         let oldWriter = writer
         let st = build_string() $(var newWriter) {
-            unsafe {
-                writer = addr(newWriter)
-            }
+            writer = unsafe(addr(newWriter))
             visit(expr, astVisitorAdapter)
         }
         writer = oldWriter
@@ -1424,10 +1420,7 @@ class GlslExport : AstVisitor {
             *writer |> write("texture(")
             return
         }
-        var fnName : string
-        unsafe {
-            fnName = glsl_function_name(reinterpret<FunctionPtr>(expr.func))
-        }
+        var fnName = glsl_function_name(unsafe(reinterpret<FunctionPtr>(expr.func)))
         // 16/8-bit lattice values crossing a call: ctors/converts are name-mapped below and user
         // functions declare through describe_glsl_type_ex — but the saturating narrows have no
         // GLSL builtin (clamp-expansion is a later wave) and CPU-only widths never emit.

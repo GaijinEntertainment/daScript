@@ -226,14 +226,12 @@ def test_c4_zip_reverse_to_array(t : T?) {
         var a : array<int>; var b : array<int>
         a |> push(1); a |> push(2); a |> push(3); a |> push(4)
         b |> push(10); b |> push(20); b |> push(30); b |> push(40)
-        unsafe {
-            let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> to_array())
-            tt |> equal(length(got), 4)
-            tt |> equal(got[0]._0, 4); tt |> equal(got[0]._1, 40)
-            tt |> equal(got[1]._0, 3); tt |> equal(got[1]._1, 30)
-            tt |> equal(got[2]._0, 2); tt |> equal(got[2]._1, 20)
-            tt |> equal(got[3]._0, 1); tt |> equal(got[3]._1, 10)
-        }
+        let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> to_array())
+        tt |> equal(length(got), 4)
+        tt |> equal(got[0]._0, 4); tt |> equal(got[0]._1, 40)
+        tt |> equal(got[1]._0, 3); tt |> equal(got[1]._1, 30)
+        tt |> equal(got[2]._0, 2); tt |> equal(got[2]._1, 20)
+        tt |> equal(got[3]._0, 1); tt |> equal(got[3]._1, 10)
     }
 }
 
@@ -243,10 +241,8 @@ def test_c4_zip_reverse_count(t : T?) {
         var a <- [for (i in range(20)); i]
         var b <- [for (i in range(15)); i]
         // zip stops at shorter (15); reverse is identity for count
-        unsafe {
-            let got = _fold(each(a) |> zip(each(b)) |> reverse() |> count())
-            tt |> equal(got, 15)
-        }
+        let got = _fold(each(a) |> zip(each(b)) |> reverse() |> count())
+        tt |> equal(got, 15)
     }
 }
 
@@ -257,10 +253,8 @@ def test_c4_zip_reverse_sum(t : T?) {
         a |> push(1); a |> push(2); a |> push(3)
         b |> push(10); b |> push(20); b |> push(30)
         // pair sums: 11, 22, 33; sum after reverse = 66 (identity)
-        unsafe {
-            let got = _fold(each(a) |> zip(each(b)) |> _select(_._0 + _._1) |> reverse() |> sum())
-            tt |> equal(got, 66)
-        }
+        let got = _fold(each(a) |> zip(each(b)) |> _select(_._0 + _._1) |> reverse() |> sum())
+        tt |> equal(got, 66)
     }
 }
 
@@ -270,13 +264,11 @@ def test_c4_zip_where_reverse(t : T?) {
         var a <- [for (i in range(6)); i]
         var b <- [for (i in range(6)); i * 10]
         // pairs: (0,0),(1,10),(2,20),(3,30),(4,40),(5,50); where(_._0 % 2 == 0) → (0,0),(2,20),(4,40); reverse → (4,40),(2,20),(0,0)
-        unsafe {
-            let got <- _fold(each(a) |> zip(each(b)) |> _where(_._0 % 2 == 0) |> reverse() |> to_array())
-            tt |> equal(length(got), 3)
-            tt |> equal(got[0]._0, 4); tt |> equal(got[0]._1, 40)
-            tt |> equal(got[1]._0, 2); tt |> equal(got[1]._1, 20)
-            tt |> equal(got[2]._0, 0); tt |> equal(got[2]._1, 0)
-        }
+        let got <- _fold(each(a) |> zip(each(b)) |> _where(_._0 % 2 == 0) |> reverse() |> to_array())
+        tt |> equal(length(got), 3)
+        tt |> equal(got[0]._0, 4); tt |> equal(got[0]._1, 40)
+        tt |> equal(got[1]._0, 2); tt |> equal(got[1]._1, 20)
+        tt |> equal(got[2]._0, 0); tt |> equal(got[2]._1, 0)
     }
 }
 
@@ -296,14 +288,12 @@ def test_c4_parity_handwritten(t : T?) {
     t |> run("C4-parity: spliced vs handwritten zip+reverse — 50-pair match") @(tt : T?) {
         var a <- [for (i in range(50)); i * 3]
         var b <- [for (i in range(50)); i * 5]
-        unsafe {
-            let spliced <- _fold(each(a) |> zip(each(b)) |> reverse() |> to_array())
-            let hand <- theme8_c4_handwritten(a, b)
-            tt |> equal(length(spliced), length(hand))
-            for (s, h in spliced, hand) {
-                tt |> equal(s._0, h._0)
-                tt |> equal(s._1, h._1)
-            }
+        let spliced <- _fold(each(a) |> zip(each(b)) |> reverse() |> to_array())
+        let hand <- theme8_c4_handwritten(a, b)
+        tt |> equal(length(spliced), length(hand))
+        for (s, h in spliced, hand) {
+            tt |> equal(s._0, h._0)
+            tt |> equal(s._1, h._1)
         }
     }
 }
@@ -351,11 +341,9 @@ def test_anti_c4_zip_reverse_first_cascades(t : T?) {
         var a : array<int>; var b : array<int>
         a |> push(1); a |> push(2); a |> push(3)
         b |> push(10); b |> push(20); b |> push(30)
-        unsafe {
-            let got = _fold(each(a) |> zip(each(b)) |> reverse() |> first())
-            // reverse → [(3,30),(2,20),(1,10)]; first = (3,30)
-            tt |> equal(got._0, 3); tt |> equal(got._1, 30)
-        }
+        let got = _fold(each(a) |> zip(each(b)) |> reverse() |> first())
+        // reverse → [(3,30),(2,20),(1,10)]; first = (3,30)
+        tt |> equal(got._0, 3); tt |> equal(got._1, 30)
     }
 }
 
@@ -365,11 +353,9 @@ def test_anti_c4_zip_reverse_select_cascades(t : T?) {
         var a : array<int>; var b : array<int>
         a |> push(1); a |> push(2); a |> push(3)
         b |> push(10); b |> push(20); b |> push(30)
-        unsafe {
-            let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> _select(_._0 + _._1) |> to_array())
-            tt |> equal(length(got), 3)
-            tt |> equal(got[0], 33); tt |> equal(got[1], 22); tt |> equal(got[2], 11)
-        }
+        let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> _select(_._0 + _._1) |> to_array())
+        tt |> equal(length(got), 3)
+        tt |> equal(got[0], 33); tt |> equal(got[1], 22); tt |> equal(got[2], 11)
     }
 }
 

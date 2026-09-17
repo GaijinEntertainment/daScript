@@ -124,9 +124,7 @@ def public free_jit_context {
                 if (emitter == null || !has_macro_context(emitter)) {
                     panic("LLVM JIT: an in-memory engine exists but the emitter module is not in the process")
                 }
-                unsafe {
-                    invoke_in_context(find_macro_context(emitter), "free_jit_engine", ee, ctx)
-                }
+                unsafe(invoke_in_context(find_macro_context(emitter), "free_jit_engine", ee, ctx))
             }
         }
     }

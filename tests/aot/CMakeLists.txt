@@ -585,6 +585,13 @@ if(NOT ${DAS_LLVM_DISABLED})
     # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "tests/(msl|metal)/")
 
+    set(LLVM_AOT_TEST_LIST ${PROJECT_BINARY_DIR}/llvm_aot_corpus.txt)
+    set(_llvm_aot_list_text "")
+    foreach(_f IN LISTS LLVM_AOT_TEST_FILES)
+        string(APPEND _llvm_aot_list_text "${PROJECT_SOURCE_DIR}/${_f}\n")
+    endforeach()
+    file(WRITE ${LLVM_AOT_TEST_LIST} "${_llvm_aot_list_text}")
+
     add_custom_target(test_llvm_aot_corpus)
     SET(LLVM_AOT_GENERATED_OBJ)
     DAS_LLVM_AOT_LIB("${LLVM_AOT_TEST_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)

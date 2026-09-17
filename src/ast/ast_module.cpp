@@ -178,19 +178,20 @@ namespace das {
         return false;
     }
 
-    static DeferredModuleLoader g_deferredModuleLoader = nullptr;
+    static std::atomic<DeferredModuleLoader> g_deferredModuleLoader { nullptr };
 
     void setDeferredModuleLoader ( DeferredModuleLoader loader ) {
-        g_deferredModuleLoader = loader;
+        g_deferredModuleLoader.store(loader);
     }
 
     DeferredModuleLoader getDeferredModuleLoader () {
-        return g_deferredModuleLoader;
+        return g_deferredModuleLoader.load();
     }
 
     bool guardModuleAvailable ( const string & name ) {
         if ( Module::requireEx(name, false) ) return true;
-        return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
+        auto loader = g_deferredModuleLoader.load();
+        return loader && loader(name) && Module::requireEx(name, false);
     }
 
     // src/ast/ARCHITECTURE.md#module-scan-manifest - process-wide, like the native paths: a descriptor registers once per process

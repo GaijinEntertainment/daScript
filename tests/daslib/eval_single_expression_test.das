@@ -56,11 +56,9 @@ def test_eval_literal_no_context(t : T?) {
             let init = find_foo_field(program, "bar")
             t2 |> success(init != null, "found Foo.bar init expression")
             var ok = true
-            unsafe {
-                let v = eval_single_expression(init, ok)
-                t2 |> success(ok, "eval ok")
-                t2 |> equal(v.x, 3.14, "literal value matches")
-            }
+            let v = unsafe(eval_single_expression(init, ok))
+            t2 |> success(ok, "eval ok")
+            t2 |> equal(v.x, 3.14, "literal value matches")
         }
     }
 }
@@ -71,11 +69,9 @@ def test_eval_literal_with_context(t : T?) {
         compile_fixture(t2) $(program; ctx) {
             let init = find_foo_field(program, "bar")
             var ok = true
-            unsafe {
-                let v = eval_single_expression(init, ctx, ok)
-                t2 |> success(ok, "eval ok")
-                t2 |> equal(v.x, 3.14, "literal value matches")
-            }
+            let v = unsafe(eval_single_expression(init, ctx, ok))
+            t2 |> success(ok, "eval ok")
+            t2 |> equal(v.x, 3.14, "literal value matches")
         }
     }
 }
@@ -90,11 +86,9 @@ def test_eval_folded_away_constexpr_var_no_context(t : T?) {
             t2 |> success(init != null, "found Foo.qux init expression")
             t2 |> success(init.__rtti == "ExprVar", "qux init stays as ExprVar (got {init.__rtti})")
             var ok = true
-            unsafe {
-                let v = eval_single_expression(init, ok)
-                t2 |> success(ok, "eval ok (regression: would crash before fix)")
-                t2 |> equal(v.x, PI, "PI value matches math::PI")
-            }
+            let v = unsafe(eval_single_expression(init, ok))
+            t2 |> success(ok, "eval ok (regression: would crash before fix)")
+            t2 |> equal(v.x, PI, "PI value matches math::PI")
         }
     }
 }
@@ -105,11 +99,9 @@ def test_eval_folded_away_constexpr_var_with_context(t : T?) {
         compile_fixture(t2) $(program; ctx) {
             let init = find_foo_field(program, "qux")
             var ok = true
-            unsafe {
-                let v = eval_single_expression(init, ctx, ok)
-                t2 |> success(ok, "eval ok (regression: would crash before fix)")
-                t2 |> equal(v.x, PI, "PI value matches math::PI")
-            }
+            let v = unsafe(eval_single_expression(init, ctx, ok))
+            t2 |> success(ok, "eval ok (regression: would crash before fix)")
+            t2 |> equal(v.x, PI, "PI value matches math::PI")
         }
     }
 }
@@ -119,11 +111,9 @@ def test_eval_null_expr_with_context(t : T?) {
     t |> run("null expression sets ok=false safely") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {
             var ok = true
-            unsafe {
-                let nullExpr : ExpressionPtr = null
-                eval_single_expression(nullExpr, ctx, ok)
-                t2 |> success(!ok, "ok set to false for null expression")
-            }
+            let nullExpr : ExpressionPtr = null
+            unsafe(eval_single_expression(nullExpr, ctx, ok))
+            t2 |> success(!ok, "ok set to false for null expression")
         }
     }
 }

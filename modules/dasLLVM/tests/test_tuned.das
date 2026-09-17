@@ -64,14 +64,11 @@ def test_tuned_stale_sidecar_perm(t : T?) {
         : "DAS_TUNE_MANIFEST='{manifest}' ")
     let cmd = "{env}\"{bin}\" \"{client}\""
     var outp = ""
-    var rc : int
-    unsafe {
-        rc = popen_timeout(cmd, 300.0) $(f) {
-            if (f != null) {
-                outp = fread(f)
-            }
+    let rc = unsafe(popen_timeout(cmd, 300.0) $(f) {
+        if (f != null) {
+            outp = fread(f)
         }
-    }
+    })
     t |> equal(rc, 0, "the stale-sidecar client compiles and runs")
     t |> success(find(outp, "stale mint?") >= 0, "the fallback stamp is announced (got: {outp})")
     t |> success(find(outp, "STALE_CLIENT_OK") >= 0, "the client ran to completion (got: {outp})")
@@ -80,14 +77,11 @@ def test_tuned_stale_sidecar_perm(t : T?) {
 
 def private spawn_capture(cmd : string; var outp : string&) : int {
     outp = ""
-    var rc : int
-    unsafe {
-        rc = popen_timeout(cmd, 300.0) $(f) {
-            if (f != null) {
-                outp = fread(f)
-            }
+    let rc = unsafe(popen_timeout(cmd, 300.0) $(f) {
+        if (f != null) {
+            outp = fread(f)
         }
-    }
+    })
     return rc
 }
 

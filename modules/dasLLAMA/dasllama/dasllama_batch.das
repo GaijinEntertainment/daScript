@@ -90,17 +90,15 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        unsafe {
-            let sgp = addr < float const? >(ws.scr.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(ws.scr.q_b, nrows, qd, head_size, sgp)
-                if (!kv_shared) {
-                    tq4_rotate_batch(ws.scr.k_b, nrows, kv_dim, head_size, sgp)
-                }
+        let sgp = unsafe(addr < float const? >(ws.scr.kv_signs[0]))
+        if (ktq4) {
+            tq4_rotate_batch(ws.scr.q_b, nrows, qd, head_size, sgp)
+            if (!kv_shared) {
+                tq4_rotate_batch(ws.scr.k_b, nrows, kv_dim, head_size, sgp)
             }
-            if (vtq4 && !kv_shared) {
-                tq4_rotate_batch(ws.scr.v_b, nrows, kv_dim, head_size, sgp)
-            }
+        }
+        if (vtq4 && !kv_shared) {
+            tq4_rotate_batch(ws.scr.v_b, nrows, kv_dim, head_size, sgp)
         }
         prof_add("tq4_rot", ts_rot)
     }
@@ -176,9 +174,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     }
     prof_add("attn", ts_attn)
     if (vtq4) {   // tq4 V: xb_b rows accumulated in the rotated basis — un-rotate per (row, head)
-        unsafe {
-            tq4_unrotate_batch(ws.scr.xb_b, nrows, qd, head_size, addr < float const? >(ws.scr.kv_signs[0]))
-        }
+        tq4_unrotate_batch(ws.scr.xb_b, nrows, qd, head_size, unsafe(addr < float const? >(ws.scr.kv_signs[0])))
     }
     attn_out_suffix(t, ws.scr, l, nrows)
 }
@@ -234,10 +230,8 @@ def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; token
         return false
     }
     g_verify_sessions |> grow_resize(nrows)
-    unsafe {
-        for (i in range64(nrows)) {
-            g_verify_sessions[i] = addr(s)
-        }
+    for (i in range64(nrows)) {
+        g_verify_sessions[i] = unsafe(addr(s))
     }
     ws.scr.kv_dtype_k = s.kv_dtype_k
     ws.scr.kv_dtype_v = s.kv_dtype_v

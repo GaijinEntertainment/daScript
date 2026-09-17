@@ -16,9 +16,7 @@ def tl_increment() {
 
 [export, pinvoke]
 def tl_read(var result : int?) {
-    unsafe {
-        *result = tl_counter
-    }
+    *result = tl_counter
 }
 
 [export, pinvoke]
@@ -59,13 +57,9 @@ def test_threadlock_invoke(t : T?) {
 def test_threadlock_multiple(t : T?) {
     t |> run("multiple invoke_in_context calls under threadlock") @(t : T?) {
         ensure_tl_agent()
-        unsafe {
-            invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_reset")
-        }
+        unsafe(invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_reset"))
         for (_i in range(5)) {
-            unsafe {
-                invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_increment")
-            }
+            unsafe(invoke_in_context(get_debug_agent_context("threadlock_test"), "tl_increment"))
         }
         var result = 0
         unsafe {

@@ -11,9 +11,7 @@ def test_exit_now_binds_under_aot(t : T?) {
     t |> run("exit_now compiles into generated C++ against the public header") @(t : T?) {
         let args <- get_command_line_arguments()
         if (empty(args)) {
-            unsafe {
-                exit_now(3)
-            }
+            unsafe(exit_now(3))
         }
         t |> success(!empty(args), "the process is still here: argv carried the interpreter")
     }

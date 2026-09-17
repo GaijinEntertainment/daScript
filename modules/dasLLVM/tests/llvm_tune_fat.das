@@ -24,20 +24,17 @@ def private tune_env_prefix(mode, baseline, pin : string) : string {
 }
 
 def private spawn_child(cmd : string; var lines : array<string>) : int {
-    var rc : int
-    unsafe {
-        rc = popen_timeout("{cmd} 2>&1", 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = strip(fgets(f))
-                if (!empty(ln)) {
-                    lines |> push("{ln}")
-                }
+    let rc = unsafe(popen_timeout("{cmd} 2>&1", 300.0) $(f) {
+        if (f == null) {
+            return
+        }
+        while (!feof(f)) {
+            let ln = strip(fgets(f))
+            if (!empty(ln)) {
+                lines |> push("{ln}")
             }
         }
-    }
+    })
     return rc
 }
 

@@ -179,7 +179,7 @@ def build_pipeline_layout(device : Device; set_layouts : array<DescriptorSetLayo
     // vk_view_destroy frees only the _vk_view_* temporaries; delete the idiomatic arrays we built so a
     // per-frame caller does not accumulate. pSetLayouts holds weak copies (finalize is a no-op), so this
     // does not destroy the real set layouts.
-    unsafe { delete plci.pSetLayouts }
+    delete plci.pSetLayouts
     delete plci.pPushConstantRanges
     return <- pl
 }

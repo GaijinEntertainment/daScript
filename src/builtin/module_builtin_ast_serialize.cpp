@@ -4048,11 +4048,12 @@ namespace das {
     }
 
     void rtti_ast_serializer_deserialize_program_ex (
-            AstSerializerState * state, smart_ptr<FileAccess> access,
+            AstSerializerState * state, smart_ptr<FileAccess> access, ModuleGroup * libGroup,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at ) {
         auto prog = make_smart<Program>();
         prog->access = access;      // the reader's: a stream carries none (src/ast/ARCHITECTURE.md#require-after-walk)
+        state->serializer->thisModuleGroup = libGroup;
         {
             gc_guard deserialize_gc_scope;
             // same-version streams can still be truncated/corrupt: the stream readers throw
@@ -4096,10 +4097,10 @@ namespace das {
     }
 
     void rtti_ast_serializer_deserialize_program (
-            AstSerializerState * state,
+            AstSerializerState * state, ModuleGroup * libGroup,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at ) {
-        rtti_ast_serializer_deserialize_program_ex(state, nullptr, block, context, at);
+        rtti_ast_serializer_deserialize_program_ex(state, nullptr, libGroup, block, context, at);
     }
 
     int64_t rtti_ast_serializer_finalize_usec ( AstSerializerState * state ) {

@@ -95,9 +95,7 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
     ptrs |> reserve(nb)
     cur |> reserve(nb)
     for (i in range64(nb)) {
-        unsafe {
-            ptrs |> push(addr(sess[i]))
-        }
+        ptrs |> push(unsafe(addr(sess[i])))
         cur |> push(prompt[i % long_length(prompt)])
     }
     var t0 = 0l

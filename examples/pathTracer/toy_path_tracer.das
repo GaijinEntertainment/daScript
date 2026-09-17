@@ -120,7 +120,5 @@ def main {   // nolint:STYLE038 - one arm per Mode; the four tracing strategies 
             pixels |> push <| RGBA_TO_UCOLOR(srgb)
         }
     }
-    unsafe {
-        stbi_write_png("{get_das_root()}/examples/pathTracer/path_tracer.png", width, height, 4, addr(pixels[0]), width * 4)
-    }
+    stbi_write_png("{get_das_root()}/examples/pathTracer/path_tracer.png", width, height, 4, unsafe(addr(pixels[0])), width * 4)
 }

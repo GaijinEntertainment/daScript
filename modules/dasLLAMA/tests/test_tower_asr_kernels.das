@@ -104,18 +104,14 @@ def private report_poison(t : T?; r : KCase) {
 
 def private plane_f(a : array<float>) : PlaneF {
     var p = PlaneF()
-    unsafe {
-        p.p = addr<float const?>(a[0])
-    }
+    p.p = unsafe(addr<float const?>(a[0]))
     p.n = long_length(a)
     return p
 }
 
 def private plane_u16(a : array<uint16>) : PlaneU16 {
     var p = PlaneU16()
-    unsafe {
-        p.p = addr<uint16 const?>(a[0])
-    }
+    p.p = unsafe(addr<uint16 const?>(a[0]))
     p.n = long_length(a)
     return p
 }

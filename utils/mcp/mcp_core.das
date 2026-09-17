@@ -635,9 +635,7 @@ def serve_stdio(server : McpServer; reg : array<ToolDef>) {
         let str_used = string_heap_bytes_allocated()
         if (heap_used > HEAP_COLLECT_THRESHOLD || str_used > HEAP_COLLECT_THRESHOLD) {
             logger_info("mcp.heap", "collecting — heap: {int(heap_used)}, string heap: {int(str_used)}")
-            unsafe {
-                heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false)
-            }
+            unsafe(heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false))
         }
     }
     logger_info("mcp", "stdin closed, shutting down")

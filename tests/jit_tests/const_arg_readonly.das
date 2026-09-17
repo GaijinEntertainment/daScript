@@ -18,19 +18,15 @@ struct Cell {
 // const void? out-parameter, cast to a typed pointer
 [hint(noinline)]
 def route_void(dst : void?; v : int) {
-    unsafe {
-        var p = reinterpret<int?>(dst)
-        *p = v
-    }
+    var p = unsafe(reinterpret<int?>(dst))
+    *p = v
 }
 
 // const typed pointer, cast to its own type
 [hint(noinline)]
 def route_same_type(dst : int?; v : int) {
-    unsafe {
-        var p = reinterpret<int?>(dst)
-        *p = v
-    }
+    var p = unsafe(reinterpret<int?>(dst))
+    *p = v
 }
 
 // const void? out-parameter as a memcpy destination
@@ -45,19 +41,15 @@ def route_memcpy(dst : void?; v : int) {
 // const structure reference, address taken and cast back
 [hint(noinline)]
 def route_const_ref(c : Cell; v : int) {
-    unsafe {
-        var p = addr<Cell?>(c)
-        p.a = v
-    }
+    var p = unsafe(addr<Cell?>(c))
+    p.a = v
 }
 
 // const typed pointer under a noalias hint - with no readonly the hint alone keeps the write
 [hint(noinline, noalias = dst)]
 def route_noalias(dst : int const?; v : int) {
-    unsafe {
-        var p = reinterpret<int?>(dst)
-        *p = v
-    }
+    var p = unsafe(reinterpret<int?>(dst))
+    *p = v
 }
 
 [test]
@@ -65,30 +57,22 @@ def test_write_through_const_argument(t : T?) {
     t |> success(!jit_enabled() || is_jit_function(@@route_void))
     t |> run("const typed pointer under noalias") @(t : T?) {
         var slot = 0
-        unsafe {
-            route_noalias(addr(slot), 40)
-        }
+        route_noalias(unsafe(addr(slot)), 40)
         t |> equal(40, slot)
     }
     t |> run("const void? out-parameter") @(t : T?) {
         var slot = 0
-        unsafe {
-            route_void(addr<void?>(slot), 41)
-        }
+        route_void(unsafe(addr<void?>(slot)), 41)
         t |> equal(41, slot)
     }
     t |> run("const typed pointer") @(t : T?) {
         var slot = 0
-        unsafe {
-            route_same_type(addr(slot), 42)
-        }
+        route_same_type(unsafe(addr(slot)), 42)
         t |> equal(42, slot)
     }
     t |> run("const void? memcpy destination") @(t : T?) {
         var slot = 0
-        unsafe {
-            route_memcpy(addr<void?>(slot), 43)
-        }
+        route_memcpy(unsafe(addr<void?>(slot)), 43)
         t |> equal(43, slot)
     }
     t |> run("const structure reference") @(t : T?) {
@@ -102,26 +86,20 @@ def test_write_through_const_argument(t : T?) {
 // every mode
 [hint(noinline)]
 def route_var_parameter(var dst : void?; v : int) {
-    unsafe {
-        var p = reinterpret<int?>(dst)
-        *p = v
-    }
+    var p = unsafe(reinterpret<int?>(dst))
+    *p = v
 }
 
 [test]
 def test_var_parameter_is_the_control(t : T?) {
     var slot = 0
-    unsafe {
-        route_var_parameter(addr<void?>(slot), 47)
-    }
+    route_var_parameter(unsafe(addr<void?>(slot)), 47)
     t |> equal(47, slot, "the same body with a var parameter")
 }
 
 [test]
 def test_write_through_const_argument_across_modules(t : T?) {
     var slot = 0
-    unsafe {
-        store_int(addr<void?>(slot), 46)
-    }
+    store_int(unsafe(addr<void?>(slot)), 46)
     t |> equal(46, slot, "a cross-partition callee needs no inlining hint")
 }

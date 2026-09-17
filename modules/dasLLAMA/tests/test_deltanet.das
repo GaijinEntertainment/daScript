@@ -182,9 +182,7 @@ def test_deltanet_owner_release(t : T?) {
         let c = small_deltanet_config()
         var s <- make_run_state(c)
         var lo = 0ul
-        unsafe {
-            lo = intptr(addr(s.dn_state[0]))
-        }
+        lo = intptr(unsafe(addr(s.dn_state[0])))
         let hi = lo + uint64(long_length(s.dn_state) * 4l)
         t |> equal(s.dn_owner.state_lo, lo, "the token's low bound is the state's host address")
         t |> equal(s.dn_owner.state_hi, hi, "the token's high bound is the state's end")

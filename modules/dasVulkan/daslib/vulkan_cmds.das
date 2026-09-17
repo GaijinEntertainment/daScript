@@ -18,9 +18,7 @@ def enumerate_physical_devices(instance : Instance; var result : VkResult? = nul
     var vklist : array<VkPhysicalDevice>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumeratePhysicalDevices(boost_value_to_vk(instance), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumeratePhysicalDevices(boost_value_to_vk(instance), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -37,9 +35,7 @@ def get_physical_device_queue_family_properties(physicalDevice : PhysicalDevice)
     var vklist : array<VkQueueFamilyProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vkGetPhysicalDeviceQueueFamilyProperties(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0]))
-        }
+        vkGetPhysicalDeviceQueueFamilyProperties(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -80,9 +76,7 @@ def enumerate_instance_layer_properties(var result : VkResult? = null) : array<V
     var vklist : array<VkLayerProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumerateInstanceLayerProperties(vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumerateInstanceLayerProperties(vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -93,9 +87,7 @@ def enumerate_instance_extension_properties(pLayerName : string; var result : Vk
     var vklist : array<VkExtensionProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumerateInstanceExtensionProperties(pLayerName, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumerateInstanceExtensionProperties(pLayerName, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -106,9 +98,7 @@ def enumerate_device_layer_properties(physicalDevice : PhysicalDevice; var resul
     var vklist : array<VkLayerProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumerateDeviceLayerProperties(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumerateDeviceLayerProperties(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -119,9 +109,7 @@ def enumerate_device_extension_properties(physicalDevice : PhysicalDevice; pLaye
     var vklist : array<VkExtensionProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumerateDeviceExtensionProperties(boost_value_to_vk(physicalDevice), pLayerName, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumerateDeviceExtensionProperties(boost_value_to_vk(physicalDevice), pLayerName, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -203,9 +191,7 @@ def get_image_sparse_memory_requirements(device : Device; image : Image) : array
     var vklist : array<VkSparseImageMemoryRequirements>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vkGetImageSparseMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(image), vkcount, addr(vklist[0]))
-        }
+        vkGetImageSparseMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(image), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -216,9 +202,7 @@ def get_physical_device_sparse_image_format_properties(physicalDevice : Physical
     var vklist : array<VkSparseImageFormatProperties>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vkGetPhysicalDeviceSparseImageFormatProperties(boost_value_to_vk(physicalDevice), format, type_, samples, usage, tiling, vkcount, addr(vklist[0]))
-        }
+        vkGetPhysicalDeviceSparseImageFormatProperties(boost_value_to_vk(physicalDevice), format, type_, samples, usage, tiling, vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -280,9 +264,7 @@ def get_pipeline_cache_data(device : Device; pipelineCache : PipelineCache; var 
     var vklist : array<uint8>
     vklist |> resize(int64(vkcount))
     if (vkcount > 0ul) {
-        unsafe {
-            vk_check(vkGetPipelineCacheData(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), vkcount, addr<void?>(vklist[0])), result)
-        }
+        vk_check(vkGetPipelineCacheData(boost_value_to_vk(device), boost_value_to_vk(pipelineCache), vkcount, unsafe(addr<void?>(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -702,9 +684,7 @@ def get_physical_device_display_properties_k_h_r(physicalDevice : PhysicalDevice
     var vklist : array<VkDisplayPropertiesKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceDisplayPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceDisplayPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -715,9 +695,7 @@ def get_physical_device_display_plane_properties_k_h_r(physicalDevice : Physical
     var vklist : array<VkDisplayPlanePropertiesKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceDisplayPlanePropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceDisplayPlanePropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -728,9 +706,7 @@ def get_display_plane_supported_displays_k_h_r(physicalDevice : PhysicalDevice; 
     var vklist : array<VkDisplayKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDisplayPlaneSupportedDisplaysKHR(boost_value_to_vk(physicalDevice), planeIndex, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDisplayPlaneSupportedDisplaysKHR(boost_value_to_vk(physicalDevice), planeIndex, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -741,9 +717,7 @@ def get_display_mode_properties_k_h_r(physicalDevice : PhysicalDevice; display :
     var vklist : array<VkDisplayModePropertiesKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDisplayModePropertiesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDisplayModePropertiesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -772,9 +746,7 @@ def get_physical_device_surface_formats_k_h_r(physicalDevice : PhysicalDevice; s
     var vklist : array<VkSurfaceFormatKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -785,9 +757,7 @@ def get_physical_device_surface_present_modes_k_h_r(physicalDevice : PhysicalDev
     var vklist : array<VkPresentModeKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -798,9 +768,7 @@ def get_swapchain_images_k_h_r(device : Device; swapchain : SwapchainKHR; var re
     var vklist : array<VkImage>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetSwapchainImagesKHR(boost_value_to_vk(device), boost_value_to_vk(swapchain), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetSwapchainImagesKHR(boost_value_to_vk(device), boost_value_to_vk(swapchain), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -956,9 +924,7 @@ def get_physical_device_queue_family_properties2(physicalDevice : PhysicalDevice
         vklist[vki] = VkQueueFamilyProperties2()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetPhysicalDeviceQueueFamilyProperties2(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0]))
-        }
+        vkGetPhysicalDeviceQueueFamilyProperties2(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -980,9 +946,7 @@ def get_physical_device_sparse_image_format_properties2(physicalDevice : Physica
         vklist[vki] = VkSparseImageFormatProperties2()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetPhysicalDeviceSparseImageFormatProperties2(boost_value_to_vk(physicalDevice), vkview_pFormatInfo, vkcount, addr(vklist[0]))
-        }
+        vkGetPhysicalDeviceSparseImageFormatProperties2(boost_value_to_vk(physicalDevice), vkview_pFormatInfo, vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -1099,9 +1063,7 @@ def enumerate_physical_device_groups(instance : Instance; var result : VkResult?
         vklist[vki] = VkPhysicalDeviceGroupProperties()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumeratePhysicalDeviceGroups(boost_value_to_vk(instance), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumeratePhysicalDeviceGroups(boost_value_to_vk(instance), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1156,9 +1118,7 @@ def get_physical_device_present_rectangles_k_h_r(physicalDevice : PhysicalDevice
     var vklist : array<VkRect2D>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDevicePresentRectanglesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDevicePresentRectanglesKHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(surface), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1192,9 +1152,7 @@ def get_past_presentation_timing_g_o_o_g_l_e(device : Device; swapchain : Swapch
     var vklist : array<VkPastPresentationTimingGOOGLE>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPastPresentationTimingGOOGLE(boost_value_to_vk(device), boost_value_to_vk(swapchain), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPastPresentationTimingGOOGLE(boost_value_to_vk(device), boost_value_to_vk(swapchain), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1260,9 +1218,7 @@ def get_physical_device_surface_formats2_k_h_r(physicalDevice : PhysicalDevice; 
         vklist[vki] = VkSurfaceFormat2KHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceSurfaceFormats2KHR(boost_value_to_vk(physicalDevice), vkview_pSurfaceInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceSurfaceFormats2KHR(boost_value_to_vk(physicalDevice), vkview_pSurfaceInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1276,9 +1232,7 @@ def get_physical_device_display_properties2_k_h_r(physicalDevice : PhysicalDevic
         vklist[vki] = VkDisplayProperties2KHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceDisplayProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceDisplayProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1292,9 +1246,7 @@ def get_physical_device_display_plane_properties2_k_h_r(physicalDevice : Physica
         vklist[vki] = VkDisplayPlaneProperties2KHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceDisplayPlaneProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceDisplayPlaneProperties2KHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1308,9 +1260,7 @@ def get_display_mode_properties2_k_h_r(physicalDevice : PhysicalDevice; display 
         vklist[vki] = VkDisplayModeProperties2KHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDisplayModeProperties2KHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDisplayModeProperties2KHR(boost_value_to_vk(physicalDevice), boost_value_to_vk(display), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1350,9 +1300,7 @@ def get_image_sparse_memory_requirements2(device : Device; pInfo : ImageSparseMe
         vklist[vki] = VkSparseImageMemoryRequirements2()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetImageSparseMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0]))
-        }
+        vkGetImageSparseMemoryRequirements2(boost_value_to_vk(device), vkview_pInfo, vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -1384,9 +1332,7 @@ def get_device_image_sparse_memory_requirements(device : Device; var pInfo : Dev
         vklist[vki] = VkSparseImageMemoryRequirements2()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetDeviceImageSparseMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0]))
-        }
+        vkGetDeviceImageSparseMemoryRequirements(boost_value_to_vk(device), vkview_pInfo, vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -1405,9 +1351,7 @@ def get_validation_cache_data_e_x_t(device : Device; validationCache : Validatio
     var vklist : array<uint8>
     vklist |> resize(int64(vkcount))
     if (vkcount > 0ul) {
-        unsafe {
-            vk_check(vkGetValidationCacheDataEXT(boost_value_to_vk(device), boost_value_to_vk(validationCache), vkcount, addr<void?>(vklist[0])), result)
-        }
+        vk_check(vkGetValidationCacheDataEXT(boost_value_to_vk(device), boost_value_to_vk(validationCache), vkcount, unsafe(addr<void?>(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1432,9 +1376,7 @@ def get_shader_info_a_m_d(device : Device; pipeline : Pipeline; shaderStage : Vk
     var vklist : array<uint8>
     vklist |> resize(int64(vkcount))
     if (vkcount > 0ul) {
-        unsafe {
-            vk_check(vkGetShaderInfoAMD(boost_value_to_vk(device), boost_value_to_vk(pipeline), shaderStage, infoType, vkcount, addr<void?>(vklist[0])), result)
-        }
+        vk_check(vkGetShaderInfoAMD(boost_value_to_vk(device), boost_value_to_vk(pipeline), shaderStage, infoType, vkcount, unsafe(addr<void?>(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1449,9 +1391,7 @@ def get_physical_device_calibrateable_time_domains_k_h_r(physicalDevice : Physic
     var vklist : array<VkTimeDomainKHR>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1559,9 +1499,7 @@ def get_queue_checkpoint_data_n_v(queue : Queue) : array<VkCheckpointDataNV> {
         vklist[vki] = VkCheckpointDataNV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetQueueCheckpointDataNV(boost_value_to_vk(queue), vkcount, addr(vklist[0]))
-        }
+        vkGetQueueCheckpointDataNV(boost_value_to_vk(queue), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -1867,9 +1805,7 @@ def get_physical_device_supported_framebuffer_mixed_samples_combinations_n_v(phy
         vklist[vki] = VkFramebufferMixedSamplesCombinationNV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1936,9 +1872,7 @@ def get_pipeline_executable_properties_k_h_r(device : Device; pPipelineInfo : Pi
         vklist[vki] = VkPipelineExecutablePropertiesKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPipelineExecutablePropertiesKHR(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPipelineExecutablePropertiesKHR(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1954,9 +1888,7 @@ def get_pipeline_executable_statistics_k_h_r(device : Device; pExecutableInfo : 
         vklist[vki] = VkPipelineExecutableStatisticKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPipelineExecutableStatisticsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPipelineExecutableStatisticsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1972,9 +1904,7 @@ def get_pipeline_executable_internal_representations_k_h_r(device : Device; pExe
         vklist[vki] = VkPipelineExecutableInternalRepresentationKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPipelineExecutableInternalRepresentationsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPipelineExecutableInternalRepresentationsKHR(boost_value_to_vk(device), vkview_pExecutableInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -1992,9 +1922,7 @@ def get_physical_device_tool_properties(physicalDevice : PhysicalDevice; var res
         vklist[vki] = VkPhysicalDeviceToolProperties()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceToolProperties(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceToolProperties(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2350,9 +2278,7 @@ def get_physical_device_fragment_shading_rates_k_h_r(physicalDevice : PhysicalDe
         vklist[vki] = VkPhysicalDeviceFragmentShadingRateKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceFragmentShadingRatesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceFragmentShadingRatesKHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2444,9 +2370,7 @@ def get_queue_checkpoint_data2_n_v(queue : Queue) : array<VkCheckpointData2NV> {
         vklist[vki] = VkCheckpointData2NV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vkGetQueueCheckpointData2NV(boost_value_to_vk(queue), vkcount, addr(vklist[0]))
-        }
+        vkGetQueueCheckpointData2NV(boost_value_to_vk(queue), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
 }
@@ -2487,9 +2411,7 @@ def get_physical_device_video_format_properties_k_h_r(physicalDevice : PhysicalD
         vklist[vki] = VkVideoFormatPropertiesKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceVideoFormatPropertiesKHR(boost_value_to_vk(physicalDevice), vkview_pVideoFormatInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceVideoFormatPropertiesKHR(boost_value_to_vk(physicalDevice), vkview_pVideoFormatInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2517,9 +2439,7 @@ def get_video_session_memory_requirements_k_h_r(device : Device; videoSession : 
         vklist[vki] = VkVideoSessionMemoryRequirementsKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetVideoSessionMemoryRequirementsKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetVideoSessionMemoryRequirementsKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2780,9 +2700,7 @@ def get_framebuffer_tile_properties_q_c_o_m(device : Device; framebuffer : Frame
         vklist[vki] = VkTilePropertiesQCOM()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetFramebufferTilePropertiesQCOM(boost_value_to_vk(device), boost_value_to_vk(framebuffer), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetFramebufferTilePropertiesQCOM(boost_value_to_vk(device), boost_value_to_vk(framebuffer), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2806,9 +2724,7 @@ def get_physical_device_optical_flow_image_formats_n_v(physicalDevice : Physical
         vklist[vki] = VkOpticalFlowImageFormatPropertiesNV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceOpticalFlowImageFormatsNV(boost_value_to_vk(physicalDevice), vkview_pOpticalFlowImageFormatInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceOpticalFlowImageFormatsNV(boost_value_to_vk(physicalDevice), vkview_pOpticalFlowImageFormatInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2832,9 +2748,7 @@ def get_device_fault_reports_k_h_r(device : Device; timeout : uint64; var result
         vklist[vki] = VkDeviceFaultInfoKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDeviceFaultReportsKHR(boost_value_to_vk(device), timeout, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDeviceFaultReportsKHR(boost_value_to_vk(device), timeout, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2877,9 +2791,7 @@ def get_shader_binary_data_e_x_t(device : Device; shader : ShaderEXT; var result
     var vklist : array<uint8>
     vklist |> resize(int64(vkcount))
     if (vkcount > 0ul) {
-        unsafe {
-            vk_check(vkGetShaderBinaryDataEXT(boost_value_to_vk(device), boost_value_to_vk(shader), vkcount, addr<void?>(vklist[0])), result)
-        }
+        vk_check(vkGetShaderBinaryDataEXT(boost_value_to_vk(device), boost_value_to_vk(shader), vkcount, unsafe(addr<void?>(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2905,9 +2817,7 @@ def get_physical_device_cooperative_matrix_properties_k_h_r(physicalDevice : Phy
         vklist[vki] = VkCooperativeMatrixPropertiesKHR()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -2954,9 +2864,7 @@ def get_gpa_session_results_a_m_d(device : Device; gpaSession : GpaSessionAMD; s
     var vklist : array<uint8>
     vklist |> resize(int64(vkcount))
     if (vkcount > 0ul) {
-        unsafe {
-            vk_check(vkGetGpaSessionResultsAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession), sampleID, vkcount, addr<void?>(vklist[0])), result)
-        }
+        vk_check(vkGetGpaSessionResultsAMD(boost_value_to_vk(device), boost_value_to_vk(gpaSession), sampleID, vkcount, unsafe(addr<void?>(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3076,9 +2984,7 @@ def get_physical_device_cooperative_matrix_flexible_dimensions_properties_n_v(ph
         vklist[vki] = VkCooperativeMatrixFlexibleDimensionsPropertiesNV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3092,9 +2998,7 @@ def get_physical_device_cooperative_vector_properties_n_v(physicalDevice : Physi
         vklist[vki] = VkCooperativeVectorPropertiesNV()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceCooperativeVectorPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceCooperativeVectorPropertiesNV(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3126,9 +3030,7 @@ def enumerate_physical_device_shader_instrumentation_metrics_a_r_m(physicalDevic
         vklist[vki] = VkShaderInstrumentationMetricDescriptionARM()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(boost_value_to_vk(physicalDevice), vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM(boost_value_to_vk(physicalDevice), vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3197,9 +3099,7 @@ def get_data_graph_pipeline_session_bind_point_requirements_a_r_m(device : Devic
         vklist[vki] = VkDataGraphPipelineSessionBindPointRequirementARM()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDataGraphPipelineSessionBindPointRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDataGraphPipelineSessionBindPointRequirementsARM(boost_value_to_vk(device), vkview_pInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3231,9 +3131,7 @@ def get_data_graph_pipeline_available_properties_a_r_m(device : Device; pPipelin
     var vklist : array<VkDataGraphPipelinePropertyARM>
     vklist |> resize(int(vkcount))
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetDataGraphPipelineAvailablePropertiesARM(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetDataGraphPipelineAvailablePropertiesARM(boost_value_to_vk(device), vkview_pPipelineInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3247,9 +3145,7 @@ def get_physical_device_queue_family_data_graph_properties_a_r_m(physicalDevice 
         vklist[vki] = VkQueueFamilyDataGraphPropertiesARM()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }
@@ -3446,9 +3342,7 @@ def get_physical_device_queue_family_data_graph_optical_flow_image_formats_a_r_m
         vklist[vki] = VkDataGraphOpticalFlowImageFormatPropertiesARM()
     }
     if (vkcount > 0u) {
-        unsafe {
-            vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkview_pQueueFamilyDataGraphProperties, vkview_pOpticalFlowImageFormatInfo, vkcount, addr(vklist[0])), result)
-        }
+        vk_check(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(boost_value_to_vk(physicalDevice), queueFamilyIndex, vkview_pQueueFamilyDataGraphProperties, vkview_pOpticalFlowImageFormatInfo, vkcount, unsafe(addr(vklist[0]))), result)
     }
     return <- vklist
 }

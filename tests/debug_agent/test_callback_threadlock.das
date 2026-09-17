@@ -53,15 +53,13 @@ def test_callback_and_pinvoke_are_serialized(t : T?) {
         var overlap = atomic32_create()
         var tick_done = atomic32_create()
         let agent_context = unsafe(addr(get_debug_agent_context("callback_threadlock_test")))
-        unsafe {
-            invoke_in_context(
-                *agent_context,
-                "configure_callback",
-                entered,
-                release,
-                active,
-                overlap)
-        }
+        unsafe(invoke_in_context(
+            *agent_context,
+            "configure_callback",
+            entered,
+            release,
+            active,
+            overlap))
         with_job_que() {
             new_thread() @() {
                 tick_debug_agent("callback_threadlock_test")

@@ -55,10 +55,8 @@ def test_repack_slot_is_context_proof(t : T?) {
                 var dp = addr(done)
                 parallel_for(0, 1, 1) $(rb, re, wg) {
                     feint("{rb} {re}")
-                    unsafe {
-                        invoke(rq8, qp, sp, n, d)
-                        dp[0] = 1
-                    }
+                    invoke(rq8, qp, sp, n, d)
+                    unsafe(dp[0]) = 1
                     wg |> notify_and_release
                 }
                 t |> equal(done, 1)

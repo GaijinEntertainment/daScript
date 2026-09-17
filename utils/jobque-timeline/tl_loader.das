@@ -72,10 +72,7 @@ def private read_json_string(data : array<uint8> const#; var pos : int&; line_en
         sb |> push(data[pos])
         pos++
     }
-    var out : string
-    unsafe {
-        out = string(sb)
-    }
+    let out = string(sb)
     delete sb
     return out
 }

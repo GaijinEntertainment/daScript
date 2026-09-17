@@ -233,16 +233,14 @@ def do_outline(file, glob_filter : string) : string {
     let das_root = get_das_root()
     let cmd = build_outline_cmd(file, glob_filter, das_root)
     var raw_json : string
-    unsafe {
-        popen(cmd) $(f) {
-            if (f == null) return
-            raw_json = build_string() $(var w) {
-                while (!feof(f)) {
-                    write(w, fgets(f))
-                }
+    unsafe(popen(cmd) $(f) {
+        if (f == null) return
+        raw_json = build_string() $(var w) {
+            while (!feof(f)) {
+                write(w, fgets(f))
             }
         }
-    }
+    })
     raw_json = strip_ast_grep_banner(raw_json)
     if (empty(raw_json) || raw_json == "[]") return make_tool_result("No declarations found")
     var err : string
@@ -283,10 +281,8 @@ def do_outline(file, glob_filter : string) : string {
     unsafe { delete parsed; }
     // sort entries within each file by line
     for (fp in file_order) {
-        unsafe {
-            sort(by_file[fp]) $(a, b) {
-                return entries[a].line < entries[b].line
-            }
+        sort(unsafe(by_file[fp])) $(a, b) {
+            return entries[a].line < entries[b].line
         }
     }
     return make_tool_result(format_outline(entries, by_file, file_order))

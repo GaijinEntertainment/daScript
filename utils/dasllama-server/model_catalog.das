@@ -157,9 +157,7 @@ def public catalog_events_shutdown {
         if (catalog_download_running()) {
             to_log(LOG_WARNING, "dasllama-server: shutdown with a catalog download still running — channel left to the worker\n")
         } else {
-            unsafe {
-                ev |> channel_remove
-            }
+            unsafe(ev |> channel_remove)
         }
     }
 }

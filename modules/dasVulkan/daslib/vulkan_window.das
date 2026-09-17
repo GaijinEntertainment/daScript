@@ -76,9 +76,7 @@ def private choose_surface_format(phys : VkPhysicalDevice; surface : SurfaceKHR;
     vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, null), null)
     var formats : array<VkSurfaceFormatKHR>
     formats |> resize(int(count))
-    unsafe {
-        vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, addr(formats[0])), null)
-    }
+    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(phys, boost_value_to_vk(surface), count, unsafe(addr(formats[0]))), null)
     // 1. explicit preference: UNORM presents pass-through (UI/2D, no double sRGB encode), sRGB suits linear-lit 3D.
     if (preferred != VkFormat.UNDEFINED) {
         // sRGB-nonlinear colorspace first (predictable presentation), then the format with any colorspace.
@@ -154,9 +152,7 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
     var got = 0u
     vk_check(vkGetSwapchainImagesKHR(dev, boost_value_to_vk(sc.handle), got, null), null)
     sc.images |> resize(int(got))
-    unsafe {
-        vk_check(vkGetSwapchainImagesKHR(dev, boost_value_to_vk(sc.handle), got, addr(sc.images[0])), null)
-    }
+    vk_check(vkGetSwapchainImagesKHR(dev, boost_value_to_vk(sc.handle), got, unsafe(addr(sc.images[0]))), null)
 
     // one image view per image
     sc.views |> reserve(length(sc.images))
@@ -250,9 +246,7 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw_cmd : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(dev, ai, addr(raw_cmd)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
     let cmd = vk_value_to_boost(raw_cmd)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
@@ -293,9 +287,7 @@ def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_p
         presented = vkQueuePresentKHR(queue, present)
     }
     vk_check(vkQueueWaitIdle(queue), null)
-    unsafe {
-        vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, addr(raw_cmd))
-    }
+    vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }
 
@@ -318,9 +310,7 @@ def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool 
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw_cmd : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(dev, ai, addr(raw_cmd)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
     let cmd = vk_value_to_boost(raw_cmd)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
@@ -355,8 +345,6 @@ def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool 
         presented = vkQueuePresentKHR(queue, present)
     }
     vk_check(vkQueueWaitIdle(queue), null)
-    unsafe {
-        vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, addr(raw_cmd))
-    }
+    vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }

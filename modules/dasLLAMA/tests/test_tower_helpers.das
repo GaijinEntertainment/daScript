@@ -56,10 +56,8 @@ def test_empty_inputs(t : T?) {
         var b : array<float>
         var w <- [1.0]
         var wp = PlaneF()
-        unsafe {
-            wp.p = addr(w[0])
-            wp.n = 1l
-        }
+        wp.p = unsafe(addr(w[0]))
+        wp.n = 1l
         clamp_rows(a, b, 0l, -1.0, 1.0)
         rms_rows(a, b, wp, 0l, 4l, 0l, 1e-6)
         rms_rows_weightless(a, 4l, 0l, 1e-6)
@@ -78,10 +76,8 @@ def test_rms_rows(t : T?) {
         var x <- [1.0, 2.0, 3.0, 4.0, -1.0, 0.5, 2.0, -2.0, 3.0, 3.0, 3.0, 3.0, 0.0, 0.0, 1.0, 0.0]
         var w <- [2.0, 1.0, 0.5, -1.0]
         var wp = PlaneF()
-        unsafe {
-            wp.p = addr(w[0])
-            wp.n = 4l
-        }
+        wp.p = unsafe(addr(w[0]))
+        wp.n = 4l
         var out : array<float>
         out |> resize(16)
         rms_rows(out, x, wp, 0l, 4l, 4l, 1e-6)

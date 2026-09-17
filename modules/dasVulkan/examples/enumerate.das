@@ -31,9 +31,7 @@ def main() : int {
     }
     var devices : array<VkPhysicalDevice>
     devices |> resize(int(count))
-    unsafe {
-        vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, addr(devices[0]))
-    }
+    vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, unsafe(addr(devices[0])))
 
     for (d in devices) {
         var props : VkPhysicalDeviceProperties
@@ -47,9 +45,7 @@ def main() : int {
         vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, null)
         var qprops : array<VkQueueFamilyProperties>
         qprops |> resize(int(qcount))
-        unsafe {
-            vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, addr(qprops[0]))
-        }
+        vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, unsafe(addr(qprops[0])))
         print("  queue families: {int(qcount)}\n")
         for (i in range(int(qcount))) {
             let f = qprops[i].queueFlags

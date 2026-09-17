@@ -23,10 +23,8 @@ class private Echo : Server {
         pass
     }
     def override onData(buf : uint8?; size : int) {
-        unsafe {
-            for (i in range(size)) {
-                got = "{got}{to_char(int(buf[i]))}"
-            }
+        for (i in range(size)) {
+            got = "{got}{to_char(int(unsafe(buf[i])))}"
         }
         send(buf, size)
     }
@@ -52,10 +50,8 @@ class private Peer : Client {
         disconnects++
     }
     def override onData(buf : uint8?; size : int) {
-        unsafe {
-            for (i in range(size)) {
-                got = "{got}{to_char(int(buf[i]))}"
-            }
+        for (i in range(size)) {
+            got = "{got}{to_char(int(unsafe(buf[i])))}"
         }
     }
     def override onError(msg : string; code : int) {

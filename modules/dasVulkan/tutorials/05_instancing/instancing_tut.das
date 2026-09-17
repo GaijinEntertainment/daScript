@@ -167,21 +167,19 @@ struct public InstancingResources {
 }
 
 def public finalize(var r : InstancingResources) {
-    unsafe {
-        delete r.readback
-        delete r.pipeline
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.ubo
-        delete r.inst_buf
-        delete r.ib
-        delete r.vb
-        delete r.framebuffer
-        delete r.render_pass
-        delete r.depth
-        delete r.color
-    }
+    delete r.readback
+    delete r.pipeline
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.ubo
+    delete r.inst_buf
+    delete r.ib
+    delete r.vb
+    delete r.framebuffer
+    delete r.render_pass
+    delete r.depth
+    delete r.color
 }
 
 struct public InstancingContext {
@@ -193,12 +191,10 @@ struct public InstancingContext {
 }
 
 def public finalize(var ctx : InstancingContext) {
-    unsafe {
-        delete ctx.res
-        delete ctx.pool
-        delete ctx.device
-        delete ctx.instance
-    }
+    delete ctx.res
+    delete ctx.pool
+    delete ctx.device
+    delete ctx.instance
 }
 
 //! Build the offscreen render targets, the 2-binding vertex input pipeline, descriptors and the

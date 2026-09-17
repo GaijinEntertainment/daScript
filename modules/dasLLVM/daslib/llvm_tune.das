@@ -73,12 +73,9 @@ def jit_cli_opt_level() : int {
     return cli.opt_level |> unwrap_or(compiling_program().policies.jit_opt_level)
 }
 
-    //! True when this compile must stay stamp-free - `policies.tune_frozen`, an AOT-consuming run
-    //! without the JIT (a stamp changes the semantic hash), or a `--jit-target` cross target (the
-    //! artifact runs on a box this sidecar never measured): every tune annotation goes inert.
 def tune_aot_gate() : bool {
     return (compiling_program().policies.tune_frozen
-        || (compiling_program().policies.aot && !compiling_program().policies.jit_enabled)
+        || compiling_program().policies.aot
         || !empty(get_target_triple()))
 }
 
@@ -223,18 +220,16 @@ def tune_box_identity() : string {
     let plat = get_platform_name()
     if (plat == "windows") {
         var build = ""
-        unsafe {
-            popen("ver") $(f) {
-                if (f != null) {
-                    while (!feof(f)) {
-                        let ln = strip(fgets(f))
-                        if (!empty(ln)) {
-                            build = ln
-                        }
+        unsafe(popen("ver") $(f) {
+            if (f != null) {
+                while (!feof(f)) {
+                    let ln = strip(fgets(f))
+                    if (!empty(ln)) {
+                        build = ln
                     }
                 }
             }
-        }
+        })
         let lb = find(build, "[")
         let rb = find(build, "]")
         // keep only the trailing [0-9.] version run, so a localized "Version" word (and its
@@ -246,27 +241,23 @@ def tune_box_identity() : string {
         cpu = env_value_of("PROCESSOR_IDENTIFIER")
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         var lines : array<string>
-        unsafe {
-            popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
-                while (!feof(f)) {
-                    let ln = strip(fgets(f))
-                    if (!empty(ln)) {
-                        lines |> push(ln)
-                    }
+        unsafe(popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
+            while (!feof(f)) {
+                let ln = strip(fgets(f))
+                if (!empty(ln)) {
+                    lines |> push(ln)
                 }
             }
-        }
+        })
         // positional: a missing sysctl key blank-fills its field rather than collapsing the count
         model_id = !empty(lines) ? lines[0] : ""
         os_build = length(lines) > 1 ? lines[1] : ""
         cpu = length(lines) > 2 ? lines[2] : ""
         delete lines
     } else {
-        unsafe {
-            popen("uname -r 2>/dev/null") $(f) {
-                os_build = strip(fgets(f))
-            }
-        }
+        unsafe(popen("uname -r 2>/dev/null") $(f) {
+            os_build = strip(fgets(f))
+        })
         cpu = linux_cpu_brand()
     }
     if (empty(cpu)) {
@@ -2641,16 +2632,13 @@ def private run_scope_tuner(scope : TuneScope; onlyFilter : string = "") : bool 
     if (!empty(onlyFilter)) {
         set_env_variable("DAS_TUNE_ONLY", onlyFilter)
     }
-    var rc : int
-    unsafe {
-        rc = popen(cmd) $(f) {
-            if (f != null) {
-                while (!feof(f)) {
-                    relay_line(fgets(f))
-                }
+    let rc = unsafe(popen(cmd) $(f) {
+        if (f != null) {
+            while (!feof(f)) {
+                relay_line(fgets(f))
             }
         }
-    }
+    })
     if (!empty(onlyFilter)) {
         set_env_variable("DAS_TUNE_ONLY", "")
     }
@@ -2829,16 +2817,13 @@ def tune_auto_reexec() : bool {
     }
     print("llvm_tune: re-launching to apply the fresh manifests\n")
     set_env_variable("DAS_TUNE_RELAUNCH", "{g_env_tune.tune_relaunch + 1}")
-    var rc : int
-    unsafe {
-        rc = popen_argv(args, 0.0) $(f) {
-            if (f != null) {
-                while (!feof(f)) {
-                    print(fgets(f))
-                }
+    let rc = unsafe(popen_argv(args, 0.0) $(f) {
+        if (f != null) {
+            while (!feof(f)) {
+                print(fgets(f))
             }
         }
-    }
+    })
     delete args
     g_reexec_code = rc
     return true

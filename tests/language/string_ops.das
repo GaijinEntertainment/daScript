@@ -156,9 +156,7 @@ multi line string"
                 write(writer, zzx)
             }
         }
-        unsafe {
-            delete_string(zzs)
-        }
+        unsafe(delete_string(zzs))
         t |> success(true)
     }
 }

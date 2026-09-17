@@ -38,7 +38,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // only trip STYLE024 under `utils/lint/main.das`. The block form fires
 // under regular compile too.
 
-expect 31209:5
+expect 31209:6
 
 require daslib/style_lint
 
@@ -150,10 +150,10 @@ def good_unsafe_block_delete_pointer() : void {
     }
 }
 
-def good_unsafe_block_delete_container() : void {
+def bad_unsafe_block_delete_container() : void {
     var arr : array<int>
     arr |> push(1)
-    unsafe {
+    unsafe {                                          // STYLE024 - a plain container is safe to delete
         delete arr
     }
 }

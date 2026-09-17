@@ -38,9 +38,7 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, null)
     var qprops : array<VkQueueFamilyProperties>
     qprops |> resize(int(qcount))
-    unsafe {
-        vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, addr(qprops[0]))
-    }
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, qcount, unsafe(addr(qprops[0])))
     var fam = -1
     for (i in range(int(qcount))) {
         if (qprops[i].queueFlags.compute) {
@@ -85,10 +83,8 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     var dslci = VkDescriptorSetLayoutCreateInfo()
     dslci.bindingCount = 1u
     var set_layout : VkDescriptorSetLayout
-    unsafe {
-        dslci.pBindings = addr(binding)
-        vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
-    }
+    dslci.pBindings = unsafe(addr(binding))
+    vk_check(vkCreateDescriptorSetLayout(dev, dslci, null, set_layout), null)
 
     // ---- descriptor pool + set ----
     var pool_size : VkDescriptorPoolSize
@@ -98,10 +94,8 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     dpci.maxSets = 1u
     dpci.poolSizeCount = 1u
     var desc_pool : VkDescriptorPool
-    unsafe {
-        dpci.pPoolSizes = addr(pool_size)
-        vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
-    }
+    dpci.pPoolSizes = unsafe(addr(pool_size))
+    vk_check(vkCreateDescriptorPool(dev, dpci, null, desc_pool), null)
     var dsai = VkDescriptorSetAllocateInfo()
     dsai.descriptorPool = desc_pool
     dsai.descriptorSetCount = 1u
@@ -128,10 +122,8 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
     var plci = VkPipelineLayoutCreateInfo()
     plci.setLayoutCount = 1u
     var pipe_layout : VkPipelineLayout
-    unsafe {
-        plci.pSetLayouts = addr(set_layout)
-        vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
-    }
+    plci.pSetLayouts = unsafe(addr(set_layout))
+    vk_check(vkCreatePipelineLayout(dev, plci, null, pipe_layout), null)
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
     stage.module_ = boost_value_to_vk(shader)
@@ -150,18 +142,14 @@ def main() : int {   // nolint:STYLE038 - flat example scaffold
         // pipeline/layout/desc_set are raw here (raw descriptor setup), so unwrap the
         // command buffer; cmd_dispatch is a generated boost wrapper taking CommandBuffer.
         vkCmdBindPipeline(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipeline)
-        unsafe {
-            vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout, 0u, 1u, addr(desc_set), 0u, null)
-        }
+        vkCmdBindDescriptorSets(boost_value_to_vk(cmd), VkPipelineBindPoint.COMPUTE, pipe_layout, 0u, 1u, unsafe(addr(desc_set)), 0u, null)
         cmd_dispatch(cmd, uint(N / GROUP), 1u, 1u)
     }
 
     // ---- read back + verify ----
     var mapped : void? = null
     let mf : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(dev, memory, 0ul, buf_size, mf, unsafe(addr(mapped))), null)
     var values : array<uint>
     values |> resize(N)
     unsafe {

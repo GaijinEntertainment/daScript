@@ -1189,9 +1189,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     let n_txt = long_length(ids)
     let clock = ref_time_ticks()
     caches_ready(vs, n_txt)
-    unsafe {
-        scratch_resize(sc.rows, n_txt * d)
-    }
+    unsafe(scratch_resize(sc.rows, n_txt * d))
     for (r in range64(n_txt)) {
         let src = ids[r] * d
         for (j in range64(d)) {

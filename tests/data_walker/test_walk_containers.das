@@ -21,9 +21,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr = [10, 20, 30]
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         var expected = "beforeArray\n"
         expected += "beforeArrayData:3\n"
@@ -45,9 +43,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr : array<int>
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         var expected = "beforeArray\n"
         expected += "beforeArrayData:0\n"
@@ -60,9 +56,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr = [42]
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         // Single element: index=0, last=true
         t |> equal(find(walker.log, "beforeElem:0:true") != -1, true)
@@ -73,9 +67,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr <- [SimpleStruct(x = 1, y = 1.0), SimpleStruct(x = 2, y = 2.0)]
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         t |> equal(find(walker.log, "beforeArray") != -1, true)
         t |> equal(find(walker.log, "beforeStruct:SimpleStruct") != -1, true)
@@ -87,9 +79,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr = ["foo", "bar", "baz"]
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         t |> equal(find(walker.log, "String:foo") != -1, true)
         t |> equal(find(walker.log, "String:bar") != -1, true)
@@ -100,9 +90,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
         var walker = new LogWalker()
         var arr <- [(1, "one"), (2, "two")]
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         t |> equal(find(walker.log, "beforeArray") != -1, true)
         t |> equal(find(walker.log, "beforeTuple") != -1, true)
@@ -128,9 +116,7 @@ def test_walk_dim(t : T?) {
         arr[1] = 200
         arr[2] = 300
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(arr), typeinfo rtti_typeinfo(arr))
-            }
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
         }
         t |> equal(find(walker.log, "beforeDim") != -1, true)
         t |> equal(find(walker.log, "Int:100") != -1, true)
@@ -153,9 +139,7 @@ def test_walk_table(t : T?) {
         var tab : table<string; int>
         tab |> insert("alpha", 1)
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))
-            }
+            adapter |> walk_data(unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
         }
         t |> equal(find(walker.log, "beforeTable") != -1, true)
         t |> equal(find(walker.log, "String:alpha") != -1, true)
@@ -167,9 +151,7 @@ def test_walk_table(t : T?) {
         var walker = new LogWalker()
         var tab : table<string; int>
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))
-            }
+            adapter |> walk_data(unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
         }
         var expected = "beforeTable\n"
         expected += "afterTable\n"
@@ -182,9 +164,7 @@ def test_walk_table(t : T?) {
         var tab : table<string; int>
         tab |> insert("x", 42)
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))
-            }
+            adapter |> walk_data(unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
         }
         let key_pos = find(walker.log, "beforeKey")
         let key_after_pos = find(walker.log, "afterKey")
@@ -201,9 +181,7 @@ def test_walk_table(t : T?) {
         var tab : table<int; string>
         tab |> insert(42, "answer")
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))
-            }
+            adapter |> walk_data(unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
         }
         t |> equal(find(walker.log, "Int:42") != -1, true)
         t |> equal(find(walker.log, "String:answer") != -1, true)
@@ -213,9 +191,7 @@ def test_walk_table(t : T?) {
         var walker = new LogWalker()
         var tab <- {"a" => 1, "b" => 2, "c" => 3}
         make_data_walker(walker) $(adapter) {
-            unsafe {
-                adapter |> walk_data(addr(tab), typeinfo rtti_typeinfo(tab))
-            }
+            adapter |> walk_data(unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
         }
         // All 3 keys and values should appear (order may vary due to hash table)
         t |> equal(find(walker.log, "String:a") != -1, true)

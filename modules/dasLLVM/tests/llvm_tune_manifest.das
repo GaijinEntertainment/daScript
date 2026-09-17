@@ -27,21 +27,18 @@ def private spawn_client(cmd : string; var lines : array<string>) : int {
     // cmd.exe /c strips the first and last quote of a line that starts with a quote — but the env
     // prefix now leads, so the line never starts with a quote and no sacrificial wrap is needed
     let full = "{env}{cmd}"
-    var rc : int
-    unsafe {
-        rc = popen_timeout(full, 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = fgets(f)
-                if (ln |> starts_with("WRITE ") || ln |> starts_with("RESULT ") || ln |> starts_with("KV ")
-                        || ln |> starts_with("OTHER ") || ln |> starts_with("REF ") || ln |> starts_with("llvm_tune:")) {
-                    lines |> push(strip("{ln}"))
-                }
+    let rc = unsafe(popen_timeout(full, 300.0) $(f) {
+        if (f == null) {
+            return
+        }
+        while (!feof(f)) {
+            let ln = fgets(f)
+            if (ln |> starts_with("WRITE ") || ln |> starts_with("RESULT ") || ln |> starts_with("KV ")
+                    || ln |> starts_with("OTHER ") || ln |> starts_with("REF ") || ln |> starts_with("llvm_tune:")) {
+                lines |> push(strip("{ln}"))
             }
         }
-    }
+    })
     return rc
 }
 
@@ -139,11 +136,9 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     // asserted on the parsed value, not the JSON text: a Windows home is escaped there
     let recorded_binary = "{jdoc?["provenance"]?["binary"] ?? ""}"
     t |> success(!empty(recorded_binary) && tilde_home(recorded_binary) == recorded_binary, "a minted sidecar names no home directory - the binary path is spelled ~: {recorded_binary}")
-    unsafe {
-        var prov = jdoc?["provenance"]
-        if (prov != null) {
-            update(prov, "box", JV("some-other-box|foreign-arch|foreign-hw"))
-        }
+    var prov = jdoc?["provenance"]
+    if (prov != null) {
+        update(prov, "box", JV("some-other-box|foreign-arch|foreign-hw"))
     }
     fwrite(sidecarPath, write_json(jdoc))
     delete_json(jdoc)
@@ -166,11 +161,9 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     var jerr2 = ""
     var jdoc2 = read_json(fread(sidecarPath), jerr2)
     t |> success(jdoc2 != null, "foreign sidecar parses: {jerr2}")
-    unsafe {
-        var prov2 = jdoc2?["provenance"]
-        if (prov2 != null) {
-            update(prov2, "applied_box", JV(tune_box_identity()))
-        }
+    var prov2 = jdoc2?["provenance"]
+    if (prov2 != null) {
+        update(prov2, "applied_box", JV(tune_box_identity()))
     }
     fwrite(sidecarPath, write_json(jdoc2))
     delete_json(jdoc2)

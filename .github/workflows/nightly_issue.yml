@@ -49,7 +49,11 @@ jobs:
             printf -- '* run: %s\n' "$RUN_URL"
             printf -- '* commit: `%s`\n\n' "$GITHUB_SHA"
             printf 'One issue for the whole nightly: while this one is open nothing else '
-            printf 'is filed, whichever lane fails. Close it once the nightly is green again.\n'
+            printf 'is filed, whichever lane fails. Close it once the nightly is green again.\n\n'
+            printf 'A PR that closes this issue runs the nightly shape of CI on itself, so the fix '
+            printf 'is proved by the lane that failed. Say `Closes #<this issue>` in the PR body '
+            printf 'before opening it, put `#nightly` anywhere in the body, or add the '
+            printf '`run-nightly` label and push again.\n'
           } > "$BODY"
 
           gh issue create --title "$TITLE" --label nightly-failure --body-file "$BODY"

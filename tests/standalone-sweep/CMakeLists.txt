@@ -45,6 +45,8 @@ endforeach()
 list(LENGTH _sweep_files _sweep_count)
 message(STATUS "standalone sweep: ${_sweep_count} files, ${_skipped} with no standalone form or a claimed stem")
 list(JOIN _sweep_files "|" _sweep_files_arg)
+set(_sweep_files_list "${CMAKE_CURRENT_BINARY_DIR}/sweep_files.txt")
+file(WRITE "${_sweep_files_list}" "${_sweep_files_arg}")
 
 ### C++ tier
 add_custom_target(standalone_sweep_aot_corpus)
@@ -55,9 +57,9 @@ DAS_AOT_CTX("${_sweep_files}" SWEEP_CTX_GENERATED_SRC standalone_sweep_aot_corpu
 set(_contexts "${CMAKE_CURRENT_BINARY_DIR}/sweep_contexts.h")
 add_custom_command(
     OUTPUT ${_contexts}
-    COMMAND ${CMAKE_COMMAND} -DOUT=${_contexts} "-DFILES=${_sweep_files_arg}"
+    COMMAND ${CMAKE_COMMAND} -DOUT=${_contexts} -DFILES_LIST=${_sweep_files_list}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/sweep_contexts.cmake
-    DEPENDS standalone_sweep_aot_corpus ${CMAKE_CURRENT_SOURCE_DIR}/sweep_contexts.cmake
+    DEPENDS standalone_sweep_aot_corpus ${CMAKE_CURRENT_SOURCE_DIR}/sweep_contexts.cmake ${_sweep_files_list}
     COMMENT "Standalone sweep (C++): collecting the contexts that emitted"
     VERBATIM
 )
@@ -85,7 +87,7 @@ add_custom_target(run_standalone_sweep_aot
 if(NOT DAS_LLVM_DISABLED)
     add_custom_target(standalone_sweep_jit
         COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
-            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_lib "-DFILES=${_sweep_files_arg}"
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_lib -DFILES_LIST=${_sweep_files_list}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/sweep_jit.cmake
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

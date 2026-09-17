@@ -38,14 +38,12 @@ def private box_from_cpu(cpu : string) : string {
 
 def private capture_line(cmd : string) : string {
     var out = ""
-    unsafe {
-        popen(cmd) $(f) {
-            if (f != null) {
-                let ln = fgets(f)
-                out = strip(ln)
-            }
+    unsafe(popen(cmd) $(f) {
+        if (f != null) {
+            let ln = fgets(f)
+            out = strip(ln)
         }
-    }
+    })
     return out
 }
 

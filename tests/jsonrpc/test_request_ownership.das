@@ -58,9 +58,7 @@ def test_response_parsers_own_their_document(t : T?) {
         for (_ in range(8)) {
             var rb <- parse_response_batch("[\{\"id\":1,\"result\":1},\{\"id\":2,\"result\":[1,2]}]")
             t |> equal(length(rb.responses), 2)
-            unsafe {
-                delete rb.responses
-            }
+            delete rb.responses
         }
         t |> equal(heap_bytes_allocated(), before, "no parse tree survives parse_response_batch")
     }

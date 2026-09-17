@@ -67,11 +67,9 @@ def test_extractors(t : T?) {
                 row[int(js * 32l + i)] = uint8(lo | (hi << 4u))
             }
         }
-        unsafe {
-            let rp = addr(row[0])
-            for (k in range64(128l)) {
-                t |> equal(int(k45_nib(rp, k)), int(k % 16l))
-            }
+        let rp = unsafe(addr(row[0]))
+        for (k in range64(128l)) {
+            t |> equal(int(k45_nib(rp, k)), int(k % 16l))
         }
     }
     t |> run("k5_hbit reads the ggml k5 qh packing") @(t : T?) {
@@ -91,11 +89,9 @@ def test_extractors(t : T?) {
             }
             qh[int(i)] = uint8(b)
         }
-        unsafe {
-            let hp = addr(qh[0])
-            for (k in range64(128l)) {
-                t |> equal(int(k5_hbit(hp, k)), int((k * 7l + 3l) & 1l))
-            }
+        let hp = unsafe(addr(qh[0]))
+        for (k in range64(128l)) {
+            t |> equal(int(k5_hbit(hp, k)), int((k * 7l + 3l) & 1l))
         }
     }
     t |> run("k6_nib reads the ggml k6 ql packing") @(t : T?) {
@@ -117,11 +113,9 @@ def test_extractors(t : T?) {
                 }
             }
         }
-        unsafe {
-            let rp = addr(row[0])
-            for (k in range64(256l)) {
-                t |> equal(int(k6_nib(rp, k)), int((k * 5l + 1l) % 16l))
-            }
+        let rp = unsafe(addr(row[0]))
+        for (k in range64(256l)) {
+            t |> equal(int(k6_nib(rp, k)), int((k * 5l + 1l) % 16l))
         }
     }
 }

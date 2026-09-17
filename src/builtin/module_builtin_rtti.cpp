@@ -2040,10 +2040,10 @@ namespace das {
                     ->args({"serializer","program"});
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
                 SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
-                    ->args({"serializer","block","context","line"});
+                    ->args({"serializer","libGroup","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program_ex)>(*this, lib, "deserialize_program",
                 SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program_ex")
-                    ->args({"serializer","access","block","context","line"});
+                    ->args({"serializer","access","libGroup","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
                 SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
                     ->args({"serializer","block","context","line"});

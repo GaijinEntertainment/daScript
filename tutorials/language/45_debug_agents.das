@@ -103,9 +103,7 @@ def install_log_agent(ctx : Context) {
 
 [export, pinvoke]
 def read_log_count(var result : int?) {
-    unsafe {
-        *result = log_intercept_count
-    }
+    *result = log_intercept_count
 }
 
 def demo_on_log() {
@@ -156,9 +154,7 @@ def agent_increment() {
 
 [export, pinvoke]
 def agent_get(var result : int?) {
-    unsafe {
-        *result = agent_counter
-    }
+    *result = agent_counter
 }
 
 def demo_invoke_in_context() {
@@ -201,9 +197,7 @@ class CalcAgent : DapiDebugAgent {
         self.accumulator += amount
     }
     def get_result(var result : int?) {
-        unsafe {
-            *result = self.accumulator
-        }
+        *result = self.accumulator
     }
 }
 
@@ -264,10 +258,8 @@ class StateAgent : DapiDebugAgent {
     }
     // onVariable is called for each variable reported above
     def override onVariable(var ctx : Context; category, name : string; info : TypeInfo; data : void?) : void {
-        unsafe {
-            let value = sprint_data(data, addr(info), print_flags.singleLine)
-            print("  {category}: {name} = {value}\n")
-        }
+        let value = sprint_data(data, unsafe(addr(info)), print_flags.singleLine)
+        print("  {category}: {name} = {value}\n")
     }
 }
 
@@ -409,9 +401,7 @@ def add_data(amount : int) {
 
 [export, pinvoke]
 def get_data(var result : int?) {
-    unsafe {
-        *result = shared_data
-    }
+    *result = shared_data
 }
 
 [unused_argument(ctx)]
@@ -471,9 +461,7 @@ class ThreadLocalAgent : DapiDebugAgent {
         self.value = val
     }
     def get_value(var result : int?) {
-        unsafe {
-            *result = self.value
-        }
+        *result = self.value
     }
 }
 
@@ -487,9 +475,7 @@ def demo_thread_local_agent() {
     fork_debug_agent_context(@@install_thread_local_agent)
 
     // Use "" (empty string) to target the thread-local agent
-    unsafe {
-        invoke_debug_agent_method("", "set_value", 42)
-    }
+    unsafe(invoke_debug_agent_method("", "set_value", 42))
 
     var result = 0
     unsafe {

@@ -65,27 +65,19 @@ def demo_scalar_types() {
         // typeinfo rtti_typeinfo(var) returns the TypeInfo for any variable
         var x = 42
         print("Walking int 42:\n")
-        unsafe {
-            adapter |> walk_data(addr(x), typeinfo rtti_typeinfo(x))
-        }
+        adapter |> walk_data(unsafe(addr(x)), typeinfo rtti_typeinfo(x))
 
         var f = 3.14
         print("Walking float 3.14:\n")
-        unsafe {
-            adapter |> walk_data(addr(f), typeinfo rtti_typeinfo(f))
-        }
+        adapter |> walk_data(unsafe(addr(f)), typeinfo rtti_typeinfo(f))
 
         var s = "hello"
         print("Walking string \"hello\":\n")
-        unsafe {
-            adapter |> walk_data(addr(s), typeinfo rtti_typeinfo(s))
-        }
+        adapter |> walk_data(unsafe(addr(s)), typeinfo rtti_typeinfo(s))
 
         var b = true
         print("Walking bool true:\n")
-        unsafe {
-            adapter |> walk_data(addr(b), typeinfo rtti_typeinfo(b))
-        }
+        adapter |> walk_data(unsafe(addr(b)), typeinfo rtti_typeinfo(b))
     }
 
     unsafe {
@@ -164,9 +156,7 @@ def demo_structures() {
     make_data_walker(walker) $(adapter) {
         var player = Player(name = "Alice", health = 100, pos = Vec3(x = 1.0, y = 2.5, z = -3.0))
         print("Walking Player:\n")
-        unsafe {
-            adapter |> walk_data(addr(player), typeinfo rtti_typeinfo(player))
-        }
+        adapter |> walk_data(unsafe(addr(player)), typeinfo rtti_typeinfo(player))
     }
 
     unsafe {
@@ -260,15 +250,11 @@ def demo_arrays_and_tables() {
     make_data_walker(walker) $(adapter) {
         var nums = [10, 20, 30, 40, 50]
         print("Walking array<int>:\n")
-        unsafe {
-            adapter |> walk_data(addr(nums), typeinfo rtti_typeinfo(nums))
-        }
+        adapter |> walk_data(unsafe(addr(nums)), typeinfo rtti_typeinfo(nums))
 
         var scores <- { "Alice" => 95, "Bob" => 87, "Charlie" => 72 }
         print("\nWalking table<string;int>:\n")
-        unsafe {
-            adapter |> walk_data(addr(scores), typeinfo rtti_typeinfo(scores))
-        }
+        adapter |> walk_data(unsafe(addr(scores)), typeinfo rtti_typeinfo(scores))
     }
 
     unsafe {
@@ -346,21 +332,15 @@ def demo_tuples_and_variants() {
     make_data_walker(walker) $(adapter) {
         var t = ("hello", 42, 3.14)
         print("Walking tuple<string;int;float>:\n")
-        unsafe {
-            adapter |> walk_data(addr(t), typeinfo rtti_typeinfo(t))
-        }
+        adapter |> walk_data(unsafe(addr(t)), typeinfo rtti_typeinfo(t))
 
         var ok_result = Result(ok = 42)
         print("\nWalking variant (ok=42):\n")
-        unsafe {
-            adapter |> walk_data(addr(ok_result), typeinfo rtti_typeinfo(ok_result))
-        }
+        adapter |> walk_data(unsafe(addr(ok_result)), typeinfo rtti_typeinfo(ok_result))
 
         var err_result = Result(err = "not found")
         print("\nWalking variant (err=\"not found\"):\n")
-        unsafe {
-            adapter |> walk_data(addr(err_result), typeinfo rtti_typeinfo(err_result))
-        }
+        adapter |> walk_data(unsafe(addr(err_result)), typeinfo rtti_typeinfo(err_result))
     }
 
     unsafe {
@@ -413,9 +393,7 @@ class EnumBitfieldPrinter : DapiDataWalker {
                     print(", ")
                 }
                 first = false
-                unsafe {
-                    print("{ti.argNames[i]}")
-                }
+                print("{unsafe(ti.argNames[i])}")
             }
         }
         print("]\n")
@@ -429,15 +407,11 @@ def demo_enums_and_bitfields() {
     make_data_walker(walker) $(adapter) {
         var color = Color.Green
         print("Walking enum Color.Green:\n")
-        unsafe {
-            adapter |> walk_data(addr(color), typeinfo rtti_typeinfo(color))
-        }
+        adapter |> walk_data(unsafe(addr(color)), typeinfo rtti_typeinfo(color))
 
         var perms : Permissions = Permissions.readable | Permissions.executable
         print("Walking bitfield (readable | executable):\n")
-        unsafe {
-            adapter |> walk_data(addr(perms), typeinfo rtti_typeinfo(perms))
-        }
+        adapter |> walk_data(unsafe(addr(perms)), typeinfo rtti_typeinfo(perms))
     }
 
     unsafe {
@@ -740,9 +714,7 @@ def demo_filtering() {
         )
 
         print("Walking PublicRecord (Secret fields skipped):\n")
-        unsafe {
-            adapter |> walk_data(addr(record), typeinfo rtti_typeinfo(record))
-        }
+        adapter |> walk_data(unsafe(addr(record)), typeinfo rtti_typeinfo(record))
     }
 
     unsafe {
@@ -788,9 +760,7 @@ def demo_mutation() {
 
     var walker = new FloatClamper()
     make_data_walker(walker) $(adapter) {
-        unsafe {
-            adapter |> walk_data(addr(particle), typeinfo rtti_typeinfo(particle))
-        }
+        adapter |> walk_data(unsafe(addr(particle)), typeinfo rtti_typeinfo(particle))
     }
 
     print("After clamping:  x={particle.x} y={particle.y} z={particle.z} alpha={particle.alpha}\n")

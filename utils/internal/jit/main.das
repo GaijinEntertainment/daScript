@@ -282,6 +282,7 @@ def private jit_setup_cop(var cop : CodeOfPolicies; input : string; tool : JitTo
         } elif (tool.aot_object) {
             cop.jit_emit_object = true
             cop.jit_dll_mode = false
+            cop.tune_frozen = true
         } elif (tool.exe) {
             cop.jit_exe_mode = true
             cop.jit_dll_mode = false

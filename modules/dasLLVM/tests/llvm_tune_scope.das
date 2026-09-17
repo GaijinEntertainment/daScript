@@ -28,20 +28,17 @@ def private tune_env(policy : string) : string {
 
 // env prefix leads, so no sacrificial-quote wrap is needed (cmd.exe only strips a LEADING quote)
 def private spawn_child(cmd : string; var lines : array<string>) : int {
-    var rc : int
-    unsafe {
-        rc = popen_timeout("{cmd} 2>&1", 300.0) $(f) {
-            if (f == null) {
-                return
-            }
-            while (!feof(f)) {
-                let ln = strip(fgets(f))
-                if (!empty(ln)) {
-                    lines |> push("{ln}")
-                }
+    let rc = unsafe(popen_timeout("{cmd} 2>&1", 300.0) $(f) {
+        if (f == null) {
+            return
+        }
+        while (!feof(f)) {
+            let ln = strip(fgets(f))
+            if (!empty(ln)) {
+                lines |> push("{ln}")
             }
         }
-    }
+    })
     return rc
 }
 
@@ -261,11 +258,9 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     var verr = ""
     var vdoc = read_json(fread(verSidecar), verr)
     t |> success(vdoc != null, "ver sidecar parses: {verr}")
-    unsafe {
-        var vprov = vdoc?["provenance"]
-        if (vprov != null) {
-            update(vprov, "testver", JV("1"))
-        }
+    var vprov = vdoc?["provenance"]
+    if (vprov != null) {
+        update(vprov, "testver", JV("1"))
     }
     fwrite(verSidecar, write_json(vdoc))
     delete_json(vdoc)

@@ -42,6 +42,7 @@ jobs:
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
       matrix: ${{ steps.matrix.outputs.matrix }}
+      nightly: ${{ steps.nightly.outputs.nightly }}
     steps:
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@v5
@@ -49,6 +50,38 @@ jobs:
           # All of these options are optional, so you can remove them if you are happy with the defaults
           concurrent_skipping: 'same_content'
           do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
+
+      - id: nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          nightly=false
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) nightly=true ;;
+            pull_request)
+              if gh api graphql -f owner='${{ github.repository_owner }}' -f name='${{ github.event.repository.name }}' \
+                   -F number=${{ github.event.pull_request.number }} -f query='
+                     query($owner:String!,$name:String!,$number:Int!){
+                       repository(owner:$owner,name:$name){
+                         pullRequest(number:$number){
+                           body
+                           labels(first:100){nodes{name}}
+                           closingIssuesReferences(first:20){nodes{labels(first:100){nodes{name}}}}
+                         }}}' \
+                   --jq '.data.repository.pullRequest
+                         | [ (.labels.nodes[].name),
+                             (.closingIssuesReferences.nodes[].labels.nodes[].name) ] as $tags
+                         | if ($tags | index("nightly-failure"))
+                              or ($tags | index("run-nightly"))
+                              or (((.body // "") | test("#nightly"; "i")))
+                           then "armed" else empty end' | grep -q .
+              then
+                nightly=true
+              fi
+              ;;
+          esac
+          echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
 
       # The build matrix is data in ci/ci_matrix.py, evaluated per event here (ci/test_ci_matrix.py pins it).
       - uses: actions/checkout@v4
@@ -58,7 +91,9 @@ jobs:
         # two statements: a substitution inside echo would hide the script's exit code
         run: |
           set -eu
-          matrix=$(python3 ci/ci_matrix.py build '${{ github.event_name }}')
+          event='${{ github.event_name }}'
+          if [ '${{ steps.nightly.outputs.nightly }}' = 'true' ]; then event=schedule; fi
+          matrix=$(python3 ci/ci_matrix.py build "$event")
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Cache LLVM
@@ -394,7 +429,7 @@ jobs:
       # per-PR ctest is -L small, so only this step executes a generated
       # context. memory_model_4gb allocates a real 4 GB chunk and stays
       # local-only.
-      if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.cmake_preset == 'Release' && needs.pre_job.outputs.nightly == 'true'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -419,7 +454,7 @@ jobs:
       # LLVM-AOT objects, and both standalone tiers - -ctx emits C++ a host
       # compiles, -lib emits a native library dasbind loads back. Same nightly
       # gate as the step above; 32-bit Windows has no AOT rail to sweep.
-      if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.cmake_preset == 'Release' && needs.pre_job.outputs.nightly == 'true'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -444,7 +479,7 @@ jobs:
     needs: pre_job
     if: >-
       (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
-      || github.event_name == 'workflow_dispatch'
+      || (github.event_name != 'schedule' && needs.pre_job.outputs.nightly == 'true')
     runs-on: windows-latest
     permissions:
       contents: read
@@ -548,7 +583,7 @@ jobs:
     needs: pre_job
     if: >-
       (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
-      || github.event_name == 'workflow_dispatch'
+      || (github.event_name != 'schedule' && needs.pre_job.outputs.nightly == 'true')
     runs-on: windows-latest
     permissions:
       contents: read
@@ -754,7 +789,7 @@ jobs:
     # scheduled cron runs the toolchains only on the canonical repo, so forks
     # don't run (and fail) the nightly — that would email every fork owner.
     # Manual workflow_dispatch still runs them anywhere.
-    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || (github.event_name != 'schedule' && needs.pre_job.outputs.nightly == 'true')
     runs-on: windows-latest
     defaults:
       run:
@@ -911,7 +946,7 @@ jobs:
     # scheduled cron runs the toolchains only on the canonical repo, so forks
     # don't run (and fail) the nightly — that would email every fork owner.
     # Manual workflow_dispatch still runs them anywhere.
-    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || (github.event_name != 'schedule' && needs.pre_job.outputs.nightly == 'true')
     runs-on: windows-latest
     steps:
     - name: "SCM Checkout"
