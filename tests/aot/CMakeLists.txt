@@ -574,7 +574,9 @@ if(NOT ${DAS_LLVM_DISABLED})
     # binds every function (a miss is a hard error under --use-aot). The JIT backend already compiles
     # all of tests/ (run_tests_jit is green), so --aot-object emits them too.
     FILE(GLOB _llvm_aot_jit_tests RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tests/jit_tests/*.das")
-    set(LLVM_AOT_TEST_FILES ${TEST_AOT_ALL_DAS} ${_llvm_aot_jit_tests})
+    FILE(GLOB_RECURSE _llvm_aot_benches RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/benchmarks/*.das")
+    list(FILTER _llvm_aot_benches EXCLUDE REGEX "benchmarks/(sql|terminal)/")
+    set(LLVM_AOT_TEST_FILES ${TEST_AOT_ALL_DAS} ${_llvm_aot_jit_tests} ${_llvm_aot_benches})
     list(REMOVE_DUPLICATES LLVM_AOT_TEST_FILES)
     # _-prefixed helpers and negative/fixture tests.
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")

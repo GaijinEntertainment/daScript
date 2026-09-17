@@ -4,7 +4,7 @@ set -euo pipefail
 HOME_DIR=${BENCH_STAND_HOME:-/srv/bench-stand}; SRC=$HOME_DIR/src; SITE=$HOME_DIR/site; TOOL=utils/internal/bench-stand; BENCHCTL=utils/benchctl
 REF=${1:-master}; shift || true
 CMAKE_ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_SQLITE_DISABLED=OFF -DDAS_PUGIXML_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON)
-TARGETS=(daslang dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
+TARGETS=(daslang test_aot_subset test_llvm_aot dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 jstr() { printf '%s' "$1" | tr -d '\r' | LC_ALL=C awk 'BEGIN{ORS=""} {gsub(/\\/,"\\\\"); gsub(/"/,"\\\""); gsub(/\t/,"\\t"); if (NR>1) printf "\\n"; printf "%s", $0}' | tr '\000-\037' ' '; }
@@ -18,7 +18,7 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-${SHA:0:8}"; STARTED=$(now)
 status running; trap 'status finished 1' ERR
 git -C "$SRC" checkout -q --detach "$SHA"
 git -C "$SRC" submodule update -q --init --recursive || true
-git -C "$SRC" clean -fdxq --exclude=build --exclude=bin --exclude=lib --exclude=.jitted_scripts
+git -C "$SRC" clean -fdxq --exclude=build --exclude=bin --exclude=lib --exclude=.jitted_scripts --exclude='*.shared_module'
 
 LOG=$HOME_DIR/logs/build-$RUN_ID.log; BUILD=ok; t0=$(date +%s)
 if [ "${BENCH_STAND_BUILD:-}" = skip ]; then
