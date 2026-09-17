@@ -58,13 +58,9 @@ if(NOT DAS_TOOLS_DISABLED)
         # The sanitizer runtimes read these from the environment of the process under test, so
         # the target carries them - otherwise every caller repeats them and they drift apart.
         # detect_leaks=0 for the JIT sweep: it exits through exit(), running no destructors.
-        set(_DAS_SAN_ENV "")
-        if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
-            set(_DAS_SAN_ENV ${CMAKE_COMMAND} -E env
-                "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/lsan_suppressions.txt"
-                "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/tsan_suppressions.txt"
-                "UBSAN_OPTIONS=print_stacktrace=1"
-                "ASAN_OPTIONS=detect_leaks=0")
+        set(_DAS_SAN_ENV ${DAS_SANITIZER_ENV})
+        if(DAS_SANITIZER_ENV)
+            list(APPEND _DAS_SAN_ENV "ASAN_OPTIONS=detect_leaks=0")
         endif()
 
         # A sanitizer lane sweeps tests/language only: the whole suite under asan/tsan/ubsan
@@ -107,7 +103,7 @@ endif()
 # preflight --full).
 if(TARGET test_aot)
     add_das_target(run_tests_aot
-        COMMAND $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"
@@ -119,7 +115,7 @@ endif()
 # subset build itself as the gate and runs no AOT tests.
 if(TARGET test_aot_subset)
     add_das_target(run_tests_aot_subset
-        COMMAND $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language
         DEPENDS test_aot_subset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"
@@ -130,7 +126,7 @@ endif()
 # statically-linked self-registering objects and run jitted. Opt-in, not in CI.
 if(TARGET test_llvm_aot)
     add_das_target(run_tests_llvm_aot
-        COMMAND $<TARGET_FILE:test_llvm_aot> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -jit -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (LLVM-AOT)"

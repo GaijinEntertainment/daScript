@@ -3605,7 +3605,7 @@ namespace das
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
         int macroStackSize = getContextStackSize();
-        if ( policies.aot_macros || policies.jit_enabled || options.getBoolOption("aot_macros", false) ) {
+        if ( policies.aot_macros || options.getBoolOption("aot_macros", false) ) {
             // quote lowering (daslib/quote) is active (same triggers as its QuotePass gate,
             // including the per-module option): a lowered quote evaluates one large
             // construction frame per quote, and macro-called functions evaluate theirs on
@@ -3893,9 +3893,10 @@ namespace das
             DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
             // under the jit the interpreter's nodes are the fallback, not the product, so a
             // user context never fuses and a macro context fuses only when its module asks
-            // (options fusion = true); without the jit the option keeps its meaning
+            // (options fusion = true); without the jit the option keeps its meaning.
+            // jit_emit_object must fuse exactly as the aot run that binds its object, or error[50101]
             bool fusion = options.getBoolOption("fusion", policies.fusion);
-            if ( policies.jit_enabled ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
+            if ( policies.jit_enabled && !policies.jit_emit_object ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
             g_fusionContextFn(context, logs, fusion);
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
         }
@@ -4179,6 +4180,7 @@ namespace das
                     fn.code = (it->second)(context);
                     if ( fn.code->rtti_node_isJit() ) {
                         fn.jit = true;
+                        fn.jitFunction = fn.code->rtti_node_jitFunction();
                     } else {
                         fn.aot = true;
                         auto fcb = (SimNode_CallBase *) fn.code;
