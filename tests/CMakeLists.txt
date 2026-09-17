@@ -130,7 +130,7 @@ endif()
 # statically-linked self-registering objects and run jitted. Opt-in, not in CI.
 if(TARGET test_llvm_aot)
     add_custom_target(run_tests_llvm_aot
-        COMMAND $<TARGET_FILE:test_llvm_aot> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -jit -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
+        COMMAND $<TARGET_FILE:test_llvm_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (LLVM-AOT)"

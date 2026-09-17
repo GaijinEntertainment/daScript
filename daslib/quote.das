@@ -466,7 +466,6 @@ class QuotePass : AstPassMacro {
     //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         let lower = (compiling_program().policies.aot_macros
-            || (compiling_program().policies.jit_enabled && !prog.flags.needMacroModule)
             || (prog._options |> find_arg("aot_macros") ?as tBool ?? false))
         if (!lower) return false
         var astVisitor = new QuoteConverter(mod = compiling_module())

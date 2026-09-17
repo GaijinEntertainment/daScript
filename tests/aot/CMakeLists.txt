@@ -592,9 +592,14 @@ if(NOT ${DAS_LLVM_DISABLED})
     endforeach()
     file(WRITE ${LLVM_AOT_TEST_LIST} "${_llvm_aot_list_text}")
 
+    FILE(GLOB _llvm_aot_harness RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/dastest/*.das")
+    set(LLVM_AOT_OBJECT_FILES ${LLVM_AOT_TEST_FILES} ${_llvm_aot_harness} ${AotDaslibList})
+    list(REMOVE_ITEM LLVM_AOT_OBJECT_FILES daslib/json_boost.das daslib/regex_boost.das)
+    list(REMOVE_DUPLICATES LLVM_AOT_OBJECT_FILES)
+
     add_custom_target(test_llvm_aot_corpus)
     SET(LLVM_AOT_GENERATED_OBJ)
-    DAS_LLVM_AOT_LIB("${LLVM_AOT_TEST_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
+    DAS_LLVM_AOT_LIB("${LLVM_AOT_OBJECT_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
 
     # Same main.cpp as daslang / test_aot; the .o are pre-built external inputs (EXTERNAL_OBJECT),
     # so the C++ toolchain links them without recompiling.

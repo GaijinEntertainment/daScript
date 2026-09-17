@@ -3922,7 +3922,7 @@ namespace das
             // user context never fuses and a macro context fuses only when its module asks
             // (options fusion = true); without the jit the option keeps its meaning
             bool fusion = options.getBoolOption("fusion", policies.fusion);
-            if ( policies.jit_enabled ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
+            if ( policies.jit_enabled && !policies.jit_emit_object ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
             g_fusionContextFn(context, logs, fusion);
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
         }
