@@ -1,7 +1,5 @@
 # test-release expected compile failures — a RULING per line, not a mute button.
 
-# --- ship defects awaiting repo fixes (RC2) ---
-
 # --- daspkg-package tier: compile only after `daspkg install` (planned daspkg phase) ---
 examples/benchmarks/sql/_common.das needs duckdb/postgres provider packages
 examples/benchmarks/sql/_sql_families.das needs duckdb/postgres provider packages
@@ -19,7 +17,8 @@ examples/daspkg/daspkg-version-2/main.das daspkg tutorial project — resolves a
 examples/daspkg/packages/daspkg-example-mixed/daslib/smooth.das daspkg tutorial package internals
 examples/games/sequence/main.das needs the cards package
 
-# --- integration-scaffold tier: the tutorial has the user BUILD the native module ---
+# --- integration-scaffold tier: the file requires a native module its own example or tutorial build writes ---
+examples/dasLLAMA/library/main.das requires dasllama_lib_c, written by the opt-in dasllama_lib_jit target the example's README builds
 tutorials/integration/c/03_binding_types.das requires the native scaffold the tutorial builds
 tutorials/integration/c/04_callbacks.das requires the native scaffold the tutorial builds
 tutorials/integration/c/05_unaligned_advanced.das requires the native scaffold the tutorial builds

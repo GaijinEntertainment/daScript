@@ -28,7 +28,9 @@ passes.
   `tutorials/`, and `modules/*/{examples,tutorials}` compiles with
   `<bundle>/bin/daslang -compile-only`, per-file timeout, parallel self-spawned workers
   (`utils/common/parallel_workers`). No execution, so windows/devices/models never engage;
-  the timeout covers the one thing that can still spin - compile-time macro work.
+  the timeout covers the one thing that can still spin - compile-time macro work. Its
+  default is 180 s: the bare `-compile-only` never reads the module cache, a dasLLAMA
+  example compiles cold in about 40 s alone, and a full worker set slows every file.
 - **utils** (implemented, `utils_phase.das`) - every shipped tool exercised in its
   capacity, from the bundle alone: the shipped suites (`utils/{common,lint,dascov,find-dupe,
   jobque-timeline}`) through the shipped runner, then `bin/dastest.exe` on one of them
@@ -36,15 +38,26 @@ passes.
   the shipped `daslib` (the tree is at zero and formatter-clean, and stays so); the analysis
   tools on their shipped fixtures (`detect-dupe` on `utils/detect-dupe/fixture`, `dascov`
   on its test script, `benchctl` reset/query, `aot` emitting `hello_world`); the LSP
-  subtools on the MCP fixtures; `daslang-live` on `examples/daslive/test_api`. Every row
+  subtools on the MCP fixtures; the DAP bridge's argument gate; both watchdog forms'
+  `--help`; `daslang-live` on `examples/daslive/test_api`. Every row
   is exit code plus substrings only a working run prints - `0 issue(s), 0 error(s)`,
   `N tests, N passed, 0 failed`, `Verified!` - never rc alone. With `--network`, `daspkg`
   installs the packages the gated examples need (sequence -> das-cards, the daspkg tutorial
-  projects, telegram, the local C/C++ build example), proves the unlock by compiling or
+  projects, the crash example, the local C/C++ build example), proves the unlock by compiling or
   running the example, and `daspkg cleanup` returns each dir to shipped state. Rows are the
   verified command lines from the RC1 utils audit; `--only <substr>` runs a subset.
 - **run** (planned) - console-pure allowlist executed with timeout, rc==0 required.
 - **headless** (planned) - dasImgui apps through the harness headless arm.
+
+## Row shapes {#utils-row-shapes}
+
+A tool with no help flag has no front to launch, so its row proves the tool through a refusal:
+the DAP bridge is a stdio server whose only reachable surface is its argument parser, and its
+row passes an unknown flag with `expect_rc` naming the code that parser exits with.
+
+`network = true` marks a row that mutates the bundle's example dirs, which is not the same as
+one that downloads: the crash example's `dascrash` package resolves from a local path and
+builds through cmake, so that row proves the shipped C++ build kit with nothing fetched.
 
 ## expected_compile.txt / expected_utils.txt
 

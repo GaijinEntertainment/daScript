@@ -6,7 +6,7 @@ require daslib/fio
 require classify
 
 // Phase `utils`: every shipped tool exercised from the bundle alone.
-// Row = argv + substring oracle; --network rows fetch packages and mutate example dirs.
+// Row = argv + oracle (substrings, an expected exit code); --network rows mutate the bundle's example dirs.
 
 struct ToolCheck {
     name : string           //! verdict key, e.g. "lint.exe/daslib"
@@ -14,8 +14,9 @@ struct ToolCheck {
     want : array<string>    //! every substring must appear in the merged output
     forbid : array<string>  //! none may appear (checked against "\n" + output, so "\n0 tests" anchors a line)
     timeout : float = 120.0
-    network : bool = false  //! only with --network: fetches packages, mutates the bundle's example dirs
+    network : bool = false  //! only with --network: mutates the bundle's example dirs (most such rows also fetch packages)
     copy_from : string      //! bundle-relative file copied into @OUT@ before the run (formatter round-trips)
+    expect_rc : int = 0     //! the exit code that passes
 }
 
 let private DASTEST_OK <- ["0 failed, 0 errors, 0 skipped"]
@@ -28,6 +29,7 @@ def private suite_row(name, dir : string; extra_argv : array<string>) : ToolChec
     return <- ToolCheck(name = name, argv <- argv, want := DASTEST_OK, forbid := DASTEST_EMPTY, timeout = 300.0)
 }
 
+[arch(at="README.md#utils-row-shapes")]
 def public utils_checks() : array<ToolCheck> {
     var rows <- [
         // --- shipped suites through the shipped runner ---------------------------------
@@ -68,6 +70,10 @@ def public utils_checks() : array<ToolCheck> {
         ToolCheck(name = "lsp/nav", argv <- ["@DASLANG@", "utils/lsp/subtools/nav.das", "--", "documentSymbol", "utils/mcp/tests/_fixture_valid.das"],
             want <- ["\"ok\":true", "\"name\":\"Point\""]),
         ToolCheck(name = "mcp/setup-help", argv <- ["@DASLANG@", "utils/mcp/setup.das", "--", "--show-help"], want <- ["--no-build"]),
+        ToolCheck(name = "dap/refuses-unknown-flag", argv <- ["@DASLANG@", "utils/dap/main.das", "--", "--no-such-flag", "x"],
+            want <- ["the options are --repo-root, --executable, --timeout"], expect_rc = 2),
+        ToolCheck(name = "watchdog.exe/help", argv <- ["@EXE:watchdog@", "--help"], want <- ["--stable-seconds"]),
+        ToolCheck(name = "watchdog/help", argv <- ["@DASLANG@", "utils/watchdog/main.das", "--", "--help"], want <- ["--stable-seconds"]),
         ToolCheck(name = "daslang-live/test_api", argv <- ["@EXE:daslang-live@", "examples/daslive/test_api/main.das", "--live-port", "19099"],
             want <- ["PASS: 2 commands registered"], timeout = 60.0),
         // --- daspkg: launch offline; the installs need the network and mutate example dirs --
@@ -79,9 +85,9 @@ def public utils_checks() : array<ToolCheck> {
             want <- ["Installed 'daspkg-test-pure'", "Installed 'daspkg-test-deps'"], network = true),
         ToolCheck(name = "daspkg.exe/run-daspkg-example", argv <- ["@DASLANG@", "examples/daspkg/daspkg-example/main.das"],
             want <- ["Hello, daspkg!", "2 + 3 = 5"], network = true),
-        ToolCheck(name = "daspkg.exe/install-telegram", argv <- ["@EXE:daspkg@", "install", "--root", "examples/telegram/echo-bot", "--no-color"],
-            want <- ["Installed 'dasTelegram'"], network = true),
-        ToolCheck(name = "daspkg.exe/unlock-telegram", argv <- ["@DASLANG@", "-compile-only", "examples/telegram/echo-bot/echo_bot.das"], network = true),
+        ToolCheck(name = "daspkg.exe/install-crash", argv <- ["@EXE:daspkg@", "install", "--root", "examples/crash", "--no-color"],
+            want <- ["Installed 'dascrash' (local)"], network = true, timeout = 600.0),
+        ToolCheck(name = "daspkg.exe/unlock-crash", argv <- ["@DASLANG@", "-compile-only", "examples/crash/main.das"], network = true),
         ToolCheck(name = "daspkg.exe/install-build-example", argv <- ["@EXE:daspkg@", "install", "--root", "examples/daspkg/daspkg-build-example", "--no-color"],
             want <- ["Installed 'daspkg-example-c' (local)", "Installed 'daspkg-example-cpp' (local)"], network = true, timeout = 600.0),
         ToolCheck(name = "daspkg.exe/run-build-example", argv <- ["@DASLANG@", "examples/daspkg/daspkg-build-example/main.das"],
@@ -89,7 +95,7 @@ def public utils_checks() : array<ToolCheck> {
     ]
     // rows run in order - the daspkg cleanup rows must stay last
     rows |> reserve(length(rows) + 4)
-    for (root in ["examples/games/sequence", "examples/daspkg/daspkg-example", "examples/telegram/echo-bot", "examples/daspkg/daspkg-build-example"]) {
+    for (root in ["examples/games/sequence", "examples/daspkg/daspkg-example", "examples/crash", "examples/daspkg/daspkg-build-example"]) {
         rows |> emplace(ToolCheck(name = "daspkg.exe/cleanup:{root}", argv <- ["@EXE:daspkg@", "cleanup", "--force", "--root", root, "--no-color"], network = true))
     }
     return <- rows
@@ -122,18 +128,23 @@ def public bundle_exe(bundle, name : string) : string {
     return get_full_file_name(path_join(bundle, "bin/{name}"))   // missing: the launch fails loudly
 }
 
-//! An exit code of 0 is only a pass when the oracle holds: 1 with the unmet expectation
-//! as the FAIL head otherwise. Non-zero exits keep their code and the child's output.
+//! The row's verdict: rc 0 only when the child's rc equals expect_rc and the oracle holds, with the child's
+//! output as the head; an unmet oracle - or a 0 where another code was expected - is rc 1 with the unmet
+//! expectation as the head; any other unexpected rc passes through with the child's output.
+def public judged(check : ToolCheck; rc : int; out : string) : tuple<rc : int; head : string> {
+    if (rc != check.expect_rc) {
+        return rc == 0 ? (rc = 1, head = "expected exit {check.expect_rc}, got 0") : (rc = rc, head = out)
+    }
+    let miss = unmet(check, out)
+    return empty(miss) ? (rc = 0, head = out) : (rc = 1, head = miss)
+}
+
 def public judged_rc(check : ToolCheck; rc : int; out : string) : int {
-    return rc == 0 && !empty(unmet(check, out)) ? 1 : rc
+    return judged(check, rc, out).rc
 }
 
 def public judged_head(check : ToolCheck; rc : int; out : string) : string {
-    if (rc != 0) {
-        return out
-    }
-    let miss = unmet(check, out)
-    return empty(miss) ? out : miss
+    return judged(check, rc, out).head
 }
 
 //! "" when the output satisfies the row, else the first unmet expectation - the FAIL head.
@@ -173,7 +184,8 @@ def public run_utils_checks(bundle, daslang : string; network : bool; name_filte
         var out : string
         let rc = run_and_capture(argv, out, check.timeout)
         let sec = float(get_time_usec(t0)) / 1000000.0
-        verdicts |> push(verdict_line(check.name, judged_rc(check, rc, out), sec, check.timeout, judged_head(check, rc, out)))
+        let v = judged(check, rc, out)
+        verdicts |> push(verdict_line(check.name, v.rc, sec, check.timeout, v.head))
     }
     rmdir_rec(out_dir)
     return <- verdicts
