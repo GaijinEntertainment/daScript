@@ -12,9 +12,10 @@ a type, a constant, a shape, a format tag, a called helper - are one parameteriz
 implementation written N times; the set is a concern, and the report names the fold - the
 single parameterized form the set collapses into.
 
-The structural sweep (detect-dupe) is one tool in the audit's kit. It orders the reading; it
-never replaces it. A function it does not pair can still be a duplicate, and a pair it reports
-can be noise. The audit is the reading of every function in scope.
+The structural sweep (detect-dupe) is one tool in the audit's kit. It orders the walk of
+its own clusters; it never replaces the reading. A function it does not pair can still be a
+duplicate, and a pair it reports can be noise. The audit is the reading of every function in
+scope.
 
 ## Two tiers
 
@@ -51,11 +52,16 @@ can be noise. The audit is the reading of every function in scope.
 
 ## The procedure
 
+Gather, do not drip: the scope call first (`git diff`, or the folder listing), then the
+folder's rule documents, the stdlib digest, the sweep, and every function in scope together
+in one call. Reading is most of an audit's cost; judgment starts at the fresh-read of
+candidate pairs.
+
 1. **Read the folder's `ARCHITECTURE*.md` and `REVIEW*.md` first.** They name the folding
    mechanisms the folder sanctions and the separations it has ruled. A fold the checklist
    already demands is reported in the checklist's words.
-2. **Read `skills/daslang/references/everything.md` in full, before the first function in
-   scope.** It is the generated digest of every module: each public symbol, most with a
+2. **Read `skills/daslang/references/everything.md` in full, before the first verdict.**
+   It is the generated digest of every module: each public symbol, most with a
    one-line description. Read whole, not grepped - a grep needs the right word and the helper
    you are looking for was named by someone else - and the MCP `discover` tool answers one
    targeted question against the same digest; it does not replace the whole read.

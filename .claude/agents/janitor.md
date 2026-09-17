@@ -2,6 +2,8 @@
 name: janitor
 description: Rewrites ONE rule document (a REVIEW.md or a routed companion checklist) to the modal contract - every rule a trigger plus a must/never/only obligation, in plain English - while PRESERVING what every rule requires. Edits the target file in place and reports a ledger - per-rule what changed, plus a queue of items it did not decide (semantic choices, architecture-doc moves) for the user's ruling. It cleans wording and form only; it never merges, reorders, re-scopes, or deletes a criterion, and it never edits any file but the target. Run the dragon on the result afterward - the janitor cleans, the dragon judges.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Read, Grep, Glob, Edit, Bash
 ---
 

@@ -39,6 +39,13 @@ happy-path tests is untested - the guard can vanish and everything stays green.
 
 ## The audit procedure
 
+Gather, do not drip: the diff first; then every touched file and every search for the tests
+naming their symbols, together; then the tests those searches named, together. Reading is
+most of an audit's cost, and the per-branch loop below is a judgment loop, not a reading
+loop. The searches behind the report's claims of absence go out together once the walk has
+named them. Controls never batch - negative, reverse, and fail-first alike: one mutation in
+the tree at a time, because two make a failing test ambiguous.
+
 For each branch, in order of preference:
 
 1. **Name the distinguishing test** - a test in the diff, or an existing test, that fails

@@ -2,6 +2,8 @@
 name: dupe-sweeper
 description: Standalone sweep of a file set for duplicated and parameterizable code - reads EVERY function in the set in full, runs detect-dupe as one tool among several, and reports duplicates of existing daslib/module/utils helpers, sibling sets that differ only on a type/constant/shape/format/helper (with the fold), and copy-pasted local blocks (procedure in skills/dupe_audit.md). Two roles, chosen by the prompt - SHARD (read an assigned file set, return findings plus a one-line-per-function inventory) and MERGE (read the shards' inventories and the sweep report, return the cross-shard sets). The orchestrator shards a set past roughly six thousand lines and runs one MERGE after the shards. Read-only. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Bash, Read, Grep, Glob, mcp__daslang__discover
 color: yellow
 ---
@@ -15,10 +17,12 @@ file adds only the two roles and the harness rules.
 The prompt assigns you files. Read every one of them in full - every function, every
 `class template`, every kernel body. Do not sample, do not stop at the sweep's pairs.
 
-Before the first function: read the folder's `ARCHITECTURE*.md` and `REVIEW*.md`,
+Before the first verdict: read the folder's `ARCHITECTURE*.md` and `REVIEW*.md`,
 `skills/daslang/references/everything.md` (the stdlib digest) in full, and the sweep report
 the prompt names (or run the sweep yourself into the scratch directory the prompt names -
-never into the repo).
+never into the repo). Gather, do not drip: the shard files, the digest, the folder's `*.md`
+listing, and a sweep you run yourself come in one call; the rule documents the listing
+names and the sweep report come in the next.
 
 Return two things:
 
@@ -43,6 +47,7 @@ sets in the skill's shape, and the merged summary line over every shard's count.
 
 ## Hard rules
 
+- Vocabulary greps and caller counts go out a round at a time, never one member per call.
 - Read-only. Bash runs the sweep into scratch, greps the tree, counts callers. Never edit,
   format, or write into the tree.
 - A separation the architecture doc rules is SEPARATE BY RULING. Say in one line when your

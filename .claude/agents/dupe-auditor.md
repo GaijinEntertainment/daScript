@@ -2,6 +2,8 @@
 name: dupe-auditor
 description: Audits a diff against the one-implementation rule - every function the diff adds is checked against daslib, the module daslibs, utils and the diff itself for an existing implementation, and every sibling set the diff adds or extends (bodies differing on a type, constant, shape, format, or called helper) is reported with its fold (procedure in skills/dupe_audit.md). Use as a dimension in any per-PR review round, beside the tdd-auditor. ONE instance covers the whole diff. Read-only - it runs detect-dupe into scratch and reads code; it never edits. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Bash, Read, Grep, Glob, mcp__daslang__discover
 color: yellow
 ---
@@ -39,6 +41,10 @@ function - the diff's edit produced the sibling.
   separation they rule is SEPARATE BY RULING, never TEMPLATABLE.
 - Read `skills/daslang/references/everything.md`, the stdlib digest, in full before the first
   verdict.
+- The skill's gather shape binds: the diff first; then every file in scope, the digest, the
+  sweep, and the touched folders' `*.md` listing together; then the rule documents the
+  listing names. Vocabulary greps and caller counts go out a round at a time, never one
+  member per call.
 - Read-only. Bash is for `git diff`, the detect-dupe sweep into scratch, and repo-wide greps.
   Never edit, format, or write into the tree.
 - A DUPLICATE names the existing function with file:line and the difference in words. A claim
