@@ -57,6 +57,9 @@ struct DastestReport {
 
 let TAIL_LINES = 40
 
+let AOT_HOST = "test_aot_subset"
+let JIT_HOST = "test_llvm_aot"
+
 struct private OutputScan {
     by_arm : table<string; array<BenchmarkRunStats>>
     arm_order, tail : array<string>
@@ -159,9 +162,15 @@ def run_bench_file(bin, repo_root : string; f : BenchFile; lane : string; limits
         return <- res
     }
     remove(report_path)
-    var argv <- [bin]
-    argv |> push("-jit") if (lane == "jit")
-    argv |> push_from([to_generic_path(path_join(repo_root, "dastest/dastest.das")), "--", "--bench", "--bench-format", "json", "--json-file", report_path,
+    let host_name = lane == "aot" ? AOT_HOST : (lane == "jit" ? JIT_HOST : "")
+    let host = empty(host_name) ? "" : to_generic_path(path_join(path_join(repo_root, "bin"), host_name))
+    let compiled = !empty(host) && stat(host).is_reg
+    var argv <- [compiled ? host : bin]
+    argv |> push("-jit") if (!compiled && lane == "jit")
+    argv |> push(to_generic_path(path_join(repo_root, "dastest/dastest.das")))
+    argv |> push("--")
+    argv |> push("--use-aot") if (compiled || lane == "aot")
+    argv |> push_from(["--bench", "--bench-format", "json", "--json-file", report_path,
         "--count", "{limits.repeat}", "--test", to_generic_path(path_join(path_join(repo_root, "benchmarks"), f.path))])
     var lines : array<string>
     var exit_code = process_running
@@ -179,7 +188,7 @@ def run_bench_file(bin, repo_root : string; f : BenchFile; lane : string; limits
                     lines |> push(line)
                 }
                 exit_code = process_poll(p)
-                if (exit_code == process_running && double(get_time_usec(t0)) / 1000000.0lf > double(limits.timeout_seconds)) {
+                if (exit_code == process_running && double(get_time_nsec(t0)) / 1000000000.0lf > double(limits.timeout_seconds)) {
                     res.status = FileStatus.timeout
                     res.message = "killed after {limits.timeout_seconds} s (timeout_seconds)"
                     process_kill(p)
@@ -192,7 +201,7 @@ def run_bench_file(bin, repo_root : string; f : BenchFile; lane : string; limits
             }
         }
     }
-    res.seconds = double(get_time_usec(t0)) / 1000000.0lf
+    res.seconds = double(get_time_nsec(t0)) / 1000000000.0lf
     return <- res if (res.status == FileStatus.spawn_failed)
     let report_text = fread(report_path)
     remove(report_path)

@@ -97,7 +97,7 @@ def private verb_run(cfg : Config; suite : SuiteConfig) : StandExit {
     }
     let t0 = ref_time_ticks()
     let failed = measure(rec, files, lanes, bin, root, cfg.filter, cfg.repeat > 0 ? cfg.repeat : suite.repeat)
-    rec.seconds = double(get_time_usec(t0)) / 1000000.0lf
+    rec.seconds = double(get_time_nsec(t0)) / 1000000000.0lf
     rec.finished = "{iso8601_now()}"
     rec.status = derive_status(rec)
     return StandExit.failed if (!write_record(cfg.out, rec))
