@@ -2,6 +2,8 @@
 name: placement-auditor
 description: Audits the placement block of ONE rule document against the folder it describes. Dispatched only when the document has a placement block (the dragon skips placement content by charter). Checks the inventory against reality - every line's file exists, every file has a line, owns/never claims spot-checked against the code. Per-line verdicts with file:line evidence; never edits.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -16,6 +18,9 @@ The fixed form you verify:
 - Each line's grammar: `` `file` `` - role: owns-list, optionally a bare never-phrase ("Zero
   network", "No SQL, no hashing"). A clause with its own defect-verdict or same-change
   obligation is a smuggled rule - report it; it belongs in the flat list above.
+
+Two calls carry the reading: the document and the folder listing first; every file the block
+names and every claim grep second.
 
 Then the map-vs-territory checks, each with evidence:
 

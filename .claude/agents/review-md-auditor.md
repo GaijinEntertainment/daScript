@@ -2,6 +2,8 @@
 name: review-md-auditor
 description: Audits a change against ONE folder-scoped REVIEW.md rule file (binding per-folder checklists, distinct from CLAUDE.md authoring guidance). Use as an extra dimension in a code review of any diff that touches a folder covered by a REVIEW.md. IMPORTANT - the orchestrator fans out, this agent does not: discover the binding set first (the make_pr step-0a walk), then launch ONE instance per discovered REVIEW.md, each told which single checklist it owns and which its siblings own. Returns per-rule verdicts with file:line evidence, plus self-review findings against the checklist itself. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Bash, Read, Grep, Glob
 color: yellow
 ---
@@ -25,6 +27,10 @@ Re-run it to confirm your assigned file is in the set (a mismatch means the diff
 and stop). Keep `--list-only`: the orchestrator already ran the `REVIEW.das` gates - you audit
 the prose half. Read `REVIEW_COMMON.md` at the repo root - the contract every checklist lives
 under - then your checklist in full, then scope the diff to the files under its directory.
+That is reading order, not call order: call one runs the `--list-only` walk and fetches
+`REVIEW_COMMON.md`, your checklist, and the diff's file list; call two fetches every changed
+file under your directory and every grep a rule needs. The per-rule walk below is a
+judgment loop, not a reading loop.
 
 ## Step 2 - audit each rule against the diff
 

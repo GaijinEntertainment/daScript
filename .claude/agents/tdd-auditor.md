@@ -1,7 +1,10 @@
 ---
 name: tdd-auditor
-description: Audits a diff against the constitutional branch-test rule - every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist review-md-auditor, ONE instance covers the whole diff, including folders no REVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. MUTATING AUDITOR - launch it in its own worktree (Agent isolation "worktree"), never in the shared tree: its control mutations race any concurrent edit there, and a crash mid-control strands the mutation. This applies to any auditor whose method mutates sources, however briefly. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
+description: Audits a diff against the constitutional branch-test rule - every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist review-md-auditor, ONE instance covers the whole diff, including folders no REVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. MUTATING AUDITOR - its frontmatter isolates it in its own worktree, and a general-purpose fallback is launched with Agent isolation "worktree" too, never in the shared tree: its control mutations race any concurrent edit there, and a crash mid-control strands the mutation. This applies to any auditor whose method mutates sources, however briefly. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
+effort: high
+omitClaudeMd: true
+isolation: worktree
 tools: Bash, Read, Grep, Glob, Edit
 color: green
 ---
@@ -22,6 +25,9 @@ are the subject of the skill's **cheat check**: every changed expectation, weake
 removed assertion, deleted case, or newly added skip/exclude gets a reverse control or a
 stated reason.
 
+The skill's gather rule binds here too; controls never batch - one mutation at a time,
+and the restore ritual below binds each.
+
 ## Reverse controls - the cheat check mechanics
 
 Run the OLD test against the NEW code: `git checkout <base> -- <testfile>`, run the one
@@ -35,6 +41,8 @@ the run with a checked-out base file in place.
 
 ## Negative controls - the hard rules
 
+- One test runs as `daslang dastest/dastest.das -- --test <file>` (`skills/writing_tests.md`
+  has the framework); `-jit` after `daslang` when the test's own settings ask for it.
 - Mutate with Edit, run the ONE candidate test (never a whole suite per mutation), restore
   with Edit (the exact reverse), then verify with `git diff -- <file>` that the file is back
   to its pre-mutation state. NEVER end your run with a mutation in place - if a tool error

@@ -2,6 +2,8 @@
 name: spartan
 description: Trims a prose document (skill, reference, rule doc) to minimal token cost with zero meaning loss: deep cuts, typically a third or more. Give it one file (or a small set it owns outright) and any per-file constraints (verbatim-survival sections, editing rules the file's README imposes). It edits in place and reports before/after sizes plus a restore list of borderline cuts. It compresses; it does not restructure a doc set, verify claims, or write new content.
 model: opus
+effort: high
+omitClaudeMd: true
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---
 
