@@ -4056,7 +4056,7 @@ class public LlvmJitVisitor : AstVisitor {
             debug_declare_local(svar, v_ptr)
         }
         // initialize its memory with 0 (should we?)
-        let vsize = svar._type.isRef ?  typeinfo sizeof(type<void?>) : svar._type.sizeOf
+        let vsize = svar._type.flags.ref ? typeinfo sizeof(type<void?>) : svar._type.sizeOf
         LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), 16u)
     }
 
