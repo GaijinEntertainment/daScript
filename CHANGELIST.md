@@ -379,6 +379,7 @@ An MCP bridge for DAP debugging (#3937) - launch, breakpoints, stepping, scopes,
 
 ### Bug Fixes
 
+- **The watchdog no longer takes a daslang in the process cwd for one beside the script** (#4059) - layout discovery `fexist`-tested its bare-name fallback against the cwd, so a `bin/` cwd made a `main.das` with no daslang in reach look served; `find_daslang` answers "" and the bare PATH name is chosen only where a spawn needs one. `get_host_binary()` keeps a bare PATH-found `argv[0]` bare instead of resolving it beside the cwd, and `tests/jit_tests/jit_lib.das` spawns it instead of the raw `argv[0]` - the two suites the v0.6.4-RC4 cells broke on when run from `bin/`
 - **The driver forwards `-h` / `--help` placed after `--`** (#4057) - it answered them with its own banner wherever they sat, so no interpreted clargs tool could print its help; the release validation catches up with the tools since RC2 in the same change (the bundle smoke compiles and launches the DAP bridge, the static watchdog's `--help` and `--lsp` fronts, the LLVM-AOT driver and the LSP subtools; the release audit's rows carry an expected exit code, the telegram rows become the crash example's local native package, the compile cap is 180 s)
 - **Side-effect inference misses that DCE'd real writes** - writes through forwarded `const?` args (#3313, fixes #3311) and through pointer-offset args (#3324, fixes #3321) are now recorded
 - **`E(a=1)` on an enum silently folded to the zero enumerant** (#3427, fixes #3426)

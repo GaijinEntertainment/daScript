@@ -4,6 +4,7 @@ options no_aot
 require dastest/testing_boost
 require daslib/fio
 require daslib/strings_boost
+require daslib/clargs
 require strings
 
 
@@ -86,8 +87,7 @@ def test_jit_lib_shared(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var lines : array<string>
     let rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_probe.das", "jit_lib_probe", "", "", lines)
     report(lines, "build")
@@ -106,8 +106,7 @@ def test_jit_lib_static_and_export_all(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var static_lines : array<string>
     let static_rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_probe.das", "jit_lib_probe_s",
         "-lib-export-all", "--jit-lib-static", static_lines) // nolint:LINT029 - lines carries the build transcript for the failure report
@@ -132,8 +131,7 @@ def test_jit_lib_result_slot_is_aligned(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var lines : array<string>
     let rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_align.das", "jit_lib_align", "", "", lines)
     report(lines, "build")
@@ -150,8 +148,7 @@ def test_jit_lib_binds_into_a_daslang_host(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var lines : array<string>
     let rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_bind.das", "bindlib", "", "", lines)
     report(lines, "build")
@@ -169,8 +166,7 @@ def test_jit_lib_runs_the_standalone_fixture(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var lines : array<string>
     let rc = build_lib(bin, SHARED_FIXTURE, "standalone_init_fixture", "", "--jit-lib-export-marked", lines)
     report(lines, "build")
@@ -187,8 +183,7 @@ def test_jit_lib_is_a_guest_of_a_populated_runtime(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var lines : array<string>
     let rc = build_lib(bin, "{FIXTURE_DIR}/_jit_lib_guest.das", "jit_lib_guest", "", "", lines)
     report(lines, "build")
@@ -205,8 +200,7 @@ def test_jit_lib_carries_two_module_sets(t : T?) {
     if (!lib_tier_ready(t)) {
         return
     }
-    let args <- get_command_line_arguments()
-    let bin = args[0]
+    let bin = get_host_binary()
     var fio_lines : array<string>
     let fio_rc = build_lib(bin, "{get_das_root()}/tests-cpp/big/standalone_ctx/standalone_modules_fixture.das",
         "standalone_modules_fixture", "", "--jit-lib-export-marked", fio_lines)

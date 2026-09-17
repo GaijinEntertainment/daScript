@@ -74,10 +74,13 @@ def public get_user_args() : array<string> {
     }
 }
 
-//! The running host binary as an absolute path - `argv[0]` resolved - for a program that spawns
-//! the same daslang it runs under.
 def public get_host_binary() : string {
-    return get_full_file_name(get_command_line_arguments()[0])
+    //! The host binary for a program that spawns the daslang it runs under: `argv[0]` made absolute
+    //! when it names an existing file (a later `cd` cannot lose it), else unchanged - a bare name the
+    //! shell found on PATH, for PATH to find again at spawn.
+    let arg0 = get_command_line_arguments()[0]
+    let full = get_full_file_name(arg0)
+    return fexist(full) ? full : arg0
 }
 
 def clargs_flag_name(field_name : string) : string {

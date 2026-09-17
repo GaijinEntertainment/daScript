@@ -201,7 +201,7 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
             return ""
         }
         let exe = find_daslang(daslang_roots(program_dir, folder))
-        if (fexist(exe)) {
+        if (!empty(exe)) {
             cfg.script = script
             cfg.daslang = exe
             return ""
@@ -244,6 +244,8 @@ def private daslang_roots(program_dir, cwd : string) : array<string> {
     return <- [cwd, program_dir, dir_name(program_dir)]
 }
 
+//! The daslang under one of `dirs`, or "" - never a bare name, which `fexist` would resolve against
+//! the process cwd and treat as found.
 def private find_daslang(dirs : array<string>) : string {
     for (root in dirs) {
         for (rel in ["bin/Release/daslang.exe", "bin/daslang.exe", "bin/Release/daslang", "bin/daslang", "build/daslang"]) {
@@ -251,6 +253,12 @@ def private find_daslang(dirs : array<string>) : string {
             if (fexist(candidate)) return candidate
         }
     }
+    return ""
+}
+
+//! A name, not a path: a file of that name beside the program (the flat-bundle layout) may still
+//! claim it, PATH resolves it at spawn otherwise - never test it against the process cwd.
+def private daslang_on_path() : string {
     return get_platform_name() == "windows" ? "daslang.exe" : "daslang"
 }
 
@@ -301,7 +309,8 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
         cfg.name = !empty(cfg.program) ? stem(cfg.program) : base_name(cfg.cwd)
     }
     if (empty(cfg.daslang)) {
-        cfg.daslang = find_daslang(daslang_roots(program_dir, cfg.cwd))
+        let found = find_daslang(daslang_roots(program_dir, cfg.cwd))
+        cfg.daslang = empty(found) ? daslang_on_path() : found
     }
     if (empty(cfg.log)) {
         cfg.log = "logs/{cfg.name}-watchdog.log"
