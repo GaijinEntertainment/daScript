@@ -327,9 +327,7 @@ def with_tray_watchdog(t : T?; url, mode : string; env : array<string>; blk : bl
     } else {
         invoke(blk, wd, root, verdict)
     }
-    unsafe {
-        close_process(wd)
-    }
+    unsafe(close_process(wd))
     // on a failed arm close_process kills the watchdog; Windows releases the handles on the
     // log and the state dir a moment later, so the removal retries
     var removed = false
@@ -398,9 +396,7 @@ def test_tray_shutdown_over_private_bus(t : T?) {
             }
         }
         if (bus.bus != null) {
-            unsafe {
-                close_process(bus.bus)
-            }
+            unsafe(close_process(bus.bus))
         }
     }
 }
@@ -502,9 +498,7 @@ def test_heaps_stay_bounded_under_a_chatty_child(t : T?) {
         let no_env : array<string>
         var wd = unsafe(spawn_process(argv, root, no_env))
         t |> equal(wait_exit_draining(wd, guard(120.0)), 0, "supervision ended with 0")
-        unsafe {
-            close_process(wd)
-        }
+        unsafe(close_process(wd))
         let events <- read_events(path_join(root, "logs/wdchatty-watchdog.log"))
         t |> equal(count_event(events, "child"), 20000, "every line reached the log")
         let strings = event_number(events, "watchdog_stopped", "string_heap_bytes")
@@ -570,6 +564,14 @@ def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm
         remove(path_join(root, "tree/bin/daslang"))
         let alone <- resolve_config(["--no-health", "--cwd", root], path_join(root, "tree"))
         t |> success(find(alone.error, "nothing to supervise") >= 0, "main.das with no daslang in reach is refused: {alone.error}")
+        let trap = path_join(root, "trap")
+        mkdir(trap)
+        fwrite(path_join(trap, get_platform_name() == "windows" ? "daslang.exe" : "daslang"), "")
+        let prior_cwd = getcwd()
+        t |> success(chdir(trap), "cwd moved onto the trap")
+        let trapped <- resolve_config(["--no-health", "--cwd", root], path_join(root, "tree"))
+        t |> success(chdir(prior_cwd), "cwd restored")
+        t |> success(find(trapped.error, "nothing to supervise") >= 0, "a daslang in the process cwd is neither beside the script nor beside the watchdog: {trapped.error}")
         remove(path_join(root, "main.das"))
         fwrite(path_join(root, "one.exe"), "")
         fwrite(path_join(root, "two.exe"), "")
@@ -581,6 +583,7 @@ def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm
         let program_mode <- resolve_config([], root)
         t |> equal(program_mode.error, "")
         t |> equal(program_mode.cfg.name, "one", "an executable names itself; the watchdog's own exe and a directory named .exe are never candidates")
+        t |> equal(program_mode.cfg.daslang, get_platform_name() == "windows" ? "daslang.exe" : "daslang", "with no daslang in reach the config carries the bare name for PATH to resolve")
         remove(path_join(root, "one.exe"))
         remove(path_join(root, "watchdog.exe"))
         rmdir_rec_result(path_join(root, "dir.exe"))
