@@ -1,3 +1,8 @@
+# Both smoke tests pull Module_Raster and Module_StbImage, which dasStbImage provides.
+if(DAS_STBIMAGE_DISABLED)
+    return()
+endif()
+
 # Pure-C ABI smoke test for split initialization and static module registration.
 add_executable(test_capi_split_init test_capi_split_init.c)
 target_link_libraries(test_capi_split_init PRIVATE
