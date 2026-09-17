@@ -3,7 +3,9 @@
 // into a scalar-forced TU would mix two vec4f ABIs in one binary. Rows guarded
 // with !_TARGET_SIMD_NEON pin SSE-flavored semantics the scalar backend promises
 // to match (NaN/tie ordering, sign-bit select, out-of-range converts, shift
-// counts past the lane width) - NEON diverges there by its own contract.
+// counts past the lane width) - NEON diverges there by its own contract. The wasm
+// backend keeps every SSE row but two it shares with NEON (VECMATH_TEST_PACKED_X_CVT
+// below): _x forms are the packed op, and float->int converts saturate.
 
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST)
 #error "the rows pin IEEE answers a fast-math build may fold; both arms are pinned to precise math in CMakeLists.txt"
@@ -29,6 +31,12 @@
 #endif
 #if defined(EXPECT_NATIVE) && defined(_TARGET_SIMD_SCALAR)
 #error this target must select the native SIMD vecmath backend
+#endif
+#if defined(EXPECT_WASM) && !defined(_TARGET_SIMD_WASM)
+#error this target must select the wasm SIMD128 vecmath backend
+#endif
+#if defined(_TARGET_SIMD_NEON) || defined(_TARGET_SIMD_WASM)
+#define VECMATH_TEST_PACKED_X_CVT 1
 #endif
 
 static int g_failed = 0;
@@ -103,7 +111,7 @@ int main()
   check_int("add_x", (long long)f2u(v_extract_x(v_add_x(a, b))), (long long)f2u(3.5f));
   check_int("nmsub_x", (long long)f2u(v_extract_x(v_nmsub_x(a, b, b))), (long long)f2u(-1.0f));
   check_int("sqrt_x", (long long)f2u(v_extract_x(v_sqrt_x(v_make_vec4f(4.0f, 5.0f, 6.0f, 7.0f)))), (long long)f2u(2.0f));
-#if !defined(_TARGET_SIMD_NEON)
+#if !defined(VECMATH_TEST_PACKED_X_CVT)
   check_lanes("add_x_keeps_yzw", v_add_x(a, b), f2u(3.5f), f2u(-2.25f), f2u(3.75f), f2u(-0.5f));
   check_lanes("nmsub_x_keeps_c_yzw", v_nmsub_x(a, b, b), f2u(-1.0f), f2u(0.5f), f2u(-1.0f), f2u(4.0f));
   check_lanes("sqrt_x_keeps_yzw", v_sqrt_x(v_make_vec4f(4.0f, 5.0f, 6.0f, 7.0f)), f2u(2.0f), f2u(5.0f), f2u(6.0f), f2u(7.0f));
@@ -124,7 +132,7 @@ int main()
 
   check_lanesi("cvtt", v_cvti_vec4i(a), 1u, 0xFFFFFFFEu, 3u, 0u);
   check_lanesi("cvtr", v_cvt_roundi_ieee(halves), 2u, 0xFFFFFFFEu, 4u, 0xFFFFFFFCu);
-#if !defined(_TARGET_SIMD_NEON)
+#if !defined(VECMATH_TEST_PACKED_X_CVT)
   check_lanesi("cvtt_ovf", v_cvti_vec4i(v_make_vec4f(no_fold(3e9f), no_fold(-3e9f), nanf_v, 100.75f)),
                0x80000000u, 0x80000000u, 0x80000000u, 100u);
   check_lanesi("cvtr_ovf", v_cvt_roundi_ieee(v_make_vec4f(3e9f, -3e9f, nanf_v, 100.5f)),
@@ -485,7 +493,7 @@ int main()
     check_int("vd_from_vec4f", vd_extract_z(d2) == 3.75 ? 1 : 0, 1);
     vec4d di = vd_cvt_from_vec4i(v_make_vec4i(3, -7, 123456, -2000000000));
     check_int("vd_from_vec4i", vd_extract_w(di) == -2000000000.0 ? 1 : 0, 1);
-#if !defined(_TARGET_SIMD_NEON) // NEON converts saturate; SSE/scalar yield INT32_MIN out of range
+#if !defined(VECMATH_TEST_PACKED_X_CVT) // NEON and wasm converts saturate; SSE/scalar yield INT32_MIN out of range
     check_lanesi("vd_to_vec4i_oor", vd_cvt_to_vec4i(vd_make_vec4d(no_fold(3e9), no_fold(-3e9), 1.0, -1.0)),
                  0x80000000u, 0x80000000u, 1u, 0xFFFFFFFFu);
 #endif

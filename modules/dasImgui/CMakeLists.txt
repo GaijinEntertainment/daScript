@@ -432,10 +432,17 @@ ELSEIF(EMSCRIPTEN)
     OPTION(DAS_IMGUI_WASM_PTHREADS "Build the wasm archives threaded (-pthread)" ON)
     MESSAGE(STATUS "dasImgui: emscripten/web build (3 module archives + FreeType; memory64=${DAS_IMGUI_WASM_MEMORY64} pthreads=${DAS_IMGUI_WASM_PTHREADS})")
 
+    # same SIMD feature set as web/CMakeLists.txt: vecmath's wasm backend selects itself on
+    # __wasm_simd128__, and the relaxed-SIMD knob mirrors DAS_WASM_RELAXED_SIMD so v_madd fuses
+    # (or not) on both sides of the archive boundary
+    OPTION(DAS_IMGUI_WASM_RELAXED_SIMD "Build the wasm archives with relaxed SIMD (matches DAS_WASM_RELAXED_SIMD)" ON)
     SET(IMGUI_WASM_FLAGS
         -fno-rtti
-        -msimd128 -msse2 -mnontrapping-fptoint
+        -msimd128 -mnontrapping-fptoint
         -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    IF(DAS_IMGUI_WASM_RELAXED_SIMD)
+        LIST(APPEND IMGUI_WASM_FLAGS -mrelaxed-simd)
+    ENDIF()
     TARGET_COMPILE_OPTIONS(freetype PRIVATE
         -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
     IF(DAS_IMGUI_WASM_MEMORY64)
