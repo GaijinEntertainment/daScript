@@ -12,3 +12,11 @@ answers to the `tests/` subfolder's checklist (`modules/dasImgui/tests/REVIEW.md
 under `modules/dasImgui/bind/` or `modules/dasImgui/src/`, runs the test suite on the author's
 host OS before the PR: `preflight --only imgui`** (the per-OS exclude split: module `CLAUDE.md`
 sec. Tests).
+
+**A diff that flips the `DAS_IMGUI_WASM_RELAXED_SIMD` default to ON, or appends `-mrelaxed-simd`
+to `IMGUI_WASM_FLAGS` unconditionally, is a defect.** Safari and every iOS browser refuse a whole
+module carrying one relaxed opcode, so the page fails to load rather than running slower.
+
+**A diff that changes a `-m` feature flag in this folder's `CMakeLists.txt` `IMGUI_WASM_FLAGS`
+makes the matching change to `web/CMakeLists.txt`'s `add_compile_options` in the same change.**
+Neither build inherits the other's flags.

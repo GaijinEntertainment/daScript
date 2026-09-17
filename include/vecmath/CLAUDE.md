@@ -1,14 +1,20 @@
 # vecmath - SIMD Math Library
 
 ## Overview
-Platform-abstracted SIMD vector math library. Wraps SSE2/SSSE3/SSE4.1 (x86), NEON (ARM) and a
-scalar per-lane fallback for targets with no SIMD ISA behind a
+Platform-abstracted SIMD vector math library. Wraps SSE2/SSSE3/SSE4.1 (x86), NEON (ARM),
+wasm SIMD128 and a scalar per-lane fallback for targets with no SIMD ISA behind a
 unified C API. Used pervasively throughout the Dagor Engine for all performance-critical math:
 transforms, physics, BVH traversal, culling, animation, etc.
 
+A backend file carries a header block stating the backend contract - which SSE/NEON semantics
+it matches and where it deviates - plus one-line mechanism comments at sites whose intrinsic
+choice or lane order is not readable from the code. The header block and the mechanism comments
+are written in this repo and travel upstream to Dagor Engine with the backend, so every backend
+file - including the ones this repo adds - reads like its siblings.
+
 ## Key Types (dag_vecMathDecl.h)
-- `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON, a 16-byte struct on scalar)
-- `vec4i` -- 128-bit integer vector (__m128i / int32x4_t)
+- `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON, a clang typed vector on wasm, a 16-byte struct on scalar)
+- `vec4i` -- 128-bit integer vector (__m128i / int32x4_t / an int32 typed vector on wasm)
 - `mat33f` -- 3x3 column-major matrix (3 x vec3f)
 - `mat44f` -- 4x4 column-major matrix (4 x vec4f)
 - `mat43f` -- 4x3 row-major matrix (3 x vec4f, each row is xyzw where w = translation component)
@@ -25,8 +31,9 @@ transforms, physics, BVH traversal, culling, animation, etc.
 | `dag_vecMath_const.h` | Constants: V_C_HALF, V_C_ONE, V_C_PI, V_C_UNIT_1000, V_CI_MASK*, etc. |
 | `dag_vecMath_pc_sse.h` | SSE low-level implementation of basic functions |
 | `dag_vecMath_neon.h` | NEON (ARM) low-level implementation of basic functions |
+| `dag_vecMath_wasm.h` | WebAssembly SIMD128 implementation of basic functions (clang `-msimd128`; `-mrelaxed-simd` fuses v_madd/v_nmsub) |
 | `dag_vecMath_scalar.h` | Scalar per-lane implementation of basic functions (no-SIMD fallback, forceable with `_TARGET_SIMD_SCALAR=1`) |
-| `dag_vecMath_double.h` | `vec4d` double-precision math (SSE/AVX, NEON and scalar in one file); include via dag_vecMath.h |
+| `dag_vecMath_double.h` | `vec4d` double-precision math (SSE/AVX, NEON, wasm and scalar in one file); include via dag_vecMath.h |
 | `dag_vecMath_common.h` | Shared implementations (bbox, frustum, quat, matrix ops built on core intrinsics) without hw-specific intrinsics |
 | `dag_vecMath_trig.h` | Polynomial approximations for sin/cos/tan/atan/asin/acos |
 
@@ -82,9 +89,10 @@ v_triangle*).
   inputs into temporaries before the first store, v_mat44_transpose takes src by value,
   v_mat44_inverse43 copies its input first). Preserve this property when adding functions -
   callers write v_mat44_mul(m, m, rel)
-- v_sel selectors must be canonical per-lane masks (all-ones/zero, as v_cmp_* produce): SSE4.1
-  blendvps reads only the sign bit, but the SSE2 path and NEON vbsl select per bit - a sign-only
-  selector works on the PC build and silently breaks on other targets
+- v_sel/v_seli read only the selector's sign bit on every backend; v_btsel/v_btseli select per
+  bit. Pass a canonical per-lane mask (all-ones/zero, as v_cmp_* produce) to either - a per-bit
+  pattern handed to v_sel picks the whole lane by bit 31 alone, and a sign-only pattern handed
+  to v_btsel takes bit 31 from one source and bits 0-30 from the other
 - v_norm* of a zero or near-zero vector produces inf/NaN lanes; v_norm*_safe(a, def) returns def
   when length^2 fails the unsafe-divisor check
 - Function results are usually fully defined: _x forms define .x only (see suffix scheme) and

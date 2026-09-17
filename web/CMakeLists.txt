@@ -31,8 +31,13 @@ option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 
 add_compile_options(-msimd128)
-add_compile_options(-msse2)
 add_compile_options(-mnontrapping-fptoint)
+# vecmath's wasm backend (include/vecmath/dag_vecMath_wasm.h) selects itself on __wasm_simd128__; no -msse* compat layer is needed.
+# modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string
+option(DAS_WASM_RELAXED_SIMD "Build wasm output with relaxed SIMD (fused v_madd; Safari refuses a module with any relaxed opcode)" OFF)
+if(DAS_WASM_RELAXED_SIMD)
+    add_compile_options(-mrelaxed-simd)
+endif()
 
 # wasm64 (memory64): 8-byte pointers. With a 64-bit host, host-ptr-size ==
 # target-ptr-size, so the JIT/AOT cross-compile bakes correct layouts (no

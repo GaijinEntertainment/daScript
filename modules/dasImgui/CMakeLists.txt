@@ -432,10 +432,15 @@ ELSEIF(EMSCRIPTEN)
     OPTION(DAS_IMGUI_WASM_PTHREADS "Build the wasm archives threaded (-pthread)" ON)
     MESSAGE(STATUS "dasImgui: emscripten/web build (3 module archives + FreeType; memory64=${DAS_IMGUI_WASM_MEMORY64} pthreads=${DAS_IMGUI_WASM_PTHREADS})")
 
+    # relaxed SIMD is OFF - Safari refuses a module with any relaxed opcode (modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string)
+    OPTION(DAS_IMGUI_WASM_RELAXED_SIMD "Build the wasm archives with relaxed SIMD (matches DAS_WASM_RELAXED_SIMD)" OFF)
     SET(IMGUI_WASM_FLAGS
         -fno-rtti
-        -msimd128 -msse2 -mnontrapping-fptoint
+        -msimd128 -mnontrapping-fptoint
         -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    IF(DAS_IMGUI_WASM_RELAXED_SIMD)
+        LIST(APPEND IMGUI_WASM_FLAGS -mrelaxed-simd)
+    ENDIF()
     TARGET_COMPILE_OPTIONS(freetype PRIVATE
         -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
     IF(DAS_IMGUI_WASM_MEMORY64)

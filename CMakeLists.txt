@@ -940,6 +940,7 @@ include/vecmath/dag_vecMath_neon.h
 include/vecmath/dag_vecMath_pc_sse.h
 include/vecmath/dag_vecMath_scalar.h
 include/vecmath/dag_vecMath_trig.h
+include/vecmath/dag_vecMath_wasm.h
 )
 list(SORT VECMATH_SRC)
 SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)

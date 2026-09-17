@@ -47,8 +47,16 @@ typedef const struct bsph3f& bsph3f_cref;
 # endif
 #endif
 
-//if target is not defined, try to auto-detect target
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
+//if target is not defined, try to auto-detect target. wasm comes first: emscripten's -msse*
+//compat layer predefines __SSE2__ over the same SIMD128 instructions, and the native backend
+//is the one that answers with single instructions
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
+  #if defined(__wasm_simd128__)
+    #define _TARGET_SIMD_WASM 1
+  #endif
+#endif
+
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
   #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
     #define _TARGET_SIMD_SSE 4
   #elif __SSSE3__
@@ -58,7 +66,7 @@ typedef const struct bsph3f& bsph3f_cref;
   #endif
 #endif
 
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
   #if defined(__ARM_NEON) || defined(__ARM_NEON__)
     #define _TARGET_SIMD_NEON 1
   #else
@@ -147,6 +155,33 @@ typedef const struct bsph3f& bsph3f_cref;
 
   //! see the SSE branch above. NEON is aarch64-only here (ARMv7 has no float64x2_t).
   struct vec4d { float64x2_t xy, zw; };
+  #define VECMATH_VEC4D_256 0
+
+#elif _TARGET_SIMD_WASM
+  #include <stdint.h>
+  #include <wasm_simd128.h>
+
+  //! clang typed vectors, so vec4f and vec4i stay distinct types for overloading (as
+  //! float32x4_t / int32x4_t are on NEON); every wasm_* intrinsic takes them through a free
+  //! (v128_t) cast. Shared with daScript/daScriptC.h, which spells the same typedefs in C.
+  typedef float vec4f __attribute__((__vector_size__(16), __aligned__(16)));
+  typedef vec4f vec3f;
+  typedef int32_t vec4i __attribute__((__vector_size__(16), __aligned__(16)));
+
+  typedef const vec4f vec4f_const;
+
+  typedef const union alignas(16) _vec4i_const_name
+  {
+    unsigned m128_u32[4];
+    vec4i m128;
+    vec4f m128f;
+    operator vec4i() const { return m128; }
+    operator vec4f() const { return m128f; }
+  } vec4i_const;
+
+  //! see the SSE branch above: two f64x2 registers, low pair .xy, high pair .zw
+  typedef double vecmath_f64x2 __attribute__((__vector_size__(16), __aligned__(16)));
+  struct vec4d { vecmath_f64x2 xy, zw; };
   #define VECMATH_VEC4D_256 0
 
 #elif _TARGET_SIMD_SCALAR

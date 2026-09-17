@@ -1,9 +1,9 @@
 # vecmath
 
 A small, header-only SIMD vector math library with one portable API across x86
-(SSE2/SSSE3/SSE4.1), ARM (NEON / AArch64), and any other CPU through a scalar
-per-lane backend. Write your math once; it compiles to
-good vector code on desktop, consoles, and mobile.
+(SSE2/SSSE3/SSE4.1), ARM (NEON / AArch64), WebAssembly (SIMD128), and any other
+CPU through a scalar per-lane backend. Write your math once; it compiles to
+good vector code on desktop, consoles, mobile, and the browser.
 
 vecmath is the math core of the [Dagor Engine](https://github.com/GaijinEntertainment/DagorEngine)
 and powers its transforms, physics, culling, and animation. This repository is the
@@ -12,13 +12,13 @@ standalone, dependency-free version of those headers.
 ## Why
 
 - **One API, many CPUs.** You call `v_add`, `v_mat44_mul`, `v_norm3`. The header
-  selects the SSE or NEON implementation for whatever you build for. No `#ifdef`
-  soup in your own code.
+  selects the SSE, NEON or wasm implementation for whatever you build for. No
+  `#ifdef` soup in your own code.
 - **Header-only, no dependencies.** Add the include path and go. Nothing to build
   or link.
-- **Zero-overhead.** Types are the native SIMD registers (`__m128` / `float32x4_t`),
-  passed in registers. Almost everything is force-inlined, so unused results melt
-  away and there is no wrapper-object cost.
+- **Zero-overhead.** Types are the native SIMD registers (`__m128` / `float32x4_t` /
+  a `v128`-backed typed vector), passed in registers. Almost everything is
+  force-inlined, so unused results melt away and there is no wrapper-object cost.
 - **Batteries included.** Vectors, 3x3 / 4x3 / 4x4 matrices, quaternions, planes,
   bounding boxes and spheres, frustum culling, ray/triangle intersection, fast
   trig/exp approximations, and a double-precision `vec4d` layer.
@@ -26,18 +26,23 @@ standalone, dependency-free version of those headers.
 ## Requirements
 
 - C++11 or later.
-- An x86 target with at least SSE2, or an AArch64 (ARMv8) target with NEON;
+- An x86 target with at least SSE2, an AArch64 (ARMv8) target with NEON, or a
+  WebAssembly target built with `-msimd128` (add `-mrelaxed-simd` for a fused
+  `v_madd`; an engine without the relaxed-SIMD proposal then refuses the module);
   any other target (Cortex-M, RISC-V without V, ...) uses the scalar backend,
   selected automatically or forced with `_TARGET_SIMD_SCALAR=1`.
 - MSVC, Clang, or GCC.
 
 The target ISA is auto-detected from the usual compiler macros (`__SSE4_1__`,
-`__ARM_NEON`, ...). To pin it explicitly, define one of these before including:
+`__ARM_NEON`, `__wasm_simd128__`, ...). To pin it explicitly, define one of these
+before including:
 
 ```cpp
 #define _TARGET_SIMD_SSE 4   // 2 = SSE2, 3 = SSSE3, 4 = SSE4.1
 // or
 #define _TARGET_SIMD_NEON 1
+// or
+#define _TARGET_SIMD_WASM 1
 ```
 
 ## Getting started

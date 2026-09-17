@@ -21,8 +21,15 @@
 #else
 #define DAS_CC_API
 #endif
-//if target is not defined, try to auto-detect target
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
+//if target is not defined, try to auto-detect target (same order as vecmath/dag_vecMathDecl.h:
+//wasm first, because emscripten's -msse* compat layer predefines __SSE2__)
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
+    #if defined(__wasm_simd128__)
+        #define _TARGET_SIMD_WASM 1
+    #endif
+#endif
+
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
     #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
         #define _TARGET_SIMD_SSE 4
     #elif __SSSE3__
@@ -32,7 +39,7 @@
     #endif
 #endif
 
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR) && !defined(_TARGET_SIMD_WASM)
     #if defined(__ARM_NEON) || defined(__ARM_NEON__)
         #define _TARGET_SIMD_NEON 1
     #else
@@ -48,6 +55,12 @@
     #include <arm_neon.h>
     typedef float32x4_t vec4f;
     typedef int32x4_t   vec4i;
+#elif defined(_TARGET_SIMD_WASM)
+    // typedefs, so declaring these in both headers is a legal redeclaration - the scalar
+    // branch declares structs, which is why it needs the guard
+    #include <stdint.h>
+    typedef float vec4f __attribute__((__vector_size__(16), __aligned__(16)));
+    typedef int32_t vec4i __attribute__((__vector_size__(16), __aligned__(16)));
 #elif defined(_TARGET_SIMD_SCALAR)
     // shared with vecmath/dag_vecMathDecl.h: same tag names, members and layout - whichever
     // header is included first defines the pair for both (guard macro is vecmath-owned)

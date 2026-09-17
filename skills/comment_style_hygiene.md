@@ -34,6 +34,10 @@ added are not.
   `CLAUDE.md` names an upstream and records the synced revision; inside one, the files
   that `CLAUDE.md` marks as written or maintained here - fork-local hooks, this repo's
   own docs - answer to these rules, and every file it leaves to upstream does not.
+- **Code contributed upstream keeps the upstream's shape.** A folder whose `CLAUDE.md` names
+  the project its files are contributed to, and states the comment shape they keep there,
+  answers to that shape for those files; the deletion test settles anything the stated shape
+  does not cover.
 
 Rules marked *(lintable)* are mechanical enough for a lint to enforce; where a rule notes
 an existing lint, the lint compels - an unnoted rule is the reviewer's.

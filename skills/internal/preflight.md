@@ -65,7 +65,7 @@ working-tree copy.
 | `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON - section below |
 | `extended_checks.yml` (nightly) | `schedule` cron (daily 04:00 UTC) + `workflow_dispatch` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
 | `codeql.yml` | every PR and `master` push touching `src/`, `include/`, `modules/`, `tests-cpp/` + a weekly cron | CodeQL over the C++ surface, ~20 min on a PR; no local mirror, so it stays per PR |
-| `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
+| `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes, the vecmath backend battery and `tests/language` under node, + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
@@ -218,11 +218,24 @@ build then went red.
 
 ## wasm_build.yml
 
-`wasm_build`: emsdk build of `web/` + a Node hello-world. `wasm_cross`:
-cross-compiles utility mains to wasm32 via dasLLVM and runs them under wasmtime,
-emscripten **pinned to 5.0.3** (newer clang crashes on
-`utils/gen1-to-gen2/ds_parser.cpp` diagnostics). Mirror = emsdk in WSL following
-the workflow verbatim; for most changes let CI carry the lane.
+`wasm_build`: emsdk build of `web/` (emsdk `latest`), then under the emsdk node
+(`"$EMSDK_NODE"`, the system node may be older) two things - the `tests/language` suite
+through `web/test/dastest_wasm.js`, and the vecmath backend battery, which runs the same C++
+rows twice: `test_vecmath_native` on the wasm SIMD128 backend and `test_vecmath_scalar` on the
+per-lane fallback it is checked against. Build both in `web/cmake_temp`
+(`ninja test_vecmath_native test_vecmath_scalar` - `web/` adds the repo tree
+`EXCLUDE_FROM_ALL`, so plain `ninja` builds neither), then from `web/`:
+
+```
+"$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_native.js
+"$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_scalar.js
+```
+
+`wasm_cross`: cross-compiles utility mains to wasm32 via dasLLVM and runs them under
+wasmtime, emscripten **pinned to 5.0.3** (newer clang crashes on
+`utils/gen1-to-gen2/ds_parser.cpp` diagnostics). Mirror, either lane = that job's own emsdk
+commands verbatim, its version included (on Windows `EMSDK_PYTHON` must point at a python
+>= 3.10, the emsdk-bundled one is older); for most changes let CI carry the lane.
 
 ## build_eastl.yml
 

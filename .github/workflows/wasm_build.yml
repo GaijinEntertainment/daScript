@@ -151,8 +151,10 @@ jobs:
         cd cmake_temp
         cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_FLEX_BISON_DISABLED=ON -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
         ninja
+        # web/ adds the repo tree EXCLUDE_FROM_ALL - plain ninja builds neither target
+        ninja test_vecmath_native test_vecmath_scalar
 
-    - name: "Test: hello world via Node.js"
+    - name: "Test: language suite and vecmath battery via Node.js"
       run: |
         set -eux
         # Use emsdk-bundled Node (deterministic version that supports the
@@ -163,6 +165,8 @@ jobs:
         # Modern wasm EH proposal (try_table / exnref) is gated in Node 22.
         # Default-on in Node 24+. Force-enable for forward compat with current LTS.
         "$EMSDK_NODE" --experimental-wasm-exnref test/dastest_wasm.js ../ ./output
+        "$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_native.js
+        "$EMSDK_NODE" --experimental-wasm-exnref output/tests/test_vecmath_scalar.js
 
   ###########################################################
   wasm_cross:

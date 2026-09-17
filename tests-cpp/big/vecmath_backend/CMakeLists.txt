@@ -32,3 +32,25 @@ if(NOT DAS_VECMATH_SCALAR)
     set_tests_properties(vecmath_native PROPERTIES LABELS "small")
     add_dependencies(test-small test_vecmath_native)
 endif()
+
+# LINK_OPTIONS replaces the web scope's inherited flags: embedded daslib and -sINVOKE_RUN=0 belong to the
+# interpreter binary, not a standalone test; the ABI flags the objects were compiled with stay.
+if(EMSCRIPTEN)
+    set(_wasm_link_options -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    if(DAS_WASM_MEMORY64)
+        list(APPEND _wasm_link_options -sMEMORY64=2)
+    endif()
+    if(DAS_WASM_PTHREADS)
+        list(APPEND _wasm_link_options -pthread)
+    endif()
+    set(_wasm_arms test_vecmath_scalar)
+    if(NOT DAS_VECMATH_SCALAR)
+        target_compile_definitions(test_vecmath_native PRIVATE EXPECT_WASM=1)
+        list(APPEND _wasm_arms test_vecmath_native)
+    endif()
+    foreach(_arm ${_wasm_arms})
+        set_target_properties(${_arm} PROPERTIES
+            LINK_OPTIONS "${_wasm_link_options}"
+            RUNTIME_OUTPUT_DIRECTORY ${DAS_WEB_OUTPUT_DIR}/tests)
+    endforeach()
+endif()
