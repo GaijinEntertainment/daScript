@@ -24,6 +24,14 @@ ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gat
 (`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
 that needs either compiles its daslang fallback body. The gates and the machine string are one
 truth on both rails: a force-env feature raises the gate AND is appended to the generic machine.
+The string reaches the code on three routes, one per engine: the DLL and exe rails build their
+target machine from it (`create_default_target_machine`); the in-memory MCJIT - the engine every
+run without a DLL cache ends on, a static daslang build always - is created through the C API
+with no cpu and no feature string, so its subtarget is the generic one, and `stamp_host_target_attrs`
+puts the same cpu and string on every defined function as `target-cpu` / `target-features`
+attributes, which the per-function subtarget lookup honors (the route the fat-mode clones of
+sec.11 already ride). A module the gates emitted SDOT into and the generic subtarget selects
+aborts codegen with `Cannot select`; the attributes are what let the two agree.
 
 The two ways a feature reaches the target machine's string license different things. A
 detection-derived append - `+dotprod` always, `+i8mm` when `cpu_supports` confirms it - is

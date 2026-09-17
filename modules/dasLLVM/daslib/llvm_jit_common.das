@@ -969,42 +969,64 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     } else {
         triple_msg = host_triple
     }
-    let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
-    let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
-
     var targetMachine : LLVMTargetMachineRef
-    if (use_host_cpu && g_target_is_aarch64) {
-        var feats = empty(features_msg) ? "+dotprod" : "{features_msg},+dotprod"
-        if (cpu_supports("i8mm")) {
-            feats = "{feats},+i8mm"
-        }
-        // a forced feature's artifact cache-hits on the target box without a linker there
-        let forced_arm = arm64_forced_plus_features()
-        if (!empty(forced_arm)) {
-            feats = "{feats},{forced_arm}"
-        }
-        targetMachine = create_target_machine(triple_msg, cpu_msg, feats, opt_level)
+    if (use_host_cpu) {
+        let host = host_machine_cpu_features()
+        targetMachine = create_target_machine(triple_msg, host.cpu, host.features, opt_level)
     } else {
-        let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
-        let feats = empty(forced) ? features_msg : (empty(features_msg) ? forced : "{features_msg},{forced}")
+        let feats = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
         let env_forced = g_target_is_x64 ? g_env_jit.jit_x64_force_features : (g_target_is_aarch64 ? g_env_jit.jit_arm64_force_features : "")
         // the baseline class names the machine's cpu; the generic rail otherwise leaves it to LLVM's default
         let baseline = jit_baseline_class()
-        let cpu = (use_host_cpu || empty(baseline)) ? cpu_msg : jit_cpu_class_row(baseline).cpu
+        let cpu = empty(baseline) ? "" : jit_cpu_class_row(baseline).cpu
         if (!empty(env_forced)) {
             to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {env_forced} to the machine {cpu}\n")
         }
         targetMachine = create_target_machine(triple_msg, cpu, feats, opt_level)
     }
 
-    if (use_host_cpu) {
-        LLVMDisposeMessage(cpu_msg)
-        LLVMDisposeMessage(features_msg)
-    }
     if (triple_owned_by_llvm) {
         LLVMDisposeMessage(triple_msg)
     }
     return targetMachine
+}
+
+//! The host machine's cpu name and feature string as the host-cpu target machine is built from
+//! them: LLVM's detection, plus dotprod / i8mm on aarch64 and the forced features of the arch.
+def public host_machine_cpu_features() : tuple<cpu : string; features : string> {
+    let cpu_msg = LLVMGetHostCPUName()
+    let features_msg = LLVMGetHostCPUFeatures()
+    var feats = "{features_msg}"
+    if (g_target_is_aarch64) {
+        feats = empty(feats) ? "+dotprod" : "{feats},+dotprod"
+        if (cpu_supports("i8mm")) {
+            feats = "{feats},+i8mm"
+        }
+    }
+    // a forced feature's artifact cache-hits on the target box without a linker there
+    let forced = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
+    if (!empty(forced)) {
+        feats = empty(feats) ? forced : "{feats},{forced}"
+    }
+    let cpu = "{cpu_msg}"
+    LLVMDisposeMessage(cpu_msg)
+    LLVMDisposeMessage(features_msg)
+    return (cpu = cpu, features = feats)
+}
+
+//! The in-memory MCJIT is built through the C API with no cpu and no feature string, so its
+//! subtarget is the generic one and cannot select a host intrinsic; a defined function carries
+//! the host's as attributes instead, which the subtarget lookup honors per function.
+def public stamp_host_target_attrs(m : LLVMOpaqueModule?) {
+    let host = host_machine_cpu_features()
+    var fn = LLVMGetFirstFunction(m)
+    while (fn != null) {
+        if (LLVMIsDeclaration(fn) == 0) {
+            LLVMAddTargetDependentFunctionAttr(fn, "target-cpu", host.cpu)
+            LLVMAddTargetDependentFunctionAttr(fn, "target-features", host.features)
+        }
+        fn = LLVMGetNextFunction(fn)
+    }
 }
 
 [macro_function]
