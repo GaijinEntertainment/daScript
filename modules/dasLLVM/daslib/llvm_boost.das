@@ -236,9 +236,10 @@ def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueA
         return attr if (attr != null)
     }
     if (attr_name == "nocapture") {
-        let v = "none"
-        return LLVMCreateStringAttribute(ctx, "captures", uint(length("captures")),
-                                              v, uint(length(v)))
+        let captures_id = LLVMGetEnumAttributeKindForName("captures")
+        if (captures_id != 0u) {
+            return LLVMCreateEnumAttribute(ctx, captures_id, 0ul)   // CaptureComponents::None
+        }
     }
     panic("{attr_name} attribute not found")
     return null
