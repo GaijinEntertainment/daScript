@@ -125,13 +125,14 @@
   // one a media element gets: ask for it through the Audio Session API where it exists, and on the
   // first gesture start a silent looping <audio> element, which puts the tab in that session too.
   (function installPlaybackSession() {
+    var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
     var armed = false;
     var arm = function () {
       if (armed) return;
       armed = true;
       try {
-        var a = new Audio('data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA');
+        var a = new Audio(SILENT_WAV);
         a.loop = true;
         a.setAttribute('playsinline', '');
         a.play().catch(function () {});

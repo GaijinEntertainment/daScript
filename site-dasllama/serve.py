@@ -79,7 +79,7 @@ DEVLOG_SCRIPT = b"""<script>
       points: navigator.maxTouchPoints, dpr: devicePixelRatio, w: innerWidth, h: innerHeight,
       canvas: c ? [c.width, c.height, c.clientWidth, c.clientHeight] : null, maxFingers: fingers,
       dasTouch: (window.Module && Module.dasTouch) ? Module.dasTouch.list.length : -1, run: !!(window.Module && Module.calledRun),
-      mem: wasmHeapBytes(),
+      memBytes: wasmHeapBytes(),
       audio: (window.__dasAudioStates || []).join(',') }));
    } catch (e) { post('tick-error', e && (e.stack || e)); }
   }
