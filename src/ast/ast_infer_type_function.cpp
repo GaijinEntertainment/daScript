@@ -8,10 +8,10 @@
 
 namespace das {
 
-    static bool isIdentifierCallName(const string &name) {
+    static bool canBeAliasName(const string &callName) {
         string moduleName, funcName;
-        splitTypeName(name, moduleName, funcName);
-        return !funcName.empty() && (isalpha(uint8_t(funcName[0])) || funcName[0] == '_');
+        splitTypeName(callName, moduleName, funcName);
+        return isPlainIdentifier(funcName);
     }
 
     Module *InferTypes::getSearchModule(string &moduleName) const {
@@ -2023,7 +2023,7 @@ namespace das {
                     reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                 }
             } else {
-                TypeDeclPtr aliasT = isIdentifierCallName(expr->name) ? findAlias(expr->name) : nullptr;
+                TypeDeclPtr aliasT = canBeAliasName(expr->name) ? findAlias(expr->name) : nullptr;
                 if (aliasT) {
                     if (aliasT->isCtorType()) {
                         expr->name = das_to_string(aliasT->baseType);
@@ -2099,6 +2099,7 @@ namespace das {
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         } else {
+            gc_free_now(tempCall);
             return nullptr;
         }
     }

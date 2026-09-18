@@ -1064,8 +1064,9 @@ namespace das {
         // remove itselft
         RemoveUnusedLocalVariables context(round);
         visit(context);
-        if ( context.didAnything() ) accessFlagsValid = false;
-        return context.didAnything();
+        bool changed = context.didAnything();
+        if ( changed ) astChanged();
+        return changed;
     }
 }
 

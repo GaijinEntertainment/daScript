@@ -6501,7 +6501,7 @@ namespace das {
     }
 
     void inferTypesDirty(Program * program, TextWriter &logs, bool verbose) {
-        program->accessFlagsValid = false;
+        program->astChanged();
         int pass = 0;
         int32_t maxInferPasses = program->options.getIntOption("max_infer_passes", program->policies.max_infer_passes);
         bool logInferPasses = program->options.getBoolOption("log_infer_passes", false);
@@ -6509,11 +6509,9 @@ namespace das {
             logs << "INITIAL CODE:\n"
                  << *program;
         }
-        // Per-pass collect+swap: infer mints a lot of throwaway TypeDecls/Expressions. When a
-        // pass grows the working root enough, collect the live tree into a fresh root and swap
-        // it in (O(1)); the old root's dtor sweeps that pass's garbage. Fire when growth since
-        // the last collect crosses a fraction of the live set, with a node floor (~2 MB) for
-        // small modules: a collect walks the whole live set, so it must reclaim a matching share.
+        // Per-pass collect+swap fires when growth since the last collect crosses a fraction of
+        // the live set, with a node floor (~2 MB) for small modules: a collect walks the whole
+        // live set, so it must reclaim a matching share.
         bool gcInferCollect = program->options.getBoolOption("gc_infer_collect", program->policies.gc_infer_collect);
         int32_t gcInferNodes = program->options.getIntOption("gc_infer_collect_nodes", program->policies.gc_infer_collect_nodes);
         int32_t gcInferPct = program->options.getIntOption("gc_infer_collect_pct", program->policies.gc_infer_collect_pct);

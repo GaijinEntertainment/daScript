@@ -62,6 +62,11 @@ namespace das {
         }
     }
 
+    bool isPlainIdentifier ( const string & name ) {
+        if ( name.empty() ) return false;
+        return isalpha(uint8_t(name[0])) || name[0]=='_';
+    }
+
     // MODULE
 
     void Module::addDependency ( Module * mod, bool pub ) {
@@ -675,9 +680,9 @@ namespace das {
             }
         }
         if ( functions.insert(mangledName, fn) ) {
-            auto & byName = functionsByName[hash64z(fn->name.c_str())];
-            if ( byName.empty() ) daScriptEnvironment::getBound()->functionNamesGeneration++;
-            byName.push_back(fn);
+            auto & overloads = functionsByName[hash64z(fn->name.c_str())];
+            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            overloads.push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -723,9 +728,9 @@ namespace das {
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
-            auto & byName = genericsByName[hash64z(fn->name.c_str())];
-            if ( byName.empty() ) daScriptEnvironment::getBound()->functionNamesGeneration++;
-            byName.push_back(fn);
+            auto & overloads = genericsByName[hash64z(fn->name.c_str())];
+            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            overloads.push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -1078,15 +1083,16 @@ namespace das {
         return it != moduleLookupByHash.end() ? it->second : nullptr;
     }
 
-    bool ModuleLibrary::hasFunctionNamed ( uint64_t nameHash ) const {
-        auto gen = daScriptEnvironment::getBound()->functionNamesGeneration;
-        if ( gen != functionNameExistsGeneration || modules.size() != functionNameExistsModules ) {
-            functionNameExists.clear();
-            functionNameExistsGeneration = gen;
-            functionNameExistsModules = modules.size();
+    bool ModuleLibrary::hasFunctionOrGenericNamed ( const string & name ) const {
+        auto gen = daScriptEnvironment::getBound()->functionNameGeneration;
+        if ( gen != functionNameCacheGeneration || modules.size() != functionNameCacheModuleCount ) {
+            functionNameCache.clear();
+            functionNameCacheGeneration = gen;
+            functionNameCacheModuleCount = modules.size();
         }
-        auto it = functionNameExists.find(nameHash);
-        if ( it != functionNameExists.end() ) return it->second;
+        auto nameHash = hash64z(name.c_str());
+        auto it = functionNameCache.find(nameHash);
+        if ( it != functionNameCache.end() ) return it->second;
         bool exists = false;
         for ( auto pm : modules ) {
             if ( pm->functionsByName.find(nameHash) || pm->genericsByName.find(nameHash) ) {
@@ -1094,7 +1100,7 @@ namespace das {
                 break;
             }
         }
-        functionNameExists[nameHash] = exists;
+        functionNameCache[nameHash] = exists;
         return exists;
     }
 
@@ -1332,7 +1338,7 @@ namespace das {
         }
         modules.clear();
         moduleLookupByHash.clear();
-        functionNameExists.clear();
+        functionNameCache.clear();
     }
 
     // Module group

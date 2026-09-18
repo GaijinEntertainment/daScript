@@ -70,12 +70,10 @@ namespace das {
         __forceinline unsigned int use_count() const { return 1; }
     };
 
+    //! frees one node its caller owns exclusively, ahead of the sweep; only that node - its children stay on the root
     inline void gc_free_now ( gc_node * node ) {
-#if DAS_GC_DEBUG
-        (void) node;
-#else
+        node->gc_unlink();
         delete node;
-#endif
     }
 
     // Optional diagnostic hook: given a node, write a short source location

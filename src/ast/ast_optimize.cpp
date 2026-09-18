@@ -12,9 +12,9 @@ namespace das {
         bool logPass = program->options.getBoolOption("log_optimization_passes", program->policies.log_optimization_passes);
         bool log = logOpt || logPass;
         bool any, last;
-        auto noteChange = [&](bool did) {
-            any |= did;
-            if ( did ) program->accessFlagsValid = false;
+        auto noteChange = [&](bool changed) {
+            any |= changed;
+            if ( changed ) program->astChanged();
         };
         int optimizationRound = 1;
         if (log) {

@@ -740,6 +740,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | ptr_arithmetic.das | Pointer arithmetic - signed/unsigned int/int64/uint/uint64 | |
 | ptr_index.das | Pointer deref and index, default null pointer argument | |
 | properties.das | Property operators (.res :=, getter/setter) | |
+| property_promotion_paths.das | Named and with-name property getters, `:=` and `+=` setters, through a value, a pointer and a `with` block | |
 | random_numbers.das | Random seeding, distributions, reproducibility | |
 | reflection.das | RTTI reflection - compile source, inspect modules/structs/enums/functions | |
 | failed_reserved_names.das | Use of reserved identifier names | **expect** `30116:9` |

@@ -24,20 +24,20 @@ def operator .(c : Cell; name : string) : int {
 
 [test]
 def test_property_promotion_paths(t : T?) {
-    t |> run("named getter on a value and through a pointer") @(t : T?) {
+    t |> run("named getter") @(t : T?) {
         var c = Cell(raw = 21)
         var pc = unsafe(addr(c))
         t |> equal(c.value, 42)
         t |> equal(pc.value, 42)
     }
-    t |> run("with-name getter on a value and through a pointer") @(t : T?) {
+    t |> run("with-name getter") @(t : T?) {
         var c = Cell(raw = 4)
         var pc = unsafe(addr(c))
         t |> equal(c.twice, 8)
         t |> equal(pc.twice, 8)
         t |> equal(c.anything_else, -1)
     }
-    t |> run("setter and op-assignment forms on a value and through a pointer") @(t : T?) {
+    t |> run("setter and op-assign") @(t : T?) {
         var c = Cell(raw = 0)
         var pc = unsafe(addr(c))
         c.value := 10
@@ -49,7 +49,7 @@ def test_property_promotion_paths(t : T?) {
         pc.value += 6
         t |> equal(c . . raw, 20)
     }
-    t |> run("getters inside a with block, on a value and through a pointer") @(t : T?) {
+    t |> run("getters in a with block") @(t : T?) {
         var c = Cell(raw = 3)
         var pc = unsafe(addr(c))
         with (c) {
@@ -61,7 +61,7 @@ def test_property_promotion_paths(t : T?) {
             t |> equal(twice, 6)
         }
     }
-    t |> run("setter inside a with block") @(t : T?) {
+    t |> run("setter in a with block") @(t : T?) {
         var c = Cell(raw = 0)
         with (c) {
             value := 8
