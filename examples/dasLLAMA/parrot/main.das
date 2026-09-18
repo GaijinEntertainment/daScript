@@ -360,9 +360,9 @@ def poll_answers() {
     poll_playback()
 }
 
-//! a say is audible or about to be
+//! a say is audible or about to be - playing, queued, or still generating its first clip
 def playback_active() : bool {
-    return g_playing_sid != INVALID_SID || !empty(g_clips)
+    return g_playing_sid != INVALID_SID || !empty(g_clips) || (g_chunks_known && !all_spoken(g_chunks))
 }
 
 //! the playing clip's position, off the mixer's own clock, and the next clip once it is done

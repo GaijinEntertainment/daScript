@@ -95,6 +95,8 @@
   (function installPlaybackSession() {
     var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    var IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!IOS) return;
     var GESTURES = ['pointerdown', 'touchend', 'keydown', 'click'];
     var held = null, pending = false;
     // a gesture the browser does not count as activation (a touch's pointerdown) has its
