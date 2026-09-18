@@ -228,6 +228,23 @@ def test_gpu_tier_contract(t : T?) {
     }
 }
 
+//! The whole-model driver is asked for by the measured-best set or by `resident` beside rails
+//! spelled out (the server's serving shape); rails alone ask for nothing. Env-backed: an exported
+//! DASLLAMA_GPU answers ahead of the want, so the rails-alone arms assert the DELTA against it.
+[test]
+def test_gpu_tier_resident_ask(t : T?) {
+    let ambient = g_env_gpu.gpu ?? false
+    set_gpu_tier_want_(GpuTierWant(dn = true, attn = true, shexp = true))
+    t |> equal(gpu_want_resident_asked(), ambient, "rails spelled out without resident ask for no whole-model driver")
+    set_gpu_tier_want_(GpuTierWant(resident = true, dn = true, attn = true, shexp = true))
+    t |> success(gpu_want_resident_asked(), "resident beside explicit rails asks for the whole-model driver")
+    t |> equal(gpu_want_auto(), ambient, "resident does not turn the measured-best set on")
+    set_gpu_tier_want_(GpuTierWant(auto_tier = true))
+    t |> success(gpu_want_resident_asked(), "the measured-best set asks for the whole-model driver")
+    set_gpu_tier_want_(GpuTierWant())
+    t |> equal(gpu_want_resident_asked(), ambient, "a zero want resets to the ambient env answer")
+}
+
 [test]
 def test_rdec_readback_reaches_the_doubles(t : T?) {
     install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,

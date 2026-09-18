@@ -112,6 +112,10 @@ fitting plan forgoes them - they would only shrink its room - so a decline past 
 placement, a class rail) leaves the per-op rails without a streamed slot, said out loud. The
 tile family the routed block rides is the f16-fed cm2 tiles (`ARCHITECTURE_GPU_VULKAN_MOE.md`
 sec.2.2af), and `DASLLAMA_GPU_RESIDENT=0` keeps the per-op rails for any model, the A/B lever.
+The driver is attempted only when asked for (`gpu_want_resident_asked`): the measured-best set
+asks (`DASLLAMA_GPU=1`, or `auto_tier` on the want), and so does a want that spells its rails
+out one by one and sets `resident` - the server's serving shape, where `gpu_dn = false` must
+still turn one rail off. Rails alone, by env or by want, keep the per-op tier.
 
 ### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
 

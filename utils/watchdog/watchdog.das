@@ -206,7 +206,7 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
             cfg.daslang = exe
             return ""
         }
-        return "watchdog: nothing to supervise in {folder} - main.das is there but no daslang sits beside it or beside the watchdog (bin/Release/daslang, bin/daslang, build/daslang). Pass --daslang, or --program for a standalone exe."
+        return "watchdog: nothing to supervise in {folder} - main.das is there but no daslang sits beside it or beside the watchdog (daslang, bin/Release/daslang, bin/daslang, build/daslang). Pass --daslang, or --program for a standalone exe."
     }
     var exes : array<string>
     dir(folder) $(fname) {
@@ -239,7 +239,8 @@ def private is_program_candidate(path, fname : string) : bool {
 }
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
-//! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent.
+//! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent,
+//! and `bin/Release/watchdog.exe` in an MSVC tree finds the `daslang.exe` in its own directory.
 def private daslang_roots(program_dir, cwd : string) : array<string> {
     return <- [cwd, program_dir, dir_name(program_dir)]
 }
@@ -248,7 +249,7 @@ def private daslang_roots(program_dir, cwd : string) : array<string> {
 //! the process cwd and treat as found.
 def private find_daslang(dirs : array<string>) : string {
     for (root in dirs) {
-        for (rel in ["bin/Release/daslang.exe", "bin/daslang.exe", "bin/Release/daslang", "bin/daslang", "build/daslang"]) {
+        for (rel in ["daslang.exe", "daslang", "bin/Release/daslang.exe", "bin/daslang.exe", "bin/Release/daslang", "bin/daslang", "build/daslang"]) {
             let candidate = path_join(root, rel)
             if (fexist(candidate)) return candidate
         }

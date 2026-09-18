@@ -2189,7 +2189,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     // models that fully fit, MoE included: the whole-stack resident driver is tried FIRST - it
     // subsumes every rail below; a decline falls through
-    let resident_try = (moe_gpu_resident_installed() && gpu_want_auto() && gpu_want_resident()
+    let resident_try = (moe_gpu_resident_installed() && gpu_want_resident_asked() && gpu_want_resident()
         && (t.config.n_expert == 0l || rdec_moe_installed()))
     // the mirror codec: f16 rows by default (native fa feed, ~2x plannable ctx);
     // DASLLAMA_VK_KV32=1 arms f32 mirrors instead (A/B; then only f32 sessions serve)
@@ -2258,7 +2258,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     } elif (moe_gpu_resident_installed() && t.config.n_expert > 0l && !rdec_moe_installed()) {
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the tier installed no MoE seats for its {t.config.n_expert} routed experts; the per-op tier's expert rails serve\n")
     } elif (moe_gpu_resident_installed() && t.config.n_expert == 0l) {
-        to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - DASLLAMA_GPU is not set (the individual DASLLAMA_GPU_* rails alone are armed)\n")
+        to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - nothing asked for it: DASLLAMA_GPU is not set and the want carries neither auto_tier nor resident (the individual DASLLAMA_GPU_* rails alone are armed)\n")
     }
     // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it
     // is armed but this model cannot ride it. Dense archs pass: every non-expert rail (cls, dense

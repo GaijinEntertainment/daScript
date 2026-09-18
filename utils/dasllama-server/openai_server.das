@@ -257,7 +257,7 @@ def set_slot_gpu_want(name : string; want : GpuTierWant) {
         if (s.name == name) {
             s.gpu_want = want
             s.gpu_capable = (s.opts.backend != "cpu"
-                && (want.auto_tier || want.moe_layers != 0l || want.moe_stream != 0l || want.dn
+                && (want.auto_tier || want.resident || want.moe_layers != 0l || want.moe_stream != 0l || want.dn
                     || want.attn || want.dense || want.dnd || want.shexp || want.qkv || want.heat > 0l))
         }
     }

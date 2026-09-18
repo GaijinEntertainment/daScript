@@ -209,6 +209,14 @@ is the default and needs no flag.
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
 
+**A served GPU path that hands a serving shape to the CPU rails, or steps it one row at a time
+where a batched arm is absent, is a defect, never a fallback - a diff that adds such a pass, or
+lands a model family, a backend arm or a session shape whose serving takes one, ships the device
+path for it in the same change.** A serving shape is what the server runs by default: a paged
+session, a batched decode step over several streams, a prefill under a multi-stream scheduler,
+a session at the model's own context. "It runs, on the CPU" is not support: the user who
+selected the GPU gets a fraction of its speed and nothing on the page says so.
+
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 model, one
 K-quant model, and one model of a format outside both, for each of the three the trim path

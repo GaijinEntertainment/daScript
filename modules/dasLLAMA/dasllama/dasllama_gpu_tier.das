@@ -1033,7 +1033,8 @@ def public matmul_moe_gpu_ffn_join(var gout : array<float>) {
 //! (an env var present in the environment overrides its field). Set BEFORE ``load_model``,
 //! then call ``moe_gpu_tier_arm_`` so a backend can install its hooks.
 struct GpuTierWant {
-    auto_tier : bool     //!< request the measured-best rail set; individual knobs below still override
+    auto_tier : bool     //!< request the measured-best rail set, the whole-model driver included; individual knobs below still override
+    resident : bool      //!< ask for the whole-model driver on a model that fits the card beside rails spelled out one by one (``auto_tier`` implies it; ``DASLLAMA_GPU_RESIDENT=0`` still keeps the rails)
     moe_layers : int64   //!< resident expert-stack layers K, offloaded from the end (auto: -1 = fill the budget)
     moe_stream : int64   //!< streamed prefill layers S below the resident set (auto: -1 = all of them)
     vram_mb : int64      //!< resident-weight VRAM cap override in MB (0 = query the device)
@@ -1093,11 +1094,17 @@ def public dasllama_noisy() : bool {
 def public gpu_want_auto : bool
     => g_env_gpu.gpu ?? g_gpu_want.auto_tier
 
+//! The whole-model driver is asked for: by the measured-best set (``DASLLAMA_GPU=1`` or ``auto_tier``),
+//! or by a want that spells its rails out and sets ``resident`` (the serving shape, one rail still
+//! switchable off); ``gpu_want_resident`` is the lever that keeps the rails regardless.
+def public gpu_want_resident_asked : bool
+    => gpu_want_auto() || g_gpu_want.resident
+
 //! The whole-model driver will be attempted on this box: the loader then keeps a dense hybrid's
 //! deltanet planes in their file formats (the driver's GEMVs and tiles dispatch per format), and
 //! the vulkan image identity carries the same bit.
 def public gpu_want_dn_native : bool
-    => moe_gpu_resident_installed() && gpu_want_auto()
+    => moe_gpu_resident_installed() && gpu_want_resident_asked()
 
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.

@@ -583,3 +583,16 @@ call throw, which the gate in `test_metal_gemv_kernels.das`'s `w13sw_gate` now g
 `name == "..."` arms of `metal_blob_scale_plane` (`dasllama/dasllama_layout.das`) name one
 roster: a format added to the ladder and not the roster loses the split-transform memo and is
 never committed by `metal_blob_commit`.
+
+## 16. Three model classes have no batched decode arm and step per row under the server
+
+`batch_decode_decline` (`dasllama/dasllama_metal_decode.das`) declines `graph` for a
+non-standard attention block - the deltanet hybrids, Qwen3.5 / 3.6 / 3.8 / Coder-Next - and for
+a MoE with a shared expert - Qwen1.5-MoE, Qwen3.5-35B-A3B, Qwen3.6-35B-A3B, GLM-4.5-Air - and
+`feature` for the per-layer-embedding E-series (gemma-4 E2B, E4B). Each such step falls to the
+per-row single decode: every stream reads the weights once per token, so N streams cost N
+weight passes where one batched step costs one. `REVIEW_GPU.md` rules a missing batched arm a
+defect. The work, one arm per class: the deltanet step and gated Q batched over rows (the
+recurrent state is per session, the GEMMs are not), the shared expert's triple as one batched
+site beside the routed experts (the CPU batch stack already runs it), and the PLE side input
+gathered per row into the batch step (item 13 is its CPU half).

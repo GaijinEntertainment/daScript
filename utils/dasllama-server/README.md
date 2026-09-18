@@ -355,7 +355,9 @@ one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out, and 
 (the env master only overrides the `auto_tier` field of an explicit want, so the pick
 resolves to `off` before any want is constructed). Per-model
 support is unchanged - a model the armed tier cannot serve falls back to the CPU with the
-reason on the control page. `gpu = vulkan` arms the MoE tier in its blessed shape - expert stacks sized
+reason on the control page. `gpu = vulkan` asks for the **whole-model resident driver** first - a
+model that fits the card serves entirely from VRAM - and arms the per-op rails beneath it as the
+fallback for one that does not: expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
 the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override

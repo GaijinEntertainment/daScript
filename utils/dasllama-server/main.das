@@ -612,6 +612,16 @@ def private gpu_detail_dn(cfg : ServerArgs) : bool
 def private gpu_detail_attn(cfg : ServerArgs) : bool
     => cfg_sourced("gpu_attn") ? cfg.gpu_attn : true
 
+//! The serving want under `gpu = vulkan`: the whole-model resident driver asked for outright
+//! (`resident`, never `auto_tier` - the rail booleans stay explicit, so a `gpu_dn = false` still
+//! turns its rail off), the expert stacks sized to the budget unless pinned, and the resident
+//! shared expert (measured +8.3% on decode).
+def private vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
+    => GpuTierWant(resident = true,
+                   moe_layers = gpu_detail_layers(cfg), moe_stream = gpu_detail_stream(cfg),
+                   vram_mb = int64(cfg.gpu_vram_mb), dn = gpu_detail_dn(cfg),
+                   attn = gpu_detail_attn(cfg), dense = cfg.gpu_dense, shexp = true)
+
 // The GET /config surface: RESOLVED effective values (what init actually uses) + per-key
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
 // -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path.
@@ -904,13 +914,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
     if (gpu == "vulkan") {
-        // shexp rides the blessed shape: the resident shared expert measured +8.3% on decode
-        // (decode-arc S2) and was missing here. The booleans stay explicit rather than riding
-        // auto_tier, so an explicit `gpu_dn = false` still turns its rail off.
-        set_gpu_tier_want(GpuTierWant(
-            moe_layers = gpu_detail_layers(g_cfg), moe_stream = gpu_detail_stream(g_cfg),
-            vram_mb = int64(g_cfg.gpu_vram_mb), dn = gpu_detail_dn(g_cfg),
-            attn = gpu_detail_attn(g_cfg), dense = g_cfg.gpu_dense, shexp = true))
+        set_gpu_tier_want(vulkan_serving_want(g_cfg))
         if (moe_gpu_tier_arm()) {
             let ktag = gpu_detail_layers(g_cfg) < 0l ? "auto" : "{gpu_detail_layers(g_cfg)}"
             let stag = gpu_detail_stream(g_cfg) < 0l ? "auto" : "{gpu_detail_stream(g_cfg)}"
@@ -970,10 +974,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         var slot_want = GpuTierWant()
         // a --tts boot with no LLM has an EMPTY roster: nothing loads, so nothing arms the tier
         if (gpu == "vulkan" && !empty(g_models)) {
-            slot_want = GpuTierWant(
-                moe_layers = gpu_detail_layers(g_cfg), moe_stream = gpu_detail_stream(g_cfg),
-                vram_mb = int64(g_cfg.gpu_vram_mb), dn = gpu_detail_dn(g_cfg),
-                attn = gpu_detail_attn(g_cfg), dense = g_cfg.gpu_dense, shexp = true)
+            slot_want = vulkan_serving_want(g_cfg)
             if (g_models[def_idx].backend != "cpu") {
                 gpu_idx = def_idx
             } else {

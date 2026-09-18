@@ -1536,3 +1536,17 @@ module) is independent and can land any time - it is pure structure.
     both inside the band the gemma arc measured): a stocked fixture of the reference exe's
     `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
     the resident's mean gap to a bar the CPU chain's gap sets.
+
+69. **The resident driver serves no session the server runs by default.** Every resident
+    override - prefill, single decode, batched decode, the embed gate, the hydrate path - declines
+    a paged session (`RdecPass.paged`: the one mirror serves the flat cache only), and
+    `dasllama-server` serves paged with the prefix cache on it, so a served request decodes on
+    the per-op rails: gemma-4-E2B Q4_K_M on the RTX 5060 Ti reads 157 tok/s tg128 on the bench
+    route's flat session and about 31 tok/s on a chat request. The server also pins the resident
+    prefill off for the process (`set_resident_prefill_allowed(false)`): the single shared mirror
+    and a second stream's chunked prefill would strand the first stream's device-only rows, so
+    every prompt prefills on the CPU rails (pp512 201 tok/s on that box against 2667 on a flat
+    session). `REVIEW_GPU.md` rules this shape a defect. The work: a paged-aware decode (the
+    mirror keyed by page, or the pages mirrored per stream) and a per-stream prefill that owns
+    its rows on the device, so the scheduler's chunked prefill and batched decode step ride the
+    driver; until then the page's served-how block names the pass.
