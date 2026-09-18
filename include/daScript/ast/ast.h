@@ -1724,6 +1724,7 @@ namespace das
             };
             uint32_t    flags = 0;
         };
+        bool                        accessFlagsValid = false;
         das_map<CompilationError,int>   expectErrors;
         AnnotationArgumentList      options;
         CodeOfPolicies              policies;

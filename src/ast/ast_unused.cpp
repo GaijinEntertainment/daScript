@@ -1051,10 +1051,12 @@ namespace das {
     // program
 
     void Program::buildAccessFlags(TextWriter &) {
+        if ( accessFlagsValid ) return;
         markSymbolUse(true,false,true,nullptr);
         // determine function side-effects
         TrackFieldAndAtFlags faf;
         faf.MarkSideEffects(*thisModule);
+        accessFlagsValid = true;
     }
 
     bool Program::optimizationUnused(TextWriter & logs, int32_t round) {
@@ -1062,6 +1064,7 @@ namespace das {
         // remove itselft
         RemoveUnusedLocalVariables context(round);
         visit(context);
+        if ( context.didAnything() ) accessFlagsValid = false;
         return context.didAnything();
     }
 }

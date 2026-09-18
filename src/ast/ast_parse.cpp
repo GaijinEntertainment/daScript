@@ -1387,6 +1387,7 @@ namespace das {
                 if (!program->failed() && !policies.no_fold_unsafe)
                     program->foldUnsafe();
                 auto timeO = ref_time_ticks();
+                program->accessFlagsValid = false;
                 if (!program->failed()) {
                     if (program->getOptimize()) {
                         callCompilationCallback(moduleName, fileName, "optimize");

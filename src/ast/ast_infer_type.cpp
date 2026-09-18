@@ -6501,6 +6501,7 @@ namespace das {
     }
 
     void inferTypesDirty(Program * program, TextWriter &logs, bool verbose) {
+        program->accessFlagsValid = false;
         int pass = 0;
         int32_t maxInferPasses = program->options.getIntOption("max_infer_passes", program->policies.max_infer_passes);
         bool logInferPasses = program->options.getBoolOption("log_infer_passes", false);
