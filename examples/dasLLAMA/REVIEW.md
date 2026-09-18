@@ -38,15 +38,15 @@ updates every test under `modules/dasLLAMA/tests/` that matches it, in the same 
 smoke tests match witness lines as substrings, so the words and their order are an interface
 (`ARCHITECTURE.md` sec. 2).
 
-**A diff that adds an entry to a browser example's `models.json`, or changes an entry's sha256,
-gives that entry a sha256 and a location that cannot move - a Hugging Face repository, or, in
-the file's `tree` list, a repo-relative path to a file this repository itself carries - never a
-machine-local path or a branch name.** The deploy fetches by that location and refuses a file
-whose hash moved (`ARCHITECTURE.md` sec. 3.4).
+**A diff that adds or changes an entry in a browser example's `models.json` gives that entry a
+sha256 and a location that cannot move - a Hugging Face repository, or, in the file's `tree`
+list, a repo-relative path to a file this repository itself carries - never a machine-local path
+or a branch name.** The deploy fetches by that location and refuses a file whose hash moved
+(`ARCHITECTURE.md` sec. 3.4).
 
-**A diff that adds an entry to a browser example's `models.json`, or changes an entry's sha256,
-states in the PR body that the sha256 is the hash of the file now published at that entry's
-location.**
+**A diff that adds or changes an entry in a browser example's `models.json` states in the PR
+body that the entry's sha256 is the hash of the file its location now resolves to - the
+published file for a Hugging Face entry, the committed file for a `tree` entry.**
 
 **A diff that changes how `library/` emits its standalone C++ context keeps `--disable-module
 dasLLVM` on that command.** The tune framework is a macro module with no AOT form and a
