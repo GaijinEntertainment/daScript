@@ -644,8 +644,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !is_ok ) {
                 return false;
             }
-            // the proxy lands in dasbind while the registrar compiles; a cache record of the
-            // registrar would not replay it (src/ast/ARCHITECTURE.md#module-cache-read)
+            // src/ast/ARCHITECTURE.md#module-cache-read
             if ( auto program = daScriptEnvironment::getBound()->g_Program ) {
                 if ( program->thisModule ) program->thisModule->noteRegistrationAtCompile();
             }

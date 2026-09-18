@@ -91,10 +91,7 @@ namespace das {
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
-        // the embedded source never touches the module cache: a served copy appends the module's
-        // functions in another order than a parse of the text, and the cumulative hash every
-        // record pins the module by would then differ between a cold and a warm run
-        // (src/ast/ARCHITECTURE.md#module-cache-read)
+        // the stream stays hidden here - src/ast/ARCHITECTURE.md#module-cache-read
         auto env = daScriptEnvironment::getBound();
         auto savedRead = env->serializer_read;
         auto savedWrite = env->serializer_write;
@@ -858,12 +855,7 @@ namespace das {
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
-        // a module that registered into a module while it compiled (a macro an annotation's apply
-        // added into it, a proxy its extern binder added into dasbind) is never served: the record
-        // replays the module's own init, not that registration, and a shared module served once
-        // would carry the gap into every later compile of the process. The header matched, so it
-        // reparses in place and the records after it still serve; a record whose length word
-        // cannot skip it cuts the stream instead
+        // a marked record is never served - src/ast/ARCHITECTURE.md#module-cache-read
         if ( (saved_flags & 1) != 0 ) {
             if ( payload_size != 0 && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
                 serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
@@ -1657,8 +1649,6 @@ namespace das {
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
-            // a module that registered into a module while it compiled: the reader reparses it in
-            // place instead of serving the record (src/ast/ARCHITECTURE.md#module-cache-read)
             uint8_t flags = thisModule->registersAtCompile ? 1 : 0;
             *serializer_write << flags;
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
