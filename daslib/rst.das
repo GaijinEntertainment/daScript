@@ -82,7 +82,15 @@ var private pageless_ref_modules : table<string>
 
 var private nosearch_symbols : table<string>
 
+struct private MdRow {
+    at : int
+    name : string
+    topic : string
+    entry_lines : int
+}
+
 var private md_section_lines : array<string>
+var private md_rows : array<MdRow>
 var private md_row_at : table<string; int>
 var private md_pending_group = ""
 var private md_index_lines : array<string>
@@ -158,23 +166,31 @@ def private md_row(name : string; topic : string; entry_lines : int = 0) {
     //! One row per name: the first overload claims it, and a later overload with a description
     //! fills a row the first one left bare.
     if (empty(digest_path)) return
-    let text = md_first_sentence(md_first_paragraph(md_read_topic(topic), entry_lines))
     var at = -1
     md_row_at |> get(name) $(idx) {
         at = idx
     }
     if (at >= 0) {
-        if (!empty(text) && md_section_lines[at] == "- `{name}`") {
-            md_section_lines[at] = "- `{name}` - {text}"
-        }
+        md_rows |> emplace(MdRow(at = at, name = name, topic = topic, entry_lines = entry_lines))
         return
     }
     if (!empty(md_pending_group)) {
         md_section_lines |> push("\n### {md_pending_group}\n")
         md_pending_group = ""
     }
-    md_section_lines |> push(empty(text) ? "- `{name}`" : "- `{name}` - {text}")
+    md_section_lines |> push("- `{name}`")
     md_row_at[name] = length(md_section_lines) - 1
+    md_rows |> emplace(MdRow(at = length(md_section_lines) - 1, name = name, topic = topic, entry_lines = entry_lines))
+}
+
+def private md_resolve_rows() {
+    for (row in md_rows) {
+        if (md_section_lines[row.at] != "- `{row.name}`") continue
+        let text = md_first_sentence(md_first_paragraph(md_read_topic(row.topic), row.entry_lines))
+        if (!empty(text)) {
+            md_section_lines[row.at] = "- `{row.name}` - {text}"
+        }
+    }
 }
 
 def private md_begin(mod_name : string; mod : Module?) {
@@ -196,6 +212,7 @@ def public write_digest() {
     //! documented so far - its intro paragraph and every public symbol with a one-line description.
     //! A no-op while `digest_path` is empty.
     if (empty(digest_path)) return
+    md_resolve_rows()
     mkdir_rec(dir_name(digest_path))
     sort(md_index_lines)
     fopen(digest_path, "wb") $(f) {

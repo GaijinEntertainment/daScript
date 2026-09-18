@@ -38,6 +38,21 @@ if(_untracked)
     set(_failed 1)
 endif()
 
+# The shipped digest is generated but tracked: skills/daslang ships to agents with no daslang to
+# generate it with. The generator wrote its copy to the build dir; the tree's copy must match.
+# A digest carries the symbols of the modules its build loaded, so only the configuration the doc
+# lane runs - DAS_BUILD_DOCUMENTATION, which it sets and an ordinary build does not - holds the
+# reading the tracked copy is compared against.
+if(DAS_DOC_BUILD AND DAS_DOC_GATE)
+    file(SHA256 "${DAS_DOC_BUILD}/everything.md" _digest_built)
+    file(SHA256 "${DAS_ROOT}/skills/daslang/references/everything.md" _digest_tracked)
+    if(NOT _digest_built STREQUAL _digest_tracked)
+        message("ERROR: skills/daslang/references/everything.md does not match what das2rst generates.")
+        message("Update it: cmake --build <build> --target regen_docs_digest")
+        set(_failed 1)
+    endif()
+endif()
+
 if(_failed)
     message(FATAL_ERROR "generated documentation is not fresh")
 endif()
