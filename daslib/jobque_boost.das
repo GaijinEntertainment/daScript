@@ -497,8 +497,11 @@ def pop_archive_with_timeout(stream : Stream?; timeout_ms : int; blk : block<(va
     //! false says nothing arrived, so a consumer can do its idle work and wait again.
     var any = false
     var value : TT -# -& -const
-    any = _builtin_stream_pop_with_timeout(stream, timeout_ms) $(bytes : array<uint8># -const) {
-        mem_archive_load(bytes, value)
+    _builtin_stream_pop_with_timeout(stream, timeout_ms) $(bytes : array<uint8># -const) {
+        if (!empty(bytes)) {
+            any = true
+            mem_archive_load(bytes, value)
+        }
     }
     if (any) {
         invoke(blk, value)
