@@ -362,6 +362,11 @@ def poll_answers() {
 
 //! the playing clip's position, off the mixer's own clock, and the next clip once it is done
 [arch(at = "../ARCHITECTURE.md#parrot-panels")]
+//! a say is audible or about to be: a clip is playing, or generated clips wait their turn
+def playback_active() : bool {
+    return g_playing_sid != INVALID_SID || !empty(g_clips)
+}
+
 def poll_playback() {
     if (g_playing_sid != INVALID_SID) {
         var done = false
@@ -415,7 +420,10 @@ def start_take() {
         g_status = "this file cannot clone - parrot needs a Pocket file with its codec encoder"
         return
     }
-    cancel_say()   // a clip still playing would be recorded
+    if (playback_active()) {   // a clip still playing would be recorded: the button waits it out
+        g_status = "wait for the say to end, then record"
+        return
+    }
     if (!sound_record_start(g_mic_rate, 1, g_mic_rate * 4, -1)) {
         g_status = "no microphone - is one connected, and allowed?"
         return
@@ -773,12 +781,14 @@ def draw_wave(peaks : array<float2>; size : float2; span, window_from, window_to
     dummy(WAVE_BOX, (size = size))
 }
 
-//! the record button: a red disc that becomes a square while recording, the silence countdown around it
+//! the record button: a red disc that becomes a square while recording, the silence countdown around it;
+//! dim and inert while a say plays, since the microphone would record the clip
 def draw_record_button() {
     let size = float2(96.0, 96.0)
     let origin = GetCursorScreenPos()
     let clicked = invisible_button(REC_BTN, (text = "record", size = size))
-    let hovered = IsItemHovered()
+    let busy = g_phase != Phase.recording && playback_active()
+    let hovered = IsItemHovered() && !busy
     let center = float2(origin.x + size.x * 0.5, origin.y + size.y * 0.5)
     with_window_drawlist() $(var dl) {
         dl |> add_circle(center, 44.0, hovered ? INK : DIM, 0, 2.0)
@@ -791,10 +801,10 @@ def draw_record_button() {
                 dl |> path_stroke(ACCENT, ImDrawFlags.None, 3.0)
             }
         } else {
-            dl |> add_circle_filled(center, 30.0, g_can_clone && g_ready ? RED : DIM, 0)
+            dl |> add_circle_filled(center, 30.0, g_can_clone && g_ready && !busy ? RED : DIM, 0)
         }
     }
-    if (clicked) {
+    if (clicked && !busy) {
         toggle_record()
     }
 }

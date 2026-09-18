@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="das-build" content="__DAS_BUILD_STAMP__">
 <title>storyteller — dasllama.io</title>
 <meta name="description" content="A small story model writes a children's tale while KittenTTS reads it aloud - dasLLAMA compiled to WebAssembly, running in your browser.">
 <link rel="icon" href="/files/dasllama-favicon.svg" type="image/svg+xml">
@@ -31,8 +32,6 @@
   #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
   #canvas { width: auto; height: auto; max-width: 100%; max-height: 100%; border: 0; outline: none; display: block;
             touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  /* daspkg release fills the build placeholder below with the revision and build time */
-  #build { position: absolute; right: 6px; bottom: 4px; font: 10px/1 ui-monospace, Menlo, monospace; color: rgba(255,255,255,0.45); pointer-events: none; z-index: 1; }
   #gate { z-index: 2;
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 14px; background: #12101a; cursor: default;
@@ -76,7 +75,6 @@
 </div></div></nav>
 <div id="stage">
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-<div id="build">__DAS_BUILD_STAMP__</div>
 <div id="gate">
   <h1>storyteller</h1>
   <p id="status">reading the model list...</p>
@@ -89,10 +87,6 @@
      copy only on a browser that can run the build, so an unsupported one loads no program -->
 <template id="loader">{{{ SCRIPT }}}</template>
 <script>
-  (function () {   // a page served from the source tree carries the raw placeholder: show nothing rather than the token
-    var b = document.getElementById('build');
-    if (b && /^__DAS_/.test(b.textContent)) b.textContent = '';
-  })();
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
 
@@ -126,6 +120,27 @@
   // workers and the audio output frozen mid-frame and out of step with each other, and the
   // first thing heard is whatever sat in the output ring: such a page starts over instead
   window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+  // iOS mutes Web Audio under the ring/silent switch unless the tab holds a playback session, the
+  // one a media element gets: ask for it through the Audio Session API where it exists, and on the
+  // first gesture start a silent looping <audio> element, which puts the tab in that session too.
+  (function installPlaybackSession() {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    var armed = false;
+    var arm = function () {
+      if (armed) return;
+      armed = true;
+      try {
+        var a = new Audio('data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA');
+        a.loop = true;
+        a.setAttribute('playsinline', '');
+        a.play().catch(function () {});
+      } catch (e) {}
+    };
+    ['pointerdown', 'touchend', 'keydown', 'click'].forEach(function (e) {
+      document.addEventListener(e, arm, true);
+    });
+  })();
 
   if (!SUPPORTED) {
     showNote('needs SharedArrayBuffer',

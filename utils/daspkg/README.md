@@ -231,12 +231,14 @@ build directory configured for another target is caught before `release wasm` fa
 ### Web build stamp {#web-build-stamp}
 
 `release wasm` stamps the page it releases. Where the shell's markup carries the
-`__DAS_BUILD_STAMP__` placeholder - the default shell and every custom shell that copies the
-line - the release replaces it with the source revision (`git describe --always --dirty=+
---abbrev=9`, or `unknown` outside a git tree) and the build time with its zone, after the
-external files have landed, so a tester on a device reads which build answered. A shell whose
-markup lacks the placeholder ships unstamped, and so does a page the release cannot read; the
-release is silent about both.
+`__DAS_BUILD_STAMP__` placeholder - the default shell and every custom shell that copies its
+`das-build` meta tag - the release replaces it with the source revision (`git describe
+--always --dirty=+ --abbrev=9`, or `unknown` outside a git tree) and the build time with its
+zone, after the external files have landed. The stamp sits in the page head and draws nothing:
+a tester reads which build answered from the page source, or from
+`document.querySelector('meta[name=das-build]').content` in the console. A shell whose markup
+lacks the placeholder ships unstamped, and so does a page the release cannot read; the release
+is silent about both.
 
 ## Tests
 
