@@ -695,6 +695,7 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-install__tabs {
     display: flex;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--rule);
     font-family: var(--font-mono);
     font-size: 12px;
@@ -726,6 +727,32 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 .forge-install__cmd  { }
 .forge-install__cmd  .prompt { color: var(--green); }
 .forge-install__sp   { height: 14px; }
+
+/* .forge-copy and .forge-copy-tail are created by copy.js, not by markup. */
+code.forge-cmd {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--amber);
+}
+.forge-copy {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 8px;
+    padding: 2px;
+    border: 0;
+    background: transparent;
+    color: var(--fg-faint);
+    cursor: pointer;
+    line-height: 0;
+}
+.forge-copy:hover { color: var(--amber); }
+.forge-copy.is-done { color: var(--green); }
+.forge-copy-tail { white-space: nowrap; }
+.forge-copy-word { white-space: normal; overflow-wrap: anywhere; }
+.forge-copy-tail--flex { display: inline-flex; align-items: flex-end; max-width: 100%; white-space: normal; }
+.forge-copy-tail--flex .forge-copy-word { min-width: 0; }
+.forge-copy-tail--flex .forge-copy { flex: none; margin-bottom: 3px; }
 
 /* ───── § 05 News ───── */
 
