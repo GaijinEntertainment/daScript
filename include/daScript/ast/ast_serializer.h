@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 215;   // 215: the policy stream carries no_fold_unsafe
+            return 216;   // 216: a record header carries the module's compile-time macro registration flag
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

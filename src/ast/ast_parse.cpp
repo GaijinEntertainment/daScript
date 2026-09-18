@@ -759,6 +759,7 @@ namespace das {
         uint64_t saved_hash = 0;
         int64_t saved_size = -1;
         string saved_filename{};
+        uint8_t saved_flags = 0;
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
@@ -768,6 +769,7 @@ namespace das {
             serializer << saved_hash;
             serializer << saved_size;
             serializer.serializeTemp(saved_filename);
+            serializer << saved_flags;
             // macro file dependencies (Program::moduleCacheDependencies) ride the record
             // header, not the payload: they must be validated BEFORE the payload is trusted
             serializer << depCount;
@@ -804,7 +806,7 @@ namespace das {
             if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
-                serializer_read->cutoffFile = fileName;
+                    serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
                 if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
                 return false;
@@ -835,7 +837,7 @@ namespace das {
             if ( currentReq != savedReq ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
-                serializer_read->cutoffFile = fileName;
+                    serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = "require set changed";
                 if ( !serializer_read->quietCache ) {
                     logs << "ser: require set changed '" << fileName << "': " << savedReq.size() << " recorded, " << currentReq.size() << " now\n";
@@ -845,6 +847,22 @@ namespace das {
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
+        // a module that registered macros while it compiled (an annotation's apply into it) is
+        // never served: the record replays the module's own init, not that registration, and a
+        // shared module served once would carry the gap into every later compile of the process.
+        // The header matched, so it reparses in place and the records after it still serve.
+        if ( (saved_flags & 1) != 0 && payload_size != 0
+            && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
+            serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
+            serializer_read->resumedModules ++;
+            // the per-record tables a payload read clears at its end: the header put this
+            // record's file name in the string table, and the next record's header indexes
+            // its own table from empty
+            serializer_read->fieldRefs.clear();
+            serializer_read->clearNodeIds();
+            if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "' (registers macros at compile time)\n";
+            return false;
+        }
         // no per-module logging on the happy path - the standalone sink has no level
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
@@ -865,6 +883,7 @@ namespace das {
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
             serializer_read->servedModules ++;
+            program->thisModule->registersMacrosAtCompile = (saved_flags & 1) != 0;   // rides the rewrite
             program->thisModuleGroup = &libGroup;
             // the stream is rewritten every run from parsedModules, so a kept record's deps
             // must round-trip through the deserialized program or the next write drops them
@@ -1619,6 +1638,11 @@ namespace das {
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
+            // a module that registered macros while it compiled cannot serve a compile that
+            // reparses anything after it: the reader restarts cold on that cutoff
+            Module * writtenModule = thisModule ? thisModule : program->thisModule.get();
+            uint8_t flags = (writtenModule && writtenModule->registersMacrosAtCompile) ? 1 : 0;
+            *serializer_write << flags;
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
             *serializer_write << depCount;
             for ( auto & dep : program->moduleCacheDependencies ) {
@@ -2227,4 +2251,5 @@ namespace das {
             return res;
         }
     }
+
 }

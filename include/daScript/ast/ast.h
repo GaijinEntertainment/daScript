@@ -1245,6 +1245,7 @@ namespace das
         das_insert_only_map<string,unique_ptr<ReaderMacro>> readMacros; // %foo "blah"
         unique_ptr<CommentReader>                   commentReader;      // /* blah */ or // blah
         vector<unique_ptr<CallMacro>>               ownedCallMacros;    // call macros (owned here, referenced from callThis lambdas)
+        bool                                        registersMacrosAtCompile = false;   // a macro registered into this module while it compiled (an annotation's apply) - not replayed by a cache record (src/ast/ARCHITECTURE.md#module-cache-read)
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_insert_only_hash_map<string,Type>       options;            // options
