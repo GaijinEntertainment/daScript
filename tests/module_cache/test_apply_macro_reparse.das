@@ -25,7 +25,7 @@ def test_apply_macro_reparse(t : T?) {
         fwrite(path_join(tmp, name), fread(path_join(fixtures, name)))
     }
     let drv = path_join(tmp, "mc_apply_drv.das")
-    let cmd = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
+    let cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
     // the child prints the path it resolved the module by; the marker holds the name and the reason
     let reparsed = "mc_apply_lib.das' (registers macros at compile time)"
     var cold : string

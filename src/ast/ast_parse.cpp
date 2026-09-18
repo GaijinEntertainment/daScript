@@ -745,7 +745,7 @@ namespace das {
                 }) || magic != SER_MODULE_STREAM_MAGIC || version != AstSerializer::getVersion() ) {
                     serializer_read->seenNewModule = true;
                     serializer_read->failed = true;
-                serializer_read->cutoffFile = fileName;
+                    serializer_read->cutoffFile = fileName;
                     serializer_read->cutoffReason = "stale or foreign module cache stream";
                     if ( !serializer_read->quietCache ) logs << "ser: read failed (stale or foreign module cache stream)\n";
                     return false;
