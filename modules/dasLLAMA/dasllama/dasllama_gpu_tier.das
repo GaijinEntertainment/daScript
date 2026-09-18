@@ -1520,6 +1520,26 @@ def gpu_tier_status_() : GpuTierStatus {
         vram_bytes = invoke(g_moe_gpu_vram_report))
 }
 
+var private g_gpu_cpu_pass_reasons : array<string>
+var private g_gpu_cpu_pass_counts : array<int64>
+
+//! Name the reasons a served GPU path hands a call to the CPU rails, in slot order, and zero the counts - the driver that counts them registers as it arms a model.
+def public set_gpu_cpu_pass_reasons(reasons : array<string>) {
+    g_gpu_cpu_pass_reasons := reasons
+    g_gpu_cpu_pass_counts |> clear()
+    g_gpu_cpu_pass_counts |> resize(length(reasons))
+}
+
+//! Count one call handed to the CPU rails under the reason registered at `slot`.
+def public note_gpu_cpu_pass(slot : int) {
+    g_gpu_cpu_pass_counts[slot]++
+}
+
+//! Calls the served GPU path handed to the CPU rails since the model armed, one row per reason that fired - an empty answer is the device serving every call.
+def gpu_cpu_passes_() : array<tuple<reason : string; count : int64>> {
+    return <- [for (r, n in g_gpu_cpu_pass_reasons, g_gpu_cpu_pass_counts); (reason = r, count = n); where n > 0l]
+}
+
 //! Upload one weight stack ([rows x n] at woff) as the GPU tier's row-major planes — q8 (fmt 0):
 //! int8 quants + f16 scales; native K-quant (k4/k5/k6): superblock payloads + decoded scale rows.
 //! stream = pinned host mirror for DMA streaming vs resident VRAM; false = tier absent/budget hit.

@@ -492,6 +492,12 @@ def gpu_tier_status() : dasllama_gpu_tier::GpuTierStatus {
     return gpu_tier_status_()
 }
 
+def gpu_cpu_passes() : array<tuple<reason : string; count : int64>> {
+    //! Calls the armed GPU path handed back to the CPU rails since the model armed, one row per
+    //! reason that fired. Empty means the device served every call; a served model keeps it empty.
+    return <- gpu_cpu_passes_()
+}
+
 def set_dispatch_worker_limit(v : int) {
     //! Cap the kernel-dispatch worker count (0 = no limit, all job-que workers). Latched by
     //! ``setup_dasllama_jobque`` — set it before that call.

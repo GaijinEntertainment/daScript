@@ -204,7 +204,8 @@ entry here:**
   reports the layers it left on the CPU with the first layer's reason and its VRAM-budget stop,
   a dense model's FFN gets its own line (the per-op tier has no dense-FFN rail), and the
   per-call resident overrides say each pass-to-CPU reason once per armed model
-  (`rdec_pass_once`). The gap is `followup_vulkan.md` item 1, not a precedent to copy.
+  (`rdec_pass_once`) and count every pass by reason in the tier (`gpu_cpu_passes`, zeroed as a
+  model arms), which the server's `/v1/stats` carries as `gpu_cpu_passes`. The gap is `followup_vulkan.md` item 1, not a precedent to copy.
 - **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
   it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
   ids, skips the CPU embed loop, and the resident driver gathers the rows on device through

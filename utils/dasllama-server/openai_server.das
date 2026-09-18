@@ -3283,10 +3283,16 @@ struct private OaiSlotStats {
     sw_avg_ms : float
 }
 
+struct private OaiCpuPass {
+    reason : string
+    count : int64
+}
+
 struct private OaiStatsResponse {
     model : string
     active_model : string
     models : array<OaiSlotStats>
+    gpu_cpu_passes : array<OaiCpuPass>   //!< calls the armed GPU path handed back to the CPU rails since the model armed, by reason; empty = the device served every call
     ctx : int64
     uptime_s : int64
     draining : bool
@@ -3416,6 +3422,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         thinking_default = g_slots[g_default_slot].think_default,
         media_pending = g_media_pending, media_rows = g_media_rows,
         mrope_streams = g_slots[g_active].sched.mrope_streams)
+    out.gpu_cpu_passes <- [for (p in gpu_cpu_passes()); OaiCpuPass(reason = p.reason, count = p.count)]
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])

@@ -245,6 +245,24 @@ def test_gpu_tier_resident_ask(t : T?) {
     t |> equal(gpu_want_resident_asked(), ambient, "a zero want resets to the ambient env answer")
 }
 
+//! The CPU-pass counters: only a reason that fired is reported, and registering again zeroes them.
+[test]
+def test_gpu_cpu_passes(t : T?) {
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"])
+    t |> equal(length(gpu_cpu_passes_()), 0, "nothing fired: the device served every call")
+    note_gpu_cpu_pass(1)
+    note_gpu_cpu_pass(1)
+    note_gpu_cpu_pass(2)
+    let fired <- gpu_cpu_passes_()
+    t |> equal(length(fired), 2, "one row per reason that fired")
+    t |> equal(fired[0].reason, "paged")
+    t |> equal(fired[0].count, 2l)
+    t |> equal(fired[1].reason, "cap")
+    t |> equal(fired[1].count, 1l)
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"])
+    t |> equal(length(gpu_cpu_passes_()), 0, "a model arming again starts from zero")
+}
+
 [test]
 def test_rdec_readback_reaches_the_doubles(t : T?) {
     install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,

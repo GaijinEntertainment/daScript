@@ -19,6 +19,7 @@ require dasllama/dasllama_rope        // build_rope_row_packed — the one sourc
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS / KQ_SUPERBLOCK_ELEMS — device block sizing
 require dasllama/dasllama_gguf        // kq_disk_bytes - the file bytes a device plane is measured against
 require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
+require daslib/enum_trait
 require dasllama/dasllama_par
 require dasllama/dasllama_env
 require math
@@ -1064,6 +1065,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
     g_rdec_pass_said |> clear()
+    set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"])
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed()) return rdec_decline("the tier installed no resident-driver seams")
     if (t.quant != QuantMode.q8) return rdec_decline("weights are not in the q8 serving mode ({t.quant})")
@@ -1621,6 +1623,7 @@ def private kvdt_name(v : int64) : string {
 
 [cold_path]
 def private rdec_pass_once(kind : RdecPass; a, b : int64) {
+    note_gpu_cpu_pass(int(kind))
     if (key_exists(g_rdec_pass_said, int(kind))) {
         return
     }
