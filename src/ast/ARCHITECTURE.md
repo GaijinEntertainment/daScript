@@ -92,7 +92,7 @@ under `ignore_shared_modules`: the shared daslib modules it requires neither com
 the environment's promoted set, so the program compiled after the scan has the same module set -
 and the same module-cache records, `daslib/builtin` first - whether the scan compiled, replayed
 or was skipped with `-no-dynamic-modules`. Compiling and running the descriptors is the scan's
-cost, and it grows with the number of descriptors in the tree, so the scan keeps a manifest beside each descriptor, `.das_module.manifest`, holding the rows the
+cost, and it grows with the number of descriptors in the tree, so the scan keeps a manifest beside each descriptor, holding the rows the
 registry received from it.
 
 The manifest is a property of the module tree, not of the script or the cwd: the rows depend on
