@@ -54,6 +54,13 @@ published file for a Hugging Face entry, the committed file for a `tree` entry.*
 it.** With dasLLVM present the emission stops on the tune framework and writes nothing
 (`ARCHITECTURE.md` sec. 3.8).
 
+**A stream a browser example creates with `stream_create()` has a producer booked on it in
+the same file (`append(1)` after the create), and a diff that adds such a stream books one.**
+A stream with no producer on its books answers a blocking pop at once, empty, so a thread that
+pops it in a loop spins a core for as long as the tab is open, and the thread pops it under
+another name than the file created it (`ARCHITECTURE.md` sec. 3.2); `REVIEW.das` checks every
+created stream.
+
 **A diff that adds an entry point to `library/dasllama_lib.das` gives it `[export_c]` and a
 result `daslib/c_api_header.das` can spell in C - a scalar, a string, a pointer, an enum, a
 vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.**

@@ -437,6 +437,7 @@ def init() {
     g_say = unsafe(stream_create())
     g_say |> append(1)   // one producer on the books: the speech thread's pop waits for a sentence instead of returning empty at once
     g_speech = unsafe(stream_create())
+    g_speech |> append(1)
     g_story_now = seq_box_create()
     g_story_now |> publish(g_stories)
     g_speech_done = unsafe(channel_create())
