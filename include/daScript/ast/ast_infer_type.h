@@ -662,6 +662,7 @@ namespace das {
         enum class InferCallError {
             functionOrGeneric,
             operatorOp2,
+            operatorOp2Borrow,
             tryOperator
         };
 

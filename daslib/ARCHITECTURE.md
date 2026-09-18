@@ -293,3 +293,7 @@ Five companions carry a concern each; a section number is unique across all six 
 PDBs, while `cmd_release_wasm` passes it to `release_one_wasm_app` to retain DWARF,
 logical frames and the emcc symbol map. The manifest contract and these release
 implementations describe the same option.
+
+## 41. ast_boost
+
+- **C++ mirror pair**: `table_key_storage_base_type` / `peel_distinct` <-> `TypeDecl::getR2VType` and `TypeDecl::isTableKeyType` (`src/ast/ast_typedecl.cpp`), the key-node rule in `src/ast/ast_simulate.cpp`: a table key is stored and hashed as its base type under every distinct level, a handled key as its value type, and the JIT emitters (`modules/dasLLVM/daslib/llvm_jit.das`, `llvm_exe.das`, `llvm_jit_plan.das`) read the daslib twin. Nothing in the default suite fails when one side moves alone (the JIT lane needs `DAS_LLVM_DISABLED=OFF`); `tests/language/distinct_table_keys.das` under `-jit` is the check.

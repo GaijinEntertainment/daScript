@@ -2288,17 +2288,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd`
-- `render_cowbell`
-- `render_cp`
-- `render_crash`
-- `render_hh`
-- `render_oh`
-- `render_ride`
-- `render_rimshot`
-- `render_sd`
-- `render_tambourine`
-- `render_tom`
+- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
+- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
+- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
+- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
+- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
+- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
+- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
+- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
+- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
+- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
+- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
 
 ### Oscillator type
 
@@ -4891,6 +4891,8 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 - `isVectorType` - Returns `true` if the given `Type` is a vector, range, or urange type (`int2`..`int4`, `uint2`..`uint4`, `float2`..`float4`, `range`, `urange`, `range64`, `urange64`).
 - `is_class_method` - Returns `true` if a `TypeDeclPtr` field represents a class method — a non-dim `tFunction` whose first argument is the class structure (or a parent of it).
 - `is_same_or_inherited` - Returns `true` if `child` is the same `Structure` as `parent` or is transitively inherited from `parent` by walking the parent chain.
+- `peel_distinct` - Returns the type under every `distinct` level; a type that is not distinct comes back as is.
+- `table_key_storage_base_type` - Returns the base type a table key is stored and hashed as: a `distinct` key peels to its underlying type, a handled key to its value type.
 
 ### Annotations
 
@@ -6426,7 +6428,7 @@ The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewri
 
 ### Call macros
 
-- `_fold`
+- `_fold` - implements _fold(expression) that folds LINQ expressions into optimized sequnences for example::
 
 ## lint
 
@@ -7417,16 +7419,16 @@ The STRINGS_CONVERT module provides soft-failing string-to-numeric conversions t
 
 ### Soft-failing conversions
 
-- `try_to_double`
-- `try_to_float`
-- `try_to_int`
-- `try_to_int16`
-- `try_to_int64`
-- `try_to_int8`
-- `try_to_uint`
-- `try_to_uint16`
-- `try_to_uint64`
-- `try_to_uint8`
+- `try_to_double` - Parse `str` as a 64-bit float.
+- `try_to_float` - Parse `str` as a 32-bit float.
+- `try_to_int` - Parse `str` as a signed 32-bit integer.
+- `try_to_int16` - Parse `str` as a signed 16-bit integer.
+- `try_to_int64` - Parse `str` as a signed 64-bit integer.
+- `try_to_int8` - Parse `str` as a signed 8-bit integer.
+- `try_to_uint` - Parse `str` as an unsigned 32-bit integer.
+- `try_to_uint16` - Parse `str` as an unsigned 16-bit integer.
+- `try_to_uint64` - Parse `str` as an unsigned 64-bit integer.
+- `try_to_uint8` - Parse `str` as an unsigned 8-bit integer.
 
 ## temp_strings
 

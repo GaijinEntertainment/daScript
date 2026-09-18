@@ -2713,8 +2713,8 @@ namespace das
     }
 
     bool TypeDecl::isTableKeyType() const {
-        if ( baseType==Type::tDistinct ) {  // nominal opacity: never hashable, by design
-            return false;
+        if ( baseType==Type::tDistinct ) {
+            return firstType && firstType->isTableKeyType();
         } else if ( baseType>=Type::tFloat16 && baseType<=Type::tUByte16 ) {
             // 16/8-bit lattice types are workhorse but not table keys (yet) — the runtime
             // table key machinery (runtime_table.cpp, jit_abi.h, daScriptC.cpp) has no rows

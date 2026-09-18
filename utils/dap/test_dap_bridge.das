@@ -612,6 +612,12 @@ def private auto_port_launch(t : T?; var m : Mcp&; file : string; stepping : boo
     delete_json(disconnected)
     var again = tool(t, m, "debug_disconnect", "\{\}")
     t |> success(again?["already_disconnected"] ?? false, "already disconnected")
+    var exit_polls = 0
+    while ((again?["session"]?["return_code"]).value is _null && exit_polls < 20) {
+        delete_json(again)
+        again = tool(t, m, "debug_disconnect", "\{\}")
+        exit_polls++
+    }
     t |> equal(again?["session"]?["return_code"] ?? -1, 0, "the debuggee ran to its end after the disconnect")
     t |> success(!has_line(again?["session"]?["process_output_tail"], "locked table"), "no locked-table noise")
     delete_json(again)

@@ -512,7 +512,7 @@ def document_module_ast_boost(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Containers", mod, %regex~(emplace_new)%%),
         group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|debug_expression)%%),
-        group_by_regex("Queries", mod, %regex~(is.*|find.*|get.*)%%),
+        group_by_regex("Queries", mod, %regex~(is.*|find.*|get.*|peel_distinct|table_key_storage_base_type)%%),
         group_by_regex("Annotations", mod, %regex~(append.*|add.*)%%),
         group_by_regex("Expression generation", mod, %regex~(override_method|panic_expr_as|make_static_assert_false|convert_to_expression)%%),
         group_by_regex("Visitors", mod, %regex~(visit.*)%%),

@@ -2059,7 +2059,7 @@ namespace das {
                             if (!reportOp2Errors(expr)) {
                                 reportMissing(expr, types, missingMsg, true);
                             }
-                        } else if (cerr != InferCallError::tryOperator) {
+                        } else if (cerr != InferCallError::tryOperator && cerr != InferCallError::operatorOp2Borrow) {
                             reportMissing(expr, types, missingMsg, true);
                         }
                     }
@@ -2071,7 +2071,7 @@ namespace das {
                         if (!reportOp2Errors(expr)) {
                             reportMissing(expr, types, missingMsg, true);
                         }
-                    } else if (cerr != InferCallError::tryOperator) {
+                    } else if (cerr != InferCallError::tryOperator && cerr != InferCallError::operatorOp2Borrow) {
                         reportMissing(expr, types, missingMsg, true);
                     }
                 }
