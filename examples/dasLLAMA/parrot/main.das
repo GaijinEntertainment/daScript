@@ -174,7 +174,7 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
         }
         var inscope m <- load_tts_model(tts_path)
         var inscope c <- caps(m)
-        var ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate, voices := c.voices)
+        var inscope ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate, voices := c.voices)
         answer |> push_archive(ready)
         var running = true
         while (running) {
@@ -201,7 +201,7 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
                         var starting = Answer(kind = 4, text = chunk, gen = a.gen, chunk = i)
                         answer |> push_archive(starting)
                         var inscope s <- synthesize(m, chunk, a.voice)
-                        var clip = Answer(kind = 2, gen = a.gen, chunk = i, pcm := s.pcm, rate = s.sample_rate,
+                        var inscope clip = Answer(kind = 2, gen = a.gen, chunk = i, pcm := s.pcm, rate = s.sample_rate,
                             us_prompt = s.timings.prompt_us, us_backbone = s.timings.backbone_us,
                             us_head = s.timings.head_us, us_codec = s.timings.codec_us, us_total = s.timings.total_us)
                         answer |> push_archive(clip)
