@@ -1276,6 +1276,10 @@ namespace das
         // cache record does not replay (src/ast/ARCHITECTURE.md#module-cache-read); after the
         // das-visible fields, whose offsets a bound annotation reads
         bool registersMacrosAtCompile = false;
+        // a registration into a module that has no macro context yet lands while that module
+        // compiles, from another module's macro context; a module's own init runs in the
+        // context makeMacroModule made for it
+        void noteMacroRegistration () { if ( !macroContext ) registersMacrosAtCompile = true; }
     private:
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;

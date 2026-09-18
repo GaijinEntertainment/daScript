@@ -49,7 +49,8 @@ compiled: an annotation's `apply`, running in another module's macro context, th
 adapters mark such a module (`Module::registersMacrosAtCompile`, set when the target has no
 macro context yet, which is what a module being compiled looks like) and the record header
 carries the mark. A marked record is never served: it reparses in place, the records after it
-still serve, and the cache is not rewritten for it. Serving it would leave any module parsed
+still serve, and the cache is not rewritten for it; a marked record whose length word cannot
+skip it cuts the stream like a changed file. Serving it would leave any module parsed
 from source against it - after a cutoff in the same read, or in a later compile of the same
 process once a `shared` module is promoted - without the registrations, and its call sites
 would fail to resolve.
