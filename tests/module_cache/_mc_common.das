@@ -15,6 +15,25 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
+//! the manifest the running binary's kind writes beside a descriptor: a dynamic-module build and
+//! a static one keep their own (src/ast/ARCHITECTURE.md#module-scan-manifest)
+def manifest_file_name() : string {
+    return das_is_dll_build() ? ".das_module.manifest" : ".das_module.static.manifest"
+}
+
+def twin_manifest_file_name() : string {
+    return das_is_dll_build() ? ".das_module.static.manifest" : ".das_module.manifest"
+}
+
+//! the other binary kind's daslang beside this one - `daslang_static` beside `daslang` and back; "" when absent
+def twin_exe() : string {
+    let exe = das_exe()
+    let dir = dir_name(exe)
+    let ext = get_platform_name() == "windows" ? ".exe" : ""
+    let twin = path_join(dir, (das_is_dll_build() ? "daslang_static" : "daslang") + ext)
+    return stat(twin).is_valid ? twin : ""
+}
+
 //! the child's environment, as a command prefix: the scan trace on, so the trace names each
 //! descriptor's verdict and each shared-module load; the prefix also keeps the command from
 //! opening with a quote, which cmd.exe would strip

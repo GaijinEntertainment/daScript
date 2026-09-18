@@ -35,9 +35,11 @@ modules/**/_build/
 bin/
 # JIT stores dll's here
 .jitted_scripts/
-# the descriptor manifest the module scan writes beside each .das_module (src/ast/ARCHITECTURE.md sec.2)
+# the descriptor manifest the module scan writes beside each .das_module (src/ast/ARCHITECTURE.md sec.2) - one per binary kind
 .das_module.manifest
 .das_module.manifest.tmp
+.das_module.static.manifest
+.das_module.static.manifest.tmp
 # All build libraries stored here
 lib/
 # dasTreeSitter vendors Tree-sitter's source directory named `lib`; it is an

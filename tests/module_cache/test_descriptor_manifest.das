@@ -123,7 +123,7 @@ def make_fixture(tmp : string) : Fixture {
     mkdir_rec(modDir, merr)
     mkdir_rec(dmDir, merr)
     mkdir_rec(brokenDir, merr)
-    let manifest = path_join(modDir, ".das_module.manifest")
+    let manifest = path_join(modDir, manifest_file_name())
     let fx = Fixture(
         tmp = tmp,
         modDir = modDir,
@@ -132,7 +132,7 @@ def make_fixture(tmp : string) : Fixture {
         descriptor = path_join(modDir, ".das_module"),
         manifest = manifest,
         manifestTmp = "{manifest}.tmp",
-        dmManifest = path_join(dmDir, ".das_module.manifest"),
+        dmManifest = path_join(dmDir, manifest_file_name()),
         cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
     )
     fwrite(fx.descriptor, DESCRIPTOR)
@@ -167,7 +167,7 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
         var out : string
         t |> success(run_child_reported(t, "broken", cmd, out, "PROBE 42"), "the other module's require still resolves")
         t |> equal("compiled with errors, no manifest", probe_line(out, "broken_probe"), "the trace names the failure:\n{out}")
-        t |> success(!stat(path_join(fx.brokenDir, ".das_module.manifest")).is_valid, "nothing was written for it")
+        t |> success(!stat(path_join(fx.brokenDir, manifest_file_name())).is_valid, "nothing was written for it")
     }
     t |> run("the second start replays the manifest and never compiles the descriptor") @(t : T?) {
         var out : string
@@ -184,6 +184,35 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
         var again : string
         t |> success(run_child_reported(t, "edited warm", cmd, again, "PROBE 42"), "the rewritten manifest resolves the require")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
+    }
+}
+
+//! the binary kinds keep their manifests apart: the other kind's daslang writes its own file
+//! beside this one's, and each replays its own from its second start on - a CI lane running
+//! both suites at once never sees a `binary kind` recompile
+def arms_binary_kinds(t : T?; fx : Fixture) {
+    let twin = twin_exe()
+    if (empty(twin)) {
+        t |> skip("no {das_is_dll_build() ? "daslang_static" : "daslang"} beside {das_exe()}")
+        return
+    }
+    let twinCmd = "{trace_prefix()}\"{twin}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{fx.tmp}\" \"{path_join(fx.tmp, "use.das")}\""
+    let twinManifest = path_join(fx.modDir, twin_manifest_file_name())
+    t |> run("the other kind's first start writes its own manifest and leaves this kind's alone") @(t : T?) {
+        let before = fread(fx.manifest)
+        var out : string
+        t |> success(run_child_reported(t, "twin cold", twinCmd, out, "PROBE 42"), "the require resolves through the twin's compiled descriptor")
+        t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the twin found no manifest of its kind:\n{out}")
+        t |> success(stat(twinManifest).is_valid, "the twin's manifest sits beside the descriptor under its own name")
+        t |> equal(before, fread(fx.manifest), "this kind's manifest is untouched")
+    }
+    t |> run("each kind replays its own manifest after the other ran") @(t : T?) {
+        var out : string
+        t |> success(run_child_reported(t, "this kind warm", fx.cmd, out, "PROBE 42"), "this kind resolves through its rows")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out), "this kind replays, no binary-kind recompile:\n{out}")
+        var again : string
+        t |> success(run_child_reported(t, "twin warm", twinCmd, again, "PROBE 42"), "the twin resolves through its rows")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the twin replays its own:\n{again}")
     }
 }
 
@@ -311,6 +340,7 @@ def test_descriptor_manifest(t : T?) {
     }
     let fx = make_fixture(tmp)
     arms_record_and_replay(t, fx)
+    arms_binary_kinds(t, fx)
     arms_rejections(t, fx)
     arms_opt_out_and_write_failures(t, fx)
     var err : string

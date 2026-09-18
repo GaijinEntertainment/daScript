@@ -98,8 +98,8 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
     copy_file(artifact, path_join(utDir, base_name(artifact)), true, cerr)
     let fx = Fixture(
         tmp = tmp,
-        manifest = path_join(modDir, ".das_module.manifest"),
-        utManifest = path_join(utDir, ".das_module.manifest"),
+        manifest = path_join(modDir, manifest_file_name()),
+        utManifest = path_join(utDir, manifest_file_name()),
         plain = path_join(tmp, "plain.das"),
         uses = path_join(tmp, "uses.das"),
         exists = path_join(tmp, "exists.das"),
@@ -310,7 +310,7 @@ def arm_fallback(t : T?; fx : Fixture) {
             to_log(LOG_INFO, "test_deferred_modules: the copied imguiApp does not load from {imguiDir} - its libraries sit outside the copy - so the half-warm arm has nothing to observe\n")
             return
         }
-        remove_result(path_join(imguiDir, ".das_module.manifest"))
+        remove_result(path_join(imguiDir, manifest_file_name()))
         var out : string
         t |> success(run_child_reported(t, "half-warm", child_cmd(fx, fx.plain), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")
         if (!copy_loaded(out, imguiDir, "imguiApp")) {

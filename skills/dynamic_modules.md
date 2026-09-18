@@ -133,8 +133,9 @@ require work after `daspkg install` drops the package into a consumer's `modules
 
 The scan runs every descriptor as a daslang program on every start, and that costs more than
 the rest of a small program's startup. So after a descriptor runs, the scan writes what it
-registered to `.das_module.manifest` next to it, and later starts replay those rows without
-compiling the descriptor. The file is keyed by the descriptor's content, the content of every
+registered to `.das_module.manifest` next to it (`.das_module.static.manifest` from a static
+build, so two binary kinds sharing a tree keep their own), and later starts replay those rows
+without compiling the descriptor. The file is keyed by the descriptor's content, the content of every
 module its compile read (`require ./helper` beside it, the daslib it uses) and the four inputs a
 descriptor can read - its folder, the das root, the binary kind and the `--jit-target`
 cross-compile name: edit the descriptor or a module it requires, move the module or the tree,
