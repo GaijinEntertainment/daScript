@@ -2421,9 +2421,9 @@ install(CODE [[
     foreach(_f IN LISTS CMAKE_INSTALL_MANIFEST_FILES)
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
-        if((_name MATCHES "^REVIEW.*\.(md|das)$"
-                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\.md$"
-                OR _name MATCHES "^followup_.*\.md$")
+        if((_name MATCHES "^REVIEW.*\\.(md|das)$"
+                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\\.md$"
+                OR _name MATCHES "^followup_.*\\.md$")
             AND NOT _f_abs STREQUAL _root_common
             AND NOT _f_abs STREQUAL _root_arch_common)
             set(_head "")
