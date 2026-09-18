@@ -69,11 +69,13 @@ daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr
 Pocket TTS English is the cloning model: 137 MB, 19 voices (`alba` the default, `bill_boerst`,
 `caro_davy`, `anna`, `george`, ...), and any voice from a few seconds of 24 kHz audio through
 `tts_register_voice`. It reads text, so it needs neither pack; the English normalizer runs in
-front of it. On the 200-sentence rig at `alba` this file reads WER 3.91 / UTMOS 4.328 at a
-real-time factor of 0.051 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
-0.210 (measured 2026-09-09 with the module's `harness/tts_rig.py`, the engine under the JIT
-tier with the box's tune profile - `DAS_TUNE_POLICY` unset - on the `arm64-gen` kernel backend,
-the reference package under torch on one thread). The five other
+front of it. On the 200-sentence rig at `alba` this file reads WER 4.23 / UTMOS 4.364 at a
+real-time factor of 0.032 on an Apple M5 Max (measured 2026-09-17 with the module's
+`harness/tts_rig.py`, the engine under the JIT tier with the box's tune profile -
+`DAS_TUNE_POLICY` unset - on the `arm64-gen` kernel backend; its earlier form, the codec
+convolutions Q8_0 on int8 activations, read 3.91 / 4.328 on the same box and rig), against the
+reference package's 5.00 / 4.393 / 0.210 on an Apple M1 Max (measured 2026-09-09, the package
+under torch on one thread). The five other
 languages are the same form, one file each with Kyutai's default clip for that language as its
 only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `rafael`, French
 `estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
@@ -81,10 +83,11 @@ exists only as the 24-layer one. A voice cloned from any clip speaks the file's 
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
 `pocket-tts-en-kq.gguf` is the English model in the small form, 78 MB: the backbone and the
 codec transformers as Q4_K, the flow head as Q8_0, the codec convolutions f16, the embedding
-table Q4_K, the encoder and the 19 voices inside (the rig row at `alba` - WER 3.86 / UTMOS 4.295
-at a real-time factor of 0.044, measured 2026-09-10 on the same box, tier, tune profile and
-kernel backend - was taken on the earlier form of this file, its codec convolutions Q8_0 and
-served on int8 activations; the present form awaits its row); it is the file the browser examples on
+table Q4_K, the encoder and the 19 voices inside (the rig row at `alba`: WER 4.09 / UTMOS 4.333
+at a real-time factor of 0.028 on an Apple M5 Max, measured 2026-09-17 with the same rig on the
+`arm64-gen` backend under the `arm-i8mm` tune profile; the earlier form of this file - its codec
+convolutions Q8_0, served on int8 activations - read 3.86 / 4.295 on the same box and rig, the
+served lane's UTMOS now matching the f32 lane's 4.330); it is the file the browser examples on
 dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
 and no codec encoder, 67 MB: it reads text in that voice and cannot clone.
 
