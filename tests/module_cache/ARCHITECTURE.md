@@ -32,6 +32,13 @@ this document states what the folder is and why its tests take the shape they do
   record is skipped and the module reparses in place, the warm read says so and serves the
   rest, and a driver edited after it parses from source against the macro the reparse
   registered - the site the macro rewrites still reads 42.
+- `test_extern_registrar_reparse.das` - a module whose compile registered an extern proxy into
+  `dasbind` (a `late` `[extern]` def, so no library is needed) carries the same mark: the warm
+  read skips its record and reparses it in place without reading the payload, so no cumulative
+  hash warning and no failed read, and the driver still serves.
+- `test_builtin_embedded_not_cached.das` - a builtin module's embedded source (`UnitTest`'s
+  `unit_test.das`) leaves no record in the cache, and a program requiring the module serves
+  clean on the warm run with no cumulative hash warning.
 - `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
 - `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`

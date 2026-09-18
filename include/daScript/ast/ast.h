@@ -1272,14 +1272,15 @@ namespace das
             };
             uint32_t        moduleFlags = 0;
         };
-        // a macro registered into this module while it compiled (an annotation's apply), which a
-        // cache record does not replay (src/ast/ARCHITECTURE.md#module-cache-read); after the
-        // das-visible fields, whose offsets a bound annotation reads
-        bool registersMacrosAtCompile = false;
+        // a registration made while this module compiled that a cache record does not replay - a
+        // macro an annotation's apply added into it, a proxy its extern binder added into dasbind
+        // (src/ast/ARCHITECTURE.md#module-cache-read); after the das-visible fields, whose offsets
+        // a bound annotation reads
+        bool registersAtCompile = false;
         // a registration into a module that has no macro context yet lands while that module
         // compiles, from another module's macro context; a module's own init runs in the
         // context makeMacroModule made for it
-        void noteMacroRegistration () { if ( !macroContext ) registersMacrosAtCompile = true; }
+        void noteRegistrationAtCompile () { if ( !macroContext ) registersAtCompile = true; }
     private:
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;
