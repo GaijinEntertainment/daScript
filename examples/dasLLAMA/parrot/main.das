@@ -561,8 +561,8 @@ def cancel_say() {
     }
     g_says++
     g_say_now |> publish(g_says)
-    g_clips |> clear()
-    g_chunks |> clear()
+    delete g_clips    // clear() would drop the rows and leak every clip's pcm and every chunk's text
+    delete g_chunks
     g_chunks_known = false
     g_out_pcm |> clear()
     g_out_peaks |> clear()
