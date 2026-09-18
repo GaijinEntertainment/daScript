@@ -76,12 +76,12 @@ field reads back zero from a mapped image.
 
 **A diff that moves what a served synthesis computes - a kernel's arithmetic, the lane or the
 kernel a tensor serves from, a weight the converter writes differently - or a change to a
-lexicon, a normalizer rule or a phoneme rule that moves a phoneme of the rig corpus (the corpus-identity cell in `tests/test_tts_g2p.das`
-decides; an unmoved corpus pins the audio bit for bit), ships the WER and UTMOS of
-`harness/tts_rig.py`, before and after, on every model the change reaches, on every weight
-lane that model can take - the unpinned default and each pin - at the rig's voice, in the PR
-body.** A lane's per-frame figures against the f32 oracle say nothing about the speech; only
-the rig does.
+lexicon, a normalizer rule or a phoneme rule that moves a phoneme of the rig corpus (the
+corpus-identity cell in `tests/test_tts_g2p.das` decides; an unmoved corpus pins the audio bit
+for bit), ships the WER and UTMOS of `harness/tts_rig.py`, before and after, on every model the
+change reaches, on every weight lane that model can take - the unpinned default and each pin - at
+the rig's voice, in the PR body.** A lane's per-frame figures against the f32 oracle say nothing
+about the speech; only the rig does.
 
 **A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or

@@ -38,11 +38,15 @@ updates every test under `modules/dasLLAMA/tests/` that matches it, in the same 
 smoke tests match witness lines as substrings, so the words and their order are an interface
 (`ARCHITECTURE.md` sec. 2).
 
-**A diff that adds a model file to a browser example's `models.json`, or changes an entry's
-sha256, names its sha256 and a location that cannot move - a Hugging Face repository, or a repo-relative path in this repository
-under `tree` - never a machine-local path or a branch name - and the PR body states that the sha256 is
-the hash of the file now published at that location.** The deploy fetches by that name and
-refuses a file whose hash moved (`ARCHITECTURE.md` sec. 3.4).
+**A diff that adds an entry to a browser example's `models.json`, or changes an entry's sha256,
+gives that entry a sha256 and a location that cannot move - a Hugging Face repository, or, in
+the file's `tree` list, a repo-relative path to a file this repository itself carries - never a
+machine-local path or a branch name.** The deploy fetches by that location and refuses a file
+whose hash moved (`ARCHITECTURE.md` sec. 3.4).
+
+**A diff that adds an entry to a browser example's `models.json`, or changes an entry's sha256,
+states in the PR body that the sha256 is the hash of the file now published at that entry's
+location.**
 
 **A diff that changes how `library/` emits its standalone C++ context keeps `--disable-module
 dasLLVM` on that command.** The tune framework is a macro module with no AOT form and a
@@ -51,6 +55,6 @@ writes nothing (`ARCHITECTURE.md` sec. 3.8).
 
 **A diff that adds an entry point to `library/dasllama_lib.das` gives it `[export_c]` and a
 result `daslib/c_api_header.das` can spell in C - a scalar, a string, a pointer, an enum, a
-vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.** An `[export_c]`
-whose signature that describer refuses is a hard emit error, not a skipped export
-(`ARCHITECTURE.md` sec. 3.8).
+vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.**
+An `[export_c]` whose signature that describer refuses is a hard emit error, not a skipped
+export (`ARCHITECTURE.md` sec. 3.8).
