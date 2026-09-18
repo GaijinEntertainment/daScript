@@ -423,6 +423,27 @@ endif()
 # Stage example .wasm into site/playground for local-dev preview (gitignored).
 # make_directory _web_ex_out first so copy_directory is a clean no-op when the
 # foreach produced nothing (non-memory64 build).
+if(DEFINED ENV{EMSDK_NODE})
+    set(DAS_WEB_NODE $ENV{EMSDK_NODE})
+elseif(EXISTS "${EMSCRIPTEN_ROOT_PATH}/em-config")
+    execute_process(COMMAND "${EMSCRIPTEN_ROOT_PATH}/em-config" NODE_JS
+        OUTPUT_VARIABLE DAS_WEB_NODE OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+if(NOT DAS_WEB_NODE)
+    find_program(DAS_WEB_NODE NAMES node REQUIRED)
+endif()
+add_custom_target(run_web_tests
+    COMMAND ${DAS_WEB_NODE} --experimental-wasm-exnref test/dastest_wasm.js ../ ${DAS_WEB_OUTPUT_DIR}
+    COMMAND ${DAS_WEB_NODE} --experimental-wasm-exnref ${DAS_WEB_OUTPUT_DIR}/tests/test_vecmath_native.js
+    COMMAND ${DAS_WEB_NODE} --experimental-wasm-exnref ${DAS_WEB_OUTPUT_DIR}/tests/test_vecmath_scalar.js
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Running tests/language and the vecmath battery under node")
+foreach(_t daslang_static test_vecmath_native test_vecmath_scalar)
+    if(TARGET ${_t})
+        add_dependencies(run_web_tests ${_t})
+    endif()
+endforeach()
+
 add_custom_target(stage_site_playground_wasm
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_web_ex_out}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_repo}/site/playground/samples/examples

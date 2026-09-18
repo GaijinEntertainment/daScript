@@ -196,6 +196,7 @@ jobs:
     - name: "Install openssl windows"
       if: runner.os == 'Windows'
       run: |
+        echo "/c/Strawberry/perl/bin" >> $GITHUB_PATH
         if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
             git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
         fi
@@ -302,49 +303,13 @@ jobs:
     - name: "Build: Daslang"
       run: |
         set -eux
-        mkdir build
-        case "${{ matrix.build_system }}" in
-          cmake)
-            case "${{ matrix.target }}${{ matrix.architecture }}" in
-              linux64)
-                CC=${{ matrix.fast_math == 'ON' && 'gcc' || 'clang' }} CXX=${{ matrix.fast_math == 'ON' && 'g++' || 'clang++' }} cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
-                        -DDAS_FAST_MATH=${{ matrix.fast_math || 'OFF' }}
-                cd build
-                ninja
-                ;;
-              windows32)
-                export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                # Launcher passed as -D here (not env) so it scopes to daslang's
-                # own targets and does NOT leak into the GLFW/libhv sub-builds.
-                # daslang's MSVC debug info is /Z7 (CMakeCommon.txt) so sccache
-                # can cache it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
-                ;;
-              windows64)
-                export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-                # Launcher passed as -D here (not env) so it scopes to daslang's
-                # own targets and does NOT leak into the GLFW/libhv sub-builds.
-                # daslang's MSVC debug info is /Z7 (CMakeCommon.txt) so sccache
-                # can cache it.
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
-                ;;
-              linux_arm*)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G \
-                        "${{ matrix.cmake_generator }}"
-                cd build
-                ninja
-                ;;
-              *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
-                cd build
-                ninja
-                ;;
-            esac
-            ;;
-        esac
+        cmake --no-warn-unused-cli -B build -G "${{ matrix.cmake_generator }}" \
+          -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
+          -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+          -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} \
+          -DDAS_FAST_MATH=${{ matrix.fast_math }} \
+          ${{ matrix.cmake_extra }}
+        cmake --build build --config ${{ matrix.cmake_preset }} --parallel
 
     # A nightly-only cell saves no slot: nothing restores it (the cron does not
     # restore, and no PR lane runs the cell), so the tarball would only hold quota.
@@ -369,55 +334,10 @@ jobs:
     - name: "Test"
       run: |
         set -eux
-        case "${{ matrix.target }}${{ matrix.architecture }}" in
-           linux64)
-            # Debug preset skips JIT — Debug+JIT is slow and, on LLVM ARM64, hangs
-            # mid-suite (see linux_arm64 note below); sanitizer cells are Release, so
-            # they still run it. Primary sweep is isolated-parallel (batch 4, mints
-            # the dll cache itself); retry is batch-1 full isolation.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
-            # Interpreter sweep: non-sanitizer only.
-            if [ "${{ matrix.sanitizers }}" = "none" ]; then
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
-            fi
-            ;;
-           windows32)
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
-            ;;
-           windows*)
-            # Debug preset skips JIT (Debug+JIT is slow; ARM64 hang note above) in addition to the jit_disabled cells.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.jit_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
-            ;;
-           linux_arm64)
-            # Skip JIT tests on the Debug cmake preset — LLVM ARM64 SelectionDAG
-            # hangs reproducibly mid-suite under Debug (different test each run,
-            # ~20 min in). Tracked separately. Release of the same matrix still
-            # runs JIT — keep --failures-only off there so PASS lines print and
-            # name the test running just before the hang if it reoccurs (see
-            # RC2 release run #25572466058).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
-            ;;
-           *)
-            # Debug preset skips JIT (Debug+JIT is slow; ARM64 hang note above).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_jit_isolated
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
-            ;;
-        esac
-    - name: "Small C++ Tests"
-      run: |
-        set -eux
-        export LSAN_OPTIONS="suppressions=$(pwd)/.github/lsan_suppressions.txt"
-        cd build
-        case "${{ matrix.target }}${{ matrix.architecture }}" in
-           windows*)
-            ctest --build-config "${{ matrix.cmake_preset }}" -L small --output-on-failure
-            ;;
-           *)
-            ctest -L small --output-on-failure
-            ;;
-        esac
+        cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_sweeps \
+          || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_sweeps_isolated
+        cmake --build ./build --config ${{ matrix.cmake_preset }} --target test-small
+
     - name: "Slow Release Tests"
       # Full AOT suite: builds the full test_aot (EXCLUDE_FROM_ALL, ~1080 AOT
       # TUs — the single biggest CI cost) via the run_tests_aot dependency and
@@ -430,45 +350,14 @@ jobs:
       # context. memory_model_4gb allocates a real 4 GB chunk and stays
       # local-only.
       if: matrix.cmake_preset == 'Release' && needs.pre_job.outputs.nightly == 'true'
-      run: |
-        set -eux
-        case "${{ matrix.target }}${{ matrix.architecture }}" in
-           windows32)
-            echo "Skipping AOT tests on 32-bit Windows"
-            ;;
-           windows*)
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
-            ;;
-           *)
-            # Same suppressions as the "Test" step — sanitizer matrix entries
-            # need them here too.
-            export LSAN_OPTIONS="suppressions=$(pwd)/.github/lsan_suppressions.txt"
-            export TSAN_OPTIONS="suppressions=$(pwd)/.github/tsan_suppressions.txt"
-            export UBSAN_OPTIONS="print_stacktrace=1"
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
-            ;;
-        esac
-        ctest --test-dir build --build-config ${{ matrix.cmake_preset }} -L big -E memory_model_4gb --output-on-failure
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_slow
     - name: "Nightly Backend Sweeps"
       # The three rails the per-PR lanes never walk, over test_aot's own corpus:
       # LLVM-AOT objects, and both standalone tiers - -ctx emits C++ a host
       # compiles, -lib emits a native library dasbind loads back. Same nightly
       # gate as the step above; 32-bit Windows has no AOT rail to sweep.
       if: matrix.cmake_preset == 'Release' && needs.pre_job.outputs.nightly == 'true'
-      run: |
-        set -eux
-        case "${{ matrix.target }}${{ matrix.architecture }}" in
-           windows32)
-            echo "Skipping backend sweeps on 32-bit Windows"
-            ;;
-           *)
-            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_standalone_sweep_aot
-            if [ "${{ env.das_llvm_disabled }}" != "ON" ] && [ "${{ matrix.jit_disabled }}" != "ON" ]; then
-              cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_llvm_aot
-              cmake --build ./build --config ${{ matrix.cmake_preset }} --target standalone_sweep_jit
-            fi
-            ;;
-        esac
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_backend_sweeps
 
   ###########################################################
   build_windows_relwithdebinfo_nightly:
@@ -571,7 +460,7 @@ jobs:
       run: cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter
 
     - name: "Small C++ Tests"
-      run: ctest --test-dir build --build-config RelWithDebInfo -L small --output-on-failure
+      run: cmake --build ./build --config RelWithDebInfo --target test-small
 
   ###########################################################
   build_windows_release_llvm_nightly:
@@ -663,7 +552,7 @@ jobs:
         cmake --build ./build --config Release --target run_tests_interpreter || cmake --build ./build --config Release --target run_tests_interpreter_isolated
 
     - name: "Small C++ Tests"
-      run: ctest --test-dir build --build-config Release -L small --output-on-failure
+      run: cmake --build ./build --config Release --target test-small
 
   ###########################################################
   bundle_smoke:
@@ -755,14 +644,8 @@ jobs:
         path: ${{ runner.temp }}/sccache
         key: sccache-bundle-linux-64-Release
 
-    - name: "Install bundle"
-      run: |
-        set -eux
-        mkdir daslang_bundle
-        cmake --install ./build --prefix ./daslang_bundle --config Release --strip
-
-    - name: "Smoke-test installed bundle"
-      run: bash ci/smoke_test_bundle.sh ./daslang_bundle
+    - name: "Install and smoke-test the bundle"
+      run: cmake --build ./build --config Release --target check_bundle_smoke
 
   ###########################################################
   build_windows_mingw:
@@ -878,10 +761,7 @@ jobs:
           || cmake --build ./build-mingw --config Release --target run_tests_jit_isolated
 
     - name: "Small C++ Tests"
-      run: |
-        set -eux
-        cd build-mingw
-        ctest -L small --output-on-failure
+      run: cmake --build ./build-mingw --config Release --target test-small
 
     - name: "Slow Release Tests (AOT)"
       run: |
@@ -901,18 +781,15 @@ jobs:
     # follow-up; we lose master's previous bind_llvm.das CI coverage in
     # the meantime.
     - name: "Run self-binder (bind_clangbind.das)"
-      run: |
-        set -eux
-        CLANG_INCLUDE="$(cygpath -w "${MSYSTEM_PREFIX}/include")"
-        ./bin/daslang.exe modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
-        git diff --exit-code -- modules/dasClangBind/src/ \
-          || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
+      env:
+        DAS_CLANG_INCLUDE: ${{ env.MSYSTEM_PREFIX }}/include
+      run: cmake --build ./build-mingw --config Release --target check_clangbind_fresh
 
     - name: "Run cbind const-gen regression test"
       # Exercises collectActiveDefines (preprocessor-active constant generation);
       # main returns non-zero on failure. Lives on the mingw worker because that
       # is where libclang/cbind is available (same reason as the self-binder).
-      run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
+      run: cmake --build ./build-mingw --config Release --target run_tests_cbind_const_preproc
 
     # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
     # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
@@ -1026,8 +903,7 @@ jobs:
     - name: "Small C++ tests"
       shell: pwsh
       run: |
-        cd build-clangcl
-        ctest -L small --output-on-failure
+        cmake --build build-clangcl --target test-small
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
   build_linux_gcc:

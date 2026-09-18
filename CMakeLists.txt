@@ -98,6 +98,7 @@ IF(WIN32)
 ENDIF()
 
 INCLUDE(./CMakeCommon.txt)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/das_lane.cmake)
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${DAS_CONFIG_INCLUDE_DIR})
@@ -2250,6 +2251,14 @@ add_subdirectory(tests)
 # Documentation targets (check_docs_generated, build_doc, das_documentation).
 add_subdirectory(doc)
 
+add_subdirectory(examples/games)
+
+add_subdirectory(benchmarks)
+
+add_subdirectory(site-dasllama)
+
+add_subdirectory(ci)
+
 # macOS: ad-hoc code sign all installed binaries and shared libraries.
 # This prevents Gatekeeper from quarantining downloaded SDK artifacts
 # ("cannot be opened because the developer cannot be verified").
@@ -2337,6 +2346,15 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         RUNTIME DESTINATION tree-sitter-daslang
         LIBRARY DESTINATION tree-sitter-daslang
     )
+
+    # The ast-grep tools need this library and the sgconfig.yml its POST_BUILD stamps. The
+    # consumers live in utils/, which is processed long before this block, so the edge is
+    # added here where both targets exist.
+    foreach(_t run_tests_mcp_tools run_utils_tests)
+        if(TARGET ${_t})
+            add_dependencies(${_t} tree_sitter_daslang)
+        endif()
+    endforeach()
     install(FILES
         tree-sitter-daslang/src/node-types.json
         tree-sitter-daslang/grammar.js

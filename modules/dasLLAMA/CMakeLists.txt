@@ -61,3 +61,39 @@ IF(NOT DAS_LLAMA_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/LICENSE.CC-BY-4.0 DESTINATION ${DAS_INSTALL_DOCDIR} RENAME CC-BY-4.0.LICENSE)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/THIRD_PARTY_NOTICES.md DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DASLLAMA_THIRD_PARTY_NOTICES.md)
 ENDIF()
+
+if(NOT DAS_TOOLS_DISABLED)
+    add_custom_target(check_model_mint
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} examples/dasLLAMA/wasm/test_mint_models.py
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} modules/dasLLAMA/harness/test_convert_pocket.py
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Testing the browser model-set mint and the Pocket converter predicates"
+    )
+endif()
+
+if(NOT DAS_TOOLS_DISABLED)
+    das_lane_dastest_target(run_tests_dasllama_server COMMENT "Testing dasllama-server"
+        COMPILE_ONLY_FILES
+            utils/dasllama-server/test_openai_server.das
+            utils/dasllama-server/test_openai_server_think.das
+            utils/dasllama-server/test_openai_server_stream.das
+            utils/dasllama-server/test_openai_server_vision.das
+            utils/dasllama-server/test_openai_server_audio.das
+            utils/dasllama-server/test_openai_server_speech.das
+        FILES
+            utils/dasllama-server/test_exchange_client.das
+            utils/dasllama-server/test_model_catalog.das
+            utils/dasllama-server/test_setup_mode.das
+            utils/dasllama-server/test_model_override.das
+        JIT_FILES utils/dasllama-server/test_worker_dispatch.das)
+    
+    das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"
+        FILES modules/dasLLAMA/tests/test_env_registry.das)
+    
+    das_lane_dastest_target(run_tests_dasllama_facade_lint COMMENT "Testing the dasllama facade lint"
+        JIT_FILES
+            modules/dasLLAMA/tests/failed_dasllama_lint_require.das
+            modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
+            modules/dasLLAMA/tests/test_dasllama_lint_escape.das
+            modules/dasLLAMA/tests/test_dasllama_lint_contracts.das)
+endif()

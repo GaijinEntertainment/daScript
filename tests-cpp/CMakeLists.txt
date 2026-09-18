@@ -61,14 +61,16 @@ doctest_discover_tests(tests-cpp-small
 # `ninja test` (or `ctest`) runs everything by default. These two run subsets.
 # --build-config $<CONFIG> is required for multi-config generators (MSVC, Xcode);
 # single-config generators ignore the flag harmlessly.
+set(_lane_lsan "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/lsan_suppressions.txt")
+
 add_custom_target(test-small
-    COMMAND ${CMAKE_CTEST_COMMAND} --build-config $<CONFIG> -L small --output-on-failure
-    DEPENDS tests-cpp-small
-    USES_TERMINAL)
+    COMMAND ${CMAKE_COMMAND} -E env ${_lane_lsan} ${CMAKE_CTEST_COMMAND} --build-config $<CONFIG> -L small --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    DEPENDS tests-cpp-small)
 
 add_custom_target(test-big
-    COMMAND ${CMAKE_CTEST_COMMAND} --build-config $<CONFIG> -L big --output-on-failure
-    USES_TERMINAL)
+    COMMAND ${CMAKE_COMMAND} -E env ${_lane_lsan} ${CMAKE_CTEST_COMMAND} --build-config $<CONFIG> -L big -E memory_model_4gb --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # ── Big tests: each big/<name>/CMakeLists.txt is auto-picked-up ─────────────
 # Glob `big/*/CMakeLists.txt` (not directories) so adding a CMakeLists to a

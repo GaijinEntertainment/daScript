@@ -77,11 +77,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DDAS_BUILD_CPP_MCP=ON $MODULES_OFF $LEAN
           cmake --build build --target cpp-mcp --parallel
 
-      - name: Assemble bundle
-        run: bash ci/make_cpp_mcp_bundle.sh dist/cpp-mcp
-
-      - name: Smoke-test bundle
-        run: bash ci/smoke_test_cpp_mcp.sh dist/cpp-mcp
+      - name: Assemble and smoke-test bundle
+        run: cmake --build build --target check_cpp_mcp_bundle
 
       - name: Package (zip)
         if: runner.os == 'Windows'

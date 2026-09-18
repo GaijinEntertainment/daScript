@@ -24,6 +24,7 @@ def private workflows_text() : string {
         return if (!(name |> ends_with(".yml")))
         all |> push(read_text(path_join(".github/workflows", name)))
     }
+    all |> push(read_text("ci/CMakeLists.txt"))
     return join(all, "\n")
 }
 
@@ -32,7 +33,7 @@ def private check_tests_wired(workflows : string) {
     dir("ci") $(name) {
         return if (!(name |> starts_with("test_")) || !(name |> ends_with(".py")))
         if (find(workflows, "ci/{name}") < 0) {
-            gate_finding("ci/{name}", "no .github/workflows step names ci/{name} - a test no CI row runs never runs again; add the step (extended_checks.yml's core role carries the python gates)")
+            gate_finding("ci/{name}", "neither a .github/workflows step nor a ci/CMakeLists.txt target names ci/{name} - a test no CI row runs never runs again; add the target (extended_checks.yml's core role carries the python gates)")
         }
     }
 }

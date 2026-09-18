@@ -62,30 +62,7 @@ jobs:
           -G Ninja
         cmake --build ./build --target daslang
 
-    - name: "Run das2rst"
-      run: cmake --build ./build --target check_docs_generated
-
-    - name: "Run imgui2rst"
-      # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
-      # from its own generator — the imgui modules carry macro-generated
-      # surfaces das2rst's reflection pass can't group.
-      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
-
-    - name: "Run vulkan2rst"
-      # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
-      # from its own generator — it introspects the loaded boost modules via RTTI
-      # and never creates a Vulkan instance, so this needs no GPU and no lavapipe.
-      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
-
-    - name: "Stage tutorial recordings (docs-assets release)"
-      # The `.. video::` directive fails the -W sphinx build on any recording
-      # missing from _static/tutorials/, so staging must precede build_doc.
+    - name: "Doc lane"
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: bash utils/internal/docs-assets/fetch.sh
-
-    - name: "Check generated docs are fresh"
-      run: cmake --build ./build --target check_docs_fresh
-
-    - name: "Build documentation (HTML)"
-      run: cmake --build ./build --target build_doc
+      run: cmake --build ./build --target run_doc

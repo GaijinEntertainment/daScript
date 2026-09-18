@@ -80,7 +80,6 @@ add_custom_target(run_standalone_sweep_aot
     DEPENDS standalone_sweep_aot
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Standalone sweep (C++): launching every context"
-    USES_TERMINAL
 )
 
 ### JIT tier
@@ -92,7 +91,6 @@ if(NOT DAS_LLVM_DISABLED)
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Standalone sweep (JIT -lib): every file as a C-ABI library, loaded back"
-        USES_TERMINAL
         VERBATIM
     )
 endif()

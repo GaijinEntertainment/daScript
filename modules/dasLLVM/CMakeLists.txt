@@ -171,3 +171,11 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit_function.das FALSE)
 
 ENDIF()
+
+if(NOT DAS_TOOLS_DISABLED)
+    das_lane_dastest_target(run_tests_llvm_vector_math COMMENT "Testing the dasLLVM inline-polynomial rail"
+        JIT_FILES modules/dasLLVM/tests/llvm_vector_math.das)
+    
+    das_lane_dastest_target(run_tests_llvm_env_registry COMMENT "Testing the dasLLVM env-knob registry"
+        FILES modules/dasLLVM/tests/llvm_env_registry.das)
+endif()

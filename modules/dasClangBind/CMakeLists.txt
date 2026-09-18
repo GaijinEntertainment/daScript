@@ -147,3 +147,40 @@ ENDIF()
 	SETUP_CPP11(libDasModuleClangBind)
 	SETUP_CPP11(dasModuleClangBind)
 ENDIF()
+
+IF(DAS_CLANG_BIND_INCLUDED AND NOT DAS_TOOLS_DISABLED)
+    set(_cbind_script ${CMAKE_CURRENT_BINARY_DIR}/check_clangbind_fresh.cmake)
+    file(WRITE ${_cbind_script} [==[
+if(NOT CLANG_INCLUDE)
+    set(CLANG_INCLUDE "$ENV{DAS_CLANG_INCLUDE}")
+endif()
+if(NOT CLANG_INCLUDE)
+    message(FATAL_ERROR "CLANG_INCLUDE (or env DAS_CLANG_INCLUDE) names the libclang include dir")
+endif()
+execute_process(
+    COMMAND "${DASLANG}" modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
+    WORKING_DIRECTORY "${DAS_ROOT}" RESULT_VARIABLE _rc)
+if(NOT _rc EQUAL 0)
+    message(FATAL_ERROR "bind_clangbind.das failed (${_rc})")
+endif()
+execute_process(
+    COMMAND git diff --exit-code -- modules/dasClangBind/src/
+    WORKING_DIRECTORY "${DAS_ROOT}" RESULT_VARIABLE _rc)
+if(NOT _rc EQUAL 0)
+    message(FATAL_ERROR "dasClangBind generated files are out of date. Run the self-binder locally and commit the result.")
+endif()
+]==])
+
+    add_custom_target(check_clangbind_fresh
+        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang> -P ${_cbind_script}
+        DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Checking the dasClangBind self-binder output is committed (env DAS_CLANG_INCLUDE)"
+    )
+    add_custom_target(run_tests_cbind_const_preproc
+        COMMAND $<TARGET_FILE:daslang> modules/dasClangBind/tests/test_const_preproc.das
+        DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Running the cbind const-gen regression test"
+    )
+ENDIF()
