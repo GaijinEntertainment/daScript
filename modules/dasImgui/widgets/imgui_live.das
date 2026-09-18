@@ -23,6 +23,7 @@ require strings
 require imgui/imgui_boost_runtime
 require imgui/imgui_live_core public
 require imgui/imgui_theme_daslang
+require imgui/imgui_touch public
 require opengl/opengl_imgui_driver public
 
 let private STORE_KEY = "__imgui_ctx"
@@ -43,6 +44,7 @@ var public live_imgui_content_scale : float = 1.0f
 // widgets/imgui_harness.das:86-101 (ensure_parsed for --headless family).
 var private g_scale_parsed   : bool  = false
 var private g_scale_override : float = 0.0f
+var private g_touch_forced   : bool  = false
 
 def private ensure_scale_parsed() {
     return if (g_scale_parsed)
@@ -50,19 +52,28 @@ def private ensure_scale_parsed() {
     let args <- get_user_args()
     let raw = find_flag_raw_value(args, "--imgui-content-scale")
     g_scale_override = to_float(raw |> unwrap_or("0"))
+    g_touch_forced = (find_bool_flag_raw_value(args, "--imgui-touch") |> unwrap_or("false")) == "true"
 }
 
+def public live_imgui_touch_forced() : bool {
+    //! ``--imgui-touch`` after the daslang ``--``: the touch arm on any host, windowed or headless.
+    ensure_scale_parsed()
+    return g_touch_forced
+}
+
+[arch(at="../ARCHITECTURE.md#touch")]
 def public live_imgui_init(window : GLFWwindow?) : ImGuiContext? {
     //! Idempotent ImGui context create + backend init; reload-safe (reuses preserved ctx). Content scale:
-    //! ``--imgui-content-scale`` override else ``glfwGetWindowContentScale``; bakes JetBrains Mono at ``14*scale`` px.
-    //! Auto path divides out the GL fb/window ratio so retina isn't double-scaled (no-op on Windows DPI / override). Call from ``init()``.
+    //! ``--imgui-content-scale`` override else ``glfwGetWindowContentScale`` (the auto path divides out the GL
+    //! fb/window ratio, so retina isn't double-scaled); bakes JetBrains Mono at ``14*scale`` px, ``17*scale`` on touch. Call from ``init()``.
+    ensure_scale_parsed()
+    imgui_touch_device = g_touch_forced || glfw_is_touch_device()     // before the reload return: the global does not ride the live store
     if (live_imgui_ctx != null) {
         SetCurrentContext(live_imgui_ctx)
         return live_imgui_ctx
     }
     live_imgui_ctx = CreateContext(null)
-    ensure_scale_parsed()
-    // The font atlas always bakes at 14 * content_scale px (crisp); layout_scale
+    // The font atlas bakes at body_font_px() * content_scale (crisp); layout_scale
     // drives ScaleAllSizes and font_global drives io.FontGlobalScale, together
     // bringing the *displayed* size back to the intended physical size.
     var layout_scale = live_imgui_content_scale
@@ -95,9 +106,12 @@ def public live_imgui_init(window : GLFWwindow?) : ImGuiContext? {
         layout_scale = max(live_imgui_content_scale / fb_ratio, 1.0f)
         font_global = 1.0f / fb_ratio
     }
-    load_daslang_font(14.0f * live_imgui_content_scale)
+    load_daslang_font(body_font_px() * live_imgui_content_scale)
     apply_daslang_theme()
     ScaleAllSizes(GetStyle(), layout_scale)
+    if (imgui_touch_device) {
+        apply_touch_style(layout_scale)
+    }
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = font_global
     ImGui_ImplGlfw_InitForOpenGL(window, true)

@@ -4,6 +4,7 @@ options gc
 
 require glfw/glfw_boost
 require live/glfw_live
+require live/glfw_touch_pad
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
@@ -610,10 +611,14 @@ def maybe_start_player_slide(remain : float) {
 def draw_hud() {
     let cx = display_w / 2
     let cy = display_h / 2
+    if (pad_wants_rotate()) {
+        draw_text_centered(pad_rotate_caption(), cx, int(pad_rotate_text_y(float(display_h))), float3(1.0, 0.75, 0.2))
+        return
+    }
     if (game_state == GameState.menu) {
         draw_text_centered("BOULDER DASH", cx, cy - 70, float3(1.0, 0.75, 0.2))
-        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, pulse_tint(float3(0.7)))
-        draw_text_centered("ARROWS MOVE   Z/CTRL GRAB", cx, cy + 50, float3(0.55))
+        draw_text_centered(pad_prompt("START"), cx, cy + 10, pulse_tint(float3(0.7)))
+        draw_text_centered(pad_enabled() ? "PAD MOVES   BUTTON GRABS" : "ARROWS MOVE   Z/CTRL GRAB", cx, cy + 50, float3(0.55))
         return
     }
     draw_text("SCORE {score}", 10, 32, float3(1.0))
@@ -630,13 +635,13 @@ def draw_hud() {
     }
     if (game_state == GameState.paused) {
         draw_text_centered("PAUSED", cx, cy - 10, float3(0.85))
-        draw_text_centered("ESC TO RESUME", cx, cy + 30, pulse_tint(float3(0.5)))
+        draw_text_centered(pad_prompt("RESUME", "ESC"), cx, cy + 30, pulse_tint(float3(0.5)))
     } elif (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.25, 0.2))
-        draw_text_centered("PRESS SPACE", cx, cy + 25, pulse_tint(float3(0.7)))
+        draw_text_centered(pad_prompt("RESTART"), cx, cy + 25, pulse_tint(float3(0.7)))
     } elif (game_state == GameState.cave_cleared) {
         draw_text_centered("CAVE CLEARED", cx, cy - 20, float3(0.3, 1.0, 0.4))
-        draw_text_centered("PRESS SPACE", cx, cy + 25, pulse_tint(float3(0.7)))
+        draw_text_centered(pad_prompt("CONTINUE"), cx, cy + 25, pulse_tint(float3(0.7)))
     } elif (game_state == GameState.dead) {
         draw_text_centered("CRUSHED", cx, cy - 10, float3(1.0, 0.4, 0.2))
     }
@@ -855,6 +860,7 @@ def setup_camera() {
 [export]
 def init() {
     live_create_window("Boulder Dash", 1280, 720)
+    pad_prefer_landscape()
     create_gl_objects()
     asch = audio_live_system()
     if (!audio_initialized) {
@@ -890,12 +896,27 @@ def init() {
     }
 }
 
+def declare_touch_pad() {
+    return if (!pad_enabled())
+    if (game_state == GameState.playing) {
+        pad_button(0.94, 0.10, 0.055, GLFW_KEY_ESCAPE)
+        pad_dpad(0.15, 0.72, 0.16, GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_UP, GLFW_KEY_DOWN)
+        pad_button(0.86, 0.74, 0.09, GLFW_KEY_Z)
+    } elif (game_state == GameState.paused) {
+        pad_tap(GLFW_KEY_ESCAPE)
+    } elif (game_state != GameState.dead) {
+        pad_tap(GLFW_KEY_SPACE)
+    }
+}
+
 [export]
 def update() {
     if (!live_begin_frame()) {
         return
     }
     live_get_framebuffer_size(display_w, display_h)
+    pad_begin_frame()
+    declare_touch_pad()
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.03, 0.03, 0.05, 1.0)
     glClearDepthf(1.0)
@@ -941,6 +962,7 @@ def update() {
     draw_player_slide()
     glDisable(GL_CULL_FACE)
     draw_hud()
+    pad_end_frame()
     live_end_frame()
 }
 

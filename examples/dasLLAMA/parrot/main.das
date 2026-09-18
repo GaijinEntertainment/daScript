@@ -6,6 +6,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dasllama/dasllama   // the facade: the TTS model, its caps, the clone verb, the chunker, the synthesis, and Silero
 require take                // the pure side: the take's numbers, the waveform columns, the chunk ledger
 require imgui/imgui_harness // the window, the frame, the boost widgets and the draw list
+require imgui/imgui_touch   // whether a finger, not a keyboard, is at the controls
 require imgui/imgui_table_builtin
 require daslib/jobque_boost
 require daslib/strings_boost
@@ -845,19 +846,22 @@ def draw_text_panel() {
     let editor_h = max(100.0, avail.y * 0.6)
     input_text_multiline(SCRIPT, (text = "##script", size = float2(avail.x, editor_h), flags = ImGuiInputTextFlags.AllowTabInput))
     let who = chosen_voice()
-    if (icon_button(SAY_BTN, (glyph = "play", tip = empty(who) ? "say" : "say as {who}", size = 26.0))) {
+    let icon = imgui_touch_device ? 44.0 : 26.0
+    if (icon_button(SAY_BTN, (glyph = "play", tip = empty(who) ? "say" : "say as {who}", size = icon))) {
         say_text()
     }
     same_line((spacing = 6.0))
-    if (icon_button(STOP_BTN, (glyph = "stop", tip = "stop the say", size = 26.0))) {
+    if (icon_button(STOP_BTN, (glyph = "stop", tip = "stop the say", size = icon))) {
         cancel_say()
         g_status = "stopped"
     }
     same_line((spacing = 12.0))
     text(SAY_LABEL, (text = empty(who) ? "say" : "say as {who}"))
-    same_line((spacing = 18.0))
-    with_style((ImGuiCol.Text, DIM)) {
-        text("Ctrl or Cmd + Enter says   Ctrl or Cmd + R records and stops")
+    if (!imgui_touch_device) {
+        same_line((spacing = 18.0))
+        with_style((ImGuiCol.Text, DIM)) {
+            text("Ctrl or Cmd + Enter says   Ctrl or Cmd + R records and stops")
+        }
     }
     text(VIEW_LABEL, (text = empty(g_chunks) ? "the say, chunk by chunk - nothing said yet" : "the say, chunk by chunk"))
     child(SCRIPT_VIEW, (text = "script", size = float2(0.0, 0.0), child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
@@ -959,8 +963,23 @@ def draw_lab_panel() {
     }
 }
 
+[arch(at = "../ARCHITECTURE.md#parrot-panels")]
+def setup_narrow_dock_layout(dock_id, status_id, rest_id : uint) {
+    var voice_id : uint = 0u
+    var text_id : uint = 0u
+    DockBuilderSplitNode(rest_id, ImGuiDir.Up, 0.48, voice_id, text_id)
+    DockBuilderDockWindow("parrot", status_id)
+    DockBuilderDockWindow("lab", voice_id)
+    DockBuilderDockWindow("voice", voice_id)
+    DockBuilderDockWindow("output", text_id)
+    DockBuilderDockWindow("text", text_id)
+    DockBuilderFinish(dock_id)
+}
+
 //! the first layout of the dock: the status strip across the top, the voice left, the lab right,
 //! the text over the output in the middle; the user drags the splits and the tabs from there
+var g_front_tab_frames = 0      //! frames left of pulling the column layout's front tabs forward - a node opens on its first tab bar's own pick
+
 def setup_dock_layout(dock_id : uint) {
     DockBuilderRemoveNode(dock_id)
     DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
@@ -968,7 +987,13 @@ def setup_dock_layout(dock_id : uint) {
     DockBuilderSetNodeSize(dock_id, ImVec2(vp.Size.x, vp.Size.y))
     var status_id : uint = 0u
     var rest_id : uint = 0u
-    DockBuilderSplitNode(dock_id, ImGuiDir.Up, 0.12, status_id, rest_id)
+    let narrow = vp.Size.x < 760.0 || vp.Size.x < vp.Size.y
+    DockBuilderSplitNode(dock_id, ImGuiDir.Up, narrow ? 0.24 : 0.12, status_id, rest_id)
+    if (narrow) {
+        setup_narrow_dock_layout(dock_id, status_id, rest_id)
+        g_front_tab_frames = 2      // the windows exist only once this frame submits them
+        return
+    }
     var voice_id : uint = 0u
     var mid_id : uint = 0u
     DockBuilderSplitNode(rest_id, ImGuiDir.Left, 0.26, voice_id, mid_id)
@@ -986,6 +1011,7 @@ def setup_dock_layout(dock_id : uint) {
     DockBuilderFinish(dock_id)
 }
 
+[arch(at = "../ARCHITECTURE.md#parrot-panels")]
 def draw_screen() {
     dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.None)) {
         if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
@@ -995,17 +1021,21 @@ def draw_screen() {
         dock_window(STATUS_WIN, (text = "parrot", closable = false, flags = ImGuiWindowFlags.NoScrollbar)) {
             draw_status_bar()
         }
+        dock_window(LAB_WIN, (text = "lab", closable = false, flags = ImGuiWindowFlags.None)) {
+            draw_lab_panel()
+        }
         dock_window(VOICE_WIN, (text = "voice", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_voice_panel()
-        }
-        dock_window(TEXT_WIN, (text = "text", closable = false, flags = ImGuiWindowFlags.None)) {
-            draw_text_panel()
         }
         dock_window(OUTPUT_WIN, (text = "output", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_output_panel()
         }
-        dock_window(LAB_WIN, (text = "lab", closable = false, flags = ImGuiWindowFlags.None)) {
-            draw_lab_panel()
+        dock_window(TEXT_WIN, (text = "text", closable = false, flags = ImGuiWindowFlags.None)) {
+            draw_text_panel()
+        }
+        if (g_front_tab_frames > 0) {           // one node a frame: a second focus in the same frame drops the first node's pick
+            SetWindowFocus(g_front_tab_frames == 2 ? "text" : "voice")
+            g_front_tab_frames--
         }
     }
 }

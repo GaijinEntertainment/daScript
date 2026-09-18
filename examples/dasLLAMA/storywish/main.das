@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama   // the facade: model, session, eval / sample / piece, the TTS entry points
@@ -8,22 +9,18 @@ require daslib/strings_boost
 require daslib/clargs
 require daslib/fio
 require daslib/archive
-require glfw/glfw_boost
-require live/glfw_live
-require opengl/opengl_boost
-require opengl/opengl_cache
-require opengl/opengl_ttf
+require imgui/imgui_harness // the window, the frame, the boost widgets
+require imgui/imgui_touch   // whether a finger, not a keyboard, is doing the asking
 require audio/audio_boost
 require live_host
 require math
-require daslib/math_boost   // ortho_rh / compose for the text layer
 require strings
 require wish                // the request side: typed line -> words -> prompt, and the field-line stop
 
 // Storywish. You type the words you wish for - "dragon, cake, moon" - and Enter asks a story
 // model trained to take requests (tinystories-instruct-27M, a llama trained on the
 // TinyStoriesInstruct corpus) for a children's story that uses them; it writes on screen a few
-// tokens per frame while Pocket TTS reads each finished sentence aloud. Tab asks for dialogue in
+// tokens per frame while Pocket TTS reads each finished sentence aloud. A checkbox asks for dialogue in
 // the story. Enter while a story is being told stops it and tells the next one; the sentences of
 // the old story still queued for speech are skipped. Escape quits.
 //
@@ -57,7 +54,7 @@ struct WishArgs {
     @clarg_doc = "The words the first story must use, comma-separated - the line you would have typed"
     words : string = "dragon, cake, moon"
 
-    @clarg_doc = "Ask for dialogue in the story from the start (Tab toggles it)"
+    @clarg_doc = "Ask for dialogue in the story from the start (the checkbox toggles it)"
     dialogue : bool
 
     @clarg_doc = "Sampling seed (0 = a fresh one per story)"
@@ -83,10 +80,14 @@ let STORY_CONTEXT = 512l          // the request + MAX_TOKENS must fit; tinystor
 let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typing, never a stall
 let BOS_TOKEN = 1l                //! the corpus separates its examples with BOS ... EOS; either one ends the story
 let EOS_TOKEN = 2l
-let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
-let MAX_WISH_CHARS = 60
-let TEXT_SIZE = 0.72
-let SMALL_SIZE = 0.52
+let MAX_WISH_WORDS = 3            //! the corpus's requests name three words
+let INK = rgba(237, 230, 209, 255)
+let DIM = rgba(140, 133, 122, 255)
+let ACCENT = rgba(250, 191, 89, 255)
+
+//! the corpus's everyday words - a finger picks from these instead of typing
+let WORD_BANK <- ["dragon", "cake", "moon", "kitten", "robot", "river", "castle", "pirate", "rain", "cookie",
+    "forest", "bird", "ship", "star", "garden", "puppy", "rainbow", "balloon"]
 
 enum Phase {
     idle
@@ -113,7 +114,9 @@ var g_phase = Phase.idle
 var g_wish = ""                   //! the line being typed
 var g_dialogue = false
 var g_told_wish = ""              //! the request the story on screen answers
-var g_wrapped_lines : array<string>
+var g_follow_frames = 0
+var g_story = ""
+var g_line_start = 0              //! where the line being written begins in g_story, so a field line can be taken back whole
 var g_sentence_pieces : array<string>
 var g_line_pieces : array<string> //! the pieces of the line being written, so a field line can be taken back whole
 var g_ntokens = 0
@@ -130,15 +133,9 @@ var g_speaking_until = 0.0
 var g_unplayed_sentences = 0
 var g_audio_initialized = false
 var g_asch : AudioSystemChannels
-var g_font : Font?
 var g_frames = 0
-//! keys are POLLED, as the storyteller polls space: a GLFW callback lambda traps in the browser build, where it
-//! fires from a JavaScript event outside any frame of the program. Edge detection per key code, plus a hold
-//! timer so a held backspace repeats
-var g_key_was : bool[512]   // GLFW key codes end at GLFW_KEY_MENU = 348
-var g_backspace_held_s = 0.0
-var display_w = 0
-var display_h = 0
+var private CHIP : table<int; ClickState>
+var private CHIP_JOIN : table<int; EmptyMarkerState>
 
 //! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice
 [arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
@@ -221,9 +218,10 @@ def start_story() {
     delete g_session
     g_session <- create_session(g_model)
     set_seed(g_session, g_args.seed != 0 ? g_args.seed : int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
-    g_wrapped_lines |> clear()
-    g_wrapped_lines |> push("")
+    g_story = ""
+    g_line_start = 0
     g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
     g_sentence_pieces |> reserve(64)
     g_line_pieces |> clear()
     g_line_pieces |> reserve(32)
@@ -246,33 +244,11 @@ def plain_quotes(piece : string) : string {
 }
 
 def append_text(piece : string) {
-    var inscope parts <- split(piece, "\n")
-    for (i, part in iter_range(parts), parts) {
-        if (i > 0) {
-            g_wrapped_lines |> push("")
-            g_line_pieces |> clear()
-        }
-        let li = length(g_wrapped_lines) - 1
-        g_wrapped_lines[li] = "{g_wrapped_lines[li]}{part}"
-        wrap_last_line()
-    }
-}
-
-def wrap_last_line() {
-    while (length(g_wrapped_lines[length(g_wrapped_lines) - 1]) > WRAP_CHARS) {
-        let li = length(g_wrapped_lines) - 1
-        var head = ""
-        var tail = ""
-        peek_data(g_wrapped_lines[li]) $(d) {
-            var cut = rfind(slice(d, 0, WRAP_CHARS), " ")
-            if (cut <= 0) {
-                cut = WRAP_CHARS
-            }
-            head = clone_string(slice(d, 0, cut))
-            tail = clone_string(slice(d, cut))
-        }
-        g_wrapped_lines[li] = head
-        g_wrapped_lines |> push(strip(tail))
+    g_story = "{g_story}{piece}"
+    let nl = rfind(piece, "\n")
+    if (nl >= 0) {
+        g_line_start = length(g_story) - (length(piece) - nl - 1)
+        g_line_pieces |> clear()
     }
 }
 
@@ -287,10 +263,7 @@ def drop_field_line() {
     for (_i in range(n)) {
         g_sentence_pieces |> pop()
     }
-    g_wrapped_lines |> pop()
-    if (empty(g_wrapped_lines)) {
-        g_wrapped_lines |> push("")
-    }
+    g_story = g_line_start == 0 ? "" : clone_string(slice(g_story, 0, g_line_start))   // never a zero-length view of the string being replaced
     g_line_pieces |> clear()
 }
 
@@ -316,6 +289,7 @@ def write_step() {
         if (sentence_ends(text)) {
             say(strip(join(g_sentence_pieces, "")))
             g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
         }
         one[0] = tok
         eval(g_model, g_session, one)
@@ -328,107 +302,106 @@ def finish_story() {
         say(rest)
     }
     g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
     g_line_pieces |> clear()
     g_phase = Phase.told
 }
 
-//! the text layer's coordinates are design pixels against a 1280x720 reference; the smaller of the two ratios
-//! governs, so a window narrower than 16:9 shrinks the text instead of cutting the lines on the right
-def hud_scale() : float {
-    let fit = min(float(display_w) / 1280.0, float(display_h) / 720.0)
-    return max(fit, 0.5)
-}
-
-//! the design height the window offers at that scale - 720 at 16:9, more in a taller window
-def design_height() : float {
-    return float(display_h) / hud_scale()
-}
-
-def text_mvp(x, y, scale : float) : float4x4 {
-    let projection = ortho_rh(0.0, float(display_w), float(display_h), 0.0, -1.0, 1.0)
-    let model = compose(float3(x, y, 0.0), float4(0.0, 0.0, 0.0, 1.0), float3(scale, scale, 1.0))
-    return projection * model
-}
-
-def draw_text(text : string; x, y : float; size : float; tint : float3) {
-    return if (g_font == null || empty(text))
-    var quads <- (*g_font) |> create_quads(text)
-    let s = hud_scale() * size
-    (*g_font) |> draw_quads(quads, text_mvp(x * hud_scale(), y * hud_scale(), s), tint)
-    delete quads
-}
-
-def draw_story() {
-    let ink = float3(0.93, 0.9, 0.82)
-    let dim = float3(0.55, 0.52, 0.48)
-    let accent = float3(0.98, 0.75, 0.35)
-    draw_text("storywish", 60.0, 60.0, 0.6, dim)
-    let caret = (g_frames / 30) % 2 == 0 ? "_" : " "
-    draw_text("wish for: {g_wish}{caret}", 60.0, 110.0, TEXT_SIZE, accent)
-    draw_text(g_dialogue ? "[with dialogue - Tab turns it off]" : "[Tab asks for dialogue]", 60.0, 146.0, SMALL_SIZE, dim)
-    var y = 200.0
-    let step = 34.0 * TEXT_SIZE / 0.72
-    let status_y = design_height() - 60.0
-    let visible = max(1, int((status_y - 24.0 - y) / step))   // what fits between the wish line and the status line
-    let first = max(0, length(g_wrapped_lines) - visible)   // a long story scrolls: the newest lines stay on screen
-    for (i in range(first, length(g_wrapped_lines))) {
-        draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
-        y += step
-    }
-    let status = (g_phase == Phase.idle ? "type the words you wish for, Enter tells the story"
+def status_line() : string {
+    return (g_phase == Phase.idle ? (imgui_touch_device ? "pick three words, then tell the story" : "type the words you wish for, Enter tells the story")
         : g_phase == Phase.writing ? "writing a story about {g_told_wish}..."
         : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
-        : "the end - change the words, Enter for another")
-    draw_text(status, 60.0, status_y, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
+        : "the end - change the words for another")
 }
 
-//! a typed key lands in the wish line as its lower-case character: letters, digits, spaces and the list's punctuation, nothing else
-def type_char(key : uint) {
-    return if (key >= 128u)
-    let c = int(key)
-    let ok = is_alpha(c) || is_number(c) || c == ' ' || c == ',' || c == '\'' || c == '-'
-    return if (!ok || length(g_wish) >= MAX_WISH_CHARS)
-    g_wish = to_lower("{g_wish}{to_char(c)}")
+def chosen_words() : array<string> {
+    return <- [for (w in split(wish_words(g_wish), ", ")); w; where !empty(w)]
 }
 
-//! down this frame and not the last
-def key_pressed_now(key : int) : bool {
-    let down = glfwGetKey(live_window, key) == GLFW_PRESS
-    let was = g_key_was[key]
-    g_key_was[key] = down
-    return down && !was
+def toggle_word(word : string) {
+    var words <- chosen_words()
+    let at = find_index(words, word)
+    if (at >= 0) {
+        words |> erase(at)
+    } elif (length(words) < MAX_WISH_WORDS) {
+        words |> push(word)
+    }
+    set_wish(join(words, ", "))
 }
 
-//! a printable GLFW key code is its upper-case ASCII, so the key range IS the character range
-[arch(at = "../ARCHITECTURE.md#polled-keys")]
-def poll_typing() {
-    for (key in range(GLFW_KEY_SPACE, GLFW_KEY_GRAVE_ACCENT + 1)) {
-        if (key_pressed_now(key)) {
-            type_char(uint(key))
+def set_wish(line : string) {
+    g_wish = line
+    WISH_INPUT.pending_value = line
+    WISH_INPUT.has_pending = true
+}
+
+//! ImGui has no wrapping row: each chip joins the previous while its width still fits
+def draw_word_bank() {
+    let words <- chosen_words()
+    let right = GetCursorScreenPos().x + GetContentRegionAvail().x
+    let pad = GetStyle().FramePadding.x * 2.0 + GetStyle().ItemSpacing.x
+    for (i, word in iter_range(WORD_BANK), WORD_BANK) {
+        if (i > 0) {
+            let need = CalcTextSize(word).x + pad
+            if (GetItemRectMax().x + need <= right) {
+                same_line(CHIP_JOIN[i])
+            }
+        }
+        let chosen = find_index(words, word) >= 0
+        let plain = GetStyle().Colors[int(ImGuiCol.Button)]
+        with_style((ImGuiCol.Button, chosen ? ImVec4(0.98, 0.75, 0.35, 0.28) : ImVec4(plain.x, plain.y, plain.z, plain.w))) {
+            if (button(CHIP[i], (text = word))) {
+                toggle_word(word)
+            }
         }
     }
-    if (key_pressed_now(GLFW_KEY_BACKSPACE)) {
-        erase_char()
-        g_backspace_held_s = 0.0
-    } elif (glfwGetKey(live_window, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
-        g_backspace_held_s += get_dt()
-        if (g_backspace_held_s > 0.4) {   // held: a repeat every 60 ms after the first 400
-            erase_char()
-            g_backspace_held_s = 0.34
-        }
-    }
-    if (key_pressed_now(GLFW_KEY_TAB)) {
-        g_dialogue = !g_dialogue
-    }
-    if (key_pressed_now(GLFW_KEY_ENTER) || key_pressed_now(GLFW_KEY_KP_ENTER)) {
-        start_story()
-    }
 }
 
-def erase_char() {
-    let n = length(g_wish)
-    return if (n == 0)
-    g_wish = n == 1 ? "" : clone_string(slice(g_wish, 0, n - 1))   // never a zero-length view of the string being replaced
+//! the storyteller's page with the wish line above the story: typed, or picked from the bank by a finger
+def draw_page() {
+    let vp = GetMainViewport()
+    SetNextWindowPos(vp.WorkPos, ImGuiCond.Always)
+    SetNextWindowSize(vp.WorkSize, ImGuiCond.Always)
+    let flags = (ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings
+        | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollbar)
+    window(PAGE, (text = "storywish", closable = false, flags = flags)) {
+        with_style((ImGuiCol.Text, DIM)) {
+            text(TITLE, (text = "storywish"))
+        }
+        if (imgui_touch_device) {
+            draw_word_bank()
+        }
+        with_style((ImGuiCol.Text, ACCENT)) {
+            text(WISH_LABEL, (text = "wish for:"))
+        }
+        same_line()
+        if (input_text_with_hint(WISH_INPUT, (text = "##wish", hint = "dragon, cake, moon"))) {
+            g_wish = WISH_INPUT.value
+        }
+        if (checkbox(DIALOGUE, (text = "with dialogue"))) {
+            g_dialogue = DIALOGUE.value
+        }
+        let footer = min(GetFontSize() * 5.5, GetContentRegionAvail().y * 0.5)     // a short window still shows some story and the button
+        child(STORY_VIEW, (text = "story", size = float2(0.0, -footer), child_flags = ImGuiChildFlags.None,
+                           window_flags = ImGuiWindowFlags.None)) {
+            with_style((ImGuiCol.Text, INK)) {
+                text_wrapped(STORY_TEXT, (text = g_story))
+            }
+            if (g_phase == Phase.writing || g_follow_frames > 0) {
+                g_follow_frames = max(g_follow_frames - 1, 0)
+                SetScrollHereY(1.0)
+            }
+        }
+        with_style((ImGuiCol.Text, g_phase == Phase.idle ? ACCENT : DIM)) {
+            text_wrapped(STATUS, (text = status_line()))
+        }
+        if (g_phase != Phase.writing) {
+            let caption = g_phase == Phase.idle ? "tell the story" : "another story"
+            if (button(START_BTN, (text = caption, size = float2(-1.0, GetFontSize() * 2.6)))) {
+                start_story()
+            }
+        }
+    }
 }
 
 [export]
@@ -438,11 +411,10 @@ def init() {
         panic("storywish: {r |> unwrap_err}")
     }
     g_args <- r |> move_unwrap
-    g_wish = g_args.words
+    harness_init("Storywish", 1280, 720)
+    set_wish(g_args.words)
     g_dialogue = g_args.dialogue
-    live_create_window("Storywish", 1280, 720)
-    cache_ttf_objects()
-    g_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
+    DIALOGUE.value = g_dialogue
     if (!g_audio_initialized) {
         g_asch = audio_system_create()
         g_audio_initialized = true
@@ -471,29 +443,24 @@ def init() {
 
 [export]
 def update() {
-    if (!live_begin_frame()) {
+    if (!harness_begin_frame()) {
         return
     }
     g_frames++
     g_elapsed_s += get_dt()
-    live_get_framebuffer_size(display_w, display_h)
-    glViewport(0, 0, display_w, display_h)
-    glClearColor(0.07, 0.06, 0.09, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
-    glDisable(GL_DEPTH_TEST)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-    if (glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(live_window, 1)
+    harness_new_frame()
+    if (IsKeyPressed(ImGuiKey.Escape, false) && !IsAnyItemActive()) {     // an active field takes Escape as "revert"
+        request_exit()
     }
-    poll_typing()
+    if (IsKeyPressed(ImGuiKey.Enter, false) || IsKeyPressed(ImGuiKey.KeypadEnter, false)) {
+        start_story()
+    }
     if (g_phase == Phase.writing) {
         write_step()
     }
     poll_speech()
-    draw_story()
-    live_end_frame()
+    draw_page()
+    harness_end_frame()
 }
 
 [export]
@@ -513,7 +480,7 @@ def shutdown() {
     delete g_session
     delete g_model
     destroy_job_que()
-    live_destroy_window()
+    harness_shutdown()
 }
 
 def story_read_out() : bool {
@@ -532,6 +499,7 @@ def main() {
     init()
     eval_main_loop() {
         update()
+        harness_maybe_collect_gc()
         return false if (done_for_smoke())
         return !exit_requested()
     }
@@ -541,6 +509,6 @@ def main() {
         to_log(LOG_INFO, read_out
             ? "storywish: story {g_stories} written and read out after {g_frames} frames\n"
             : "storywish: the frame cap stopped story {g_stories} after {g_frames} frames\n")
-        print("{join(g_wrapped_lines, "\n")}\n")
+        print("{g_story}\n")
     }
 }

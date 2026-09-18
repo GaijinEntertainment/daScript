@@ -218,7 +218,7 @@
   .dio-footer__grid{grid-template-columns:1fr 1fr}
   .dio-head__aside{text-align:left}
 }
-@media (max-width:767px){
+@media (max-width:767px){.dio-nav__back{display:none}
   .dio-nav__burger{display:inline-flex;align-items:center;order:-1}
   .dio-tabs{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;gap:6px;background:var(--bg-2);border-bottom:1px solid var(--rule);padding:14px 20px 18px;font-size:14px;z-index:40}
   .dio-nav.is-open .dio-tabs{display:flex}

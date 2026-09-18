@@ -3,15 +3,13 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-**Never add or change a dasImgui test file - a `.das` file that declares a `[test]` function or
-is named `test_*.das`, `failed_imgui_*.das`, or `record_*.das` - outside `modules/dasImgui/tests`
-- put it under that folder instead.** A dasImgui test file, wherever the diff puts it, also
+**Never add or change a dasImgui test file - a `.das` file that requires an `imgui/*` module and
+either declares a `[test]` function or is named `test_*.das`, `failed_imgui_*.das`, or
+`record_*.das` - outside `modules/dasImgui/tests` - put it under that folder instead.** A dasImgui test file, wherever the diff puts it, also
 answers to the `tests/` subfolder's checklist (`modules/dasImgui/tests/REVIEW.md`).
 
-**A diff that changes anything but comments in a `.das` file under this folder, or any file
-under `modules/dasImgui/bind/` or `modules/dasImgui/src/`, runs the test suite on the author's
-host OS before the PR: `preflight --only imgui`** (the per-OS exclude split: module `CLAUDE.md`
-sec. Tests).
+**A diff that changes any non-`.md` file under this folder, beyond comments, runs the test suite
+on the author's host OS before the PR: `preflight --only imgui`.**
 
 **A diff that flips the `DAS_IMGUI_WASM_RELAXED_SIMD` default to ON, or appends `-mrelaxed-simd`
 to `IMGUI_WASM_FLAGS` unconditionally, is a defect.** Safari and every iOS browser refuse a whole

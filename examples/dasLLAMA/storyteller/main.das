@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options gc
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama   // the facade: model, session, eval / sample / piece, the TTS entry points
@@ -8,22 +9,18 @@ require daslib/strings_boost
 require daslib/clargs
 require daslib/fio
 require daslib/archive
-require glfw/glfw_boost
-require live/glfw_live
-require opengl/opengl_boost
-require opengl/opengl_cache
-require opengl/opengl_ttf
+require imgui/imgui_harness // the window, the frame, the boost widgets
 require audio/audio_boost
 require live_host
 require math
-require daslib/math_boost   // ortho_rh / compose for the text layer
 require strings
 
 // Storyteller. A tiny story model (Karpathy's stories15M, Q8) writes a children's story on
 // screen a few tokens per frame, and KittenTTS reads each finished sentence aloud in a kid's
-// voice while the next one is still being written. Space starts a new story at any moment - the
-// clip being read stops, and the sentences of the old story still queued for speech are skipped,
-// so the new one is heard at once. Escape quits.
+// voice while the next one is still being written. The button, or space, starts a new story at
+// any moment - the clip being read stops, and the sentences of the old story still queued for
+// speech are skipped, so the new one is heard at once. Escape quits. The page is Dear ImGui through
+// the imgui harness: one undecorated window over the viewport, the story wrapped to its width.
 //
 //   bin/daslang -jit examples/dasLLAMA/storyteller/main.das -- --models <dir>
 //
@@ -77,9 +74,9 @@ let STORY_CONTEXT = 256l          // prompt + MAX_TOKENS must fit; stories15M wa
 let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typing, never a stall
 let BOS_TOKEN = 1l                // llama2 vocabulary; the TinyStories corpus separates stories with BOS, so it is the stop word too
 let EOS_TOKEN = 2l
-let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
-let TEXT_SIZE = 0.72
-let SMALL_SIZE = 0.52
+let INK = rgba(237, 230, 209, 255)
+let DIM = rgba(140, 133, 122, 255)
+let ACCENT = rgba(250, 191, 89, 255)
 
 enum Phase {
     idle
@@ -103,7 +100,8 @@ var g_model = Model()
 var g_session = Session()
 var g_params = SamplingParams(temp = 0.8, top_k = 40l, penalty = 1.1)
 var g_phase = Phase.idle
-var g_wrapped_lines : array<string>
+var g_follow_frames = 0
+var g_story = ""
 var g_sentence_pieces : array<string>
 var g_ntokens = 0
 var g_stories = 0
@@ -119,13 +117,9 @@ var g_speaking_until = 0.0
 var g_unplayed_sentences = 0
 var g_audio_initialized = false
 var g_asch : AudioSystemChannels
-var g_font : Font?
 var g_frames = 0
 var g_clips_played = 0
 var g_rail_restarted = false      // the smoke rail's restart fires once
-var g_space_was = false
-var display_w = 0
-var display_h = 0
 
 //! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice
 [arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
@@ -207,9 +201,9 @@ def start_story() {
     delete g_session
     g_session <- create_session(g_model)
     set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
-    g_wrapped_lines |> clear()
-    g_wrapped_lines |> push("")
+    g_story = ""
     g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
     g_sentence_pieces |> reserve(64)
     g_ntokens = 0
     g_stories++
@@ -231,33 +225,7 @@ def plain_quotes(piece : string) : string {
 }
 
 def append_text(piece : string) {
-    var inscope parts <- split(piece, "\n")
-    for (i, part in iter_range(parts), parts) {
-        if (i > 0) {
-            g_wrapped_lines |> push("")
-        }
-        let li = length(g_wrapped_lines) - 1
-        g_wrapped_lines[li] = "{g_wrapped_lines[li]}{part}"
-        wrap_last_line()
-    }
-}
-
-def wrap_last_line() {
-    while (length(g_wrapped_lines[length(g_wrapped_lines) - 1]) > WRAP_CHARS) {
-        let li = length(g_wrapped_lines) - 1
-        var head = ""
-        var tail = ""
-        peek_data(g_wrapped_lines[li]) $(d) {
-            var cut = rfind(slice(d, 0, WRAP_CHARS), " ")
-            if (cut <= 0) {
-                cut = WRAP_CHARS
-            }
-            head = clone_string(slice(d, 0, cut))
-            tail = clone_string(slice(d, cut))
-        }
-        g_wrapped_lines[li] = head
-        g_wrapped_lines |> push(strip(tail))
-    }
+    g_story = "{g_story}{piece}"
 }
 
 def sentence_ends(piece : string) : bool {
@@ -281,6 +249,7 @@ def write_step() {
         if (sentence_ends(text)) {
             say(strip(join(g_sentence_pieces, "")))
             g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
         }
         one[0] = tok
         eval(g_model, g_session, one)
@@ -293,54 +262,49 @@ def finish_story() {
         say(rest)
     }
     g_sentence_pieces |> clear()
+    g_follow_frames = 2         // the frame that shows the last line still scrolls to it
     g_phase = Phase.told
 }
 
-//! the text layer's coordinates are design pixels against a 1280x720 reference; the smaller of the two ratios
-//! governs, so a window narrower than 16:9 shrinks the text instead of cutting the lines on the right
-def hud_scale() : float {
-    let fit = min(float(display_w) / 1280.0, float(display_h) / 720.0)
-    return max(fit, 0.5)
-}
-
-//! the design height the window offers at that scale - 720 at 16:9, more in a taller window
-def design_height() : float {
-    return float(display_h) / hud_scale()
-}
-
-def text_mvp(x, y, scale : float) : float4x4 {
-    let projection = ortho_rh(0.0, float(display_w), float(display_h), 0.0, -1.0, 1.0)
-    let model = compose(float3(x, y, 0.0), float4(0.0, 0.0, 0.0, 1.0), float3(scale, scale, 1.0))
-    return projection * model
-}
-
-def draw_text(text : string; x, y : float; size : float; tint : float3) {
-    return if (g_font == null || empty(text))
-    var quads <- (*g_font) |> create_quads(text)
-    let s = hud_scale() * size
-    (*g_font) |> draw_quads(quads, text_mvp(x * hud_scale(), y * hud_scale(), s), tint)
-    delete quads
-}
-
-def draw_story() {
-    let ink = float3(0.93, 0.9, 0.82)
-    let dim = float3(0.55, 0.52, 0.48)
-    let accent = float3(0.98, 0.75, 0.35)
-    draw_text("storyteller", 60.0, 60.0, 0.6, dim)
-    var y = 130.0
-    let step = 34.0 * TEXT_SIZE / 0.72
-    let status_y = design_height() - 60.0
-    let visible = max(1, int((status_y - 24.0 - y) / step))   // what fits between the title and the status line
-    let first = max(0, length(g_wrapped_lines) - visible)   // a long story scrolls: the newest lines stay on screen
-    for (i in range(first, length(g_wrapped_lines))) {
-        draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
-        y += step
-    }
-    let status = (g_phase == Phase.idle ? "press SPACE for a story"
+def status_line() : string {
+    return (g_phase == Phase.idle ? "a tiny story model writes, a small voice reads"
         : g_phase == Phase.writing ? "writing..."
         : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
-        : "the end - press SPACE for another")
-    draw_text(status, 60.0, status_y, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
+        : "the end")
+}
+
+//! one undecorated window over the viewport, the story in a child the writing scrolls
+def draw_page() {
+    let vp = GetMainViewport()
+    SetNextWindowPos(vp.WorkPos, ImGuiCond.Always)
+    SetNextWindowSize(vp.WorkSize, ImGuiCond.Always)
+    let flags = (ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings
+        | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollbar)
+    window(PAGE, (text = "storyteller", closable = false, flags = flags)) {
+        with_style((ImGuiCol.Text, DIM)) {
+            text(TITLE, (text = "storyteller"))
+        }
+        let footer = min(GetFontSize() * 5.5, GetContentRegionAvail().y * 0.5)     // a short window still shows some story and the button
+        child(STORY_VIEW, (text = "story", size = float2(0.0, -footer), child_flags = ImGuiChildFlags.None,
+                           window_flags = ImGuiWindowFlags.None)) {
+            with_style((ImGuiCol.Text, INK)) {
+                text_wrapped(STORY_TEXT, (text = g_story))
+            }
+            if (g_phase == Phase.writing || g_follow_frames > 0) {
+                g_follow_frames = max(g_follow_frames - 1, 0)
+                SetScrollHereY(1.0)
+            }
+        }
+        with_style((ImGuiCol.Text, g_phase == Phase.idle ? ACCENT : DIM)) {
+            text_wrapped(STATUS, (text = status_line()))
+        }
+        if (g_phase != Phase.writing) {
+            let caption = g_phase == Phase.idle ? "tell me a story" : "another story"
+            if (button(START_BTN, (text = caption, size = float2(-1.0, GetFontSize() * 2.6)))) {
+                start_story()
+            }
+        }
+    }
 }
 
 [export]
@@ -350,9 +314,7 @@ def init() {
         panic("storyteller: {r |> unwrap_err}")
     }
     g_args <- r |> move_unwrap
-    live_create_window("Storyteller", 1280, 720)
-    cache_ttf_objects()
-    g_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
+    harness_init("Storyteller", 1280, 720)
     if (!g_audio_initialized) {
         g_asch = audio_system_create()
         g_audio_initialized = true
@@ -381,29 +343,19 @@ def init() {
 
 [export]
 def update() {
-    if (!live_begin_frame()) {
+    if (!harness_begin_frame()) {
         return
     }
     g_frames++
     g_elapsed_s += get_dt()
-    live_get_framebuffer_size(display_w, display_h)
-    glViewport(0, 0, display_w, display_h)
-    glClearColor(0.07, 0.06, 0.09, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
-    glDisable(GL_DEPTH_TEST)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-    let space = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
-    let space_just = space && !g_space_was
-    g_space_was = space
-    if (glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(live_window, 1)
+    harness_new_frame()
+    if (IsKeyPressed(ImGuiKey.Escape, false) && !IsAnyItemActive()) {     // an active field takes Escape as "revert"
+        request_exit()
     }
     let rail_due = (!g_rail_restarted
         && ((g_args.restart_at > 0 && g_frames == g_args.restart_at)
             || (g_args.restart_on_clip > 0 && g_clips_played == g_args.restart_on_clip)))
-    if (space_just || rail_due) {
+    if (IsKeyPressed(ImGuiKey.Space, false) || rail_due) {
         g_rail_restarted ||= rail_due
         start_story()
     }
@@ -411,8 +363,8 @@ def update() {
         write_step()
     }
     poll_speech()
-    draw_story()
-    live_end_frame()
+    draw_page()
+    harness_end_frame()
 }
 
 [export]
@@ -432,7 +384,7 @@ def shutdown() {
     delete g_session
     delete g_model
     destroy_job_que()
-    live_destroy_window()
+    harness_shutdown()
 }
 
 def story_read_out() : bool {
@@ -451,6 +403,7 @@ def main() {
     init()
     eval_main_loop() {
         update()
+        harness_maybe_collect_gc()
         return false if (done_for_smoke())
         return !exit_requested()
     }
@@ -460,6 +413,6 @@ def main() {
         to_log(LOG_INFO, read_out
             ? "storyteller: story {g_stories} written and read out after {g_frames} frames\n"
             : "storyteller: the frame cap stopped story {g_stories} after {g_frames} frames\n")
-        print("{join(g_wrapped_lines, "\n")}\n")
+        print("{g_story}\n")
     }
 }

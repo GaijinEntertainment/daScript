@@ -30,10 +30,6 @@ void Module_dasGLFW::initFunctions_4() {
 	makeExtern< int (*)(int) , glfwGetKeyScancode , SimNode_ExtFuncCall >(lib,"glfwGetKeyScancode","glfwGetKeyScancode")
 		->args({"key"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:4901:13
-	makeExtern< int (*)(GLFWwindow *,int) , glfwGetKey , SimNode_ExtFuncCall >(lib,"glfwGetKey","glfwGetKey")
-		->args({"window","key"})
-		->addToModule(*this, SideEffects::worstDefault);
 // from GLFW/glfw3.h:4930:13
 	makeExtern< int (*)(GLFWwindow *,int) , glfwGetMouseButton , SimNode_ExtFuncCall >(lib,"glfwGetMouseButton","glfwGetMouseButton")
 		->args({"window","button"})

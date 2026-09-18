@@ -8,4 +8,5 @@ def initialize(project_path : string) {
     }
     register_native_path("glfw", "glfw_boost", "{project_path}/dasglfw/glfw_boost.das")
     register_native_path("live", "glfw_live", "{project_path}/dasglfw/glfw_live.das")
+    register_native_path("live", "glfw_touch_pad", "{project_path}/dasglfw/glfw_touch_pad.das")
 }

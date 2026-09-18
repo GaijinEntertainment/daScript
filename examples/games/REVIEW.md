@@ -3,13 +3,15 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-**A diff that deletes a check in `REVIEW.das` (beside this file), narrows what it walks, or
-drops a finding it used to report is a defect** - updating a constant so a check keeps
-matching the tree is not.
+**A diff that changes a game's on-screen controls, its prompts, or its canvas size runs the
+playground spec suite under `site/tests/playground/` (repo root).**
+
+**A diff that leaves `REVIEW.das` (beside this file) checking less than it did - a check deleted,
+its walk narrowed, a finding it used to report gone - is a defect.**
 
 **A `.das` in a game's folder that declares a module declares `module <name> public`, never
-`shared`** - a shared module survives a live reload, and the late-bound GL calls inside it fail
-their second compile.
+`shared`** - the game tree recompiles on a live reload, and a shared module in it keeps running
+the old code.
 
 **A diff that adds or edits a `[vertex_program]` or `[fragment_program]` function in a game,
 or any `def` such a function reaches directly or through another `def`, keeps that code inside
@@ -19,8 +21,7 @@ GLSL ES 3.00** - the same file runs in the playground on WebGL2.
 framebuffer completeness at creation and falls back to `GL_RGBA8` when the framebuffer is
 incomplete** - WebGL2 does not guarantee a float colour attachment.
 
-**A `.das` a diff adds to a game that has a playground copy is named in the sample's `files`
-list (`web/examples/ui/samples/data.json`) in the same change** - the port gate checks the
-staged copy is byte-identical, not that the page mounts it, and the playground sample fails to
-load with `missing prerequisite`.
+**A `.das` a diff adds to a game with a playground copy is named in the sample's `files` list
+(`web/examples/ui/samples/data.json`) in the same change** - a staged file no list names never
+mounts, and the sample fails to load with `missing prerequisite`.
 

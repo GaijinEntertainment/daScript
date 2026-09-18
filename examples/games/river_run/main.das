@@ -213,6 +213,7 @@ def handle_pause_input() {
 [export]
 def init() {
     live_create_window("River Run", 1280, 720)
+    pad_prefer_landscape()
     create_gl_objects()
     init_audio()
 
@@ -312,7 +313,21 @@ def render_frame(game_time : float) {
     draw_hud_3d(game_time)
     draw_hud()
     end_hud_overlay(saved_fog)
+    pad_end_frame()
     glEnable(GL_CULL_FACE)
+}
+
+def declare_touch_pad() {
+    return if (!pad_enabled())
+    if (game_state == GameState.playing) {
+        pad_button(0.94, 0.10, 0.055, GLFW_KEY_ESCAPE)
+        pad_dpad(0.15, 0.72, 0.16, GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_UP, GLFW_KEY_DOWN, diagonal = true)
+        pad_button(0.86, 0.74, 0.09, GLFW_KEY_SPACE)
+    } elif (game_state == GameState.paused) {
+        pad_tap(GLFW_KEY_ESCAPE)
+    } else {
+        pad_tap(GLFW_KEY_SPACE)
+    }
 }
 
 [export]
@@ -321,6 +336,7 @@ def update() {
         return
     }
 
+    pad_begin_frame()
     live_get_framebuffer_size(display_w, display_h)
     let aspect = (display_h != 0 ? float(display_w) / float(display_h) : 1.0)
     v_projection = perspective_rh_minus1_to_1(CAM_FOV_DEG * PI / 180.0, aspect, Z_NEAR, Z_FAR)
@@ -341,6 +357,7 @@ def update() {
 
     let game_time = get_uptime()
 
+    declare_touch_pad()
     handle_menu_input()
     handle_pause_input()
     simulate()

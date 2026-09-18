@@ -94,6 +94,9 @@ var vao, vbo, ebo : uint
 var texture : uint                    // CPU modes upload the accumulation surface here
 var accum_tex : uint[2]               // GPU mode: ping-pong RGBA32F accumulation textures
 var accum_fbo : uint                  // GPU mode: render-to-texture target
+var g_fb_status_reported = false
+var g_gpu_draw_error_reported = false
+var g_gpu_refusal_reason = ""
 var g_accum_idx = 0                   // index of accum_tex holding the latest accumulation (the one we display)
 
 // ----- display shader: textured fullscreen quad, linear -> sRGB -----
@@ -207,9 +210,7 @@ def render_rows(var pbb : array<float3>?; var pepoch : int?; my_epoch, pidx, ymi
             break
         }
         var rc = 0
-        unsafe {
-            draw(pidx, TRACE_W, TRACE_H, y, y + 1, *pbb, rc)
-        }
+        draw(pidx, TRACE_W, TRACE_H, y, y + 1, *pbb, rc)
         rays += rc
     }
     return rays
@@ -219,9 +220,7 @@ def render_rows(var pbb : array<float3>?; var pepoch : int?; my_epoch, pidx, ymi
 // race; read only after join). The captured wait-group handle is released by the lambda itself.
 def worker_band(var pbb : array<float3>?; var pepoch, pray : int?; my_epoch, pidx, ymin, ymax : int) {
     let rays = render_rows(pbb, pepoch, my_epoch, pidx, ymin, ymax)
-    unsafe {
-        *pray += rays
-    }
+    *pray += rays
 }
 
 // Threads mode: dispatch n band-threads from the main thread and return immediately — the threads
@@ -271,9 +270,7 @@ def advance_render {
             g_last_pass_us = get_time_usec(g_threads_t0)
         }
         var st = g_threads_status
-        unsafe {
-            job_status_remove(st)
-        }
+        unsafe(job_status_remove(st))
         g_threads_status = null
     }
     // 2. Mode/epoch switch → reset the accumulation (watch it clear, then fill).
@@ -300,9 +297,7 @@ def upload_surface {
         upload_rgba[i] = float4(backbuffer[i], 1.0)
     }
     glBindTexture(GL_TEXTURE_2D, texture)
-    unsafe {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TRACE_W, TRACE_H, GL_RGBA, GL_FLOAT, addr(upload_rgba[0]))
-    }
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TRACE_W, TRACE_H, GL_RGBA, GL_FLOAT, unsafe(addr(upload_rgba[0])))
 }
 
 // GPU mode: one fragment-shader pass per frame traces a sample per pixel into the ping-pong
@@ -316,12 +311,32 @@ def run_gpu_pass {
     glBindFramebuffer(GL_FRAMEBUFFER, accum_fbo)
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, accum_tex[dst], 0)
     glViewport(0, 0, TRACE_W, TRACE_H)
+    glDisable(GL_BLEND)
     glUseProgram(pt_program)
     pt_prev := accum_tex[src]
     pt_effect_bind_uniform(pt_program)
     glBindVertexArray(vao)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    if (!g_fb_status_reported) {
+        g_fb_status_reported = true
+        for (_i in range(64)) {             // drain what earlier calls left, so the draw's own error is the one read below
+            break if (glGetError() == 0u)
+        }
+        let status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            g_gpu_refusal_reason = "float framebuffer incomplete (status {status})"
+            to_log(LOG_ERROR, "path tracer: the accumulation framebuffer is not complete (status {status})\n")
+        }
+    }
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
+    if (!g_gpu_draw_error_reported) {
+        g_gpu_draw_error_reported = true
+        let err = glGetError()
+        if (err != 0u) {
+            g_gpu_refusal_reason = "GL error {err} on the GPU pass"
+            to_log(LOG_ERROR, "path tracer: the GPU pass left GL error {err}\n")
+        }
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, 0u)
     if (g_gpu_prev_tick != 0l) {
         g_gpu_us = get_time_usec(g_gpu_prev_tick)
@@ -361,10 +376,16 @@ def build_ui {
     RadioButton("CPU - single thread", safe_addr(g_mode), int(Mode.SingleThread))
     RadioButton("CPU - threads", safe_addr(g_mode), int(Mode.Threads))
     RadioButton("OpenGL (GPU)", safe_addr(g_mode), int(Mode.OpenGL))
+    if (g_mode == int(Mode.OpenGL) && !empty(g_gpu_refusal_reason)) {
+        g_mode = int(Mode.Threads)
+    }
     if (g_mode != prev) {
         g_epoch++            // tell advance_render to abort + clear + restart in the new mode
         g_smooth_rps = 0.0lf // rays/sec magnitude differs wildly per mode — ramp fresh, don't lag-blend
         g_gpu_prev_tick = 0l // no previous GPU frame to delta against after a switch
+    }
+    if (!empty(g_gpu_refusal_reason)) {
+        TextWrapped("this browser refused the GPU pass: {g_gpu_refusal_reason} - CPU threads instead")
     }
     Separator()
 
@@ -405,9 +426,7 @@ def save_screenshot(fname : string) {
     }
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
-    unsafe {
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
-    }
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
     let row_bytes = w * 4
     var temp : array<uint8>
     temp |> resize(row_bytes)
@@ -420,9 +439,7 @@ def save_screenshot(fname : string) {
             memcpy(addr(pixels[bot]), addr(temp[0]), row_bytes)
         }
     }
-    unsafe {
-        stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
-    }
+    stbi_write_png(fname, w, h, 4, unsafe(addr(pixels[0])), w * 4)
     print("wrote {fname} ({w}x{h})\n")
 }
 
@@ -481,9 +498,7 @@ def shutdown() {
     g_epoch++       // make any in-flight band threads bail via the epoch check, then drain them
     if (g_threads_status != null) {
         g_threads_status |> join
-        unsafe {
-            job_status_remove(g_threads_status)
-        }
+        unsafe(job_status_remove(g_threads_status))
         g_threads_status = null
     }
     destroy_job_que()

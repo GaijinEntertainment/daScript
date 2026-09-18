@@ -31,3 +31,23 @@ which calls the handler directly.
 The identity between the two trees relies on the deployed `daslang_static` linking
 `live_host` and embedding the `live/` tree. A runtime regression there breaks every
 staged game at once; the nightly dasweb-verify boot is the watchdog.
+
+## 4. The touch pad
+
+On a touch device each game declares its on-screen controls once a frame through
+`live/glfw_touch_pad` (`modules/dasGlfw/ARCHITECTURE.md` sec. 2.3): the pad holds the game's own
+keys in the virtual key table `glfwGetKey` reads, so the input code stays the keyboard code, and
+the game only adds a mapping - Arkanoid puts the paddle under the finger, Pac-Man reads a swipe,
+Boulder Dash draws a d-pad and a grab button, River Run a d-pad that also throttles (diagonals
+hold both axes) and a fire button.
+A corner button pauses and any tap starts or restarts; the prompts read `TAP` where the keyboard
+build reads `PRESS SPACE`. The two games that play sideways ask for landscape and draw a rotate
+hint in a portrait window. On a desktop `--touch-pad` after the daslang `--` turns the pad on.
+In Arkanoid a finger landing launches a held ball and then steers; the F-key look and CRT toggles
+get no pad control and stay keyboard-only.
+
+## 5. A narrow window opens the field of view
+
+Arkanoid and Pac-Man frame their playfield for a design aspect - 1024x768 and 900x760 - and hold
+that horizontal coverage in a narrower window by opening the vertical field of view in proportion,
+instead of cropping the sides. A phone in portrait sees the whole field, taller, not a slice of it.

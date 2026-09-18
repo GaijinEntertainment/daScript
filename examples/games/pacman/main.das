@@ -4,6 +4,7 @@ options gc
 
 require glfw/glfw_boost
 require live/glfw_live
+require live/glfw_touch_pad
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
@@ -32,6 +33,8 @@ require live_host
 // ===== Constants =====
 
 let CELL_SIZE   = 1.0          // world units per maze cell
+let FOV_Y       = 50.0 * PI / 180.0
+let DESIGN_ASPECT = 900.0 / 760.0
 let MAZE_COLS   = 21
 let MAZE_ROWS   = 23
 let HALF_W      = float(MAZE_COLS) * CELL_SIZE * 0.5
@@ -717,8 +720,8 @@ def draw_hud() {
     if (game_state == GameState.menu) {
         draw_text_centered("PAC-MAN", cx, cy - 60, float3(1.0, 0.9, 0.1))
         let pulse = 0.5 + 0.5 * sin(get_uptime() * 3.0)
-        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, float3(pulse, pulse, pulse))
-        draw_text_centered("ARROW KEYS TO MOVE", cx, cy + 45, float3(0.6, 0.6, 0.6))
+        draw_text_centered(pad_prompt("START"), cx, cy + 10, float3(pulse, pulse, pulse))
+        draw_text_centered(pad_enabled() ? "SWIPE TO MOVE" : "ARROW KEYS TO MOVE", cx, cy + 45, float3(0.6, 0.6, 0.6))
         return
     }
     draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
@@ -733,11 +736,11 @@ def draw_hud() {
     } elif (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
         draw_text_centered("SCORE: {score}", cx, cy + 20, float3(1.0, 1.0, 0.5))
-        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 55, float3(0.7, 0.7, 0.7))
+        draw_text_centered(pad_prompt("RESTART"), cx, cy + 55, float3(0.7, 0.7, 0.7))
     } elif (game_state == GameState.win_state) {
         draw_text_centered("LEVEL CLEAR!", cx, cy - 20, float3(0.2, 1.0, 0.3))
         draw_text_centered("SCORE: {score}", cx, cy + 20, float3(1.0, 1.0, 0.5))
-        draw_text_centered("PRESS SPACE TO CONTINUE", cx, cy + 55, float3(0.7, 0.7, 0.7))
+        draw_text_centered(pad_prompt("CONTINUE"), cx, cy + 55, float3(0.7, 0.7, 0.7))
     }
 
     // Draw floating score popups (project world pos → screen)
@@ -1154,10 +1157,21 @@ def init() {
     }
 }
 
+def declare_touch_pad() {
+    return if (!pad_enabled())
+    if (game_state == GameState.playing || game_state == GameState.ready) {
+        pad_swipe(GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_UP, GLFW_KEY_DOWN)
+    } else {
+        pad_tap(GLFW_KEY_SPACE)
+    }
+}
+
 [export]
 def update() {   // nolint:STYLE038 - one linear frame: input, timers, simulation, render, HUD
     if (!live_begin_frame()) { return ; }
     live_get_framebuffer_size(display_w, display_h)
+    pad_begin_frame()
+    declare_touch_pad()
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.02, 0.02, 0.06, 1.0)
     glClearDepthf(1.0)   // glClearDepth(double) is desktop-GL-only; glClearDepthf is WebGL2-safe (and exists on desktop GL too)
@@ -1166,7 +1180,8 @@ def update() {   // nolint:STYLE038 - one linear frame: input, timers, simulatio
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 200.0)
+    let fov_y = aspect < DESIGN_ASPECT ? 2.0 * atan(tan(FOV_Y * 0.5) * DESIGN_ASPECT / aspect) : FOV_Y
+    v_projection = perspective_rh_minus1_to_1(fov_y, aspect, 0.1, 200.0)
     // Screen shake
     var shake_off = float2(0.0)
     if (shake_timer > 0.0) {
@@ -1276,6 +1291,7 @@ def update() {   // nolint:STYLE038 - one linear frame: input, timers, simulatio
 
     glDisable(GL_CULL_FACE)
     draw_hud()
+    pad_end_frame()
     live_end_frame()
 }
 

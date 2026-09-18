@@ -9,11 +9,11 @@ function reaches directly or through another; or to a class whose own or inherit
 declarations included, or to a struct a `@push_constant` member of either class names - applies
 `REVIEW_SHADER_EMITTERS.md` (beside this file) together with its own folder's checklist.**
 
-**A C++ module whose CMake target links another in-tree module's target calls
-`Module::require("<name>")` for it, and the returned module's `initDependencies()`, in its own
-`initDependencies`, in the same change.** A module no other module requires is left unloaded, and
-the loader resolves an importer's imports before any of its code runs, so the importer's next
-load fails on the missing sibling.
+**In its own `initDependencies`, a C++ module calls `Module::require("<name>")` for every in-tree
+module its CMake target links, and calls `initDependencies()` on each module that call returns -
+in the same change as the link.** A module no other module requires is left unloaded, and the
+linking module's imports are resolved before any of its code runs, so its next load fails on the
+missing sibling.
 
 **A module whose `dasClangBind`-generated binding depends on another in-tree module declares
 that dependency in its `bind_*.das` - `require_modules` when the binding uses the other module's
@@ -24,3 +24,9 @@ module's type library, so both modules binding the same C++ types resolve to one
 **Never hand-write a module dependency into a `dasClangBind`-generated file - declare it in the
 module's `bind_*.das` instead.** The binder emits `initDependencies` from `require_modules` and
 `require_load_modules`.
+
+**A diff that hand-binds a function in a module's own C++ - a function the module's
+`bind_*.das` binder would otherwise generate - makes that binder's `skip_function` override
+return true for the function, and deletes the function's generated registration from the
+module's `src/`, in the same change.** Otherwise the generated registration sits beside the
+hand-bound one and the module registers the name twice.

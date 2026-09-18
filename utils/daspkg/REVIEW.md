@@ -13,9 +13,9 @@ change.** The integration suite is `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
 repos).
 
-**A diff that changes any code on the `daspkg release` path - `cmd_release`, `cmd_release_wasm`,
-and the `ship_*` / `release_*` helpers they call in `commands.das` - states in the review which
-platform the release was run on.** The native release layout differs per platform (`.app` bundle
+**A diff that changes `cmd_release` or `cmd_release_wasm`, or a function either one runs that
+writes a file into the bundle, chooses a file's name or location inside it, or builds the command
+that compiles or links an exe, states in the review which platform the release was run on.** The native release layout differs per platform (`.app` bundle
 vs flat directory), and the wasm release links with the emsdk installed on that platform.
 
 **A diff that adds a command also adds its `print_usage` line and its row in the `README.md`

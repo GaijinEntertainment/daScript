@@ -106,6 +106,28 @@ def main() {
 }
 ```
 
+## Touch devices
+
+On a touch device the harness changes input and style with no application code; only a layout
+that changes shape reads the device flag.
+
+- `harness_init` and `live_imgui_init` decide from the platform, before the first frame: a bigger
+  font, every hit box padded, a window moved only by its title bar. `harness_begin_frame` then
+  turns two fingers into a scroll of the window under them, every frame. A single finger arrives
+  as ordinary mouse input.
+- Force the touch behavior on any host, windowed or headless: `bin/daslang app.das -- --imgui-touch`.
+  A windowed run gets the touch font and the touch style; a headless run gets the style only - its
+  atlas is the default font, whatever the device flag says. The two-finger gesture still needs
+  injected fingers on either, because there is no touch hardware to poll.
+- A headless test runs the app under `daslang-live` (`daslang-live app.das -- --headless --imgui-touch`)
+  and drives the gesture by posting `imgui_touch_inject` to that host's live API with a `touches`
+  array of `{id, x, y, began, ended}`; the injected fingers stay down until the next injection, so
+  a host running thousands of frames between two commands still sees them. POST mechanics:
+  `skills/daslang_live.md`.
+- A layout that must change shape for a phone tests `imgui_touch_device`
+  (`require imgui/imgui_touch`), which the harness sets before the first frame. When the layout
+  also depends on orientation, read `GetIO().DisplaySize` every frame - a phone rotates.
+
 ## Ownership checklist
 
 - [ ] `init`, `update`, and `shutdown` are exported.

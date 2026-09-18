@@ -27,7 +27,17 @@ namespace das {
     DAS_MOD_API int DAS_glfwCanvasCssHeight();
     DAS_MOD_API double DAS_glfwDevicePixelRatio();
     DAS_MOD_API void DAS_glfwToggleFullscreen();
+    DAS_MOD_API int DAS_glfwTouchCount();
+    DAS_MOD_API int DAS_glfwTouchId(int i);
+    DAS_MOD_API float DAS_glfwTouchX(int i);
+    DAS_MOD_API float DAS_glfwTouchY(int i);
+    DAS_MOD_API bool DAS_glfwTouchBegan(int i);
+    DAS_MOD_API bool DAS_glfwTouchEnded(int i);
+    DAS_MOD_API bool DAS_glfwIsTouchDevice();
 #endif
+    DAS_MOD_API int DasGlfw_GetKey ( GLFWwindow * window, int key );
+    DAS_MOD_API void DasGlfw_SetVirtualKey ( int key, bool down );
+    DAS_MOD_API void DasGlfw_ClearVirtualKeys ();
     // chain + synthetic event API
     DAS_MOD_API void DasGlfw_ChainAddCursorPos ( GLFWwindow * window, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx );
     DAS_MOD_API void DasGlfw_ChainAddMouseButton ( GLFWwindow * window, TLambda<void,const GLFWwindow*,int,int,int> func, Context * ctx );

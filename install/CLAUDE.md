@@ -61,7 +61,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
 | `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree - run/lint/test from a standalone `daslang` or MCP; junctions + `project_root` |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
-| `skills/imgui_application.md` | Building any dasImgui application - harness lifecycle, the headless arm, heap/GC ownership |
+| `skills/imgui_application.md` | Building any dasImgui application - harness lifecycle, the headless arm, heap/GC ownership, touch/phone layout |
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer |
 | `skills/imgui_ui_debugging.md` | Any dasImgui UI/interaction bug: reproduce -> observe in `imgui_snapshot` -> fix -> prove via snapshot + test. Never claim a UI fix from logic or a screenshot alone |
 | `skills/daslang/references/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
