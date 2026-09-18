@@ -3648,6 +3648,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def build_move(tdst : LLVMOpaqueValue?; right : ExpressionPtr; needTest : bool) {
         var tsrc = getE(right)
+        if (tsrc == tdst) return     // moving a value onto itself is the no-op the runtime test below would take
         let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             /*
