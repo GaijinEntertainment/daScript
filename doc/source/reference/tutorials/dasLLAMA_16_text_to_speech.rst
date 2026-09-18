@@ -310,6 +310,7 @@ speech from the restored prompt:
 
 .. code-block:: das
 
+   let clip <- load_audio_mono("me.wav", c.sample_rate)
    var inscope prompt <- tts_prepare_voice_prompt(m, clip, c.sample_rate)
    var inscope restored = TtsVoicePrompt()
    if (sscan_json(sprint_json(prompt, false), restored)
