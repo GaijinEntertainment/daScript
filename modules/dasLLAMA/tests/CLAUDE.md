@@ -910,11 +910,14 @@ conditioning and EOS logit per frame, the latents and the waveform, plus a free 
 facade cells - caps (cloning, no speed, one language, the 19-voice roster), the reference's chunk lists over
 multi-sentence texts, one sentence spoken with the family's own timing stages, a cloned voice
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
-a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, the one-channel
-convs f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
+a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
+conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
 frame count and speech - the rig is the lane's quality gate); the published Q8_0 file
-(`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM and
-32-wide codec conv arrived as Q8_0, the same lane within a few percent; and the five other
+(`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived
+as Q8_0 and no codec conv did, the same lane within a few percent; the quiet floor
+(`pocket-tts-en-kq.gguf` alone): the served lane's differenced quiet-window floor within 6 dB of
+the f32 lane's on one two-sentence text, with a hissed copy of the reference as the control
+that lands outside the bar; and the five other
 languages (`pocket-tts-{de,es,it,pt,fr}-q8.gguf`, oracle dirs `tts_oracle/pocket_<config>/`
 minted over `_tts_fixtures/pocket_sentences.json`, token fixtures `pocket_tokens_<config>.json`):
 the language code and the one default voice, the tokenizer on the language's own sentences

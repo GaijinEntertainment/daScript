@@ -94,8 +94,12 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` (which tile the Vulkan
 matmul picks and whether that dispatch splits its reduction across partial planes, on every input
 of the prefill's tile-and-split pick; added rows on those inputs are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
-arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local
-fork pools, shared queue policy.
+arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`, `test_pocket_kq_file` and
+`test_pocket_quiet_floor` cells (the published file's tensor formats against the f16 load-time
+quants, the kq lane against the q8 lane, the served lane's quiet floor against the f32 lane's -
+silence is where a lane's per-block scale error is audible, and no per-frame figure shows it);
+`utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local fork pools, shared
+queue policy.
 
 **A diff that adds a gate whose expected value is written down where a person edits it - a
 document, a checked-in table, a generated artifact's committed form, a roster - rather than

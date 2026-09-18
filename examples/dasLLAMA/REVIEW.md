@@ -40,10 +40,15 @@ updates every test under `modules/dasLLAMA/tests/` that matches it, in the same 
 smoke tests match witness lines as substrings, so the words and their order are an interface
 (`ARCHITECTURE.md` sec. 2).
 
-**A diff that adds a model file to a browser example's `models.json` names its sha256 and a
-location that cannot move - a Hugging Face repository, or a repo-relative path in this repository
-under `tree` - never a machine-local path or a branch name.** The deploy fetches by that name and
-refuses a file whose hash moved (`ARCHITECTURE.md` sec. 3.4).
+**A diff that adds or changes an entry in a browser example's `models.json` gives that entry a
+sha256 and a location that cannot move - a Hugging Face repository, or, in the file's `tree`
+list, a repo-relative path to a file this repository itself carries - never a machine-local path
+or a branch name.** The deploy fetches by that location and refuses a file whose hash moved
+(`ARCHITECTURE.md` sec. 3.4).
+
+**A diff that adds or changes an entry in a browser example's `models.json` states in the PR
+body that the entry's sha256 is the hash of the file its location now resolves to - the
+published file for a Hugging Face entry, the committed file for a `tree` entry.**
 
 **A diff that changes `library/`'s `-ctx` emission command keeps `--disable-module dasLLVM` on
 it.** With dasLLVM present the emission stops on the tune framework and writes nothing
@@ -51,6 +56,6 @@ it.** With dasLLVM present the emission stops on the tune framework and writes n
 
 **A diff that adds an entry point to `library/dasllama_lib.das` gives it `[export_c]` and a
 result `daslib/c_api_header.das` can spell in C - a scalar, a string, a pointer, an enum, a
-vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.** An `[export_c]`
-whose signature that describer refuses is a hard emit error, not a skipped export
-(`ARCHITECTURE.md` sec. 3.8).
+vector, a POD struct, or nothing at all, never an array, a fixed array, a table or a tuple.**
+An `[export_c]` whose signature that describer refuses is a hard emit error, not a skipped
+export (`ARCHITECTURE.md` sec. 3.8).

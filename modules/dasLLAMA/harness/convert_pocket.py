@@ -26,13 +26,13 @@ Canonical names: `flow_lm.transformer.layers.N.*` -> `backbone.N.*`; `flow_lm.fl
 `head.*`; `mimi.encoder_transformer.transformer.layers.N.*` -> `mimi.enc_tf.N.*`, the decoder
 twin `mimi.dec_tf.N.*`; every other `flow_lm.` / `mimi.` name kept as is.
 
-`--q8` writes the published form: every GEMM weight the engine serves as Q8_0 quants is stored
-as Q8_0 in the layout the kernels read - a linear as [nout][nin] with the 32-blocks along nin,
-a dense stride-1 conv on 32-wide channels as the tap-stacked slab [cout][k][cin] (the f16 form
-keeps PyTorch's [cout][cin][k]) - and the reader takes the blocks straight into its int8 plane.
-The rest of the file is unchanged. The engine's eligibility rule (`conv1d_q8_eligible`,
-`linear_prepare`) is mirrored here in `q8_linear` / `q8_conv`; `tests/test_tts_pocket.das`
-holds the two files to each other.
+`--q8` writes the published form: every linear the engine serves as Q8_0 quants is stored as
+Q8_0 in the layout the kernels read - [nout][nin] with the 32-blocks along nin - and the reader
+takes the blocks straight into its int8 plane. Every codec conv stays f16 in PyTorch's
+[cout][cin][k]. The rest of the file is unchanged.
+The engine's eligibility rule (`linear_prepare`) is mirrored here in `q8_linear`; `dense_codec_conv`
+names the `--fake` group `codecconv`; `tests/test_tts_pocket.das` holds the two
+files to each other.
 """
 import argparse
 import json
@@ -95,11 +95,10 @@ def q8_linear(name, shape):
     return rows_served and len(shape) == 2 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
-def q8_conv(name, shape, stride, transposed):
-    """The convs the engine serves q8: dense, forward, stride 1, both channel counts on 32 -
-    every codec conv (the latent projection included) but the strided encoder stages and the
-    downsampler, the transposed decoder stages, the depthwise resampler and the two
-    single-channel ends."""
+def dense_codec_conv(name, shape, stride, transposed):
+    """Forward, stride 1, both channel counts on 32 - every codec conv (the latent projection
+    included) but the strided encoder stages and the downsampler, the transposed decoder stages,
+    the depthwise resampler and the two single-channel ends."""
     is_conv = name.startswith("mimi.") and (name.endswith(".conv.weight") or name == "mimi.quantizer.output_proj.weight")
     return is_conv and len(shape) == 3 and not transposed and stride == 1 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
@@ -110,9 +109,9 @@ FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "embed", "head", "codec", "cod
 def fake_group(name, shape, conv_served=False):
     """The tensor group a `--fake` spec names: the backbone's attention projections, its two FFN
     matrices, the frame input projection, the speaker projection, the text embedding table, the
-    flow head's matrices, the codec transformers' GEMMs (`codec`), the convs the engine serves
-    q8 (`codecconv`), and the codec's strided, transposed and resampling convs the file keeps
-    f16 (`strided`). Norms, biases and the voices are never in a group."""
+    flow head's matrices, the codec transformers' GEMMs (`codec`), the dense codec convs
+    (`codecconv`), and the codec's strided, transposed and resampling convs (`strided`). Norms,
+    biases and the voices are never in a group."""
     if name == "flow_lm.speaker_proj_weight":   # the one matrix the bundle names without the ".weight" suffix
         return "speaker" if len(shape) == 2 else None
     if not name.endswith(".weight") or len(shape) < 2:
@@ -346,7 +345,7 @@ def main():
         if a.no_cloning and encoder_tensor(name):
             dropped.append(name)
             continue
-        group = fake_group(name, v.shape, q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
+        group = fake_group(name, v.shape, dense_codec_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
         if group in fake:
             v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group], group)
         if a.kq and kq_tensor(name, v.shape):
@@ -354,10 +353,6 @@ def main():
             quantized_k4.append(name)
         elif a.q8 and (q8_linear(name, v.shape) or (a.kq and head_q8_linear(name, v.shape))):
             tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
-            quantized.append(name)
-        elif a.q8 and q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name):
-            slab = np.ascontiguousarray(np.transpose(v, (0, 2, 1)).astype(np.float32))   # [cout][cin][k] -> [cout][k][cin]
-            tensors[name] = ("q8", slab)
             quantized.append(name)
         else:
             tensors[name] = np.ascontiguousarray(v.astype(np.float16))

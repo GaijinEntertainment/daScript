@@ -111,17 +111,24 @@ lane and the rig compares them on the same sentences. A vector layer the file st
 head) runs its GEMV on the q8 lane.
 
 The two lanes every Pocket file has, as the StyleTTS2 families have them: f32, the parity
-rail's reference, and q8, the served default - the transformer layers' four matrices, the frame
-input projection and every
-dense stride-1 codec conv on 32-wide channels as Q8_0 rows (`linear_prepare`,
-`conv1d_q8_eligible`), the decode step on the q8 GEMV entry. The published GGUF
-(`convert_pocket.py --q8`) stores exactly those tensors as Q8_0 in the layout the kernels read
-- a linear as [nout][nin], a conv as the tap-stacked slab [cout][k][cin] with the 32-blocks
-along the input channels - so `read_linear` and `read_conv_q8` take the blocks into the int8
-planes and repack for the backend; every other tensor stays f16, and the f32 lane of such a
-file serves the same weights dequantized. The converter's `q8_linear` / `q8_conv` are the
-engine's eligibility rule written a second time; `test_pocket_q8_file` holds the two files to
-each other and the rig holds the published file to the reference. The file's block scales
+rail's reference, and q8, the served default - the transformer layers' four matrices and the
+frame input projection as Q8_0 rows (`linear_prepare`), the decode step on the q8 GEMV entry.
+The codec's convs serve f32 on every lane: the q8 rows conv quantizes its activations to int8
+per 32 input channels, and in the Mimi decoder those activations are the audio, so one loud
+channel's block scale crushes the quiet ones into a hiss floor 30 dB over the reference in
+every silence - the quietest twentieth of 100 ms windows of `harness/tts_synth.das` renders of
+four fixture sentences at `stuart_bell`, per band above 1 kHz, on an Apple M5 Max with the
+`arm64-gen` backend and the `arm-i8mm` tune profile, no overrides; `test_pocket_quiet_floor`
+reads the same effect as 11 dB on its differenced whole-signal metric and holds the served lane
+to the f32 lane's floor. The
+published GGUF (`convert_pocket.py --q8`) stores the served linears as Q8_0 in the layout the
+kernels read - [nout][nin] with the 32-blocks along nin - so `read_linear` takes the blocks
+into the int8 planes and repacks for the backend; every conv and every other tensor stays f16,
+and the f32 lane of such a file serves the same weights dequantized. A file of the older form
+that stores a codec conv as a Q8_0 slab dequantizes it at load (`read_conv_q8`). The
+converter's `q8_linear` is the engine's eligibility rule written a second time;
+`test_pocket_q8_file` holds the two files to each other and the rig holds the published file to
+the reference. The file's block scales
 are f16, the load-time quantizer's f32, and the flow head amplifies that half a thousandth per
 block into about one percent of a frame (`test_pocket_q8_file`'s teacher-forced compare of the
 two loads) - the same picture as the lane itself against the f32

@@ -29,7 +29,8 @@ require _model_tier
 // the 200-sentence corpus and on the byte-fallback probes (`_tts_fixtures/pocket_tokens.json`,
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
 // Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
-// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent.
+// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent. The
+// quiet-floor cell needs pocket-tts-en-kq.gguf alone.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "pocket-tts-en.gguf")
@@ -495,8 +496,8 @@ def test_pocket_q8_lane(t : T?) {
         var inscope m <- load_pocket(path)
         t |> success(m.q8, "the pinned q8 lane serves")
         t |> success(pocket_serves_q8(), "the pin is what the policy answers")
-        t |> success(m.backbone.layers[0].in_proj.q8 && m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
-            "the GEMMs on 32-wide inputs minted q8; the one-channel convs stayed f32")
+        t |> success(m.backbone.layers[0].in_proj.q8 && !m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
+            "the backbone GEMMs serve q8; every codec conv serves f32")
         var inscope sc = PocketScratch()
         var done = 0
         for (c in man.cases) {
@@ -580,9 +581,8 @@ def test_pocket_q8_file(t : T?) {
             from_file += (l.in_proj.q8 && l.out_proj.q8 && l.ffn1.q8 && l.ffn2.q8) ? 1 : 0
         }
         t |> equal(from_file, length(mq.backbone.layers), "every backbone layer's four GEMMs came in as Q8_0")
-        t |> success(mq.mimi.dec_in.q8 && mq.mimi.enc_out.q8 && mq.mimi.dec_res[0].conv1.q8 && !mq.mimi.enc_in.q8 && !mq.mimi.dec_out.q8,
-            "the codec's 32-wide convs came in as Q8_0 slabs, the one-channel ends as f16")
-        t |> equal(mq.mimi.dec_in.q8_k, mq.mimi.dec_in.k * mq.mimi.dec_in.cin, "the slab's row is kernel times input channels")
+        t |> success(!mq.mimi.dec_in.q8 && !mq.mimi.enc_out.q8 && !mq.mimi.dec_res[0].conv1.q8 && !mf.mimi.dec_in.q8,
+            "the codec's convs serve f32 on the q8 lane, whichever form the file stores them in")
         for (c in man.cases) {
             continue if (!c.stages || c.voice != "alba")
             var inscope a <- forced_latents(mq, c, man, sc)
@@ -908,12 +908,9 @@ def test_pocket_facade(t : T?) {
         t |> equal(a.timings.samples, long_length(a.pcm))
         t |> success(a.timings.backbone_us > 0l && a.timings.codec_us > 0l && a.timings.bert_us == 0l, "the family's own stages carry the time")
         to_log(LOG_INFO, "pocket facade: {timings_line(a.timings, a.sample_rate)}\n")
-        // a cloned voice: the roster's own clip under a new name speaks and is listed
-        var inscope clip : array<float>
-        m.pocket.voices |> get("caro_davy") $(pcm) {
-            clip := pcm
-        }
-        t |> success(!empty(clip), "the parity file stores its roster as clips (the older form) - caro_davy's is the clone's source")
+        // a cloned voice: the checked-in reference clip under a new name speaks and is listed
+        var inscope clip <- load_audio_mono("{get_das_root()}/modules/dasLLAMA/models/jfk_ask_not.wav", 24000)
+        t |> success(!empty(clip), "the checked-in reference clip is the clone's source")
         tts_register_voice(m, "cloned", clip, 24000)
         var inscope c2 <- caps(m)
         t |> equal(length(c2.voices), 20, "the cloned voice joined the roster")
@@ -993,6 +990,69 @@ def test_pocket_no_encoder(t : T?) {
         t |> success(why |> find("no codec encoder") >= 0, "a clip is refused by the missing encoder: {why}")
         var inscope c2 <- caps(m)
         t |> equal(length(c2.voices), 1, "and the roster is unchanged")
+    }
+}
+
+//! The first difference drops the low end the leading silence and the breath sit in, so the lowest twentieth of the 100 ms window RMS reads the hiss in the pauses, not the speech above it.
+def private quiet_floor_db(pcm : array<float>; rate : int) : float {
+    let win = rate / 10
+    let n = (length(pcm) - 1) / win
+    var rms : array<float>
+    rms |> reserve(n)
+    for (i in range(n)) {
+        var ssq = 0.0lf
+        for (j in range(win)) {
+            let v = pcm[i * win + j + 1] - pcm[i * win + j]
+            ssq += double(v * v)
+        }
+        rms |> push(float(sqrt(ssq / double(win))))
+    }
+    rms |> sort()
+    let k = max(1, n / 20)
+    var acc = 0.0
+    for (i in range(k)) {
+        acc += rms[i]
+    }
+    return 20.0 * log10(max(acc / float(k), 1e-9))
+}
+
+[test]
+def test_pocket_quiet_floor(t : T?) {
+    //! A per-frame parity bar reads the loud part of a frame, so the quiet floor is the only lane compare that catches a hiss in the silences.
+    let path = kq_gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+        }
+        let text = "The quick brown fox jumps over the lazy dog. Then it slept, and all was still."
+        set_pocket_q8(true)   // the lane this cell measures, pinned
+        var inscope served <- load_tts_model(path)
+        t |> success(served.pocket.q8, "the pinned q8 lane serves")
+        var inscope a <- synthesize(served, text, "alba")
+        delete served
+        set_pocket_q8(false)
+        var inscope reference <- load_tts_model(path)
+        t |> success(!reference.pocket.q8, "the pinned f32 lane serves")
+        var inscope b <- synthesize(reference, text, "alba")
+        t |> success(length(a.pcm) >= 2 * a.sample_rate && length(b.pcm) >= 2 * b.sample_rate,
+            "both renders carry seconds of audio ({length(a.pcm)} and {length(b.pcm)} samples) - the floor reads their quietest twentieth")
+        let fa = quiet_floor_db(a.pcm, a.sample_rate)
+        let fb = quiet_floor_db(b.pcm, b.sample_rate)
+        to_log(LOG_INFO, "pocket quiet floor: served {fa} dBFS, f32 lane {fb} dBFS\n")
+        t |> success(fa <= fb + 6.0, "the served lane's quiet floor ({fa} dBFS) sits within 6 dB of the f32 lane's ({fb} dBFS)")
+        // the control that lands outside the bar: the reference with a hiss 60 dB down mixed in
+        var hissed := b.pcm
+        var seed = 0x9e3779b9u
+        for (i in range(length(hissed))) {
+            seed = seed * 1664525u + 1013904223u
+            hissed[i] += (float(seed >> 8u) / 16777216.0 - 0.5) * 0.002
+        }
+        let fh = quiet_floor_db(hissed, b.sample_rate)
+        t |> success(fh > fb + 6.0, "a reference with a -60 dBFS hiss reads {fh} dBFS - past the bar the served lane must stay under")
     }
 }
 
