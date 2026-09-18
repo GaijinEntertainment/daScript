@@ -1876,3 +1876,24 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-ex-hero__title { font-size: 34px; }
     .forge-ex-overlay { padding: 16px; }
 }
+/* A phone plays the example edge to edge: the game inside letterboxes itself (canvas object-fit) and draws its own touch pad, so the box needs no aspect cap. */
+@media (max-width: 767px), ((pointer: coarse) and (max-width: 1024px)) {
+    .forge-ex-overlay { padding: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .forge-ex-player {
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .forge-ex-player__bar { padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); }
+    .forge-ex-player__viewport {
+        flex: 1;
+        min-height: 0;
+        aspect-ratio: auto;
+        max-height: none;
+    }
+    .forge-ex-player__toolbar { padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); gap: 8px; }
+    .forge-ex-player__links { display: none; }
+}

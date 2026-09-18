@@ -96,6 +96,29 @@ var private g_headless_dt       : float = 1.0f / 60.0f
 var private g_headless_last_uptime : float = -1.0f
 var private g_headless_first_uptime : float = -1.0f
 
+var private g_touch_scroll : TouchScrollState
+
+def private device_touches() : array<TouchPoint> {
+    var touches : array<TouchPoint>
+    if (!imgui_touch_device || harness_is_headless()) return <- touches
+    let count = glfw_touch_count()
+    touches |> reserve(count)
+    for (i in range(count)) {
+        touches |> push(TouchPoint(id = glfw_touch_id(i), pos = float2(glfw_touch_x(i), glfw_touch_y(i)),
+                                   began = glfw_touch_began(i), ended = glfw_touch_ended(i)))
+    }
+    return <- touches
+}
+
+[arch(at="../ARCHITECTURE.md#touch")]
+def private harness_touch_frame() {
+    let injected = !empty(imgui_touch_injected)
+    if (!injected && !imgui_touch_device && !touch_injection_seen()) return
+    let touches <- (injected ? touch_take_injected() : device_touches())
+    let gesture = touch_scroll_step(g_touch_scroll, touches, touch_scroll_step_px(body_font_px() * live_imgui_content_scale))
+    touch_gesture_apply(gesture)
+}
+
 def private ensure_parsed() {
     // Lazy CLI parse on first harness_* call; clargs `find_*` don't error on unknown args, so future test-side clargs structs coexist.
     return if (g_parsed)
@@ -131,8 +154,12 @@ def public harness_init(title : string; width : int = 800; height : int = 600) {
     //! — no window, no GL context, no TTF (the headless atlas uses ProggyClean).
     if (harness_is_headless()) {
         g_headless_ctx = CreateContext(null)
+        imgui_touch_device = live_imgui_touch_forced()       // --imgui-touch reaches the headless arm too, so a phone layout can be snapshotted
         InstallCoreClipboardBackend()
         apply_daslang_theme()
+        if (imgui_touch_device) {
+            apply_touch_style(1.0)
+        }
         imgui_headless_init_fonts()
         imgui_headless_set_display_size(float(width), float(height))
         if (g_no_ini) {
@@ -208,6 +235,7 @@ def public harness_begin_frame() : bool {
         g_headless_last_uptime = now
         imgui_headless_advance_dt(g_headless_dt)
         begin_frame()
+        harness_touch_frame()
         g_headless_frame++
         advance_coroutines()
         return true
@@ -234,6 +262,7 @@ def public harness_begin_frame() : bool {
     if (mdt > 0.0f) {
         io.DeltaTime = mdt
     }
+    harness_touch_frame()
     advance_coroutines()
     return true
 }

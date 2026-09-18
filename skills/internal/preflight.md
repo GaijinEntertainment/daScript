@@ -149,14 +149,14 @@ python gates, review-md discovery, dastest's own suite, the REVIEW.das gates, ci
 and `modules` the module and service suites - ser/deser, MCP tools, boulder-dash,
 dasllama-server, env-knob registries, the dasLLVM vector-math rail, facade lint,
 dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
-daslang_static sweep. A step's condition is `matrix.role != '<other>'`, so the nightly job
-(role `all`, one each on linux, darwin15, windows) runs every step plus the nightly-only ones:
-tutorial dry-runs and the run form of examples (preflight's `compile-sweep` is their per-PR
-mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report, not a gate),
-and the nano cross-compile - platform-bound: its arm-none-eabi toolchain is an apt package no
-darwin cell and no developer box carries, so it has no per-PR cell and no local mirror. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py`
-pins them and the condition spelling. The per-PR mirror of the nightly-only compile steps is
-preflight's `compile-sweep` gate.
+dasGlfw touch layer, the daslang_static sweep. A step's condition is `matrix.role != '<other>'`,
+so the nightly job (role `all`, one each on linux, darwin15, windows) runs every step plus the
+nightly-only ones: tutorial dry-runs and the run form of examples (preflight's `compile-sweep`
+is their per-PR mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report,
+not a gate), and the nano cross-compile - platform-bound: its arm-none-eabi toolchain is an apt
+package no darwin cell and no developer box carries, so it has no per-PR cell and no local
+mirror. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py` pins them and
+the condition spelling.
 
 **CI configures with ALL release modules ON** - `ci/release_modules.txt` flips
 `DAS_HV/LLVM/AUDIO/PUGIXML/SQLITE/GLFW_DISABLED=OFF`. A local build with several
@@ -190,6 +190,7 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | AST verify tree sweep - **not a PR gate** (the per-PR arm is the row above) | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 timeout 120 <daslang> --ast-verify-batch -compile-only` - an `AST verify` line is a failure; compile errors are expected (many tests assert one). This one-liner attributes neither a crash (`CRASH:` banner) nor a timeout (rc 124) to its file - for those copy the step's `/tmp/ast_verify_one.sh` helper out of the workflow | runs on `extended_checks.yml`'s 04:00 cron: one daslang process per test file, each re-parsing daslib. Force it early with `gh workflow run extended_checks.yml`. Run locally after touching macro or AST-building code - `skills/das_macros.md` |
 | Authored-doc code blocks - **not a PR gate** | `<daslang> utils/internal/doc-verify/main.das` (exit 0 = every authored RST page's das blocks compile; report at `build/doc_verify/report.json`) | nightly cron + `workflow_dispatch`, posix cells only: ~35 min, one daslang spawn per page. Run locally after editing `doc/source/reference/**` or `doc/source/stdlib/handmade/**`, or after daslib/module API changes docs quote - `skills/internal/doc_sweep.md` |
 | MCP tools test | `cmake --build build --config Release --target tree_sitter_daslang` (the grammar library plus the `sgconfig.yml` its post-build step stamps - without them ast-grep knows no `daslang` language), then `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | the `modules` role; MCP signature changes break it silently - run after editing `utils/mcp/` |
+| dasGlfw touch layer | `node modules/dasGlfw/tests/test_web_cursor.cjs`, `node modules/dasGlfw/tests/test_web_touch.cjs`, then `<daslang> dastest/dastest.das -- --color --failures-only --test modules/dasGlfw/tests` | the `modules` role. Run after editing `modules/dasGlfw/src/glfw_emscripten_*.c` or `modules/dasGlfw/dasglfw/glfw_touch_pad.das`: the node tests read the EM_JS bodies out of the `.c` source under node's vm against fake GLFW/Browser fixtures, and `test_touch_pad.das` injects fingers with no window |
 | dasImgui build | nothing to install - dasImgui is in-tree (`modules/dasImgui`), built like any default-ON module | external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) run in `nightly_daspkg_index.yml`; `skills/internal/abi_break_sweep.md` |
 | Coverage - **nightly** (linux) | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | |
 

@@ -3235,6 +3235,29 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     return 0
 }
 
+[arch(at="README.md#web-build-stamp")]
+def private stamp_web_build(root, html_path : string) {
+    var rev = ""
+    if (run_cmd("git -C \"{root}\" describe --always --dirty=+ --abbrev=9", rev) != 0) {
+        rev = "unknown"
+    }
+    let stamp = "{strip(rev)} {format_time(get_clock(), "%Y-%m-%d %H:%M %z")}"     // the zone rides along, so two boxes' stamps order
+    var html = ""
+    fopen(html_path, "rb") $(f) {
+        if (f != null) {
+            html = fread(f)
+        }
+    }
+    return if (empty(html) || find(html, "__DAS_BUILD_STAMP__") < 0)
+    let stamped = replace(html, "__DAS_BUILD_STAMP__", stamp)
+    fopen(html_path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, stamped)
+        }
+    }
+    log("  build stamp: {stamp}\n")
+}
+
 // `daspkg release wasm` entry. Releases the single app the package's .das_package
 // declares (release_main()) into <out>/<name>/. Each example is its own package
 // (its .das_package declares both requirements and packaging) — CI loops over the
@@ -3289,6 +3312,7 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     let app_out_dir = path_join(out_dir, bundle_name)
     let staged = ship_external_files(bundle_name, app_out_dir, spec.external_files, shipped)
     if (staged != 0) { return staged }
+    stamp_web_build(root, path_join(app_out_dir, "{bundle_name}.html"))      // after the external files land: one of them could be the page itself
     log("  released {bundle_name} -> {app_out_dir} ({bundle_name}.html / .js / .wasm)\n")
     return 0
 }

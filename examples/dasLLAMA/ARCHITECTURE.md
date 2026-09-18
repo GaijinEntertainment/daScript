@@ -8,12 +8,15 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 
 - `storyteller/` - a browser example: stories15M writes a children's story a few tokens per
   frame, KittenTTS reads each finished sentence. `main.das` is the whole program, `web_shell.html`
-  the page around its canvas, `.das_package` the release, `models.json` its model set.
+  the page around its canvas, `.das_package` the release, `models.json` its model set. The page
+  is Dear ImGui through the `imgui_harness` (sec.3.7): one undecorated window over the viewport,
+  the story wrapped to its width, a button that starts a story.
 - `storywish/` - a browser example: the typed words become a request in the TinyStoriesInstruct
   corpus's layout, tinystories-instruct-27M writes the story, Pocket TTS reads it in one baked
   voice from a file without the codec encoder (text in, no packs, no cloning). Same four files;
   `wish.das` holds the request side pure (typed line -> words -> prompt, the field-line stop) so a
-  test reaches it without a window.
+  test reaches it without a window. The same harness page as the storyteller, with the wish line
+  above the story; on a touch device a bank of word chips fills the line, three words at most.
 - `parrot/` - a browser example: you press record and talk, Silero VAD ends the take when you go
   quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and its
   roster, which the picker offers beside the clone), and the text in the editor is read aloud in
@@ -35,7 +38,7 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 
 ## 2. Definitions
 
-- **A browser example** is a subfolder of this folder with a `web_shell.html`: `daspkg release
+- **A browser example** is a folder with a `web_shell.html`, wherever under `examples/` it sits: `daspkg release
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
   checklist's rules about the browser build bind browser examples and nothing else.
 - **A witness line** is a line a browser example logs under its own name (`storyteller: ...`,
@@ -74,17 +77,18 @@ worker starts slowly enough to read story text where the path was. An archived m
 out of the stream into the reader's heap, so the stream is the one channel that is safe for a
 string.
 
-### 3.3 Input is polled {#polled-keys}
+### 3.3 Input is polled
 
-A browser example that draws its own text reads the keyboard with `glfwGetKey` each frame,
-edge-detected per key code, never through a GLFW callback. In the browser build a callback
+Every browser example reads its input inside its own frame. One on the imgui harness (sec.3.7),
+which every example is today, reads ImGui's key and mouse state there - `IsKeyPressed` edge-detects.
+One that draws its own text reads the keyboard with `glfwGetKey` each frame, edge-detected per key
+code. Neither installs a GLFW callback. In the browser build a callback
 lambda fires from a JavaScript event outside any frame of the program, where the example's state
 is not live, and the program traps. A printable GLFW key code is its upper-case ASCII, so the key
 range doubles as the character range for a typed line, and repeats come from a hold timer. The
 mouse is read the same way: a click is `glfwGetMouseButton` edge-detected against a label's own
-box in design pixels. An example on the imgui harness (sec.3.7) reads nothing from GLFW itself:
-the backend's callbacks are C++ and enter no daslang code, and the program reads ImGui's key and
-mouse state inside its frame. In the browser the GLFW window is reconciled every frame to the
+box in design pixels. On the imgui harness the backend's callbacks are C++ and enter no daslang
+code. In the browser the GLFW window is reconciled every frame to the
 box the canvas may fill - its parent's box, the stage below the nav (dasGlfw's glue reads the
 document viewport only when the parent is the body, or in fullscreen) - so the program's
 picture is the stage; a program that keeps its own aspect is letterboxed inside it. Emscripten
@@ -153,7 +157,13 @@ kept window shaded, the voice picker), the text in the middle (the editor, the p
 icon buttons naming the voice, the say's chunks in their state's colour) with the output below
 it (the say's waveform growing chunk by chunk with a tick at each chunk's start and the
 playhead, the per-chunk table of stage times), and the lab on the right (the model's facts, the
-job queue's knobs, the measure button). The shell keeps the space bar's keydown for the editor:
+job queue's knobs, the measure button). A window narrower than 760 px, or taller than wide, gets
+one column instead: the status strip, the voice over the text, with the lab and the output behind
+them as tabs. In that column the voice shares a node with the lab and the text with the output, and
+a node's first tab bar makes its own pick, so once the column layout is built the program focuses
+`text` then `voice` for two frames: a phone opens on the record disc and the editor. A touch device,
+wide or narrow, gets the say buttons grown to a thumb's size. The shell keeps the space
+bar's keydown for the editor:
 a prevented keydown swallows the keypress the editor reads, and the page cannot scroll anyway;
 the editor takes Tab as a character (`AllowTabInput`), since a Tab that moves focus is no use
 in a text one types into.

@@ -115,12 +115,14 @@ var g_last_pass_us = 0                // wall time of the last agent pass (worke
 var g_smooth_steps = 0.0lf            // exponentially-smoothed simulation steps/sec
 var g_sim_frame = 0                       // completed passes
 
-// ----- audio: strudel on the main thread (strudel_tick() in update). Each layer's per-ORBIT gain is
-// faded live via strudel_fade_orbit from plain globals — no pattern rebuild (track gain stays at 1.0;
-// strudel_tick auto-removes a track whose gain reaches 0). Ambient always plays; the lead swells
-// while the mouse attracts the slime; the percussion swells while a slider is being dragged.
+// ----- audio: strudel on its own thread where the runtime hosts one (strudel_init/strudel_play), on
+// the main thread otherwise (strudel_create_channel + strudel_tick() in update). Each layer's
+// per-ORBIT gain is faded live - no pattern rebuild (track gain stays at 1.0; a track whose gain
+// reaches 0 is removed). Ambient always plays; the lead swells while the mouse attracts the slime;
+// the percussion swells while a slider is being dragged.
 var g_asch : AudioSystemChannels
 var g_audio_owned = false             // true only if WE created the audio system (else the host owns it)
+var g_music_threaded = false
 var g_track_ambient = -1
 var g_track_lead = -1
 var g_track_perc = -1
@@ -420,9 +422,7 @@ def advance_sim {
     if (g_status != null) {
         return if (!g_status.isReady)
         var st = g_status
-        unsafe {
-            job_status_remove(st)
-        }
+        unsafe(job_status_remove(st))
         g_status = null
         g_last_pass_us = get_time_usec(g_pass_t0)
         if (g_prev_pass_tick != 0l) {
@@ -460,9 +460,7 @@ def upload_field {
         upload_rgba[i] = float4(field[off + i], 0.0f, 0.0f, 1.0f)
     }
     glBindTexture(GL_TEXTURE_2D, texture)
-    unsafe {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TW, TH, GL_RGBA, GL_FLOAT, addr(upload_rgba[0]))
-    }
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TW, TH, GL_RGBA, GL_FLOAT, unsafe(addr(upload_rgba[0])))
 }
 
 def draw_surface {
@@ -484,14 +482,20 @@ def draw_surface {
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
 }
 
-// ===== audio (strudel on the main thread) =====
+// ===== audio (strudel on its thread, or on the main thread where no thread can be had) =====
 
-def setup_audio {
-    if (get_audio_command_stream() == null) {
-        g_asch = audio_system_create()
-        g_audio_owned = true
-    }
-    strudel_create_channel()
+var g_audio_report_frames = 0
+
+//! browser only, one line every ~300 frames (~5 s): the underrun count says whether the mixer thread ever refilled the ring
+def report_audio_health {
+    return if (get_running_platform_name() != "emscripten")
+    g_audio_report_frames++
+    return if (g_audio_report_frames % 300 != 1)
+    to_log(LOG_INFO, "physarum audio: underrun frames {sound_playback_underrun_frames()}, threads {g_threads}, hw {get_total_hw_threads()}\n")
+}
+
+//! builds the three tracks in the context that plays them: the strudel thread on the worker arm, the main thread on the channel arm
+def build_tracks {
     strudel_set_look_ahead(4.0)
     strudel_set_cps(0.5lf)
     // ambient pad + sub bass — always present, slow and evolving
@@ -509,19 +513,63 @@ def setup_audio {
         note("a5 e5 c6 e5", "square") |> gain(0.16) |> room(0.3)
     ]))
     // Mute the two interactive layers via their ORBIT bus, NOT track gain: strudel_tick auto-removes
-    // any track whose gain (and target) reach 0, so fading the track to 0 deletes it. The orbit gain
-    // silences the voices while the track stays alive at gain 1.0, ready to swell back in.
+    // a track whose gain reaches 0, and the orbit gain fades every voice with no per-note latency.
     strudel_set_orbit_gain(g_track_lead, 0, 0.0f)
     strudel_set_orbit_gain(g_track_perc, 0, 0.0f)
 }
 
+//! runs a layer command ("lead:1" / "lead:0" / "perc:1" / "perc:0") on whichever thread owns strudel - the strudel thread on the worker arm, the main thread on the channel arm
+def music_cmd(cmd : string) {
+    if (cmd == "lead:1") {
+        strudel_fade_orbit(g_track_lead, 0, 1.0f, 0.12f)
+    } elif (cmd == "lead:0") {
+        strudel_fade_orbit(g_track_lead, 0, 0.0f, 0.8f)
+    } elif (cmd == "perc:1") {
+        strudel_fade_orbit(g_track_perc, 0, 1.0f, 0.06f)
+    } elif (cmd == "perc:0") {
+        strudel_fade_orbit(g_track_perc, 0, 0.0f, 0.5f)
+    }
+}
+
+def music_main {
+    build_tracks()
+    strudel_play(@@music_cmd)
+}
+
+def set_layer(name : string; on : bool) {
+    let cmd = "{name}:{on ? 1 : 0}"
+    if (g_music_threaded) {
+        strudel_command(cmd)
+    } else {
+        music_cmd(cmd)
+    }
+}
+
+def setup_audio {
+    if (get_audio_command_stream() == null) {
+        g_asch = audio_system_create()
+        g_audio_owned = true
+    }
+    // The worker arm needs a real thread: native builds and the standalone wasm card have one, and spawning one in the wasm playground interpreter parks the whole tab.
+    g_music_threaded = (
+        !audio_is_single_threaded() &&
+        (get_platform_name() != "emscripten" || is_standalone_exe())
+    )
+    if (g_music_threaded) {
+        strudel_init(@@music_main)
+    } else {
+        strudel_create_channel()
+        build_tracks()
+    }
+}
+
 // Drive the live per-track gains from mouse/UI state (called inside the ImGui frame, so the io
-// queries are valid). strudel_tick reads the faded gains on the main thread — no pattern rebuild.
+// queries are valid). The layer fades ride as commands to whichever thread owns strudel - no pattern rebuild.
 def drive_audio {
     let mouse_active = !GetIO().WantCaptureMouse && IsMouseDown(ImGuiMouseButton.Left)
     if (mouse_active != g_mouse_audio) {
         g_mouse_audio = mouse_active
-        strudel_fade_orbit(g_track_lead, 0, mouse_active ? 1.0f : 0.0f, mouse_active ? 0.12f : 0.8f)
+        set_layer("lead", mouse_active)
     }
     if (g_ui_tweaked) {
         g_tweak_hold = 24            // hold the perc layer ~0.4s past the last change (debounce)
@@ -531,7 +579,7 @@ def drive_audio {
     let want_tweak = g_tweak_hold > 0
     if (want_tweak != g_tweak_audio) {
         g_tweak_audio = want_tweak
-        strudel_fade_orbit(g_track_perc, 0, want_tweak ? 1.0f : 0.0f, want_tweak ? 0.06f : 0.5f)
+        set_layer("perc", want_tweak)
     }
 }
 
@@ -620,9 +668,7 @@ def save_screenshot(fname : string) {
     }
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
-    unsafe {
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
-    }
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
     let row_bytes = w * 4
     var temp : array<uint8>
     temp |> resize(row_bytes)
@@ -635,9 +681,7 @@ def save_screenshot(fname : string) {
             memcpy(addr(pixels[bot]), addr(temp[0]), row_bytes)
         }
     }
-    unsafe {
-        stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
-    }
+    stbi_write_png(fname, w, h, 4, unsafe(addr(pixels[0])), w * 4)
     print("wrote {fname} ({w}x{h})\n")
 }
 
@@ -680,8 +724,8 @@ def update() {
     if (!harness_begin_frame()) {
         return
     }
-    if (g_audio_enabled) {
-        strudel_tick()       // advance the strudel scheduler on the main thread
+    if (g_audio_enabled && !g_music_threaded) {
+        strudel_tick()
     }
     harness_new_frame()
     build_ui()
@@ -690,7 +734,10 @@ def update() {
     }
     advance_sim()
     if (g_audio_enabled) {
-        strudel_tick()       // top up audio after the heavy collect/diffuse, while the workers run
+        if (!g_music_threaded) {
+            strudel_tick()   // top up audio after the heavy collect/diffuse, while the workers run
+        }
+        report_audio_health()
     }
     upload_field()
     draw_surface()
@@ -704,9 +751,7 @@ def update() {
 def shutdown() {
     if (g_status != null) {
         g_status |> join
-        unsafe {
-            job_status_remove(g_status)
-        }
+        unsafe(job_status_remove(g_status))
         g_status = null
     }
     if (g_audio_enabled) {

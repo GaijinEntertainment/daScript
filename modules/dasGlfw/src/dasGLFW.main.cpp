@@ -98,7 +98,15 @@ namespace das {
 // Scalar returns (no out-pointers) so there's no MEMORY64 BigInt-pointer marshalling in EM_JS.
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include "glfw_emscripten_touch.h"
 namespace das {
+    int DAS_glfwTouchCount() { return (int) das_glfw_touch_query(DAS_TOUCH_COUNT, 0); }
+    int DAS_glfwTouchId(int i) { return (int) das_glfw_touch_query(DAS_TOUCH_ID, i); }
+    float DAS_glfwTouchX(int i) { return (float) das_glfw_touch_query(DAS_TOUCH_X, i); }
+    float DAS_glfwTouchY(int i) { return (float) das_glfw_touch_query(DAS_TOUCH_Y, i); }
+    bool DAS_glfwTouchBegan(int i) { return das_glfw_touch_query(DAS_TOUCH_BEGAN, i) != 0; }
+    bool DAS_glfwTouchEnded(int i) { return das_glfw_touch_query(DAS_TOUCH_ENDED, i) != 0; }
+    bool DAS_glfwIsTouchDevice() { return das_glfw_is_touch_device() != 0; }
     // The CSS box the canvas can occupy = its parent's box when the page gave it one (a stage
     // below a site nav), else the document viewport (the iframe inner size on the examples page,
     // the screen when that iframe is fullscreen). NOT canvas.clientWidth: under
@@ -151,6 +159,13 @@ namespace das {
     int DAS_glfwCanvasCssHeight() { return 0; }
     double DAS_glfwDevicePixelRatio() { return 1.0; }
     void DAS_glfwToggleFullscreen() {}
+    int DAS_glfwTouchCount() { return 0; }
+    int DAS_glfwTouchId(int) { return 0; }
+    float DAS_glfwTouchX(int) { return 0.0f; }
+    float DAS_glfwTouchY(int) { return 0.0f; }
+    bool DAS_glfwTouchBegan(int) { return false; }
+    bool DAS_glfwTouchEnded(int) { return false; }
+    bool DAS_glfwIsTouchDevice() { return false; }
 }
 #endif
 
@@ -428,6 +443,22 @@ namespace das {
     // through the user-control lock.
     static std::atomic<bool> g_GlfwRealInputMuted{false};
 
+    static bool g_GlfwVirtualKeys[GLFW_KEY_LAST + 1] = {};
+
+    void DasGlfw_SetVirtualKey ( int key, bool down ) {
+        if ( key >= 0 && key <= GLFW_KEY_LAST ) g_GlfwVirtualKeys[key] = down;
+    }
+
+    void DasGlfw_ClearVirtualKeys () {
+        memset(g_GlfwVirtualKeys, 0, sizeof(g_GlfwVirtualKeys));
+    }
+
+    // modules/dasGlfw/ARCHITECTURE.md#virtual-keys
+    int DasGlfw_GetKey ( GLFWwindow * window, int key ) {
+        if ( key >= 0 && key <= GLFW_KEY_LAST && g_GlfwVirtualKeys[key] ) return GLFW_PRESS;
+        return glfwGetKey(window, key);
+    }
+
     void DasGlfw_SetRealInputMuted ( bool muted ) {
         g_GlfwRealInputMuted.store(muted, std::memory_order_relaxed);
     }
@@ -605,6 +636,7 @@ namespace das {
     // needs no reconciling, and DAS_glfwCanvasCssWidth returns 0 there anyway.
     void DasGlfw_PollEvents () {
 #ifdef __EMSCRIPTEN__
+        das_glfw_touch_poll();
         if ( GLFWwindow * window = glfwGetCurrentContext() ) {
             int cw = DAS_glfwCanvasCssWidth();
             int ch = DAS_glfwCanvasCssHeight();
@@ -633,9 +665,30 @@ namespace das {
         Module_dasGLFW::g_Callbacks = das_map<void *, GlswCallbacks>{};
         g_GlfwChain = das_map<void *, GlfwChainState>{};
         g_GlfwRealInputMuted.store(false, std::memory_order_relaxed);
+        DasGlfw_ClearVirtualKeys();
     }
 
 	void Module_dasGLFW::initMain () {
+        addExtern<DAS_BIND_FUN(DasGlfw_GetKey)>(*this,lib,"glfwGetKey",
+            SideEffects::worstDefault,"DasGlfw_GetKey")
+            ->args({"window","key"});
+        addExtern<DAS_BIND_FUN(DasGlfw_SetVirtualKey)>(*this,lib,"glfw_set_virtual_key",
+            SideEffects::worstDefault,"DasGlfw_SetVirtualKey")
+            ->args({"key","down"});
+        addExtern<DAS_BIND_FUN(DasGlfw_ClearVirtualKeys)>(*this,lib,"glfw_clear_virtual_keys",
+            SideEffects::worstDefault,"DasGlfw_ClearVirtualKeys");
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchCount)>(*this, lib, "glfw_touch_count",SideEffects::accessExternal, "DAS_glfwTouchCount");
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchId)>(*this, lib, "glfw_touch_id",SideEffects::accessExternal, "DAS_glfwTouchId")
+            ->args({"index"});
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchX)>(*this, lib, "glfw_touch_x",SideEffects::accessExternal, "DAS_glfwTouchX")
+            ->args({"index"});
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchY)>(*this, lib, "glfw_touch_y",SideEffects::accessExternal, "DAS_glfwTouchY")
+            ->args({"index"});
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchBegan)>(*this, lib, "glfw_touch_began",SideEffects::accessExternal, "DAS_glfwTouchBegan")
+            ->args({"index"});
+        addExtern<DAS_BIND_FUN(DAS_glfwTouchEnded)>(*this, lib, "glfw_touch_ended",SideEffects::accessExternal, "DAS_glfwTouchEnded")
+            ->args({"index"});
+        addExtern<DAS_BIND_FUN(DAS_glfwIsTouchDevice)>(*this, lib, "glfw_is_touch_device",SideEffects::accessExternal, "DAS_glfwIsTouchDevice");
         // callbacks
         addExtern<DAS_BIND_FUN(DasGlfw_SetKeyCallback)>(*this,lib,"glfwSetKeyCallback",
             SideEffects::worstDefault,"DasGlfw_SetKeyCallback");

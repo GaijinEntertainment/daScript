@@ -96,14 +96,25 @@ def private draw_menu() {
     draw_text_centered("fly the canyon · shoot what shoots back · do not run dry",
         cx, cy - 92.0, TEXT_SMALL, float3(0.62, 0.70, 0.78))
 
-    draw_text_centered("ARROWS / A D      steer", cx, cy - 30.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
-    draw_text_centered("W S               throttle", cx, cy + 2.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
-    draw_text_centered("SPACE             fire", cx, cy + 34.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
-    draw_text_centered("ESC               pause", cx, cy + 66.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+    if (pad_enabled()) {
+        draw_text_centered("PAD           steer and throttle", cx, cy - 30.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+        draw_text_centered("BUTTON        fire", cx, cy + 2.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+        draw_text_centered("CORNER        pause", cx, cy + 34.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+    } else {
+        draw_text_centered("ARROWS / A D      steer", cx, cy - 30.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+        draw_text_centered("W S               throttle", cx, cy + 2.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+        draw_text_centered("SPACE             fire", cx, cy + 34.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+        draw_text_centered("ESC               pause", cx, cy + 66.0, TEXT_BODY, float3(0.86, 0.90, 0.94))
+    }
 
     let blink = 0.55 + 0.45 * abs(sin(get_uptime() * 2.6))
-    draw_text_centered("PRESS SPACE TO START", cx, cy + 128.0, TEXT_HEAD,
+    draw_text_centered(pad_prompt("START"), cx, cy + 128.0, TEXT_HEAD,
         float3(1.0, 0.92, 0.45) * blink)
+}
+
+def private draw_rotate_hint() {
+    let cx = design_w() * 0.5
+    draw_text_centered(pad_rotate_caption(), cx, pad_rotate_text_y(design_h()), TEXT_HEAD, float3(1.0, 0.92, 0.45))
 }
 
 def private draw_playing_readout() {
@@ -156,7 +167,7 @@ def private draw_pause_banner() {
     let blink = 0.6 + 0.4 * abs(sin(get_uptime() * 2.6))
     draw_text_centered("PAUSED", cx, design_h() * 0.5 - 18.0, TEXT_HEAD,
         float3(1.0, 0.88, 0.35) * blink)
-    draw_text_centered("ESC to resume", cx, design_h() * 0.5 + 14.0, TEXT_SMALL,
+    draw_text_centered(pad_enabled() ? "tap to resume" : "ESC to resume", cx, design_h() * 0.5 + 14.0, TEXT_SMALL,
         float3(0.72, 0.78, 0.86))
 }
 
@@ -168,6 +179,11 @@ def draw_hud() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glDisable(GL_DEPTH_TEST)
 
+    if (pad_wants_rotate()) {
+        draw_rotate_hint()
+        glEnable(GL_DEPTH_TEST)
+        return
+    }
     if (game_state == GameState.menu) {
         draw_menu()
         glEnable(GL_DEPTH_TEST)
@@ -181,10 +197,10 @@ def draw_hud() {
         draw_pause_banner()
     } elif (game_state == GameState.game_over_state) {
         draw_overlay_card("GAME OVER", float3(1.0, 0.32, 0.28), "SCORE  {score}",
-            "PRESS SPACE TO RESTART")
+            pad_prompt("RESTART"))
     } elif (game_state == GameState.win_state) {
         draw_overlay_card("RIVER RUN COMPLETE", float3(0.45, 1.0, 0.58), "SCORE  {score}",
-            "PRESS SPACE TO RESTART")
+            pad_prompt("RESTART"))
     }
 
     glEnable(GL_DEPTH_TEST)

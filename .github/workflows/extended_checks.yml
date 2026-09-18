@@ -583,6 +583,15 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash
 
+    - name: "Test the touch layer (dasGlfw)"
+      if: matrix.role != 'core'
+      run: |
+        set -eux
+        # the EM_JS bodies run under node's vm against fake GLFW/Browser fixtures - no browser, no window
+        node modules/dasGlfw/tests/test_web_cursor.cjs
+        node modules/dasGlfw/tests/test_web_touch.cjs
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./modules/dasGlfw/tests
+
     - name: "Test review-md discovery"
       if: matrix.role != 'modules'
       run: |

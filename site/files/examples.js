@@ -22,6 +22,7 @@
                 'rendered in 3D straight through the WebGL2 backend.',
             tags: ['game', 'opengl', 'wasm'],
             controls: '← → or A D  paddle · space launch · F3 F4 scanline pitch',
+            touchControls: 'finger  paddle · tap launch · corner button pause',
             poster: 'files/examples/arcanoid-poster.png',
             aspect: 1024 / 768,           // native window — sizes the player so the game fills it
         },
@@ -31,6 +32,7 @@
                 'power-ups — entities driven by the daslang ECS, compiled to wasm.',
             tags: ['game', 'decs', 'wasm'],
             controls: 'arrow keys  ·  move',
+            touchControls: 'swipe  ·  move',
             poster: 'files/examples/pacman-poster.png',
             aspect: 900 / 760,
         },
@@ -41,6 +43,7 @@
                 'from a seed. A daslang-live game, compiled to wasm.',
             tags: ['game', 'opengl', 'audio', 'wasm'],
             controls: 'arrows move · z/ctrl grab · space start',
+            touchControls: 'pad moves · button grabs · tap start · sideways',
             poster: 'files/examples/boulder-dash-poster.jpg',
             aspect: 1280 / 720,
         },
@@ -52,6 +55,7 @@
                 'through the WebGL2 backend.',
             tags: ['game', 'opengl', 'decs', 'audio', 'wasm'],
             controls: 'arrows / A D steer · W S throttle · space fire · esc pause',
+            touchControls: 'pad steers and throttles · button fires · corner button pause · sideways',
             poster: 'files/examples/river_run-poster.jpg',
             aspect: 1280 / 720,
         },
@@ -227,6 +231,15 @@
                'src="' + esc(runnerUrl(ex)) + '" allow="autoplay; fullscreen"></iframe>';
     }
 
+    // The on-screen pad itself is drawn by the game; a touch device only swaps the controls text.
+    function isTouchDevice() {
+        return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    }
+
+    function controlsFor(ex) {
+        return (isTouchDevice() && ex.touchControls) ? ex.touchControls : ex.controls;
+    }
+
     function openPlayer(ex) {
         closePlayer();
 
@@ -247,13 +260,13 @@
               '</span>' +
               '<div class="forge-ex-player__actions">' +
                 '<button type="button" class="forge-ex-pill" data-act="restart">↻ restart</button>' +
-                '<button type="button" class="forge-ex-pill" data-act="fullscreen">⤢ fullscreen</button>' +
+                (document.fullscreenEnabled ? '<button type="button" class="forge-ex-pill" data-act="fullscreen">⤢ fullscreen</button>' : '') +
                 '<button type="button" class="forge-ex-pill forge-ex-pill--close" data-act="close" aria-label="close">✕</button>' +
               '</div>' +
             '</div>' +
             '<div class="forge-ex-player__viewport" id="ex-viewport">' + viewportHTML(ex) + '</div>' +
             '<div class="forge-ex-player__toolbar">' +
-              '<span class="forge-ex-player__controls"><span class="forge-ex-player__controls-label">controls</span>&nbsp;&nbsp;' + esc(ex.controls) + '</span>' +
+              '<span class="forge-ex-player__controls"><span class="forge-ex-player__controls-label">controls</span>&nbsp;&nbsp;' + esc(controlsFor(ex)) + '</span>' +
               '<div class="forge-ex-player__links">' +
                 '<a href="' + esc(ex.srcUrl) + '" target="_blank" rel="noopener" class="forge-ex-player__link">view source ↗</a>' +
                 (ex.playgroundUrl

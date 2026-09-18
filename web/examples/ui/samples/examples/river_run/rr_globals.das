@@ -3,6 +3,7 @@ options persistent_heap
 
 require glfw/glfw_boost public
 require live/glfw_live public
+require live/glfw_touch_pad public
 require opengl/opengl_boost public
 require opengl/opengl_gen public
 require opengl/opengl_cache public

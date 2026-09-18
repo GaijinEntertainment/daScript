@@ -58,10 +58,14 @@ ledgered follow-up.
 
 `serve.py` maps `/examples/<id>/` onto `../web/output64/examples/<id>/` and sends the two
 cross-origin-isolation headers the Caddy vhost sends under `/examples/` (`utils/internal/dasllama-ladder/caddy.snippet`),
-so a locally built example runs here as deployed once its model set sits in `<id>/models/`.
+so a locally built example runs here as deployed once its model set sits in `<id>/models/`. A
+`devlog.on` marker file beside the examples (or `?devlog=1` on the page) makes a served example
+page carry an injected console/touch/audio tap that posts to `/api/devlog`, which `serve.py`
+appends to `web/output64/examples/devlog.jsonl` - a phone's run then reads on the serving box,
+and that page is not the deployed one.
 
-`serve.py` also proxies `/api/*` to a locally running ladder service on 127.0.0.1:8201
-(mirroring the Caddy vhost), so a preview against real data is: start
+`serve.py` also proxies `/api/*` (except `/api/devlog`, above) to a locally running ladder
+service on 127.0.0.1:8201 (mirroring the Caddy vhost), so a preview against real data is: start
 `utils/internal/dasllama-ladder/main.das` with `--official-dir modules/dasLLAMA/performance/records`,
 then browse. Without the service the pages show their unreachable/zero states.
 

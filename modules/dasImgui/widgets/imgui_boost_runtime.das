@@ -1371,6 +1371,9 @@ def private io_jv() : JsonValue? {
     tab |> insert("key_alt",   JV(IsKeyDown(ImGuiKey.ImGuiMod_Alt)))
     tab |> insert("key_super", JV(IsKeyDown(ImGuiKey.ImGuiMod_Super)))
     tab |> insert("config_macos_behaviors", JV(GetIO().ConfigMacOSXBehaviors))
+    tab |> insert("display_size", JV(float2(GetIO().DisplaySize.x, GetIO().DisplaySize.y)))
+    tab |> insert("framebuffer_scale", JV(float2(GetIO().DisplayFramebufferScale.x, GetIO().DisplayFramebufferScale.y)))
+    tab |> insert("touch_screen", JV((int(GetIO().ConfigFlags) & int(ImGuiConfigFlags.IsTouchScreen)) != 0))
     let active_id = GetActiveID()
     if (active_id != 0u) {
         tab |> insert("active_id", JV(active_id))

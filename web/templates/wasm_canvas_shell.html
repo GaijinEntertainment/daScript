@@ -6,7 +6,7 @@
 <title>daslang</title>
 <style>
   html, body {
-    margin: 0; height: 100%; background: #0d0c0a; overflow: hidden;
+    margin: 0; height: 100%; height: 100dvh; background: #0d0c0a; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
   }
   /* Letterbox, never stretch: the canvas keeps its intrinsic (game) aspect
@@ -16,9 +16,12 @@
      max-width/max-height alone only ever scale DOWN, so a 640x480 program sat
      at 640x480 in the middle of a larger frame — measured on a 906px-wide
      playground frame, which is the "renders in the middle at 2/3" report. */
+  #build { position: fixed; right: 6px; bottom: 4px; font: 10px/1 ui-monospace, Menlo, monospace; color: rgba(255,255,255,0.45); pointer-events: none; z-index: 5; }
+  /* the program owns every finger: no browser pan, pinch or double-tap zoom on the canvas */
   #canvas {
     width: 100%; height: 100%; object-fit: contain;
     border: 0; outline: none; display: block;
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
 </style>
 </head>
@@ -27,7 +30,12 @@
      this artifact in an iframe; override with release_web_shell(<path>) for a
      custom frame. -->
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<div id="build">__DAS_BUILD_STAMP__</div>
 <script>
+  (function () {   // a page served from the source tree carries the raw placeholder: show nothing rather than the token
+    var b = document.getElementById('build');
+    if (b && /^__DAS_/.test(b.textContent)) b.textContent = '';
+  })();
   // The app owns the keyboard: stop arrow/space/page keys from scrolling the
   // embedding page. emscripten GLFW reads them for input but does not
   // preventDefault, so their default scroll otherwise chains out of this
@@ -41,6 +49,7 @@
       var c = document.getElementById('canvas');
       // Keep focus on the canvas so keyboard input reaches the game.
       c.addEventListener('click', function () { c.focus(); });
+      c.addEventListener('pointerdown', function () { c.focus(); });
       // Report the drawing buffer to an embedder the moment a program asks for
       // a GL context, so it can size its frame to the program's real aspect —
       // the same contract run-frame.html has with the playground, which is what
@@ -59,6 +68,31 @@
       return c;
     })(),
   };
+
+  // Browsers only start audio from a gesture: resume every AudioContext the program opens on the first pointer/key event.
+  (function installAudioUnlock() {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (!OrigAC) return;
+    var ctxs = new Set();
+    var Wrapped = function () {
+      var c = new OrigAC(...arguments);
+      ctxs.add(c);
+      try { c.resume().catch(function () {}); } catch (e) {}
+      return c;
+    };
+    Wrapped.prototype = OrigAC.prototype;
+    window.AudioContext = Wrapped;
+    if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
+    var resumeAll = function () {
+      ctxs.forEach(function (c) {
+        if (c.state === 'closed') ctxs.delete(c);
+        else if (c.state !== 'running') c.resume().catch(function () {});   // 'suspended', and WebKit's 'interrupted'
+      });
+    };
+    ['pointerdown', 'touchend', 'keydown', 'click'].forEach(function (e) {
+      document.addEventListener(e, resumeAll, true);
+    });
+  })();
 
   // Feed for an embedder's fps badge (the playground's, today). Counts animation
   // frames in which the program DREW rather than raw rAF ticks — a threaded program

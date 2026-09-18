@@ -5,6 +5,7 @@ options stack = 8_388_608   // 8 MB: decs nested queries overflow the 16 KB defa
 // arcanoid live
 require glfw/glfw_boost
 require live/glfw_live
+require live/glfw_touch_pad
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
@@ -976,9 +977,26 @@ def update_paddle(dt : float) {
             paddle_x -= PADDLE_SPEED * dt
         }
     }
+    // screen-left is world +x: the camera looks back down the field
+    let axis = pad_axis_x()
+    if (!spectator && axis >= 0.0) {
+        paddle_x = (0.5 - axis) * FIELD_W
+    }
     let pw = current_paddle_w()
     let limit = FIELD_W * 0.5 - pw * 0.5
     paddle_x = clamp(paddle_x, -limit, limit)
+}
+
+def declare_touch_pad() {
+    return if (!pad_enabled())
+    if (game_state == GameState.playing && !spectator) {
+        pad_button(0.93, 0.08, 0.055, GLFW_KEY_ESCAPE)
+        pad_tap(GLFW_KEY_SPACE)
+    } elif (game_state == GameState.paused) {
+        pad_tap(GLFW_KEY_ESCAPE)
+    } else {
+        pad_tap(GLFW_KEY_SPACE)
+    }
 }
 
 def draw_paddle() {
@@ -1749,7 +1767,7 @@ def draw_hud() {
     let cy = display_h / 2
     if (game_state == GameState.menu) {
         draw_text_centered("ARCANOID", cx, cy - 60, float3(1.0, 0.8, 0.2))
-        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, pulse_tint(float3(0.7, 0.7, 0.7)))
+        draw_text_centered(pad_prompt("START"), cx, cy + 10, pulse_tint(float3(0.7, 0.7, 0.7)))
         return
     }
     draw_text("SCORE: {score}", HUD_MARGIN, 45, float3(1.0, 1.0, 1.0))
@@ -1759,8 +1777,9 @@ def draw_hud() {
         lives_color = float3(blink, 1.0, blink)
     }
     draw_text("LIVES: {lives}", HUD_MARGIN, 80, lives_color)
-    draw_text("LEVEL {level + 1}", display_w - HUD_MARGIN - 130, 45, float3(0.9, 0.9, 0.95))
-    if (crt_enabled) {
+    let narrow = display_w < 720
+    draw_text("LEVEL {level + 1}", narrow ? HUD_MARGIN : display_w - HUD_MARGIN - 130, narrow ? 115 : 45, float3(0.9, 0.9, 0.95))
+    if (crt_enabled && !pad_enabled()) {
         draw_text("PITCH {crt_pitch} F3/F4", display_w - HUD_MARGIN - 230, 80, float3(0.6, 0.6, 0.7))
     }
     if (level_card_timer > 0.0) {
@@ -1769,22 +1788,22 @@ def draw_hud() {
         draw_text_centered(g_levels[clamp(level, 0, level_count() - 1)].name, cx, cy, float3(0.9, 0.9, 0.95) * fade)
     }
     if (spectator) {
-        draw_text_centered("DEMO", cx, 35, float3(1.0, 0.8, 0.2))
-        draw_text_centered("PRESS SPACE TO PLAY", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
+        draw_text_centered("DEMO", cx, narrow ? 150 : 35, float3(1.0, 0.8, 0.2))
+        draw_text_centered(pad_prompt("PLAY"), cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
         return
     }
     if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
-        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
+        draw_text_centered(pad_prompt("RESTART"), cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
     } elif (game_state == GameState.win_state) {
         draw_text_centered("YOU WIN!", cx, cy - 20, float3(0.2, 1.0, 0.3))
         draw_text_centered("SCORE: {score}", cx, cy + 25, float3(1.0, 1.0, 0.5))
-        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 65, pulse_tint(float3(0.7, 0.7, 0.7)))
+        draw_text_centered(pad_prompt("RESTART"), cx, cy + 65, pulse_tint(float3(0.7, 0.7, 0.7)))
     } elif (game_state == GameState.paused) {
         draw_text_centered("PAUSED", cx, cy - 20, float3(0.8, 0.8, 0.8))
-        draw_text_centered("PRESS ESC TO RESUME", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
+        draw_text_centered(pad_prompt("RESUME", "ESC"), cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
     } elif (has_stuck_balls()) {
-        draw_text_centered("PRESS SPACE TO LAUNCH", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
+        draw_text_centered(pad_prompt("LAUNCH"), cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
     }
     if (god_mode) {
         draw_text("GOD", display_w - 80, 35, float3(1.0, 0.5, 0.0))
@@ -1833,12 +1852,15 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         return
     }
     live_get_framebuffer_size(display_w, display_h)
+    pad_begin_frame()
+    declare_touch_pad()
     ensure_render_targets(display_w, display_h)
     begin_scene_pass(float3(0.05, 0.02, 0.1))
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_minus1_to_1(FOV_Y, aspect, 0.1, Z_FAR)
+    let fov_y = fitted_fov_y(aspect)
+    v_projection = perspective_rh_minus1_to_1(fov_y, aspect, 0.1, Z_FAR)
     f_ZFar = Z_FAR
     v_view = look_at_rh(
         float3(0.0, 14.0, -4.0),
@@ -2040,6 +2062,7 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     glActiveTexture(GL_TEXTURE0)      // the post chain leaves the active unit on its last sampler; the font binds on unit 0
     draw_hud()
     run_postfx(post_settings(aspect))
+    pad_end_frame()
     live_end_frame()
 }
 
@@ -2048,14 +2071,23 @@ var @live ssao_enabled = true
 var @live fx_debug_view = 0
 var @live crt_pitch = 4.0
 let FOV_Y = 45.0 * PI / 180.0
+let DESIGN_ASPECT = 1024.0 / 768.0
+
+// A window narrower than the design aspect opens the vertical field of view instead of cropping the field.
+def fitted_fov_y(aspect : float) : float {
+    return aspect < DESIGN_ASPECT ? 2.0 * atan(tan(FOV_Y * 0.5) * DESIGN_ASPECT / aspect) : FOV_Y
+}
 
 def post_settings(aspect : float) : PostSettings {
     var cfg = PostSettings()
     cfg.crt = crt_enabled
     cfg.ssao = ssao_enabled
     cfg.scanline_pitch = crt_pitch
+    if (pad_enabled()) {
+        cfg.curvature = 0.0
+    }
     cfg.debug_view = fx_debug_view
-    let t = tan(FOV_Y * 0.5)
+    let t = tan(fitted_fov_y(aspect) * 0.5)      // the same fit the projection took, or the SSAO rays land short
     cfg.tan_half_fov = float2(t * aspect, t)
     cfg.z_far = Z_FAR
     cfg.time = get_uptime()
