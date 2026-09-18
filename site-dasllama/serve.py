@@ -25,6 +25,7 @@ web/output64/examples/devlog.jsonl itself, one JSON line per page event — star
 import http.server
 import os
 import socketserver
+import threading
 import urllib.error
 import urllib.request
 
@@ -35,6 +36,8 @@ SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js
 PORT = 8932
 LADDER = "http://127.0.0.1:8201"
 DEVLOG = os.path.join(EXAMPLES_OUT, "devlog.jsonl")
+DEVLOG_MAX_BODY = 64 * 1024        # the page caps a line at 4000 chars; anything past this is not a devlog line
+DEVLOG_LOCK = threading.Lock()
 DEVLOG_ON = os.path.join(EXAMPLES_OUT, "devlog.on")
 DEVLOG_SCRIPT = b"""<script>
 (function () {
@@ -101,9 +104,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 n = 0
+            n = min(n, DEVLOG_MAX_BODY)
             body = self.rfile.read(n) if n else b""
-            with open(DEVLOG, "ab", buffering=0) as f:       # one unbuffered write: handlers run on threads and a line must not split
-                f.write(body.rstrip(b"\n") + b"\n")
+            if body.strip():
+                with DEVLOG_LOCK, open(DEVLOG, "ab", buffering=0) as f:   # handlers run on threads: one writer at a time, one write per line
+                    f.write(body.rstrip(b"\n") + b"\n")
             self.send_response(204)
             self.end_headers()
             return

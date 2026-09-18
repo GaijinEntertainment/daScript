@@ -147,9 +147,9 @@ def public touch_take_injected() : array<TouchPoint> {
     //! The injected fingers as this frame sees them. The list then commits like the device poll does:
     //! ``began`` clears and an ended finger leaves, so a headless host running thousands of frames
     //! between two commands keeps the fingers down until the next injection replaces them.
-    var out := imgui_touch_injected
-    var keep <- [for (f in imgui_touch_injected); TouchPoint(id = f.id, pos = f.pos); where !f.ended]
-    delete imgui_touch_injected
+    var out <- imgui_touch_injected
+    var keep <- [for (f in out); TouchPoint(id = f.id, pos = f.pos); where !f.ended]
+    delete imgui_touch_injected     // already moved out and empty; the release the move-assign lint asks for
     imgui_touch_injected <- keep
     return <- out
 }
