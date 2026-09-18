@@ -55,8 +55,8 @@ namespace das {
 
     bool NameLookup::PerfectHash::build ( const vector<uint64_t> & keys, vector<uint32_t> & dispOut, uint32_t slack ) {
         uint32_t n = uint32_t(keys.size());
-        nbuckets = das::max(1u, (n + 4) / 5);
-        nslots = n + das::max(1u, n / 20) * slack;
+        nbuckets = das::max(uint32_t(1), (n + 4) / 5);
+        nslots = n + das::max(uint32_t(1), n / 20) * slack;
         vector<uint64_t> scrambled(n);
         vector<uint32_t> bucketOf(n);
         vector<uint32_t> bucketSize(nbuckets, 0);
