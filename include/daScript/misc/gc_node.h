@@ -70,6 +70,15 @@ namespace das {
         __forceinline unsigned int use_count() const { return 1; }
     };
 
+    //! frees a node its creator knows nothing references, ahead of the sweep; under DAS_GC_DEBUG the node stays for use-after-sweep detection
+    inline void gc_free_now ( gc_node * node ) {
+#if DAS_GC_DEBUG
+        (void) node;
+#else
+        delete node;
+#endif
+    }
+
     // Optional diagnostic hook: given a node, write a short source location
     // ("file.das:line:col") into buf. Installed by the AST layer (ast_gc_report.cpp),
     // which alone can downcast to the concrete subclass and read its `at`. nullptr by

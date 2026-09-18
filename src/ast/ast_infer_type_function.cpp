@@ -2122,6 +2122,7 @@ namespace das {
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         } else {
+            gc_free_now(tempCall);
             return nullptr;
         }
     }
@@ -2130,7 +2131,12 @@ namespace das {
         conststring->constant = true;
         auto fieldName = new ExprConstString(expr_at, arg1);
         fieldName->type = conststring;
-        return inferGenericOperator(opN, expr_at, arg0, fieldName, err);
+        auto opE = inferGenericOperator(opN, expr_at, arg0, fieldName, err);
+        if (!opE) {
+            gc_free_now(fieldName);
+            gc_free_now(conststring);
+        }
+        return opE;
     }
     Variable *InferTypes::findMatchingBlockOrLambdaVariable(const string &name) {
         // local (that on the stack)
