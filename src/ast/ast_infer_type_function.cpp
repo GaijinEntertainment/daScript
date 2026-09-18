@@ -8,6 +8,12 @@
 
 namespace das {
 
+    static bool isIdentifierCallName(const string &name) {
+        string moduleName, funcName;
+        splitTypeName(name, moduleName, funcName);
+        return !funcName.empty() && (isalpha(uint8_t(funcName[0])) || funcName[0] == '_');
+    }
+
     Module *InferTypes::getSearchModule(string &moduleName) const {
         if (moduleName == "_") {
             moduleName = "*";
@@ -2017,7 +2023,8 @@ namespace das {
                     reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                 }
             } else {
-                if (auto aliasT = findAlias(expr->name)) {
+                TypeDeclPtr aliasT = isIdentifierCallName(expr->name) ? findAlias(expr->name) : nullptr;
+                if (aliasT) {
                     if (aliasT->isCtorType()) {
                         expr->name = das_to_string(aliasT->baseType);
                         if (aliasT->baseType == Type::tBitfield || aliasT->baseType == Type::tBitfield8 ||
