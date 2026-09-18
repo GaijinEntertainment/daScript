@@ -496,8 +496,8 @@ def test_pocket_q8_lane(t : T?) {
         var inscope m <- load_pocket(path)
         t |> success(m.q8, "the pinned q8 lane serves")
         t |> success(pocket_serves_q8(), "the pin is what the policy answers")
-        t |> success(m.backbone.layers[0].in_proj.q8 && m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
-            "the GEMMs on 32-wide inputs minted q8; the one-channel convs stayed f32")
+        t |> success(m.backbone.layers[0].in_proj.q8 && !m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
+            "the backbone GEMMs serve q8; every codec conv serves f32")
         var inscope sc = PocketScratch()
         var done = 0
         for (c in man.cases) {
@@ -908,12 +908,9 @@ def test_pocket_facade(t : T?) {
         t |> equal(a.timings.samples, long_length(a.pcm))
         t |> success(a.timings.backbone_us > 0l && a.timings.codec_us > 0l && a.timings.bert_us == 0l, "the family's own stages carry the time")
         to_log(LOG_INFO, "pocket facade: {timings_line(a.timings, a.sample_rate)}\n")
-        // a cloned voice: the roster's own clip under a new name speaks and is listed
-        var inscope clip : array<float>
-        m.pocket.voices |> get("caro_davy") $(pcm) {
-            clip := pcm
-        }
-        t |> success(!empty(clip), "the parity file stores its roster as clips (the older form) - caro_davy's is the clone's source")
+        // a cloned voice: the checked-in reference clip under a new name speaks and is listed
+        var inscope clip <- load_audio_mono("{get_das_root()}/modules/dasLLAMA/models/jfk_ask_not.wav", 24000)
+        t |> success(!empty(clip), "the checked-in reference clip is the clone's source")
         tts_register_voice(m, "cloned", clip, 24000)
         var inscope c2 <- caps(m)
         t |> equal(length(c2.voices), 20, "the cloned voice joined the roster")
