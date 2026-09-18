@@ -38,6 +38,12 @@ def run_reported(t : T?; phase : string; cmd : string; var out : string&; marker
 
 let CACHE_DIR = ".jitted_scripts/module_cache"
 
+//! the stems carry the binary kind: the dynamic and the static suite run this file at once in
+//! one tree, and each counts only the cache files its own children wrote
+def kind_stem(stem : string) : string {
+    return das_is_dll_build() ? stem : "{stem}_static"
+}
+
 //! the cache files written for one root: `<CACHE_DIR>/<stem>-<hash>.dascache`
 def cache_files(stem : string) : int {
     var n = 0
@@ -206,17 +212,19 @@ def test_source_derived_syntax_policy_serves(t : T?) {
 
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
 def check_off_modes(t : T?; base, b, c : string) {
+    let sb = kind_stem("mc_default_b")
+    let sc = kind_stem("mc_default_c")
     var off : string
     let offRc = run("{base} -no-module-cache {b}", off)
-    t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_mc_default_b"), "-no-module-cache still executes")
-    t |> equal(cache_files("mc_default_b"), 0, "-no-module-cache writes no cache")
+    t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_{sb}"), "-no-module-cache still executes")
+    t |> equal(cache_files(sb), 0, "-no-module-cache writes no cache")
     var co : string
     let coRc = run("{base} -compile-only {c}", co)
     t |> success(coRc == 0, "-compile-only compiles:\n{co}")
-    t |> equal(cache_files("mc_default_c"), 0, "-compile-only writes no cache")
+    t |> equal(cache_files(sc), 0, "-compile-only writes no cache")
     var aot : string
     run("{base} -use-aot {c}", aot)
-    t |> equal(cache_files("mc_default_c"), 0, "-use-aot writes no cache, whether or not the binary carries AOT stubs")
+    t |> equal(cache_files(sc), 0, "-use-aot writes no cache, whether or not the binary carries AOT stubs")
 }
 
 def count_lines_with(text, needle : string) : int {
@@ -310,18 +318,19 @@ def test_source_lines_survive_the_cache(t : T?) {
 //! a cache file cut in the middle, or one whose header is garbage, is read as far as it goes,
 //! silently, and rewritten
 def check_damaged_cache(t : T?; base, a : string) {
-    truncate_file(cache_file_path("mc_default_a"))
+    let sa = kind_stem("mc_default_a")
+    truncate_file(cache_file_path(sa))
     var damaged : string
     let damagedRc = run("{base} {a}", damaged)
-    t |> success(report_child(t, "damaged cache", damagedRc, damaged, "MARK_mc_default_a"), "a run over a truncated cache file executes")
+    t |> success(report_child(t, "damaged cache", damagedRc, damaged, "MARK_{sa}"), "a run over a truncated cache file executes")
     t |> success(quiet(damaged), "the default cache says nothing over a truncated cache file:\n{damaged}")
-    t |> equal(cache_files("mc_default_a"), 1, "the truncated file is rewritten in place")
-    scramble_header(cache_file_path("mc_default_a"))
+    t |> equal(cache_files(sa), 1, "the truncated file is rewritten in place")
+    scramble_header(cache_file_path(sa))
     var garbage : string
     let garbageRc = run("{base} {a}", garbage)
-    t |> success(report_child(t, "garbage header", garbageRc, garbage, "MARK_mc_default_a"), "a run over a cache file with a garbage header executes")
+    t |> success(report_child(t, "garbage header", garbageRc, garbage, "MARK_{sa}"), "a run over a cache file with a garbage header executes")
     t |> success(quiet(garbage) && find(garbage, "das: ") < 0, "the default cache says nothing over a garbage header - no verdict, no serializer warning:\n{garbage}")
-    t |> equal(cache_files("mc_default_a"), 1, "the garbage file is rewritten in place")
+    t |> equal(cache_files(sa), 1, "the garbage file is rewritten in place")
 }
 
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
@@ -335,25 +344,28 @@ def test_default_module_cache(t : T?) {
         return
     }
     let root = get_das_root()
-    let stems <- ["mc_default_a", "mc_default_b", "mc_default_c"]
+    let sa = kind_stem("mc_default_a")
+    let sb = kind_stem("mc_default_b")
+    let sc = kind_stem("mc_default_c")
+    let stems <- [sa, sb, sc]
     for (stem in stems) {
         remove_cache_files(stem)
         fwrite(path_join(tmp, "{stem}.das"), "options gen2\n[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
     }
     let base = "{das_exe()} -dasroot {root}"
-    let a = "{path_join(tmp, "mc_default_a.das")}"
-    let b = "{path_join(tmp, "mc_default_b.das")}"
-    let c = "{path_join(tmp, "mc_default_c.das")}"
+    let a = path_join(tmp, "{sa}.das")
+    let b = path_join(tmp, "{sb}.das")
+    let c = path_join(tmp, "{sc}.das")
     var cold : string
     let coldRc = run("{base} {a}", cold)
-    t |> success(report_child(t, "default cold", coldRc, cold, "MARK_mc_default_a"), "a plain run executes")
+    t |> success(report_child(t, "default cold", coldRc, cold, "MARK_{sa}"), "a plain run executes")
     t |> success(quiet(cold), "the default cache says nothing on the cold run:\n{cold}")
-    t |> equal(cache_files("mc_default_a"), 1, "the cold run wrote one cache file for the root")
+    t |> equal(cache_files(sa), 1, "the cold run wrote one cache file for the root")
     var warm : string
     let warmRc = run("{base} {a}", warm)
-    t |> success(report_child(t, "default warm", warmRc, warm, "MARK_mc_default_a"), "the warm run executes")
+    t |> success(report_child(t, "default warm", warmRc, warm, "MARK_{sa}"), "the warm run executes")
     t |> success(quiet(warm), "the default cache says nothing on the warm run:\n{warm}")
-    t |> equal(cache_files("mc_default_a"), 1, "the warm run adds no second file")
+    t |> equal(cache_files(sa), 1, "the warm run adds no second file")
     check_damaged_cache(t, base, a)
     check_off_modes(t, base, b, c)
     var loud : string
@@ -362,20 +374,20 @@ def test_default_module_cache(t : T?) {
     let win = get_platform_name() == "windows"
     var envRun : string
     let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)
-    t |> success(report_child(t, "env-keyed", envRc, envRun, "MARK_mc_default_a"), "a DAS* environment change still executes")
-    t |> equal(cache_files("mc_default_a"), 2, "a DAS* environment change keys a second cache file")
+    t |> success(report_child(t, "env-keyed", envRc, envRun, "MARK_{sa}"), "a DAS* environment change still executes")
+    t |> equal(cache_files(sa), 2, "a DAS* environment change keys a second cache file")
     var flagged : string
     let flaggedRc = run("{base} -v2syntax {a}", flagged)
-    t |> success(report_child(t, "flag-keyed", flaggedRc, flagged, "MARK_mc_default_a"), "a different host flag set still executes")
-    t |> equal(cache_files("mc_default_a"), 3, "a host flag before the script keys a third cache file")
+    t |> success(report_child(t, "flag-keyed", flaggedRc, flagged, "MARK_{sa}"), "a different host flag set still executes")
+    t |> equal(cache_files(sa), 3, "a host flag before the script keys a third cache file")
     var userArgs : string
     let userRc = run("{base} {a} -- --probe", userArgs)
-    t |> success(report_child(t, "user-args", userRc, userArgs, "MARK_mc_default_a"), "script arguments after -- still execute")
-    t |> equal(cache_files("mc_default_a"), 3, "script arguments after -- do not key a cache file")
+    t |> success(report_child(t, "user-args", userRc, userArgs, "MARK_{sa}"), "script arguments after -- still execute")
+    t |> equal(cache_files(sa), 3, "script arguments after -- do not key a cache file")
     let ignored = path_join(tmp, "ignored.bin")
     var both : string
     let bothRc = run("{base} -module-cache {ignored} -no-module-cache {b}", both)
-    t |> success(report_child(t, "explicit+off", bothRc, both, "MARK_mc_default_b"), "-module-cache with -no-module-cache still executes")
+    t |> success(report_child(t, "explicit+off", bothRc, both, "MARK_{sb}"), "-module-cache with -no-module-cache still executes")
     t |> success(quiet(both), "-no-module-cache wins over -module-cache - no verdict line:\n{both}")
     var ignoredStat : FStat
     t |> success(!stat(ignored, ignoredStat), "-no-module-cache wins over -module-cache - the explicit file is not written")
@@ -388,8 +400,8 @@ def test_default_module_cache(t : T?) {
     let viaPath = win ? "set \"PATH={binDir};%PATH%\"&& {exeName} -dasroot {root}" : "PATH={binDir}:$PATH {exeName} -dasroot {root}"
     var pathRun : string
     let pathRc = run("{viaPath} {a}", pathRun)
-    t |> success(report_child(t, "via PATH", pathRc, pathRun, "MARK_mc_default_a"), "a PATH launch executes")
-    t |> equal(cache_files("mc_default_a"), 3, "a PATH launch keys the same file as the path launch - the binary is resolved, not read off argv[0]")
+    t |> success(report_child(t, "via PATH", pathRc, pathRun, "MARK_{sa}"), "a PATH launch executes")
+    t |> equal(cache_files(sa), 3, "a PATH launch keys the same file as the path launch - the binary is resolved, not read off argv[0]")
     for (stem in stems) {
         remove_cache_files(stem)
     }

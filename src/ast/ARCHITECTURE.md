@@ -100,7 +100,11 @@ the descriptor's bytes and on four process-wide inputs a descriptor can read - i
 (`project_path`), the das root (`get_das_root()`), the binary kind (`das_is_dll_build()`) and the
 cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descriptor consults to
 register its module for the web target only) - so the file sits next to the descriptor, and a
-read-only tree simply compiles on every start. Its key
+read-only tree simply compiles on every start. The binary kind also picks the file's name: a
+dynamic-module build writes `.das_module.manifest`, a static build (`daslang_static`, its
+modules linked in) `.das_module.static.manifest`, so the two kinds sharing one tree - a CI lane
+running both suites at once, a box with both binaries - never rewrite each other's rows, and each
+replays its own from its second start on. Its key
 is the descriptor's size and content hash (`hash_block64`, no stat) plus those four inputs, one
 line each (`root`, `dll`, `dasroot`, `target`), plus one `dep` line per file the descriptor's
 compile read - every module in its program with a file name, the daslib ones included - carrying

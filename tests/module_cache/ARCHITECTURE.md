@@ -49,7 +49,9 @@ this document states what the folder is and why its tests take the shape they do
   first: the first start compiles the descriptor and writes the manifest beside it, the second
   replays it, an edited descriptor recompiles once, every rejection the reader knows - a table
   over each mutated line - recompiles and rewrites, an edited module the descriptor requires
-  recompiles it once, a `--jit-target` run keys apart from a native one, a `no_manifest()` descriptor compiles on every start, a recorded argument with a
+  recompiles it once, a `--jit-target` run keys apart from a native one, the other binary kind
+  (`daslang_static` beside `daslang`, or back) writes its own manifest file and each kind replays
+  its own after the other ran, a `no_manifest()` descriptor compiles on every start, a recorded argument with a
   tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
   goes fails the create or the rename so the start just compiles; each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
@@ -147,7 +149,10 @@ directory, asserting on the child's stdout; the manifest case on a project root 
 directory, asserting on the scan trace. Each removes what it wrote under its own directory,
 with one ledgered write outside it: the default-path case's child writes the default cache,
 which is `.jitted_scripts/module_cache/` under the cwd it shares with dastest by definition,
-and the test removes what that child wrote before it returns. The `.das_module.manifest`
-sidecars every child's module scan warms beside the tree's descriptors are the scan's,
-gitignored, and stay. A child's stdout is echoed on failure,
+and the test removes what that child wrote before it returns. The manifest sidecars every
+child's module scan warms beside the tree's descriptors - `.das_module.manifest` from the
+dynamic-module build, `.das_module.static.manifest` from `daslang_static` - are the scan's,
+gitignored, and stay; a test names the one its own kind writes (`manifest_file_name`), since
+the static suite runs this folder too, and the default-path case keys its stems by kind
+(`kind_stem`) because the two suites run at once in one tree. A child's stdout is echoed on failure,
 because the exit code alone would turn a one-line answer into an exit-code hunt.

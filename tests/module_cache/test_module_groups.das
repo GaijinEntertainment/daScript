@@ -122,7 +122,7 @@ def arms_expand(t : T?; fx : Fixture) {
         var out : string
         t |> success(run_driver_reported(t, "cold", fx, useGroup, out, "PROBE 11"), "both members resolve")
         t |> equal("compiled (no manifest), manifest written (3 row(s))", descriptor_verdict(out, "grp_alpha"), "alpha's manifest carries its path row and its two group rows:\n{out}")
-        let manifest = fread(path_join(fx.alphaDir, ".das_module.manifest"))
+        let manifest = fread(path_join(fx.alphaDir, manifest_file_name()))
         t |> success(find(manifest, "\ngrp\tprobe_group\tgrp_alpha/alpha\tmath\n") >= 0, "the group row is written with its guard:\n{manifest}")
         t |> success(find(out, "grp_delta/delta") < 0, "delta's row, guarded on a module the build lacks, adds nothing and resolves nothing:\n{out}")
     }
