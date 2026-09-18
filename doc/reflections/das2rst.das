@@ -411,7 +411,7 @@ def document_module_dasllama_tts(_root : string) {
         group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_has_phonemes|finalize)$%%),
         group_by_regex("Voices", mod, %regex~(tts_register_voice|tts_prepare_voice_prompt|tts_voice_prompt_valid|tts_register_voice_prompt)$%%),
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
-        group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream)$%%),
+        group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),
         group_by_regex("Timings", mod, %regex~(rtf|timings_line)$%%)
     )
@@ -679,7 +679,7 @@ def document_module_jobque_boost(_root : string) {
         group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%),
         group_by_regex("Iteration", mod, %regex~(for_each|each|each_clone|for_each_clone)$%%),
         group_by_regex("Passing data", mod, %regex~(push|push_clone|push_batch|push_batch_clone|push_archive)$%%),
-        group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone|pop_archive|try_pop_archive|gather_archive)$%%),
+        group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone|pop_archive|try_pop_archive|pop_archive_with_timeout|gather_archive)$%%),
         group_by_regex("Synchronization", mod, %regex~(with_wait_group|done)$%%),
         group_by_regex("Parallel execution", mod, %regex~(_parallel_for|parallel_for|team_parallel_for|team_parallel_for_indexed|team_parallel_stages|_parallel_for_each|parallel_for_each|_parallel_map|parallel_map)$%%),
         group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear|fill|grab)$%%),
