@@ -2779,13 +2779,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         } elif (subExprT.isGoodTableType) {
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-            var keyType : Type
-            if (subExprT.firstType.isWorkhorseType) {
-                keyType = subExprT.firstType.baseType
-            } else {
-                var uvt = get_underlying_value_type(subExprT.firstType)
-                keyType = uvt.baseType
-            }
+            let keyType = table_key_storage_base_type(subExprT.firstType)
             var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
             var tab = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, expr.subexpr._type.alignOf, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE.DATA), "table.data")
@@ -2894,13 +2888,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var tab_ty = expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var tab = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(tab_ty), tsrc, tab_ty.alignOf, "tab")
                 var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-                var keyType : Type
-                if (etype.firstType.isWorkhorseType) {
-                    keyType = etype.firstType.baseType
-                } else {
-                    var uvt = get_underlying_value_type(etype.firstType)
-                    keyType = uvt.baseType
-                }
+                let keyType = table_key_storage_base_type(etype.firstType)
                 var at_tab = build_table_find(keyType, tab_ptr, tidx, etype.secondType.sizeOf)
                 var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, at_tab, types.ConstI32(uint64(-1)), "table_found")
                 var subRes = build_select(if_found, resType) {
@@ -3932,7 +3920,7 @@ class public LlvmJitVisitor : AstVisitor {
                 || !(starts_with(cf.func.name, "builtin`keys`") || starts_with(cf.func.name, "builtin`values`"))) return false
         assume tabT = cf.arguments[0]._type
         if (tabT == null || !tabT.isGoodTableType) return false
-        return is_workhorse_table_key(tabT.firstType.baseType)
+        return is_workhorse_table_key(peel_distinct(tabT.firstType).baseType)
     }
 
     def inline_each_source(expr : ExpressionPtr) : ExpressionPtr {
@@ -5598,13 +5586,7 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-        var keyType : Type
-        if (subExprT.firstType.isWorkhorseType) {
-            keyType = subExprT.firstType.baseType
-        } else {
-            var uvt = get_underlying_value_type(subExprT.firstType)
-            keyType = uvt.baseType
-        }
+        let keyType = table_key_storage_base_type(subExprT.firstType)
         var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
         setE(expr, res)
         return expr
@@ -5616,13 +5598,7 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-        var keyType : Type
-        if (subExprT.firstType.isWorkhorseType) {
-            keyType = subExprT.firstType.baseType
-        } else {
-            var uvt = get_underlying_value_type(subExprT.firstType)
-            keyType = uvt.baseType
-        }
+        let keyType = table_key_storage_base_type(subExprT.firstType)
         var res = build_table_at(keyType, tab_ptr, tidx, 0, expr.at)
         setE(expr, res)
         return expr
@@ -5634,13 +5610,7 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-        var keyType : Type
-        if (subExprT.firstType.isWorkhorseType) {
-            keyType = subExprT.firstType.baseType
-        } else {
-            var uvt = get_underlying_value_type(subExprT.firstType)
-            keyType = uvt.baseType
-        }
+        let keyType = table_key_storage_base_type(subExprT.firstType)
         var at_tab = build_table_find(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, at_tab, types.ConstI32(uint64(-1)), "")
         var resType = LLVMPointerType(type_to_llvm_type(subExprT.secondType), 0u)
@@ -5663,13 +5633,7 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
-        var keyType : Type
-        if (subExprT.firstType.isWorkhorseType) {
-            keyType = subExprT.firstType.baseType
-        } else {
-            var uvt = get_underlying_value_type(subExprT.firstType)
-            keyType = uvt.baseType
-        }
+        let keyType = table_key_storage_base_type(subExprT.firstType)
         var at_tab = build_table_find(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         var res = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, at_tab, types.ConstI32(uint64(-1)), "")
         setE(expr, res)

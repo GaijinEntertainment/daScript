@@ -483,25 +483,27 @@ namespace das {
                 return Visitor::visit(expr);
             }
         }
-        // distinct types borrow == and != (language-level, not overridable): lower to a compare
-        // of the underlyings. Both sides must be the SAME distinct type; Foo == int stays an error
-        if ((expr->op == "==" || expr->op == "!=") && expr->left->type->isDistinct() &&
-            expr->left->type->isSameType(*expr->right->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
-            reportAstChanged();
-            return new ExprOp2(expr->at, expr->op,
-                new ExprPtr2Ref(expr->left->at, expr->left),
-                new ExprPtr2Ref(expr->right->at, expr->right));
-        }
+        // distinct types borrow == and != from the underlying type when no operator is defined for them
+        bool canBorrowDistinct = (expr->op == "==" || expr->op == "!=") && expr->left->type->isDistinct() &&
+            expr->left->type->isSameType(*expr->right->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no);
         auto opName = "_::" + expr->op;
         auto tempCall = new ExprLooksLikeCall(expr->at, opName);
         tempCall->arguments.push_back(expr->left);
         tempCall->arguments.push_back(expr->right);
-        expr->func = inferFunctionCall(tempCall, InferCallError::operatorOp2);
+        auto errorsBeforeLookup = program->errors.size();
+        expr->func = inferFunctionCall(tempCall, canBorrowDistinct ? InferCallError::operatorOp2Borrow : InferCallError::operatorOp2);
         if (opName != tempCall->name) { // this happens when the operator gets instanced
             reportAstChanged();
             auto opCall = new ExprCall(expr->at, tempCall->name);
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
+        }
+        if (!expr->func && canBorrowDistinct && program->errors.size()==errorsBeforeLookup) {
+            gc_free_now(tempCall);
+            reportAstChanged();
+            return new ExprOp2(expr->at, expr->op,
+                new ExprPtr2Ref(expr->left->at, expr->left),
+                new ExprPtr2Ref(expr->right->at, expr->right));
         }
         if (expr->func) {
             if (expr->func->firstArgReturnType) {

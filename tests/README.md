@@ -621,6 +621,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | default_method_arguments.das | Default argument values in abstract/override methods | |
 | deref_ptr_fun.das | `deref(getPtr())` - function pointer dereference | |
 | dim.das | Fixed-size 2D arrays - indexing, pointer arithmetic, string representation | |
+| distinct_table_keys.das | Tables and sets keyed by distinct types - two distincts over `int` stay apart, erase, iteration, `keys()`, a distinct over `string` | |
 | div_by_zero.das | Division/modulo by zero - int, uint, int64, uint64 via try/recover | |
 | dummy.das | `SomeDummyType` - sizeof, alignof with `@safe_when_uninitialized` | |
 | failed_duplicate_keys.das | Duplicate table keys at compile time | **expect** `40300:4` |

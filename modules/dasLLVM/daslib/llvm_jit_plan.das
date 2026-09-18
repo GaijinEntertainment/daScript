@@ -608,16 +608,6 @@ class public DllExternResolver : AstVisitor {
         return expr
     }
 
-    def private get_table_t(subexprT : TypeDeclPtr) {
-        assume firstT = subexprT.firstType
-        if (firstT.isWorkhorseType) {
-            return firstT.baseType
-        } else {
-            var uvt = get_underlying_value_type(firstT)
-            return uvt.baseType
-        }
-    }
-
     // Pre-bind the JIT table-fn globals for the standalone-exe / cache-reload path. String
     // keys route through the precomputed-hash helpers (see build_table_find/at), so bind
     // those globals instead of the per-type ones.
@@ -642,7 +632,7 @@ class public DllExternResolver : AstVisitor {
     def override preVisitExprAt(expr : ExprAt?) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType) {
-            bind_jit_table_at_glob(get_table_t(subExprT))
+            bind_jit_table_at_glob(table_key_storage_base_type(subExprT.firstType))
         } elif (handle_at_is_jitable(expr)) {
             assume ixT = expr.index._type
             dll.set_glob_address(uid.get_at_type(subExprT, ixT),
@@ -657,27 +647,27 @@ class public DllExternResolver : AstVisitor {
     }
 
     def override preVisitExprSetInsert(expr : ExprSetInsert?) {
-        bind_jit_table_at_glob(get_table_t(expr.arguments[0]._type))
+        bind_jit_table_at_glob(table_key_storage_base_type(expr.arguments[0]._type.firstType))
     }
 
     def override preVisitExprKeyExists(expr : ExprKeyExists?) {
-        bind_jit_table_find_glob(get_table_t(expr.arguments[0]._type))
+        bind_jit_table_find_glob(table_key_storage_base_type(expr.arguments[0]._type.firstType))
     }
 
     def override preVisitExprFind(expr : ExprFind?) {
-        bind_jit_table_find_glob(get_table_t(expr.arguments[0]._type))
+        bind_jit_table_find_glob(table_key_storage_base_type(expr.arguments[0]._type.firstType))
     }
 
     def override preVisitExprSafeAt(expr : ExprSafeAt?) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var etype = subExprT.isPointer ? subExprT.firstType : subExprT
-            bind_jit_table_find_glob(get_table_t(etype))
+            bind_jit_table_find_glob(table_key_storage_base_type(etype.firstType))
         }
     }
 
     def override preVisitExprErase(expr : ExprErase?) {
-        let t = get_table_t(expr.arguments[0]._type)
+        let t = table_key_storage_base_type(expr.arguments[0]._type.firstType)
         dll.set_glob_address(DllName(FN_JIT_TABLE_ERASE(t)), get_jit_table_erase(unsafe(reinterpret<int>(t))))
     }
 }

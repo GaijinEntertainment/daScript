@@ -64,8 +64,9 @@ For a distinct type over a pointer, ``*`` peels the distinct level, not the poin
 Operators
 ---------
 
-Only ``==`` and ``!=`` are borrowed from the underlying type, and both sides must be the
-*same* distinct type. Everything else — arithmetic, ordering — is deliberately absent:
+Only ``==`` and ``!=`` are borrowed from the underlying type, both sides must be the
+*same* distinct type, and an ``operator ==`` or ``operator !=`` you define for the distinct
+type takes precedence over the borrow. Everything else — arithmetic, ordering — is deliberately absent:
 ``EntityId + EntityId`` is meaningless, so it doesn't compile. Where an operation is
 meaningful, define it explicitly:
 
@@ -75,8 +76,10 @@ meaningful, define it explicitly:
 
     let d = Meters(2.0) + Meters(3.0)   // Meters(5.0)
 
-Distinct types cannot be table keys (even though the underlying type hashes fine — the
-nominal wall is the point). Arrays, struct fields, tuple and variant fields all work.
+A distinct type keys a table when its underlying type can: the key hashes as the underlying
+value, and the nominal wall still holds, so ``table<EntityId; string>`` refuses a plain ``int``
+key and a key of any other distinct type over ``int`` at compile time. Arrays, struct fields,
+tuple and variant fields all work as well.
 
 ---------
 Overloads

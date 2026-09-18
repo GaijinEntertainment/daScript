@@ -27,6 +27,7 @@ namespace das
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
     void (*g_resetFusionEngineFn) ( bool orphan ) = nullptr;
+
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
@@ -1501,12 +1502,8 @@ namespace das
         auto val = getE(expr->arguments[1]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = expr->arguments[0]->type->secondType->getSizeOf();
-            Type valueType;
-            if ( expr->arguments[0]->type->firstType->isWorkhorseType() ) {
-                valueType = expr->arguments[0]->type->firstType->baseType;
-            } else {
-                auto valueT = expr->arguments[0]->type->firstType->annotation->makeValueType();
-                valueType = valueT->baseType;
+            Type valueType = expr->arguments[0]->type->firstType->getR2VType();
+            if ( !expr->arguments[0]->type->firstType->isWorkhorseType() ) {
                 val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
             }
             setE(expr, context.code->makeTableKeyValueNode<SimNode_TableErase>(valueType, at, cont, val, valueTypeSize));
@@ -1524,12 +1521,8 @@ namespace das
         auto val = getE(expr->arguments[1]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
             DAS_ASSERTF(expr->arguments[0]->type->secondType->getSizeOf()==0,"Expecting value type size to be 0 for set insert");
-            Type valueType;
-            if ( expr->arguments[0]->type->firstType->isWorkhorseType() ) {
-                valueType = expr->arguments[0]->type->firstType->baseType;
-            } else {
-                auto valueT = expr->arguments[0]->type->firstType->annotation->makeValueType();
-                valueType = valueT->baseType;
+            Type valueType = expr->arguments[0]->type->firstType->getR2VType();
+            if ( !expr->arguments[0]->type->firstType->isWorkhorseType() ) {
                 val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
             }
             setE(expr, context.code->makeTableKeyValueNode<SimNode_TableSetInsert>(valueType, at, cont, val));
@@ -1552,12 +1545,8 @@ namespace das
                 setE(expr, context.code->makeNode<SimNode_TableFind_WithHash>(at, cont, keyStr, keyHash, valueTypeSize));
             } else {
                 auto val = getE(expr->arguments[1]);
-                Type valueType;
-                if ( keyT->isWorkhorseType() ) {
-                    valueType = keyT->baseType;
-                } else {
-                    auto valueT = keyT->annotation->makeValueType();
-                    valueType = valueT->baseType;
+                Type valueType = keyT->getR2VType();
+                if ( !keyT->isWorkhorseType() ) {
                     val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
                 }
                 setE(expr, context.code->makeTableKeyValueNode<SimNode_TableFind>(valueType, at, cont, val, valueTypeSize));
@@ -1581,12 +1570,8 @@ namespace das
                 setE(expr, context.code->makeNode<SimNode_KeyExists_WithHash>(at, cont, keyStr, keyHash, valueTypeSize));
             } else {
                 auto val = getE(expr->arguments[1]);
-                Type valueType;
-                if ( keyT->isWorkhorseType() ) {
-                    valueType = keyT->baseType;
-                } else {
-                    auto valueT = keyT->annotation->makeValueType();
-                    valueType = valueT->baseType;
+                Type valueType = keyT->getR2VType();
+                if ( !keyT->isWorkhorseType() ) {
                     val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
                 }
                 setE(expr, context.code->makeTableKeyValueNode<SimNode_KeyExists>(valueType, at, cont, val, valueTypeSize));
@@ -2014,12 +1999,8 @@ namespace das
                 res = context.code->makeNode<SimNode_TableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize, 0);
             } else {
                 auto pidx = getE(expr->index);
-                Type keyType;
-                if ( keyT->isWorkhorseType() ) {
-                    keyType = keyT->baseType;
-                } else {
-                    auto keyValueType = keyT->annotation->makeValueType();
-                    keyType = keyValueType->baseType;
+                Type keyType = keyT->getR2VType();
+                if ( !keyT->isWorkhorseType() ) {
                     pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
                 }
                 res = context.code->makeTableKeyValueNode<SimNode_TableIndex>(keyType, at, prv, pidx, valueTypeSize, 0);
@@ -2061,12 +2042,8 @@ namespace das
                     setE(expr, context.code->makeNode<SimNode_SafeTableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize));
                 } else {
                     auto pidx = getE(expr->index);
-                    Type valueType;
-                    if ( seT->firstType->isWorkhorseType() ) {
-                        valueType = seT->firstType->baseType;
-                    } else {
-                        auto valueT = seT->firstType->annotation->makeValueType();
-                        valueType = valueT->baseType;
+                    Type valueType = seT->firstType->getR2VType();
+                    if ( !seT->firstType->isWorkhorseType() ) {
                         pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
                     }
                     setE(expr, context.code->makeTableKeyValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));
@@ -2121,12 +2098,8 @@ namespace das
                     setE(expr, context.code->makeNode<SimNode_SafeTableIndex_WithHash>(at, prv, keyStr, keyHash, valueTypeSize));
                 } else {
                     auto pidx = getE(expr->index);
-                    Type valueType;
-                    if ( seT->firstType->isWorkhorseType() ) {
-                        valueType = seT->firstType->baseType;
-                    } else {
-                        auto valueT = seT->firstType->annotation->makeValueType();
-                        valueType = valueT->baseType;
+                    Type valueType = seT->firstType->getR2VType();
+                    if ( !seT->firstType->isWorkhorseType() ) {
                         pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
                     }
                     setE(expr, context.code->makeTableKeyValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0));

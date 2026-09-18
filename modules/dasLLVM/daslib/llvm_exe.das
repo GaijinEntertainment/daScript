@@ -518,20 +518,10 @@ class public CollectExternVisitor : AstVisitor {
         }
     }
 
-    def private get_table_t(subexprT : TypeDeclPtr) {
-        assume firstT = subexprT.firstType
-        if (firstT.isWorkhorseType) {
-            return firstT.baseType
-        } else {
-            var uvt = get_underlying_value_type(firstT)
-            return uvt.baseType
-        }
-    }
-
     // get_jit_table_{at,find,erase} dispatch on baseType only; context+at unused.
     // Pass null for both to match the C++ signature without a real Context.
     def add_table_at_call(index_t : TypeDeclPtr) {
-        let typ = get_table_t(index_t)
+        let typ = table_key_storage_base_type(index_t.firstType)
         if (typ == Type.tString) {
             // string keys route through the precomputed-hash at (see build_table_at); bake it + its after-packed-miss insert helper
             let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_wh_type, tab_at_wh_accessor, [], "")
@@ -555,7 +545,7 @@ class public CollectExternVisitor : AstVisitor {
     }
 
     def add_table_find_call(index_t : TypeDeclPtr) {
-        let typ = get_table_t(index_t)
+        let typ = table_key_storage_base_type(index_t.firstType)
         // String + workhorse find are fully inline; the per-type C++ find glob exists only for non-workhorse finds, so a miss = no consumer to bake.
         if (typ == Type.tString) {
             return
@@ -571,7 +561,7 @@ class public CollectExternVisitor : AstVisitor {
     }
 
     def add_table_erase_call(index_t : TypeDeclPtr) {
-        let typ = get_table_t(index_t)
+        let typ = table_key_storage_base_type(index_t.firstType)
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_erase_accessor, call_args, "")

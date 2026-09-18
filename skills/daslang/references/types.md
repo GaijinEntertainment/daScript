@@ -262,11 +262,15 @@ print("{*id}\n")          // only way out: '*' peels one distinct level, yields 
 def operator + (a, b : Meters) : Meters => Meters(*a + *b)
 ```
 
-Only `==` and `!=` are borrowed (same distinct both sides); define the rest yourself. Overloads
+Only `==` and `!=` are borrowed (same distinct both sides), and an `operator ==` / `operator !=`
+you define for the distinct type wins over the borrow; define the rest yourself. Overloads
 on a distinct and on its underlying type coexist. Two distincts over the same underlying type
 are unrelated, as are same-named distincts in two modules. `var id : EntityId` and
-`default<EntityId>` zero-initialize. Distinct types cannot be table keys but work as array
-elements, struct fields, and tuple/variant members. Printing and RTTI show the underlying value.
+`default<EntityId>` zero-initialize. A distinct keys a table when its underlying type can (it
+hashes as the underlying value; `table<EntityId; string>` still refuses an `int` key and a key of
+any other distinct over `int`), and works
+as array elements, struct fields, and tuple/variant members. Printing and RTTI show the
+underlying value.
 For a distinct over a pointer, `*` peels the distinct, not the pointer.
 `typedef private distinct Foo = int` limits visibility to the declaring module.
 

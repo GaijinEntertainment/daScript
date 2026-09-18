@@ -257,6 +257,20 @@ def setup_tag_annotation(name, tag : string; var classPtr) {
     this_module() |> add_function_annotation(ann)
 }
 
+def peel_distinct(typ : TypeDeclPtr) : TypeDeclPtr const {
+    //! The type under every distinct level; a non-distinct type comes back as is.
+    if (typ.baseType == Type.tDistinct && typ.firstType != null) {
+        return peel_distinct(typ.firstType)
+    }
+    return typ
+}
+
+def table_key_storage_base_type(keyT : TypeDeclPtr) : Type {
+    //! The base type a table key is stored and hashed as: a distinct peels to its underlying type, a handled type to its value type.
+    let storageT = peel_distinct(keyT)
+    return storageT.isWorkhorseType ? storageT.baseType : get_underlying_value_type(storageT).baseType
+}
+
 def find_unique_function(mod : Module?; name : string; canfail : bool = false) {
     //! Finds a unique non-generic function by name in a module; panics if more than one found.
     var res : FunctionPtr
