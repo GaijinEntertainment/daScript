@@ -27,6 +27,11 @@ this document states what the folder is and why its tests take the shape they do
 - `test_macro_dep_invalidate.das` - a compile-time input a macro pinned through
   `add_module_cache_dependency` is compared by content, not mtime: a byte-identical rewrite
   serves the record, a changed file re-parses from that module on and says so.
+- `test_apply_macro_reparse.das` - a module whose compile registered a call macro into itself
+  (a function annotation's `apply` on a def of the module) is never served from the cache: its
+  record is skipped and the module reparses in place, the warm read says so and serves the
+  rest, and a driver edited after it parses from source against the macro the reparse
+  registered - the site the macro rewrites still reads 42.
 - `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
 - `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`

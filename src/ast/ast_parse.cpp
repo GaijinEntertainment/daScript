@@ -759,6 +759,7 @@ namespace das {
         uint64_t saved_hash = 0;
         int64_t saved_size = -1;
         string saved_filename{};
+        uint8_t saved_flags = 0;
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
@@ -768,6 +769,7 @@ namespace das {
             serializer << saved_hash;
             serializer << saved_size;
             serializer.serializeTemp(saved_filename);
+            serializer << saved_flags;
             // macro file dependencies (Program::moduleCacheDependencies) ride the record
             // header, not the payload: they must be validated BEFORE the payload is trusted
             serializer << depCount;
@@ -845,6 +847,30 @@ namespace das {
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
+        // a module that registered macros while it compiled (an annotation's apply into it) is
+        // never served: the record replays the module's own init, not that registration, and a
+        // shared module served once would carry the gap into every later compile of the process.
+        // The header matched, so it reparses in place and the records after it still serve; a
+        // record whose length word cannot skip it cuts the stream instead
+        if ( (saved_flags & 1) != 0 ) {
+            if ( payload_size != 0 && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
+                serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
+                serializer_read->resumedModules ++;
+                // the per-record tables a payload read clears at its end: the header put this
+                // record's file name in the string table, and the next record's header indexes
+                // its own table from empty
+                serializer_read->fieldRefs.clear();
+                serializer_read->clearNodeIds();
+                if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "' (registers macros at compile time)\n";
+            } else {
+                serializer_read->seenNewModule = true;
+                serializer_read->failed = true;
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "registers macros at compile time, record length unusable";
+                if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "' (registers macros at compile time, record length unusable)\n";
+            }
+            return false;
+        }
         // no per-module logging on the happy path - the standalone sink has no level
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
@@ -1619,6 +1645,10 @@ namespace das {
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
+            // a module that registered macros while it compiled: the reader reparses it in place
+            // instead of serving the record (src/ast/ARCHITECTURE.md#module-cache-read)
+            uint8_t flags = thisModule->registersMacrosAtCompile ? 1 : 0;
+            *serializer_write << flags;
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
             *serializer_write << depCount;
             for ( auto & dep : program->moduleCacheDependencies ) {

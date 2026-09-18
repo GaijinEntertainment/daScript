@@ -2253,6 +2253,7 @@ namespace das {
     }
 
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_at(at, "can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -2263,6 +2264,7 @@ namespace das {
     }
 
     void addModuleCommentReader ( Module * module, CommentReaderPtr newM, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         if ( !module->addCommentReader(newM, true) ) {
             context->throw_error_at(at, "can't add comment reader to module %s", module->name.c_str());
         }
@@ -2282,6 +2284,7 @@ namespace das {
     }
 
     void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         module->ownedCallMacros.push_back(unique_ptr<CallMacro>(newM));
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
@@ -2302,6 +2305,7 @@ namespace das {
     }
 
     void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr newM, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         if ( ! module->addTypeInfoMacro(newM,true) ) {
             context->throw_error_at(at, "can't add type info macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -2325,6 +2329,7 @@ namespace das {
     }
 
     void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->variantMacros.push_back(unique_ptr<VariantMacro>(newM));
     }
 
@@ -2333,6 +2338,7 @@ namespace das {
     }
 
     void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->forLoopMacros.push_back(unique_ptr<ForLoopMacro>(newM));
     }
 
@@ -2341,6 +2347,7 @@ namespace das {
     }
 
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->captureMacros.push_back(unique_ptr<CaptureMacro>(newM));
     }
 
@@ -2349,6 +2356,7 @@ namespace das {
     }
 
     void addModuleTypeMacro ( Module * module, TypeMacroPtr newM, Context * ctx, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         auto it = module->typeMacros.find(newM->name);
         if ( it != module->typeMacros.end() ) {
             ctx->throw_error_at(at, "type macro %s already exists in module %s", newM->name.c_str(), module->name.c_str());
@@ -2362,34 +2370,42 @@ namespace das {
     }
 
     void addModuleSimulateMacro ( Module * module, SimulateMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->simulateMacros.push_back(unique_ptr<SimulateMacro>(newM));
     }
 
     void addModuleInferMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->macros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->inferMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModulePostRewriteMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->postRewriteMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModulePostCompileMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->postCompileMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModuleLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->lintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModuleGlobalLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->globalLintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModuleOptimizationMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->noteMacroRegistration();
         module->optimizationMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
@@ -2398,6 +2414,7 @@ namespace das {
     }
 
     void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         EnumerationAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_at(at, "can't add enumeration annotation %s to module %s",
@@ -2423,6 +2440,7 @@ namespace das {
     }
 
     void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         StructureAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_at(at, "can't add structure annotation %s to module %s",
@@ -2453,6 +2471,7 @@ namespace das {
     }
 
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
+        module->noteMacroRegistration();
         FunctionAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_at(at, "can't add function annotation %s to module %s",

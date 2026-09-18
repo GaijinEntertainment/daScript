@@ -41,6 +41,20 @@ served records re-serialized from the modules the reader restored, then the fres
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,
 without cutting the stream, whenever the record carries a usable payload length.
 
+A served module replays what its own init registered - the macro classes a `[call_macro]` or
+`[reader_macro]` annotation adds through the module's init function come back when the record
+re-instantiates its macro program - but not a registration made INTO the module while it
+compiled: an annotation's `apply`, running in another module's macro context, that calls
+`add_call_macro` (or any other `add_*_macro` / `add_*_annotation`) on `compiling_module()`. The
+adapters mark such a module (`Module::registersMacrosAtCompile`, set when the target has no
+macro context yet, which is what a module being compiled looks like) and the record header
+carries the mark. A marked record is never served: it reparses in place, the records after it
+still serve, and the cache is not rewritten for it; a marked record whose length word cannot
+skip it cuts the stream like a changed file. Serving it would leave any module parsed
+from source against it - after a cutoff in the same read, or in a later compile of the same
+process once a `shared` module is promoted - without the registrations, and its call sites
+would fail to resolve.
+
 Every diagnostic the read prints - a record for another file, a changed file, a changed
 dependency, changed policies, a truncated or version-mismatched stream, a failed payload, a
 reparse in place - is
