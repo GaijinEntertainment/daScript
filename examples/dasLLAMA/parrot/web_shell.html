@@ -130,10 +130,11 @@
   window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
 
   // iOS mutes Web Audio under the ring/silent switch unless the tab holds a playback session, the
-  // one a media element gets: ask for it through the Audio Session API where it exists, and on the
-  // first gesture start a silent looping <audio> element, which puts the tab in that session too.
+  // one a media element gets: ask for it through the Audio Session API where it exists - the
+  // play-and-record category here, since a plain playback session refuses the microphone - and on
+  // the first gesture start a silent looping <audio> element, which puts the tab in that session too.
   (function installPlaybackSession() {
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
     var armed = false;
     var arm = function () {
       if (armed) return;
