@@ -97,9 +97,9 @@ struct PocketVoiceState {
     len : int64
 }
 
-//! a codec conv's carry between two windows of a stream: the last rows it saw, which lead the
-//! next window
 struct PocketConvCarry {
+    //! a codec conv's carry between two windows of a stream: the last rows it saw, which lead
+    //! the next window
     @scratch @exact_size rows : array<float>   // [n][cin]
     n : int64
 }
@@ -290,10 +290,10 @@ def finalize(var sc : PocketScratch) {
     delete sc.enc_carry
 }
 
-//! Free every buffer the carrier holds and the block home's scratch globals its kernels grew;
-//! the next synthesis or clone grows them back. For a platform where idle memory matters more
-//! than a few milliseconds of allocation per run.
 def pocket_release_scratch(var sc : PocketScratch) {
+    //! Free every buffer the carrier holds and the block home's scratch globals its kernels grew;
+    //! the next synthesis or clone grows them back. For a platform where idle memory matters more
+    //! than a few milliseconds of allocation per run.
     finalize(sc)
     tts_blocks_release_scratch()
 }

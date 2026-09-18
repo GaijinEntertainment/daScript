@@ -1198,10 +1198,10 @@ var @scratch g_kq_xq : array<int8>
 var @scratch g_kq_xs : array<float>
 var @scratch g_kq_xbs : array<int>
 
-//! Free the block home's scratch globals - the tap lift, the requant images, the attention head
-//! rows and the rest; every kernel grows its own back on the next call. For a platform where
-//! idle memory matters more than the allocation a run then pays (`tts_release_scratch`).
 def tts_blocks_release_scratch() {
+    //! Free the block home's scratch globals - the tap lift, the requant images, the attention head
+    //! rows and the rest; every kernel grows its own back on the next call. For a platform where
+    //! idle memory matters more than the allocation a run then pays (`tts_release_scratch`).
     delete g_conv_col
     delete g_conv_ytm
     delete g_convt_xtm
