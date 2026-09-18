@@ -95,20 +95,23 @@
   (function installPlaybackSession() {
     var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
-    var armed = false;
+    var GESTURES = ['pointerdown', 'touchend', 'keydown', 'click'];
+    var held = null, pending = false;
+    // a gesture the browser does not count as activation (a touch's pointerdown) has its
+    // play() refused; the arm stays for the next gesture and leaves once a play went through
     var arm = function () {
-      if (armed) return;
-      armed = true;
-      try {
-        var a = new Audio(SILENT_WAV);
-        a.loop = true;
-        a.setAttribute('playsinline', '');
-        a.play().catch(function () {});
-      } catch (e) {}
+      if (held || pending) return;
+      var a;
+      try { a = new Audio(SILENT_WAV); } catch (e) { return; }
+      a.loop = true;
+      a.setAttribute('playsinline', '');
+      pending = true;
+      a.play().then(function () {
+        held = a;
+        GESTURES.forEach(function (e) { document.removeEventListener(e, arm, true); });
+      }, function () { pending = false; });
     };
-    ['pointerdown', 'touchend', 'keydown', 'click'].forEach(function (e) {
-      document.addEventListener(e, arm, true);
-    });
+    GESTURES.forEach(function (e) { document.addEventListener(e, arm, true); });
   })();
 
   // Feed for an embedder's fps badge (the playground's, today). Counts animation

@@ -63,7 +63,7 @@ DEVLOG_SCRIPT = b"""<script>
     if (!window.Module) return -1;
     var names = ['wasmMemory', 'HEAP8'];
     for (var i = 0; i < names.length; i++) {
-      var d = Object.getOwnPropertyDescriptor(Module, names[i]);
+      var d = Object.getOwnPropertyDescriptor(window.Module, names[i]);
       if (d && ('value' in d) && d.value && d.value.buffer) return d.value.buffer.byteLength;
     }
     return -1;
