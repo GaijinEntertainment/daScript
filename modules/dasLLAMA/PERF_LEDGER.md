@@ -21,7 +21,12 @@ what it costs today and what the fix would change.
   hands the workers thin out: codec minima 81-89 ms for the whole run against 93 at 16, 94 at 8,
   106 at 4, inside a run-to-run band of a tenth (cv 5-7%, void by the discipline; the say's total
   196-217 ms whole, 204 at 16). The remaining cost is the lane split at a few hundred rows -
-  `followup_general.md` row 153.
+  `followup_general.md` row 153. What a say still leaves behind, by the heap report's blocks:
+  the roster voice's state, 12 blocks of 4.5 MB (six layers, keys and values, 1150 rows of
+  slack for a 126-row clip - the next lever, about 35 MB a voice), the model's `PocketScratch`
+  at 57 MB, and 21 MB of the block home's own scratch globals - `conv1d_rows_transposed`'s tap
+  lift at 15 MB (66 MB on the whole run: `t_in * k * cout` of the widest stage), the attention
+  head scratch at 6 MB. Nothing leaks; the scratch is sized to the largest run it saw.
 - **LANDED (2026-09-16) - the browser build runs on every engine; `+relaxed-simd` leaves the
   wasm feature string.** WebKit implements none of the relaxed opcodes, and the previous entry's
   `+relaxed-simd` put `f32x4.relaxed_max` (the backend's lowering of an `nnan` vector max, which
