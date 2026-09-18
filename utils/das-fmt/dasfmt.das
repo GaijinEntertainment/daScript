@@ -73,6 +73,10 @@ def private collect_input_paths(args : array<string>; key : string; var paths : 
 def private collect_files(input_paths : array<string>; var cache : table<string; void?>; var files : array<string>) : bool {
     for (path in input_paths) {
         if (path |> ends_with(".das")) {
+            if (!fexist(path)) {
+                log::error("Unable to open '{path}'")
+                return false
+            }
             if (!cache |> key_exists(path)) {
                 cache.insert(path, null)
                 files |> push <| path
@@ -171,6 +175,10 @@ def private format_one_strip_file(file : string; verify, verbose : bool; var ver
     let diff_result = collect_diff(before, after)
     let changed = diff_result.differ
     if (!open) {
+        if (!fexist(file)) {
+            log::warn("'{file}' no longer exists, skipped")
+            return
+        }
         log::info("-- {file}")
         log::error("Unable to open '{file}'")
         strip_failures++
@@ -236,6 +244,10 @@ def private format_one_file(file : string; verify, verbose, strip_comments : boo
     let diff_result = collect_diff(before, after)
     let changed = diff_result.differ
     if (!open) {
+        if (!fexist(file)) {
+            log::warn("'{file}' no longer exists, skipped")
+            return
+        }
         log::info("-- {file}")
         log::error("Unable to open '{file}'")
     } elif (verify) {
