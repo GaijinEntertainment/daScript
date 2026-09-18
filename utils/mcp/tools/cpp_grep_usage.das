@@ -98,7 +98,7 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
             if (lines_val != null && (lines_val.value is _string)) {
                 context = strip(lines_val.value as _string)
             }
-            let display_path = make_relative_path(file_path, das_root)
+            let display_path = make_relative_path(file_path, server_root())
             let entry = "  {line_num}: {context}"
             if (!key_exists(by_file, display_path)) {
                 file_order |> push(display_path)

@@ -12,3 +12,8 @@ list is absent in the shipped SDK while the in-tree server keeps working.
 
 **Weakening any case in `test_tools.das` that pins which comments the formatter keeps is a
 defect.**
+
+**Never normalize a path that `resolve_path` or `server_root` (`tools/common.das`) returns - keep
+the generic, forward-slash spelling.** `normalize` / `lexically_normal` rewrites every separator to
+the platform's preferred one, so on Windows the served root's forward slashes become backslashes and
+every string comparison against that root stops matching.

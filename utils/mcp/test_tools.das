@@ -26,6 +26,8 @@ require tools/find_references public
 require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
+require tools/common public
+require tools/cpp_common public
 require tools/outline public
 require tools/cpp_grep_usage public
 require tools/cpp_find_symbol public
@@ -3813,5 +3815,48 @@ def test_discover(t : T?) {
         parse_result(do_discover("(uri", "", ""), text, is_error)
         t |> success(is_error, "unbalanced fts5 query should be error -- text={text}")
         t |> success(find(text, "invalid FTS5 query") >= 0, "names the cause -- text={text}")
+    }
+}
+
+[test]
+def test_served_tree_paths(t : T?) {
+    let here = getcwd()
+    let dir = path_join(get_das_root(), "utils/mcp/tests/_served_tree_{ref_time_ticks()}")
+    mkdir(dir)
+    t |> success(chdir(dir), "enter the served tree")
+    let served = to_generic_path(getcwd())
+    t |> run("a relative path joins the served tree, not the daslang root") @(t : T?) {
+        t |> equal(resolve_path("tests/x.das"), path_join(served, "tests/x.das"))
+        t |> equal(resolve_path(""), served)
+        t |> equal(resolve_path("."), served)
+        t |> equal(resolve_path("/abs/x.das"), "/abs/x.das")
+    }
+    t |> run("a served tree with no project marker keeps the daslang C++ index roots") @(t : T?) {
+        var inscope dirs <- cpp_default_search_dirs()
+        t |> equal(length(dirs), length(CPP_SEARCH_DIRS))
+        t |> equal(dirs[0], path_join(get_das_root(), CPP_SEARCH_DIRS[0]))
+    }
+    t |> run("the C++ index roots are the served tree once it carries a project marker") @(t : T?) {
+        fwrite(path_join(served, "CMakeLists.txt"), "")
+        var inscope dirs <- cpp_default_search_dirs()
+        t |> equal(length(dirs), 1)
+        t |> equal(dirs[0], served)
+    }
+    t |> run("the compile database is looked up under the served tree") @(t : T?) {
+        mkdir(path_join(served, "build"))
+        let db = path_join(served, "build/compile_commands.json")
+        fwrite(db, "[]")
+        t |> equal(cpp_locate_compile_db(""), db)
+    }
+    t |> success(chdir(here), "leave the served tree")
+    rmdir_rec(dir)
+    t |> run("at the daslang root the C++ index roots are CPP_SEARCH_DIRS") @(t : T?) {
+        if (to_generic_path(getcwd()) != get_das_root()) {
+            t |> skip("the suite runs outside the daslang root")
+            return
+        }
+        var inscope dirs <- cpp_default_search_dirs()
+        t |> equal(length(dirs), length(CPP_SEARCH_DIRS))
+        t |> equal(dirs[0], path_join(get_das_root(), CPP_SEARCH_DIRS[0]))
     }
 }

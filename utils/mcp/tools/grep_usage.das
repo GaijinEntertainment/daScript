@@ -89,11 +89,7 @@ def get_start_line(m : JsonValue?) : int {
 def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : string {
     if (empty(symbol)) return make_tool_result("'symbol' argument is required", true)
     let das_root = get_das_root()
-    // "" and "." both mean the repo root. Going through resolve_path(".") would append
-    // a trailing "/.", and ast-grep cannot relativize candidate paths against a root
-    // spelled that way -- every slash-anchored --globs filter then matches nothing and
-    // the tool reports a silent "0 matches" instead of an error.
-    let search_dir = (empty(directory) || directory == "." ? get_das_root() : resolve_path(directory))
+    let search_dir = resolve_path(directory)
     // build ast-grep command
     let sg = get_ast_grep_cmd()
     let cd_root = "cd \"{das_root}\" && "
@@ -132,7 +128,7 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
             let file_val = m?.file
             let lines_val = m?.lines
             if (file_val == null) continue
-            let display_path = make_relative_path(file_val.value as _string, das_root)
+            let display_path = make_relative_path(file_val.value as _string, server_root())
             let line_num = get_start_line(m) + 1
             var context = ""
             if (lines_val != null && (lines_val.value is _string)) {
