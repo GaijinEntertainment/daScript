@@ -68,6 +68,7 @@ DEVLOG_SCRIPT = b"""<script>
       points: navigator.maxTouchPoints, dpr: devicePixelRatio, w: innerWidth, h: innerHeight,
       canvas: c ? [c.width, c.height, c.clientWidth, c.clientHeight] : null, maxFingers: fingers,
       dasTouch: (window.Module && Module.dasTouch) ? Module.dasTouch.list.length : -1, run: !!(window.Module && Module.calledRun),
+      mem: (window.Module && Module.HEAP8) ? Module.HEAP8.buffer.byteLength : -1,
       audio: (window.__dasAudioStates || []).join(',') }));
    } catch (e) { post('tick-error', e && (e.stack || e)); }
   }
@@ -80,7 +81,7 @@ DEVLOG_SCRIPT = b"""<script>
     window.AudioContext = Wrapped; if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
     window.__dasAudioStates = { join: function () { return states.map(function (c) { return c.state; }).join(','); } };
   }
-  window.addEventListener('DOMContentLoaded', function () { post('open', 'devlog on, build ' + ((document.getElementById('build') || {}).textContent || 'unstamped')); });
+  window.addEventListener('DOMContentLoaded', function () { post('open', 'devlog on, build ' + ((document.querySelector('meta[name=das-build]') || {}).content || 'unstamped')); });
 })();
 </script>"""
 
