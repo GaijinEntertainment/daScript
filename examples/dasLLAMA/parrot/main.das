@@ -174,7 +174,7 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
         }
         var inscope m <- load_tts_model(tts_path)
         var inscope c <- caps(m)
-        var ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate, voices := c.voices)
+        var inscope ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate, voices := c.voices)
         answer |> push_archive(ready)
         var running = true
         while (running) {
@@ -201,7 +201,7 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
                         var starting = Answer(kind = 4, text = chunk, gen = a.gen, chunk = i)
                         answer |> push_archive(starting)
                         var inscope s <- synthesize(m, chunk, a.voice)
-                        var clip = Answer(kind = 2, gen = a.gen, chunk = i, pcm := s.pcm, rate = s.sample_rate,
+                        var inscope clip = Answer(kind = 2, gen = a.gen, chunk = i, pcm := s.pcm, rate = s.sample_rate,
                             us_prompt = s.timings.prompt_us, us_backbone = s.timings.backbone_us,
                             us_head = s.timings.head_us, us_codec = s.timings.codec_us, us_total = s.timings.total_us)
                         answer |> push_archive(clip)
@@ -360,6 +360,11 @@ def poll_answers() {
     poll_playback()
 }
 
+//! a say is audible or about to be - playing, queued, or still generating its first clip
+def playback_active() : bool {
+    return g_playing_sid != INVALID_SID || !empty(g_clips) || (g_chunks_known && !all_spoken(g_chunks))
+}
+
 //! the playing clip's position, off the mixer's own clock, and the next clip once it is done
 [arch(at = "../ARCHITECTURE.md#parrot-panels")]
 def poll_playback() {
@@ -415,7 +420,10 @@ def start_take() {
         g_status = "this file cannot clone - parrot needs a Pocket file with its codec encoder"
         return
     }
-    cancel_say()   // a clip still playing would be recorded
+    if (playback_active()) {   // the microphone would record the clip that is playing
+        g_status = "wait for the say to end, then record"
+        return
+    }
     if (!sound_record_start(g_mic_rate, 1, g_mic_rate * 4, -1)) {
         g_status = "no microphone - is one connected, and allowed?"
         return
@@ -553,8 +561,8 @@ def cancel_say() {
     }
     g_says++
     g_say_now |> publish(g_says)
-    g_clips |> clear()
-    g_chunks |> clear()
+    delete g_clips    // these rows own heap data; clear() drops them without finalizing it
+    delete g_chunks
     g_chunks_known = false
     g_out_pcm |> clear()
     g_out_peaks |> clear()
@@ -778,7 +786,8 @@ def draw_record_button() {
     let size = float2(96.0, 96.0)
     let origin = GetCursorScreenPos()
     let clicked = invisible_button(REC_BTN, (text = "record", size = size))
-    let hovered = IsItemHovered()
+    let say_in_flight = g_phase != Phase.recording && playback_active()
+    let hovered = IsItemHovered() && !say_in_flight
     let center = float2(origin.x + size.x * 0.5, origin.y + size.y * 0.5)
     with_window_drawlist() $(var dl) {
         dl |> add_circle(center, 44.0, hovered ? INK : DIM, 0, 2.0)
@@ -791,10 +800,10 @@ def draw_record_button() {
                 dl |> path_stroke(ACCENT, ImDrawFlags.None, 3.0)
             }
         } else {
-            dl |> add_circle_filled(center, 30.0, g_can_clone && g_ready ? RED : DIM, 0)
+            dl |> add_circle_filled(center, 30.0, g_can_clone && g_ready && !say_in_flight ? RED : DIM, 0)
         }
     }
-    if (clicked) {
+    if (clicked && !say_in_flight) {
         toggle_record()
     }
 }

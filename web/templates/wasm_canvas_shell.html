@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="das-build" content="__DAS_BUILD_STAMP__">
 <title>daslang</title>
 <style>
   html, body {
@@ -16,7 +17,6 @@
      max-width/max-height alone only ever scale DOWN, so a 640x480 program sat
      at 640x480 in the middle of a larger frame — measured on a 906px-wide
      playground frame, which is the "renders in the middle at 2/3" report. */
-  #build { position: fixed; right: 6px; bottom: 4px; font: 10px/1 ui-monospace, Menlo, monospace; color: rgba(255,255,255,0.45); pointer-events: none; z-index: 5; }
   /* the program owns every finger: no browser pan, pinch or double-tap zoom on the canvas */
   #canvas {
     width: 100%; height: 100%; object-fit: contain;
@@ -30,12 +30,7 @@
      this artifact in an iframe; override with release_web_shell(<path>) for a
      custom frame. -->
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-<div id="build">__DAS_BUILD_STAMP__</div>
 <script>
-  (function () {   // a page served from the source tree carries the raw placeholder: show nothing rather than the token
-    var b = document.getElementById('build');
-    if (b && /^__DAS_/.test(b.textContent)) b.textContent = '';
-  })();
   // The app owns the keyboard: stop arrow/space/page keys from scrolling the
   // embedding page. emscripten GLFW reads them for input but does not
   // preventDefault, so their default scroll otherwise chains out of this
@@ -92,6 +87,33 @@
     ['pointerdown', 'touchend', 'keydown', 'click'].forEach(function (e) {
       document.addEventListener(e, resumeAll, true);
     });
+  })();
+
+  // iOS mutes Web Audio under the ring/silent switch unless the tab holds a playback session, the
+  // one a media element gets: ask for it through the Audio Session API where it exists, and on the
+  // first gesture start a silent looping <audio> element, which puts the tab in that session too.
+  (function installPlaybackSession() {
+    var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    var IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!IOS) return;
+    var GESTURES = ['pointerdown', 'touchend', 'keydown', 'click'];
+    var held = null, pending = false;
+    // a gesture the browser does not count as activation (a touch's pointerdown) has its
+    // play() refused; the arm stays for the next gesture and leaves once a play went through
+    var arm = function () {
+      if (held || pending) return;
+      var a;
+      try { a = new Audio(SILENT_WAV); } catch (e) { return; }
+      a.loop = true;
+      a.setAttribute('playsinline', '');
+      pending = true;
+      a.play().then(function () {
+        held = a;
+        GESTURES.forEach(function (e) { document.removeEventListener(e, arm, true); });
+      }, function () { pending = false; });
+    };
+    GESTURES.forEach(function (e) { document.addEventListener(e, arm, true); });
   })();
 
   // Feed for an embedder's fps badge (the playground's, today). Counts animation

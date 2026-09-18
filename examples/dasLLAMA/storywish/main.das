@@ -169,7 +169,7 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
                     return
                 }
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
-                var clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
+                var inscope clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
             }
         }
@@ -230,7 +230,7 @@ def start_story() {
     g_told_wish = words
     g_story_now |> publish(g_stories)
     to_log(LOG_INFO, "storywish: story {g_stories} starts at frame {g_frames} - words: {words}{g_dialogue ? ", with dialogue" : ""}\n")
-    g_clips |> clear()
+    delete g_clips    // clear() would drop the rows and leak every clip's pcm
     g_unplayed_sentences = 0
     g_speaking_until = g_elapsed_s
     var prompt <- encode(g_model, build_prompt(words, g_dialogue), true)

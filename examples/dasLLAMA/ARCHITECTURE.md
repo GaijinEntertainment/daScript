@@ -139,8 +139,8 @@ tail is drained before the device stops, since stopping frees the ring. The clip
 plus a quarter second at each end, never longer than the cap, and goes to the speech thread as a
 clone request, so the clone runs off the frame thread like a synthesis. A take with no speech in
 it is dropped, and the status says whether the device gave nothing, silence, or too little. A
-take starts by cancelling a say in flight - a clip still playing would be recorded - and the
-pure side of all this (`take.das`) is what the model-free cells test. The gain slider scales the
+take is refused while a say is playing, queued or still generating - a clip landing mid-take would be recorded - the
+record disc dim and inert until the say ends, and the pure side of all this (`take.das`) is what the model-free cells test. The gain slider scales the
 frames as they land in the take, before the detector hears them and before the clone, so it
 reaches a quiet microphone; the physical input gain is the browser's or the system's, out of the
 program's reach.

@@ -57,6 +57,17 @@ DEVLOG_SCRIPT = b"""<script>
   window.addEventListener('unhandledrejection', function (e) { post('rejection', e.reason && (e.reason.stack || e.reason)); });
   var fingers = 0;
   document.addEventListener('touchstart', function (e) { fingers = Math.max(fingers, e.touches.length); }, true);
+  // the wasm linear memory's size; read through the property descriptor, since Module defines
+  // an aborting getter for a runtime method the build did not export
+  function wasmHeapBytes() {
+    if (!window.Module) return -1;
+    var names = ['wasmMemory', 'HEAP8'];
+    for (var i = 0; i < names.length; i++) {
+      var d = Object.getOwnPropertyDescriptor(window.Module, names[i]);
+      if (d && ('value' in d) && d.value && d.value.buffer) return d.value.buffer.byteLength;
+    }
+    return -1;
+  }
   var lastTick = 0;
   function tick(now) {
     requestAnimationFrame(tick);
@@ -68,6 +79,7 @@ DEVLOG_SCRIPT = b"""<script>
       points: navigator.maxTouchPoints, dpr: devicePixelRatio, w: innerWidth, h: innerHeight,
       canvas: c ? [c.width, c.height, c.clientWidth, c.clientHeight] : null, maxFingers: fingers,
       dasTouch: (window.Module && Module.dasTouch) ? Module.dasTouch.list.length : -1, run: !!(window.Module && Module.calledRun),
+      memBytes: wasmHeapBytes(),
       audio: (window.__dasAudioStates || []).join(',') }));
    } catch (e) { post('tick-error', e && (e.stack || e)); }
   }
@@ -80,7 +92,10 @@ DEVLOG_SCRIPT = b"""<script>
     window.AudioContext = Wrapped; if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
     window.__dasAudioStates = { join: function () { return states.map(function (c) { return c.state; }).join(','); } };
   }
-  window.addEventListener('DOMContentLoaded', function () { post('open', 'devlog on, build ' + ((document.getElementById('build') || {}).textContent || 'unstamped')); });
+  window.addEventListener('DOMContentLoaded', function () {
+    var build = (document.querySelector('meta[name=das-build]') || {}).content || '';
+    post('open', 'devlog on, build ' + (build && !/^__DAS_/.test(build) ? build : 'unstamped'));   // a source-tree page carries the raw placeholder
+  });
 })();
 </script>"""
 
