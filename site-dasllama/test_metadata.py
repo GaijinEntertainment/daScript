@@ -152,6 +152,15 @@ class ExampleShellTest(unittest.TestCase):
             self.assertLess(text.index("self.crossOriginIsolated"), text.index(f"function {runner}()"),
                             "the isolation probe is decided before the program path")
 
+    def test_the_build_stamp_sits_in_the_head_and_draws_nothing(self):
+        # daspkg release wasm replaces the placeholder wherever the shell puts it; the shells put it
+        # in a das-build meta tag, so a released page carries its build without showing it
+        for name, text, runner in self.shells():
+            self.assertEqual(text.count("__DAS_BUILD_STAMP__"), 1, f"{name}: one placeholder")
+            head = text[:text.index("<body")]
+            self.assertIn('<meta name="das-build" content="__DAS_BUILD_STAMP__">', head, f"{name}: the stamp is a meta tag in the head")
+            self.assertNotIn('id="build"', text, f"{name}: no element draws the stamp")
+
     def test_the_only_live_scripts_are_the_site_files(self):
         for name, text, runner in self.shells():
             parser = MetadataParser()

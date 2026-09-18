@@ -169,7 +169,7 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
                     return
                 }
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
-                var clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
+                var inscope clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
             }
         }

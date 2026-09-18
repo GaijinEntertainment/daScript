@@ -92,7 +92,10 @@ DEVLOG_SCRIPT = b"""<script>
     window.AudioContext = Wrapped; if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
     window.__dasAudioStates = { join: function () { return states.map(function (c) { return c.state; }).join(','); } };
   }
-  window.addEventListener('DOMContentLoaded', function () { post('open', 'devlog on, build ' + ((document.querySelector('meta[name=das-build]') || {}).content || 'unstamped')); });
+  window.addEventListener('DOMContentLoaded', function () {
+    var build = (document.querySelector('meta[name=das-build]') || {}).content || '';
+    post('open', 'devlog on, build ' + (build && !/^__DAS_/.test(build) ? build : 'unstamped'));   // a source-tree page carries the raw placeholder
+  });
 })();
 </script>"""
 
