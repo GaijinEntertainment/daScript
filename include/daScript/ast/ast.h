@@ -1245,7 +1245,6 @@ namespace das
         das_insert_only_map<string,unique_ptr<ReaderMacro>> readMacros; // %foo "blah"
         unique_ptr<CommentReader>                   commentReader;      // /* blah */ or // blah
         vector<unique_ptr<CallMacro>>               ownedCallMacros;    // call macros (owned here, referenced from callThis lambdas)
-        bool                                        registersMacrosAtCompile = false;   // a macro registered into this module while it compiled (an annotation's apply) - not replayed by a cache record (src/ast/ARCHITECTURE.md#module-cache-read)
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_insert_only_hash_map<string,Type>       options;            // options
@@ -1273,6 +1272,10 @@ namespace das
             };
             uint32_t        moduleFlags = 0;
         };
+        // a macro registered into this module while it compiled (an annotation's apply), which a
+        // cache record does not replay (src/ast/ARCHITECTURE.md#module-cache-read); after the
+        // das-visible fields, whose offsets a bound annotation reads
+        bool registersMacrosAtCompile = false;
     private:
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;

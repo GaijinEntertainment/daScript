@@ -26,7 +26,8 @@ def test_apply_macro_reparse(t : T?) {
     }
     let drv = path_join(tmp, "mc_apply_drv.das")
     let cmd = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
-    let reparsed = "ser: reparsing in place '{path_join(tmp, "mc_apply_lib.das")}' (registers macros at compile time)"
+    // the child prints the path it resolved the module by; the marker holds the name and the reason
+    let reparsed = "mc_apply_lib.das' (registers macros at compile time)"
     var cold : string
     let coldRc = run_child(cmd, cold)
     var coldOk = report_child(t, "cold", coldRc, cold, "ser: wrote")
@@ -37,7 +38,7 @@ def test_apply_macro_reparse(t : T?) {
     var warm : string
     let warmRc = run_child(cmd, warm)
     var warmOk = report_child(t, "warm", warmRc, warm, reparsed)
-    warmOk = warmOk && report_child(t, "warm", warmRc, warm, "deser: partial")
+    warmOk = warmOk && report_child(t, "warm", warmRc, warm, "deser: partial - 1 module(s) reparsed in place, rest from cache")
     warmOk = warmOk && report_child(t, "warm", warmRc, warm, "PROBED=42")
     t |> success(warmOk, "warm run reparses the annotated lib in place and serves the rest")
     // the driver changes: its record cuts off, the lib still reparses, the driver parses from

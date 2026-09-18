@@ -745,7 +745,7 @@ namespace das {
                 }) || magic != SER_MODULE_STREAM_MAGIC || version != AstSerializer::getVersion() ) {
                     serializer_read->seenNewModule = true;
                     serializer_read->failed = true;
-                    serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffFile = fileName;
                     serializer_read->cutoffReason = "stale or foreign module cache stream";
                     if ( !serializer_read->quietCache ) logs << "ser: read failed (stale or foreign module cache stream)\n";
                     return false;
@@ -806,7 +806,7 @@ namespace das {
             if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
-                    serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
                 if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
                 return false;
@@ -837,7 +837,7 @@ namespace das {
             if ( currentReq != savedReq ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
-                    serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = "require set changed";
                 if ( !serializer_read->quietCache ) {
                     logs << "ser: require set changed '" << fileName << "': " << savedReq.size() << " recorded, " << currentReq.size() << " now\n";
@@ -1638,8 +1638,8 @@ namespace das {
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
-            // a module that registered macros while it compiled cannot serve a compile that
-            // reparses anything after it: the reader restarts cold on that cutoff
+            // a module that registered macros while it compiled: the reader reparses it in place
+            // instead of serving the record (src/ast/ARCHITECTURE.md#module-cache-read)
             Module * writtenModule = thisModule ? thisModule : program->thisModule.get();
             uint8_t flags = (writtenModule && writtenModule->registersMacrosAtCompile) ? 1 : 0;
             *serializer_write << flags;
@@ -2251,5 +2251,4 @@ namespace das {
             return res;
         }
     }
-
 }
