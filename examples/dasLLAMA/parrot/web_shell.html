@@ -182,8 +182,33 @@
       }
     } });
   }
+  // a stand-in for the microphone on a device that has no usable one (the simulator, a CI box):
+  // ?fakemic=noise, or ?fakemic=<url of a clip> looped - the program's capture path runs unchanged
+  var fakeMic = new URLSearchParams(location.search).get('fakemic');
+  async function fakeMicrophone(what) {
+    var ac = new (window.AudioContext || window.webkitAudioContext)();
+    var dest = ac.createMediaStreamDestination();
+    var src = ac.createBufferSource();
+    if (what === 'noise') {
+      var buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3;
+      src.buffer = buf;
+    } else {
+      src.buffer = await ac.decodeAudioData(await (await fetch(what)).arrayBuffer());
+    }
+    src.loop = true;
+    src.connect(dest);
+    src.start();
+    try { await ac.resume(); } catch (e) {}
+    return dest.stream;
+  }
   var askMicrophone = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = function (constraints) {
+    if (fakeMic) {
+      setMicNote('microphone: a stand-in, ' + fakeMic);
+      return fakeMicrophone(fakeMic);
+    }
     setMicNote('asking for the microphone...');
     return askMicrophone(constraints).then(function (stream) {
       var track = stream.getAudioTracks()[0];
