@@ -92,14 +92,19 @@ namespace das {
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         // the stream stays hidden here - src/ast/ARCHITECTURE.md#module-cache-read
-        auto env = daScriptEnvironment::getBound();
-        auto savedRead = env->serializer_read;
-        auto savedWrite = env->serializer_write;
-        env->serializer_read = nullptr;
-        env->serializer_write = nullptr;
+        struct HiddenStream {
+            daScriptEnvironment * env;
+            AstSerializer * read, * write;
+            HiddenStream ( daScriptEnvironment * e ) : env(e), read(e->serializer_read), write(e->serializer_write) {
+                env->serializer_read = nullptr;
+                env->serializer_write = nullptr;
+            }
+            ~HiddenStream () {
+                env->serializer_read = read;
+                env->serializer_write = write;
+            }
+        } hidden(daScriptEnvironment::getBound());
         auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
-        env->serializer_read = savedRead;
-        env->serializer_write = savedWrite;
         module->ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(module->ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
         auto result = appendBuiltinModuleContent(module, program, modName);

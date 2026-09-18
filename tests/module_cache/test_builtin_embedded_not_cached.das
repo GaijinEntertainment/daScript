@@ -12,6 +12,7 @@ def private bytes_have(data : array<uint8> const#; needle : string) : bool {
     var found = false
     peek_data(needle) $(nd) {
         let n = length(nd)
+        return if (n > length(data))
         for (i in range(length(data) - n + 1)) {
             var same = true
             for (j in range(n)) {
