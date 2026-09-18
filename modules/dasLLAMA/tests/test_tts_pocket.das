@@ -580,9 +580,8 @@ def test_pocket_q8_file(t : T?) {
             from_file += (l.in_proj.q8 && l.out_proj.q8 && l.ffn1.q8 && l.ffn2.q8) ? 1 : 0
         }
         t |> equal(from_file, length(mq.backbone.layers), "every backbone layer's four GEMMs came in as Q8_0")
-        t |> success(mq.mimi.dec_in.q8 && mq.mimi.enc_out.q8 && mq.mimi.dec_res[0].conv1.q8 && !mq.mimi.enc_in.q8 && !mq.mimi.dec_out.q8,
-            "the codec's 32-wide convs came in as Q8_0 slabs, the one-channel ends as f16")
-        t |> equal(mq.mimi.dec_in.q8_k, mq.mimi.dec_in.k * mq.mimi.dec_in.cin, "the slab's row is kernel times input channels")
+        t |> success(!mq.mimi.dec_in.q8 && !mq.mimi.enc_out.q8 && !mq.mimi.dec_res[0].conv1.q8 && !mf.mimi.dec_in.q8,
+            "the codec's convs serve f32 on the q8 lane, whichever form the file stores them in")
         for (c in man.cases) {
             continue if (!c.stages || c.voice != "alba")
             var inscope a <- forced_latents(mq, c, man, sc)
@@ -997,6 +996,59 @@ def test_pocket_no_encoder(t : T?) {
 }
 
 // a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
+// the RMS of a clip's quietest 100 ms windows (the lowest twentieth) after a first difference, in
+// dB - the difference drops the low end where the leading silence and the voice's breath sit, so
+// the number is the hiss floor in the pauses, whatever the speech above it does
+def private quiet_floor_db(pcm : array<float>; rate : int) : float {
+    let win = rate / 10
+    let n = (length(pcm) - 1) / win
+    var rms : array<float>
+    rms |> reserve(n)
+    for (i in range(n)) {
+        var ssq = 0.0lf
+        for (j in range(win)) {
+            let v = pcm[i * win + j + 1] - pcm[i * win + j]
+            ssq += double(v * v)
+        }
+        rms |> push(float(sqrt(ssq / double(win))))
+    }
+    rms |> sort()
+    let k = max(1, n / 20)
+    var acc = 0.0
+    for (i in range(k)) {
+        acc += rms[i]
+    }
+    return 20.0 * log10(max(acc / float(k), 1e-9))
+}
+
+[test]
+def test_pocket_quiet_floor(t : T?) {
+    //! The served lane's silences are as quiet as the f32 lane's: int8 activations on the codec's
+    //! convs once put a hiss floor 30 dB over the reference, and no parity cell saw it - a frame
+    //! bar reads the loud part.
+    let path = kq_gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+        }
+        let text = "The quick brown fox jumps over the lazy dog. Then it slept, and all was still."
+        var inscope served <- load_tts_model(path)
+        var inscope a <- synthesize(served, text, "alba")
+        delete served
+        set_pocket_q8(false)
+        var inscope reference <- load_tts_model(path)
+        var inscope b <- synthesize(reference, text, "alba")
+        let fa = quiet_floor_db(a.pcm, a.sample_rate)
+        let fb = quiet_floor_db(b.pcm, b.sample_rate)
+        to_log(LOG_INFO, "pocket quiet floor: served {fa} dBFS, f32 lane {fb} dBFS\n")
+        t |> success(fa <= fb + 6.0, "the served lane's quiet floor ({fa} dBFS) sits within 6 dB of the f32 lane's ({fb} dBFS)")
+    }
+}
+
 // budget: the voice's caches grow to hold its text and every frame the cap allows, and the
 // synthesis runs to EOS instead of panicking on the cache
 [test]

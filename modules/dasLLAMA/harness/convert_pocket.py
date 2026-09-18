@@ -26,13 +26,14 @@ Canonical names: `flow_lm.transformer.layers.N.*` -> `backbone.N.*`; `flow_lm.fl
 `head.*`; `mimi.encoder_transformer.transformer.layers.N.*` -> `mimi.enc_tf.N.*`, the decoder
 twin `mimi.dec_tf.N.*`; every other `flow_lm.` / `mimi.` name kept as is.
 
-`--q8` writes the published form: every GEMM weight the engine serves as Q8_0 quants is stored
-as Q8_0 in the layout the kernels read - a linear as [nout][nin] with the 32-blocks along nin,
-a dense stride-1 conv on 32-wide channels as the tap-stacked slab [cout][k][cin] (the f16 form
-keeps PyTorch's [cout][cin][k]) - and the reader takes the blocks straight into its int8 plane.
-The rest of the file is unchanged. The engine's eligibility rule (`conv1d_q8_eligible`,
-`linear_prepare`) is mirrored here in `q8_linear` / `q8_conv`; `tests/test_tts_pocket.das`
-holds the two files to each other.
+`--q8` writes the published form: every linear the engine serves as Q8_0 quants is stored as
+Q8_0 in the layout the kernels read - [nout][nin] with the 32-blocks along nin - and the reader
+takes the blocks straight into its int8 plane. Every codec conv stays f16 in PyTorch's
+[cout][cin][k]: the engine serves the codec's convs on f32 activations on every lane, since int8
+activations there put a hiss floor 30 dB over the reference. The rest of the file is unchanged.
+The engine's eligibility rule (`linear_prepare`) is mirrored here in `q8_linear`; `q8_conv`
+names the dense codec convs for the `--fake` groups; `tests/test_tts_pocket.das` holds the two
+files to each other.
 """
 import argparse
 import json
@@ -96,7 +97,7 @@ def q8_linear(name, shape):
 
 
 def q8_conv(name, shape, stride, transposed):
-    """The convs the engine serves q8: dense, forward, stride 1, both channel counts on 32 -
+    """The dense codec convs (the `codecconv` fake group): forward, stride 1, both channel counts on 32 -
     every codec conv (the latent projection included) but the strided encoder stages and the
     downsampler, the transposed decoder stages, the depthwise resampler and the two
     single-channel ends."""
@@ -354,10 +355,6 @@ def main():
             quantized_k4.append(name)
         elif a.q8 and (q8_linear(name, v.shape) or (a.kq and head_q8_linear(name, v.shape))):
             tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
-            quantized.append(name)
-        elif a.q8 and q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name):
-            slab = np.ascontiguousarray(np.transpose(v, (0, 2, 1)).astype(np.float32))   # [cout][cin][k] -> [cout][k][cin]
-            tensors[name] = ("q8", slab)
             quantized.append(name)
         else:
             tensors[name] = np.ascontiguousarray(v.astype(np.float16))

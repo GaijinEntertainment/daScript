@@ -368,19 +368,7 @@ def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string;
     if (c.stride != 1l || c.transposed || c.groups != 1l || c.cin % 32l != 0l || c.cout % 32l != 0l) {
         panic("dasLLAMA pocket: '{wname}' is Q8_0 with stride {c.stride}, groups {c.groups}{c.transposed ? ", transposed" : ""}, {c.cin} -> {c.cout} channels: not the dense stride-1 32-wide conv the slab layout is for")
     }
-    if (g_stage_q8) {
-        c.wq |> reserve_resize(c.cout * kc)
-        c.wqs |> reserve_resize(c.cout * kc / 32l)
-        gguf_transcode_q8_0(m, bytes, wname, c.wq, c.wqs, 0l, 0l, c.cout * kc)
-        if (g_stage_repack) {
-            repack_q8q8_weight(c.wq, c.wqs, 0l, kc, c.cout)
-        }
-        c.q8 = true
-        c.q8_k = kc
-        c.cout_s = c.cout
-        return
-    }
-    var inscope slab <- read_arr(m, bytes, wname)
+    var inscope slab <- read_arr(m, bytes, wname)     // a Q8_0 slab of an older file dequantizes: the codec convs serve f32 on every lane
     c.w |> reserve_resize(c.cout * kc)
     for (co in range64(c.cout)) {
         for (kk in range64(c.k)) {
@@ -389,7 +377,7 @@ def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string;
             }
         }
     }
-    conv1d_prepare(c, g_stage_q8, g_stage_repack)
+    conv1d_prepare(c, false, g_stage_repack)
 }
 
 // a causal conv's context is its geometry: a forward conv's left zero pad of `k - stride`, or
@@ -425,7 +413,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
         c.pad_l = c.k - stride
         c.pad_r = 0l
     }
-    conv1d_prepare(c, g_stage_q8, g_stage_repack)
+    conv1d_prepare(c, false, g_stage_repack)      // never q8: int8 activations on the codec's convs are a hiss floor 30 dB over the reference
     return <- c
 }
 
