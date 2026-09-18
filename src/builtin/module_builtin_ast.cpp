@@ -512,8 +512,7 @@ namespace das {
     // UNSAFE: the caller must own `expr` exclusively.
     void delete_expression ( ExpressionPtr expr ) {
         if ( !expr ) return;
-        expr->gc_unlink();
-        delete expr;
+        gc_free_now(expr);
     }
 
     // Free a SINGLE orphaned TypeDecl node (sibling of delete_expression). Only the node
@@ -522,8 +521,7 @@ namespace das {
     // the dtor never follows). UNSAFE: caller must own the node.
     void delete_type ( TypeDeclPtr typ ) {
         if ( !typ ) return;
-        typ->gc_unlink();
-        delete typ;
+        gc_free_now(typ);
     }
 
     void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {

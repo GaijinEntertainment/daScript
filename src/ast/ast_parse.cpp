@@ -1386,6 +1386,7 @@ namespace das {
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 if (!program->failed() && !policies.no_fold_unsafe)
                     program->foldUnsafe();
+                program->astChanged();
                 auto timeO = ref_time_ticks();
                 if (!program->failed()) {
                     if (program->getOptimize()) {

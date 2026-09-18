@@ -12,6 +12,10 @@ namespace das {
         bool logPass = program->options.getBoolOption("log_optimization_passes", program->policies.log_optimization_passes);
         bool log = logOpt || logPass;
         bool any, last;
+        auto noteChange = [&](bool changed) {
+            any |= changed;
+            if ( changed ) program->astChanged();
+        };
         int optimizationRound = 1;
         if (log) {
             logs << *program << "\n";
@@ -20,29 +24,29 @@ namespace das {
             if ( log ) logs << "OPTIMIZE " << optimizationRound << ":\n";
             if ( logPass ) logs << *program;
             any = false;
-            last = program->optimizationRefFolding(optimizationRound);    if ( program->failed() ) break;  any |= last;
+            last = program->optimizationRefFolding(optimizationRound);    if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationUnused(logs, optimizationRound);    if ( program->failed() ) break;  any |= last;
+            last = program->optimizationUnused(logs, optimizationRound);    if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationConstFolding(optimizationRound);  if ( program->failed() ) break;  any |= last;
+            last = program->optimizationConstFolding(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationCondFolding(optimizationRound);  if ( program->failed() ) break;  any |= last;
+            last = program->optimizationCondFolding(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationBlockFolding(optimizationRound);  if ( program->failed() ) break;  any |= last;
+            last = program->optimizationBlockFolding(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationCSE(optimizationRound);  if ( program->failed() ) break;  any |= last;
+            last = program->optimizationCSE(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "CSE:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
-            last = program->optimizationDeadStores(optimizationRound);  if ( program->failed() ) break;  any |= last;
+            last = program->optimizationDeadStores(optimizationRound);  if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "DEAD STORES:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
             // this is here again for a reason
-            last = program->optimizationUnused(logs, optimizationRound);    if ( program->failed() ) break;  any |= last;
+            last = program->optimizationUnused(logs, optimizationRound);    if ( program->failed() ) break;  noteChange(last);
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
             // now, user macros
@@ -65,10 +69,10 @@ namespace das {
             };
             Module::foreach(modMacro);
             if ( program->failed() ) break;
-            any |= last;
+            noteChange(last);
             libGroup.foreach(modMacro,"*");
             if ( program->failed() ) break;
-            any |= last;
+            noteChange(last);
             if ( log ) logs << "MACROS:" << (last ? "optimized" : "nothing") << "\n";
             if ( logPass ) logs << *program;
             optimizationRound++;

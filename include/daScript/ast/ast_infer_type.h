@@ -306,6 +306,15 @@ namespace das {
         ExprWith *hasMatchingWith(const string &fieldName) const;
 
         ExpressionPtr promoteToProperty(ExprVar *expr, ExpressionPtr right);
+        struct PropertyProbe {
+            string  fnName;
+            string  fieldName;
+            bool    hasNamed = false;
+            bool    hasWithName = false;
+        };
+        bool hasPropertyFunction(const string &propFnName) const;
+        ExpressionPtr tryProperty(const PropertyProbe &probe, const LineInfo &at, ExpressionPtr value, ExpressionPtr right);
+        ExpressionPtr tryPropertyThroughDeref(const PropertyProbe &probe, const LineInfo &at, ExpressionPtr value, ExpressionPtr right);
 
         vector<TypeMacro *> findTypeMacro(const string &name) const;
 

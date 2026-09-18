@@ -669,6 +669,15 @@ namespace das {
         return nullptr;
     }
     ExpressionPtr InferTypes::promoteToProperty(ExprVar *expr, ExpressionPtr right) {
+        if (with.empty())
+            return nullptr;
+        PropertyProbe probe;
+        probe.fnName = right ? ".`" + expr->name + "`clone" : ".`" + expr->name;
+        probe.fieldName = expr->name;
+        probe.hasNamed = hasPropertyFunction(probe.fnName);
+        probe.hasWithName = !right && hasPropertyFunction(".");
+        if (!probe.hasNamed && !probe.hasWithName)
+            return nullptr;
         for (auto it = with.rbegin(), its = with.rend(); it != its; ++it) {
             auto eW = *it;
             if (!eW->with) continue;    // module flavor opens no field scope
@@ -681,30 +690,11 @@ namespace das {
                 }
                 if (pSt) {
                     if (eWT->isPointer()) {
-                        auto derefV = new ExprPtr2Ref(expr->at, eW->with);
-                        derefV->type = new TypeDecl(*eWT->firstType);
-                        TypeDecl::applyAutoContracts(derefV->type, eWT->firstType);
-                        derefV->type->ref = true;
-                        derefV->type->constant |= eWT->constant;
-                        if (right) {
-                            if (auto cloneSet = inferGenericOperator(".`" + expr->name + "`clone", expr->at, derefV, right))
-                                return cloneSet;
-                        } else {
-                            if (auto opE = inferGenericOperator(".`" + expr->name, expr->at, derefV, nullptr))
-                                return opE;
-                            if (auto opE = inferGenericOperatorWithName(".", expr->at, derefV, expr->name))
-                                return opE;
-                        }
+                        if (auto opE = tryPropertyThroughDeref(probe, expr->at, eW->with, right))
+                            return opE;
                     } else {
-                        if (right) {
-                            if (auto cloneSet = inferGenericOperator(".`" + expr->name + "`clone", expr->at, eW->with, right))
-                                return cloneSet;
-                        } else {
-                            if (auto opE = inferGenericOperator(".`" + expr->name, expr->at, eW->with, nullptr))
-                                return opE;
-                            if (auto opE = inferGenericOperatorWithName(".", expr->at, eW->with, expr->name))
-                                return opE;
-                        }
+                        if (auto opE = tryProperty(probe, expr->at, eW->with, right))
+                            return opE;
                     }
                 }
             }
@@ -991,38 +981,51 @@ namespace das {
     }
     ExpressionPtr InferTypes::promoteToProperty(ExprField *expr, ExpressionPtr right, const string &opName) {
         if (!expr->no_promotion && expr->value->type) {
-            if (right) {
-                if (auto cloneSet = inferGenericOperator(".`" + expr->name + "`" + opName, expr->at, expr->value, right))
-                    return cloneSet;
-                auto valT = expr->value->type;
-                if (valT->isPointer() && valT->firstType) {
-                    auto derefV = new ExprPtr2Ref(expr->at, expr->value);
-                    derefV->type = new TypeDecl(*valT->firstType);
-                    TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
-                    derefV->type->ref = true;
-                    derefV->type->constant |= valT->constant;
-                    if (auto cloneSet = inferGenericOperator(".`" + expr->name + "`" + opName, expr->at, derefV, right))
-                        return cloneSet;
-                }
-            } else {
-                if (auto opE = inferGenericOperator(".`" + expr->name, expr->at, expr->value, nullptr))
+            PropertyProbe probe;
+            probe.fnName = right ? ".`" + expr->name + "`" + opName : ".`" + expr->name;
+            probe.fieldName = expr->name;
+            probe.hasNamed = hasPropertyFunction(probe.fnName);
+            probe.hasWithName = !right && hasPropertyFunction(".");
+            if (!probe.hasNamed && !probe.hasWithName)
+                return nullptr;
+            if (auto opE = tryProperty(probe, expr->at, expr->value, right))
+                return opE;
+            auto valT = expr->value->type;
+            if (valT->isPointer() && valT->firstType) {
+                if (auto opE = tryPropertyThroughDeref(probe, expr->at, expr->value, right))
                     return opE;
-                if (auto opE = inferGenericOperatorWithName(".", expr->at, expr->value, expr->name))
-                    return opE;
-                auto valT = expr->value->type;
-                if (valT->isPointer() && valT->firstType) {
-                    auto derefV = new ExprPtr2Ref(expr->at, expr->value);
-                    derefV->type = new TypeDecl(*valT->firstType);
-                    TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
-                    derefV->type->ref = true;
-                    derefV->type->constant |= valT->constant;
-                    if (auto opE = inferGenericOperator(".`" + expr->name, expr->at, derefV, nullptr))
-                        return opE;
-                    if (auto opE = inferGenericOperatorWithName(".", expr->at, derefV, expr->name))
-                        return opE;
-                }
             }
         }
+        return nullptr;
+    }
+    bool InferTypes::hasPropertyFunction(const string &propFnName) const {
+        return program->library.hasFunctionOrGenericNamed(propFnName);
+    }
+    ExpressionPtr InferTypes::tryProperty(const PropertyProbe &probe, const LineInfo &at, ExpressionPtr value, ExpressionPtr right) {
+        if (right)
+            return inferGenericOperator(probe.fnName, at, value, right);
+        if (probe.hasNamed) {
+            if (auto opE = inferGenericOperator(probe.fnName, at, value, nullptr))
+                return opE;
+        }
+        if (probe.hasWithName) {
+            if (auto opE = inferGenericOperatorWithName(".", at, value, probe.fieldName))
+                return opE;
+        }
+        return nullptr;
+    }
+    ExpressionPtr InferTypes::tryPropertyThroughDeref(const PropertyProbe &probe, const LineInfo &at, ExpressionPtr value, ExpressionPtr right) {
+        auto valT = value->type;
+        auto derefV = new ExprPtr2Ref(at, value);
+        auto derefT = new TypeDecl(*valT->firstType);
+        TypeDecl::applyAutoContracts(derefT, valT->firstType);
+        derefT->ref = true;
+        derefT->constant |= valT->constant;
+        derefV->type = derefT;
+        if (auto opE = tryProperty(probe, at, derefV, right))
+            return opE;
+        if (derefV->type == derefT) gc_free_now(derefT);
+        gc_free_now(derefV);
         return nullptr;
     }
     LineInfo InferTypes::makeConstAt(ExprField *expr) const {

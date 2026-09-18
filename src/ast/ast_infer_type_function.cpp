@@ -8,6 +8,12 @@
 
 namespace das {
 
+    static bool canBeAliasName(const string &callName) {
+        string moduleName, funcName;
+        splitTypeName(callName, moduleName, funcName);
+        return isPlainIdentifier(funcName);
+    }
+
     Module *InferTypes::getSearchModule(string &moduleName) const {
         if (moduleName == "_") {
             moduleName = "*";
@@ -2017,7 +2023,8 @@ namespace das {
                     reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                 }
             } else {
-                if (auto aliasT = findAlias(expr->name)) {
+                TypeDeclPtr aliasT = canBeAliasName(expr->name) ? findAlias(expr->name) : nullptr;
+                if (aliasT) {
                     if (aliasT->isCtorType()) {
                         expr->name = das_to_string(aliasT->baseType);
                         if (aliasT->baseType == Type::tBitfield || aliasT->baseType == Type::tBitfield8 ||
@@ -2092,6 +2099,7 @@ namespace das {
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         } else {
+            gc_free_now(tempCall);
             return nullptr;
         }
     }
@@ -2115,6 +2123,7 @@ namespace das {
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         } else {
+            gc_free_now(tempCall);
             return nullptr;
         }
     }
@@ -2123,7 +2132,12 @@ namespace das {
         conststring->constant = true;
         auto fieldName = new ExprConstString(expr_at, arg1);
         fieldName->type = conststring;
-        return inferGenericOperator(opN, expr_at, arg0, fieldName, err);
+        auto opE = inferGenericOperator(opN, expr_at, arg0, fieldName, err);
+        if (!opE) {
+            gc_free_now(fieldName);
+            gc_free_now(conststring);
+        }
+        return opE;
     }
     Variable *InferTypes::findMatchingBlockOrLambdaVariable(const string &name) {
         // local (that on the stack)

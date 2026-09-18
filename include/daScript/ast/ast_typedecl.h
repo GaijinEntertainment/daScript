@@ -805,6 +805,7 @@ namespace das {
     das::TypeDeclPtr DAS_API makeDistinctType(const das::ModuleLibrary & library, const char * typeName);
 
     DAS_API bool splitTypeName ( const string & name, string & moduleName, string & funcName );
+    DAS_API bool isPlainIdentifier ( const string & name );
 
     DAS_API bool isCircularType ( const TypeDeclPtr & type );
     DAS_API bool hasImplicit ( const TypeDeclPtr & type );

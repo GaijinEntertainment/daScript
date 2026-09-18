@@ -62,6 +62,11 @@ namespace das {
         }
     }
 
+    bool isPlainIdentifier ( const string & name ) {
+        if ( name.empty() ) return false;
+        return isalpha(uint8_t(name[0])) || name[0]=='_';
+    }
+
     // MODULE
 
     void Module::addDependency ( Module * mod, bool pub ) {
@@ -675,7 +680,9 @@ namespace das {
             }
         }
         if ( functions.insert(mangledName, fn) ) {
-            functionsByName[hash64z(fn->name.c_str())].push_back(fn);
+            auto & overloads = functionsByName[hash64z(fn->name.c_str())];
+            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            overloads.push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -721,7 +728,9 @@ namespace das {
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
-            genericsByName[hash64z(fn->name.c_str())].push_back(fn);
+            auto & overloads = genericsByName[hash64z(fn->name.c_str())];
+            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            overloads.push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -1074,6 +1083,27 @@ namespace das {
         return it != moduleLookupByHash.end() ? it->second : nullptr;
     }
 
+    bool ModuleLibrary::hasFunctionOrGenericNamed ( const string & name ) const {
+        auto gen = daScriptEnvironment::getBound()->functionNameGeneration;
+        if ( gen != functionNameCacheGeneration || modules.size() != functionNameCacheModuleCount ) {
+            functionNameCache.clear();
+            functionNameCacheGeneration = gen;
+            functionNameCacheModuleCount = modules.size();
+        }
+        auto nameHash = hash64z(name.c_str());
+        auto it = functionNameCache.find(nameHash);
+        if ( it != functionNameCache.end() ) return it->second;
+        bool exists = false;
+        for ( auto pm : modules ) {
+            if ( pm->functionsByName.find(nameHash) || pm->genericsByName.find(nameHash) ) {
+                exists = true;
+                break;
+            }
+        }
+        functionNameCache[nameHash] = exists;
+        return exists;
+    }
+
     void ModuleLibrary::findWithCallback ( const string & name, Module * inWhichModule, const callable<void (Module * pm, const string &name, Module * inWhichModule)> & func ) const {
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
@@ -1308,6 +1338,7 @@ namespace das {
         }
         modules.clear();
         moduleLookupByHash.clear();
+        functionNameCache.clear();
     }
 
     // Module group

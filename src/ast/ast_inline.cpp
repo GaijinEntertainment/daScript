@@ -123,10 +123,6 @@ namespace das {
             virtual void preVisit ( ExprAssume * expr ) override { Visitor::preVisit(expr); flag("body contains an assume expression"); }
         };
 
-        bool isPlainIdentifier ( const string & name ) {
-            if ( name.empty() ) return false;
-            return isalpha(uint8_t(name[0])) || name[0]=='_';
-        }
 
         // operator names dispatched through ExprOp1/2/3 - the node kinds the splicer plans.
         // punctuation dispatched elsewhere ([] via ExprAt, ??, properties) stays refused
