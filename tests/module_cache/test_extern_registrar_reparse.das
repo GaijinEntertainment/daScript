@@ -13,6 +13,10 @@ require _mc_common
 //! (src/ast/ARCHITECTURE.md#module-cache-read)
 [test]
 def test_extern_registrar_reparse(t : T?) {
+    if (typeinfo sizeof(type<void?>) != 8) {
+        t |> skip("a 32-bit host builds no extern binder, so nothing registers at compile time")
+        return
+    }
     var terr : string
     let tmp = create_temp_directory("das_mc_extern", terr)
     if (empty(tmp)) {
