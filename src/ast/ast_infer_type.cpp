@@ -6511,7 +6511,8 @@ namespace das {
         // Per-pass collect+swap: infer mints a lot of throwaway TypeDecls/Expressions. When a
         // pass grows the working root enough, collect the live tree into a fresh root and swap
         // it in (O(1)); the old root's dtor sweeps that pass's garbage. Fire when growth since
-        // the last collect crosses a node threshold (~2 MB) OR a fraction of the live set.
+        // the last collect crosses a fraction of the live set, with a node floor (~2 MB) for
+        // small modules: a collect walks the whole live set, so it must reclaim a matching share.
         bool gcInferCollect = program->options.getBoolOption("gc_infer_collect", program->policies.gc_infer_collect);
         int32_t gcInferNodes = program->options.getIntOption("gc_infer_collect_nodes", program->policies.gc_infer_collect_nodes);
         int32_t gcInferPct = program->options.getIntOption("gc_infer_collect_pct", program->policies.gc_infer_collect_pct);
@@ -6534,8 +6535,8 @@ namespace das {
             if ( gcInferCollect && pass > 0 ) {
                 uint64_t curCount = gc_root::gc_get_active_root()->gc_count;
                 uint64_t grown = curCount >= gcLastCount ? curCount - gcLastCount : 0;
-                bool fire = grown >= uint64_t(gcInferNodes)
-                         || ( gcLastCount && grown * 100 >= gcLastCount * uint64_t(gcInferPct) );
+                uint64_t threshold = das::max(uint64_t(gcInferNodes), gcLastCount * uint64_t(gcInferPct) / 100);
+                bool fire = grown >= threshold;
                 if ( gcInferLog ) {
                     logs << "[gc-infer] " << program->thisModule->name << " pass " << pass
                          << " live=" << curCount << " grown=" << grown

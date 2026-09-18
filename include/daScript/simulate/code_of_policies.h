@@ -66,8 +66,8 @@ namespace das {
     // swap it in (O(1)), letting the old root's dtor sweep that pass's garbage. Caps the compile
     // memory peak (infer churns many throwaway TypeDecls/Expressions) at ~no time cost.
         /*option*/ bool        gc_infer_collect = true;            // enable per-pass collect+swap during inference
-        /*option*/ int32_t     gc_infer_collect_nodes = 25000;     // fire when the root grew by this many nodes since the last collect (~2 MB)
-        /*option*/ int32_t     gc_infer_collect_pct = 50;          // ...or by this percent of the live set, whichever comes first
+        /*option*/ int32_t     gc_infer_collect_nodes = 25000;     // the floor of the collect threshold: growth since the last collect, in nodes (~2 MB)
+        /*option*/ int32_t     gc_infer_collect_pct = 50;          // the threshold is the larger of the floor and this percent of the live set at the last collect
         uint64_t    max_static_variables_size = 0x100000000;   // 4GB
         /*option*/ uint64_t    max_heap_allocated = 0;
         /*option*/ uint64_t    max_string_heap_allocated = 0;
