@@ -11,6 +11,17 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-18) - the Pocket codec streams in windows of 16 latent frames
+  (`ARCHITECTURE_POCKET.md` sec.2.46).** The codec's activations, about 20 MB per second of
+  audio across the chain's ping-pong rows, were the say's and the clone's working set: 116 MB
+  for a 5.7 s chunk, 233 MB for an 11 s clip (das heap counters, the English q8 file, M5 Max);
+  at 16 frames they are 41 MB whatever the run's length, 21 MB at 8. On one thread (26 runs, cv
+  under 1%) a window is cache-sized rows and beats the whole run: the 5.7 s decode 374 ms -> 365
+  at 16 and 360 at 8, the 11 s encode 710 -> 672 and 664. On fourteen threads the rows a step
+  hands the workers thin out: codec minima 81-89 ms for the whole run against 93 at 16, 94 at 8,
+  106 at 4, inside a run-to-run band of a tenth (cv 5-7%, void by the discipline; the say's total
+  196-217 ms whole, 204 at 16). The remaining cost is the lane split at a few hundred rows -
+  `followup_general.md` row 153.
 - **LANDED (2026-09-16) - the browser build runs on every engine; `+relaxed-simd` leaves the
   wasm feature string.** WebKit implements none of the relaxed opcodes, and the previous entry's
   `+relaxed-simd` put `f32x4.relaxed_max` (the backend's lowering of an `nnan` vector max, which
