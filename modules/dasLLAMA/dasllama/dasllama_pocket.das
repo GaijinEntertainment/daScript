@@ -175,7 +175,7 @@ def reset_pocket_q8() {
 
 // ===== the codec's window: the latent frames a stream step covers =====
 
-let POCKET_CODEC_WINDOW_DEFAULT = 8l
+let POCKET_CODEC_WINDOW_DEFAULT = 16l
 var private g_pocket_codec_window = POCKET_CODEC_WINDOW_DEFAULT
 
 //! Set how many latent frames the codec's encoder and decoder run per stream step; 0 runs a
