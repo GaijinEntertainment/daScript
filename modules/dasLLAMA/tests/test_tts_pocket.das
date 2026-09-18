@@ -1038,6 +1038,8 @@ def test_pocket_quiet_floor(t : T?) {
         var inscope reference <- load_tts_model(path)
         t |> success(!reference.pocket.q8, "the pinned f32 lane serves")
         var inscope b <- synthesize(reference, text, "alba")
+        t |> success(length(a.pcm) >= 2 * a.sample_rate && length(b.pcm) >= 2 * b.sample_rate,
+            "both renders carry seconds of audio ({length(a.pcm)} and {length(b.pcm)} samples) - the floor reads their quietest twentieth")
         let fa = quiet_floor_db(a.pcm, a.sample_rate)
         let fb = quiet_floor_db(b.pcm, b.sample_rate)
         to_log(LOG_INFO, "pocket quiet floor: served {fa} dBFS, f32 lane {fb} dBFS\n")

@@ -80,7 +80,7 @@ only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `ra
 exists only as the 24-layer one. A voice cloned from any clip speaks the file's language with
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
 `pocket-tts-en-kq.gguf` is the English model in the small form, 78 MB: the backbone and the
-codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding
+codec transformers as Q4_K, the flow head as Q8_0, the codec convolutions f16, the embedding
 table Q4_K, the encoder and the 19 voices inside (the rig row at `alba` - WER 3.86 / UTMOS 4.295
 at a real-time factor of 0.044, measured 2026-09-10 on the same box, tier, tune profile and
 kernel backend - was taken on the earlier form of this file, its codec convolutions Q8_0 and
