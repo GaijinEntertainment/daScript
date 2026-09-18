@@ -134,6 +134,16 @@ LOG="$(mktemp)"
 # run; Windows has no rpath and locks open DLL dirs, so only POSIX.
 BUILD_LIB="$(cd "$CI_DIR/.." && pwd -P)/lib"
 HIDDEN_LIB=""
+# A previous run killed outright (SIGKILL, a hard ninja abort) never reached its trap and
+# left lib/ hidden, which breaks every link and every daslang launch in the tree until
+# someone notices. Put it back before doing anything else.
+if [[ -d "$BUILD_LIB.smokehidden" ]]; then
+    if [[ -e "$BUILD_LIB" ]]; then
+        cp -a "$BUILD_LIB.smokehidden"/. "$BUILD_LIB"/ && rm -rf "$BUILD_LIB.smokehidden"
+    else
+        mv "$BUILD_LIB.smokehidden" "$BUILD_LIB"
+    fi
+fi
 if [[ -z "$CPP_SUFFIX" && -d "$BUILD_LIB" ]]; then
     HIDDEN_LIB="$BUILD_LIB.smokehidden"
     mv "$BUILD_LIB" "$HIDDEN_LIB"

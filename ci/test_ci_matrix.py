@@ -120,35 +120,24 @@ class WorkflowShapes(unittest.TestCase):
         text = self.read("build.yml")
         self.assertIn("if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'", text)
 
-    # the steps that run only on the nightly cron, pinned by name: moving another step off the per-PR path is
-    # a deliberate edit here, with its preflight mirror or platform reason stated in the workflow
-    NIGHTLY_ONLY_STEPS = {
-        "Run examples from modules",
-        "Run tutorial dry-runs",
-        "Verify authored-doc code blocks (nightly only)",
-        "Cross-compile nano for cortex-m4",
-        "Compile tests/ with --ast-verify-batch",
-        "Coverage",
+    # the checks that run only on the nightly cron, pinned by name: moving another off the
+    # per-PR path is a deliberate edit here, with its preflight mirror or platform reason stated
+    NIGHTLY_ONLY = {
+        "run_examples",
+        "dry_run_tutorials",
+        "check_doc_verify",
+        "check_nano_arm",
+        "check_ast_verify_tree",
+        "run_coverage",
     }
 
-    def step_conditions(self, text):
-        """{step name: its first `if:` line} for every named step of a workflow."""
-        conditions, current = {}, None
-        for line in text.splitlines():
-            m = re.match(r'\s*- name: "(.*)"\s*$', line)
-            if m:
-                current = m.group(1)
-                conditions.setdefault(current, "")
-                continue
-            m = re.match(r"\s*if: (.*)$", line)
-            if m and current is not None and not conditions[current]:
-                conditions[current] = m.group(1)
-        return conditions
-
-    def test_nightly_only_steps_are_exactly_the_pinned_set(self):
-        conditions = self.step_conditions(self.read("extended_checks.yml"))
-        nightly = {name for name, cond in conditions.items() if "github.event_name == 'schedule'" in cond}
-        self.assertEqual(nightly, self.NIGHTLY_ONLY_STEPS)
+    def test_nightly_only_checks_are_exactly_the_pinned_set(self):
+        """extended_checks.yml runs one group target per role; ci/CMakeLists.txt assigns the
+        checks, so the nightly-only set is read there rather than from step conditions."""
+        text = open(os.path.join(os.path.dirname(HERE), "ci", "CMakeLists.txt"), encoding="utf-8").read()
+        body = text.split("set(DAS_EXTENDED_NIGHTLY", 1)[1].split("das_lane_group", 1)[0]
+        named = set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
+        self.assertEqual(named, self.NIGHTLY_ONLY)
 
 
 class CommandLine(unittest.TestCase):

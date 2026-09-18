@@ -304,7 +304,7 @@ jobs:
       - name: "Smoke-test installed bundle"
         if: matrix.cmake_preset == 'Release'
         shell: bash
-        run: bash ci/smoke_test_bundle.sh ./daslang_bundle
+        run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target check_bundle_smoke
       - name: "Checksum"
         # every package-manager manifest reads its sha256 from this sibling asset
         if: matrix.cmake_preset == 'Release'

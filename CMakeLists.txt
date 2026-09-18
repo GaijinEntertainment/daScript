@@ -98,6 +98,7 @@ IF(WIN32)
 ENDIF()
 
 INCLUDE(./CMakeCommon.txt)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/das_lane.cmake)
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
     INCLUDE_DIRECTORIES(${DAS_CONFIG_INCLUDE_DIR})
@@ -2088,6 +2089,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/lint/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
+# Install ast-verify (the --ast-verify-batch gate: the flag reports and exits 0,
+# so the verdict is read from its output)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das DESTINATION utils/ast-verify)
+
 # Install detect-dupe (cross-file duplicate-function detector)
 file(GLOB DAS_DETECT_DUPE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
 install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
@@ -2246,6 +2251,14 @@ add_subdirectory(tests)
 # Documentation targets (check_docs_generated, build_doc, das_documentation).
 add_subdirectory(doc)
 
+add_subdirectory(examples/games)
+
+add_subdirectory(benchmarks)
+
+add_subdirectory(site-dasllama)
+
+add_subdirectory(ci)
+
 # macOS: ad-hoc code sign all installed binaries and shared libraries.
 # This prevents Gatekeeper from quarantining downloaded SDK artifacts
 # ("cannot be opened because the developer cannot be verified").
@@ -2333,6 +2346,15 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         RUNTIME DESTINATION tree-sitter-daslang
         LIBRARY DESTINATION tree-sitter-daslang
     )
+
+    # The ast-grep tools need this library and the sgconfig.yml its POST_BUILD stamps. The
+    # consumers live in utils/, which is processed long before this block, so the edge is
+    # added here where both targets exist.
+    foreach(_t run_tests_mcp_tools run_utils_tests)
+        if(TARGET ${_t})
+            add_dependencies(${_t} tree_sitter_daslang)
+        endif()
+    endforeach()
     install(FILES
         tree-sitter-daslang/src/node-types.json
         tree-sitter-daslang/grammar.js
@@ -2417,9 +2439,9 @@ install(CODE [[
     foreach(_f IN LISTS CMAKE_INSTALL_MANIFEST_FILES)
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
-        if((_name MATCHES "^REVIEW.*\.(md|das)$"
-                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\.md$"
-                OR _name MATCHES "^followup_.*\.md$")
+        if((_name MATCHES "^REVIEW.*\\.(md|das)$"
+                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\\.md$"
+                OR _name MATCHES "^followup_.*\\.md$")
             AND NOT _f_abs STREQUAL _root_common
             AND NOT _f_abs STREQUAL _root_arch_common)
             set(_head "")

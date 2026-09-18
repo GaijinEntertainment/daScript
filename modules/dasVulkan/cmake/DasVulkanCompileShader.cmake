@@ -41,7 +41,6 @@ MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
         DEPENDS ${input_src} ${extra_deps}
         OUTPUT ${out_dir}/${input_name_ext}.pre.glsl
         WORKING_DIRECTORY ${input_dir}
-        USES_TERMINAL
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_PRE_ARGS}
             ${input_name_ext} > ${out_dir}/${input_name_ext}.pre.glsl
@@ -51,7 +50,6 @@ MACRO(DAS_VULKAN_COMPILE_SHADER input extra_deps)
         OUTPUT ${out_dir}/${input_name_ext}.base.spv
         WORKING_DIRECTORY ${input_dir}
         VERBATIM
-        USES_TERMINAL
         COMMAND_EXPAND_LISTS
         COMMAND ${DAS_VULKAN_GLSLANG_VALIDATOR_EXE} ${DS_GLSLANG_ARGS}
             ${input_name_ext} -o ${out_dir}/${input_name_ext}.base.spv

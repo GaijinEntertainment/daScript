@@ -16,6 +16,54 @@ add_custom_target(check_dasgen
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
 )
 
+# The lint gate's -P script; configure emits it into the build dir.
+set(_das_changed_files_fn [==[
+function(das_ci_changed_files out base_ref)
+    execute_process(
+        COMMAND git diff --name-only --diff-filter=AM "origin/${base_ref}...HEAD" -- ${ARGN}
+        WORKING_DIRECTORY "${DAS_ROOT}"
+        OUTPUT_VARIABLE _files
+        RESULT_VARIABLE _rc
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR "git diff against origin/${base_ref} failed (${_rc})")
+    endif()
+    string(REPLACE "\n" ";" _files "${_files}")
+    set(${out} "${_files}" PARENT_SCOPE)
+endfunction()
+]==])
+
+set(DAS_LINT_CHANGED_SCRIPT ${CMAKE_BINARY_DIR}/das_lint_changed.cmake)
+file(WRITE ${DAS_LINT_CHANGED_SCRIPT} "${_das_changed_files_fn}" [==[
+if(NOT BASE_REF)
+    set(BASE_REF "$ENV{DAS_CI_BASE_REF}")
+endif()
+if(NOT BASE_REF)
+    set(BASE_REF master)
+endif()
+das_ci_changed_files(_changed "${BASE_REF}" "*.das" "*.md")
+if(NOT _changed)
+    message(STATUS "no .das or .md files changed; skipping lint")
+    return()
+endif()
+message(STATUS "linting: ${_changed}")
+execute_process(
+    COMMAND "${DASLANG}" ./utils/lint/main.das -- ${_changed} --quiet --disable LINT019
+    WORKING_DIRECTORY "${DAS_ROOT}"
+    RESULT_VARIABLE _rc)
+if(NOT _rc EQUAL 0)
+    message(FATAL_ERROR "lint reported findings (${_rc})")
+endif()
+]==])
+
+add_custom_target(check_lint_changed
+    COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang>
+            -P ${DAS_LINT_CHANGED_SCRIPT}
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Linting the .das and .md files changed against origin/DAS_CI_BASE_REF"
+)
+
 # watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV,
 # dasStdDlg (the tray icon) and dasStbImage (the icon file's PNG decoder) as static archives, no
 # compiler, no shared module, no lock on the files it deploys (the shape of
@@ -84,6 +132,78 @@ endif()
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
 # Requires LLVM for -exe compilation.
+
+
+set(_lane_util_bin ${UTIL_BIN_DIR})
+
+
+das_lane_dastest_target(run_tests_mcp_tools
+    COMMENT "Testing the MCP tools"
+    FILES utils/mcp/test_tools.das utils/mcp/test_crosstree_guard.das utils/mcp/test_setup.das
+)
+
+das_lane_dastest_target(run_tests_daspkg COMMENT "Testing daspkg"
+    FILES utils/daspkg/test_daspkg.das ARGS --timeout 900)
+
+das_lane_dastest_target(run_tests_dap_bridge COMMENT "Testing the DAP MCP bridge"
+    FILES utils/dap/test_dap_bridge.das ARGS --timeout 900)
+
+das_lane_dastest_target(run_tests_review_md COMMENT "Testing review-md discovery, the make-pr gates and preflight"
+    FILES utils/internal/review-md/test_scan.das utils/internal/review-md/test_gate.das
+          utils/internal/review-md/test_walkers.das utils/internal/make-pr/test_gates.das
+          utils/internal/preflight/tests)
+
+das_lane_dastest_target(run_tests_dastest COMMENT "Testing dastest's own suite" FILES dastest/tests)
+
+das_lane_dastest_target(run_tests_pr_babysit COMMENT "Testing the pr-babysit verdict core"
+    FILES utils/internal/pr-babysit/test_watch_verdict.das)
+
+set(_ci_dasweb_playground)
+foreach(_s test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints)
+    list(APPEND _ci_dasweb_playground utils/internal/dasweb-playground/${_s}.das)
+endforeach()
+das_lane_dastest_target(run_tests_dasweb_playground COMMENT "Testing dasweb-playground" FILES ${_ci_dasweb_playground})
+
+set(_ci_dasllama_ladder)
+foreach(_s test_ladder_store test_ladder_config test_ladder_server)
+    list(APPEND _ci_dasllama_ladder utils/internal/dasllama-ladder/${_s}.das)
+endforeach()
+das_lane_dastest_target(run_tests_dasllama_ladder COMMENT "Testing dasllama-ladder" FILES ${_ci_dasllama_ladder})
+
+set(_ci_dasweb_buildd)
+foreach(_s test_buildd_config test_buildd_core test_buildd_client test_roll_toolchain)
+    list(APPEND _ci_dasweb_buildd utils/internal/dasweb-buildd/${_s}.das)
+endforeach()
+das_lane_dastest_target(run_tests_dasweb_buildd COMMENT "Testing dasweb-buildd" FILES ${_ci_dasweb_buildd})
+
+add_custom_target(run_tests_dasweb_verify
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/utils/internal/dasweb-verify/test_verify_core.das
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/dasweb-verify/main.das
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Testing dasweb-verify and compiling the curated samples"
+)
+
+add_custom_target(check_review_gates
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/review-md/all.das
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Running every REVIEW.das gate"
+)
+
+add_custom_target(check_gated_das
+    COMMAND $<TARGET_FILE:daslang> utils/internal/preflight/main.das -- --only ci-das
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Compiling the CI-only das surface (ci_only_das.txt)"
+)
+
+add_custom_target(check_ast_verify_changed
+    COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --changed
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Running --ast-verify-batch over the .das files changed against origin/DAS_CI_BASE_REF"
+)
 
 if(DAS_LLVM_DISABLED)
     return()
@@ -252,3 +372,26 @@ ADD_CUSTOM_TARGET(run_utils_tests
     COMMENT "Running utils tests"
 )
 
+add_custom_target(check_standalone_exes
+    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-fmt ./utils/das-fmt/dasfmt.das
+    COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-lint ./utils/lint/main.das
+    DEPENDS daslang all_utils_exe
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Building the standalone das-fmt and das-lint executables"
+)
+add_custom_target(check_format_exe
+    COMMAND ${PROJECT_SOURCE_DIR}/bin/das-fmt.exe --path ${PROJECT_SOURCE_DIR}/ --verify --exclude-mask ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Verifying .das formatting with the standalone das-fmt"
+)
+add_dependencies(check_format_exe check_standalone_exes)
+
+if(TARGET dascov_exe)
+    add_custom_target(run_coverage
+        COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800
+        COMMAND ${UTIL_BIN_DIR}/dascov.exe -- ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --exclude tests/language
+        DEPENDS daslang dascov_exe
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Coverage of tests/language (dastest --cov-path + dascov)"
+    )
+endif()

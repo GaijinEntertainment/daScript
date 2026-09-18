@@ -58,3 +58,12 @@ set_target_properties(libDaScriptNano PROPERTIES FOLDER "nano")
 if(MSVC)
     target_compile_options(libDaScriptNano PRIVATE /wd4100 /wd4127)
 endif()
+
+if(NOT DAS_TOOLS_DISABLED AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_custom_target(check_nano_arm
+        COMMAND ${PROJECT_SOURCE_DIR}/ci/nano_arm_build.sh $<TARGET_FILE:daslang>
+        DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Cross-compiling nano for cortex-m4"
+    )
+endif()

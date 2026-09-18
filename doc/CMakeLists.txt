@@ -18,6 +18,22 @@ if(NOT DAS_TOOLS_DISABLED)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Checking generated documentation is fresh"
     )
+    if(TARGET libDasModuleImgui)
+        add_custom_target(run_imgui2rst
+            COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/modules/dasImgui/utils/imgui2rst.das
+            DEPENDS daslang
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Regenerating the dasImgui stdlib RST (imgui2rst)"
+        )
+    endif()
+    if(TARGET libDasModuleVulkan)
+        add_custom_target(run_vulkan2rst
+            COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/modules/dasVulkan/utils/vulkan2rst.das
+            DEPENDS daslang
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Regenerating the dasVulkan stdlib RST (vulkan2rst)"
+        )
+    endif()
 endif()
 
 # ── Documentation build (optional) ──────────────────────────────────────────
@@ -91,4 +107,35 @@ if(DAS_BUILD_DOCUMENTATION)
         message(WARNING "DAS_BUILD_DOCUMENTATION is ON but Sphinx was not found. "
                         "Install Python 3 and run: pip install sphinx sphinx-rtd-theme")
     endif()
+endif()
+
+if(NOT DAS_TOOLS_DISABLED)
+    add_custom_target(check_doc_verify
+        COMMAND $<TARGET_FILE:daslang> ./utils/internal/doc-verify/main.das -- --daslang $<TARGET_FILE:daslang>
+        DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Verifying authored-doc code blocks compile (doc-verify)"
+    )
+
+    add_custom_target(stage_doc_assets
+        COMMAND bash ${PROJECT_SOURCE_DIR}/utils/internal/docs-assets/fetch.sh
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Staging the docs-assets tutorial recordings"
+    )
+
+    set(_doc_generators check_docs_generated stage_doc_assets)
+    foreach(_t run_imgui2rst run_vulkan2rst)
+        if(TARGET ${_t})
+            list(APPEND _doc_generators ${_t})
+        endif()
+    endforeach()
+    add_dependencies(check_docs_fresh ${_doc_generators})
+
+    set(_doc_all ${_doc_generators} check_docs_fresh)
+    if(TARGET build_doc)
+        add_dependencies(build_doc check_docs_fresh)
+        list(APPEND _doc_all build_doc)
+    endif()
+    add_custom_target(run_doc COMMENT "Running the doc lane")
+    add_dependencies(run_doc ${_doc_all})
 endif()

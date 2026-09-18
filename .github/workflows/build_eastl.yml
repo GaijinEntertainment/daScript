@@ -36,4 +36,4 @@ jobs:
           DAGOR_ROOT: ${{ github.workspace }}/.dagor_headers
       - name: smoke run
         if: matrix.variant == 'pc'
-        run: ./bin/daslang_static examples/clargs/main.das -- --name ci -r 1
+        run: cmake --build build_eastl_pc --target run_eastl_smoke

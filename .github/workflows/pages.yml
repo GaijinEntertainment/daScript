@@ -181,7 +181,7 @@ jobs:
       # from its own generator; the host above builds with dasGlfw+dasImgui ON.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+      run: cmake --build ./build --target run_imgui2rst
 
     - name: "Run vulkan2rst"
       # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
@@ -189,14 +189,14 @@ jobs:
       # and never creates a Vulkan instance, so this needs no GPU.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
+      run: cmake --build ./build --target run_vulkan2rst
 
     - name: "Stage tutorial recordings (docs-assets release)"
       # The `.. video::` directive fails the -W sphinx build on any recording
       # missing from _static/tutorials/, so staging must precede sphinx.
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: bash utils/internal/docs-assets/fetch.sh
+      run: cmake --build ./build --target stage_doc_assets
 
     - name: "Build Sphinx HTML"
       run: |

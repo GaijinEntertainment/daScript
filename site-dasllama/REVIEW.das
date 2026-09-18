@@ -75,7 +75,7 @@ def private check_page_census {
     }
     dir("site-dasllama") $(name) {
         let served = name |> ends_with(".html") || name |> ends_with(".xml") || name |> ends_with(".txt")
-        return if (!served)
+        return if (!served || name == "CMakeLists.txt")
         let path = "site-dasllama/{name}"
         if (!key_exists(staged_set, path)) {
             gate_finding(path, "has no copy line in {PAGES_YML}'s dasllama.io deploy step - the step names each top-level file, so an unlisted one never reaches the site")

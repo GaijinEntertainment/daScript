@@ -29,14 +29,12 @@ if(NOT DAS_TOOLS_DISABLED)
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
-        USES_TERMINAL
     )
     add_custom_target(run_tests_interpreter_isolated
         COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter, isolated retry)"
-        USES_TERMINAL
     )
 
     if(NOT DAS_LLVM_DISABLED)
@@ -94,14 +92,12 @@ if(NOT DAS_TOOLS_DISABLED)
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated-parallel)"
-            USES_TERMINAL
         )
         add_custom_target(run_tests_jit_isolated
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --timeout ${DAS_TEST_JIT_TIMEOUT_ISOLATED}
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated retry)"
-            USES_TERMINAL
         )
     endif()
 endif()
@@ -115,7 +111,6 @@ if(TARGET test_aot)
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"
-        USES_TERMINAL
     )
 endif()
 
@@ -128,7 +123,6 @@ if(TARGET test_aot_subset)
         DEPENDS test_aot_subset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"
-        USES_TERMINAL
     )
 endif()
 
@@ -140,9 +134,116 @@ if(TARGET test_llvm_aot)
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (LLVM-AOT)"
-        USES_TERMINAL
     )
 endif()
 
 # Two standalone sweeps over the test corpus, one per backend. Opt-in, out of CI.
 add_subdirectory(standalone-sweep)
+
+if(NOT DAS_TOOLS_DISABLED)
+
+set(_lane_lsan "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/lsan_suppressions.txt")
+set(_lane_san_env ${_lane_lsan}
+    "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/tsan_suppressions.txt"
+    "UBSAN_OPTIONS=print_stacktrace=1")
+
+function(das_lane_dastest name comment)
+    set(_cmds)
+    foreach(_f IN LISTS ARGN)
+        list(APPEND _cmds COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das --
+             --color --failures-only --test ${PROJECT_SOURCE_DIR}/${_f})
+    endforeach()
+    add_custom_target(${name} ${_cmds} DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMENT "${comment}")
+endfunction()
+
+function(das_ci_sweeps out isolated)
+    set(_deps)
+    set(_jit run_tests_jit)
+    set(_interp run_tests_interpreter)
+    if(isolated)
+        set(_jit run_tests_jit_isolated)
+        set(_interp run_tests_interpreter_isolated)
+    endif()
+    if(TARGET ${_jit} AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        list(APPEND _deps ${_jit})
+    endif()
+    if(NOT DAS_USE_SANITIZER OR DAS_USE_SANITIZER STREQUAL "none")
+        list(APPEND _deps ${_interp})
+    endif()
+    set(${out} ${_deps} PARENT_SCOPE)
+endfunction()
+
+das_ci_sweeps(_ci_sweeps OFF)
+
+das_ci_sweeps(_ci_sweeps_isolated ON)
+
+add_custom_target(run_tests_sweeps COMMENT "Running the per-PR sweeps")
+if(NOT "${_ci_sweeps}" STREQUAL "")
+    add_dependencies(run_tests_sweeps ${_ci_sweeps})
+endif()
+
+add_custom_target(run_tests_sweeps_isolated COMMENT "Running the per-PR sweeps")
+if(NOT "${_ci_sweeps_isolated}" STREQUAL "")
+    add_dependencies(run_tests_sweeps_isolated ${_ci_sweeps_isolated})
+endif()
+
+add_custom_target(run_tests_static
+    COMMAND $<TARGET_FILE:daslang_static> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests
+    DEPENDS daslang_static
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Running tests (daslang_static)"
+)
+
+add_custom_target(run_tests_serdeser
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests --ser ${CMAKE_CURRENT_BINARY_DIR}/serialized.bin --timeout 1200
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests --deser ${CMAKE_CURRENT_BINARY_DIR}/serialized.bin --timeout 1200
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Running tests (serialize, then deserialize)"
+)
+
+
+
+add_custom_target(run_tests_slow COMMENT "Running the full AOT suite and the big C++ tests")
+if(TARGET run_tests_aot)
+    add_dependencies(run_tests_slow run_tests_aot)
+endif()
+if(TARGET test-big)
+    add_dependencies(run_tests_slow test-big)
+endif()
+
+if(NOT _ci_backend)
+    set(_ci_backend COMMAND ${CMAKE_COMMAND} -E true)
+endif()
+add_custom_target(run_backend_sweeps COMMENT "Running the nightly backend sweeps")
+foreach(_t run_standalone_sweep_aot run_tests_llvm_aot standalone_sweep_jit)
+    if(TARGET ${_t} AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_dependencies(run_backend_sweeps ${_t})
+    endif()
+endforeach()
+
+file(GLOB_RECURSE _ci_ast_verify_files RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/tests/*.das)
+set(_ci_ast_verify_stamps)
+foreach(_f IN LISTS _ci_ast_verify_files)
+    get_filename_component(_name ${_f} NAME)
+    if(_name MATCHES "^(cant_|failed_|invalid_)")
+        continue()
+    endif()
+    set(_stamp ${CMAKE_CURRENT_BINARY_DIR}/ast_verify/${_f}.stamp)
+    add_custom_command(
+        OUTPUT ${_stamp}
+        COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --file ${_f}
+        COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+        DEPENDS daslang ${PROJECT_SOURCE_DIR}/${_f} ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "ast-verify ${_f}"
+    )
+    list(APPEND _ci_ast_verify_stamps ${_stamp})
+endforeach()
+add_custom_target(check_ast_verify_tree
+    DEPENDS ${_ci_ast_verify_stamps}
+    COMMENT "Compiling tests/ with --ast-verify-batch"
+)
+
+endif()
