@@ -221,15 +221,44 @@ def main() {
 
     // ─── Install-section tab toggle ────────────────────────────────
     function wireInstallTabs() {
-        const tabs  = document.querySelectorAll('.forge-install__tab');
-        const panes = document.querySelectorAll('.forge-install__pane');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const key = tab.dataset.pane;
-                tabs.forEach(t  => t.classList.toggle('is-active', t === tab));
-                panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === key));
+        const tabs  = Array.from(document.querySelectorAll('.forge-install__tab'));
+        const panes = Array.from(document.querySelectorAll('.forge-install__pane'));
+        // tab <-> panel linkage for assistive tech, keyed on data-pane
+        tabs.forEach(t => {
+            t.id = t.id || `install-tab-${t.dataset.pane}`;
+            t.setAttribute('aria-controls', `install-pane-${t.dataset.pane}`);
+        });
+        panes.forEach(p => {
+            p.id = p.id || `install-pane-${p.dataset.pane}`;
+            p.setAttribute('aria-labelledby', `install-tab-${p.dataset.pane}`);
+        });
+        const select = tab => {
+            const key = tab.dataset.pane;
+            tabs.forEach(t => {
+                const on = t === tab;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                t.tabIndex = on ? 0 : -1;
+            });
+            panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === key));
+        };
+        tabs.forEach((tab, i) => {
+            tab.addEventListener('click', () => select(tab));
+            // ARIA tabs: arrows move the selection, Home/End jump to the ends
+            tab.addEventListener('keydown', ev => {
+                const step = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+                let next = null;
+                if (step) next = tabs[(i + step + tabs.length) % tabs.length];
+                else if (ev.key === 'Home') next = tabs[0];
+                else if (ev.key === 'End') next = tabs[tabs.length - 1];
+                if (!next) return;
+                ev.preventDefault();
+                select(next);
+                next.focus();
             });
         });
+        const initial = tabs.find(t => t.classList.contains('is-active')) || tabs[0];
+        if (initial) select(initial);
     }
 
     // ─── Benchmarks (§ 01) ─────────────────────────────────────────

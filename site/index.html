@@ -300,22 +300,57 @@ def main() {
             </div>
             <div class="forge-install__grid">
                 <div>
-                    <h2 class="forge-h2">Grab a release. Or build from source.</h2>
+                    <h2 class="forge-h2">One command on every platform.</h2>
                     <p class="forge-p">
-                        Daslang is early — packaged installers (brew, apt, scoop) are on
-                        the roadmap. For now: pre-built binaries on GitHub, or a CMake
-                        build straight from the repo. AOT compiles to a single C++ stub
-                        you link with your host.
+                        Homebrew on macOS and Linux, scoop on Windows, pip on Windows, Linux
+                        and macOS, a .deb for Debian and Ubuntu — each installs the same SDK
+                        bundle: the compiler with the LLVM JIT, the tools, the standard
+                        library and the examples. The bundles themselves are on GitHub
+                        Releases, and a CMake build from the repo still works.
                     </p>
-                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript">github.com/GaijinEntertainment/daslang →</a>
+                    <a class="forge-link-amber" href="downloads.html">downloads →</a>
                 </div>
                 <div class="forge-install__panel">
                     <div class="forge-install__tabs" role="tablist">
-                        <button class="forge-install__tab is-active" data-pane="releases">github releases</button>
-                        <button class="forge-install__tab" data-pane="source">build from source</button>
+                        <button class="forge-install__tab is-active" role="tab" aria-selected="true" data-pane="brew">brew</button>
+                        <button class="forge-install__tab" role="tab" aria-selected="false" tabindex="-1" data-pane="scoop">scoop</button>
+                        <button class="forge-install__tab" role="tab" aria-selected="false" tabindex="-1" data-pane="pip">pip</button>
+                        <button class="forge-install__tab" role="tab" aria-selected="false" tabindex="-1" data-pane="apt">apt</button>
+                        <button class="forge-install__tab" role="tab" aria-selected="false" tabindex="-1" data-pane="releases">github releases</button>
+                        <button class="forge-install__tab" role="tab" aria-selected="false" tabindex="-1" data-pane="source">build from source</button>
                     </div>
                     <div class="forge-install__body">
-                        <div class="forge-install__pane is-active" data-pane="releases">
+                        <div class="forge-install__pane is-active" role="tabpanel" data-pane="brew">
+                            <div class="forge-install__hint"># macOS (Apple silicon) and Linux (x86_64, arm64)</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> brew install borisbat/daslang/daslang</div>
+                            <div class="forge-install__sp"></div>
+                            <div class="forge-install__hint"># on PATH: daslang, daslang-live; the SDK tree sits under the Cellar</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang --version</div>
+                        </div>
+                        <div class="forge-install__pane" role="tabpanel" data-pane="scoop">
+                            <div class="forge-install__hint"># Windows x64</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> scoop bucket add daslang https://github.com/borisbat/scoop-daslang</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> scoop install daslang</div>
+                            <div class="forge-install__sp"></div>
+                            <div class="forge-install__hint"># on PATH: daslang, daslang-live, dastest, lint, daspkg, dascov, detect-dupe, benchctl, das-fmt</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang --version</div>
+                        </div>
+                        <div class="forge-install__pane" role="tabpanel" data-pane="pip">
+                            <div class="forge-install__hint"># Windows x64, Linux x86_64 / arm64, macOS Apple silicon</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> pip install daslang</div>
+                            <div class="forge-install__sp"></div>
+                            <div class="forge-install__hint"># on PATH: daslang, daslang-live, dastest, lint, daspkg, dascov, detect-dupe, benchctl, das-fmt</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang --version</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> python -m daslang --version</div>
+                        </div>
+                        <div class="forge-install__pane" role="tabpanel" data-pane="apt">
+                            <div class="forge-install__hint"># Debian / Ubuntu x86_64 - the .deb from the release page</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> sudo apt install ./daslang_0.6.4_amd64.deb</div>
+                            <div class="forge-install__sp"></div>
+                            <div class="forge-install__hint"># on PATH: daslang, daslang-live; the SDK tree sits in /opt/daslang</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang --version</div>
+                        </div>
+                        <div class="forge-install__pane" role="tabpanel" data-pane="releases">
                             <div class="forge-install__hint"># 1 — grab a pre-built binary</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> open <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/releases">https://github.com/GaijinEntertainment/daScript/releases</a></div>
                             <div class="forge-install__hint">#     pick the archive for your platform, unzip, add to PATH</div>
@@ -327,7 +362,7 @@ def main() {
                             <div class="forge-install__hint"># 3 — (optional) JIT to native via LLVM for max speed</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> daslang -jit hello.das</div>
                         </div>
-                        <div class="forge-install__pane" data-pane="source">
+                        <div class="forge-install__pane" role="tabpanel" data-pane="source">
                             <div class="forge-install__hint"># requires CMake ≥ 3.15 and a C++17 compiler</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> git clone https://github.com/GaijinEntertainment/daScript.git daslang</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> cd daslang &amp;&amp; git submodule update --init --recursive</div>
@@ -488,6 +523,7 @@ def main() {
 <script src="files/highlight.js" defer></script>
 <script src="files/runner.js" defer></script>
 <script src="files/forge.js" defer></script>
+<script src="files/copy.js" defer></script>
 <script src="files/blog-counter.js" defer></script>
 <script src="files/news-counter.js" defer></script>
 <script src="files/github-star.js" defer></script>
