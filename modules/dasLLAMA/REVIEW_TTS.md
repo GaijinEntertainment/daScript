@@ -74,13 +74,11 @@ the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md` sec.2
 field reads back zero from a mapped image.
 
 **A diff that moves what a served synthesis computes - a run with no flags and no environment
-overrides: a kernel's arithmetic, the lane or the kernel a tensor serves from, a weight the
-converter writes differently, or a lexicon, normalizer or phoneme rule that moves a phoneme of
-the rig corpus (the corpus-identity cell in `tests/test_tts_g2p.das` decides) - ships the WER
-and UTMOS of `harness/tts_rig.py`, before and after, on every model the change reaches, on every
-weight lane that model can take - the unpinned default and each pin - at the rig's voice, in the
-PR body.** A lane's per-frame figures against the f32 oracle say nothing about the speech; only
-the rig does.
+overrides, the text front end included (a moved phoneme of the rig corpus, which
+`test_corpus_phonemes` in `tests/test_tts_g2p.das` decides) - ships the WER and UTMOS of
+`harness/tts_rig.py`, before and after, on every model the change reaches, on every weight lane
+that model can take - the unpinned default and each pin - at the rig's voice, in the PR body.** A
+lane's per-frame figures against the f32 oracle say nothing about the speech; only the rig does.
 
 **A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
@@ -94,8 +92,8 @@ the call site instead.**
 `pad_l = k - stride` on a forward conv, `pad_r = k - stride` on a transposed one, the replicate
 pad `pocket_encode_latents` applies before `mimi.downsample` - and a diff that gives one of
 them conv state, a symmetric pad, or a trim of the output by hand is a defect.** The codec runs
-a chunk in one shot (`ARCHITECTURE_POCKET.md` sec.2.46);
-`harness/pocket_oracle.py` checks the one-shot decode against the package's frame-by-frame output.
+a chunk in one shot (`ARCHITECTURE_POCKET.md` sec.2.46); `harness/pocket_oracle.py` checks the
+one-shot decode against the package's frame-by-frame output.
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
 (`q8_linear` / `kq_tensor` / `head_q8_linear` / `dense_codec_conv` in
@@ -106,10 +104,5 @@ covers is written once in the converter and again in the reader.
 **A diff that changes what `harness/convert_pocket.py` writes into a published file re-mints
 that file and lands its new bytes and sha256 in `harness/tts_model_card.md` and
 `performance/model_specs.das`, and its new sha256 in every `examples/dasLLAMA/*/models.json`
-(repo root) pinning it, in the same change.** Each of them refuses a file whose hash moved.
-
-**A diff to `test_pocket_q8_file`, `test_pocket_kq_file` or `test_pocket_quiet_floor` in
-`tests/test_tts_pocket.das` that deletes a cell, loosens a bar, or drops a compare whose
-property the code still holds is a defect; where the property is gone, the cell says what
-replaced it.** Silence is where a lane's block-scale error is audible, and no per-frame figure
-shows it.
+(repo root) pinning it, in the same change.** The fetches refuse a file whose sha256 moved, and
+the card is what a reader downloads against.

@@ -97,6 +97,12 @@ of the prefill's tile-and-split pick; added rows on those inputs are not an axis
 arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local
 fork pools, shared queue policy.
 
+**A diff to `test_pocket_q8_file`, `test_pocket_kq_file` or `test_pocket_quiet_floor` in
+`test_tts_pocket.das` that deletes a cell, loosens a bar, or drops a compare is a defect while
+the code still holds the property that cell, bar or compare asserts; where the property is gone,
+the cell says what replaced it.** Silence is where a lane's per-block scale error is audible, and
+no per-frame figure shows it.
+
 **A diff that adds a gate whose expected value is written down where a person edits it - a
 document, a checked-in table, a generated artifact's committed form, a roster - rather than
 computed by the code under test, adds it to the pinned set in the same change** - as a file
