@@ -1,6 +1,6 @@
 "use strict";
 
-const LANES = ["interp", "jit"];
+const LANES = ["interp", "jit", "aot"];
 const state = { data: null, status: null, runWindow: 90, lanes: new Set(LANES), group: "" };
 
 const $ = (sel) => document.querySelector(sel);
@@ -21,6 +21,7 @@ function fmtNs(v) {
     if (v >= 1e3) return (v / 1e3).toFixed(2) + " us";
     return v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2) + " ns";
 }
+const fmtRel = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(2)) + "x";
 const fmtSec = (s) => (s >= 3600 ? (s / 3600).toFixed(1) + " h" : s >= 60 ? Math.round(s / 60) + " min" : Math.round(s) + " s");
 const shortSha = (sha) => (sha || "").slice(0, 8);
 const dateOf = (iso) => (iso || "").slice(0, 10);
@@ -145,7 +146,8 @@ function niceTicks(lo, hi, count) {
     return out;
 }
 
-function drawChart(lines, runIdx, failedRuns, label) {
+function drawChart(lines, runIdx, failedRuns, label, fmt) {
+    fmt = fmt || fmtNs;
     const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img", "aria-label": label });
     const n = runIdx.length;
     const xOf = new Map(runIdx.map((ri, i) => [ri, PAD.l + (n === 1 ? (W - PAD.l - PAD.r) / 2 : (i * (W - PAD.l - PAD.r)) / (n - 1))]));
@@ -161,7 +163,7 @@ function drawChart(lines, runIdx, failedRuns, label) {
         if (tv < lo || tv > hi) continue;
         svg.append(svgEl("line", { class: "grid-line", x1: PAD.l, x2: W - PAD.r, y1: yOf(tv), y2: yOf(tv) }));
         const t = svgEl("text", { x: PAD.l - 6, y: yOf(tv) + 3.5, "text-anchor": "end" });
-        t.textContent = fmtNs(tv);
+        t.textContent = fmt(tv);
         svg.append(t);
     }
     const runs = state.data.runs;
@@ -190,7 +192,7 @@ function drawChart(lines, runIdx, failedRuns, label) {
         if (pts.length === 1) svg.append(svgEl("circle", { class: "marker marker--" + ln.lane, cx: xOf.get(pts[0].r), cy: yOf(pts[0].v), r: 4 }));
         const last = pts[pts.length - 1];
         const lbl = svgEl("text", { class: "end-label", x: W - PAD.r + 6, y: yOf(last.v) + 3.5 });
-        lbl.textContent = fmtNs(last.v);
+        lbl.textContent = fmt(last.v);
         svg.append(lbl);
     }
     attachHover(svg, lines, runIdx, failedRuns, xOf, yOf);
@@ -223,7 +225,7 @@ function attachHover(svg, lines, runIdx, failedRuns, xOf, yOf) {
             if (!p) { markers[i].setAttribute("visibility", "hidden"); return; }
             markers[i].setAttribute("cx", x); markers[i].setAttribute("cy", yOf(p.v)); markers[i].setAttribute("visibility", "visible");
             const row = el("div", "tt-row");
-            row.append(el("span", "tt-key tt-key--" + ln.lane), el("span", "tt-val", fmtNs(p.v)), el("span", null, ln.lane), el("span", "tt-sub", "spread " + (p.s * 100).toFixed(1) + "%"));
+            row.append(el("span", "tt-key tt-key--" + ln.lane), el("span", "tt-val", fmt(p.v)), el("span", null, ln.lane), el("span", "tt-sub", "spread " + (p.s * 100).toFixed(1) + "%"));
             tooltip.append(row);
         });
         if (failedRuns.has(best)) tooltip.append(el("div", "tt-sub", "this file failed that night"));
@@ -252,6 +254,44 @@ function chartCard(id, file, lines, runIdx, failedRuns) {
     ttl.append(el("span", "file", file + " "), id.slice(file.length + 1));
     head.append(ttl);
     card.append(head, drawChart(lines, runIdx, failedRuns, id));
+    if (lines.length > 1) {
+        const lg = el("div", "legend");
+        for (const ln of lines) lg.append(el("span", "legend--" + ln.lane, ln.lane));
+        card.append(lg);
+    }
+    return card;
+}
+
+function aggregateCard(group, entries, runIdx) {
+    const lines = [];
+    for (const lane of LANES) {
+        if (!state.lanes.has(lane)) continue;
+        const byRun = new Map();
+        for (const [, arm] of entries) {
+            const ln = arm.lines.find((l) => l.lane === lane);
+            if (!ln || !ln.points.length) continue;
+            const base = ln.points[0].v;
+            if (!(base > 0)) continue;
+            for (const p of ln.points) {
+                if (!(p.v > 0)) continue;
+                if (!byRun.has(p.r)) byRun.set(p.r, []);
+                byRun.get(p.r).push(Math.log(p.v / base));
+            }
+        }
+        const points = [...byRun.entries()].sort((a, b) => a[0] - b[0])
+            .map(([r, ls]) => ({ r, v: Math.exp(ls.reduce((a, b) => a + b, 0) / ls.length), s: 0, n: ls.length }));
+        if (points.length) lines.push({ lane, points });
+    }
+    if (!lines.length) return null;
+    const card = el("div", "card chart-card chart-card--agg");
+    const head = el("div", "chart-card__head");
+    const ttl = el("div", "chart-card__title");
+    ttl.append(el("span", "file", group + " "), "all arms");
+    head.append(ttl);
+    card.append(head, drawChart(lines, runIdx, new Set(), group + " aggregate", fmtRel));
+    const note = el("div", "muted");
+    note.textContent = "geometric mean, each arm against its own first run";
+    card.append(note);
     if (lines.length > 1) {
         const lg = el("div", "legend");
         for (const ln of lines) lg.append(el("span", "legend--" + ln.lane, ln.lane));
@@ -290,6 +330,8 @@ function renderSeries() {
         const h = el("h3");
         h.append(group, el("span", "muted", entries.length + " arms"));
         const grid = el("div", "grid");
+        const agg = aggregateCard(group, entries, runIdx);
+        if (agg) grid.append(agg);
         for (const [id, arm] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
             arm.lines.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane));
             const failedRuns = new Set();

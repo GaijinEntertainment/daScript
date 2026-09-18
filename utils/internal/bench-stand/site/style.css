@@ -10,6 +10,7 @@
     --border: rgba(11, 11, 11, 0.10);
     --interp: #2a78d6;
     --jit: #eb6834;
+    --aot: #6b3fa0;
     --good: #0ca30c;
     --good-text: #006300;
     --warning: #fab219;
@@ -30,6 +31,7 @@
         --border: rgba(255, 255, 255, 0.10);
         --interp: #3987e5;
         --jit: #d95926;
+        --aot: #9160c9;
         --good-text: #0ca30c;
         --chip-on: #22314a;
     }
@@ -38,6 +40,7 @@
 /* One colour per lane, read by every lane-marked element: chips, tags, legend, lines, bands, markers, tooltip keys. */
 .lane--interp, .tag--interp, .legend--interp, .series--interp, .band--interp, .marker--interp, .tt-key--interp { --lane: var(--interp); }
 .lane--jit, .tag--jit, .legend--jit, .series--jit, .band--jit, .marker--jit, .tt-key--jit { --lane: var(--jit); }
+.lane--aot, .tag--aot, .legend--aot, .series--aot, .band--aot, .marker--aot, .tt-key--aot { --lane: var(--aot); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
@@ -97,7 +100,7 @@ main { padding: 0 24px 32px; max-width: 1500px; }
 .card li:first-child { border-top: 0; }
 .card .empty { color: var(--muted); }
 .tag { font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--ink-2); }
-.tag--interp, .tag--jit { color: var(--lane); border-color: var(--lane); }
+.tag--interp, .tag--jit, .tag--aot { color: var(--lane); border-color: var(--lane); }
 .tag--failure { color: var(--critical); border-color: var(--critical); }
 .msg { color: var(--ink-2); font-size: 13px; }
 .msg code { white-space: pre-wrap; word-break: break-word; }
@@ -155,3 +158,5 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
     border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
 }
+.chart-card--agg { outline: 1px solid var(--border); background: var(--card-alt, transparent); }
+.chart-card--agg .chart-card__title { font-weight: 600; }

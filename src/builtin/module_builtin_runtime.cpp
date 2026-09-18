@@ -2896,9 +2896,6 @@ namespace das
         // string using
         addUsing<das::string>(*this, lib, "das::string");
         // try-recover
-        addExternInline<DAS_BIND_FUN(builtin_try_recover)>(*this, lib, "builtin_try_recover",
-            SideEffects::invoke, "builtin_try_recover")
-                ->args({"try_block","catch_block","context","at"});
         // main-loop
         addExternInline<DAS_BIND_FUN(builtin_main_loop)>(*this, lib, "eval_main_loop",
             SideEffects::invoke, "builtin_main_loop")
