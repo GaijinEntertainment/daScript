@@ -29,7 +29,8 @@ require _model_tier
 // the 200-sentence corpus and on the byte-fallback probes (`_tts_fixtures/pocket_tokens.json`,
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
 // Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
-// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent.
+// it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent. The
+// quiet-floor cell needs pocket-tts-en-kq.gguf alone.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "pocket-tts-en.gguf")
@@ -995,10 +996,7 @@ def test_pocket_no_encoder(t : T?) {
     }
 }
 
-// a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
-// the RMS of a clip's quietest 100 ms windows (the lowest twentieth) after a first difference, in
-// dB - the difference drops the low end where the leading silence and the voice's breath sit, so
-// the number is the hiss floor in the pauses, whatever the speech above it does
+//! The first difference drops the low end the leading silence and the breath sit in, so the lowest twentieth of the 100 ms window RMS reads the hiss in the pauses, not the speech above it.
 def private quiet_floor_db(pcm : array<float>; rate : int) : float {
     let win = rate / 10
     let n = (length(pcm) - 1) / win
@@ -1023,9 +1021,7 @@ def private quiet_floor_db(pcm : array<float>; rate : int) : float {
 
 [test]
 def test_pocket_quiet_floor(t : T?) {
-    //! The served lane's silences are as quiet as the f32 lane's: int8 activations on the codec's
-    //! convs once put a hiss floor 30 dB over the reference, and no parity cell saw it - a frame
-    //! bar reads the loud part.
+    //! A per-frame parity bar reads the loud part of a frame, so the quiet floor is the only lane compare that catches a hiss in the silences.
     let path = kq_gguf_path()
     if (!model_available(t, path)) {
         return
@@ -1049,6 +1045,7 @@ def test_pocket_quiet_floor(t : T?) {
     }
 }
 
+// a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
 // budget: the voice's caches grow to hold its text and every frame the cap allows, and the
 // synthesis runs to EOS instead of panicking on the cache
 [test]

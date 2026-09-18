@@ -91,12 +91,12 @@ class PublishedFormTest(unittest.TestCase):
         self.assertFalse(cp.q8_linear(SPEAKER, (1024, 512)))
         self.assertFalse(cp.q8_linear(ATTN, (3072, 1000)))
 
-    def test_q8_convs_are_the_dense_forward_stride_one_ones(self):
-        self.assertTrue(cp.q8_conv(CODEC_CONV, (512, 512, 3), 1, False))
-        self.assertTrue(cp.q8_conv("mimi.quantizer.output_proj.weight", (512, 256, 1), 1, False))
-        self.assertFalse(cp.q8_conv(STRIDED, (256, 128, 8), 4, False), "a strided stage")
-        self.assertFalse(cp.q8_conv("mimi.decoder.model.5.convtr.convtr.weight", (256, 128, 8), 4, True), "a transposed stage")
-        self.assertFalse(cp.q8_conv("mimi.decoder.model.14.conv.weight", (1, 64, 7), 1, False), "the single-channel end")
+    def test_the_dense_codec_convs_are_the_forward_stride_one_ones(self):
+        self.assertTrue(cp.dense_codec_conv(CODEC_CONV, (512, 512, 3), 1, False))
+        self.assertTrue(cp.dense_codec_conv("mimi.quantizer.output_proj.weight", (512, 256, 1), 1, False))
+        self.assertFalse(cp.dense_codec_conv(STRIDED, (256, 128, 8), 4, False), "a strided stage")
+        self.assertFalse(cp.dense_codec_conv("mimi.decoder.model.5.convtr.convtr.weight", (256, 128, 8), 4, True), "a transposed stage")
+        self.assertFalse(cp.dense_codec_conv("mimi.decoder.model.14.conv.weight", (1, 64, 7), 1, False), "the single-channel end")
 
 
 if __name__ == "__main__":

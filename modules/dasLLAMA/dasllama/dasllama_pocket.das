@@ -355,8 +355,7 @@ def private read_norm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) :
     return <- n
 }
 
-// the published file's conv: a Q8_0 slab [cout][k][cin] (the tap-stacked rows layout, innermost
-// cin) - taken as the q8 lane's blocks, or dequantized and re-laid into PyTorch's [cout][cin][k];
+// an older file's conv: a Q8_0 slab [cout][k][cin] dequantized and re-laid into PyTorch's [cout][cin][k];
 // the slab is the dense stride-1 conv's shape alone, any other Q8_0 conv is refused, never guessed
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-q8-file")]
 def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string; var c : TtsConv1d) {
@@ -368,7 +367,7 @@ def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string;
     if (c.stride != 1l || c.transposed || c.groups != 1l || c.cin % 32l != 0l || c.cout % 32l != 0l) {
         panic("dasLLAMA pocket: '{wname}' is Q8_0 with stride {c.stride}, groups {c.groups}{c.transposed ? ", transposed" : ""}, {c.cin} -> {c.cout} channels: not the dense stride-1 32-wide conv the slab layout is for")
     }
-    var inscope slab <- read_arr(m, bytes, wname)     // a Q8_0 slab of an older file dequantizes: the codec convs serve f32 on every lane
+    var inscope slab <- read_arr(m, bytes, wname)
     c.w |> reserve_resize(c.cout * kc)
     for (co in range64(c.cout)) {
         for (kk in range64(c.k)) {
@@ -413,7 +412,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
         c.pad_l = c.k - stride
         c.pad_r = 0l
     }
-    conv1d_prepare(c, false, g_stage_repack)      // never q8: int8 activations on the codec's convs are a hiss floor 30 dB over the reference
+    conv1d_prepare(c, false, g_stage_repack)
     return <- c
 }
 

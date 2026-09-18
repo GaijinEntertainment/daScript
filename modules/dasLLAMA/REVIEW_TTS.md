@@ -98,8 +98,9 @@ a chunk in one shot (`ARCHITECTURE_POCKET.md`, "The codec runs a chunk in one sh
 `harness/pocket_oracle.py` checks the one-shot decode against the package's frame-by-frame output.
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
-(`q8_linear` / `q8_conv` / `kq_tensor` / `head_q8_linear` in `harness/convert_pocket.py`,
-`read_linear` / `read_conv_q8` and the K-quant branch in `dasllama/dasllama_pocket.das`), ships
-both sides in the same diff, and weakening `test_pocket_q8_file` or `test_pocket_kq_file` in
-`tests/test_tts_pocket.das` is a defect** - the reader's eligibility rule and the converter's are
-the same rule written twice.
+(`q8_linear` / `kq_tensor` / `head_q8_linear` in `harness/convert_pocket.py`, `read_linear` /
+`read_conv_q8` and the K-quant branch in `dasllama/dasllama_pocket.das`), ships both sides in the
+same diff, and weakening `test_pocket_q8_file`, `test_pocket_kq_file` or
+`test_pocket_quiet_floor` in `tests/test_tts_pocket.das` is a defect** - the reader's eligibility
+rule and the converter's are the same rule written twice, and the quiet floor is the one lane
+compare that reads a silence.
