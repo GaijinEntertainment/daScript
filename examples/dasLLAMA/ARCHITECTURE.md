@@ -75,7 +75,14 @@ thread can show what is being generated and tell the last clip from a pause. A s
 pointer into the frame thread's heap, which that thread reuses on its own schedule; a browser
 worker starts slowly enough to read story text where the path was. An archived message is copied
 out of the stream into the reader's heap, so the stream is the one channel that is safe for a
-string.
+string. The request stream carries one producer on its books (`append(1)` after
+`stream_create`): a stream with none answers a pop at once, empty, and the thread that pops it
+in a loop spins a core while idle. The thread waits for a request with a timeout
+(`pop_archive_with_timeout`, `IDLE_RELEASE_MS`), and a wait that returns empty means nothing is
+queued: it gives the engine's
+activation scratch back once (`tts_release_scratch`) and waits again, so an idle tab holds the
+model and the voices and not the last run's rows - the browser tab's budget is what a phone
+runs out of - and the next request grows the scratch back for a few milliseconds of allocation.
 
 ### 3.3 Input is polled
 

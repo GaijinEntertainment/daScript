@@ -290,6 +290,14 @@ def finalize(var sc : PocketScratch) {
     delete sc.enc_carry
 }
 
+//! Free every buffer the carrier holds and the block home's scratch globals its kernels grew;
+//! the next synthesis or clone grows them back. For a platform where idle memory matters more
+//! than a few milliseconds of allocation per run.
+def pocket_release_scratch(var sc : PocketScratch) {
+    finalize(sc)
+    tts_blocks_release_scratch()
+}
+
 // ===== the GGUF =====
 
 let private LN_EPS = 1e-5
@@ -956,7 +964,7 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
 
 // ===== the voice prompt =====
 
-let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's text and frames may take before the caches grow
+let private VOICE_CACHE_GROW = 64l   // rows past a chunk's need the caches grow by, so a run of chunks of one length grows once
 let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from: the state is the clip's frames per layer
 
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
@@ -985,7 +993,7 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
         rows[bos * d + i] = proj[i]
     }
     vs.len = frames + bos
-    caches_init(vs.caches, m.backbone, vs.len + VOICE_CACHE_SLACK)
+    caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
     transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc)
     return <- vs
 }
@@ -1294,14 +1302,19 @@ def private grow_cache(var kc : TtsKvCache; cap : int64) {
     kv_cache_grow(kc, cap)
 }
 
+//! the rows a chunk of `n_txt` tokens can take after the voice: its text and every frame the cap allows
+def private chunk_rows(n_txt : int64) : int64 {
+    return n_txt + pocket_max_frames(n_txt) + 1l
+}
+
 // the voice's rows stay; the previous chunk's text and frames are forgotten, and a chunk the
 // caches cannot hold - `n_txt` text rows plus every frame the cap allows - grows them first
 def private caches_ready(var vs : PocketVoiceState; n_txt : int64) {
-    let need = vs.len + n_txt + pocket_max_frames(n_txt) + 1l
+    let need = vs.len + chunk_rows(n_txt)
     for (kc in vs.caches) {
         kc.n = vs.len
         if (kc.cap < need) {
-            grow_cache(kc, need + VOICE_CACHE_SLACK)
+            grow_cache(kc, need + VOICE_CACHE_GROW)
         }
     }
 }

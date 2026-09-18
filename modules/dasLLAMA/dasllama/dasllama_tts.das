@@ -54,6 +54,13 @@ def finalize(var m : TtsModel) {
     delete m.pocket_scratch
 }
 
+//! Free the activation scratch a synthesis or a clone left behind - the Pocket carrier and the
+//! block home's scratch globals; the next run grows them back for a few milliseconds of allocation.
+//! For a platform where idle memory matters, called when nothing is queued; the StyleTTS2 carrier keeps its noise state.
+def tts_release_scratch(var m : TtsModel) {
+    pocket_release_scratch(m.pocket_scratch)   // the block home's scratch globals go with it, whichever family grew them
+}
+
 def load_tts_model(path : string) : TtsModel {
     //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared
     //! ``.dlim`` image; the phoneme families read ``tts_g2p.bin`` and ``tts_postag.bin`` from the same directory (Pocket

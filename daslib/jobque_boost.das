@@ -492,6 +492,23 @@ def try_pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void
     return any
 }
 
+def pop_archive_with_timeout(stream : Stream?; timeout_ms : int; blk : block<(var value : auto(TT)&) : void>) : bool {
+    //! Pop + deserialize, waiting at most ``timeout_ms``. Returns true if a value was consumed in time;
+    //! false says nothing arrived, so a consumer can do its idle work and wait again.
+    var any = false
+    var value : TT -# -& -const
+    any = _builtin_stream_pop_with_timeout(stream, timeout_ms) $(bytes : array<uint8># -const) {
+        mem_archive_load(bytes, value)
+    }
+    if (any) {
+        invoke(blk, value)
+    }
+    unsafe {
+        delete value
+    }
+    return any
+}
+
 def gather_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) {
     //! Drain the stream, deserializing each blob via ``daslib/archive`` and invoking the block on each.
     _builtin_stream_gather(stream) $(bytes : array<uint8># -const) {

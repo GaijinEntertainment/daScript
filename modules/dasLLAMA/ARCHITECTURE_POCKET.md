@@ -57,7 +57,12 @@ windowed output equals the one-shot output to float noise at every window, one f
 they batch, so a window's output differs from the one-shot's the way two chunk lengths already
 do, and the rig, not a per-element bar, holds that lane. The oracle script's own check - the
 package's whole-chunk decode against its frame-by-frame stream, 1e-6 apart - is the reference's
-statement of the same fact.
+statement of the same fact. What a run leaves behind is the carrier (`PocketScratch`, sized to
+the largest window it saw) and the block home's scratch globals - the transposed conv's tap
+lift, a cache-sized block of input rows at a time, the attention head rows, the requant images;
+`pocket_release_scratch` (the facade's `tts_release_scratch`) frees them all and the next run
+grows them back, for a platform where idle memory matters more than the allocation a run then
+pays.
 
 ### 2.47 A voice is the backbone's memory of a clip {#pocket-voice-state}
 
@@ -66,9 +71,11 @@ frames at 12.5 Hz, through `speaker_proj` into the backbone's width, and - with 
 front - through the backbone at positions 0.., filling every layer's key-value cache. That cache
 (`PocketVoiceState`, `len` positions) is the voice. A synthesis appends its text and frames after
 `len` and a later one forgets them by resetting each cache's fill to `len`; nothing is copied.
-The caches are sized for the clip plus 1024 rows and grow, the voice's rows kept, when a chunk's
-text plus every frame its cap allows needs more - one unsplittable run of two hundred tokens is
-such a chunk. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
+The caches are sized for the clip plus the rows a chunk of the reference's budget can take -
+`POCKET_MAX_TOKENS` text rows and every frame its cap allows, about 285 - and grow by a small
+slack, the voice's rows kept, when a chunk needs more - one unsplittable run of two hundred
+tokens is such a chunk; a voice is about 20 MB of keys and values, not the 54 MB a flat 1024-row
+slack cost. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
 per layer, and the codec encoder's attention is a query block by the 250-key window it sees.
 The roster rides the GGUF as each clip's latent frames (`voice_latents.<name>`, the package's
 own codec encoder over the clip at conversion), and a voice's state is built from them on first
