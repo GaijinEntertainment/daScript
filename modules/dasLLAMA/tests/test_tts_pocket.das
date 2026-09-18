@@ -1032,16 +1032,28 @@ def test_pocket_quiet_floor(t : T?) {
             reset_pocket_q8()
         }
         let text = "The quick brown fox jumps over the lazy dog. Then it slept, and all was still."
+        set_pocket_q8(true)   // the lane this cell measures, pinned
         var inscope served <- load_tts_model(path)
+        t |> success(served.pocket.q8, "the pinned q8 lane serves")
         var inscope a <- synthesize(served, text, "alba")
         delete served
         set_pocket_q8(false)
         var inscope reference <- load_tts_model(path)
+        t |> success(!reference.pocket.q8, "the pinned f32 lane serves")
         var inscope b <- synthesize(reference, text, "alba")
         let fa = quiet_floor_db(a.pcm, a.sample_rate)
         let fb = quiet_floor_db(b.pcm, b.sample_rate)
         to_log(LOG_INFO, "pocket quiet floor: served {fa} dBFS, f32 lane {fb} dBFS\n")
         t |> success(fa <= fb + 6.0, "the served lane's quiet floor ({fa} dBFS) sits within 6 dB of the f32 lane's ({fb} dBFS)")
+        // the control that lands outside the bar: the reference with a hiss 60 dB down mixed in
+        var hissed := b.pcm
+        var seed = 0x9e3779b9u
+        for (i in range(length(hissed))) {
+            seed = seed * 1664525u + 1013904223u
+            hissed[i] += (float(seed >> 8u) / 16777216.0 - 0.5) * 0.002
+        }
+        let fh = quiet_floor_db(hissed, b.sample_rate)
+        t |> success(fh > fb + 6.0, "a reference with a -60 dBFS hiss reads {fh} dBFS - past the bar the served lane must stay under")
     }
 }
 

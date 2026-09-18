@@ -45,14 +45,14 @@ No espeak-ng, no phonemizer: the front end is data, and the data is in the two p
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
-| `pocket-tts-en-q8.gguf` | Kyutai Pocket TTS, English (english_2026-04): the served GEMM weights as Q8_0, the rest f16, its unigram tokenizer and 19 voice clips inside; reads text, needs no pack | 152613664 | `9fca82dbe1a550a0bce958d3dfcf51f3c793c89db6aee850823724826b56589c` |
-| `pocket-tts-de-q8.gguf` | Pocket TTS German (6 layers), the same form, one voice (`juergen`) | 134667200 | `a7f69bff844d796a164a62766071457f56c5bd8d854a0a743f88c2d8c4790d9e` |
-| `pocket-tts-es-q8.gguf` | Pocket TTS Spanish (6 layers), one voice (`lola`) | 134624480 | `40b36e28cbc1d6d01ef660751b63b37b44f25b6887a93102bc29bfb516e93ade` |
-| `pocket-tts-it-q8.gguf` | Pocket TTS Italian (6 layers), one voice (`giovanni`) | 134415072 | `3c5739d544b1b7c8284fd3df9d7122557cf700c91895d3dc45b3fdc5ef6e2670` |
-| `pocket-tts-pt-q8.gguf` | Pocket TTS Portuguese (6 layers), one voice (`rafael`) | 134667488 | `3375c31e742c8783c6dddbbd3bd152e8dff9d188fdaceb1cbb4d187514291c57` |
-| `pocket-tts-fr-q8.gguf` | Pocket TTS French (24 layers, the only French model Kyutai ships), one voice (`estelle`) | 375793696 | `f06ffac80b96a34d2e51ca40c41111469d8b44e0269b27a64e707a7a9be1ec20` |
-| `pocket-tts-en-kq.gguf` | Pocket TTS English in the small form: the backbone and the codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding table Q4_K; its tokenizer, the codec encoder (so it clones) and the 19 voices as latent frames | 74970016 | `2475a1ed8d49eb72c9d9b8c38f10f91ef5b03c7cd6e9fe43fdf7ab00ae1a0a25` |
-| `pocket-tts-en-stuart-kq.gguf` | the same small form with one voice (`stuart_bell`) as latent frames and no codec encoder: reads text in that voice, cannot clone | 65107520 | `bc9604b527066134354dc480e20c960f63f5c3538c1dd757ba409bd782cddac9` |
+| `pocket-tts-en-q8.gguf` | Kyutai Pocket TTS, English (english_2026-04): the served GEMM weights as Q8_0, the rest f16, its unigram tokenizer and 19 voice clips inside; reads text, needs no pack | 136819008 | `5bebd1b8ae89029257e2fcba08435c578c5cec9cada70b55c3ba176a21bc043c` |
+| `pocket-tts-de-q8.gguf` | Pocket TTS German (6 layers), the same form, one voice (`juergen`) | 136518016 | `b956f49c40600c20c1a7fdbd498b661a818b5f377b77aa3db4b88b509b24deff` |
+| `pocket-tts-es-q8.gguf` | Pocket TTS Spanish (6 layers), one voice (`lola`) | 136518304 | `8cde7394dc56b12bf86ab05388a2875d2e4c992bc50e549166f8ae29c0739307` |
+| `pocket-tts-it-q8.gguf` | Pocket TTS Italian (6 layers), one voice (`giovanni`) | 136514048 | `c8082959b5078c809656d31bc610295333b392d0e15aa188032ecdcbad5233e9` |
+| `pocket-tts-pt-q8.gguf` | Pocket TTS Portuguese (6 layers), one voice (`rafael`) | 136519072 | `fda96257ada104c0691094516f0ef9da38de2e963c1b066691be574c292a8b96` |
+| `pocket-tts-fr-q8.gguf` | Pocket TTS French (24 layers, the only French model Kyutai ships), one voice (`estelle`) | 377328320 | `490b404e533d2e2f8610657078f3a83c3c0fc0d03a1af7ab8b979745fdbb8738` |
+| `pocket-tts-en-kq.gguf` | Pocket TTS English in the small form: the backbone and the codec transformers as Q4_K, the flow head as Q8_0, the codec convolutions f16, the embedding table Q4_K; its tokenizer, the codec encoder (so it clones) and the 19 voices as latent frames | 77765536 | `2bd5ef27bfbc88769c5339ff5e8b74349fb015b77a0015a03514a21e4a95ac64` |
+| `pocket-tts-en-stuart-kq.gguf` | the same small form with one voice (`stuart_bell`) as latent frames and no codec encoder: reads text in that voice, cannot clone | 67004480 | `c0e086a080a0a41d5121870f560f0e79d47be3e61ddd5032d49e556363e78277` |
 
 The packs sit beside whichever GGUF you load; the loader reads them from the model's
 directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
@@ -81,9 +81,10 @@ exists only as the 24-layer one. A voice cloned from any clip speaks the file's 
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
 `pocket-tts-en-kq.gguf` is the English model in the small form, 75 MB: the backbone and the
 codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding
-table Q4_K, the encoder and the 19 voices inside (on the rig at `alba`: WER 3.86 / UTMOS 4.295
+table Q4_K, the encoder and the 19 voices inside (the rig row at `alba` - WER 3.86 / UTMOS 4.295
 at a real-time factor of 0.044, measured 2026-09-10 on the same box, tier, tune profile and
-kernel backend, the file's Q4_K planes served as they are); it is the file the browser examples on
+kernel backend - was taken on the earlier form of this file, its codec convolutions Q8_0 and
+served on int8 activations; the present form awaits its row); it is the file the browser examples on
 dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
 and no codec encoder, 65 MB: it reads text in that voice and cannot clone.
 

@@ -38,9 +38,10 @@ updates every test under `modules/dasLLAMA/tests/` that matches it, in the same 
 smoke tests match witness lines as substrings, so the words and their order are an interface
 (`ARCHITECTURE.md` sec. 2).
 
-**A diff that adds a model file to a browser example's `models.json` names its sha256 and a
-location that cannot move - a Hugging Face repository, or a repo-relative path in this repository
-under `tree` - never a machine-local path or a branch name.** The deploy fetches by that name and
+**A diff that adds a model file to a browser example's `models.json`, or changes an entry's
+sha256, names its sha256 and a location that cannot move - a Hugging Face repository, or a repo-relative path in this repository
+under `tree` - never a machine-local path or a branch name - and the PR body states that the sha256 is
+the hash of the file now published at that location.** The deploy fetches by that name and
 refuses a file whose hash moved (`ARCHITECTURE.md` sec. 3.4).
 
 **A diff that changes how `library/` emits its standalone C++ context keeps `--disable-module

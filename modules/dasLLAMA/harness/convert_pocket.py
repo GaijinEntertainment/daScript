@@ -110,8 +110,8 @@ def fake_group(name, shape, conv_served=False):
     """The tensor group a `--fake` spec names: the backbone's attention projections, its two FFN
     matrices, the frame input projection, the speaker projection, the text embedding table, the
     flow head's matrices, the codec transformers' GEMMs (`codec`), the dense codec convs
-    (`codecconv`), and the codec's strided, transposed and resampling convs the file keeps
-    f16 (`strided`). Norms, biases and the voices are never in a group."""
+    (`codecconv`), and the codec's strided, transposed and resampling convs (`strided`). Norms,
+    biases and the voices are never in a group."""
     if name == "flow_lm.speaker_proj_weight":   # the one matrix the bundle names without the ".weight" suffix
         return "speaker" if len(shape) == 2 else None
     if not name.endswith(".weight") or len(shape) < 2:

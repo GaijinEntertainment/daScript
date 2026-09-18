@@ -295,8 +295,8 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 var private g_stage_file_q8 = false   // the file's `pocket.weights` says q8: its Q8_0 tensors are in the kernels' layout
 
 // a Q8_0 tensor is read as the kernels' own blocks only where the converter wrote it that way:
-// `pocket.weights = "q8"` names the layout, and the block-home rule (32-wide on both dims, a dense
-// stride-1 conv) is what q8_linear / q8_conv / head_q8_linear wrote a second time; Q4_K's disk form is ggml's own and needs no gate
+// `pocket.weights = "q8"` names the layout, and the block-home rule (32-wide on both dims) is what
+// q8_linear / head_q8_linear wrote a second time; a Q8_0 conv is an older file's and dequantizes; Q4_K's disk form is ggml's own and needs no gate
 def private is_q8_tensor(m : GGUFMeta; name : string) : bool {
     if (gguf_tensor_type(m, name) != GGML_TYPE_Q8_0) {
         return false

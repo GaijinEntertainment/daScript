@@ -74,8 +74,9 @@ the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md` sec.2
 `verify` beside it (`dasllama/dasllama_styletts2.das`), in the same change** - an unwritten
 field reads back zero from a mapped image.
 
-**A change to a kernel, or a change to a lexicon, a normalizer rule or a phoneme rule that
-moves a phoneme of the rig corpus (the corpus-identity cell in `tests/test_tts_g2p.das`
+**A diff that moves what a served synthesis computes - a kernel's arithmetic, the lane or the
+kernel a tensor serves from, a weight the converter writes differently - or a change to a
+lexicon, a normalizer rule or a phoneme rule that moves a phoneme of the rig corpus (the corpus-identity cell in `tests/test_tts_g2p.das`
 decides; an unmoved corpus pins the audio bit for bit), ships the WER and UTMOS of
 `harness/tts_rig.py`, before and after, on every model the change reaches, on every weight
 lane that model can take - the unpinned default and each pin - at the rig's voice, in the PR
@@ -98,9 +99,16 @@ a chunk in one shot (`ARCHITECTURE_POCKET.md`, "The codec runs a chunk in one sh
 `harness/pocket_oracle.py` checks the one-shot decode against the package's frame-by-frame output.
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
-(`q8_linear` / `kq_tensor` / `head_q8_linear` in `harness/convert_pocket.py`, `read_linear` /
-`read_conv_q8` and the K-quant branch in `dasllama/dasllama_pocket.das`), ships both sides in the
-same diff, and weakening `test_pocket_q8_file`, `test_pocket_kq_file` or
-`test_pocket_quiet_floor` in `tests/test_tts_pocket.das` is a defect** - the reader's eligibility
-rule and the converter's are the same rule written twice, and the quiet floor is the one lane
-compare that reads a silence.
+(`q8_linear` / `kq_tensor` / `head_q8_linear` in `harness/convert_pocket.py`, `read_linear` and
+the K-quant branch in `dasllama/dasllama_pocket.das`), ships both sides in the same diff** - the
+reader's eligibility rule and the converter's are the same rule written twice.
+
+**A diff that changes what `harness/convert_pocket.py` writes into a published file re-mints
+that file and lands its new bytes and sha256 in `harness/tts_model_card.md`,
+`performance/model_specs.das` and every `models.json` pinning it, in the same change.** Each of
+the three refuses a file whose hash moved.
+
+**Weakening `test_pocket_q8_file`, `test_pocket_kq_file` or `test_pocket_quiet_floor` in
+`tests/test_tts_pocket.das` - a cell deleted, a bar loosened, a compare dropped - is a defect;
+the one exit is an assertion whose property no longer exists, and the cell then says what
+replaced it.** The quiet floor is the one lane compare that reads a silence.
