@@ -2088,6 +2088,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/lint/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
+# Install ast-verify (the --ast-verify-batch gate: the flag reports and exits 0,
+# so the verdict is read from its output)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das DESTINATION utils/ast-verify)
+
 # Install detect-dupe (cross-file duplicate-function detector)
 file(GLOB DAS_DETECT_DUPE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
 install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
