@@ -371,6 +371,87 @@ def private head_over_frames(m : PocketModel; var sc : PocketScratch; conds, x0 
     return <- out
 }
 
+// the rows of the codec chain's ping-pong scratch, the window's working set
+def private codec_scratch_bytes(sc : PocketScratch) : int64 {
+    return (long_capacity(sc.ca) + long_capacity(sc.cb) + long_capacity(sc.cc) + long_capacity(sc.cpad) + long_capacity(sc.cs) + long_capacity(sc.ct)) * 4l
+}
+
+let STREAM_BAR = 1.0e-5   // absolute, on a waveform or a latent frame: float noise of the same sums in another batching
+
+// windowed against whole: the same output within float noise, and a bar that a poisoned expectation trips
+def private stream_diff(t : T?; tag : string; ours, ref : array<float>) {
+    if (length(ours) != length(ref)) {
+        t |> failure("{tag}: {length(ours)} elements against the whole run's {length(ref)}")
+        return
+    }
+    let d = max_abs_diff(ours, ref)
+    to_log(LOG_INFO, "pocket {tag}: maxdiff {d} over {length(ref)}\n")
+    t |> success(d <= STREAM_BAR, "{tag}: maxdiff {d} <= {STREAM_BAR}")
+    if (!empty(ref)) {
+        var inscope poisoned := ref
+        poisoned[0] += 2.0 * STREAM_BAR
+        t |> success(max_abs_diff(ours, poisoned) > STREAM_BAR, "{tag}: the bar discriminates a poisoned expectation")
+    }
+}
+
+//! the codec stream (ARCHITECTURE_POCKET.md sec.2.46): a chunk decoded and a clip encoded a
+//! window of frames per step give the whole run's output on the f32 lane, one frame per step
+//! included, with the activations scaling with the window
+[test]
+def test_pocket_codec_stream(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    var picked = -1
+    for (i, c in iter_range(man.cases), man.cases) {
+        if (c.stages && picked < 0) {
+            picked = i
+        }
+    }
+    if (picked < 0) {
+        t |> skip("no oracle dump with stages under {oracle_dir()}")
+        return
+    }
+    let c & = unsafe(man.cases[picked])
+    with_job_que() {
+        setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+            set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
+        }
+        set_pocket_q8(false)   // the f32 lane: the served GEMMs' result depends on how many rows they batch
+        var inscope m <- load_pocket(path)
+        var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+        let frames = int64(c.n_frames)
+        set_pocket_codec_window(0l)
+        var inscope whole = PocketScratch()
+        var inscope ref_wave : array<float>
+        pocket_decode_latents(m, dump["latent"].f, frames, whole, ref_wave)
+        var inscope ref_lat : array<float>
+        let ref_frames = pocket_encode_latents(m, dump["voice_pcm"].f, whole, ref_lat)
+        let whole_bytes = codec_scratch_bytes(whole)
+        t |> equal(long_length(ref_wave), frames * m.frame_samples, "the whole run decodes frames * frame_samples samples")
+        for (w in [1l, POCKET_CODEC_WINDOW_DEFAULT]) {
+            set_pocket_codec_window(w)
+            var inscope sc = PocketScratch()
+            var inscope wave : array<float>
+            pocket_decode_latents(m, dump["latent"].f, frames, sc, wave)
+            stream_diff(t, "{c.id} decode, window {w}", wave, ref_wave)
+            var inscope lat : array<float>
+            let lframes = pocket_encode_latents(m, dump["voice_pcm"].f, sc, lat)
+            t |> equal(lframes, ref_frames, "window {w}: the clip's frame count")
+            stream_diff(t, "{c.id} encode, window {w}", lat, ref_lat)
+            let bytes = codec_scratch_bytes(sc)
+            to_log(LOG_INFO, "pocket codec scratch: window {w} {bytes} bytes, whole run {whole_bytes}\n")
+            if (frames > 4l * w) {
+                t |> success(bytes * 2l < whole_bytes, "window {w}: the codec scratch is under half the whole run's ({bytes} against {whole_bytes})")
+            }
+        }
+    }
+}
+
 [test]
 def test_pocket_frames(t : T?) {
     let path = gguf_path()

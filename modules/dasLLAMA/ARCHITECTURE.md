@@ -99,7 +99,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   padded concat width, the per-synthesis carrier, the served carrier on the image rail, the
   sine source's operation order, the heteronym context, the rig's scoring, and the two-tier
   phoneme pack.
-- `ARCHITECTURE_POCKET.md` - sec.2.46-2.50: the Pocket codec's one-shot chunk, a voice as the
+- `ARCHITECTURE_POCKET.md` - sec.2.46-2.50: the Pocket codec's windowed stream, a voice as the
   backbone's key-value memory, the one-step head's baked timestep constants, the released
   chunker, and the published file's served quants.
 

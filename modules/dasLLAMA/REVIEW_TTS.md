@@ -88,12 +88,13 @@ expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
 the call site instead.**
 
-**A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as geometry -
-`pad_l = k - stride` on a forward conv, `pad_r = k - stride` on a transposed one, the replicate
-pad `pocket_encode_latents` applies before `mimi.downsample` - and a diff that gives one of
-them conv state, a symmetric pad, or a trim of the output by hand is a defect.** The codec runs
-a chunk in one shot (`ARCHITECTURE_POCKET.md` sec.2.46); `harness/pocket_oracle.py` checks the
-one-shot decode against the package's frame-by-frame output.
+**A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
+stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the
+first (`ARCHITECTURE_POCKET.md` sec.2.46) - and a diff that pads one symmetrically, trims the
+final output by hand, or makes a window's output differ from the whole run's on the f32 lane
+beyond float noise is a defect.** `test_pocket_codec_stream` holds a one-frame window and the
+default to the whole run; `harness/pocket_oracle.py` checks the package's own whole-chunk decode
+against its frame-by-frame stream.
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
 (`q8_linear` / `kq_tensor` / `head_q8_linear` / `dense_codec_conv` in
