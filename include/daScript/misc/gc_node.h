@@ -70,7 +70,6 @@ namespace das {
         __forceinline unsigned int use_count() const { return 1; }
     };
 
-    //! frees a node its creator knows nothing references, ahead of the sweep; under DAS_GC_DEBUG the node stays for use-after-sweep detection
     inline void gc_free_now ( gc_node * node ) {
 #if DAS_GC_DEBUG
         (void) node;

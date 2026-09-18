@@ -1724,7 +1724,6 @@ namespace das
             };
             uint32_t    flags = 0;
         };
-        bool                        accessFlagsValid = false;
         das_map<CompilationError,int>   expectErrors;
         AnnotationArgumentList      options;
         CodeOfPolicies              policies;
@@ -1736,6 +1735,7 @@ namespace das
         // of serving what a compile folded from the old value.
         vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
         UpdateAliasMapCallback      updateAliasMapCallback;
+        bool                        accessFlagsValid = false;
     };
 
     // the shared capture/validate stat for Program::moduleCacheDependencies: size -1 + hash 0
