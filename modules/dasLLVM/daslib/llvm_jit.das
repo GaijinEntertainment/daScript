@@ -2707,7 +2707,7 @@ class public LlvmJitVisitor : AstVisitor {
         return res
     }
 
-    def build_array_index(var data, tidx : LLVMOpaqueValue?; elemType : TypeDeclPtr; name : string) {
+    def build_array_index(var data, tidx : LLVMOpaqueValue?; elemType : TypeDeclPtr; name : string; inbounds : bool = true) {
         var ptr_idx : LLVMOpaqueValue?
         if (elemType.isVectorType && elemType.vectorDim == 3) {
             var data_bytes = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(types.t_int8, 0u), "")
@@ -2718,10 +2718,10 @@ class public LlvmJitVisitor : AstVisitor {
             // LLVM GEP on <3 x T> would advance by the padded alloc size — use the das stride.
             var stride = LLVMConstInt(LLVMTypeOf(tidx), uint64(elemType.sizeOf), 0)
             var data_idx = LLVMBuildMul(g_builder, tidx, stride, "")
-            ptr_idx = LLVMBuildGEP2(g_builder, types.t_int8, data_bytes, data_idx, "")
+            ptr_idx = LLVMBuildGEP2(g_builder, types.t_int8, data_bytes, data_idx, "", inbounds)
             ptr_idx = LLVMBuildPointerCast(g_builder, ptr_idx, LLVMPointerType(type_to_llvm_type(elemType), 0u), name)
         } else {
-            ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(elemType), data, tidx, name)
+            ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(elemType), data, tidx, name, inbounds)
         }
         return ptr_idx
     }
@@ -2744,7 +2744,7 @@ class public LlvmJitVisitor : AstVisitor {
             if (thisFunc != null && !thisFunc.flags.unsafeDeref) {
                 check_ptr_zero(tsrc, expr.at, "dereferencing null pointer, {expr.subexpr.describe()} is null")
             }
-            var ptr_idx = build_array_index(tsrc, tidx, subExprT.firstType, "ptr_at")
+            var ptr_idx = build_array_index(tsrc, tidx, subExprT.firstType, "ptr_at", false)
             if (expr.atFlags.r2v) {
                 var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(expr._type),
                     ptr_idx, expr._type.alignOf, "at_r2v")
@@ -2947,7 +2947,7 @@ class public LlvmJitVisitor : AstVisitor {
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             var if_not_null = LLVMBuildIsNotNull(g_builder, tsrc, "ptr_not_null")
             res = build_select(if_not_null, resType) {
-                return build_array_index(tsrc, tidx, etype, "ptr_safe_at")
+                return build_array_index(tsrc, tidx, etype, "ptr_safe_at", false)
             }
             lpipe() {
                 return LLVMConstNull(resType)
@@ -3589,6 +3589,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprCopy
     def build_copy(tdst : LLVMOpaqueValue?; right : ExpressionPtr) {
         var tsrc = getE(right)
+        if (tsrc == tdst) return     // constructed in place: the copy is a memcpy onto itself
         let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             if (right._type.isWorkhorseType) {
@@ -3647,6 +3648,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def build_move(tdst : LLVMOpaqueValue?; right : ExpressionPtr; needTest : bool) {
         var tsrc = getE(right)
+        if (tsrc == tdst) return     // moving a value onto itself is the no-op the runtime test below would take
         let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             /*
@@ -4056,7 +4058,7 @@ class public LlvmJitVisitor : AstVisitor {
             debug_declare_local(svar, v_ptr)
         }
         // initialize its memory with 0 (should we?)
-        let vsize = svar._type.isRef ?  typeinfo sizeof(type<void?>) : svar._type.sizeOf
+        let vsize = svar._type.flags.ref ? typeinfo sizeof(type<void?>) : svar._type.sizeOf
         LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), 16u)
     }
 
