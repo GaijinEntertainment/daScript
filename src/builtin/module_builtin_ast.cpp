@@ -40,14 +40,14 @@ namespace das {
     bool addModuleKeyword ( Module * module, char * kwd, bool needOxfordComma, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
         if ( !kwd || kwd[0]==0 ) context->throw_error_at(lineInfo, "expecting keyword, not empty string");
-        module->noteMacroRegistration();
+        module->noteRegistrationAtCompile();
         return module->addKeyword(kwd, needOxfordComma, true);
     }
 
     bool addModuleTypeFunction ( Module * module, char * kwd, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
         if ( !kwd || kwd[0]==0 ) context->throw_error_at(lineInfo, "expecting type function name, not empty string");
-        module->noteMacroRegistration();
+        module->noteRegistrationAtCompile();
         return module->addTypeFunction(kwd, true);
     }
 

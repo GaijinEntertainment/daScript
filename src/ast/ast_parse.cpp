@@ -91,6 +91,19 @@ namespace das {
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
+        // the stream stays hidden here - src/ast/ARCHITECTURE.md#module-cache-read
+        struct HiddenStream {
+            daScriptEnvironment * env;
+            AstSerializer * read, * write;
+            HiddenStream ( daScriptEnvironment * e ) : env(e), read(e->serializer_read), write(e->serializer_write) {
+                env->serializer_read = nullptr;
+                env->serializer_write = nullptr;
+            }
+            ~HiddenStream () {
+                env->serializer_read = read;
+                env->serializer_write = write;
+            }
+        } hidden(daScriptEnvironment::getBound());
         auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
         module->ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(module->ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
@@ -847,11 +860,7 @@ namespace das {
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
-        // a module that registered macros while it compiled (an annotation's apply into it) is
-        // never served: the record replays the module's own init, not that registration, and a
-        // shared module served once would carry the gap into every later compile of the process.
-        // The header matched, so it reparses in place and the records after it still serve; a
-        // record whose length word cannot skip it cuts the stream instead
+        // a marked record is never served - src/ast/ARCHITECTURE.md#module-cache-read
         if ( (saved_flags & 1) != 0 ) {
             if ( payload_size != 0 && uint64_t(payload_size) <= uint64_t(serializer_read->buffer->buffer.size() - payload_start) ) {
                 serializer_read->buffer->bufferPos = payload_start + size_t(payload_size);
@@ -861,13 +870,13 @@ namespace das {
                 // its own table from empty
                 serializer_read->fieldRefs.clear();
                 serializer_read->clearNodeIds();
-                if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "' (registers macros at compile time)\n";
+                if ( !serializer_read->quietCache ) logs << "ser: reparsing in place '" << fileName << "' (registers at compile time)\n";
             } else {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
                 serializer_read->cutoffFile = fileName;
-                serializer_read->cutoffReason = "registers macros at compile time, record length unusable";
-                if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "' (registers macros at compile time, record length unusable)\n";
+                serializer_read->cutoffReason = "registers at compile time, record length unusable";
+                if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "' (registers at compile time, record length unusable)\n";
             }
             return false;
         }
@@ -1645,9 +1654,7 @@ namespace das {
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
-            // a module that registered macros while it compiled: the reader reparses it in place
-            // instead of serving the record (src/ast/ARCHITECTURE.md#module-cache-read)
-            uint8_t flags = thisModule->registersMacrosAtCompile ? 1 : 0;
+            uint8_t flags = thisModule->registersAtCompile ? 1 : 0;
             *serializer_write << flags;
             uint32_t depCount = uint32_t(program->moduleCacheDependencies.size());
             *serializer_write << depCount;

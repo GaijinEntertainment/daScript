@@ -644,6 +644,10 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !is_ok ) {
                 return false;
             }
+            // src/ast/ARCHITECTURE.md#module-cache-read
+            if ( auto program = daScriptEnvironment::getBound()->g_Program ) {
+                if ( program->thisModule ) program->thisModule->noteRegistrationAtCompile();
+            }
             return !registerProxy(fun, ba, err).empty();
         }
 
