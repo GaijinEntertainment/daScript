@@ -505,6 +505,7 @@ ENDIF()
 # Every dynamic module should pass through this macro.
 MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     MESSAGE("REGISTER DAS SHARED MODULE ${module_name}")
+    SET_PROPERTY(GLOBAL APPEND PROPERTY DAS_SHARED_MODULE_TARGETS ${module_name})
     SETUP_DAS_SHARED_LIBRARY(${module_name} ${ARGN})
     DAS_APPLY_STRICT_WARNINGS(${module_name})
 
