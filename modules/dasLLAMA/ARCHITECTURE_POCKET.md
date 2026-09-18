@@ -116,7 +116,11 @@ frame input projection as Q8_0 rows (`linear_prepare`), the decode step on the q
 The codec's convs serve f32 on every lane: the q8 rows conv quantizes its activations to int8
 per 32 input channels, and in the Mimi decoder those activations are the audio, so one loud
 channel's block scale crushes the quiet ones into a hiss floor 30 dB over the reference in
-every silence (`test_pocket_quiet_floor` holds the served lane to the f32 lane's floor). The
+every silence - the quietest twentieth of 100 ms windows of `harness/tts_synth.das` renders of
+four fixture sentences at `stuart_bell`, per band above 1 kHz, on an Apple M5 Max with the
+`arm64-gen` backend and the `arm-i8mm` tune profile, no overrides; `test_pocket_quiet_floor`
+reads the same effect as 11 dB on its differenced whole-signal metric and holds the served lane
+to the f32 lane's floor. The
 published GGUF (`convert_pocket.py --q8`) stores the served linears as Q8_0 in the layout the
 kernels read - [nout][nin] with the 32-blocks along nin - so `read_linear` takes the blocks
 into the int8 planes and repacks for the backend; every conv and every other tensor stays f16,

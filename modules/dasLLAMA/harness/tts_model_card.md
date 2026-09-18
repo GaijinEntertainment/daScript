@@ -66,7 +66,7 @@ dasllama-server --tts kitten-nano.gguf          # POST /v1/audio/speech, the Ope
 daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr-voice-2-f --text "Hello." --out hello.wav
 ```
 
-Pocket TTS English is the cloning model: 152 MB, 19 voices (`alba` the default, `bill_boerst`,
+Pocket TTS English is the cloning model: 130 MB, 19 voices (`alba` the default, `bill_boerst`,
 `caro_davy`, `anna`, `george`, ...), and any voice from a few seconds of 24 kHz audio through
 `tts_register_voice`. It reads text, so it needs neither pack; the English normalizer runs in
 front of it. On the 200-sentence rig at `alba` this file reads WER 3.91 / UTMOS 4.328 at a
@@ -79,14 +79,14 @@ only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `ra
 `estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
 exists only as the 24-layer one. A voice cloned from any clip speaks the file's language with
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
-`pocket-tts-en-kq.gguf` is the English model in the small form, 75 MB: the backbone and the
+`pocket-tts-en-kq.gguf` is the English model in the small form, 74 MB: the backbone and the
 codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding
 table Q4_K, the encoder and the 19 voices inside (the rig row at `alba` - WER 3.86 / UTMOS 4.295
 at a real-time factor of 0.044, measured 2026-09-10 on the same box, tier, tune profile and
 kernel backend - was taken on the earlier form of this file, its codec convolutions Q8_0 and
 served on int8 activations; the present form awaits its row); it is the file the browser examples on
 dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
-and no codec encoder, 65 MB: it reads text in that voice and cannot clone.
+and no codec encoder, 64 MB: it reads text in that voice and cannot clone.
 
 Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
 M1 Max (measured 2026-09-02 with the same rig). Its voices are `expr-voice-2-m` through
