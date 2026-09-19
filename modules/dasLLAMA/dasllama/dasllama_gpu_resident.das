@@ -866,8 +866,8 @@ def rdec_decline_say(reason : string; memory : bool = false) {
     to_log(LOG_WARNING, "dasLLAMA: resident driver declined - {reason}; the per-op rails serve\n")
 }
 
-//! the last resident decline's text ("" when the driver armed or never planned); `moe_gpu_resident_memory_decline` says whether it was the card's room
-def moe_gpu_resident_decline() : string => g_rdec_decline_reason
+//! why the whole-model driver does not serve the last loaded model ("" when it armed, or no tier was asked for): its decline, or why it was never attempted; `moe_gpu_resident_memory_decline` says whether it was the card's room
+def gpu_resident_decline_() : string => g_rdec_decline_reason
 
 //! true when the last decline was the residency plan not fitting the card - the remedy is a shorter context or a smaller file, not a driver fix
 def moe_gpu_resident_memory_decline() : bool => g_rdec_memory_decline
@@ -2459,10 +2459,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             rdec_decline_say(empty(plan.reason) ? "the residency plan does not fit" : plan.reason, plan.memory)
         }
     } elif (moe_gpu_resident_installed() && !gpu_want_resident()) {
+        g_rdec_decline_reason = "not attempted: the per-op rails were asked for (DASLLAMA_GPU_RESIDENT=0)"
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the per-op rails were asked for (DASLLAMA_GPU_RESIDENT=0, or set_gpu_resident_route(false) in process)\n")
     } elif (moe_gpu_resident_installed() && t.config.n_expert > 0l && !rdec_moe_installed()) {
+        g_rdec_decline_reason = "not attempted: the tier installed no seats for routed experts"
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the tier installed no MoE seats for its {t.config.n_expert} routed experts; the per-op tier's expert rails serve\n")
     } elif (moe_gpu_resident_installed() && t.config.n_expert == 0l) {
+        g_rdec_decline_reason = "not attempted: nothing asked for the whole-model driver"
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - nothing asked for it: DASLLAMA_GPU is not set and the want carries neither auto_tier nor resident (the individual DASLLAMA_GPU_* rails alone are armed)\n")
     }
     // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it

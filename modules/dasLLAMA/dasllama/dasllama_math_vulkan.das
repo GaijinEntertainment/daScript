@@ -234,7 +234,8 @@ def private vulkan_no_group3(var y0p : float?; var y1p : float?; var y2p : float
 [unused_argument(wp, sp, n, d)]
 def private vulkan_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
 
-def private vk_resident_bytes : int64 => g_gpu != null ? g_gpu.resident_bytes : 0l
+//! what the loaded model holds on the device: the per-op tier's planes, and under the whole-model driver its weights and both K/V mirror sides
+def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes : 0l) + (g_rd != null && g_rd.ready ? g_rd.weight_bytes + 2l * rd_mir_bytes() : 0l)
 
 // The resident driver sizes a whole model against these BEFORE uploading anything. Probing the
 // device here (rather than reporting 0 until something else arms it) is what lets the gate answer

@@ -1092,6 +1092,9 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                                 t |> equal(e?["backend_effective"] ?? "", "cpu")
                                 t |> equal(e?["cached_tokens"] ?? -1l, 0l)
                                 t |> equal(e?["holds_gpu"] ?? true, false)
+                                t |> equal(e?["served"] ?? "", "CPU")
+                                t |> equal(e?["served_note"] ?? "?", "", "a slot that asked for the CPU has nothing holding it back")
+                                t |> equal(e?["device_kv"] ?? true, false)
                             }
                         }
                     }

@@ -69,10 +69,9 @@ def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
 }
 
 def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
-    //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region, so
-    //! no host cache is allocated and nothing crosses the bus per token. Valid only while
-    //! ``gpu_device_sessions()`` answers a count: hold at most that many live ones, in the
-    //! driver's codec (``gpu_device_session_dtype``). A call the device cannot serve panics.
+    //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
+    //! Hold at most ``gpu_device_sessions()`` live ones, in the driver's codec (``gpu_device_session_dtype``).
+    //! A call the device cannot serve panics.
     return <- create_device_session_(model, kv_dtype)
 }
 
@@ -623,6 +622,12 @@ def set_gpu_ctx_max(n : int64) {
     //! Cap the whole-model GPU driver's K/V context at ``n`` positions per region for the models
     //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it.
     set_gpu_ctx_max_(n)
+}
+
+def gpu_resident_decline() : string {
+    //! Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with
+    //! the remedy where one exists), or why it was never attempted. Empty when it serves.
+    return gpu_resident_decline_()
 }
 
 def gpu_device_sessions() : int64 {

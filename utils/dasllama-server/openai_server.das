@@ -61,6 +61,8 @@ struct ModelSlot {
     sched : Scheduler = Scheduler()
     opts : SlotOpts = SlotOpts()
     backend_effective : string = "cpu"   // arm outcome: cpu | gpu:rails | gpu:resident
+    gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot: the streams it serves device-home (0 off that driver)
+    gpu_note : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
     is_default : bool
     last_used : int64
     sw_count : int64                // gpu-switch telemetry (count / total usec)
@@ -222,7 +224,9 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
+    slot.gpu_regions = gpu_device_sessions()
     slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
+    slot.gpu_note = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     let was_gpu = slot.backend_effective != "cpu"
     var probe <- create_chat_renderer(slot.model, "", 1l)
     // reporting the raw template default would show the page a checked box for a family whose
@@ -312,6 +316,8 @@ def private bind_gpu_slot(si : int) {
     // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
     // order-sensitive half of the switch lives in the engine
     g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
+    g_slots[si].gpu_note = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    g_slots[si].gpu_regions = gpu_device_sessions()
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
     g_slots[si].sw_count ++
@@ -322,14 +328,54 @@ def private bind_gpu_slot(si : int) {
 //! A slot the device serves whole, with a K/V region per stream and no media tower or self-speculation (both leave the
 //! device), admits DEVICE-HOME sessions; any other slot admits host-cached ones. Called with the slot's marks installed,
 //! so the facade answers for THIS model; an idle scheduler is the only one that switches.
+//! whether the slot the GPU is armed for serves its streams device-home: the whole-model driver, no media tower, no self-speculation, a K/V region per stream
+def private slot_device_kv_want(s : ModelSlot) : bool {
+    return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
+        && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
+}
+
 def private slot_device_kv(var s : ModelSlot) {
-    let want = (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
-        && !s.sched.mtp && gpu_device_sessions() >= s.sched.max_streams)
+    let want = slot_device_kv_want(s)
     let was = s.sched.device_kv
     if (set_device_kv(s.sched, want) != was) {
         let kind = want ? "device-home sessions: every stream's K/V stays on the GPU, {gpu_device_session_ctx()} positions each" : "host-cached sessions"
         to_log(LOG_INFO, "dasllama-server: {s.name} admits {kind}\n")
     }
+}
+
+//! How a slot is served, for a reader who never saw the engine: where the weights are, and where the streams' caches are.
+def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
+    if (slot_flavor(s) == "metal") {
+        return "GPU (Metal): the whole model"
+    }
+    if (s.backend_effective != "cpu" && !holds_gpu) {
+        return "GPU, off the card now: another model holds it, and this one takes it back once that one is idle"
+    }
+    if (s.backend_effective == "gpu:resident") {
+        return (device_kv ? "GPU: the whole model and every stream's cache on the card"
+            : "GPU: the whole model on the card, the streams' caches on the host")
+    }
+    return s.backend_effective == "gpu:rails" ? "GPU in part: some layers' work on the card, the rest on the CPU" : "CPU"
+}
+
+//! Why the slot is not served better, "" when nothing holds it back: the whole-model driver's own reason, or what keeps the caches off the card.
+def private slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
+    if (s.backend_effective != "cpu" && !holds_gpu) {
+        return ""
+    }
+    if (s.backend_effective != "gpu:resident") {
+        return s.opts.backend == "cpu" ? "" : s.gpu_note
+    }
+    if (device_kv) {
+        return ""
+    }
+    if (s.vision.kind != VisionKind.none || s.audio_armed) {
+        return "a vision or audio tower is armed: its spans evaluate on the host, so every stream's cache stays there and each step passes to the CPU"
+    }
+    if (s.sched.mtp) {
+        return "self-speculation has no GPU arm: every stream's cache stays on the host and each step passes to the CPU"
+    }
+    return "the card holds {s.gpu_regions} stream caches and the slot serves {s.sched.max_streams} streams: every stream's cache stays on the host and each step passes to the CPU"
 }
 
 // Auto-switch policy: move the tier to a gpu-wanting slot only when the current owner is idle
@@ -3296,6 +3342,9 @@ struct private OaiSlotStats {
     audio : bool              // an audio arm is attached: this slot's chat route takes input_audio parts
     thinking_default : bool   // this family's own default when a request sends no enable_thinking
     last_used_s : float       // seconds since this slot last admitted a request (-1 = never)
+    served : string           //!< how this slot is served, in plain words: where the weights sit and where the streams' caches do
+    served_note : string      //!< why it is not served better (the whole-model driver's decline, the tower that keeps the caches on the host); "" when there is nothing to say
+    device_kv : bool          //!< the streams' K/V caches live on the GPU, a region each
     sw_count : int64          // P2 gpu-switch telemetry
     sw_avg_ms : float
 }
@@ -3443,9 +3492,11 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
+        let holds_gpu = i == g_gpu_owner
+        let device_kv = holds_gpu ? slot_device_kv_want(s) : s.sched.device_kv
         out.models |> push(OaiSlotStats(
             name = s.name, file = base_name(s.path), is_default = s.is_default, is_active = i == g_active,
-            holds_gpu = i == g_gpu_owner,
+            holds_gpu = holds_gpu,
             backend = s.opts.backend, backend_effective = s.backend_effective,
             flavor = slot_flavor(s), vision = s.vision.kind != VisionKind.none,
             audio = s.audio_armed,
@@ -3458,6 +3509,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             prefix_pages = prefix_held_groups(s.sched.prefix),
             weights_bytes = model_weights_bytes(s.model),
             kv_bytes = kv_pool_bytes(s.sched.pool),
+            served = slot_served(s, device_kv, holds_gpu), served_note = slot_served_note(s, device_kv, holds_gpu), device_kv = device_kv,
             last_used_s = s.last_used > 0l ? age_seconds(s.last_used) : -1.0,
             sw_count = s.sw_count,
             sw_avg_ms = s.sw_count > 0l ? float(s.sw_us / s.sw_count) / 1000.0 : 0.0))

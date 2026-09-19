@@ -127,7 +127,7 @@ def private gemma_model(t : T?; file : string) : Model {
     var tr <- load_model_(path, QuantMode.q8)
     set_gpu_resident_route(route0)
     if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the residency plan does not fit this card ({moe_gpu_resident_decline()}) - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")
+        t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}) - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")
         delete tr
         return <- Model()
     }
