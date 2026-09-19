@@ -734,7 +734,7 @@ def private tsi_normalize_fields(var st : StructurePtr; var rules : Template; ab
         if (f.init != null) {
             f.init = apply_template(rules, f.at, clone_expression(f.init))
         }
-        //! a field the surviving concrete parent declares stays a parent field: its cast<auto> finalizer init is what binds the instance's finalizer to the parent's slot type
+        // a field the surviving concrete parent declares stays a parent field: its cast<auto> finalizer init is what binds the instance's finalizer to the parent's slot type
         if (above != null && find_structure_field(above, string(f.name)) != null) continue
         f.flags.parentType = false
         if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {

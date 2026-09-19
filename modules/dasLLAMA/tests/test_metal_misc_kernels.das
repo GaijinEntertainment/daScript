@@ -2084,8 +2084,8 @@ def test_metal_misc_kernels(t : T?) {
     }
 }
 
-//! writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
-//! of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
+// writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
+// of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
 def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> {
     let dir_r = create_temp_directory_result("dasllama_lens_{tag}")
     if (!(dir_r is value)) {
