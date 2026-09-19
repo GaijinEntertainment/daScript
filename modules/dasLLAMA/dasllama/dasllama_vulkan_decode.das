@@ -26,6 +26,7 @@ let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a
 let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane: one fragment at the widest KV row the prepare admits
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 let RD_NB_MAX = 8l   //! the N-row token command's rows, at most: the N-column GEMV leaves' width, and what the per-row planes size to
+var g_rd_nrow_bisect = 0   //! a probe's bisect of the N-row command, bits: 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no rope, 8 = no activation requant - the logits are garbage under any
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
 //! DA_NSPLIT_MAX; one where the card's SM count is unknown or the heads alone cover it
@@ -1964,6 +1965,15 @@ def private rd_ensure_n_leaves {
     verify(ok, "vk decode: the N-column GEMV rails must engage on a live device")
 }
 
+//! a GEMV of the N-row command: the N-column form, or under the bisect's bit 2 the one-column form over row 0
+def private rd_gemv_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
+    if ((g_rd_nrow_bisect & 2) != 0) {
+        gemv_enc(fmt, raw, h, set_, pc, rows)
+    } else {
+        gemv_enc_n(fmt, raw, h, set_, pc, rows)
+    }
+}
+
 //! the attention head over `nrows` rows: the projections as N-column GEMVs into the rows of the projection plane, the
 //! rope and store at each row's own position and region, the attention over each row's own history
 def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows, nsplit : int64) {
@@ -1976,24 +1986,30 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     if (L.qkv_merged) {
         let nreg = qd / kvd + (L.vfk ? 1l : 2l)
         var pcqkv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = uint(nreg), ybase = 0u, ncols = nr, ystride = kvrow)
-        gemv_enc_n(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
+        rd_gemv_n(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
         rd_ts(raw, "a:qkv")
     } else {
         var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u, ncols = nr, ystride = kvrow)
-        gemv_enc_n(L.fq, raw, h, L.s_q, pcq, qd)
+        rd_gemv_n(L.fq, raw, h, L.s_q, pcq, qd)
         rd_ts(raw, "a:q")
         if (L.kv_merged) {
             var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd), ncols = nr, ystride = kvrow)
-            gemv_enc_n(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
+            rd_gemv_n(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
         } else {
             var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd), ncols = nr, ystride = kvrow)
-            gemv_enc_n(L.fk, raw, h, L.s_k, pck, kvd)
+            rd_gemv_n(L.fk, raw, h, L.s_k, pck, kvd)
             if (!L.vfk) {
                 var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd), ncols = nr, ystride = kvrow)
-                gemv_enc_n(L.fv, raw, h, L.s_v, pcv, kvd)
+                rd_gemv_n(L.fv, raw, h, L.s_v, pcv, kvd)
             }
         }
         rd_ts(raw, "a:kv")
+    }
+    if ((g_rd_nrow_bisect & 5) == 5) {   // TEMP bisect: no rope, no attention - the wo GEMV alone
+        var pcw0 = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(dim))
+        rd_gemv_n(L.fo, raw, h, L.s_wo, pcw0, dim)
+        rd_ts(raw, "a:wo")
+        return
     }
     let npairs = qd / 2l + kvd / 2l
     var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = hs / 2u,
@@ -2001,19 +2017,22 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
         rows = nr, kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
     let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
-    if (g_rd.kv16) {
-        enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
-    } else {
-        enc_rope_kv_cls(raw, h, L.s_rope, pcr, rwgs)
+    if ((g_rd_nrow_bisect & 4) == 0) {
+        if (g_rd.kv16) {
+            enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
+        } else {
+            enc_rope_kv_cls(raw, h, L.s_rope, pcr, rwgs)
+        }
+        rd_ts(raw, "a:rope")
     }
-    rd_ts(raw, "a:rope")
     let rqk = rd_attn_rqk(L)
     var pca = DaAttnArgs(kvd = uint(kvd), hs = hs, kv_mul = uint(L.kv_mul),
         kbase = uint(L.mir_base), vbase = uint(L.mir_base), scale = g_rd.scale, qstride = hs, gated = 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(g_rd.n_heads * nsplit), qrow = kvrow)
     let awgs = g_rd.n_heads * nsplit * nrows
-    if (g_rd.has_sinks) {
+    if ((g_rd_nrow_bisect & 1) != 0) {   // TEMP bisect: no attention
+    } elif (g_rd.has_sinks) {
         if (g_rd.kv16) {
             enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
         } else {
@@ -2025,7 +2044,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
     }
     rd_ts(raw, "a:attn")
-    if (nsplit > 1l) {
+    if (nsplit > 1l && (g_rd_nrow_bisect & 1) == 0) {
         if (g_rd.has_sinks) {
             enc_da_attn_comb_sink_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads * nrows)
         } else {
@@ -2044,7 +2063,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:rq_a")
     }
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(dim))
-    gemv_enc_n(L.fo, raw, h, L.s_wo, pcw, dim)
+    rd_gemv_n(L.fo, raw, h, L.s_wo, pcw, dim)
     rd_ts(raw, "a:wo")
 }
 
@@ -2055,20 +2074,22 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     let nr = uint(nrows)
     let act = L.gelu ? ACT_GELU : ACT_SILU
     var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(hid))
-    gemv_enc_n(L.f1, raw, h, L.s_gate, pcg, hid)
+    rd_gemv_n(L.f1, raw, h, L.s_gate, pcg, hid)
     rd_ts(raw, "a:gate")
-    gemv_enc_n(L.f3, raw, h, L.s_up, pcg, hid)
+    rd_gemv_n(L.f3, raw, h, L.s_up, pcg, hid)
     rd_ts(raw, "a:up")
-    if (kq_sb(L.f2)) {
-        var pc_act_k = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 256l) * nr)
-        enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid * nrows / 8l + 255l) / 256l)
-    } else {
-        var pc_act = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 32l) * nr)
-        enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid * nrows / 4l + 255l) / 256l)
+    if ((g_rd_nrow_bisect & 8) == 0) {
+        if (kq_sb(L.f2)) {
+            var pc_act_k = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 256l) * nr)
+            enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid * nrows / 8l + 255l) / 256l)
+        } else {
+            var pc_act = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 32l) * nr)
+            enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid * nrows / 4l + 255l) / 256l)
+        }
+        rd_ts(raw, "a:actrq")
     }
-    rd_ts(raw, "a:actrq")
     var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(dim))
-    gemv_enc_n(L.f2, raw, h, L.s_down, pcd, dim)
+    rd_gemv_n(L.f2, raw, h, L.s_down, pcd, dim)
     rd_ts(raw, "a:down")
 }
 
@@ -2076,7 +2097,7 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
 //! planes, the GEMVs as N-column dispatches, the rope, store and attention at each row's own position and region, the
 //! attention at `nsplit` key splits a head - recorded once per row count and split form, its stamps kept apart
 [cold_path]
-def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
+def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; twin : bool) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
     let nr = uint(nrows)
@@ -2161,7 +2182,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
-    if (nsplit > 1l) {
+    if (!twin) {   //! the stamp names by form: a row count whose split form runs at one split still fills the split slot
         delete g_rdq_names_n
         g_rdq_names_n <- g_rdq_stamp_names
         g_rdq_n_n = g_pfq_n
@@ -2207,9 +2228,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
         rd_ensure_n_sets()
         //! the split form's key splits: the rows' heads already fill the card, so the split shrinks with the row count
         let nsplit = min(g_rd.attn_nsplit, da_nsplit(g_rd.n_heads * nrows, int64(g_gpu.sm_count)))
-        rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit)
+        rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, false)
         if (twin) {
-            rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l)
+            rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, true)
         }
         g_rd.tok_n_recorded[nrows] = true
     }
