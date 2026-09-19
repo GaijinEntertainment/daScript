@@ -290,8 +290,8 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
 - **`dasllama_scheduler.das`** - the continuous-batching scheduler, the serving layer over the
   facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each
   `scheduler_step` admits queued requests, runs one `eval_batch` decode step over every
-  decoding stream, then at most one bounded prefill chunk FCFS; paged serving donates finished
-  streams' KV pages to the prefix cache. Results flow out as `SchedEvent`s - no HTTP here.
+  decoding stream, then at most one prefill chunk FCFS; paged serving donates finished streams'
+  KV pages to the prefix cache, device mode parks their regions. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
   The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps

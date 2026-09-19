@@ -183,6 +183,10 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
 def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
     let c = t.config
     batch_decode_alloc(t, ws.scr, nrows)
+    ws.row_tokens |> grow_resize(nrows)
+    for (i in range64(nrows)) {
+        ws.row_tokens[i] = tokens[i]
+    }
     let dim = c.dim
     let ts_embed = prof_ticks()
     for (i in range64(nrows)) {
@@ -333,13 +337,13 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         kv_ensure(*sp, sp.n_past + 1l)
         ws.positions[i] = sp.n_past
         ws.rope_positions[i] = sp.n_past + sp.rope_pos_delta   // post-image mrope streams rope ahead of their KV index
-        if (s0.kv_pool == null) {
+        if (s0.kv_pool == null && !sp.device_kv) {
             unsafe {
                 ws.kbase[i] = addr(sp.key_cache[0])
                 ws.vbase[i] = addr(sp.value_cache[0])
             }
         } else {
-            ws.kbase[i] = null   // paged rows address the pool blobs, hoisted per layer
+            ws.kbase[i] = null   // paged rows address the pool blobs, hoisted per layer; a device-home row has no host cache at all
             ws.vbase[i] = null
         }
     }

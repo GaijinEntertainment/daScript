@@ -68,6 +68,13 @@ def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     return <- create_session_(model, kv_dtype, kv_dtype)
 }
 
+def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
+    //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
+    //! Hold at most ``gpu_device_sessions()`` live ones, in the driver's codec (``gpu_device_session_dtype``).
+    //! A call the device cannot serve panics.
+    return <- create_device_session_(model, kv_dtype)
+}
+
 def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
     //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry. Sessions created over it
     //! allocate cache pages of ``page_rows`` positions on demand instead of the full ``seq_len`` slab
@@ -492,6 +499,12 @@ def gpu_tier_status() : dasllama_gpu_tier::GpuTierStatus {
     return gpu_tier_status_()
 }
 
+def gpu_cpu_passes() : array<tuple<reason : string; words : string; count : int64>> {
+    //! Calls the armed GPU path handed back to the CPU rails since the model armed, one row per
+    //! reason that fired: its name, the same in words a status page prints, the count. Empty means the device served every call.
+    return <- gpu_cpu_passes_()
+}
+
 def set_dispatch_worker_limit(v : int) {
     //! Cap the kernel-dispatch worker count (0 = no limit, all job-que workers). Latched by
     //! ``setup_dasllama_jobque`` — set it before that call.
@@ -599,9 +612,67 @@ def moe_gpu_drop_model() {
     moe_gpu_drop_model_()
 }
 
+def set_gpu_resident_regions(n : int64) {
+    //! Ask the whole-model GPU driver for ``n`` K/V regions on the models loaded next, so ``n``
+    //! sessions keep their K/V on the device at once - a server's stream count. One by default.
+    set_gpu_resident_regions_(n)
+}
+
+def set_gpu_ctx_max(n : int64) {
+    //! Cap the whole-model GPU driver's K/V context at ``n`` positions per region for the models
+    //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it.
+    set_gpu_ctx_max_(n)
+}
+
+def gpu_resident_decline() : string {
+    //! Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with
+    //! the remedy where one exists), or why it was never attempted. Empty when it serves.
+    return gpu_resident_decline_()
+}
+
+def gpu_device_sessions() : int64 {
+    //! How many DEVICE-HOME sessions (``create_device_session``) the installed model serves at once:
+    //! the armed driver's region count, 0 when the model is not served whole from the device.
+    return gpu_device_sessions_()
+}
+
+def gpu_device_prefill_continues(model : Model) : bool {
+    //! A device-home session of ``model`` prefills from a position past zero - a prompt in chunks,
+    //! a turn over the turns before it. False for a recurrent model: prefill each prompt whole,
+    //! from position zero, and adopt no earlier rows.
+    return gpu_device_prefill_continues_(model)
+}
+
+def gpu_device_kv_park(var session : Session) : int64 {
+    //! A FINISHED device-home session lets go of its K/V region and answers the claim its rows stay
+    //! under (0 = none) - call it before every such session's ``delete``. Keep the claim and
+    //! ``gpu_device_kv_adopt`` hands the rows to a later session: a prefix cache with no copy.
+    return gpu_device_kv_park_(session)
+}
+
+def gpu_device_kv_adopt(var session : Session; claim : int64; npos : int64) : bool {
+    //! Hand the first ``npos`` rows a kept ``claim`` holds to the fresh device-home ``session``, whose
+    //! ``n_past`` becomes ``npos``. False when the rows are gone (another session took the region).
+    return gpu_device_kv_adopt_(session, claim, npos)
+}
+
+def gpu_device_session_ctx() : int64 {
+    //! The positions one device-home session holds - the armed driver's per-region context.
+    return gpu_device_session_ctx_()
+}
+
+def gpu_device_prefill_window() : int64 {
+    //! The positions the device prefills in one window - the shortest chunk worth handing a device-home session.
+    return gpu_device_prefill_window_()
+}
+
+def gpu_device_session_dtype() : KVDtype {
+    //! The K/V codec a device-home session must carry: the armed driver's.
+    return gpu_device_session_dtype_()
+}
+
 def set_resident_prefill_allowed(allowed : bool) {
-    //! Allow or pin out the resident-decode prefill arm. A multi-stream scheduler pins it OFF for
-    //! good: the single shared mirror plus chunked prefill would leave device-only KV that a
-    //! second stream's steal strands.
+    //! Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has
+    //! K/V regions would strand device-only rows. A device-home session prefills on the device whatever the pin says.
     set_resident_prefill_allowed_(allowed)
 }

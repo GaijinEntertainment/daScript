@@ -28,6 +28,57 @@ the cap is skipped, the plan sizes a mirror the device prepare refuses, and the 
 declines to the per-op rails with the dense FFN on the CPU. The prepare keeps its own guard for
 direct callers.
 
+**The mirror is `regions` consecutive copies of the per-layer layout, and a region is one
+session's whole history.** A host asks for the count before the load (`set_gpu_resident_regions`, the facade's verb,
+one by default; a server's stream count), the plan sizes every region's K/V at `seq_cap`, and
+the binding cap divides by the count, since both sides stay one buffer and one binding. A region
+is an element offset (`rd_mir_base`: the layer's base plus the selected region's stride), folded
+on the host into the `layerbase` push constant of every kernel that stores or reads a mirror row
+and into the sync, readback and hydrate offsets, so no kernel knows regions exist. The push
+constant is baked as the token command records, so the driver records one command per region
+(and one unsplit twin) and `vk_rdec_select_region` names the region the next call resolves
+against; the window chain encodes per call and reads the same accessor. The resident module owns
+who sits where (`RdecRegion`: rows, the owning claim's generation, a last-bind tick): a session
+binds its own region while its claim stands, else the least recently used one, which its next
+claim takes. Two sessions in two regions step between each other, or in one batched step, with no
+K/V crossing the bus - `tests/test_gpu_resident_regions.das` holds each bit for bit to the
+session alone. A session past the region count takes another's region and brings its history up
+from the host, as every session did on the single mirror. An owner whose region another session
+took is served from the host or not at all: where its rows never came down, its next prefill or
+decode panics rather than read another session's history. A batched step over a
+per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
+row gathered on device where the driver holds the projection, else that row of the pre-step
+`eval_batch` already ran.
+
+**A device-home session's region is its only copy.** `create_device_session` makes a session
+with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and
+nothing crosses the bus per token: the overrides bring no history up for it, read no row back
+after a batched step and hydrate nothing down. The CPU rails cannot take its call, so a pass
+that reaches one panics with the pass's reason (`rdec_device_home_guard`) - the prefill pin
+is the one gate it walks past, because the pin guards host-cached sessions whose device-only
+rows another session's claim would strand. Its region is pinned while it lives
+(`RdecRegion.pinned`): no other session is handed it, and a host-cached outsider that finds
+every region pinned passes as `busy`. A finished session parks (`gpu_device_kv_park`): the
+pin drops, and the claim it answers keeps naming the rows until another session takes the
+region; `gpu_device_kv_adopt` hands the first `npos` of them to a fresh session under a claim
+of its own, the next prefill rewriting whatever lay past. `gpu_device_sessions` answers how
+many a host may hold - the region count - and `gpu_device_prefill_continues` whether a
+session's prefill may start past zero: not on a recurrent model, whose window chain starts the
+deltanet state from zero.
+
+**The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
+idle `Scheduler` (one batched step takes one kind of session): admitted streams are
+device-home, their prefill quantum is at least the device's window (`gpu_device_prefill_window`),
+a media request is refused at `submit` (a device-home session serves no media span),
+and a reaped stream parks its claim under the token list its rows hold - one parked claim a
+stream slot - so the next request adopts the longest opening it shares, short of its last
+token: a conversation's next turn prefills its new suffix alone, with no copy. A recurrent
+model's stream parks nothing: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
+per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
+has a region per stream and no media tower or self-speculation, and sizes the slot's context
+to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
+mode against host-cached twins on the same device, on a qwen2 and on the E-series carrier.
+
 **The auto arm sizes against the room the OS reports on the adapter, where the OS reports
 it.** Vulkan cannot see the desktop: `VK_EXT_memory_budget` reads a flat 16024 MB on the 16 GB
 reference card with 3 GiB of another process's memory resident, and so does the process's own
@@ -112,6 +163,10 @@ fitting plan forgoes them - they would only shrink its room - so a decline past 
 placement, a class rail) leaves the per-op rails without a streamed slot, said out loud. The
 tile family the routed block rides is the f16-fed cm2 tiles (`ARCHITECTURE_GPU_VULKAN_MOE.md`
 sec.2.2af), and `DASLLAMA_GPU_RESIDENT=0` keeps the per-op rails for any model, the A/B lever.
+The driver is attempted only when asked for (`gpu_resident_requested`): the measured-best set
+asks (`DASLLAMA_GPU=1`, or `auto_tier` on the want), and so does a want that spells its rails
+out one by one and sets `resident` - the server's serving shape, where `gpu_dn = false` must
+still turn one rail off. Rails alone, by env or by want, keep the per-op tier.
 
 ### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
 

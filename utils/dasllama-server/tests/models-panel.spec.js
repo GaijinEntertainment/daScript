@@ -69,6 +69,58 @@ test('a GPU budget reveals the VRAM bar with the owner and fill', async ({ page 
 });
 
 test('no GPU budget keeps the VRAM panel hidden', async ({ page }) => {
-    await openControl(page, { stats: fx('stats') });
+    await openControl(page, { stats: { ...fx('stats'), gpu_budget_bytes: 0 } });
     await expect(page.locator('#vram-panel')).toBeHidden();
+});
+
+test('every card says how its slot is served, in the words the server sent', async ({ page }) => {
+    const s = fx('stats_multi');
+    await openControl(page, { stats: s });
+    for (const m of s.models) {
+        await expect(page.locator('#mc-' + m.name + ' [data-served]')).toHaveText('served · ' + m.served);
+        await expect(page.locator('#mc-' + m.name + ' [data-served-note]')).toHaveCount(0);
+        await expect(page.locator('#mc-' + m.name + ' [data-cpu-passes]')).toHaveCount(0);
+    }
+});
+
+test('a slot held back from the GPU prints the reason under its served line', async ({ page }) => {
+    const s = fx('stats_multi');
+    const note = 'not enough video memory for the whole model: lower ctx';
+    s.models = s.models.map(m => (m.is_active ? { ...m, served_note: note } : m));
+    await openControl(page, { stats: s });
+    const act = s.models.find(m => m.is_active);
+    await expect(page.locator('#mc-' + act.name + ' [data-served-note]')).toHaveText(note);
+    await expect(page.locator('.mcard [data-served-note]')).toHaveCount(1);
+});
+
+test('calls the GPU handed back to the CPU are counted on the card of the slot that holds the GPU', async ({ page }) => {
+    const s = fx('stats_cpu_pass');
+    const first = s.gpu_cpu_passes[0];
+    s.gpu_cpu_passes = [first, { ...first, reason: first.reason + '-again', count: first.count + 2 }];
+    const owner = s.models.find(m => m.holds_gpu);
+    await openControl(page, { stats: s });
+    const line = page.locator('#mc-' + owner.name + ' [data-cpu-passes]');
+    await expect(line).toContainText(s.gpu_cpu_passes.reduce((n, p) => n + p.count, 0) + ' calls ran on the CPU instead of the GPU');
+    for (const p of s.gpu_cpu_passes) {
+        await expect(line.locator('span[title="' + p.reason + '"]')).toHaveText(p.words + ' (' + p.count + ')');
+    }
+    await expect(page.locator('.mcard [data-cpu-passes]')).toHaveCount(1);
+});
+
+test('one call on the CPU reads in the singular, in the words the server sent', async ({ page }) => {
+    const s = fx('stats_cpu_pass');
+    const owner = s.models.find(m => m.holds_gpu);
+    await openControl(page, { stats: s });
+    const total = s.gpu_cpu_passes.reduce((n, p) => n + p.count, 0);
+    await expect(page.locator('#mc-' + owner.name + ' [data-cpu-passes]'))
+        .toContainText(total + (total > 1 ? ' calls' : ' call') + ' ran on the CPU instead of the GPU: ' + s.gpu_cpu_passes[0].words);
+});
+
+test('a stats document from before the served fields draws the card without them', async ({ page }) => {
+    const s = fx('stats_multi');
+    s.models = s.models.map(({ served, served_note, device_kv, ...m }) => m);
+    delete s.gpu_cpu_passes;
+    await openControl(page, { stats: s });
+    await expect(page.locator('#mc-' + s.models[0].name)).toBeVisible();
+    await expect(page.locator('.mcard [data-served]')).toHaveCount(0);
 });

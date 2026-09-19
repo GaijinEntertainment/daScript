@@ -110,6 +110,20 @@ struct DoneStream {
     done_at : int64                         // ref_time_ticks at reap
 }
 
+//! on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
+def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
+    if (!sch.device_kv) {
+        return sch.chunk_tokens
+    }
+    return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
+}
+
+//! A finished device-home stream's K/V rows, kept on the device for the next request that opens with the same tokens.
+struct ParkedKv {
+    claim : int64           //! the region claim the rows sit under (`gpu_device_kv_park`)
+    tokens : array<int64>   //! the tokens those rows hold, in order
+}
+
 //! The continuous-batching scheduler: active streams, the admission queue, the shared eval_batch
 //! workspace, knobs, and counters. One per served model; drive it with scheduler_step.
 struct Scheduler {
@@ -118,13 +132,15 @@ struct Scheduler {
     queue : array<PendingReq>
     max_streams : int64 = 4l
     max_queue : int64 = 32l
-    chunk_tokens : int64 = 64l              // prefill quantum K for TEXT chunks; a media span evals as ONE body (per-call mask), so it may stall decode by its row count
+    chunk_tokens : int64 = 64l              // prefill quantum K for TEXT chunks of a host-cached stream (`prefill_chunk` widens a device-home one); a media span evals as ONE body (per-call mask), so it may stall decode by its row count
     // paged serving (page_rows > 0 at create): sessions page KV out of the pool, and finished
     // streams donate their pages to the prefix cache so repeat prefixes skip their prefill
     paged : bool
     pool : KVPool
     prefix : PrefixCache
     kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
+    device_kv : bool                        //! admitted sessions are DEVICE-HOME: their K/V lives only in the GPU driver's regions (`set_device_kv`)
+    parked : array<ParkedKv>
     mtp : bool                              // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
     // per-step gather scratch. @do_not_delete is load-bearing: delete of a plain array<T?>
     // CASCADES to the pointees — these are borrowed rows into streams[i].session
@@ -173,6 +189,19 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
     return <- sch
 }
 
+//! Serve the streams admitted from here on as DEVICE-HOME sessions (`on`), or as the scheduler was created. Only an idle
+//! scheduler switches - one batched step takes one kind of session - so the answer is what it now does.
+def set_device_kv(var sch : Scheduler; on : bool) : bool {
+    if (sch.device_kv != on && empty(sch.streams)) {
+        sch.device_kv = on
+        to_log(LOG_INFO, "dasLLAMA scheduler: streams admitted from here on are {on ? "device-home (their K/V lives only on the GPU)" : "host-cached"} (set_device_kv)\n")
+        if (!on) {
+            delete sch.parked   // the claims die with the device state
+        }
+    }
+    return sch.device_kv
+}
+
 //! Active stream count (prefilling + decoding).
 def n_active(sch : Scheduler) : int64 => long_length(sch.streams)
 
@@ -189,6 +218,9 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     }
     if (req.n_media < 0l) {
         panic("dasllama_scheduler: negative n_media {req.n_media} (stream {req.id})")
+    }
+    if (req.n_media > 0l && sch.device_kv) {
+        panic("dasllama_scheduler: a media request in device mode (stream {req.id}) - a device-home session serves no media span; the wiring keeps `set_device_kv` off for a model that takes media")
     }
     if (req.n_media > 0l) {
         if (req.media_at < 0l || req.media_at > np) {
@@ -345,7 +377,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 }
 
 //! One scheduler tick: admit from the queue while under max_streams, ONE eval_batch decode step
-//! over every decoding stream, at most ONE chunk_tokens prefill chunk (FCFS; the final chunk's
+//! over every decoding stream, at most ONE prefill chunk (`chunk_tokens`, or `prefill_chunk`'s wider one in device mode; FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
 [arch(at="../ARCHITECTURE_ENGINE.md#scheduler-step")]
@@ -369,7 +401,14 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          media_non_causal = sch.queue[0].media_non_causal,
                          media_grid = sch.queue[0].media_grid,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
-        if (sch.paged && st.n_media > 0l) {
+        if (sch.device_kv) {
+            st.session <- create_device_session(m, gpu_device_session_dtype())
+            let matched = parked_attach(sch, st.session, st.prompt)   // a model whose prefill cannot continue parks nothing, so nothing matches
+            st.n_prefilled = matched
+            st.n_cached = matched
+            sch.cached_tokens += matched
+            to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok already on the device\n")
+        } elif (sch.paged && st.n_media > 0l) {
             // a media stream's KV past the splice does NOT follow from its token ids, so neither
             // half of the prefix cache is sound for it: no attach here, no donate at reap
             st.session <- create_session(m, sch.pool)
@@ -490,7 +529,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.prefill_tokens += sch.streams[i].n_media
         } else {
             let head_end = media_pending ? sch.streams[i].media_at : np
-            let take = min(sch.chunk_tokens, head_end - sch.streams[i].n_prefilled)
+            let chunk = prefill_chunk(m, sch, head_end)
+            let take = min(chunk, head_end - sch.streams[i].n_prefilled)
             sch.chunk |> resize(take)
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
@@ -528,7 +568,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 n_gen = sch.streams[i].n_gen, ttft_us = sch.streams[i].ttft_us,
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
                 done_at = ref_time_ticks()))
-            if (sch.paged) {
+            if (sch.streams[i].session.device_kv) {
+                park_stream(m, sch, sch.streams[i])
+            } elif (sch.paged) {
                 if (sch.streams[i].n_media == 0l) {   // media KV does not follow from the token ids
                     donate_stream(m, sch, sch.streams[i])
                 }
@@ -552,6 +594,59 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
 // conversation (prompt + reply + close + new user turn) extends the cached prefix. The tail is
 // skipped when it cannot fit; evicted streams donate only what ran. prefix_insert trims to n_past.
 def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
+    close_turn(m, sch, st)
+    prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
+}
+
+def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
+    if (!gpu_device_prefill_continues(m)) {
+        gpu_device_kv_park(st.session)
+        return
+    }
+    close_turn(m, sch, st)
+    let claim = gpu_device_kv_park(st.session)
+    if (claim == 0l) {
+        return
+    }
+    sch.donate_toks |> resize(min(long_length(sch.donate_toks), st.session.n_past))
+    while (long_length(sch.parked) >= sch.max_streams) {
+        drop_parked(sch, 0)
+    }
+    sch.parked |> emplace(ParkedKv(claim = claim, tokens := sch.donate_toks))
+}
+
+//! Adopt the parked rows sharing the longest opening with `prompt` (always short of its last token, whose logits the
+//! prefill must produce); 0 when none stands. A claim another session took since is dropped where it is found.
+def private parked_attach(var sch : Scheduler; var session : Session; prompt : array<int64>) : int64 {
+    var best = -1
+    var best_len = 0l
+    for (p, pi in sch.parked, count()) {
+        var n = 0l
+        let cap = min(long_length(p.tokens), long_length(prompt) - 1l)
+        while (n < cap && p.tokens[n] == prompt[n]) {
+            n ++
+        }
+        if (n > best_len) {
+            best = pi
+            best_len = n
+        }
+    }
+    if (best < 0) {
+        return 0l
+    }
+    let adopted = gpu_device_kv_adopt(session, sch.parked[best].claim, best_len)
+    drop_parked(sch, best)
+    return adopted ? best_len : 0l
+}
+
+//! `erase` moves the entries after it down and finalizes nothing, so the entry's token list goes first
+def private drop_parked(var sch : Scheduler; at : int) {
+    delete sch.parked[at].tokens
+    sch.parked |> erase(at)
+}
+
+//! Eval the turn's closing tokens and leave in `donate_toks` the token list the session's rows hold.
+def private close_turn(m : Model; var sch : Scheduler; var st : Stream) {
     if (st.finish != "evicted") {
         sch.donate_toks |> clear()
         if (st.finish == "length" && st.cur_tok >= 0l) {
@@ -569,5 +664,4 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
         sch.donate_toks |> push(st.prompt[k])
     }
     sch.donate_toks |> push_from(st.session.recent, st.close_toks)
-    prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
 }

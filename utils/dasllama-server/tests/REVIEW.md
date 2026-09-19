@@ -3,18 +3,26 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `utils/dasllama-server/README.md` (repo root), `fixtures/README.md`.
 
-**A captured response body under `fixtures/` (beside this file), whatever its extension -
-`sse_expected.json` and `capture_catalog.tune.json` are derived, not captured - is never
-hand-authored, and never edited beyond machine-local path normalization; re-capture it
-instead.** `fixtures/README.md` gives the capture procedure and the path normalization.
+**A file under `fixtures/` (beside this file) that `fixtures/README.md` captures from a server
+run, whatever its extension, is never hand-authored, and never edited beyond the machine-local
+path normalization that README gives; re-capture it instead.** `fixtures/README.md` gives the
+capture procedure and the normalization.
+
+**A file under `fixtures/` that `fixtures/README.md` derives from another capture is redone
+from that capture by the README's recipe, and changed no other way.**
+
+**A diff that adds a file under `fixtures/` (beside this file) gives it a row in
+`fixtures/README.md` saying what captures it or what it derives from, in the same change.**
 
 **A request or response body in a Playwright `.spec.js` in this folder is a captured fixture,
-or a clone of one with named fields overridden - a body authored from nothing is a defect.**
+or a clone of one changed only by overriding named fields, dropping named fields, or cloning
+one of its entries; a body authored from nothing is a defect.**
 
-**A Playwright `.spec.js` in this folder never spells out a value the fixture carries - it
-reads that value from the fixture; only page copy (a button label, a note, a heading) is
-asserted literally.** A spelled-out fixture value is a second copy of the capture, and the next
-capture moves it.
+**A Playwright `.spec.js` in this folder never spells out a value the committed capture
+carries - it reads that value from the fixture; the literals it may assert are page copy (a
+button label, a heading, the page's own wording around a value) and a value the spec itself
+wrote into its clone.** A spelled-out fixture value is a second copy of the capture, and the
+next capture moves it.
 
 **A Playwright `.spec.js` in this folder never hard-codes a number a re-capture can move -
 including one derived from a capture's length; it computes the number from the fixture.** A

@@ -64,7 +64,7 @@ struct ServerArgs {
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
     metal : string
 
-    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan (a set --metal flag keeps the legacy env-driven path)"
+    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)"
     gpu : string
 
     @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default 2 under --gpu vulkan)"
@@ -612,6 +612,13 @@ def private gpu_detail_dn(cfg : ServerArgs) : bool
 def private gpu_detail_attn(cfg : ServerArgs) : bool
     => cfg_sourced("gpu_attn") ? cfg.gpu_attn : true
 
+[arch(at = "README.md#gpu-key")]
+def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
+    => GpuTierWant(resident = true,
+                   moe_layers = gpu_detail_layers(cfg), moe_stream = gpu_detail_stream(cfg),
+                   vram_mb = int64(cfg.gpu_vram_mb), dn = gpu_detail_dn(cfg),
+                   attn = gpu_detail_attn(cfg), dense = cfg.gpu_dense, shexp = true)
+
 // The GET /config surface: RESOLVED effective values (what init actually uses) + per-key
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
 // -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path.
@@ -904,13 +911,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
     if (gpu == "vulkan") {
-        // shexp rides the blessed shape: the resident shared expert measured +8.3% on decode
-        // (decode-arc S2) and was missing here. The booleans stay explicit rather than riding
-        // auto_tier, so an explicit `gpu_dn = false` still turns its rail off.
-        set_gpu_tier_want(GpuTierWant(
-            moe_layers = gpu_detail_layers(g_cfg), moe_stream = gpu_detail_stream(g_cfg),
-            vram_mb = int64(g_cfg.gpu_vram_mb), dn = gpu_detail_dn(g_cfg),
-            attn = gpu_detail_attn(g_cfg), dense = g_cfg.gpu_dense, shexp = true))
+        set_gpu_tier_want(vulkan_serving_want(g_cfg))
         if (moe_gpu_tier_arm()) {
             let ktag = gpu_detail_layers(g_cfg) < 0l ? "auto" : "{gpu_detail_layers(g_cfg)}"
             let stag = gpu_detail_stream(g_cfg) < 0l ? "auto" : "{gpu_detail_stream(g_cfg)}"
@@ -970,10 +971,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         var slot_want = GpuTierWant()
         // a --tts boot with no LLM has an EMPTY roster: nothing loads, so nothing arms the tier
         if (gpu == "vulkan" && !empty(g_models)) {
-            slot_want = GpuTierWant(
-                moe_layers = gpu_detail_layers(g_cfg), moe_stream = gpu_detail_stream(g_cfg),
-                vram_mb = int64(g_cfg.gpu_vram_mb), dn = gpu_detail_dn(g_cfg),
-                attn = gpu_detail_attn(g_cfg), dense = g_cfg.gpu_dense, shexp = true)
+            slot_want = vulkan_serving_want(g_cfg)
             if (g_models[def_idx].backend != "cpu") {
                 gpu_idx = def_idx
             } else {
@@ -994,12 +992,13 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (empty(ent.name)) {
                 ent.name = base_name(ent.path)
             }
+            let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
+                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx)
             }
             print("loading {ent.path} ...\n")
             var m <- load_model(ent.path, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant))
-            let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (ectx > 0l) {
                 m.config.seq_len = min(m.config.seq_len, ectx)
             }

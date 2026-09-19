@@ -45,6 +45,7 @@ Then capture (`B=http://127.0.0.1:18132`):
 | File | Command |
 |---|---|
 | `stats_multi.json` | `curl $B/v1/stats` (idle) |
+| `stats_cpu_pass.json` | on a box whose GPU serves `smol` whole (the Vulkan whole-model driver): `curl -X POST $B/v1/embeddings -d '{"input":"hi"}'`, then `curl $B/v1/stats` - the embeddings session is host-cached, so its one call runs on the CPU and `gpu_cpu_passes` carries a real `{reason, words, count}` entry |
 | `stats.json` | `stats_multi.json` with `models` cut to the active slot (a single-model server serves the same shape with one entry) |
 | `streams_idle.json` | `curl $B/v1/streams` (idle) |
 | `streams_active.json` | fire 2 concurrent chats (`max_tokens: 128`), then `curl $B/v1/streams` mid-flight; re-poll until one stream is `decoding`. Re-send one finished prompt first so `cache` carries a chain |

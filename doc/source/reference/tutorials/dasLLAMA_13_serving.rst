@@ -155,9 +155,82 @@ holds a model is the bug this order prevents:
    let backend = gpu_slot_rearm(GpuTierWant(auto_tier = true), m)   // ...and re-armed
 
 One more serving pin: a multi-stream scheduler calls
-``set_resident_prefill_allowed(false)`` once and leaves it — its single shared
-mirror plus chunked prefill would leave device-only KV that a second stream's
+``set_resident_prefill_allowed(false)`` once and leaves it — a host-cached
+stream's chunked prefill would leave device-only KV that a second stream's
 steal strands. ``dasllama-server`` does exactly this.
+
+Streams served from the device
+==============================
+
+A session normally keeps its K/V cache in host memory, and a GPU that serves
+it copies rows over the bus. The vulkan whole-model driver can hold the cache
+itself. It splits its K/V memory into *regions*, one per stream. A session
+that lives in one region, with no host cache at all, is a **device-home**
+session.
+
+We size this before the load. ``set_gpu_resident_regions`` says how many
+streams we serve, and ``set_gpu_ctx_max`` caps the positions one region
+holds. After the load we ask what we got: ``gpu_device_sessions`` answers the
+region count (0 on a CPU box, under the per-op rails, and on Metal),
+``gpu_resident_decline`` says why the driver does not serve,
+``gpu_device_session_ctx`` answers the positions per region,
+``gpu_device_session_dtype`` the K/V codec a device-home session carries, and
+``gpu_device_prefill_window`` how many positions the device prefills in one
+window - a host that feeds a prompt in chunks makes them at least that long:
+
+.. code-block:: das
+
+   set_gpu_resident_regions(4l)
+   set_gpu_ctx_max(8192l)
+   // ... load_model runs here ...
+   let regions = gpu_device_sessions()
+   if (regions == 0l) {
+       print("no device-home sessions here: {gpu_resident_decline()}\n")
+   } else {
+       print("{regions} streams, {gpu_device_session_ctx()} positions each, K/V in {gpu_device_session_dtype()}\n")
+   }
+
+``create_device_session`` makes the session. A finished one calls
+``gpu_device_kv_park`` before its ``delete``: the region is free for the next
+stream, and park answers a *claim* — a number that names the rows until
+another session takes the region. ``gpu_device_kv_adopt`` hands those rows to
+a fresh session, so the next turn of a conversation prefills only its new
+tokens. ``gpu_device_prefill_continues`` says whether this model may do that;
+a recurrent model prefills every prompt whole, from position zero:
+
+.. das-doc: given let turn1 <- [1l, 2l, 3l]
+.. das-doc: given let rest <- [4l, 5l]
+.. code-block:: das
+
+   var first <- create_device_session(m, gpu_device_session_dtype())
+   eval(m, first, turn1)
+   let held = first.n_past
+   let claim = gpu_device_kv_park(first)   // before every device-home delete
+   delete first
+
+   var second <- create_device_session(m, gpu_device_session_dtype())
+   if (gpu_device_prefill_continues(m) && gpu_device_kv_adopt(second, claim, held)) {
+       eval(m, second, rest)               // turn one's rows are already there
+   }
+   gpu_device_kv_park(second)
+   delete second
+
+The scheduler does all of this per stream once we switch it with
+``set_device_kv(sch, true)``. Only an idle scheduler switches, and we switch
+it on only when every stream gets a region — ``gpu_device_sessions()`` is at
+least the scheduler's stream count.
+
+``gpu_cpu_passes`` is the honesty counter: every call the GPU path handed
+back to the CPU, by reason, with the reason in plain words. Streams served
+from the device keep it empty. Run this tutorial with the vulkan tier armed
+and the counter lists the earlier sections' paged sessions — those keep their
+cache on the host, so their calls ran on the CPU:
+
+.. code-block:: das
+
+   for (p in gpu_cpu_passes()) {
+       print("{p.count} calls ran on the CPU: {p.words}\n")
+   }
 
 The same module, more streams
 =============================

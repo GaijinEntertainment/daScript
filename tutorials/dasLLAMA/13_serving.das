@@ -17,6 +17,8 @@ require strings
 //   - Stateless requests: rendered token prompts hold no KV memory
 //   - Multi-model GPU serving: the tier want/arm calls and the slot dance
 //     (capture, rearm, hydrate, drop, the resident-prefill pin)
+//   - Streams served from the device: device-home sessions, their K/V regions,
+//     park and adopt, and the counter that says a call ran on the CPU
 //
 // Prerequisites: tutorials 02 and 04.
 //
@@ -34,6 +36,7 @@ let QUESTIONS2 = fixed_array("What is the capital of Japan?",
     "What does a linker do?",
     "Which desert is the largest?")
 let MAX_NEW = 32l
+let STREAMS = 4l   // conversations served at once: the scheduler's stream slots, and in section 5 the GPU's K/V regions
 
 // Resolve the model path: last command-line argument ending in .gguf, else $DASLLAMA_MODEL.
 def model_path() : string {
@@ -214,9 +217,78 @@ def section_gpu_slots(m : Model) {
     print("A switched in: '{rearmed}'\n")
 
     // the serving pin: a multi-stream scheduler turns the resident prefill arm OFF
-    // for good — its one shared mirror plus chunked prefill would leave device-only
-    // KV that a second stream's steal strands (dasllama-server does exactly this)
+    // for good — a host-cached stream's chunked prefill would leave device-only KV
+    // that a second stream's steal strands (dasllama-server does exactly this)
     set_resident_prefill_allowed(false)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 5 — Streams served from the device
+// ──────────────────────────────────────────────────────────────────────────
+//
+// A session normally keeps its K/V cache in host memory, and a GPU that serves
+// it copies rows over the bus. The vulkan whole-model driver can hold the cache
+// itself: it splits its K/V memory into REGIONS, one per stream, and a
+// DEVICE-HOME session (create_device_session) lives in one region and has no
+// host cache at all. Two calls before load_model size this:
+// set_gpu_resident_regions says how many streams we serve, set_gpu_ctx_max caps
+// the positions one region holds.
+//
+// After the load, gpu_device_sessions answers how many regions the driver armed
+// (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
+// says why the driver does not serve, gpu_device_session_ctx the positions per
+// region, gpu_device_session_dtype the K/V codec a device-home session carries.
+//
+// A finished session calls gpu_device_kv_park before its delete. The region is
+// free for the next stream, and park answers a CLAIM: a number that names the
+// rows until another session takes the region. gpu_device_kv_adopt hands those
+// rows to a fresh session, so the next turn of a conversation prefills only its
+// new tokens. gpu_device_prefill_continues says whether this model may do that
+// (a recurrent model prefills every prompt whole, from position zero).
+//
+// gpu_cpu_passes is the honesty counter: every call the GPU path handed back to
+// the CPU, by reason. A slot served from the device keeps it empty.
+
+def section_device_streams(m : Model; var sch : Scheduler) {
+    let regions = gpu_device_sessions()
+    if (regions == 0l) {
+        let why = gpu_resident_decline()
+        print("no device-home sessions on this box: {empty(why) ? "no GPU was asked for" : why}\n")
+        return
+    }
+    print("the device holds {regions} streams, {gpu_device_session_ctx()} positions each, K/V in {gpu_device_session_dtype()}\n")
+    print("it prefills {gpu_device_prefill_window()} positions a window: a prompt in chunks hands it at least that many at a time\n")
+
+    // turn one: prefill, then park
+    var first <- create_device_session(m, gpu_device_session_dtype())
+    let turn1 <- encode(m, "{SYSTEM} {QUESTIONS[0]}")
+    eval(m, first, turn1)
+    let held = first.n_past
+    let claim = gpu_device_kv_park(first)   // before every device-home delete
+    delete first
+
+    // turn two is turn one's tokens plus new ones: adopt the rows, prefill the rest
+    var second <- create_device_session(m, gpu_device_session_dtype())
+    let rest <- encode(m, " {QUESTIONS[1]}", false)
+    if (gpu_device_prefill_continues(m) && gpu_device_kv_adopt(second, claim, held)) {
+        eval(m, second, rest)
+        print("turn two adopted {held} rows and prefilled {length(rest)} new tokens\n")
+    } else {
+        var turn2 := turn1
+        turn2 |> push_from(rest)
+        eval(m, second, turn2)
+    }
+    gpu_device_kv_park(second)
+    delete second
+
+    // the scheduler does all of the above per stream once it is in device mode;
+    // only an idle scheduler switches, and only when every stream gets a region
+    let on = set_device_kv(sch, regions >= STREAMS)
+    print("scheduler device mode: {on}\n")
+    set_device_kv(sch, false)
+
+    let passes <- gpu_cpu_passes()
+    print("calls that ran on the CPU instead: {passes}\n")
 }
 
 [export]
@@ -226,13 +298,15 @@ def main() {
         print("usage: daslang -jit tutorials/dasLLAMA/13_serving.das -- <model.gguf>\n")
         return
     }
+    set_gpu_resident_regions(STREAMS)   // section 5: a K/V region per stream, asked for before the load
+    set_gpu_ctx_max(8192l)         // and at most this many positions in a region
     var m <- load_model(path, QuantMode.q8)
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     with_job_que() {
         setup_dasllama_jobque()
         section_raw(m)
 
-        var sch <- create_scheduler(m, 4l, 32l, 64l, 16l)   // 4 streams, paged KV, prefix cache on
+        var sch <- create_scheduler(m, STREAMS, 32l, 64l, 16l)   // paged KV, prefix cache on
         let batched = run_round(m, sch, 1l, "batched, cold", QUESTIONS)
         let seq = sequential_round(m)
         print("four conversations: batched {batched / 1000l}ms vs sequential {seq / 1000l}ms\n\n")
@@ -242,6 +316,7 @@ def main() {
         // is the shared system turn's pages — donated by round one, attached instead
         // of prefilled, so only each question's tail pays prefill
 
+        section_device_streams(m, sch)
         delete sch
 
         section_gpu_slots(m)

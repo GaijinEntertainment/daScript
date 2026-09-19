@@ -38,14 +38,13 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 //! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
-                    mir_elems, cos_elems : int64) : bool {
+                    mir_elems, cos_elems, regions : int64) : bool {
     if (!vk_moe_init()) {
         return false
     }
     let esz = kv16 ? 2l : 4l
-    // each mirror side binds as ONE SSBO range, slack included: past maxStorageBufferRange (or the
-    // shaders' uint word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
-    let mir_bound = mir_elems + RDEC_MIR_SLACK
+    // every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
+    let mir_bound = (mir_elems + RDEC_MIR_SLACK) * regions
     if (mir_bound * esz > vk_max_storage_range() || mir_bound > 4_294_967_295l) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side plus the {RDEC_MIR_SLACK} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
         return false
@@ -124,19 +123,20 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.xb2_dev = make_device_buf(dim * 4l)
     r.n_attn = n_attn
     r.mir_elems = mir_elems + RDEC_MIR_SLACK
+    r.regions = regions
     // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
-    r.k_mirror = try_device_buf(r.mir_elems * esz)
-    r.v_mirror = try_device_buf(r.mir_elems * esz)
+    r.k_mirror = try_device_buf(rd_mir_bytes())
+    r.v_mirror = try_device_buf(rd_mir_bytes())
     if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * r.mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes()) >> 20l} MB for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
     }
     {   // the mirrors start at zero, never at garbage: a flash fragment straddling a window's end reads the unwritten rows past it - inside a plane and in the slack - and zero times a masked probability stays zero where a garbage NaN would not
         var rawz = alloc_transient_cmd()
         let beginz = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(rawz, beginz), null)
-        cmd_fill_zero(rawz, r.k_mirror, 0l, r.mir_elems * esz)
-        cmd_fill_zero(rawz, r.v_mirror, 0l, r.mir_elems * esz)
+        cmd_fill_zero(rawz, r.k_mirror, 0l, rd_mir_bytes())
+        cmd_fill_zero(rawz, r.v_mirror, 0l, rd_mir_bytes())
         vk_check(vkEndCommandBuffer(rawz), null)
         submit_wait(rawz)
         free_transient_cmd(rawz)
@@ -170,11 +170,22 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.logits_host = make_host_buf(vocab * 4l, false, [cached = true])
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
-    r.cmd = alloc_cmd()
-    if (r.attn_nsplit > 1l) {   //! the unsplit twin exists only where the attention splits
-        r.cmd_unsplit = alloc_cmd()
+    r.tok_recorded |> resize(regions)
+    r.cmd |> reserve(regions)
+    r.cmd_unsplit |> resize(regions)
+    for (ri in range64(regions)) {
+        r.cmd |> push(alloc_cmd())
+        if (r.attn_nsplit > 1l) {
+            r.cmd_unsplit[ri] = alloc_cmd()
+        }
     }
     return true
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def vk_rdec_select_region(region : int64) {
+    assert(g_rd != null && region >= 0l && region < g_rd.regions, "vk_rdec_select_region: no such mirror region")
+    g_rd.region = region
 }
 
 //! Upload the norm-weight rows once: [rms_att[0], rms_ffn[0], ..., rms_att[L-1], rms_ffn[L-1],
@@ -288,7 +299,7 @@ def vk_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq
     rd_attn_sets(L, mir_idx, bq, bk, bv, bo, fq, fk, fv, fo, f1, f3, f2)
     rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
     L.made = true
-    g_rd.tok_recorded = false   //! the recorded chain references the replaced sets
+    rd_invalidate_token()   //! the recorded chain references the replaced sets
 }
 
 //! the attention half of a layer's registration: the quad's blocks, formats and sets (f1 / f3 / f2
@@ -347,7 +358,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
                 fixed_array(pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q | VHZ_KVK | VHZ_KVV))
         }
-        let mirbytes = g_rd.mir_elems * g_rd.kv_esz
+        let mirbytes = rd_mir_bytes()
         let cosbytes = g_rd.cos_elems * 4l
         let bias_bind = rd_bias_bind()
         if (g_rd.qk_norm) {
@@ -644,7 +655,7 @@ def vk_rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2
     L.fe1 = fe1; L.fe3 = fe3; L.fe2 = fe2
     rd_moe_sets(L)
     g_rd.fused_sets_made = false
-    g_rd.tok_recorded = false
+    rd_invalidate_token()
 }
 
 //! the dense triple is the shared expert's; b1 < 0 = the layer has none.
@@ -795,7 +806,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         rd_tail_sets_bare(L, f1, f3, f2)   //! a recurrent MoE layer without a shared expert
     }
     L.made = true
-    g_rd.tok_recorded = false
+    rd_invalidate_token()
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
@@ -890,7 +901,7 @@ def vk_rdec_set_ple(ple : int64) : bool {
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l)
-    g_rd.tok_recorded = false
+    rd_invalidate_token()
     return true
 }
 
@@ -933,7 +944,7 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
             fixed_array(pp.wqb, pp.wsb, ple * 4l, g_rd.n_layers * ple * 4l, dim * 4l),
             fixed_array(0u, 0u, VHZ_GATE, VHZ_COS, VHZ_FFO))
     }
-    g_rd.tok_recorded = false
+    rd_invalidate_token()
 }
 
 //! Register the classifier plane (arena block + format) and build the prologue / final-norm / cls
@@ -988,7 +999,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             fixed_array(pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))
         g_rd.cls_fmt_marker = cls_fmt
-        g_rd.tok_recorded = false   // the recorded chain references the replaced cls/prologue sets
+        rd_invalidate_token()   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
     }
 }
@@ -1043,7 +1054,7 @@ def private rd_record_token {
         }
     }
     rd_record_unsplit_twin()
-    rd_encode_token(g_rd.cmd, g_rd.attn_nsplit)
+    rd_encode_token(g_rd.cmd[g_rd.region], g_rd.attn_nsplit)
 }
 
 //! the unsplit twin on a split device: the same chain at one split into `cmd_unsplit`, its stamp names and overflow flag kept apart
@@ -1051,7 +1062,7 @@ def private rd_record_token {
 def private rd_record_unsplit_twin {
     g_rd.unsplit_on = g_rd.attn_nsplit > 1l
     if (!g_rd.unsplit_on) return
-    rd_encode_token(g_rd.cmd_unsplit, 1l)
+    rd_encode_token(g_rd.cmd_unsplit[g_rd.region], 1l)
     delete g_rdq_names_unsplit
     g_rdq_names_unsplit <- g_rdq_stamp_names
     g_rdq_n_unsplit = g_rdq_n
@@ -1219,7 +1230,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     }
     let hs = L.hs
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
-    let mirbase = uint(L.mir_base)
+    let mirbase = uint(rd_mir_base(L))
     if (fuse_qkr) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
             neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = mirbase,
@@ -1687,7 +1698,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
         vk_check(vkEndCommandBuffer(raw), null)
     }
     g_rdq_n = g_pfq_n   // decode's stamp count (prefill re-arms the shared pool per window)
-    g_rd.tok_recorded = true
+    g_rd.tok_recorded[g_rd.region] = true
 }
 
 def private rdq_group_line(pfx : string; n : double) : string {
@@ -1790,16 +1801,16 @@ def private rd_warmup_check(wall_us : int64) {
 [hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
 def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
-    if (!g_rd.tok_recorded) {
+    if (!g_rd.tok_recorded[g_rd.region]) {
         rd_record_token()
     } elif (vk_rdec_rerecord_on()) {   // probe arm: pay the full re-encode every token, both forms
         rd_record_unsplit_twin()
-        rd_encode_token(g_rd.cmd, g_rd.attn_nsplit)
+        rd_encode_token(g_rd.cmd[g_rd.region], g_rd.attn_nsplit)
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
     let unsplit = g_rd.unsplit_on && pos < RD_UNSPLIT_POS
-    var cmd = unsplit ? g_rd.cmd_unsplit : g_rd.cmd
+    var cmd = unsplit ? g_rd.cmd_unsplit[g_rd.region] : g_rd.cmd[g_rd.region]
     if (unsplit) {
         g_rd.unsplit_served++
     }
@@ -1879,7 +1890,7 @@ def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int6
         return
     }
     let rowb = L.kvd * g_rd.kv_esz
-    let base = L.mir_base * g_rd.kv_esz
+    let base = rd_mir_base(L) * g_rd.kv_esz
     upload_region_at(g_rd.k_mirror, base, kp, npos * rowb)
     upload_region_at(g_rd.v_mirror, base, vp, npos * rowb)
 }
@@ -1901,7 +1912,7 @@ def vk_rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int
     while (p0 < npos) {
         let rows = min(KV_READBACK_ROWS, npos - p0)
         let bytes = rows * rowb
-        let off = L.mir_base * g_rd.kv_esz + p0 * rowb
+        let off = rd_mir_base(L) * g_rd.kv_esz + p0 * rowb
         unsafe {
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -1927,7 +1938,7 @@ def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
         return
     }
     let rowb = L.kvd * g_rd.kv_esz
-    let off = L.mir_base * g_rd.kv_esz + pos * rowb
+    let off = rd_mir_base(L) * g_rd.kv_esz + pos * rowb
     verify(vk_moe_init())
     unsafe {
         var raw = alloc_transient_cmd()
@@ -2123,10 +2134,7 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (g_rd != null && g_rd.hybrid && l < long_length(g_rd.layers) && g_rd.layers[l].recurrent) {
         var L & = unsafe(g_rd.layers[l])
         if (L.dn.valid && L.dn.owner_state_addr == intptr(stp)) {
-            if (L.dn.dirty) {
-                dnd_flush_down(L.dn)
-            }
-            dnd_drop_slot(L.dn)
+            dnd_send_home(L.dn)
         }
         return
     }
@@ -2139,10 +2147,15 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (st.owner_state_addr != caller_state_addr) {
         return
     }
+    dnd_send_home(*st)
+}
+
+//! the owner's state goes back to the host where the device holds the newer copy, and the slot is free
+def private dnd_send_home(var st : DnStep) {
     if (st.dirty) {
-        dnd_flush_down(*st)
+        dnd_flush_down(st)
     }
-    dnd_drop_slot(*st)
+    dnd_drop_slot(st)
 }
 
 def private dnd_drop_slot(var st : DnStep) {
@@ -2166,6 +2179,14 @@ def private dnd_flush_down(st : DnStep) {
     unsafe {
         memcpy(reinterpret<void?>(st.owner_state_addr), g_gpu.dn_state_host.mapped, st.state_bytes)
         memcpy(reinterpret<void?>(st.owner_hist_addr), g_gpu.dn_tail_host.mapped, st.ring_bytes)
+    }
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
+def vk_rdec_dn_flush_owners {
+    for (L in g_rd.layers) {
+        continue if (!L.recurrent || !L.dn.valid)
+        dnd_send_home(L.dn)
     }
 }
 

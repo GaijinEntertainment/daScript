@@ -109,6 +109,8 @@ button.mini.on { border-color: var(--amber); color: var(--amber); }
 .mcard .head .spacer { flex: 1; }
 .mcard .line { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); line-height: 1.7; }
 .mcard .line.dim { color: var(--fg-faint); }
+.mcard .line.served { color: var(--fg); }
+.mcard .line.warn { color: var(--red); white-space: normal; }
 .mcard canvas { height: 26px; margin-top: 6px; cursor: default; }
 .chip { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--amber-dim); color: var(--amber); white-space: nowrap; }
 .chip.cpu { border-color: var(--rule); color: var(--fg-dim); }
@@ -723,6 +725,8 @@ function renderModels(s) {
         if (!hh) { hh = []; slotHitHist.set(m.name, hh); }
         push(hh, hitRate);
         const backLine = m.backend === m.backend_effective ? m.backend : m.backend + " → " + m.backend_effective;
+        const passes = m.holds_gpu ? (s.gpu_cpu_passes || []) : [];
+        const passTotal = passes.reduce((n, x) => n + x.count, 0);
         el.innerHTML =
             '<div class="head"><b>' + esc(m.name) + '</b>' +
             (m.is_default ? '<span class="def">default</span>' : '') +
@@ -737,6 +741,12 @@ function renderModels(s) {
             (!m.is_default && slots.length > 1
                 ? '<button class="mini xs" type="button" data-unload="' + esc(m.name).replace(/"/g, "&quot;") + '" title="free this slot’s weights, kv, and vram">unload</button>' : '') +
             '</div>' +
+            (m.served ? '<div class="line served" data-served>served · ' + esc(m.served) + '</div>' : '') +
+            (m.served_note ? '<div class="line warn" data-served-note>' + esc(m.served_note) + '</div>' : '') +
+            (passTotal > 0
+                ? '<div class="line warn" data-cpu-passes title="calls the GPU handed back to the CPU since this model loaded, by reason">' +
+                  fmt(passTotal) + ' call' + (passTotal > 1 ? 's' : '') + ' ran on the CPU instead of the GPU: ' +
+                  passes.map(x => '<span title="' + esc(x.reason) + '">' + esc(x.words || x.reason) + ' (' + fmt(x.count) + ')</span>').join(' · ') + '</div>' : '') +
             '<div class="line">ctx ' + fmt(m.ctx) + ' · backend ' + esc(backLine) +
                 ' · ' + (m.weights_bytes / 1e9).toFixed(1) + ' GB weights · ' + (m.kv_bytes / 1e9).toFixed(2) + ' GB kv</div>' +
             '<div class="line">streams ' + m.active + ' / queued ' + m.queued +

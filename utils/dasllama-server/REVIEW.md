@@ -7,11 +7,11 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that changes a flag's user-visible text in any of its three copies - the
-`@clarg_doc` in `main.das`, its row in `README.md`, its row in
-`doc/source/reference/utils/dasllama_server.rst` (repo root) - updates the other two in the
-same change, adding the copy where one is missing** - a copy left behind sends the user to a
-flag that no longer does what it says.
+**A diff that changes a flag's user-visible text updates every copy of that text in the same
+change - the `@clarg_doc` in `main.das`, every `README.md` place that documents the flag (its
+table row, and the section documenting the key where it has one), its row in
+`doc/source/reference/utils/dasllama_server.rst` (repo root) - adding a copy where one is
+missing** - a copy left behind sends the user to a flag that no longer does what it says.
 
 **A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
 `tests/` subfolder's `REVIEW.md` (beside this file) too.**
@@ -39,6 +39,34 @@ the route that answers with that key first.**
 
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
+
+**Every word `openai_server.das` writes itself into a `served` or `served_note` value - all of it
+but the engine text it quotes - is a plain word: never one of the engine's own nouns for its parts
+(`pass`, `region`, `mirror`, `resident driver`, `tier`, `rails`).**
+
+**A `served_note` that carries the engine's decline text leads with a sentence of
+`openai_server.das`'s own that stands without it.**
+
+**A `gpu_cpu_passes` reason the control page prints shows the engine's plain words for it, with
+the machine name only in the `title` tooltip; a reason the engine sent no words for prints its
+machine name.**
+
+**A diff that adds or changes a `served` value in `openai_server.das` says how the model is
+served now, and a value that says the whole model is on the card also says where the streams'
+caches sit.**
+
+**A diff that adds or changes a `served_note` value in `openai_server.das` names what about the
+slot itself holds it back, and is empty when nothing about the slot does.** A slot waiting for
+the card says that in its `served` value.
+
+**A diff in this folder that calls `create_device_session`, or turns a scheduler's device mode
+on (`set_device_kv`), shows at that call site that the slot's live device-home sessions - a
+scheduler in device mode counts as `max_streams` of them - stay within the K/V regions its load
+armed (`ModelSlot.gpu_regions`).** The driver panics on the session that finds no region.
+
+**A diff in this folder that calls `moe_gpu_drop_model` turns off every device mode this folder
+armed before the dropped slot's next step, in the same change.** The regions go with the model,
+and a scheduler left in device mode admits a session that has none.
 
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line (today `dasllama_exchange` and `llvm_tune`) -

@@ -42,8 +42,8 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 [unused_argument(wq, ws, n, rows, fmt)]
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
-[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems)]
-def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems : int64) : bool {
+[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems, regions)]
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
     g_prepared_n_attn = n_attn
@@ -94,8 +94,8 @@ def private d_token(x : array<float>; cossin : array<float>; ple_row : array<flo
     }
 }
 
-[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, logits)]
-def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {}
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
+def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {}
 
 [unused_argument(l, kp, vp, npos)]
 def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
@@ -123,8 +123,8 @@ var private g_ids_scale = 0.0
 var private g_emb_block = -1l
 var private g_emb_f32_vocab = -1l
 
-[unused_argument(tokens, cos_batch)]
-def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+[unused_argument(tokens, cos_batch, pos0)]
+def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>) {
     g_ids_npos = npos
     g_ids_scale = emb_scale
     if (!empty(logits)) {
@@ -171,7 +171,7 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
-            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l))
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l))
         t |> success(g_prepared, "prepare double must have run")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
         t |> equal(g_prepared_n_attn, 1l)
@@ -226,6 +226,39 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(!moe_gpu_tier_arm_(), "reset to unarmed for the rest of the process")
         t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
     }
+}
+
+//! env-backed: an exported DASLLAMA_GPU answers ahead of the want, so the rails-alone arms assert the DELTA against the ambient answer, never false
+[test]
+def test_gpu_tier_resident_ask(t : T?) {
+    let ambient = g_env_gpu.gpu ?? false
+    set_gpu_tier_want_(GpuTierWant(dn = true, attn = true, shexp = true))
+    t |> equal(gpu_resident_requested(), ambient, "rails spelled out without resident ask for no whole-model driver")
+    set_gpu_tier_want_(GpuTierWant(resident = true, dn = true, attn = true, shexp = true))
+    t |> success(gpu_resident_requested(), "resident beside explicit rails asks for the whole-model driver")
+    t |> equal(gpu_want_auto(), ambient, "resident does not turn the measured-best set on")
+    set_gpu_tier_want_(GpuTierWant(auto_tier = true))
+    t |> success(gpu_resident_requested(), "the measured-best set asks for the whole-model driver")
+    set_gpu_tier_want_(GpuTierWant())
+    t |> equal(gpu_resident_requested(), ambient, "a zero want resets to the ambient env answer")
+}
+
+[test]
+def test_gpu_cpu_passes(t : T?) {
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"], ["a codec", "pages", "the cap"])
+    t |> equal(length(gpu_cpu_passes_()), 0, "nothing fired: the device served every call")
+    note_gpu_cpu_pass(1)
+    note_gpu_cpu_pass(1)
+    note_gpu_cpu_pass(2)
+    let fired <- gpu_cpu_passes_()
+    t |> equal(length(fired), 2, "one row per reason that fired")
+    t |> equal(fired[0].reason, "paged")
+    t |> equal(fired[0].words, "pages", "a reason's words ride with its name")
+    t |> equal(fired[0].count, 2l)
+    t |> equal(fired[1].reason, "cap")
+    t |> equal(fired[1].count, 1l)
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"], ["a codec", "pages", "the cap"])
+    t |> equal(length(gpu_cpu_passes_()), 0, "a model arming again starts from zero")
 }
 
 [test]
@@ -292,7 +325,7 @@ def test_rdec_prefill_ids_seam(t : T?) {
         let cosb : array<float>
         var logits : array<float>
         logits |> resize(4)
-        rdec_prefill_ids(ids, 1.5, cosb, 1l, logits)
+        rdec_prefill_ids(ids, 1.5, cosb, 1l, 0l, logits)
         t |> equal(g_ids_npos, 1l)
         t |> equal(g_ids_scale, 1.5)
         t |> equal(logits[0], 43.0)

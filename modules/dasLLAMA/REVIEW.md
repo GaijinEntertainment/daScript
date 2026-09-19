@@ -37,12 +37,12 @@ omission costs every later `run.das -- --changed` the whole suite, never coverag
 **A dasLLAMA `[test]` file, wherever the diff puts it, and every `dasllama/` change answer to this
 folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
 
-**A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
-declares), or K/V-mirror (the device-side copy of the key/value cache a GPU decode reads and
-writes) change - and a GPU kernel A/B race, a knockout (an arm that skips a stage to measure
-that stage's cost), or a hand-binding arm (one that writes buffer or kargs (kernel-argument
-struct) binding numbers as literals instead of taking the kernel class's declared ones),
-wherever the diff puts it - applies `REVIEW_GPU.md`.**
+**A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]` declares),
+or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes) change, a call that
+makes, arms or tears down device-home serving (`create_device_session`, `set_device_kv`,
+`moe_gpu_drop_model`), a GPU kernel A/B race, a knockout (an arm that skips a stage to measure that
+stage's cost), or a hand-binding arm (one that writes buffer or kargs (kernel-argument struct)
+binding numbers as literals instead of the kernel class's declared ones), wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever

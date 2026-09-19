@@ -1203,6 +1203,8 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "a ReBAR memory type (device-local, host-visible, host-coherent past the 256 MiB window)", present = rebar_memory_type(phys) >= 0,
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
+        VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
+            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -2385,7 +2387,9 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // mir_elems elements of the kv16 codec: each attention layer's [seq_cap x its kvd] rows from RLayer.mir_base
+    k_mirror, v_mirror : uint64   // `regions` consecutive copies of mir_elems elements of the kv16 codec: each attention layer's [seq_cap x its kvd] rows from RLayer.mir_base
+    regions : int64 = 1l          //! one mirror region per served stream: a region is a session's whole K/V history, addressed as an element offset into both sides
+    region : int64                //! the region every mirror address and the submitted token command resolve against (`vk_rdec_select_region`)
     n_attn : int64                // attention layers = mirror slots
     q_gated : bool                // the q GEMV writes [q | gate] per head (2*qd rows); rope/attention read q head-strided
     rot : int64                   // rotary width per head (hs, or the partial-rope width)
@@ -2426,11 +2430,11 @@ struct RDec {
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
     layers : array<RLayer>
-    cmd : VkCommandBuffer
-    cmd_unsplit : VkCommandBuffer   //! the unsplit twin: the same chain with the attention at one split, submitted under RD_UNSPLIT_POS
+    cmd : array<VkCommandBuffer>    //! one recorded token command per mirror region: the mirror base is a push constant, baked as the command records
+    cmd_unsplit : array<VkCommandBuffer>   //! the unsplit twin: the same chain with the attention at one split, submitted under RD_UNSPLIT_POS
     unsplit_on : bool               //! ... recorded (a device at one split has no twin)
     unsplit_served : int64        //! the tokens the twin served
-    tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
+    tok_recorded : array<bool>    //! per region: cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2532,6 +2536,19 @@ let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
 def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && dim % (int64(F16G_BK) * F16G_SPLIT) == 0l
 
 var g_rd : RDec?
+
+//! a layer's first mirror element in the selected region
+def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_elems
+
+//! one mirror side's binding: all `regions` copies end to end
+def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
+
+//! every region's token command re-records: the sets or planes it references were replaced
+def rd_invalidate_token {
+    for (rec in g_rd.tok_recorded) {
+        rec = false
+    }
+}
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
 

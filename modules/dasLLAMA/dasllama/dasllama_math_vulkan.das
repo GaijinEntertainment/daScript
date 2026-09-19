@@ -234,7 +234,8 @@ def private vulkan_no_group3(var y0p : float?; var y1p : float?; var y2p : float
 [unused_argument(wp, sp, n, d)]
 def private vulkan_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
 
-def private vk_resident_bytes : int64 => g_gpu != null ? g_gpu.resident_bytes : 0l
+//! what the loaded model holds on the device: the per-op tier's planes, and under the whole-model driver its weights and both K/V mirror sides
+def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes : 0l) + (g_rd != null && g_rd.ready ? g_rd.weight_bytes + 2l * rd_mir_bytes() : 0l)
 
 // The resident driver sizes a whole model against these BEFORE uploading anything. Probing the
 // device here (rather than reporting 0 until something else arms it) is what lets the gate answer
@@ -361,6 +362,7 @@ def dasllama_math_vulkan_register() {
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,
         @@vk_rdec_sync_kv, @@vk_rdec_read_kv, @@vk_rdec_read_kv_bulk)
+    install_moe_gpu_resident_regions(@@vk_rdec_select_region)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)
     set_moe_gpu_dn_state_hooks(@@vk_dn_step_flush, @@vk_dn_step_invalidate, @@vk_dn_step_release)
