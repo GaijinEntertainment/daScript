@@ -10,6 +10,7 @@ options _dasllama_internal = true
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmup sanity check and the row statistic - shared with dasllama-server's in-process bench
 require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, a region a batched-row stream
+require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
@@ -1457,6 +1458,9 @@ def main() : int {
         // STREAM=35 that gather was the dominant per-run cost)
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                g_rd_nrow_bisect = to_int(get_env_variable("DASLLAMA_VK_NROW_BISECT"))   //! a probe's bisect of the N-row command; 0 = the served command
+            }
         }
         var t <- load_model_cached(mpath, cfg.quant)
         var sched_ctx = 0l   //! the batched row's context: the flat rows' session narrows `seq_len` to its own rows, the scheduler's streams need theirs back
