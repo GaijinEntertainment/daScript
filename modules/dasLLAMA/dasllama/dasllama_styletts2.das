@@ -916,15 +916,12 @@ struct St2Scratch {
     @scratch @exact_size hs_padded : array<float>
     @scratch @exact_size hs_re : array<float>
     @scratch @exact_size hs_im : array<float>
-    @scratch @exact_size gen_a : array<float>
-    @scratch @exact_size gen_b : array<float>
-    @scratch @exact_size st_y : array<float>
-    @scratch @exact_size st_rb : array<float>
-    @scratch @exact_size st_src : array<float>
-    @scratch @exact_size st_src_res : array<float>
-    @scratch @exact_size grb_xt : array<float>
-    @scratch @exact_size grb_y1 : array<float>
-    @scratch @exact_size grb_y2 : array<float>
+    @scratch @exact_size gen_a : array<float>    //! the generator's stage stream, one side of the ping-pong
+    @scratch @exact_size gen_b : array<float>    //! the other side
+    @scratch @exact_size st_y : array<float>     //! a stage's noise branch output, then its upsampled stream
+    @scratch @exact_size st_res : array<float>   //! the noise branch's residual output, then each Snake block's
+    @scratch @exact_size grb_t0 : array<float>   //! a conv pair's AdaIN + Snake input, then its second conv output
+    @scratch @exact_size grb_t1 : array<float>   //! a conv pair's first conv output
     @scratch @exact_size gen_post : array<float>
     @scratch @exact_size gen_re : array<float>
     @scratch @exact_size gen_im : array<float>
@@ -1186,11 +1183,12 @@ def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s 
 // One Snake residual block on token-major rows: `y` = `src` plus the three conv pairs' residuals,
 // the first pair reading `src` so no copy of the input is ever made. Every op class lands in
 // its tts.gen.* bucket of the encode-stage profiling rail.
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers")]
 def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exact_size var y : array<float>; t : int64; s : array<float>; var sc : St2Scratch) {
     let n = b.c * t
-    var xt & = unsafe(sc.grb_xt)
-    var y1 & = unsafe(sc.grb_y1)
-    var y2 & = unsafe(sc.grb_y2)
+    var xt & = unsafe(sc.grb_t0)
+    var y1 & = unsafe(sc.grb_t1)
+    var y2 & = xt
     for (j in range(length(b.convs1))) {
         var tc = ref_time_ticks()
         if (j == 0) {
@@ -1262,12 +1260,13 @@ def styletts2_har_spectrum(d : St2Decoder; har : array<float>; n : int64; var tr
 
 // One generator stage: x [tt][cc] rows in, `out` the next stage's rows; the upsampled stream
 // carries the noise branch and the averaged Snake residual blocks.
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers")]
 def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @scratch @exact_size var out : array<float>;
                             var cc, tt : int64&; s : array<float>; har_spec : array<float>; har_frames : int64;
                             var tr : StyleTts2Trace?; var sc : St2Scratch) {
-    var y & = unsafe(sc.st_y)
-    var src & = unsafe(sc.st_src)
-    var src_res & = unsafe(sc.st_src_res)
+    var src & = unsafe(sc.st_y)
+    var y & = src
+    var src_res & = unsafe(sc.st_res)
     var tc = ref_time_ticks()
     leaky_relu(x, cc * tt, 0.1)
     asr_prof_add("tts.gen.leaky", tc)
@@ -1310,10 +1309,11 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @sc
 }
 
 // The stage's n_kernels Snake residual blocks, each from the stage stream x, averaged into out.
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers")]
 def private stage_resblocks(d : St2Decoder; i : int64; x : array<float>; @scratch @exact_size var out : array<float>;
                             cc, tt : int64; s : array<float>; var tr : StyleTts2Trace?; var sc : St2Scratch) {
     let n = cc * tt
-    var y & = unsafe(sc.st_rb)
+    var y & = unsafe(sc.st_res)
     var tc = 0l
     for (j in range64(d.n_kernels)) {
         gen_res_block(d.resblocks[i * d.n_kernels + j], x, y, tt, s, sc)
@@ -1589,7 +1589,7 @@ def private warn_truncated(n, cap : int64) {
 //! Synthesize from token ids: the full StyleTTS2 pass into `sc.wave` (the facade trims the
 //! tail), the sample count back. `noise` supplies the source noise (empty = drawn from `seed`),
 //! `tr` collects the stage tensors when not null, `tm` the stage walls, `sc` every buffer.
-[hot_path, arch(at = "../ARCHITECTURE_TTS.md#tts-scratch-carrier")]
+[hot_path, arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier")]
 def styletts2_synthesize(m : StyleTts2Model; ids : array<int>; style : array<float>; speed : float;
                          var noise : TtsNoise; seed : uint64; var tr : StyleTts2Trace?; var tm : TtsTimings; var sc : St2Scratch) : int64 {
     let start = ref_time_ticks()

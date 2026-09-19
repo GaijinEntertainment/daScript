@@ -1,7 +1,10 @@
 # dasLLAMA architecture - text to speech
 
 The companion `ARCHITECTURE.md` indexes: the TTS file charters (sec.1.7c) and the mechanisms the
-TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
+TTS files implement (sec.2.28-2.30, 2.32-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) is
+the contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
+buffers, the chunk cap and the idle release - is `ARCHITECTURE_TTS_MEMORY.md` (sec.2.31, 2.51,
+2.52).
 
 ## 1. File charters
 
@@ -215,19 +218,6 @@ through the norm, the LeakyReLU and the conv, the parity bars do not move, and t
 four largest convs serve q8.
 The rows AdaIN kernels also take a width off the four-lane one channel at a time, which is
 what a block without the padding runs on.
-
-### 2.31 One carrier per synthesis {#tts-scratch-carrier}
-
-`styletts2_synthesize` carries `[hot_path]`: nothing on the synthesis path allocates. Every
-stage activation is a `@scratch @exact_size` field of the `St2Scratch` carrier the facade's
-`TtsModel` reuses across syntheses (the waveform is `sc.wave`; ping-pong fields replace
-delete-and-move handoffs), the block home's kernel-private transients are `@scratch` module
-globals, and every block-home out-parameter is `@scratch`. Sizing is the builtin
-`scratch_resize` at the site - a helper wrapping it would hide the contract from the lint - and
-a `@scratch` mark on a local is inert: the mark says "this buffer persists between syntheses
-and grows to its working size once", which only a field or a global can promise. The source
-noise lives in the carrier too, and `TtsNoise.captured` decides whether a synthesis draws it:
-a reused carrier is never empty after the first chunk, so emptiness cannot.
 
 ### 2.32 The served carrier rides the image rail {#tts-image-rail}
 

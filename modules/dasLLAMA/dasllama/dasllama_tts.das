@@ -40,6 +40,7 @@ struct TtsModel {
     tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
     pocket : PocketModel = PocketModel()    //! the Pocket TTS family's model, when the GGUF is one; it reads text, not phonemes
     pocket_scratch : PocketScratch = PocketScratch()   //! its activation carrier
+    chunk_chars : int = TTS_CHUNK_CHARS     //! the longest chunk a synthesis speaks, in codepoints (``tts_set_chunk_chars``)
 }
 
 // Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
@@ -54,11 +55,26 @@ def finalize(var m : TtsModel) {
     delete m.pocket_scratch
 }
 
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-idle-release")]
 def tts_release_scratch(var m : TtsModel) {
-    //! Free the activation scratch a synthesis or a clone left behind - the Pocket carrier and the
-    //! block home's scratch globals; the next run grows them back for a few milliseconds of allocation.
-    //! For a platform where idle memory matters, called when nothing is queued; the StyleTTS2 carrier keeps its noise state.
+    //! Free the activation scratch a synthesis or a clone left behind - the carrier of either family
+    //! and the block home's scratch globals; the next run grows them back for a few milliseconds of
+    //! allocation. For a platform where idle memory matters, called when nothing is queued.
+    if (!m.scratch.noise.captured) {   // the parity rail's captured noise is the one thing a run cannot redraw
+        delete m.scratch
+    }
     pocket_release_scratch(m.pocket_scratch)   // the block home's scratch globals go with it, whichever family grew them
+}
+
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-idle-release")]
+def tts_set_chunk_chars(var m : TtsModel; chars : int) {
+    //! Cap the chunk a synthesis speaks at ``chars`` codepoints (default ``TTS_CHUNK_CHARS``; under one is
+    //! refused): the peak memory a say holds is the largest chunk's, so a memory-tight platform lowers it and
+    //! the same text speaks in more, shorter pieces, each its own synthesis. Pocket's chunks take no cap.
+    if (chars < 1) {
+        panic("dasLLAMA tts: a chunk cap of {chars} codepoints - the chunk cap takes at least one")
+    }
+    m.chunk_chars = chars
 }
 
 def load_tts_model(path : string) : TtsModel {
@@ -444,7 +460,7 @@ def tts_chunks(m : TtsModel; norm : string) : array<string> {
     if (m.kind == TtsKind.pocket) {
         return <- pocket_chunks(m.pocket, norm)
     }
-    return <- tts_chunks(norm, TTS_CHUNK_CHARS, m.kind == TtsKind.kitten)
+    return <- tts_chunks(norm, m.chunk_chars, m.kind == TtsKind.kitten)
 }
 
 // ===== synthesis =====

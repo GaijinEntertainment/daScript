@@ -1743,3 +1743,15 @@
     and the lane count the queue was set up with. Done looks like: the lanes following the rows
     at the small end, measured on the window sweep with the discipline's cv, and `stream_conv`
     writing a transposed conv's window rows straight into `y` instead of through `sc.ct`.
+154. **One program's JIT codegen of the TTS generator runs 15% slower than another's on the
+    same source.** A memory probe over `synthesize` read the kitten-nano 7 s say at 400 ms on one
+    thread against 345 for the same engine source under a probe differing by one `require` and
+    a print - reproducible across processes because the JIT cache served the same compiled
+    program each time, and gone with any edit to the probe. The generator's op buckets under
+    `set_asr_prof` were equal to the millisecond between the two, so the swing sits in the
+    compiled kernels' code layout or cross-module inlining, not in the algorithm. A per-program
+    swing of that size makes a before/after measured through two different programs void, and
+    means a shipped example's TTS speed is one codegen's luck. Done looks like: the swing
+    reproduced with `daslang_jit_dump_ir` on the two programs, the differing inlining or
+    alignment named, and either a pin (the generator kernels `[no_inline]`-bounded, or aligned)
+    or a `PERF_LEDGER.md` refutation.

@@ -40,11 +40,14 @@ def private panic_text_of(blk : block<() : void>) : string {
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
 // a whitespace-free run, the appended punctuation), the normalizer the facade exposes
 // (`tts_normalize`), the WAV writer's container (header fields, sample round trip), the timings'
-// own rtf guard, and the kitten symbol table's drop rule.
+// own rtf guard, the kitten symbol table's drop rule, and the chunk cap knob on the model's own
+// chunker (`tts_set_chunk_chars`, its floor refused by name).
 // Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the facade's
-// phonemes (`tts_phonemize`) against the corpus fixture's own inventory, and the streaming
+// phonemes (`tts_phonemize`) against the corpus fixture's own inventory, the streaming
 // form's chunks concatenate to the buffered form's audio with summed timings, the two
-// syntheses run at different worker counts.
+// syntheses run at different worker counts, and the idle release (`tts_release_scratch`): the
+// carrier's generator rows, waveform and noise gone, the next synthesis sample-identical, and a
+// lowered cap speaking the same sentences in more pieces.
 
 [test]
 def test_chunker(t : T?) {
@@ -360,6 +363,83 @@ def test_streaming(t : T?) {
             }
             t |> equal(differing, 0, "{differing} of {length(whole.pcm)} samples move with the worker count")
             t |> success(whole.timings.samples == long_length(whole.pcm), "the summed timings count every sample")
+        }
+    }
+}
+
+[test]
+def test_chunk_cap_knob(t : T?) {
+    t |> run("a lowered cap splits the same text into shorter pieces, on the model's own chunker") @(t : T?) {
+        var inscope m = TtsModel()
+        m.kind = TtsKind.kitten
+        var words = ""
+        for (i in range(60)) {
+            words = i == 0 ? "word" : "{words} word"
+        }
+        var inscope wide <- tts_chunks(m, words)
+        t |> equal(length(wide), 1, "sixty short words sit under the default cap")
+        tts_set_chunk_chars(m, 30)
+        var inscope narrow <- tts_chunks(m, words)
+        t |> success(length(narrow) >= 10, "{length(narrow)} pieces at a 30-codepoint cap")
+        for (p in narrow) {
+            t |> success(cpt_count(p) <= 30, "every piece is under the cap: '{p}'")
+        }
+        tts_set_chunk_chars(m, TTS_CHUNK_CHARS)
+        var inscope back <- tts_chunks(m, words)
+        t |> equal(length(back), 1, "the default cap restored")
+    }
+    t |> run("a cap under one codepoint is refused by name") @(t : T?) {
+        var inscope m = TtsModel()
+        m.kind = TtsKind.kokoro
+        let why = panic_text_of() {
+            tts_set_chunk_chars(m, 0)
+        }
+        t |> success(find(why, "chunk cap") >= 0, "the refusal names the knob: {why}")
+    }
+}
+
+[test]
+def test_release_and_cap_on_a_model(t : T?) {
+    t |> run("the release empties the carrier and the next synthesis speaks the same samples; a cap makes more chunks") @(t : T?) {
+        let gguf = path_join(models_dir(), "kitten-nano.gguf")
+        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("kitten-nano.gguf or the front-end packs not present")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope m <- load_tts_model(gguf)
+            let text = "The first sentence is short. The second one is a little longer than the first! Is the third a question?"
+            var inscope first <- synthesize(m, text, "Bella")
+            t |> success(long_capacity(m.scratch.gen_a) > 0l, "a synthesis leaves the generator's rows in the carrier")
+            t |> success(long_capacity(m.scratch.noise.normal) > 0l, "and the noise it drew")
+            tts_release_scratch(m)
+            t |> equal(long_capacity(m.scratch.gen_a), 0l, "the release gives the generator's rows back")
+            t |> equal(long_capacity(m.scratch.wave), 0l, "and the waveform")
+            t |> equal(long_capacity(m.scratch.noise.normal), 0l, "and the noise - a synthesis redraws it from the seed")
+            var inscope again <- synthesize(m, text, "Bella")
+            t |> equal(length(again.pcm), length(first.pcm), "the next synthesis speaks the same length")
+            var differing = 0
+            for (a, b in first.pcm, again.pcm) {
+                differing += a == b ? 0 : 1
+            }
+            t |> equal(differing, 0, "{differing} of {length(first.pcm)} samples move across the release")
+            // a memory-tight cap: the same sentences in more pieces, each its own synthesis
+            tts_set_chunk_chars(m, 24)
+            var chunks = 0
+            var inscope capped : array<float>
+            synthesize_stream(m, text, "Bella", 1.0) $(chunk) {
+                chunks++
+                capped |> push_from(chunk.pcm)
+            }
+            t |> success(chunks > 3, "{chunks} chunks where the default cap made three")
+            var peak = 0.0
+            for (x in capped) {
+                peak = max(peak, abs(x))
+            }
+            t |> success(peak > 0.05 && peak <= 1.0, "the capped synthesis is audible speech (peak {peak})")
+            let ratio = float(length(capped)) / float(length(first.pcm))
+            t |> success(ratio > 0.7 && ratio < 1.5, "and about as long as the uncapped one ({ratio})")
         }
     }
 }

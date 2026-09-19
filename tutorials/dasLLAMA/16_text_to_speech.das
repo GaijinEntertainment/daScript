@@ -24,6 +24,7 @@ require strings
 //   - tts_chunks — the sentence splitter one synthesis takes at a time
 //   - tts_register_voice — a voice cloned from a few seconds of audio, on a model that can
 //   - tts_release_scratch — the activation rows given back while nothing is queued
+//   - tts_set_chunk_chars — the chunk cap lowered where memory is tight: more, shorter pieces
 //
 // Three families run through these verbs, and load_tts_model tells them apart from the GGUF's
 // own architecture metadata:
@@ -294,5 +295,18 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         tts_release_scratch(m)
         let after <- synthesize(m, TEXT, vname)
         print("\ntts_release_scratch: the next synthesis speaks as before - {seconds(after.pcm, after.sample_rate)} s\n")
+
+        // The rows are sized by the longest chunk a synthesis speaks, so the peak a say holds is
+        // the chunk cap's: tts_set_chunk_chars lowers it, and the same text speaks in more, shorter
+        // pieces - each its own synthesis, so a phrase cut in two is read as two phrases.
+        if (m.kind != TtsKind.pocket) {
+            tts_set_chunk_chars(m, 60)
+            var short_pieces = 0
+            synthesize_stream(m, TEXT, vname, 1.0) $(chunk) {
+                short_pieces++
+            }
+            print("tts_set_chunk_chars(60): the same text in {short_pieces} pieces, at the peak of the longest\n")
+            tts_set_chunk_chars(m, TTS_CHUNK_CHARS)
+        }
     }
 }
