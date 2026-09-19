@@ -1974,28 +1974,15 @@ class MetalMoeBucket {
 }
 
 [metal_dispatch(name = "pf_enc_moe_reduce", pso = "g_pf_pso_moe_reduce", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
-class MetalMoeReduce {
-    @ssbo @binding = 0 @role = "read" dn : array<float>    //!< [padded rows x dim] bucket-ordered down outputs
-    @ssbo @binding = 1 @role = "read" selw : array<float>  //!< selection rows, float view (w of row r at r*2k + k)
-    @ssbo @binding = 2 @role = "read" inv : array<uint>
+class MetalMoeReduce : MetalMoeCombineT {
     @ssbo @binding = 3 @role = "write" y : array<float>     //!< [npos x dim]
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 nk : uint
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_reduce_msl")]
     def metal_moe_reduce {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= dim) {
-            return
-        }
-        let row = gl_WorkGroupID.y
-        var acc = 0.0
-        var j = 0u
-        while (j < nk) {
-            acc += selw[row * 2u * nk + nk + j] * dn[inv[row * nk + j] * dim + gid]
-            j++
-        }
-        y[row * dim + gid] = acc
+        combine_body()
     }
 }
 

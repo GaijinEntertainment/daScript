@@ -7397,33 +7397,51 @@ class MetalMoeGemvQ51 {
     }
 }
 
-// Weighted top-k reduce per stream (grid.y): y[st*dim + i] = sum_j w[st][j] * dn[(st*k+j)*dim + i]
-// — the CPU slot-order axpy chain as one deterministic in-kernel loop. Overwrites y (the dense
-// w2 site's write shape).
+// Weighted top-k reduce per row (grid.y): y[row*dim + i] = sum_j w[row][j] * dn[<slot j's row>*dim + i]
+// — the CPU slot-order axpy chain as one deterministic in-kernel loop, overwriting y. GATHERED
+// says where slot j's down row sits: stacked per stream, or bucket-ordered behind inv[].
+[ |> template_struct_instance]
+class template MetalMoeCombineT {
+    @template_constant GATHERED : bool = false
+    @ssbo @binding = 0 @role = "read" dn : array<float>    // per-slot down outputs
+    @ssbo @binding = 1 @role = "read" selw : array<float>  // the selection buffer's float view — w of row r at r*2k + k
+    @ssbo @binding = 2 @role = "read" @template_gate = GATHERED inv : array<uint>
+
+    def combine_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= dim) {
+            return
+        }
+        let row = gl_WorkGroupID.y
+        var acc = 0.0
+        var j = 0u
+        //! each site walks the slots with the address form its own indexing hoists best out of the loop
+        static_if (GATHERED) {
+            while (j < nk) {
+                acc += selw[row * 2u * nk + nk + j] * dn[inv[row * nk + j] * dim + gid]
+                j++
+            }
+        } else {
+            let w0 = row * 2u * nk + nk
+            let dn0 = row * nk * dim
+            while (j < nk) {
+                acc += selw[w0 + j] * dn[dn0 + j * dim + gid]
+                j++
+            }
+        }
+        y[row * dim + gid] = acc
+    }
+}
+
 [metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
-class MetalMoeCombine {
-    @ssbo @binding = 0 dn : array<float>    // [streams x k x dim] per-slot down outputs
-    @ssbo @binding = 1 selw : array<float>  // the selection buffer's float view — w of stream s at s*2k + k
-    @ssbo @binding = 2 y : array<float>     // [streams x dim] combined out
+class MetalMoeCombine : MetalMoeCombineT {
+    @ssbo @binding = 2 @role = "write" y : array<float>     // [streams x dim] combined out
     @uniform @binding = 3 dim : uint
     @uniform @binding = 4 nk : uint
 
     [metal_kernel(name="metal_moe_combine_msl")]
     def metal_moe_combine {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= dim) {
-            return
-        }
-        let st = gl_WorkGroupID.y
-        let w0 = st * 2u * nk + nk
-        let dn0 = st * nk * dim
-        var acc = 0.0
-        var j = 0u
-        while (j < nk) {
-            acc += selw[w0 + j] * dn[dn0 + j * dim + gid]
-            j++
-        }
-        y[st * dim + gid] = acc
+        combine_body()
     }
 }
 
@@ -7544,27 +7562,43 @@ class MetalMoeWScale {
     }
 }
 
-// The GEMV site hooks: a GEMV template's dot walks one weight row against the x row and writes
-// the y row a stamp's site_setup names, so the plain, position-batched and expert-indexed stamps
-// of one format share the dot and carry only their own x / y / uniform bindings.
+// The GEMV site hooks: a format's dot walks one weight row against the x row and writes the y row
+// the site names, so that format's stamps share the dot and carry only their own x / y bindings.
+// GATHERED is the site axis - a MoeGemvArgs uniform plus sel[slot], against the plain n / d pair.
 [ |> template_struct_instance]
 class template MetalGemvSiteT {
-    //! g[0] = n, g[1] = the expert's superblock shift, g[2] = the x row in the unit the body's x view indexes (float4 for the q8 body, scalar for the K bodies), g[3] = the y row
-    def abstract site_setup(var g : uint[8]) : void
-    //! d, the y rows - read where the reduce guard reads it, so the uniform load stays there
-    def abstract y_rows : uint
-    def abstract x_at(i : uint) : float
-    def abstract y_put(i : uint; v : float) : void
+    @template_constant GATHERED : bool = false
+    //! the gathered x row lands in float4 units (the q8 body indexes x through a float4 view; every K body scales g[2] itself)
+    @template_constant XROW4 : bool = false
 
-    //! the expert-indexed site (a MoeGemvArgs uniform's fields): the superblock shift from
-    //! sel[slot], x and y at the slot's rows
-    def moe_site_setup(ndim, ddim, eplane, xs, ss, bxs, bys : uint; sel : array<uint>; var g : uint[8]) {
-        g[0] = ndim
-        let slot = gl_WorkGroupID.y
-        let st = gl_WorkGroupID.z
-        g[1] = sel[st * ss + slot] * eplane
-        g[2] = st * bxs + slot * xs
-        g[3] = st * bys + slot * ddim
+    //! g[0] = n, g[1] = the expert's superblock shift, g[2] = the x row in the unit the body's x view indexes (float4 for the q8 body, scalar for the K bodies), g[3] = the y row
+    def site_setup(var g : uint[8]) {
+        static_if (GATHERED) {
+            g[0] = ka.ndim
+            let slot = gl_WorkGroupID.y
+            let st = gl_WorkGroupID.z
+            g[1] = sel[st * ka.ss + slot] * ka.eplane
+            g[2] = st * ka.bxs + slot * ka.xs
+            g[3] = st * ka.bys + slot * ka.ddim
+            static_if (XROW4) {
+                g[2] /= 4u
+            }
+        } else {
+            g[0] = ndim
+        }
+    }
+
+    //! d, the y rows - read where the reduce guard reads it, so the uniform load stays there
+    def y_rows : uint {
+        static_if (GATHERED) {
+            return ka.ddim
+        } else {
+            return ddim
+        }
+    }
+    def abstract x_at(i : uint) : float
+    def y_put(i : uint; v : float) {
+        y[i] = v
     }
 }
 
@@ -7575,8 +7609,12 @@ class template MetalGemvSiteT {
 class template MetalQ8GemvT : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
+    @uniform @binding = 4 @template_gate = "!GATHERED" ndim : uint       // n (reduction dim, % 32)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ddim : uint       // d (output rows)
+    @uniform @binding = 4 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 6 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
-    def abstract x4_at(i : uint) : float4
+    def x4_at(i : uint) : float4 => x[i]
 
     //! the dot over the site g; x0 = the x row's float4 at the lane (a pointer parameter, since
     //! the emitter roots a pointer local at an addr(member[..]) of the kernel's own class)
@@ -7693,8 +7731,6 @@ class MetalQ8Gemv {
 class MetalDnBa : MetalQ8GemvT {
     @ssbo @binding = 2 x : array<float4>    // [npos x n] f32 rows, float4 view
     @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [np x d] outputs
-    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
-    @uniform @binding = 5 ddim : uint       // d (output rows)
 
     [metal_kernel]
     def metal_q8_gemv {
@@ -7703,15 +7739,11 @@ class MetalDnBa : MetalQ8GemvT {
         gemv_body(g, unsafe(addr(x[g[2] + gl_SubgroupInvocationID])))
     }
 
+    //! the position-batched plain site: one x row and one y row per gl_WorkGroupID.y
     def override site_setup(var g : uint[8]) {
         g[0] = ndim
         g[2] = gl_WorkGroupID.y * (ndim / 4u)
         g[3] = gl_WorkGroupID.y * ddim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -7719,23 +7751,12 @@ class MetalDnBa : MetalQ8GemvT {
 class MetalQ8GemvSg : MetalQ8GemvT {
     @ssbo @binding = 2 @role = "read" @off = "xoff" x : array<float4>    // [n] f32 vector, float4 view
     @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "d*4" y : array<float>     // [d] outputs
-    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
-    @uniform @binding = 5 ddim : uint       // d (output rows)
 
     [metal_kernel]
     def metal_q8_gemv {
         var g : uint[8]
         site_setup(g)
         gemv_body(g, unsafe(addr(x[g[2] + gl_SubgroupInvocationID])))
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -7746,24 +7767,14 @@ class MetalQ8GemvSg : MetalQ8GemvT {
 class MetalMoeGemvQ8 : MetalQ8GemvT {
     @ssbo @binding = 2 @role = "read" x : array<float4>
     @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 4 ka : MoeGemvArgs
-    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override GATHERED = true
+    override XROW4 = true
 
     [metal_kernel(name="metal_moe_gemv_q8_msl")]
     def metal_moe_gemv_q8 {
         var g : uint[8]
         site_setup(g)
         gemv_body(g, unsafe(addr(x[g[2] + gl_SubgroupInvocationID])))
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-        g[2] /= 4u
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -7775,6 +7786,10 @@ class template MetalKqGemvK4T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @template_constant X4 : bool = false
 
     //! the X4 stamp's activation read, a float4 at float4 index i
@@ -7887,22 +7902,13 @@ class template MetalKqGemvK4T : MetalGemvSiteT {
 class MetalKqGemvK4 : MetalKqGemvK4T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_k4_msl")]
     def metal_kq_gemv_k4 {
         gemv_body()
     }
 
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
     def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 // Expert-indexed Q4_K GEMV — MetalKqGemvK4T's dot with the expert superblock shift, x through
@@ -7911,8 +7917,7 @@ class MetalKqGemvK4 : MetalKqGemvK4T {
 class MetalMoeGemvK4 : MetalKqGemvK4T {
     @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override GATHERED = true
     override X4 = true
 
     [metal_kernel(name="metal_moe_gemv_k4_msl")]
@@ -7920,14 +7925,7 @@ class MetalMoeGemvK4 : MetalKqGemvK4T {
         gemv_body()
     }
 
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
     def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 // Q5_K: int-composed q5 (nibble | qh bit << 4) — one fma per element; same kmask scale decode.
@@ -7937,6 +7935,12 @@ class template MetalKqGemvK5T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    def override x_at(i : uint) : float => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -8007,21 +8011,10 @@ class template MetalKqGemvK5T : MetalGemvSiteT {
 class MetalKqGemvK5 : MetalKqGemvK5T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_k5_msl")]
     def metal_kq_gemv_k5 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8030,21 +8023,11 @@ class MetalKqGemvK5 : MetalKqGemvK5T {
 class MetalMoeGemvK5 : MetalKqGemvK5T {
     @ssbo @binding = 3 @role = "read" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_k5_msl")]
     def metal_moe_gemv_k5 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8135,6 +8118,12 @@ class template MetalKqGemvK6T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    def override x_at(i : uint) : float => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -8199,21 +8188,10 @@ class template MetalKqGemvK6T : MetalGemvSiteT {
 class MetalKqGemvK6 : MetalKqGemvK6T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_k6_msl")]
     def metal_kq_gemv_k6 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8223,21 +8201,11 @@ class MetalKqGemvK6 : MetalKqGemvK6T {
 class MetalMoeGemvK6 : MetalKqGemvK6T {
     @ssbo @binding = 3 @role = "read" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_k6_msl")]
     def metal_moe_gemv_k6 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8626,6 +8594,12 @@ class template MetalKqGemvK3T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale strips, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k3 quant plane, byte view (qs at 96*blk, hmask at +64)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    def override x_at(i : uint) : float => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -8690,21 +8664,10 @@ class template MetalKqGemvK3T : MetalGemvSiteT {
 class MetalKqGemvK3 : MetalKqGemvK3T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_k3_msl")]
     def metal_kq_gemv_k3 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8713,21 +8676,11 @@ class MetalKqGemvK3 : MetalKqGemvK3T {
 class MetalMoeGemvK3 : MetalKqGemvK3T {
     @ssbo @binding = 3 @role = "read" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_k3_msl")]
     def metal_moe_gemv_k3 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x_at(i : uint) : float => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8842,11 +8795,16 @@ class template MetalKqGemvIq4T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane (the scale buffer at byte nsb*16, s0off = the caller's doff); iq4nl: the 16B/sb d plane, block bu's d at blk*8+bu
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (block bu of blk at 32*blk + 4*bu; q40's 128B/sb nibble tiling)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
     @template_constant IQ4NL : bool = false
     @template_constant Q40 : bool = false   // q40: iq4nl's d plane, the linear nibble map (q - 8) in the codebook slot
 
-    def abstract x4_at(i : uint) : float4
+    //! the activation read, a float4 at float4 index i
+    def x4_at(i : uint) : float4 => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -8907,22 +8865,11 @@ class template MetalKqGemvIq4T : MetalGemvSiteT {
 class MetalKqGemvIq4xs : MetalKqGemvIq4T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
     override IQ4NL = false
 
     [metal_kernel]
     def metal_kq_gemv_iq4 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8930,22 +8877,11 @@ class MetalKqGemvIq4xs : MetalKqGemvIq4T {
 class MetalKqGemvIq4nl : MetalKqGemvIq4T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
     override IQ4NL = true
 
     [metal_kernel]
     def metal_kq_gemv_iq4 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -8953,8 +8889,6 @@ class MetalKqGemvIq4nl : MetalKqGemvIq4T {
 class MetalKqGemvQ40 : MetalKqGemvIq4T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
     override IQ4NL = true
     override Q40 = true
 
@@ -8962,60 +8896,31 @@ class MetalKqGemvQ40 : MetalKqGemvIq4T {
     def metal_kq_gemv_iq4 {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq4xs_c", pso = "g_pso_moe_kq_iq4xs", tgmem = "metal_moe_gemv_iq4xs_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq4xs : MetalKqGemvIq4T {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_iq4xs_msl")]
     def metal_moe_gemv_iq4xs {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_q40_c", pso = "g_pso_moe_kq_q40", tgmem = "metal_moe_gemv_q40_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvQ40 : MetalKqGemvIq4T {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
     override IQ4NL = true
     override Q40 = true
 
     [metal_kernel(name="metal_moe_gemv_q40_msl")]
     def metal_moe_gemv_q40 {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9027,9 +8932,14 @@ class template MetalKqGemvIq3T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales (iq3xxs: 2ls+1) + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (iq3s: 16 qs, 2 qh, 8 signs per superblock; iq3xxs: 16 qs, 8 aux)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @template_constant XXS : bool = false
 
-    def abstract x4_at(i : uint) : float4
+    //! the activation read, a float4 at float4 index i
+    def x4_at(i : uint) : float4 => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -9099,43 +9009,22 @@ class template MetalKqGemvIq3T : MetalGemvSiteT {
 class MetalKqGemvIq3s : MetalKqGemvIq3T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_iq3s_msl")]
     def metal_kq_gemv_iq3s {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq3s_c", pso = "g_pso_moe_kq_iq3s", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq3s : MetalKqGemvIq3T {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_iq3s_msl")]
     def metal_moe_gemv_iq3s {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9143,45 +9032,24 @@ class MetalMoeGemvIq3s : MetalKqGemvIq3T {
 class MetalKqGemvIq3xxs : MetalKqGemvIq3T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
     override XXS = true
 
     [metal_kernel(name="metal_kq_gemv_iq3xxs_msl")]
     def metal_kq_gemv_iq3xxs {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq3xxs_c", pso = "g_pso_moe_kq_iq3xxs", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq3xxs : MetalKqGemvIq3T {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
     override XXS = true
 
     [metal_kernel(name="metal_moe_gemv_iq3xxs_msl")]
     def metal_moe_gemv_iq3xxs {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9302,8 +9170,13 @@ class template MetalKqGemvIq2sT : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 16 UNSIGNED per-16 sub-scales, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2s quant plane, uint view (18 words per superblock: 8 idx, 8 signs, 2 qh)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
-    def abstract x4_at(i : uint) : float4
+    //! the activation read, a float4 at float4 index i
+    def x4_at(i : uint) : float4 => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -9366,43 +9239,22 @@ class template MetalKqGemvIq2sT : MetalGemvSiteT {
 class MetalKqGemvIq2s : MetalKqGemvIq2sT {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_iq2s_msl")]
     def metal_kq_gemv_iq2s {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq2s_c", pso = "g_pso_moe_kq_iq2s", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq2s : MetalKqGemvIq2sT {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_iq2s_msl")]
     def metal_moe_gemv_iq2s {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9414,8 +9266,13 @@ class template MetalKqGemvIq2xsT : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 16 UNSIGNED per-16 sub-scales, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xs quant plane, uint view (16 words per superblock: 32 u16 qs words)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
-    def abstract x4_at(i : uint) : float4
+    //! the activation read, a float4 at float4 index i
+    def x4_at(i : uint) : float4 => x[i]
 
     def gemv_body {
         var g : uint[8]
@@ -9476,43 +9333,22 @@ class template MetalKqGemvIq2xsT : MetalGemvSiteT {
 class MetalKqGemvIq2xs : MetalKqGemvIq2xsT {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="metal_kq_gemv_iq2xs_msl")]
     def metal_kq_gemv_iq2xs {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq2xs_c", pso = "g_pso_moe_kq_iq2xs", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq2xs : MetalKqGemvIq2xsT {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_iq2xs_msl")]
     def metal_moe_gemv_iq2xs {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9524,10 +9360,15 @@ class template MetalKqGemvIq2xxsFam : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view (16 words per superblock: [grid bytes][aux32] per block)
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @template_constant F4 : bool = false
     @workgroup @template_gate = F4 gridf : float4[512]   // pre-expanded magnitudes, one float4 per grid word (8 KB)
 
-    def abstract x4_at(i : uint) : float4
+    //! the activation read, a float4 at float4 index i
+    def x4_at(i : uint) : float4 => x[i]
 
     def gemv_body {
         static_if (F4) {
@@ -9601,43 +9442,22 @@ class template MetalKqGemvIq2xxsFam : MetalGemvSiteT {
 class MetalKqGemvIq2xxs : MetalKqGemvIq2xxsFam {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
     [metal_kernel]
     def metal_kq_gemv_iq2xxs {
         gemv_body()
     }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
-    }
 }
 
 [metal_dispatch(name = "enc_moe_gemv_iq2xxs_c", pso = "g_pso_moe_kq_iq2xxs", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvIq2xxs : MetalKqGemvIq2xxsFam {
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override GATHERED = true
 
     [metal_kernel(name="metal_moe_gemv_iq2xxs_msl")]
     def metal_moe_gemv_iq2xxs {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
-    }
-    def override y_rows : uint => ka.ddim
-    def override x4_at(i : uint) : float4 => x4[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
@@ -9646,22 +9466,11 @@ class MetalMoeGemvIq2xxs : MetalKqGemvIq2xxsFam {
 class MetalKqGemvIq2xxsF4 : MetalKqGemvIq2xxsFam {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
     override F4 = true
 
     [metal_kernel]
     def metal_kq_gemv_iq2xxs {
         gemv_body()
-    }
-
-    def override site_setup(var g : uint[8]) {
-        g[0] = ndim
-    }
-    def override y_rows : uint => ddim
-    def override x4_at(i : uint) : float4 => x[i]
-    def override y_put(i : uint; v : float) {
-        y[i] = v
     }
 }
 
