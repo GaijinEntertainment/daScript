@@ -9560,30 +9560,20 @@ class template MetalKqMvIq4T : MetalKqMvShellT {
             }
         }
         let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    let vh = x[xb4 + 4u + uint(u)]
-                    acc += v.x * wl[u].x + v.y * wl[u].y + v.z * wl[u].z + v.w * wl[u].w
-                    acc += vh.x * wh[u].x + vh.y * wh[u].y + vh.z * wh[u].z + vh.w * wh[u].w
-                }
-                sumf[b] += acc
+        for [unroll_full] (b in range(NR)) {
+            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            static_if (TILED) {
+                rowb = colbase + uint(b)
             }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    let vh = x[xb4 + 4u + uint(u)]
-                    acc += v.x * wl[u].x + v.y * wl[u].y + v.z * wl[u].z + v.w * wl[u].w
-                    acc += vh.x * wh[u].x + vh.y * wh[u].y + vh.z * wh[u].z + vh.w * wh[u].w
-                }
-                sumf[b] += acc
+            let xb4 = rowb * nb4 + cx4
+            var acc = 0.0
+            for [unroll_full] (u in range(4)) {
+                let v = x[xb4 + uint(u)]
+                let vh = x[xb4 + 4u + uint(u)]
+                acc += v.x * wl[u].x + v.y * wl[u].y + v.z * wl[u].z + v.w * wl[u].w
+                acc += vh.x * wh[u].x + vh.y * wh[u].y + vh.z * wh[u].z + vh.w * wh[u].w
             }
+            sumf[b] += acc
         }
     }
 }

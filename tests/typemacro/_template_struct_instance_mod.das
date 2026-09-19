@@ -24,15 +24,6 @@ class public XModBase {
     }
 }
 
-[ |> template_struct_instance]
-class template public XModOverKern : XModBase {
-    @template_constant STEP : int = 1
-
-    def value : int {
-        return hits * STEP
-    }
-}
-
 [structure_macro(name = "tsi_test_bind_kt")]
 class TsiTestBindKt : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {

@@ -204,6 +204,17 @@ def test_tsi_cross_module(t : T?) {
     }
 }
 
+//! the template stays HERE while its concrete base XModBase stays in the required module: a
+//! same-module pair reifies green either way, so only the split pins the cast<auto> __finalize init
+[ |> template_struct_instance]
+class template XModOverKern : XModBase {
+    @template_constant STEP : int = 1
+
+    def value : int {
+        return hits * STEP
+    }
+}
+
 class XModOverInt : XModOverKern {
     override STEP = 10
 }
