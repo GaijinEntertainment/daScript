@@ -1479,7 +1479,7 @@ def main() : int {
             }
             t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
         } else {
-            let rows_ctx = cfg.npl > 1 ? plen + ngen + int64(cfg.npl) : max(plen, ngen)   //! the batched row's streams decode past their prompt
+            let rows_ctx = cfg.npl > 1 ? max(plen, BENCH_PP_TOKENS) + ngen + int64(cfg.npl) : max(plen, ngen)   //! the batched row's streams decode past their prompt (llama-bench's -p when the pp row is off)
             t.config.seq_len = min(t.config.seq_len, rows_ctx + 8l)   // cap the KV allocation
             sched_ctx = t.config.seq_len
         }
@@ -1714,12 +1714,19 @@ def main() : int {
                 t.config.seq_len = sched_ctx
                 var tps : array<double>
                 tps |> reserve(reps)
+                let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the streams' prompts: -p, or llama-bench's default when the pp row is off
                 for (rep in range(reps)) {
-                    let br = bench_tg_batched_rep(t, npl, plen, ngen, int64(rep))
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep))
                     if (!empty(br.why)) {
                         panic("lcpp_bench: REFUSED tg{ngen}@{npl}{dtag} - {br.why}")
                     }
                     tps |> push(br.tps)
+                }
+                if (cfg.prof) {   //! one untimed rep under the buckets: the step's host phases beside the device's
+                    forward_profile_reset()
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps))
+                    say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
+                    forward_profile_report()
                 }
                 t.config.seq_len = flat_len
                 let st = bench_row("tg{ngen}@{npl}{dtag}", tps)

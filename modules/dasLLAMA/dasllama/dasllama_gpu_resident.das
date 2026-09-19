@@ -2060,6 +2060,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     g_rdec_poss |> resize(nrows)
     g_rdec_cnts |> resize(nrows)
     g_rdec_regs |> resize(nrows)
+    let ts_prep = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = ws.positions[i]
@@ -2081,7 +2082,11 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
     }
+    prof_add("nrow_prep", ts_prep)
+    let ts_gpu = prof_ticks()
     rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_tmp_n)
+    prof_add("nrow_gpu", ts_gpu)
+    let ts_land = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = g_rdec_poss[i]
@@ -2103,6 +2108,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         s.rdec_host_current = !s.device_kv
         copy_floats(g_rdec_tmp_n, i * c.vocab_size, s.logits, 0l, c.vocab_size)
     }
+    prof_add("nrow_land", ts_land)
     batch_decode_override_logits_done()
     return true
 }
