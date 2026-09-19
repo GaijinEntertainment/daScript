@@ -2272,6 +2272,7 @@ struct RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
+    s_addr_ffn_rq_b, s_addr_next_rq_b : VkDescriptorSet   //! the N-row command's fused sites over the rows' planes, where the feed is Q8_0
     rq_ffn_stamp : RqStamp          //! the FFN site's: the triple's or the experts' feed form, the row stored for a router
     rq_next_stamp : RqStamp         //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
     // host-visible per-dispatch buffers: the class GEMV region pairs
@@ -2426,6 +2427,8 @@ struct RDec {
     cls_epi_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
+    s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
+    n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int

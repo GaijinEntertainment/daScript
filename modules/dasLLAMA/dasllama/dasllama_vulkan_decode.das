@@ -233,6 +233,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
         fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
     g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
     // quantize xb (post-ffn-norm) -> xq/xs
     L.s_quant_xb2 = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
         fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
@@ -655,6 +656,7 @@ def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
         fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
     g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
@@ -671,6 +673,7 @@ def vk_rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2
     L.fe1 = fe1; L.fe3 = fe3; L.fe2 = fe2
     rd_moe_sets(L)
     g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
     rd_invalidate_token()
 }
 
@@ -1001,6 +1004,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
             fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
         g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
         // quantize final xb
         g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
             fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
@@ -1921,6 +1925,34 @@ def vk_rdec_token_n_rows : int64 {
     return g_rd.nb
 }
 
+//! a fused site's N-row set: the rows of x, their add partner, the norms, the quant feed - the Q8_0 twin over `nb` rows
+def private set_ar_rq_rows(add : uint64; aclass : uint) : VkDescriptorSet {
+    let dim = g_rd.dim
+    let nb = g_rd.nb
+    return set_cls_ar_rq_b(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * nb, (dim / 32l) * 4l * nb), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ))
+}
+
+//! the N-row command's fused sites, where a site's feed is Q8_0: the prologue, each layer's FFN step and next step
+def private rd_ensure_n_sets {
+    if (g_rd.n_sets_made) return
+    verify(ensure_cls_ar_rq_b(), "vk decode: the N-row fused add+rms+requant rail must engage on a live device")
+    if (!kq_sb(g_rd.layers[0].fq)) {
+        g_rd.s_prologue_rq_b = set_ar_rq_rows(g_rd.x_dev, VHZ_X)
+    }
+    for (l in range64(g_rd.n_layers)) {
+        var L & = unsafe(g_rd.layers[l])
+        if (!kq_sb(L.f1)) {
+            L.s_addr_ffn_rq_b = set_ar_rq_rows(g_rd.xb2_dev, VHZ_XB2)
+        }
+        let fn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : g_rd.cls_fmt_marker
+        if (!kq_sb(fn)) {
+            L.s_addr_next_rq_b = set_ar_rq_rows(g_rd.ffnout_dev, VHZ_FFO)
+        }
+    }
+    g_rd.n_sets_made = true
+}
+
 //! the N-column leaves of every plane the command dispatches, built before the first record
 def private rd_ensure_n_leaves {
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker)
@@ -2064,8 +2096,15 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
+        //! a Q8_0 feed's site fuses the residual step with its requant (`cls_ar_rq_b`, a row a workgroup); a K-quant feed's
+        //! takes the split pair, since the Q8_K twin has no row form yet
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
-        enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, nrows)   // xb = rms_att[0](x), a row a workgroup
+        var xq_ready = !kq_sb(g_rd.layers[0].fq)   //! the site before quantized the rows' feed
+        if (xq_ready) {
+            enc_cls_ar_rq_b(raw, h, g_rd.s_prologue_rq_b, pc_pro, nrows)   // xq/xs = rms_att[0](x), a row a workgroup
+        } else {
+            enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, nrows)   // xb = rms_att[0](x), a row a workgroup
+        }
         rd_ts(raw, "p:prologue")
         var pc_rq_dim = RqArgs(inbase = 0u, nblk = uint(dim / 32l) * nr)
         var pc_rq_dim_k = RqArgs(inbase = 0u, nblk = uint(dim / 256l) * nr)
@@ -2073,37 +2112,45 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
         let rqwg_dim_k = (dim * nrows / 8l + 255l) / 256l
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
-            if (kq_sb(L.fq)) {
-                enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
-            } else {
-                enc_cls_dn_rq(raw, h, L.s_quant_xb, pc_rq_dim, rqwg_dim)
+            if (!xq_ready) {
+                if (kq_sb(L.fq)) {
+                    enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
+                } else {
+                    enc_cls_dn_rq(raw, h, L.s_quant_xb, pc_rq_dim, rqwg_dim)
+                }
+                rd_ts(raw, "a:rq_x")
             }
-            rd_ts(raw, "a:rq_x")
             rd_encode_attn_head_n(raw, h, L, l, nrows, nsplit)
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
-            rd_ts(raw, "a:ar1")
             if (kq_sb(L.f1)) {
+                enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
+                rd_ts(raw, "a:ar1")
                 enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
+                rd_ts(raw, "a:rq_f")
             } else {
-                enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
+                enc_cls_ar_rq_b(raw, h, L.s_addr_ffn_rq_b, pc8, nrows)
+                rd_ts(raw, "a:arrq_f")
             }
-            rd_ts(raw, "a:rq_f")
             let nxt = l + 1l < g_rd.n_layers ? uint(rd_norm_off(l + 1l, RD_NORM_ATT)) : nlfin
+            let fn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : g_rd.cls_fmt_marker
             rd_encode_ffn_n(raw, h, L, nrows)
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = nxt, eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-            enc_cls_ar(raw, h, L.s_addr_next, pc14, nrows)
-            rd_ts(raw, "a:ar2")
+            xq_ready = !kq_sb(fn)
+            if (xq_ready) {
+                enc_cls_ar_rq_b(raw, h, L.s_addr_next_rq_b, pc14, nrows)
+                rd_ts(raw, "a:arrq_n")
+            } else {
+                enc_cls_ar(raw, h, L.s_addr_next, pc14, nrows)
+                rd_ts(raw, "a:ar2")
+            }
         }
-        if (kq_sb(g_rd.cls_fmt_marker)) {
+        if (!xq_ready) {   //! a K-quant classifier feed: the last next step stored the normed rows, quantized here
             enc_cls_q8k_rq(raw, h, g_rd.s_quant_final, pc_rq_dim_k, rqwg_dim_k)
-        } else {
-            enc_cls_dn_rq(raw, h, g_rd.s_quant_final, pc_rq_dim, rqwg_dim)
+            rd_ts(raw, "t:fin_rq")
         }
-        rd_ts(raw, "t:fin_rq")
         var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(g_rd.vocab))
         gemv_enc_n(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
         rd_ts(raw, "t:cls")
@@ -2139,6 +2186,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
     if (!g_rd.tok_n_recorded[nrows]) {
         rd_fill_gemv_regions_all()
         rd_ensure_n_leaves()
+        rd_ensure_n_sets()
         //! the split form's key splits: the rows' heads already fill the card, so the split shrinks with the row count
         let nsplit = min(g_rd.attn_nsplit, da_nsplit(g_rd.n_heads * nrows, int64(g_gpu.sm_count)))
         rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit)

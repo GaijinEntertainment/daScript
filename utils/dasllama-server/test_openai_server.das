@@ -691,6 +691,7 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
                     let tg : double = r?["ours_tg"] ?? 0.0lf
                     t |> success(pp > 0.0lf, "pp512 measured: {pp} tok/s")
                     t |> success(tg > 0.0lf, "tg128 measured: {tg} tok/s")
+                    t |> equal(int(r?["npl"] ?? 0l), 0, "the CPU harness homes no streams on a device, so the batched row stays off the result")
                     t |> equal(int(r?["reps"] ?? 0l), 3, "three reps per row")
                     t |> success(find(r?["ref_cmd"] ?? "", "llama-bench") >= 0, "the llama-bench comparison line rides along")
                     t |> equal(r?["model"] ?? "", "test-llm", "the row names the slot it ran on")

@@ -445,7 +445,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </div>
         <div class="cfg" id="bench-log" style="display:none"></div>
         <table class="ctable" id="bench-table" style="display:none">
-            <thead><tr><th></th><th>pp512 tok/s</th><th>tg128 tok/s</th></tr></thead>
+            <thead><tr><th></th><th>pp512 tok/s</th><th>tg128 tok/s</th><th>tg128@N tok/s summed</th></tr></thead>
             <tbody id="bench-body"></tbody>
         </table>
         <div class="cfg-file" id="bench-meta" style="white-space:pre-line"></div>
@@ -2695,11 +2695,12 @@ function renderBench(b) {
         const r = b.result;
         $("bench-table").style.display = "table";
         const body = $("bench-body");
-        let rows = "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td></tr>";
+        const tgb = r.npl > 0 ? r.ours_tgb.toFixed(1) + " @" + r.npl : "—";   // the batched row rides only a slot whose device homes streams
+        let rows = "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td><td>" + tgb + "</td></tr>";
         if (r.theirs_pp !== undefined) {
-            rows += "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td></tr>" +
+            rows += "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td><td>—</td></tr>" +
                 "<tr><td class=\"pv\">ratio</td><td class=\"" + (r.pp_ratio >= 1 ? "hit" : "") + "\">" + r.pp_ratio.toFixed(2) + "x</td>" +
-                "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td></tr>";
+                "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td><td>—</td></tr>";
         }
         body.innerHTML = rows;
         // an in-process row names what produced it: the slot, its file, the device, the KV codec,
