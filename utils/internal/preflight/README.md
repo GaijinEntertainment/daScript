@@ -79,4 +79,6 @@ the separate deadlock guard.
 compiles (dasOpenGL today); see the header comment there before adding
 entries - surfaces that pull external daspkg packages belong to the
 `sequence` gate, not the compile sweep. The compile sweep's own exclusions,
-each with its reason, are `SWEEP_EXCLUDED` in `config.das`.
+each with its reason, are `SWEEP_EXCLUDED` in `config.das`; the trees whose roots need a
+native module the box may not have built (dasVulkan, off by default on Apple) are
+`SWEEP_NEEDS_MODULE` there, swept only while the module's shared artifact exists.

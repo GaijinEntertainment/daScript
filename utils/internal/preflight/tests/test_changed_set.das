@@ -113,6 +113,16 @@ def test_sweep_excluded(t : T?) {
     for (why in values(SWEEP_EXCLUDED)) {
         t |> success(!empty(why), "every exclusion carries its reason")
     }
+    // a module-gated tree follows the box: swept with the artifact built, skipped without it
+    let vulkan_absent = module_artifact_absent(SWEEP_NEEDS_MODULE?["examples/vulkan/"] ?? "")
+    let absent_text = vulkan_absent ? "absent" : "present"
+    t |> equal(sweep_excluded("examples/vulkan/one_source_path_tracer/main.das"), vulkan_absent,
+        "a vulkan example is excluded exactly when the box built no dasVulkan artifact ({absent_text})")
+    t |> equal(sweep_excluded("examples/vulkan_imgui_cube/main.das"), vulkan_absent, "and so is the imgui cube")
+    t |> success(!sweep_excluded("examples/vulkan_less/main.das"), "a prefix match is on the whole path segment here too")
+    for (artifact in values(SWEEP_NEEDS_MODULE)) {
+        t |> success(artifact |> ends_with(".shared_module"), "every module gate names a shared artifact: {artifact}")
+    }
 }
 
 [test]

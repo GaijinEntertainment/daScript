@@ -93,12 +93,28 @@ let public SWEEP_EXCLUDED <- {
     "utils/internal/ast-fuzz/selftest/" => "deliberately broken fixtures test_ast_fuzz.das owns"
 }
 
+//! trees whose roots require a native module a CMake option may leave out of the box's build (dasVulkan is off
+//! by default on Apple): swept while the module's shared artifact exists, skipped while it does not
+let public SWEEP_NEEDS_MODULE <- {
+    "examples/vulkan/" => "modules/dasVulkan/dasModuleVulkan.shared_module",
+    "examples/vulkan_imgui_cube/" => "modules/dasVulkan/dasModuleVulkan.shared_module",
+    "examples/gltf/mesh_viewer_vulkan/" => "modules/dasVulkan/dasModuleVulkan.shared_module",
+    "modules/dasVulkan/" => "modules/dasVulkan/dasModuleVulkan.shared_module"
+}
+
 def public sweep_excluded(path : string) : bool {
     for (prefix in keys(SWEEP_EXCLUDED)) {
         return true if (path |> starts_with(prefix))
     }
+    for (prefix, artifact in keys(SWEEP_NEEDS_MODULE), values(SWEEP_NEEDS_MODULE)) {
+        return true if ((path |> starts_with(prefix)) && module_artifact_absent(artifact))
+    }
     return standalone_module_tree(path)
 }
+
+//! a shared-module build without the artifact has nothing for the tree's roots to require; a static build
+//! links every module it was configured with, so the artifact says nothing there
+def public module_artifact_absent(artifact : string) : bool => das_is_dll_build() && !fexist(artifact)
 
 //! a module the root build skips - `.daspkg_standalone` beside its CMakeLists.txt, the marker the root
 //! CMakeLists.txt reads - has no artifact for its roots to require, so its trees are the box's, not the sweep's
