@@ -82,15 +82,15 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
-  A per-format family stamp is `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` (families `kq_mm`,
-  `moe_mm`, `moe_mm_split`): the lens derives every string the long form spells from the three tokens,
-  an argument spelled beside `stamp` wins, and the threadgroup-memory global is always
-  `<Class>_<kernel method>_msl_tgmem`. Hosts compile through `compile_stamp(<stem>_msl, ok)` - one
-  spelling, so a source never pairs with another kernel's entry - and release through `release_handles`.
+  A per-format family stamp is `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` (`kq_mm`, `moe_mm`,
+  `moe_mm_split`): the lens derives every string the long form spells, an explicit argument wins, and the
+  threadgroup-memory global is always `<Class>_<kernel method>_msl_tgmem`. Hosts compile through
+  `compile_stamp(<stem>_msl, ok)` - one spelling, so a source never pairs with another kernel's entry.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no
-  shared bind path may span the two layouts; the in-engine moe mul_mm A/B race harnesses
+  shared bind path may span the two layouts; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
+  2/3/4, `MetalMoeReduce` at 3/4/5 under its gated `inv`) keeps each leaf's numbers; the in-engine moe mul_mm A/B race harnesses
   (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
   and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`

@@ -18,8 +18,9 @@ they inherit.
 one base shell.** Body divergence is carried by a `@template_constant`, or by an overridden method
 spliced flat at emission.
 
-**A `@template_constant` a stamp sets, that no `static_if` arm of that stamp's compiled body reads,
-is a defect - move the constant to the template whose arms read it, or make the arm read it.**
+**A `@template_constant` a stamp sets, that nothing in that stamp resolves at compile time - a
+`static_if` arm, a `@template_gate`, a value select, an array extent - reads, is a defect - move
+the constant to the template whose body reads it, or make the body read it.**
 
 **A diff that folds kernel classes onto one template, or retargets a dispatch class at another
 template, carries in the PR body, for each affected stamp, its generated source diffed against the
@@ -69,7 +70,10 @@ compiled census key, and that it matches no dispatched one - is a defect.**
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
 `<lhs> % <int>` - or weakening any test cell that holds such a refusal
 (`test_lens_tgmem_gate` and `test_lens_requires_gate` in `tests/test_metal_misc_kernels.das`,
-`test_vkd_lens_readonly_gate` in `tests/test_vulkan_kernels.das`), is a defect.**
+`test_vkd_lens_readonly_gate` in `tests/test_vulkan_kernels.das`), is a defect.** A refusal
+replaced by a derivation that leaves no such configuration compiling unbound - the `stamp =`
+form's threadgroup-memory global - is not a weakening, and the test cell then holds the derived
+path.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row would leave the rest of each row outside the tracked
@@ -89,7 +93,8 @@ and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=
 builder instead.** Binding it separately adds a second place to get it wrong.
 
 **A kernel-class method a compiled body calls in value position - inside an expression rather
-than as its own statement - is a single arrow-form (`=>`) return; a method that needs more than
-one statement hands its value back through a `var T&` parameter instead.** The emitter splices a
-value-position method as one expression, so a multi-statement body reaches the kernel as a
-statement and its value never arrives.
+than as its own statement - returns its value in one statement after compile-time folding: an
+arrow form (`=>`), or a `static_if` whose every arm is one `return`; a method that needs more
+than one statement hands its value back through a `var T&` parameter instead.** The emitter
+splices a value-position method as one expression, so a body that folds to more than one
+statement reaches the kernel as a statement and its value never arrives.
