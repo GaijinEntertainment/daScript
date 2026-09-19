@@ -6351,14 +6351,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             }
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
-                unsafe {
-                    var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
-                    pf_enc_ple_gather_fmt(enc, t, bple_tok, bple, pka, c.n_layers, npos, ple_n)
-                    let bwp = bf16_of(g_dev, t, t.ple_model_off)
-                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
-                    var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))
-                    pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
-                }
+                var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
+                pf_enc_ple_gather_fmt(enc, t, bple_tok, bple, pka, c.n_layers, npos, ple_n)
+                let bwp = bf16_of(g_dev, t, t.ple_model_off)
+                pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
+                var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple_n * 4l))
+                pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
                 s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {
@@ -7298,24 +7296,52 @@ def dasllama_metal_prefill_register() {
 }
 
 
+//! what a tensor A/B race opens with, once for every race in this file: `ok` false means
+//! `verdict` already holds the answer and nothing is timed - a box whose toolchain cannot build
+//! the tensor twin leaves the simdgroup kernel crowned, and the base pipeline is already released.
+struct private RacePsoPair {
+    base_pso, twin_pso : MetalComputePipeline?
+    verdict : MetalTensorRaceResult
+    ok : bool
+}
+
+//! a plain call rather than a shell taking the timed blocks: merging the races into one body would
+//! merge their kn_kargs/kn_dispatch tallies too, and the manual-dispatch census reads them per
+//! function (`dasllama_metal_lens.das`)
+def private race_pso_pair(dev : MetalDevice?; family : string;
+                          base_src, base_entry : string; base_fm : bool;
+                          twin_src, twin_entry : string; twin_fm : bool) : RacePsoPair {
+    var p = RacePsoPair(base_pso = null, twin_pso = null, ok = false,
+        verdict = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = ""))
+    var err = ""
+    p.base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
+    if (p.base_pso == null) {
+        p.verdict.note = "base pso: {err}"
+        return p
+    }
+    p.twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
+    if (p.twin_pso == null) {
+        p.verdict.winner = "simdgroup"
+        p.verdict.note = "twin pso: {err}"
+        metal_release(p.base_pso)
+        p.base_pso = null
+        return p
+    }
+    p.ok = true
+    return p
+}
+
 def private race_hmm_tall(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "hmm_tall", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let m = 512
     let kdim = 2048
     let ndim = 2048
-    var err = ""
-    var base_pso = pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, "hmm_tall",
+        MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath,
+        MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var wa <- race_x_f16(ndim * kdim)
     var xa <- race_x_f16(m * kdim)
     var bw = race_buf(dev, uint64(ndim * kdim * 2), unsafe(addr<void?>(wa[0])))
@@ -7357,24 +7383,16 @@ def private race_hmm_tall(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
 }
 
 def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "mulmm_bf16", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let m = 512
     let kdim = 2048
     let ndim = 1024
-    var err = ""
-    var base_pso = pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err)
-    if (twin_pso == null) {
-        //! no tensor support on this box/toolchain — the simdgroup kernel keeps the crown
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, "mulmm_bf16",
+        metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath,
+        MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     var wb : array<uint16>
     wb |> resize(ndim * kdim)
@@ -7420,24 +7438,17 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
 }
 
 def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let m = 512
     let kdim = 2048
     let ndim = 1024
     let nkb = kdim / 32
-    var err = ""
-    var base_pso = pipeline_from_source(dev, metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, "mulmm_q8",
+        metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath,
+        MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     var blob <- race_q8_blob(ndim * nkb)
     var bw = race_buf(dev, uint64(ndim * nkb * 34), unsafe(addr<void?>(blob[0])))
@@ -7482,7 +7493,6 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
 }
 
 def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "moe_mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let ne = 4
     let rows_per = 32
     let m = ne * rows_per
@@ -7490,19 +7500,13 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     let ndim = 1024
     let nkb = kdim / 32
     let eblk = ndim * nkb
-    var err = ""
-    var base_pso = pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_fastmath, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, "moe_mulmm_q8",
+        metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath,
+        MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_fastmath)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     var blob <- race_q8_blob(ne * eblk)
     var cnt : array<uint>
@@ -7562,8 +7566,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
 }
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets")]
-def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
-    var res = MetalTensorRaceResult(family = "moe_mulmm_mx4", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers stay live to the release tail
     let ne = 4
     let rows_per = 32
     let m = ne * rows_per
@@ -7571,19 +7574,13 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     let ndim = 1024
     let nkb = kdim / 32
     let eblk = ndim * nkb
-    var err = ""
-    var base_pso = pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_fastmath, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, "moe_mulmm_mx4",
+        metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath,
+        MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_fastmath)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     var nplane : array<uint>
     nplane |> resize(ne * eblk * 4)   //! 16B nibbles per block
@@ -7674,24 +7671,15 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
                           base_src, base_entry : string; base_fm : bool; base_tgmem : uint64;
                           twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                           qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let m = 512
     let kdim = 2048
     let ndim = 1024
     let nsb = kdim / 256
-    var err = ""
-    var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, family, base_src, base_entry, base_fm, twin_src, twin_entry, twin_fm)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var xa <- race_x_f32(m * kdim)
     let nblk = ndim * nsb
     var planes = race_kq_planes(dev, nblk, qu_per_sb, sform)

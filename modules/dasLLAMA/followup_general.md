@@ -1148,6 +1148,14 @@
    with rows-per-thread as the stamp axis. The tile is crowned and measured as it stands (the m4 mint), so the fold is a
    refactor plus a re-race, not a kernel change. Done = one template stamps `MetalKqMvB2K4` and the
    tile, and the tile's emitted MSL is byte-identical or both boxes re-race it.
+   A `ROWS` axis carried on `MetalKqMvShellT` - the per-row values staged in `uint[ROWS]` /
+   `float[16 * ROWS]` locals so one unrolled decode serves both stamps - does NOT reach byte
+   identity: the row arrays survive SROA in the two-row stamp, and the tile compiles to 467 AIR
+   instructions with 15 allocas and 16 fused FP ops against the hand body's 324 / 3 / 27, while the
+   one-row stamps of every `MetalKqMv*` format read MOVED. The `@off = "xoff"` on the tile's x
+   binding, which the one-row stamps do not carry, additionally forces a `@template_gate`d field
+   pair at binding 3 plus one accessor arm. So the fold is a kernel change and needs the re-race on
+   both boxes; byte identity is not the route.
 97. **The K-quant crown races time one width and check no CPU reference.** `race_kq_rows` and
    `race_kq_k4_form` (`dasllama/dasllama_metal_kernels.das`) time two rows only, while the
    `kq_rows_<fmt>` crown gates the four- and eight-column forms at 3..8 rows (`REVIEW_GPU_RACE.md`'s

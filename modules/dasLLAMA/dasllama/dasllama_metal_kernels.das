@@ -4588,49 +4588,54 @@ let KQ_ROWS_RACE_FORMATS <- [
     (fmt = KqFmt.iq2xxs, qu = 16, sform = KqRaceScaleForm.split_d)
 ]
 
-//! needs the decode PSOs - the caller runs `metal_decode_init` first
+//! the rig shell both K-quant decode races share: one format's fixture at the race shape, the
+//! timed pair over the two arms, the envelope verdict against the a/b y planes, and the release
 [arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
-def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "kq_rows_{fmt}", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
-    let n = 2048
-    let rows = 8192
+def private race_kq_rig_pair(queue : MetalCommandQueue?; family : string; qu_per_sb : int; sform : KqRaceScaleForm;
+                             n, rows : int;
+                             base_arm, twin_arm : block<(enc : MetalComputeEncoder?; rig : KqRaceRig; var ka : KqMvArgs) : void>) : MetalTensorRaceResult {
+    var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     var rig <- kq_race_rig(qu_per_sb, sform, n, rows)
     var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = 2u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
-        for (r in range(8)) {
-            enc_kq_mvb(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul, ka, int64(rows), 2l)
-        }
+        invoke(base_arm, enc, rig, ka)
     }, $(enc) {
-        for (r in range(8)) {
-            let by = (r & 1) == 0 ? rig.by_b : rig.by_b2
-            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n))
-            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n), uint64(rows * 4), uint64(n * 4))
-        }
+        invoke(twin_arm, enc, rig, ka)
     })
     kq_race_verdict(res, rig.by_a, rig.by_b, 2 * rows)
     release_kq_race_rig(rig)
     return res
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
-def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = "kq_mvb2_k4_r2", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+//! needs the decode PSOs - the caller runs `metal_decode_init` first
+def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
     let n = 2048
     let rows = 8192
-    var rig <- kq_race_rig(32, KqRaceScaleForm.compact, n, rows)
-    var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = 2u)
-    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
+    return race_kq_rig_pair(queue, "kq_rows_{fmt}", qu_per_sb, sform, n, rows, $(enc, rig, ka) {
+        for (r in range(8)) {
+            enc_kq_mvb(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul, ka, int64(rows), 2l)
+        }
+    }, $(enc, rig, _ka) {
+        for (r in range(8)) {
+            let by = (r & 1) == 0 ? rig.by_b : rig.by_b2
+            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n))
+            enc_kq_gemv(enc, fmt, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, by, rig.bn, rig.bd, int64(rows), int64(n), uint64(rows * 4), uint64(n * 4))
+        }
+    })
+}
+
+def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    let n = 2048
+    let rows = 8192
+    return race_kq_rig_pair(queue, "kq_mvb2_k4_r2", 32, KqRaceScaleForm.compact, n, rows, $(enc, rig, ka) {
         for (r in range(8)) {
             enc_kq_mvb2_k4_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul, ka, int64(rows))
         }
-    }, $(enc) {
+    }, $(enc, rig, ka) {
         for (r in range(8)) {
             enc_kq_mvb2_k4r2_c(enc, rig.bs, 0ul, rig.bs, 0ul, rig.bq, 0ul, rig.bx, 0ul, (r & 1) == 0 ? rig.by_b : rig.by_b2, 0ul, ka, int64(rows))
         }
     })
-    kq_race_verdict(res, rig.by_a, rig.by_b, 2 * rows)
-    release_kq_race_rig(rig)
-    return res
 }
 
 // the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes per arm, the n/d uniforms
