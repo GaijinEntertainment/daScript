@@ -124,8 +124,10 @@ zoo. Facts that decide the order:
   the tensor K45/K6 x Db pair (~285; removes the coupled-bool trap where `MetalKqMulMmIq4nl`
   must set `IQ4XS` and `IQ4NL`; the Db forms sit on the sanctioned float-A list); the four dense
   mul_mm shells onto a `MetalMoeMulMmBase` twin (~145); the MoE GEMV `GATHERED` axis (~230, the
-  `float4` x view stays its own axis - a measured 2.25x); the singles (DequantK6H, the bias
-  pair). Two classes fold only when their (binding number -> field type, `@off`) maps agree: the
+  `float4` x view stays its own axis - a measured 2.25x); the singles (DequantK6H; the bias
+  pair that folds is `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the
+  map and `x`'s offset apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out). Two
+  classes fold only when their (binding number -> field type, `@off`) maps agree: the
   SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
   the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
   binding) and the RmsNorm/AddRms pair (the residual at 1 shifts five) stay apart on that rule;
@@ -139,7 +141,11 @@ zoo. Facts that decide the order:
   `<Leaf>_<method>_msl` global), so a chain splits the shared decode from the kernel-carrying
   levels; an instance may add fields (the `MetalKqDequant<Fmt>` stamps bind their own `@ssbo`);
   a `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
-  infers both arms); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
+  infers both arms), and on a class template it declares no `@role = "read"`/`"write"` - the
+  census cross-checks declared roles against the unreified body and reads the gated field as
+  unused, while an undeclared role derives the same value; a method used in value position is
+  an arrow-form single return, so a multi-statement format hook hands its value back through
+  a `var T&` parameter (the emitter's carve-out to the return-the-result rule); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
   `test_metal_gemm_kernels.das`) are the parity lock per format - green before and after, on the
   M1 first, the M5 pass after.
 - Detect-dupe (`utils/detect-dupe`) over the two files finds the exact-clone shells and the
