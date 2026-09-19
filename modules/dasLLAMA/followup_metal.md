@@ -124,9 +124,14 @@ zoo. Facts that decide the order:
   the tensor K45/K6 x Db pair (~285; removes the coupled-bool trap where `MetalKqMulMmIq4nl`
   must set `IQ4XS` and `IQ4NL`; the Db forms sit on the sanctioned float-A list); the four dense
   mul_mm shells onto a `MetalMoeMulMmBase` twin (~145); the MoE GEMV `GATHERED` axis (~230, the
-  `float4` x view stays its own axis - a measured 2.25x); the zero-risk singles (CrossVx f16/f32,
-  Q8MvB2/B4 onto `MetalGemvB24T`, argmax rows, rope-store batched, DequantK6H,
-  G4aMag/Q3aPow, the bias pair; ~325).
+  `float4` x view stays its own axis - a measured 2.25x); the singles (DequantK6H, the bias
+  pair). Two classes fold only when their (binding number -> field type, `@off`) maps agree: the
+  SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
+  the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
+  binding) and the RmsNorm/AddRms pair (the residual at 1 shifts five) stay apart on that rule;
+  `MetalSqAttnCombT` folds because both its stamps share one kargs struct at one binding. The
+  Q8MvB2/B4 pair stays apart on the emitter: an NR-wide stamp needs a local fixed array of
+  pointers, which has no MSL form.
 - Rules for every conversion: a stamp's `tgmem=` string is `<LeafClass>_<method>_msl_tgmem`, so a
   hand class becoming a stamp keeps its names by keeping its named `[metal_kernel(name=..)]`
   def on the leaf and moving only the shared body to the template; a leaf that inherits a
