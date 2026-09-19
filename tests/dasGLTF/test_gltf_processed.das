@@ -22,6 +22,16 @@ def test_processed_files_preserve_geometry_and_animation(t : T?){
         var unpacked <- unpack_processed_geometry(cooked)
         let bounds = gltf_scene_bounds(unpacked)
         t |> success(length(bounds._0 - cooked.lo) < 0.0001 && length(bounds._1 - cooked.hi) < 0.0001, "positions/bounds survive packing")
+        if (relative == "SimpleSkin.gltf") {
+            for (mesh in cooked.meshes) { for (p in mesh.primitives) {
+                t |> success((p.attributes & VERTEX_SKIN) != 0, "skinned fixtures retain skin attributes")
+                t |> equal(p.stride, processed_stride(p.attributes), "skin stride matches the compact layout")
+            }}
+            for (mesh in unpacked.meshes) { for (p in mesh.primitives) { for (v in p.vertices) {
+                t |> success(abs(dot(v.weights0, float4(1.0)) - 1.0) < .00001, "decoded skin weights remain normalized")
+                for (i in range(1, 4)) { t |> success(v.weights0[i - 1] >= v.weights0[i], "decoded influences remain ordered") }
+            }}}
+        }
         for (ext in [".das_gltf", ".das_glb"]){
             let path = "{work_dir}/roundtrip/{base_name(relative)}{ext}"
             t |> success(save_processed(cooked, path, "{work_dir}/roundtrip"), "save custom format")
@@ -88,4 +98,35 @@ def test_load_rejects_truncated_encoded_geometry(t : T?){
     }
     t |> success(rejected, "load validates encoded payloads before returning")
     remove(path); delete raw; delete cooked
+}
+
+[test]
+def test_load_rejects_skin_weights_without_exact_byte_sum(t : T?){
+    var prim = GltfPrimitive()
+    prim.vertices <- [GltfVertex(weights0 = float4(1.0)), GltfVertex(weights0 = float4(1.0)), GltfVertex(weights0 = float4(1.0))]
+    prim.indices <- [0u, 1u, 2u]
+    var packed <- process_primitive(prim, VERTEX_SKIN, false, false)
+    for (vertex in range(packed.vertex_count)) { for (component in range(4)) { packed.vertices[vertex * packed.stride + 20 + component] = 0u8 } }
+    var mesh : ProcessedMesh; mesh.primitives |> emplace(packed)
+    var asset = ProcessedAsset(version = DAS_GLTF_VERSION); asset.meshes |> emplace(mesh)
+    let file_r = create_temp_file_result("gltf_bad_skin_sum", ".das_glb")
+    if (!(file_r is value)){t |> failure("create malformed skin fixture"); delete asset; return }
+    let path = unsafe(file_r.value)
+    t |> success(save_processed(asset, path), "structural save accepts payload before load validation")
+    var rejected = false
+    try { var loaded <- load_processed(path); delete loaded } recover { rejected = true }
+    t |> success(rejected, "load rejects compact skin weights that do not sum to 255")
+    let stride = asset.meshes[0].primitives[0].stride
+    for (vertex in range(asset.meshes[0].primitives[0].vertex_count)) { asset.meshes[0].primitives[0].vertices[vertex * stride + 20] = 255u8 }
+    t |> success(save_processed(asset, path), "write canonical compact skin weights")
+    var canonical_loaded = false
+    try { var loaded <- load_processed(path); canonical_loaded = true; delete loaded } recover { canonical_loaded = false }
+    t |> success(canonical_loaded, "canonical compact skin weights load")
+    asset.meshes[0].primitives[0].vertices[20] = 155u8; asset.meshes[0].primitives[0].vertices[21] = 0u8
+    asset.meshes[0].primitives[0].vertices[22] = 100u8; asset.meshes[0].primitives[0].vertices[23] = 0u8
+    t |> success(save_processed(asset, path), "structural save accepts noncanonical weight order")
+    rejected = false
+    try { var loaded <- load_processed(path); delete loaded } recover { rejected = true }
+    t |> success(rejected, "load rejects a nonzero influence after a zero weight")
+    remove(path); delete asset
 }

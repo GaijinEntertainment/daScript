@@ -3,6 +3,7 @@ options persistent_heap
 module gltf_processed shared public
 require gltf/gltf_boost public
 require stbimage/texture_blocks public
+require gltf/gltf_skinning public
 require meshoptimizer
 require math
 require daslib/math_boost
@@ -11,8 +12,8 @@ require daslib/json_boost
 require daslib/f16_cvt
 require strings
 
-let DAS_GLTF_VERSION = 1
-let DAS_GLTF_PROCESSOR_VERSION = 2
+let DAS_GLTF_VERSION = 2
+let DAS_GLTF_PROCESSOR_VERSION = 3
 let VERTEX_UV = 1
 let VERTEX_TANGENT = 2
 let VERTEX_SKIN = 4
@@ -59,6 +60,14 @@ struct ProcessedCatalog {
     version : int //! Catalog schema version.
     assets : array<ProcessedCatalogEntry> //! Catalog entries in author-defined order.
 }
+def prepare_processed_catalog(var catalog : ProcessedCatalog; full_regeneration : bool) {
+    //! Reject partial updates across format versions; a full source-tree conversion starts a fresh catalog.
+    if (catalog.version != DAS_GLTF_VERSION && (catalog.version != 0 || !empty(catalog.assets))) {
+        if (!full_regeneration) { panic("Processed catalog version changed; rerun without explicit input files") }
+        clear(catalog.assets)
+    }
+    catalog.version = DAS_GLTF_VERSION
+}
 struct ProcessedManifest {
     //! Split-file manifest for geometry and independently shared texture payloads.
     version : int //! Manifest schema version.
@@ -69,7 +78,7 @@ struct ProcessedManifest {
 def processed_stride(flags : int) : int {
     //! Return the packed vertex stride for the `VERTEX_*` attribute bit mask. Position and normal
     //! are always present; optional streams add their fixed portable widths.
-    return 16 + ((flags & VERTEX_UV) != 0 ? 4 : 0) + ((flags & VERTEX_TANGENT) != 0 ? 4 : 0) + ((flags & VERTEX_SKIN) != 0 ? 16 : 0) + ((flags & VERTEX_UV1) != 0 ? 4 : 0) + ((flags & VERTEX_COLOR) != 0 ? 4 : 0)
+    return 16 + ((flags & VERTEX_UV) != 0 ? 4 : 0) + ((flags & VERTEX_TANGENT) != 0 ? 4 : 0) + ((flags & VERTEX_SKIN) != 0 ? 8 : 0) + ((flags & VERTEX_UV1) != 0 ? 4 : 0) + ((flags & VERTEX_COLOR) != 0 ? 4 : 0)
 }
 [arch(at="../ARCHITECTURE.md#processed-vertex-portability")]
 def private pack_uv(v : float2) : uint {return f32_to_f16(v.x) | (f32_to_f16(v.y) << 16)}
@@ -94,10 +103,8 @@ def private pack_vertices(vertices : array<GltfVertex>; flags : int) : array<uin
         if ((flags & VERTEX_UV) != 0){words[at++] = pack_uv(v.uv0)}
         if ((flags & VERTEX_TANGENT) != 0){words[at++] = pack_direction(v.tangent)}
         if ((flags & VERTEX_SKIN) != 0){
-            for (c in range(4)){if (v.joints0[c] < 0.0 || v.joints0[c] > 65535.0){panic("Joint index does not fit processed layout")}}
-            let joints = unsafe(reinterpret<uint2>(ushort4(uint4(v.joints0))))
-            let weights = unsafe(reinterpret<uint2>(ushort4(uint4(round(clamp(v.weights0, float4(0.0), float4(1.0)) * 65535.0)))))
-            words[at++] = joints.x; words[at++] = joints.y; words[at++] = weights.x; words[at++] = weights.y
+            let skin = skin_pack8(v.joints0, v.weights0)
+            words[at++] = skin.x; words[at++] = skin.y
         }
         if ((flags & VERTEX_UV1) != 0){words[at++] = pack_uv(v.uv1)}
         if ((flags & VERTEX_COLOR) != 0){words[at++] = unsafe(reinterpret<uint>(ubyte4(uint4(round(clamp(v.color0, float4(0.0), float4(1.0)) * 255.0)))))}
@@ -217,8 +224,8 @@ def unpack_processed_geometry(asset : ProcessedAsset) : GltfScene {
                 if ((p.attributes & VERTEX_UV) != 0){v.uv0 = unpack_uv(words[at++])}
                 if ((p.attributes & VERTEX_TANGENT) != 0){v.tangent = unpack_direction(words[at++])}
                 if ((p.attributes & VERTEX_SKIN) != 0){
-                    v.joints0 = float4(uint4(unsafe(reinterpret<ushort4>(uint2(words[at], words[at + 1]))))); at += 2
-                    v.weights0 = float4(uint4(unsafe(reinterpret<ushort4>(uint2(words[at], words[at + 1]))))) / 65535.0; at += 2
+                    let skin = skin_unpack8(uint2(words[at], words[at + 1])); at += 2
+                    v.joints0 = skin.joints; v.weights0 = skin.weights
                 }
                 if ((p.attributes & VERTEX_UV1) != 0){v.uv1 = unpack_uv(words[at++])}
                 v.color0 = (p.attributes & VERTEX_COLOR) != 0 ? float4(uint4(unsafe(reinterpret<ubyte4>(words[at++])))) / 255.0 : float4(1.0)
@@ -247,6 +254,15 @@ def private processed_payloads_valid(a : ProcessedAsset) : bool {
     for (mesh in a.meshes){for (p in mesh.primitives){
         var vertices : array<uint8>
         if (p.encoded && !meshopt_decode_vertices(vertices, p.vertices, uint(p.vertex_count), uint(p.stride))){delete vertices; return false}
+        if (!p.encoded && (p.attributes & VERTEX_SKIN) != 0){vertices <- clone(p.vertices)}
+        if ((p.attributes & VERTEX_SKIN) != 0){
+            let skin_offset = 16 + ((p.attributes & VERTEX_UV) != 0 ? 4 : 0) + ((p.attributes & VERTEX_TANGENT) != 0 ? 4 : 0)
+            for (vertex in range(p.vertex_count)){
+                let weights = vertex * p.stride + skin_offset + 4
+                if (uint(vertices[weights]) + uint(vertices[weights + 1]) + uint(vertices[weights + 2]) + uint(vertices[weights + 3]) != 255u ||
+                    uint(vertices[weights]) < uint(vertices[weights + 1]) || uint(vertices[weights + 1]) < uint(vertices[weights + 2]) || uint(vertices[weights + 2]) < uint(vertices[weights + 3])){delete vertices; return false}
+            }
+        }
         delete vertices
         var indices : array<uint>
         if (p.encoded){
