@@ -2067,6 +2067,7 @@ struct Session {
     // resident-driver mirror ownership: gen stamps which session's rows the device KV mirror
     // holds (0 = never resident-prefilled); rdec_host_current = the host KV holds everything the mirror does
     rdec_gen : int64
+    rdec_region : int64         //! the mirror region the claim above sits in (meaningful only while `rdec_gen` matches that region's)
     rdec_host_current : bool
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)

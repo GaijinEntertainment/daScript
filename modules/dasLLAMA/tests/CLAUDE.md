@@ -509,6 +509,14 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_regions.das` - stocked suite, `-jit` only; the resident driver's mirror regions
+(the same qwen2, loaded at two regions through `set_gpu_resident_regions`): two sessions hold
+their K/V on the device at once. The instrument is the driver against itself, so no CPU chain
+runs: a session stepped between another session's single steps, and a batched step over both,
+each read bit for bit what the session reads alone, the two prompts differing in content and
+length so a crossed region cannot land there. The batched cell also holds both claims unchanged
+through every step (no history came up from the host again) and both cells hold
+`gpu_cpu_passes_()` empty. About a minute; skips without the model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
