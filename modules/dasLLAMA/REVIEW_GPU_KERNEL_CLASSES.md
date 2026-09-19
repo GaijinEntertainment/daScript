@@ -68,9 +68,11 @@ compiled census key, and that it matches no dispatched one - is a defect.**
 `@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
-`<lhs> % <int>` - or weakening any test cell that holds such a refusal
-(`test_lens_tgmem_gate` and `test_lens_requires_gate` in `tests/test_metal_misc_kernels.das`,
-`test_vkd_lens_readonly_gate` in `tests/test_vulkan_kernels.das`), is a defect.** A refusal
+`<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
+source off the `_msl` stem, an empty `release_handles` - or weakening any test cell that holds
+such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
+`test_lens_call_macro_gates` in `tests/test_metal_misc_kernels.das`, `test_vkd_lens_readonly_gate`
+in `tests/test_vulkan_kernels.das`), is a defect.** A refusal
 replaced by a derivation that leaves no such configuration compiling unbound - the `stamp =`
 form's threadgroup-memory global - is not a weakening, and the test cell then holds the derived
 path.
