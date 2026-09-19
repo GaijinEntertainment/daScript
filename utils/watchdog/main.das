@@ -50,9 +50,7 @@ def private collect_if_due() {
     let due = (g_last_collect == 0l || get_time_usec(g_last_collect) > COLLECT_SECONDS * 1000000
         || string_heap_bytes_allocated() > g_strings_after_collect + COLLECT_STRING_BYTES)
     if (!due) return
-    unsafe {
-        heap_collect(true, false)
-    }
+    unsafe(heap_collect(true, false))
     g_strings_after_collect = string_heap_bytes_allocated()
     g_last_collect = ref_time_ticks()
 }
@@ -73,7 +71,15 @@ def start(self_pid : int) : bool {
         return g_lsp != null
     }
     g_supervisor = watchdog_start(args, program_dir, self_pid, g_exit_code)
+    if (g_supervisor != null) {
+        g_supervisor.collect_before_stop = @@collect_now
+    }
     return g_supervisor != null
+}
+
+//! the collect the supervisor runs before its stop record: the heaps it reports are the live set
+def private collect_now() {
+    unsafe(heap_collect(true, false))
 }
 
 [export]
@@ -158,6 +164,7 @@ def main() : int {
     }
     var sup = watchdog_start(args, program_dir_from(args), 0, code)
     if (sup == null) return code
+    sup.collect_before_stop = @@collect_now
     while (!sup->tick()) {
         collect_if_due()
     }
