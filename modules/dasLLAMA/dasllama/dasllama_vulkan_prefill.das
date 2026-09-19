@@ -3252,7 +3252,7 @@ def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
     let xfer = g_gpu.xfer_fam >= 0
     vk_check(vkEndCommandBuffer(raw), null)
     if (xfer) {
-        let sig = xfer_submit_after(raw, 0ul)
+        let sig = xfer_submit_after(raw, XFER_NO_WAIT)
         if (sync) {
             xfer_host_wait(sig)
         }

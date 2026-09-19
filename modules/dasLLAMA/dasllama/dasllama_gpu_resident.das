@@ -567,7 +567,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
             + RDEC_PF_ROWS * (c.n_expert + 1l) * 4l + nk * 12l)
     }
     let nb = max(g_rdec_regions_want, 1l)   //! the N-row command's planes hold a row a region: the logits and the attention pieces scale with it
-    let pieces = hs > 0l ? (qd / hs) * 16l * (hs + 2l) * 4l : 0l
+    let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
         + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe
 }
@@ -795,6 +795,7 @@ def private rdec_has_device_only_rows(s : Session) : bool {
     return !s.device_kv && rdec_owns(s, s.rdec_region) && g_rdec_regions[s.rdec_region].cnt > 0l && !s.rdec_host_current
 }
 let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mirror at
+let private RDEC_ATTN_SPLIT_CAP = 16l   //! the key splits the plan budgets the attention partials for: the most the driver ever picks, whatever the card's SM count
 
 var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positions (0 = none): the test rigs pin 32768, a server keeps the model's context
 
@@ -2082,7 +2083,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
             if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
-                panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+                panic("dasLLAMA resident batch decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
             }
             rdec_take_mirror(t, s, r, pos)
         }
@@ -2148,7 +2149,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
             if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
-                panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+                panic("dasLLAMA resident row-at-a-time decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
             }
             rdec_take_mirror(t, s, r, pos)
         }

@@ -229,8 +229,8 @@ def private cols_ruler(n, d : int) {
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)) && gemv_cls_ensure_n(int(f)), "vk_gemv_probe: the ruler's gemv class rails must engage on a live device")
     }
-    let pairs = g_q8_n2_min_n == 0u ? "the q8 row-pair stamps engaged" : "the q8 rows a row a subgroup (n2off)"
-    print("vk_gemv_probe: the N-column ruler at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up over two alternating output planes, {pairs}; GB/s over the weight bytes; the last column = this dispatch's wall over `cols` one-column dispatches\n")
+    let pair_note = g_q8_n2_min_n == 0u ? "the q8 row-pair stamps engaged" : "the q8 rows a row a subgroup (n2off)"
+    print("vk_gemv_probe: the N-column ruler at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up over two alternating output planes, {pair_note}; GB/s over the weight bytes; the last column = this dispatch's wall over `cols` one-column dispatches\n")
     print("| fmt    | class | cols |  us/dispatch |    GB/s | vs N single |             |\n")
     print("| :----- | :---- | ---: | -----------: | ------: | ----------: | :---------- |\n")
     let widths = fixed_array(1, 2, 4, 8)

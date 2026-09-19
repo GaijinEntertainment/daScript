@@ -10972,27 +10972,24 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    var pair = q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
-    if (pair) {   //! the pair twins build on first use, since the lever can move after the family's ensure ran
-        pair = pc.ncols <= 2u ? ensure_q8_gemv_n2p_cls() : (pc.ncols <= 4u ? ensure_q8_gemv_n4p_cls() : ensure_q8_gemv_n8p_cls())
-    }
-    let g = pair ? (wgs + 1l) / 2l : wgs   //! a subgroup a row pair: half the row grid
-    if (pc.ncols <= 2u) {
-        if (pair) {
-            enc_q8_gemv_n2p_cls(raw, h, set_, pc, g)
+    let pair_wanted = q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+    let g2 = (wgs + 1l) / 2l   //! a subgroup a row pair: half the row grid
+    if (pc.ncols <= 2u) {   //! each pair twin builds on first use, since the lever can move after the family's ensure ran
+        if (pair_wanted && ensure_q8_gemv_n2p_cls()) {
+            enc_q8_gemv_n2p_cls(raw, h, set_, pc, g2)
         } else {
-            enc_q8_gemv_n2_cls(raw, h, set_, pc, g)
+            enc_q8_gemv_n2_cls(raw, h, set_, pc, wgs)
         }
     } elif (pc.ncols <= 4u) {
-        if (pair) {
-            enc_q8_gemv_n4p_cls(raw, h, set_, pc, g)
+        if (pair_wanted && ensure_q8_gemv_n4p_cls()) {
+            enc_q8_gemv_n4p_cls(raw, h, set_, pc, g2)
         } else {
-            enc_q8_gemv_n4_cls(raw, h, set_, pc, g)
+            enc_q8_gemv_n4_cls(raw, h, set_, pc, wgs)
         }
-    } elif (pair) {
-        enc_q8_gemv_n8p_cls(raw, h, set_, pc, g)
+    } elif (pair_wanted && ensure_q8_gemv_n8p_cls()) {
+        enc_q8_gemv_n8p_cls(raw, h, set_, pc, g2)
     } else {
-        enc_q8_gemv_n8_cls(raw, h, set_, pc, g)
+        enc_q8_gemv_n8_cls(raw, h, set_, pc, wgs)
     }
 }
 

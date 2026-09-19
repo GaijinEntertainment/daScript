@@ -1121,10 +1121,10 @@ def private ibench_step() {
         if (g_ibench_npl < 2l) {
             g_ibench_npl = 0l
         }
-        let ctx = g_slots[si].model.config.seq_len
-        let batched_ctx = BENCH_PP_TOKENS + BENCH_TG_TOKENS + g_ibench_npl
-        if (g_ibench_npl > 0l && ctx < batched_ctx) {
-            ibench_log("no tg{BENCH_TG_TOKENS}@{g_ibench_npl} row: the served context is {ctx} tokens and the row's streams need {batched_ctx}")
+        let served_ctx = g_slots[si].model.config.seq_len
+        let row_needs_ctx = BENCH_PP_TOKENS + BENCH_TG_TOKENS + g_ibench_npl
+        if (g_ibench_npl > 0l && served_ctx < row_needs_ctx) {
+            ibench_log("no tg{BENCH_TG_TOKENS}@{g_ibench_npl} row: the served context is {served_ctx} tokens and the row's streams need {row_needs_ctx}")
             g_ibench_npl = 0l
         }
         g_ibench_passes0 = cpu_pass_total()

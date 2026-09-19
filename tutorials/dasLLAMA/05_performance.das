@@ -132,15 +132,16 @@ def section_threads(m : Model) {
 
     // The window has a GPU-served twin: while the whole-model GPU driver serves the loaded model
     // the pool carries only the sampler's small work between steps, so the workers park after
-    // set_jobque_spin_gpu_us (500 us by default) instead of the CPU window - the spin would only
+    // set_jobque_spin_gpu_us (the print shows the default) instead of the CPU window - the spin would only
     // heat the cores the device does not need. get_jobque_spin_in_force reads whichever of the
     // two the pool is on right now: with no GPU driver armed (this tutorial's CPU model) it is the
     // CPU window. The switch is process-wide, so a CPU audio route beside a GPU-served model sits
     // under the GPU window too - widen it here if that route's wake latency shows.
     print("windows: cpu {get_jobque_spin_us()} us, gpu-served {get_jobque_spin_gpu_us()} us, in force {get_jobque_spin_in_force()} us\n")
+    let gpu_spin_was = get_jobque_spin_gpu_us()
     set_jobque_spin_gpu_us(2000l)
     print("gpu-served window widened to {get_jobque_spin_gpu_us()} us; in force stays {get_jobque_spin_in_force()} us with no GPU driver armed\n")
-    set_jobque_spin_gpu_us(500l)   // the default back
+    set_jobque_spin_gpu_us(gpu_spin_was)   // the default back
 }
 
 // ──────────────────────────────────────────────────────────────────────────

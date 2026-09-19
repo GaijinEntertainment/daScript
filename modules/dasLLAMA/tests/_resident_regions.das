@@ -259,10 +259,15 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
     }
 }
 
-//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone: bit for bit
-//! where `exact`, else within the split bar with the one-token-off control (a K-quant carrier's N-row Q8_K sites round
-//! apart from the one-row command's - `../followup_vulkan.md` item 75)
-def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; exact : bool) {
+//! the bar a batched row holds against its session alone: bit for bit, or the split bar with the one-token-off control
+//! (a K-quant carrier's N-row Q8_K sites round apart from the one-row command's - `../followup_vulkan.md` item 75)
+enum LogitsBar {
+    bit_exact
+    split_bar
+}
+
+//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
     var fa <- feed_a()
     var fb <- feed_b()
     var ra <- logits_alone(tr, pa, fa)
@@ -279,7 +284,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; exact 
         var toks <- [fa[st], fb[st]]
         eval_batch(tr, ws, sess, toks)
         delete toks
-        if (exact) {
+        if (bar == LogitsBar.bit_exact) {
             hold_equal(t, sa.logits, ra[st + 1l], "batched step {st}, row A")
             hold_equal(t, sb.logits, rb[st + 1l], "batched step {st}, row B")
         } else {
@@ -305,7 +310,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; exact 
     delete fb
 }
 
-def cell_regions_batched_steps(t : T?; file : string; exact : bool = true) {
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -313,7 +318,7 @@ def cell_regions_batched_steps(t : T?; file : string; exact : bool = true) {
             setup_dasllama_jobque_()
             var pa <- prompt_a()
             var pb <- prompt_b()
-            batched_steps_body(t, tr, pa, pb, exact)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }
@@ -323,7 +328,7 @@ def cell_regions_batched_steps(t : T?; file : string; exact : bool = true) {
 
 //! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
-def cell_regions_batched_steps_split(t : T?; file : string; exact : bool = true) {
+def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -334,7 +339,7 @@ def cell_regions_batched_steps_split(t : T?; file : string; exact : bool = true)
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
             }
-            batched_steps_body(t, tr, pa, pb, exact)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }

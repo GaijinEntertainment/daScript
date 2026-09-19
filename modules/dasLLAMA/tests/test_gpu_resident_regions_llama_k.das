@@ -16,10 +16,10 @@ let private REGIONS_FILE = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 [test]
 def test_regions_batched_steps_k(t : T?) {
-    cell_regions_batched_steps(t, REGIONS_FILE, false)
+    cell_regions_batched_steps(t, REGIONS_FILE, LogitsBar.split_bar)
 }
 
 [test]
 def test_regions_batched_steps_split_k(t : T?) {
-    cell_regions_batched_steps_split(t, REGIONS_FILE, false)
+    cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.split_bar)
 }

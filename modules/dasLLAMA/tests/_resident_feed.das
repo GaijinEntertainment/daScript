@@ -1,5 +1,6 @@
-// The forced-feed helpers the whole-model resident cells share: the served tile arm's tag, the
-// argmax of a logits row, and a prompt plus fed tokens through one session with every step's logits kept.
+// The forced-feed helpers of the llama resident cells (the qwen2, hybrid and shexp files still carry their
+// own copies): the served tile arm's tag, the argmax of a logits row, and a prompt plus fed tokens through one
+// session with every step's logits kept.
 
 options gen2
 options _dasllama_internal = true

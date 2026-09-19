@@ -34,8 +34,8 @@ def private allow_cpu_prefill_intent() {
 let private LOGIT_BAR_REL = 0.06
 let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
-//! the carrier's gate: the JIT, the armed tier and the file; "" where a cell skips
-def private llama_ready(t : T?; file : string) : string {
+//! the carrier's path past its gate - the JIT, the armed tier and the file; "" where the cell already registered its skip
+def private llama_model_path(t : T?; file : string) : string {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return ""
@@ -51,7 +51,7 @@ def private llama_ready(t : T?; file : string) : string {
 
 //! `file` through the resident chain and the CPU chain over an `n`-token prompt and eight steps
 def private llama_forced_feed(t : T?; file : string; n : int64) {
-    let path = llama_ready(t, file)
+    let path = llama_model_path(t, file)
     if (empty(path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
@@ -119,7 +119,7 @@ def test_gpu_resident_llama_1b(t : T?) {
 [test]
 def test_gpu_resident_llama_batched_row(t : T?) {
     t |> run("bench_tg_batched_rep: the refusal past the homed streams, then one served rep") @(t : T?) {
-        let path = llama_ready(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        let path = llama_model_path(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
         if (empty(path)) return
         var tr <- load_model_(path, QuantMode.q8)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
@@ -127,9 +127,10 @@ def test_gpu_resident_llama_batched_row(t : T?) {
             setup_dasllama_jobque_()
             let homes = gpu_device_sessions()
             t |> success(homes >= 1l, "the armed driver homes a stream ({homes})")
-            let refused = bench_tg_batched_rep(tr, homes + 63l, 32l, 4l, 1l)
+            let over_home = homes + 1l
+            let refused = bench_tg_batched_rep(tr, over_home, 32l, 4l, 1l)
             t |> equal(refused.tps, 0.0lf, "a row asking more streams than the device homes reads 0")
-            t |> equal(refused.why, "the device homes {homes} stream(s), the row asks {homes + 63l}", "... and names the refusal")
+            t |> equal(refused.why, "the device homes {homes} stream(s), the row asks {over_home}", "... and names the refusal")
             let served = bench_tg_batched_rep(tr, homes, 32l, 4l, 1l)
             t |> equal(served.why, "", "a row the device homes is served: {served.why}")
             t |> success(served.tps > 0.0lf, "... at a rate ({served.tps} tok/s summed over {homes} stream(s))")

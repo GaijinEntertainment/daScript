@@ -2368,6 +2368,13 @@ struct RLayer {
 //! the layer's dense FFN triple is placed: its own FFN, or an MoE layer's shared expert (an MoE layer without one has none)
 def has_dense_triple(L : RLayer) : bool => L.b1 >= 0l
 
+//! the N-row token command's kernel classes on this device: built once before a step commits to the command, or one declined
+enum NRail {
+    unasked
+    built
+    declined
+}
+
 struct RDec {
     ready : bool
     tokens_served : int64
@@ -2388,7 +2395,7 @@ struct RDec {
     xq_dev, xs_dev : uint64       // quantized activation (shared across the layer's GEMVs)
     q_dev, kv_dev : uint64        // roped q; the k/v projection buffer rope reads (k@qd, v@qd+kvd)
     attn_dev : uint64             // attention output
-    attn_part_dev : uint64        //! the split decode attention's pieces [rows x heads x DA_NSPLIT_MAX x (head_size + 2)], then its arrival counters
+    attn_part_dev : uint64        //! the split decode attention's pieces [rows x heads x attn_nsplit x (head_size + 2)], then its arrival counters
     attn_cnt_off : int64          //! the counters' word offset in that plane
     ar_cnt_dev : uint64           //! the epilogue GEMVs' arrival counter (one word: the dispatches are sequential), zero between dispatches
     attn_nsplit : int64           //! key splits a head the token command dispatches (1 = the unsplit pass; `da_nsplit`)
@@ -2440,7 +2447,7 @@ struct RDec {
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
     s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
     n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
-    n_rail : int   //! the N-row command's kernel classes on this device: 0 not asked yet, 1 built, -1 one declined (the command answers 0 rows)
+    n_rail : NRail = NRail.unasked   //! the N-row command's kernel classes on this device; declined = the command answers 0 rows
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
@@ -3306,17 +3313,17 @@ def private alloc_cmd_in(pool : CommandPool) : VkCommandBuffer {
     return raw
 }
 
-// One-shot command buffers (the KV readback rails) are freed by their caller — registering them
-// in model_cmds would grow it per hydration until the next model drop.
+//! a one-shot command (the KV readback rails) its caller frees through `free_transient_cmd`: registering it in model_cmds would grow that list per hydration until the next model drop
 def alloc_transient_cmd : VkCommandBuffer => alloc_cmd_in(g_gpu.pool)
 
 def free_transient_cmd(var raw : VkCommandBuffer) {
     vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
 }
 
+//! a persistent command on the compute pool, model-owned: freed by the model drop
 def alloc_cmd : VkCommandBuffer {
-    var raw = alloc_transient_cmd()
-    g_gpu.model_cmds |> push(raw)   // all persistent cmds are model-owned; freed by the model drop
+    var raw = alloc_cmd_in(g_gpu.pool)
+    g_gpu.model_cmds |> push(raw)
     return raw
 }
 
@@ -3376,7 +3383,9 @@ def submit_signal(var raw : VkCommandBuffer) : uint64 {
     return g_gpu.cmp_value
 }
 
-//! a transfer-queue submit that waits for the compute timeline at `cmp_val` (0 = no wait) and signals the transfer timeline; returns the value to wait for
+let XFER_NO_WAIT = 0ul   //! `xfer_submit_after`'s compute-timeline value for a submit that waits on nothing
+
+//! a transfer-queue submit that waits for the compute timeline at `cmp_val` and signals the transfer timeline; returns the value to wait for
 def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     g_gpu.xfer_value++
     var sig = g_gpu.xfer_value
@@ -3391,7 +3400,7 @@ def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     submit.signalSemaphoreCount = 1u
     let nofence : VkFence
     unsafe {
-        if (cmp_val != 0ul) {
+        if (cmp_val != XFER_NO_WAIT) {
             submit.waitSemaphoreCount = 1u
             tss.waitSemaphoreValueCount = 1u
             tss.pWaitSemaphoreValues = addr(wval)

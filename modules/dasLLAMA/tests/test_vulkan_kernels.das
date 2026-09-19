@@ -6899,19 +6899,16 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         y_ref[d + 2] += 1.0 + abs(y_ref[d + 2])   //! the poison: one past the element's own magnitude (an int8 dot lands in the hundreds of thousands)
         t |> success(mismatch_approx(y_one, y_ref) == 1, "{name}: the oracle bar reds one poisoned element")
         let n2_min_prior = g_q8_n2_min_n
-        for (pairs in fixed_array(false, true)) {
-            continue if (pairs && !q8)
-            g_q8_n2_min_n = pairs ? 0u : 0xFFFFFFFFu
-            let form = pairs ? "{name} row-pair" : name
+        for (paired in fixed_array(false, true)) {
+            continue if (paired && !q8)
+            g_q8_n2_min_n = paired ? 0u : 0xFFFFFFFFu
+            let form = paired ? "{name} row-pair" : name
             t |> success(gemv_cls_ensure_n(fmt), "{form}: the N-column class rail engages")
-            var s_n : VkDescriptorSet
-            unsafe {
-                var pair <- [0u, 0u]
-                let rgd = make_device_buf(8l)
-                upload_region_at(rgd, 0l, addr<uint8 const?>(pair[0]), 8l)
-                s_n = gemv_cls_set_n(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, yd), fixed_array(wq_bytes, ws_bytes, 8l, xq_bytes, xs_bytes, y_bytes), gbits)
-                delete pair
-            }
+            var pair <- [0u, 0u]
+            let rgd = make_device_buf(8l)
+            upload_region_at(rgd, 0l, unsafe(addr<uint8 const?>(pair[0])), 8l)
+            var s_n = gemv_cls_set_n(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, yd), fixed_array(wq_bytes, ws_bytes, 8l, xq_bytes, xs_bytes, y_bytes), gbits)
+            delete pair
             for (ncols in fixed_array(1, 2, 4, 8)) {
                 unsafe {
                     nan_sentinel_upload(yd, y_bytes)

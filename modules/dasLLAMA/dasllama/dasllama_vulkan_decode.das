@@ -1965,19 +1965,20 @@ def vk_rdec_token_n_rows : int64 {
                 || !(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
                     && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
     }
-    if (g_rd.n_rail == 0) {
-        g_rd.n_rail = rd_n_rail_engages() ? 1 : -1
+    if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
+        g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
     }
-    return g_rd.n_rail > 0 ? g_rd.nb : 0l
+    return g_rd.n_rail == NRail.built ? g_rd.nb : 0l
 }
 
 //! the N-column leaves of every plane the command dispatches and its fused Q8_0 site, built on this device; false logs the decline once
 [cold_path]
-def private rd_n_rail_engages : bool {
+def private rd_ensure_n_rail : bool {
     let nb = g_rd.nb
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
     for (L in g_rd.layers) {
-        ok = (ok && gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
+        break if (!ok)
+        ok = (gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
             && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb))
     }
     if (!ok) {
