@@ -1459,7 +1459,7 @@ def main() : int {
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
             static_if (typeinfo builtin_module_exists(vulkan)) {
-                g_rd_nrow_bisect = to_int(get_env_variable("DASLLAMA_VK_NROW_BISECT"))   //! a probe's bisect of the N-row command; 0 = the served command
+                g_rd_nrow_bisect = int(g_env_vulkan.vk_nrow_bisect)   //! a probe's bisect of the N-row command; 0 = the served command
             }
         }
         var t <- load_model_cached(mpath, cfg.quant)
