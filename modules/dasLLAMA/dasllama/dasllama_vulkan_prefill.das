@@ -1189,7 +1189,7 @@ def private pf_setup {
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
-    let mirbytes = g_rd.mir_elems * g_rd.kv_esz
+    let mirbytes = rd_mir_bytes()
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
@@ -1470,7 +1470,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     g_rd.s_tok_ple_ar = set_cls_ar(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.tok_plep),
         fixed_array(all * 4l, all * 4l, g_rd.ple * 4l, all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
     g_rd.ple_gpu = true
-    g_rd.tok_recorded = false   //! the token command re-records with the pre-step's finish at its head
+    rd_invalidate_token()   //! the token command re-records with the pre-step's finish at its head
     return true
 }
 
@@ -1687,7 +1687,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 // kq consumers take the Q8_K quant/act forms — unless the f16 feed serves them (k4 cm2)
                 let fqk = kq_sb(g_rd.layers[l].fq) && !fq6
                 let fok = kq_sb(g_rd.layers[l].fo) && !fo6
-                let mirb = uint(g_rd.layers[l].mir_base)
+                let mirb = uint(rd_mir_base(g_rd.layers[l]))
                 let feed_already_fused = l > 0l && pf_qkv_feed_fused(l)
                 if (!feed_already_fused) {
                     if (fq6) {
