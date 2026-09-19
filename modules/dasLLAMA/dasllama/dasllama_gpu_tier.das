@@ -1265,6 +1265,30 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
     g_rdec_note_weight_bytes = f
 }
 
+//! the N-row token command: `nrows` rows of x and cos/sin, each row's position, cached count and mirror region, the rows' logits back
+typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; var logits : array<float>) : void>
+
+[unused_argument(x, cossin, poss, cnts, regs, nrows, logits)]
+def private rdec_unset_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; var logits : array<float>) {
+    panic("dasLLAMA: resident N-row token hit without an installed GPU driver")
+}
+def private rdec_no_token_n_rows : int64 => 0l
+var private g_rdec_token_n = @@rdec_unset_token_n
+var private g_rdec_token_n_rows = @@rdec_no_token_n_rows
+
+//! Install the N-row token command beside the resident driver: `rows` answers how many rows it steps at once on the armed model (0 = none)
+def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : function<() : int64>) {
+    g_rdec_token_n = token_n
+    g_rdec_token_n_rows = rows
+}
+
+def public rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; var logits : array<float>) {
+    invoke(g_rdec_token_n, x, cossin, poss, cnts, regs, nrows, logits)
+}
+
+//! the rows the armed driver's N-row command steps at once; 0 where the model or the driver has none
+def public rdec_token_n_rows() : int64 => invoke(g_rdec_token_n_rows)
+
 [unused_argument(regions)]
 def private moe_gpu_no_binding_cap(regions : int64) : int64 => 0l
 var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
@@ -1942,6 +1966,12 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_binding_cap == null) {
         g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
+    }
+    if (g_rdec_token_n == null) {
+        g_rdec_token_n = @@rdec_unset_token_n
+    }
+    if (g_rdec_token_n_rows == null) {
+        g_rdec_token_n_rows = @@rdec_no_token_n_rows
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes

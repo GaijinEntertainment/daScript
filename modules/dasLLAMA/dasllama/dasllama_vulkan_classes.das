@@ -27,7 +27,7 @@ struct TokMeta {
     pos : uint      // this token's absolute position (mirror row = layerbase + pos * kvd)
     cnt : uint      // cached positions incl. this one
     parity : uint   // deltanet conv-ring parity
-    _pad : uint
+    mirbase : uint  //! the N-row command: this row's K/V mirror region as an element offset; 0 in the one-row command, whose push carries the region
 }
 
 // ===== add + rmsnorm =====
@@ -4078,6 +4078,8 @@ struct DaAttnArgs {
     nsplit : uint   //! the key range split across this many workgroups a head, each leaving a (max, denom, acc) partial for `DaAttnComb`; 0 or 1 = one workgroup a head stores y itself
     rqk : uint      //! the row's requant folded into the store: 0 = Q8_0 blocks of 32, 1 = Q8_K superblocks of 256 (a head a multiple of 256), 2 = none (the row alone)
     sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
+    rowwg : uint    //! (head, split) workgroups a row: the dispatch past them is the N-row command's next row, which reads its own `tok` entry
+    qrow : uint     //! a row's stride in q (the projection row's width); 0 in the one-row command
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
@@ -4197,10 +4199,17 @@ class template DaAttnT {
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
-        let cnt = tok[0u].cnt
         let nsplit = max(pa.nsplit, 1u)
-        let h = gl_WorkGroupID.x / nsplit
-        let sp = gl_WorkGroupID.x % nsplit
+        let rowwg = max(pa.rowwg, 1u)
+        let row = gl_WorkGroupID.x / rowwg
+        let wg = gl_WorkGroupID.x % rowwg
+        let cnt = tok[row].cnt
+        let h = wg / nsplit
+        let sp = wg % nsplit
+        let hflat = gl_WorkGroupID.x / nsplit   //! the row's head in the attention-out and partial planes, whose row stride is the heads' width
+        let qb = row * pa.qrow
+        let kbase = pa.kbase + tok[row].mirbase
+        let vbase = pa.vbase + tok[row].mirbase
         let kvh = h / pa.kv_mul
         let tid = gl_LocalInvocationID.x
         let wide = hs > 256u
@@ -4212,7 +4221,7 @@ class template DaAttnT {
         let lane = gl_SubgroupInvocationID
         var i = tid
         while (i < hs) {
-            qrow[i] = q[h * qstride + i]
+            qrow[i] = q[qb + h * qstride + i]
             i += 256u
         }
         if (tid == 0u) {
@@ -4232,11 +4241,11 @@ class template DaAttnT {
             while (kk < clen) {
                 let kk2 = kk + gl_NumSubgroups
                 let kkb = min(kk2, clen - 1u)   //! a lone last key reads a live row twice and stores once
-                let krow = pa.kbase + (c0 + kk) * pa.kvd + kvh * hs + lane * dpl
-                let krow2 = pa.kbase + (c0 + kkb) * pa.kvd + kvh * hs + lane * dpl
+                let krow = kbase + (c0 + kk) * pa.kvd + kvh * hs + lane * dpl
+                let krow2 = kbase + (c0 + kkb) * pa.kvd + kvh * hs + lane * dpl
                 var pv = 0.0
                 var pv2 = 0.0
-                let vec = KV16 && dpl % 8u == 0u && (pa.kbase & 7u) == 0u   //! the f16 stamp on a head of 256 (one word a lane) or 512 (two), the row base on a word
+                let vec = KV16 && dpl % 8u == 0u && (kbase & 7u) == 0u   //! the f16 stamp on a head of 256 (one word a lane) or 512 (two), the row base on a word
                 static_if (KV16) {
                     if (vec) {
                         let nw = dpl / 8u
@@ -4309,7 +4318,7 @@ class template DaAttnT {
             // V accumulate: group g strides the chunk, rescaled by this chunk's alpha
             acc *= alpha
             acc2 *= alpha
-            let vb = pa.vbase + kvh * hs + c
+            let vb = vbase + kvh * hs + c
             if (wide) {
                 var jj = 0u
                 while (jj + 3u < clen) {
@@ -4359,7 +4368,7 @@ class template DaAttnT {
             barrier()   // sc/sgp settle before the next chunk overwrites them
             c0 += 256u
         }
-        let pb = (h * nsplit + sp) * da_attn_part_stride(hs)   // this (head, split)'s partial
+        let pb = gl_WorkGroupID.x * da_attn_part_stride(hs)   // this (row, head, split)'s partial
         let linv = unsplit_linv(h, mrun, ml[1u])
         if (wide) {   // one group: every thread holds two finished dims
             if (nsplit > 1u) {
@@ -4374,10 +4383,10 @@ class template DaAttnT {
             var o = acc * linv
             var o2 = acc2 * linv
             if (pa.gated != 0u) {
-                o = o / (1.0 + exp(-q[h * qstride + hs + tid]))
-                o2 = o2 / (1.0 + exp(-q[h * qstride + hs + tid + 256u]))
+                o = o / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
+                o2 = o2 / (1.0 + exp(-q[qb + h * qstride + hs + tid + 256u]))
             }
-            store_row(h, hs, tid, o, o2, true)
+            store_row(hflat, hs, tid, o, o2, true)
             return
         }
         // cross-group reduce (sc reused as the partial slab: slot tid == g * hs + c)
@@ -4403,9 +4412,9 @@ class template DaAttnT {
         }
         var o = SINK ? tot * linv : tot / ml[1u]
         if (pa.gated != 0u && tid < hs) {
-            o = o / (1.0 + exp(-q[h * qstride + hs + tid]))
+            o = o / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
         }
-        store_row(h, hs, tid, o, 0.0, false)
+        store_row(hflat, hs, tid, o, 0.0, false)
     }
 }
 
@@ -9369,10 +9378,14 @@ struct RopeKvArgs {
     neox : uint     // pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
     kpair0 : uint   // first k pair's global index (q pairs come first)
     npairs : uint
-    layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
+    layerbase : uint   // this layer's K/V mirror base; the row rides tok[row].pos past tok[row].mirbase
     boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
     hasb : uint
     cbase : uint    //! this layer's rope class's row base in the cos/sin plane (a second class's row follows the first's)
+    rows : uint     //! the N-row command: rows in the dispatch, `npairs` threads each; 0 = one
+    kvrow : uint    //! ... a row's stride in kvsrc (the projection row's width), in qrows, and in the cos/sin plane; 0 in the one-row command
+    qrow : uint
+    cosrow : uint
 }
 
 // fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
@@ -9393,24 +9406,29 @@ class template RopeKvStoreT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
-        if (gid < pa.npairs) {
-            let is_k = gid >= pa.kpair0
-            let lp = is_k ? gid - pa.kpair0 : gid
+        if (gid < pa.npairs * max(pa.rows, 1u)) {
+            let row = gid / pa.npairs
+            let pr = gid % pa.npairs
+            let is_k = pr >= pa.kpair0
+            let lp = is_k ? pr - pa.kpair0 : pr
             let h = lp / pa.half
             let j = lp % pa.half
-            let fcr = cossin[pa.cbase + j]
-            let fci = cossin[pa.cbase + pa.half + j]
+            let cb = row * pa.cosrow + pa.cbase
+            let fcr = cossin[cb + j]
+            let fci = cossin[cb + pa.half + j]
             let e0 = pa.neox != 0u ? j : j * 2u
             let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
             if (is_k) {
-                let mrow = pa.layerbase + tok[0u].pos * pa.kvd
-                let kb = pa.qd + h * pa.hs
-                let a0 = kvsrc[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + kb + e0] : 0.0)
-                let a1 = kvsrc[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + kb + e1] : 0.0)
+                let mrow = pa.layerbase + tok[row].mirbase + tok[row].pos * pa.kvd
+                let kb = row * pa.kvrow + pa.qd + h * pa.hs
+                let bk = pa.boff + pa.qd + h * pa.hs
+                let a0 = kvsrc[kb + e0] + (pa.hasb != 0u ? bias[bk + e0] : 0.0)
+                let a1 = kvsrc[kb + e1] + (pa.hasb != 0u ? bias[bk + e1] : 0.0)
                 // v is not roped — copy the same two elements raw (plus their bias) into the V plane
-                let vb = pa.qd + pa.kvd + h * pa.hs
-                let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + vb + e0] : 0.0)
-                let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + vb + e1] : 0.0)
+                let vb = row * pa.kvrow + pa.qd + pa.kvd + h * pa.hs
+                let bv = pa.boff + pa.qd + pa.kvd + h * pa.hs
+                let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[bv + e0] : 0.0)
+                let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[bv + e1] : 0.0)
                 static_if (CLAMP16) {
                     kmir[mrow + h * pa.hs + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
                     kmir[mrow + h * pa.hs + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
@@ -9423,9 +9441,10 @@ class template RopeKvStoreT {
                     vmir[mrow + h * pa.hs + e1] = v1
                 }
             } else {
-                let qb = h * pa.hs
-                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + qb + e0] : 0.0)
-                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + qb + e1] : 0.0)
+                let qb = row * pa.qrow + h * pa.hs
+                let bq = pa.boff + h * pa.hs
+                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[bq + e0] : 0.0)
+                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[bq + e1] : 0.0)
                 qrows[qb + e0] = a0 * fcr - a1 * fci
                 qrows[qb + e1] = a0 * fci + a1 * fcr
             }
@@ -10849,6 +10868,9 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 }
 
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
+
+//! the formats with an N-column leaf
+def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs)
 
 def gemv_cls_ensure_n(fmt : int) : bool {
     if (fmt == int(KqFmt.q8)) {

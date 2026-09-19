@@ -2435,6 +2435,10 @@ struct RDec {
     unsplit_on : bool               //! ... recorded (a device at one split has no twin)
     unsplit_served : int64        //! the tokens the twin served
     tok_recorded : array<bool>    //! per region: cmd holds the whole-token chain, re-submittable as-is
+    nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
+    cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
+    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS
+    tok_n_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2546,6 +2550,9 @@ def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
 //! every region's token command re-records: the sets or planes it references were replaced
 def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.tok_n_recorded) {
         rec = false
     }
 }

@@ -1651,6 +1651,13 @@ def private resident_prefill_ple_rows(t : Model; tokens : array<int64>; npos : i
 }
 
 var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the armed driver (`resident_cos_elems`)
+// the N-row command's gathered rows: the residuals, the rope rows, the logits back, and each row's position, count and region
+var private @scratch g_rdec_x_n : array<float>
+var private @scratch g_rdec_cos_n : array<float>
+var private @scratch g_rdec_tmp_n : array<float>
+var private @scratch g_rdec_poss : array<int64>
+var private @scratch g_rdec_cnts : array<int64>
+var private @scratch g_rdec_regs : array<int64>
 
 // per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
 var private @scratch g_rdec_x : array<float>
@@ -2041,6 +2048,65 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
     copy_floats(ws.scr.ple_inp, i * all, g_rdec_ple_rows, 0l, all)
 }
 
+//! the step's rows through the N-row token command, one weight pass for all: regions bound, histories brought up, one submit,
+//! each host-cached row's K/V read back and its logits landed; false when a row found no region or two rows one region,
+//! and the caller's row-at-a-time loop serves the step
+def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    let c = t.config
+    let dim = c.dim
+    g_rdec_x_n |> resize(dim * nrows)
+    g_rdec_cos_n |> resize(g_rdec_cos_elems * nrows)
+    g_rdec_tmp_n |> resize(c.vocab_size * nrows)
+    g_rdec_poss |> resize(nrows)
+    g_rdec_cnts |> resize(nrows)
+    g_rdec_regs |> resize(nrows)
+    for (i in range64(nrows)) {
+        var s & = unsafe(*sessions[i])
+        let pos = ws.positions[i]
+        let r = rdec_bind_region(s)
+        if (r < 0l) {
+            return false
+        }
+        for (j in range64(i)) {
+            if (g_rdec_regs[j] == r) {   //! two rows one region: the row-at-a-time loop resyncs between them
+                return false
+            }
+        }
+        if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+            rdec_take_mirror(t, s, r, pos)
+        }
+        copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
+        rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
+        g_rdec_poss[i] = pos
+        g_rdec_cnts[i] = pos + 1l
+        g_rdec_regs[i] = r
+    }
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_tmp_n)
+    for (i in range64(nrows)) {
+        var s & = unsafe(*sessions[i])
+        let pos = g_rdec_poss[i]
+        let r = g_rdec_regs[i]
+        if (!s.device_kv) {
+            rdec_bind_region(s)   //! the readback reads the selected region: this row's
+            for (l in range64(c.n_layers)) {
+                continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
+                let kvd = layer_kv_dim(c, l)
+                let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
+                let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
+                unsafe {
+                    rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
+                        kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
+                }
+            }
+        }
+        g_rdec_regions[r].cnt = pos + 1l
+        s.rdec_host_current = !s.device_kv
+        copy_floats(g_rdec_tmp_n, i * c.vocab_size, s.logits, 0l, c.vocab_size)
+    }
+    batch_decode_override_logits_done()
+    return true
+}
+
 def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim
@@ -2050,6 +2116,9 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     }
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
+    }
+    if (!ple && c.recr_mask == 0ul && nrows > 1l && rdec_token_n_rows() >= nrows && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
+        return true
     }
     g_rdec_x |> resize(dim)
     g_rdec_cossin |> resize(g_rdec_cos_elems)
