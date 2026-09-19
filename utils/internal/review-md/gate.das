@@ -26,6 +26,8 @@ def walker_self_binary : string {
     return get_full_file_name(normalize(argv[0]))
 }
 
+let GATE_TIMEOUT_S = 600.0   //! the site gate compiles a dasLLAMA sample from source per page: over a minute on the slowest CI runner, and a killed gate read as red with no output
+
 //! Execute each gate (repo-relative path), printing its output. Returns the red-gate count.
 def run_gates(root : string; gates : array<string>) : int {
     return 0 if (empty(gates))
@@ -38,10 +40,13 @@ def run_gates(root : string; gates : array<string>) : int {
     var failed = 0
     for (g in gates) {
         var out : string
-        let rc = run_and_capture([self, g], out, 120.0)
+        let rc = run_and_capture([self, g], out, GATE_TIMEOUT_S)
         print(out)
         if (rc != 0) {
             failed++
+            if (empty(out)) {
+                print("REVIEW.das {g}: exited {rc} with no output - killed at the {int(GATE_TIMEOUT_S)} s cap, or a crash before its verdict\n")
+            }
         }
     }
     chdir(prev)
