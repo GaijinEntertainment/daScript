@@ -12,12 +12,15 @@ options _dasllama_internal = true
 // Args: <n> <d> (default 4096 12288, the Qwen3.5-9B FFN gate; 5120 17408 is the 27B's); `single` dispatches ONE
 // plane copy - the served size, L2-warm across the chain - so the row reads the dispatch's own floor past its
 // bytes at the streaming rate (the decode's small planes pay it once per GEMV).
-// `cols` runs the N-column ruler instead: the batched decode step's formats (q8, k4, k6, k5, q40, iq4xs) at their
-// served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows; the last column
-// is the N-column dispatch's wall over N one-column dispatches - under 1 the weight pass is shared, at 1 it is not.
-// `n2off` holds the q8 rows to the one-row-a-subgroup form (the two-row twin serves past `g_q8_n2_min_n` otherwise).
-// `cold` dispatches ONE plane copy at a time, the copies in turn - the served launch size in the DRAM regime, the
-// token command's own; `single` replays one copy L2-warm and `cold` yields to it.
+// ATTRIBUTION SWEEP - the `cols` mode: the N-column ruler, the batched decode step's formats (q8, k4, k6, k5, q40,
+// iq4xs) at their served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows,
+// each dispatch's wall attributed to its class and width; the last column is the N-column dispatch's wall over N
+// one-column dispatches - under 1 the weight pass is shared, at 1 it is not. The chain alternates two output planes,
+// so consecutive dispatches overlap as the batched step's do. The q8 rows engage the row-pair stamps
+// (`g_q8_n2_min_n` at 0 for the run); `n2off` holds them to the one-row-a-subgroup form.
+// ATTRIBUTION SWEEP - the `cold` mode: ONE plane copy a dispatch, the copies in turn - the served launch size in
+// the DRAM regime, the token command's own - each row attributing a format's wall at that launch size; `single`
+// replays one copy L2-warm and `cold` yields to it.
 
 require strings
 require math
@@ -33,10 +36,12 @@ let private DISPATCHES = 20
 let private SUBMITS = 5
 let private STREAM_MB = 128   //! the least a dispatch streams: four times the 32 MB L2 of the reference card
 
-let private YBIT = 32u   //! the y buffer's hazard bit in the binding order below
+let private YBIT = 32u    //! the y buffer's hazard bit in the binding order below
+let private YBIT2 = 64u   //! the second output plane's, in the `cols` chain
 
 var private g_single_copy = false
 var private g_cold = false
+var private g_cols = false
 
 //! one probe's synthetic planes and activation rows, uploaded; the dispatch geometry rides beside them
 struct private ProbePlanes {
@@ -48,14 +53,15 @@ struct private ProbePlanes {
     rg_bytes : int64
     copies : int
     blocks : int     //! weight blocks a plane copy (the region table's stride)
-    wgs : int64      //! the dispatch grid over every copy's rows, and over one copy's
-    wgs1 : int64
+    wgs_all_copies : int64   //! the dispatch grid over every copy's rows (the ring's dispatch)
+    wgs_one_copy : int64     //! ... over one copy's rows (a `cold` dispatch's)
     pc : GemvArgs
 }
 
-//! the host-side fill of one probe: `wq_words` / `ws_words` of hashed weights, `xq_words` / `xs_count` of activation words
-//! and scales over `xrows` rows, `blocks` weight blocks a plane copy (the region table's stride), the copies' regions
-def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, blocks : int; var p : ProbePlanes) : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; rgd : uint64> {
+//! the host-side fill of one probe: `wq_words` / `ws_words` of hashed weights, `xq_words` / `xs_words` of activation words
+//! and scales over `xrows` rows, `blocks` weight blocks a plane copy (the region table's stride), the copies' regions;
+//! `yd2` is the second output plane the `cols` chain alternates with `yd`
+def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, blocks : int; var p : ProbePlanes) : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; yd2 : uint64; rgd : uint64> {
     var wqh : array<uint>
     var wsh : array<uint>
     var xqh : array<uint>
@@ -65,7 +71,7 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, bloc
     wsh |> reserve(ws_words)
     wsh |> resize(ws_words)
     xqh |> resize(xq_words)
-    xsh |> resize(xs_count)
+    xsh |> resize(xs_words)
     for (i in range(wq_words)) {
         wqh[i] = hash_word(uint(i) + seed * 77777u)
     }
@@ -75,19 +81,20 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, bloc
     for (i in range(xq_words)) {
         xqh[i] = hash_word(uint(i) * 31u + 5u)
     }
-    for (i in range(xs_count)) {
+    for (i in range(xs_words)) {
         xsh[i] = 0.5 + float(i % 7) * 0.25
     }
     p.wq_bytes = int64(wq_words) * 4l
     p.ws_bytes = int64(ws_words) * 4l
     p.xq_bytes = int64(xq_words) * 4l
-    p.xs_bytes = int64(xs_count) * 4l
+    p.xs_bytes = int64(xs_words) * 4l
     p.rg_bytes = 8l * int64(p.copies)
     let wqd = make_device_buf(p.wq_bytes)
     let wsd = make_device_buf(p.ws_bytes)
     let xqd = make_device_buf(p.xq_bytes)
     let xsd = make_device_buf(p.xs_bytes)
     let yd = make_device_buf(p.y_bytes)
+    let yd2 = g_cols ? make_device_buf(p.y_bytes) : 0ul
     let rgd = make_device_buf(p.rg_bytes)
     var regs <- [for (i in range(p.copies * 2)); (i % 2 == 0) ? uint(i / 2 * blocks) : 0u]   //! region r: its own plane copy, the one x
     unsafe {
@@ -101,13 +108,16 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, bloc
     delete wsh
     delete xqh
     delete xsh
-    return (wqd = wqd, wsd = wsd, xqd = xqd, xsd = xsd, yd = yd, rgd = rgd)
+    return (wqd = wqd, wsd = wsd, xqd = xqd, xsd = xsd, yd = yd, yd2 = yd2, rgd = rgd)
 }
 
 //! DISPATCHES dependent dispatches of `fmt`'s class (`ncols` 0 = the one-column class) over the planes, timed
 //! after a warm-up submit; MB = the weight bytes a dispatch reads. Under `cold` every dispatch is one plane copy
-//! at the served launch size, the copies taken in turn so none is L2-warm from the dispatch before
-def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; rgd : uint64>) : tuple<mb : double; us : double> {
+//! at the served launch size, the copies taken in turn so none is L2-warm from the dispatch before. Under `cols`
+//! the chain alternates two output planes under their own hazard bits: a dispatch's barrier is the write-after-write
+//! against the dispatch two back on its plane (the encoder's own WAW gate), so consecutive dispatches overlap as
+//! the batched step's GEMVs do; the one-plane modes chain every dispatch on the one y
+def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; yd2 : uint64; rgd : uint64>) : tuple<mb : double; us : double> {
     var raw = alloc_cmd()
     var sets : array<VkDescriptorSet>
     unsafe {
@@ -122,10 +132,16 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
                 let bufs = fixed_array(b.wqd, b.wsd, rgd, b.xqd, b.xsd, b.yd)
                 let sz = fixed_array(p.wq_bytes, p.ws_bytes, 8l, p.xq_bytes, p.xs_bytes, p.y_bytes)
                 sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sz, gbits) : gemv_cls_set(int(fmt), bufs, sz, gbits))
+                delete pair
             }
         } else {
             let bufs = fixed_array(b.wqd, b.wsd, b.rgd, b.xqd, b.xsd, b.yd)
             sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sizes, gbits) : gemv_cls_set(int(fmt), bufs, sizes, gbits))
+            if (g_cols) {
+                let bufs2 = fixed_array(b.wqd, b.wsd, b.rgd, b.xqd, b.xsd, b.yd2)
+                let gbits2 = fixed_array(1u, 2u, 4u, 8u, 16u, YBIT2)
+                sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs2, sizes, gbits2) : gemv_cls_set(int(fmt), bufs2, sizes, gbits2))
+            }
         }
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -135,7 +151,7 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
             pc.nreg = 1u
             pc.ystride = pc.d
         }
-        let wgs = g_cold ? p.wgs1 : p.wgs
+        let wgs = g_cold ? p.wgs_one_copy : p.wgs_all_copies
         for (i in range(DISPATCHES)) {
             var s_cls = sets[i % length(sets)]
             if (ncols > 0) {
@@ -143,7 +159,9 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
             } else {
                 gemv_cls_enc(int(fmt), raw, h, s_cls, pc, wgs)
             }
-            vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
+            if (!g_cols) {
+                vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
+            }
         }
         vk_check(vkEndCommandBuffer(raw), null)
     }
@@ -171,8 +189,8 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int
     let xrows = max(ncols, 1)
     var p = ProbePlanes(copies = probe_copies(plane_bytes), blocks = nwsb)
     p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
-    p.wgs = gemv_wgs(int64(d) * int64(p.copies), lanes_per_row)
-    p.wgs1 = gemv_wgs(int64(d), lanes_per_row)
+    p.wgs_all_copies = gemv_wgs(int64(d) * int64(p.copies), lanes_per_row)
+    p.wgs_one_copy = gemv_wgs(int64(d), lanes_per_row)
     p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = lanes_per_row,
         ncols = uint(ncols), ystride = uint(d * p.copies))
     let b = probe_fill(uint(int(fmt)), nwsb * qsb_words * p.copies, nwsb * ssb_words * p.copies, nsb * 64 * xrows, nsb * xrows, nwsb, p)
@@ -187,8 +205,8 @@ def private probe_q8(n, d : int; ncols : int = 0) : tuple<mb : double; us : doub
     let xrows = max(ncols, 1)
     var p = ProbePlanes(copies = probe_copies(nblk * 34), blocks = nblk)
     p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
-    p.wgs = gemv_wgs(int64(d) * int64(p.copies), 0u)
-    p.wgs1 = gemv_wgs(int64(d), 0u)
+    p.wgs_all_copies = gemv_wgs(int64(d) * int64(p.copies), 0u)
+    p.wgs_one_copy = gemv_wgs(int64(d), 0u)
     p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = 0u,
         ncols = uint(ncols), ystride = uint(d * p.copies))
     let b = probe_fill(99991u, nblk * 8 * p.copies, (nblk * p.copies + 1) / 2, nb * 8 * xrows, nb * xrows, nblk, p)
@@ -203,23 +221,25 @@ def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double;
     return probe_fmt(fmt, n, d, gemv_lanes_per_row(int(fmt), int64(n)), ncols)
 }
 
-//! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format (the q8 row
-//! takes its two-rows-a-subgroup twin past Q8_N2_MIN_N, as the token command does)
+//! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format (the q8 rows
+//! take the two-rows-a-subgroup stamps past `g_q8_n2_min_n`, which `main` holds at 0 for the run unless `n2off`),
+//! every dispatch's output unread - timing only
 def private cols_ruler(n, d : int) {
     let fmts = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)) && gemv_cls_ensure_n(int(f)), "vk_gemv_probe: the ruler's gemv class rails must engage on a live device")
     }
-    print("vk_gemv_probe: the N-column ruler at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; GB/s over the weight bytes; the last column = this dispatch's wall over `cols` one-column dispatches\n")
-    print("| fmt    | class | cols |  us/dispatch |    GB/s | vs N single |\n")
-    print("| :----- | :---- | ---: | -----------: | ------: | ----------: |\n")
+    let pairs = g_q8_n2_min_n == 0u ? "the q8 row-pair stamps engaged" : "the q8 rows a row a subgroup (n2off)"
+    print("vk_gemv_probe: the N-column ruler at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up over two alternating output planes, {pairs}; GB/s over the weight bytes; the last column = this dispatch's wall over `cols` one-column dispatches\n")
+    print("| fmt    | class | cols |  us/dispatch |    GB/s | vs N single |             |\n")
+    print("| :----- | :---- | ---: | -----------: | ------: | ----------: | :---------- |\n")
     let widths = fixed_array(1, 2, 4, 8)
     for (f in fmts) {
         let one = probe_any(f, n, d, 0)
-        print("| {f} | one | 1 | {one.us:12.1f} | {one.mb * 1048576.0lf / (one.us * 1000.0lf):7.1f} | {1.0lf:11.2f} |\n")
+        print("| {f} | one | 1 | {one.us:12.1f} | {one.mb * 1048576.0lf / (one.us * 1000.0lf):7.1f} | {1.0lf:11.2f} | timing-only |\n")
         for (nc in widths) {
             let r = probe_any(f, n, d, nc)
-            print("| {f} | ncol | {nc} | {r.us:12.1f} | {r.mb * 1048576.0lf / (r.us * 1000.0lf):7.1f} | {r.us / (one.us * double(nc)):11.2f} |\n")
+            print("| {f} | ncol | {nc} | {r.us:12.1f} | {r.mb * 1048576.0lf / (r.us * 1000.0lf):7.1f} | {r.us / (one.us * double(nc)):11.2f} | timing-only |\n")
         }
     }
 }
@@ -236,14 +256,16 @@ def main : int {
     }
     g_single_copy = find_index(args, "single") >= 0
     g_cold = find_index(args, "cold") >= 0 && !g_single_copy
+    g_cols = find_index(args, "cols") >= 0
+    if (g_single_copy && find_index(args, "cold") >= 0) {
+        print("vk_gemv_probe: WARNING `single` takes precedence over `cold` - the cold arm is dropped; run them apart\n")
+    }
     if (!ensure_q8_batch_cls()) {
         print("vk_gemv_probe: no Vulkan device\n")
         return 1
     }
-    if (find_index(args, "n2off") >= 0) {   //! the q8 ruler on the one-row-a-subgroup form alone
-        g_q8_n2_min_n = 0xFFFFFFFFu
-    }
-    if (find_index(args, "cols") >= 0) {
+    if (g_cols) {
+        g_q8_n2_min_n = find_index(args, "n2off") >= 0 ? 0xFFFFFFFFu : 0u
         cols_ruler(n, d)
         return 0
     }

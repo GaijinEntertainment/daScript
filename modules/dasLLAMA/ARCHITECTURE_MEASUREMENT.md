@@ -12,8 +12,16 @@ sections 2.21, 2.26 and 2.27. The Vulkan GEMM probe's arms, shapes and alternate
 *mirror* of the upstream `llama-bench` - the same test shapes, rep counts and timing
 boundaries, applied to our engine - so `pp` is one batched prefill of `-p` tokens from an empty
 cache per rep and `tg` is `-n` single-token forwards with no logit read, each row one untimed
-warmup plus `-r` timed reps. The rows' protocol lives in one place, `dasllama/dasllama_bench.das`
-(the synthetic ids, the warmups, the timed reps, the warmup logit check, the row statistic), and
+warmup plus `-r` timed reps; its `tg128@N` row (`--npl N`) mirrors the reference's batched bench
+at that parallel count - N streams served together through the scheduler's device mode, the rate
+their served tokens summed over the step wall. The batched row's clock covers the scheduler step
+whole - the sampling, the detokenization and the event list inside it - where the reference exe
+times its decode call alone, so a ratio taken between the two reads conservative for ours. The
+row's prefills and first tokens run before the clock starts, as the reference times PP apart, and
+each of its streams decodes to `plen + npl + ngen` positions - the context a driver sizes before
+it opens the row's session. The rows' protocol lives in one place,
+`dasllama/dasllama_bench.das` (the synthetic ids, the warmups, the timed reps, the warmup logit
+check, the row statistic), and
 two drivers run it: `lcpp_bench` from its loop, and dasllama-server's in-process `/bench` one
 step per tick on the model it serves. Only `lcpp_bench`'s rows become records: the server's are
 a self-measure the operator reads on the control page, stamped with the device, the KV codec,
@@ -101,7 +109,10 @@ variance break, because a heat-soaked re-run lands low with a clean cv and a cv-
 keep it. Map warming can only make a re-run faster, so a slower axis says the box was still
 shedding the previous cell's heat and `--das-settle` is short for that tier.
 
-**The two decode rulers beside the GEMV probe read against rows of their own run.**
+**The two decode rulers beside the GEMV probe read against rows of their own run.** Every figure
+of ours in this paragraph is the pod's (Linux, RTX PRO 4500, `daslang -jit`, the vulkan tier in
+its cm2 mode, kv f16), each probe at its defaults - the attention ruler at 4 rows, 640 positions,
+head 64, 32 heads and 4 heads a kv head, the copy ruler at its four sizes.
 `harness/vk_attn_probe.das [rows] [cnt] [hs] [heads] [kv_mul]` times the token command's attention
 pass a layer on the device clock across the key-split ladder; a row's alternates are the other
 splits of the same run, and the reference-engine row is llama.cpp's `FLASH_ATTN_EXT` line from

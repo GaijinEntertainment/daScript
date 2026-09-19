@@ -17,21 +17,23 @@ provenance line that unambiguously covers it, or by a citation of a passage or b
 provenance covers it - a provenance line covers the paragraphs it sits under, or the ones it names
 as its scope.
 
-An arm is one side of a pair held against the other. Flags are the tier (`-jit` or not), the
-`DAS_TUNE_POLICY` value in force, and the kernel backend the run served on; for a run served on a
-GPU backend, the device and the coopmat mode in force (`DASLLAMA_COOPMAT` - which
-cooperative-matrix path the run compiled). An environment override is an env variable a run was
-given that changes what it compiles, tunes, or serves, other than the ones named above.
+An arm is one side of a pair held against the other. An instrument is a script that times a run
+itself and reports the wall or rate as its own result. The flags of a serving run are the tier
+(`-jit` or not), the `DAS_TUNE_POLICY` value in force, and the kernel backend the run served on;
+for a run served on a GPU backend, the device and the coopmat mode in force (`DASLLAMA_COOPMAT` -
+which cooperative-matrix path the run compiled). The flags of an instrument run are the tier, the
+`DAS_TUNE_POLICY` value in force, the device, the coopmat mode and the instrument's own arguments.
+An environment override is an env variable a run was given that changes what it compiles, tunes,
+or serves, other than that run's own flags named above.
 
-A board cell is a run `performance/gen_bench_records.das`
-spawns, or a manual `benchmarks/lcpp_bench.das` cell its `PROFILE.md` section documents, whose
-reading lands as a row of `performance/records/<box>.json`; an `--oracle` re-measure is not one -
-it never writes the store. A ruler record (`performance/records/mtp/*.json`, written by
-`harness/mtp_ruler.das`) is not a board cell. The `-jit` script is `benchmarks/lcpp_bench.das` run
-as a script under `-jit` rather than as the released exe. A rig leg is the backend arm a board cell
-runs - one the set `stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is
-a real model file a harness run drives; a harness is the `harness/` script that drove a run, where
-one did.
+A board cell is a run `performance/gen_bench_records.das` spawns, or a manual
+`benchmarks/lcpp_bench.das` cell its `PROFILE.md` section documents, whose reading lands as a row
+of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it never writes the
+store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
+writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
+rather than as the released exe. A rig leg is the backend arm a board cell runs - one the set
+`stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is a real model file
+a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
 **A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
 tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
@@ -60,8 +62,7 @@ benchmark process.**
 **A checked-in document other than `PERF_LEDGER.md` that states a `--for-debug-purposes` reading
 covered by a committed board row - one matching on all three of model, served-turn leg (prefill,
 decode, or the turn end to end) and backend - cites that row and marks the reading `debug-jit`.**
-A `--for-debug-purposes` reading is the `-jit` script's own output; the ledger's own gate above
-admits no such reading.
+A `--for-debug-purposes` reading is the `-jit` script's own output.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**
 
@@ -70,8 +71,7 @@ another project - it rests on a measurement a cell or instrument of this reposit
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 whose losing arm was never committed.** That timing settles its adoption decision in the PR that
-lands the kernel. The winner enters the ledger only
-through a re-measured board cell.
+lands the kernel. The winner enters the ledger only through a re-measured board cell.
 
 **A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
 mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
@@ -106,8 +106,8 @@ that ran it.**
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
-exe or script that produced it.** A figure a committed board cell or ruler record produced names
-the record and row instead.
+exe or script that produced it.** A figure a committed board cell produced, or a committed record
+an instrument under `harness/` wrote, names the record and row instead.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

@@ -60,7 +60,7 @@ def test_facade_jobque_spin_knob(t : T?) {
         t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "no driver armed: the CPU window is in force")
         set_jobque_spin_gpu_us(777l)
         t |> equal(get_jobque_spin_gpu_us(), 777l, "the facade setter lands on the engine knob")
-        t |> equal(get_jobque_spin_in_force(), 30000l, "the GPU knob alone moves nothing: the CPU window stays in force")
+        t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the GPU knob alone moves nothing: the CPU window stays in force")
         set_jobque_spin_gpu_us(500l)
     }
 }

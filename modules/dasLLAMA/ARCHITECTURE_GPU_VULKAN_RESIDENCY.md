@@ -205,10 +205,14 @@ on the transfer timeline's counter (`xfer_spin_wait`) instead of the fence - a b
 would pay the OS wake-up a step, as the fence wait's spin already knows. The logits planes are
 CONCURRENT between the two families (`make_device_buf` / `make_host_buf` at `xfer_shared`), so no
 ownership transfer sits on the path; the host orders the next step behind the copy, so the
-command's next write of the plane never races its read. Without a transfer family the command
-carries the copy and the fence as before (`rd_submit_land` / `rd_wait_land` choose). Pod,
-Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371 us, tg128@4 1019 -> 1136
-summed, tg128 426 -> 451.
+command's next write of the plane never races its read. `DASLLAMA_VK_XFERQ=0` leaves the device
+without a transfer family; there the command carries the copy and the fence as before
+(`rd_submit_land` / `rd_wait_land` choose) - the one in-process switch that puts the copy back
+inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
+us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451. The figures in this section and the next are
+the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
+`benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
+rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
 
 ### 2.2ao The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
 
@@ -218,7 +222,11 @@ rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
 MoE, per-layer-embedding or shared-KV layer, a q/k norm, a gated q, a classifier epilogue, or a
-weight format with no N-column leaf. Every GEMV goes out as an N-column dispatch
+weight format with no N-column leaf. Every set over a per-row plane binds the plane's whole `nb`
+extent; the rule guards two shapes - an ungated q row sitting inside the projection row, and a q
+binding sized to one row, which leaves every row but the first reading past its binding. The MoE
+feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE layers, and
+their sets bind one row. Every GEMV goes out as an N-column dispatch
 (`GemvArgs.ncols` activation rows one weight pass apart by `ystride`); the q8 leaf takes its
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
 because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup. The
@@ -229,7 +237,10 @@ the attention, `rowwg` 0 naming a one-row dispatch). The rows' heads already fil
 the attention's key split shrinks as the row count grows (`da_nsplit` over
 `da_attn_row_wgs x nrows`). A command is recorded once per row count and split form, on first
 use, and keeps its own stamp names; the one-row command's list is borrowed for the record and put
-back.
+back. A row count whose split form runs at one split still fills the split stamp slot: the
+recorder's list for that row count is the split form's. The command's N-column leaves are built
+on the first batched step; a stamp that declines on the device logs once, and the command answers
+0 rows from then on, so the row-at-a-time loop serves.
 
 **The rows' logits come home in one read of the mapped plane.** `rd_land_logits_n` copies the
 whole plane into a scratch row, then a row a copy to each session's pointer: four reads straight

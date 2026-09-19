@@ -3,14 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-A marker struct stands on the CPU for a value whose storage exists only on the device - a tile, a
-tensor, a layout or view over one, a sampler, an image - and has no storage of its own; a resource
-struct carries the device handle.
-
 **Never put anything that cannot compile on the CPU into a kernel body or into a function a
 kernel calls - keep both in ordinary das.** A kernel built from ordinary values is compared
-against its own CPU run; a marker struct and the builtins over it compile on the CPU, and
-their CPU bodies compute nothing.
+against its own CPU run; a marker struct - one that stands on the CPU for a value whose storage
+exists only on the device (a tile, a tensor, a layout or view over one, a sampler, an image) and
+has no storage of its own - and the builtins over it compile on the CPU, and their CPU bodies
+compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
 declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or
@@ -20,9 +18,9 @@ returns, argument for argument.**
 **Never let a construct the emitter cannot lower produce a kernel or a crash - the emitter
 reports a compile error that names the construct.**
 
-**Never pass a shape constant to a kernel as a runtime argument - pass it as a call-site
-constant.** A shape constant is a value the kernel's index arithmetic treats as a fixed extent
-of its tile or of its cooperating lane group.
+**Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
+carry it - pass it as a call-site constant.** A shape constant is a value the kernel's index
+arithmetic treats as a fixed extent of its tile or of its cooperating lane group.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
@@ -46,29 +44,27 @@ shape is the structure of the emitted kernel - its signature, its parameter attr
 statement forms - and its stamped shape values (tile, grid, threadgroup sizes).
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
-shared ledger (`dasMetal/ARCHITECTURE.md`, "Cross-backend parity - the kernel-model asymmetry
-ledger") naming that capability - covered by the row that names its family, or by a row the diff
-adds.** A kernel-model capability is present on an emitter when the emitted text or words carry
-its effect - an emitter that accepts the construct and emits nothing for it does not have it -
-and a family is the set of constructs one ledger row names.
+shared ledger (`dasMetal/ARCHITECTURE.md` sec.5) naming that capability - covered by the row
+that names its family, or by a row the diff adds.** A kernel-model capability is present on an
+emitter when the emitted text or words carry its effect - an emitter that accepts the construct
+and emits nothing for it does not have it - and a family is the set of constructs one ledger row
+names.
 
 **A diff that puts a `daslib/shader_lingua_franca` declaration into a kernel body or fixture an
 emitter compiles, where that emitter does not handle it, ships, in the same change, either
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
 
-**A read of a global-rooted array - a module global, a `@workgroup` array, or a `self.<member>`
-resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or in any `def`
-that body calls, that a diff adds to the emitted words or text, or makes happen on a dispatch or
-at an index it did not reach before - by widening the set of dispatches it happens on, by
-dropping the condition that kept it inside the region this dispatch's own bound defines (a read
-in both arms of an `if`, a clamp landing outside that region, and a bare read are the shapes that
-drop takes), or by loading a fixed-size block whose only guard is on its store - is in range on
-every dispatch it happens on, or the `ARCHITECTURE*.md` at the root of the module the kernel
-ships in names slack past that range and the read stays inside the slack.** Both emitters lower
-a `?:`, `&&` or `||` operand so only the taken side runs, so the short-circuit form needs no
-rewrite; the device declares no robust buffer access, so an out-of-range read returns undefined
-data, not zero.
+**A global-rooted-array read a diff adds, makes happen at an index it did not reach before, or
+makes happen on a dispatch it did not happen on before, is in range on every dispatch it happens
+on, or the `ARCHITECTURE*.md` at the root of the module the kernel ships in names slack past
+that range and the read stays inside the slack.** A global-rooted array is a module global, a
+`@workgroup` array, or a `self.<member>` resource, read in a `[spirv_kernel]`,
+`[compute_shader]` or `[metal_kernel]` body or in any `def` that body calls; a diff makes that
+read happen on a dispatch it did not happen on before when it drops the condition that kept the
+read inside the region this dispatch's own bound defines - a read in both arms of an `if`, a
+clamp landing outside that region, a bare read - or loads a fixed-size block whose only guard is
+on its store.
 
 **A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
 a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff

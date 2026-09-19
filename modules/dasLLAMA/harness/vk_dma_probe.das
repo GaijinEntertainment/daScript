@@ -12,30 +12,22 @@ options _dasllama_internal = true
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
+require _vk_probe_fixture   // pfq_arm, pfq_avg_us: the device clock around a recorded command
 
 let private REPS = 8
 
-//! one copy of `bytes` on the compute queue, the device clock around it, averaged over REPS submits
+//! one copy of `bytes` on the compute queue, the device clock around it, averaged over REPS submits after a warm-up
 def private compute_copy_us(src, dst : uint64; bytes : int64) : double {
     var raw = alloc_cmd()
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    ensure_pfq()
-    g_pfq_on = true
-    g_pfq_n = 0u
-    cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
+    pfq_arm(raw)
     pfq_ts(raw)
     cmd_copy_whole(raw, src, dst, bytes)
     pfq_ts(raw)
     pfq_end(raw)
     vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(raw)
-    var us = 0.0lf
-    for (_i in range(REPS)) {
-        submit_wait(raw)
-        us += pfq_us(1u)
-    }
-    return us / double(REPS)
+    return pfq_avg_us(raw, REPS, 1)
 }
 
 //! the same copy on the transfer queue, the host clock from submit to the timeline's signal
@@ -84,16 +76,16 @@ def main : int {
     let xfer = g_gpu.xfer_fam >= 0
     let xq = xfer ? "family {g_gpu.xfer_fam}" : "absent"
     print("vk_dma_probe: device -> cached host copies, {REPS} reps after a warm-up; compute queue by the device clock, transfer queue ({xq}) by the host clock including its submit and wait\n")
-    print("|     bytes | compute us | compute GB/s | us/4K page | transfer us | transfer GB/s |\n")
-    print("| --------: | ---------: | -----------: | ---------: | ----------: | ------------: |\n")
+    print("|     bytes | compute us | compute GB/s | us/4K page | transfer us | transfer GB/s |             |\n")
+    print("| --------: | ---------: | -----------: | ---------: | ----------: | ------------: | :---------- |\n")
     for (kb in [512, 2048, 8192, 32768]) {
         let bytes = int64(kb) * 1024l
-        let src = make_device_buf(bytes)
-        let dst = make_host_buf(bytes, false, [cached = true])
+        let src = make_device_buf(bytes, true)   //! both queue families own the pair: the transfer arm copies across them
+        let dst = make_host_buf(bytes, false, [cached = true, xfer_shared = true])
         let cus = compute_copy_us(src, dst.buf, bytes)
         let pages = double(bytes) / 4096.0lf
         let tus = xfer ? transfer_copy_us(src, dst.buf, bytes) : 0.0lf
-        print("| {bytes:9d} | {cus:10.1f} | {double(bytes) / (cus * 1000.0lf):12.2f} | {cus / pages:10.3f} | {tus:11.1f} | {xfer ? double(bytes) / (tus * 1000.0lf) : 0.0lf:13.2f} |\n")
+        print("| {bytes:9d} | {cus:10.1f} | {double(bytes) / (cus * 1000.0lf):12.2f} | {cus / pages:10.3f} | {tus:11.1f} | {xfer ? double(bytes) / (tus * 1000.0lf) : 0.0lf:13.2f} | timing-only |\n")
     }
     return 0
 }

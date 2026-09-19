@@ -578,6 +578,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // 1..320 counting prompt)
             parity <- ev_gemma4_dense()),
         ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf", display = "Llama-3.1-8B"),
+        ModelSpec(file = "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", display = "Llama-3.1-8B-q4km", quant_label = "q4_k_m"),
         // gpt-oss is revision-pinned (upstream re-uploads bit-different files under the same
         // name); its parity fixtures run through test_parity's own shared-load arm — the
         // ~13GB native-mx4 resident is the suite's biggest, loaded once for both fixtures

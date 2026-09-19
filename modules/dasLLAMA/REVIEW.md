@@ -10,8 +10,8 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 **A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it - a driver reading a child's clock is
 not one), a kernel race (a run timing two kernel variants - arms - against each other in one
-process), or a file under `benchmarks/` or `performance/` that `benchmarks/lcpp_bench.das` requires directly, wherever it
-lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+process), or a file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to
+this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
@@ -38,11 +38,11 @@ omission costs every later `run.das -- --changed` the whole suite, never coverag
 folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]` declares),
-or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes) change, a call that
-makes, arms or tears down device-home serving (`create_device_session`, `set_device_kv`,
-`moe_gpu_drop_model`), a GPU kernel A/B race, a knockout (an arm that skips a stage to measure that
+or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes) change, a GPU kernel
+A/B race, a call that makes, arms or tears down device-home serving (`create_device_session`,
+`set_device_kv`, `moe_gpu_drop_model`), a knockout (an arm that skips a stage to measure that
 stage's cost), or a hand-binding arm (one that writes buffer or kargs (kernel-argument struct)
-binding numbers as literals instead of the kernel class's declared ones), wherever the diff puts it - applies `REVIEW_GPU.md`.**
+binding numbers as literals), wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever
@@ -90,13 +90,12 @@ a maintainer ruling that bench comparability is broken.** Recorded performance r
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value that is the same on every dispatch a compiled kernel's pipeline serves - a shape class is,
-a per-model flag is not - never reaches that kernel as a uniform, a kargs field, or an `@off` bind
-offset: stamp it into the class as a `@template_constant`.**
+**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width the
+class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a kargs
+field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
 
-**A function-typed global a serialized exe must re-establish lands in a `dasllama/` file with
-the `[init]` that establishes it at boot; landing one where `REVIEW.das`'s restore-check walk
-over `dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so
+**A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
+the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
 a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
 stays green; a global another file's `[init]` arms has no initializer, and its null default is
 the declared "no hook".
@@ -122,18 +121,17 @@ serves the same weights and shape, is a defect - call that twin instead.** A sit
 stay f32 for another reason is ledgered on its own file's sec.1 charter line in an
 `ARCHITECTURE_*.md` companion, not commented into compliance.
 
-**A caller never re-checks a guard its callee checks - drop the caller's copy and let the
-callee's check stand.**
+**A caller never re-checks a guard its callee checks - drop the caller's copy.**
 
 **A boot-path prompt (code that runs at startup, before the first request) that reads stdin
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
-cold one-shot load, bake, map or tokenizer-build progress log and the first-start kernel race
-report of a fat exe - one built `DAS_TUNE_MODE=fat`, shipping its tune profile - is a defect** -
-instrumentation goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`,
-`asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers and logs), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+**A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside
+the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
+tier's `vk_prof()`-gated ledgers and logs), a cold one-shot load, bake, map or tokenizer-build
+progress log, or the first-start kernel race report of a fat exe (one built `DAS_TUNE_MODE=fat`,
+shipping its tune profile), is a defect - route it through a rail (`ARCHITECTURE_MEASUREMENT.md` sec.2.10).**
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
@@ -150,19 +148,18 @@ below the entry that carries no annotation of its own; an unreached loop has no 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` / `[no_env]` /
 `[no_io]` contract moves that annotation to the new name in the same change** - it is no new entry.
 
-**The annotation sits on the region entry - the outermost function the runtime re-enters per
-token, per frame, or per prefill quantum: a kernel `*_encode` / `*_decode`, a step driver, the
-CPU decoder's `forward_*` entries, or a function reached only through a registered function
-value - and an interior function carries an annotation only when it is a `[cold_path]` on a
-rarely-taken branch (a guard that logs once).**
+**A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function below the
+region entry - the outermost function the runtime re-enters per token, per frame, or per prefill
+quantum: a kernel `*_encode` / `*_decode`, a step driver, the CPU decoder's `forward_*` entries,
+or a function reached only through a registered function value - is a defect - move it to the
+entry; an interior function carries only a `[cold_path]` on a rarely-taken branch.**
 
-**A loop reached only from a load, stage, bake, or convert path is not a region entry: it
-carries no `[hot_path]` and none of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts; a
-`[cold_path]` may sit on it.**
+**Never put `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a loop reached
+only from a load, stage, bake, or convert path - it is no region entry; it carries `[cold_path]`
+or nothing.**
 
 **A driver that calls the `forward_*` entries and is reached only by a measurement - a
-benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which
-covers only the functions below it that carry no annotation of their own.**
+benchmark row, a rig's loop - and never by a served request carries `[cold_path]`.**
 
 **A change to `encode`/`bpe_encode`, or to a function they call, in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
@@ -177,15 +174,17 @@ a metadata default the encode reads as a value - does not fire this rule.
 template strings any of them look up, records a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
-**A diff that adds an override, or gives one a new effect, without the announce is a defect.**
-An override is an environment knob, an exported runtime setter, or an on-disk state file - one a
-run writes or a user places, never data a build ships - that moves a gate, policy, or threshold
-off its default and so changes which code the run takes or what it writes, reads, mints, or
-computes; a measured time and the run's own duration are not such a change, a CLI flag never is one.
+**A diff that adds an override, or gives one a new effect, without the announce is a defect.** An
+announce is the line the run prints where the override changes the outcome. An override is an
+environment knob, an exported runtime setter, or an on-disk state file - one a run writes or a
+user places, never data a build ships - that moves a gate, policy, or threshold off its default
+and so changes which code the run takes or what it writes, reads, mints, or computes. A measured
+time, the run's own duration, or a different moment at which the same work happens is not such a
+change; a CLI flag is never an override.
 
 **An announce names the override by the spelling a user would set - the env variable, the sidecar
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
-(none: it says so).** It prints where the override changes the outcome; a set-but-inert override is silent.
+(none: it says so).** A set-but-inert override is silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
 outside this folder left showing the old call, flag, or default after a change to user-facing API
@@ -219,20 +218,20 @@ lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
 `require ... public` that re-exports an engine module OUT of a file carrying this option,
 beyond what that consumer's ruled charter grants, breaks this rule too.
 
-**An edit that stops a `REVIEW.das` (beside this file) check firing without fixing what it
-flagged is a defect:** dropping a check, rewriting a finding text so it no longer names what
-failed, adding a name to a check's licensed set - the names that check does not flag - where that
-check's own finding text does not name the set as its extension point, or re-stamping a pinned
-hash, count or list where that check's own finding text does not sanction the re-stamp; the gate itself says what it enforces.
+**An edit that stops a `REVIEW.das` (beside this file) check firing without fixing what it flagged
+is a defect:** dropping a check, rewriting a finding text so it no longer names what failed, adding
+a name to a check's licensed set - the names that check does not flag - or re-stamping a pinned
+hash, count or list, where that check's own finding text does not sanction the addition or the
+re-stamp; the gate itself says what it enforces.
 
 **A new `REVIEW.das` check, or a check whose licensed set gains a name, names in its finding text
 the rule it enforces and ships its line in the companion section that owns the mechanism the check
 guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The
 line names the check and the names it licenses; when the check licenses no names, the line says so.
 
-**Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
-that describes a mechanism of the reference build, or names that build, its binaries or its
-symbols, wherever the diff puts it - and the commit message or PR body of a diff that does - applies `REVIEW_UPSTREAM.md`.**
+**Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language - that
+describes a reference-build mechanism, or names that build, its binaries or symbols, wherever the
+diff puts it - and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 
 **A diff that changes what authoring a new weight format entails - a step added or dropped, a
 file the author must touch, a fixture or probe entry the format must supply, or a gate it must
@@ -240,8 +239,8 @@ pass - updates `HOW_TO_ADD_A_FORMAT.md` in the same change.** The how-to is the 
 author's whole brief: a step dropped there is a step the next format silently skips.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
-this folder's `THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, a model card (the provenance-and-licence page
-published beside a released model or pack), or a ledger row naming a licence as a reason to
+a model card (the provenance-and-licence page beside a released model or pack), this folder's
+`THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, or a ledger row naming a licence as a reason to
 adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
 
 **A def of a facade file - one whose defs reach a consumer through `require dasllama/dasllama`;
@@ -264,7 +263,8 @@ by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.*
 
 **A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter's
 holds column does not cover, keeps the charters true in the same change - in an
-`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.**
+`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.** `ARCHITECTURE.md`'s sec.1 routing
+block names the companion holding each file's charter line.
 
 **A `followup_*.md` row whose work landed in this change is deleted and no other row is
 renumbered - text cites rows by number - an item that landed leaves a row that lists several,

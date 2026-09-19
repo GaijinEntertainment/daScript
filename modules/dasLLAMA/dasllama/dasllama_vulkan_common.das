@@ -1191,7 +1191,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the SM count the dense tile pick and split-k read ({sm} here); without it the l tile serves every dense GEMM and nothing splits k"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
-            rides = "the transfer queue that overlaps streamed weight copies with compute; without it the copies ride the compute queue"),
+            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident token command's logits behind a compute-timeline wait; without it the copies ride the compute queue and the token command copies its own logits under its fence"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -2426,7 +2426,7 @@ struct RDec {
     logits_dev : uint64
     x_host, logits_host : HostBuf
     log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
-    xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands, one a row count (0 = the one-row command's), recorded on first use
+    xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands by row count (index 0 unused; the one-row command lands at 1), recorded on first use
     xlog_recorded : array<bool>
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
@@ -2440,6 +2440,7 @@ struct RDec {
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
     s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
     n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
+    n_rail : int   //! the N-row command's kernel classes on this device: 0 not asked yet, 1 built, -1 one declined (the command answers 0 rows)
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
@@ -2716,6 +2717,13 @@ def rdq_reset {
     g_rdq_n_unsplit = 0u
     g_rdq_overflow_unsplit = false
     g_rdq_form_unsplit = false
+    g_rdq_names_n |> clear()
+    g_rdq_n_n = 0u
+    g_rdq_overflow_n = false
+    g_rdq_names_n_unsplit |> clear()
+    g_rdq_n_n_unsplit = 0u
+    g_rdq_overflow_n_unsplit = false
+    g_rdq_form_n = false
 }
 
 let PFQ_CAP = 2048u
@@ -3288,17 +3296,19 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
     }
 }
 
-// One-shot command buffers (the KV readback rails) are freed by their caller — registering them
-// in model_cmds would grow it per hydration until the next model drop.
-def alloc_transient_cmd : VkCommandBuffer {
+def private alloc_cmd_in(pool : CommandPool) : VkCommandBuffer {
     var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(g_gpu.pool)
+    ai.commandPool = boost_value_to_vk(pool)
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw : VkCommandBuffer
     vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
     return raw
 }
+
+// One-shot command buffers (the KV readback rails) are freed by their caller — registering them
+// in model_cmds would grow it per hydration until the next model drop.
+def alloc_transient_cmd : VkCommandBuffer => alloc_cmd_in(g_gpu.pool)
 
 def free_transient_cmd(var raw : VkCommandBuffer) {
     vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
@@ -3308,6 +3318,19 @@ def alloc_cmd : VkCommandBuffer {
     var raw = alloc_transient_cmd()
     g_gpu.model_cmds |> push(raw)   // all persistent cmds are model-owned; freed by the model drop
     return raw
+}
+
+//! a persistent command on the transfer queue's pool
+def alloc_xfer_cmd : VkCommandBuffer {
+    var raw = alloc_cmd_in(g_gpu.xfer_pool)
+    g_gpu.model_xcmds |> push(raw)   // model-owned: freed by the model drop, as alloc_cmd's are
+    return raw
+}
+
+def upload_zeros(dev : uint64; off, bytes : int64) {
+    var zeros : array<uint8>
+    zeros |> resize(bytes)
+    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), bytes)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -3353,19 +3376,7 @@ def submit_signal(var raw : VkCommandBuffer) : uint64 {
     return g_gpu.cmp_value
 }
 
-//! a persistent command on the transfer queue's pool
-def alloc_xfer_cmd : VkCommandBuffer {
-    var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(g_gpu.xfer_pool)
-    ai.level = VkCommandBufferLevel.PRIMARY
-    ai.commandBufferCount = 1u
-    var raw : VkCommandBuffer
-    vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
-    g_gpu.model_xcmds |> push(raw)   // model-owned: freed by the model drop, as alloc_cmd's are
-    return raw
-}
-
-//! a transfer-queue submit that waits for the compute timeline at `cmp_val` and signals the transfer timeline; returns the value to wait for
+//! a transfer-queue submit that waits for the compute timeline at `cmp_val` (0 = no wait) and signals the transfer timeline; returns the value to wait for
 def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     g_gpu.xfer_value++
     var sig = g_gpu.xfer_value
@@ -3377,18 +3388,20 @@ def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     wstage.transfer = true
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
-    submit.waitSemaphoreCount = 1u
     submit.signalSemaphoreCount = 1u
     let nofence : VkFence
     unsafe {
-        tss.waitSemaphoreValueCount = 1u
-        tss.pWaitSemaphoreValues = addr(wval)
+        if (cmp_val != 0ul) {
+            submit.waitSemaphoreCount = 1u
+            tss.waitSemaphoreValueCount = 1u
+            tss.pWaitSemaphoreValues = addr(wval)
+            submit.pWaitSemaphores = addr(wsem)
+            submit.pWaitDstStageMask = addr<uint?>(wstage)
+        }
         tss.signalSemaphoreValueCount = 1u
         tss.pSignalSemaphoreValues = addr(sig)
         submit.pNext = addr<void?>(tss)
         submit.pCommandBuffers = addr(xraw)
-        submit.pWaitSemaphores = addr(wsem)
-        submit.pWaitDstStageMask = addr<uint?>(wstage)
         submit.pSignalSemaphores = addr(ssem)
         vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
     }

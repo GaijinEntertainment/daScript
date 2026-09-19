@@ -518,16 +518,21 @@ llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLA
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
 the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
-GPU-served window in force while the driver is armed, the CPU window back after the drop; skips
-without the model or the armed tier.
-`test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das` and
-`test_gpu_resident_regions_hybrid.das` (`_resident_regions.das` carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
+GPU-served window in force while the driver is armed, the CPU window back after the drop; the 1B
+also runs the batched bench row (`bench_tg_batched_rep`): a row asking more streams than the
+device homes refuses by name and reads 0, and a row it homes serves at a rate with every stream
+parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
+other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
+`test_gpu_resident_regions_hybrid.das` and `test_gpu_resident_regions_llama_k.das` (`_resident_regions.das` carries the cells; one model a file; the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
 itself, so no CPU reference chain runs. The bit-for-bit cells: a session stepped between another
 session's single steps, and a batched step over both, each read what the session reads alone,
 the two prompts differing in content and length so a crossed region cannot land there, the
 claims unchanged through the batched steps (no history came up from the host again); the same
+batched steps past the unsplit position (both prompts longer than `RD_UNSPLIT_POS`, so the N-row
+command's split attention form serves, its arrival counters a row apart); the same
 with device-home sessions, which allocate no host cache, prefill on the device under the
 server's prefill pin (`set_resident_prefill_allowed(false)`) and come through a hydrate
 untouched; the pin - with both regions held by

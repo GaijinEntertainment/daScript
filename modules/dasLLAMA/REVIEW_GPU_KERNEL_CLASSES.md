@@ -18,14 +18,17 @@ they inherit.
 one base shell.** Body divergence is carried by a `@template_constant`, or by an overridden method
 spliced flat at emission.
 
-**A `@template_constant` a stamp sets, that nothing in that stamp resolves at compile time - a
-`static_if` arm, a `@template_gate`, a value select, an array extent - reads, is a defect - move
-the constant to the template whose body reads it, or make the body read it.**
+**A `@template_constant` a stamp - one instance of a class template, or one class deriving from a
+base shell - sets, that nothing in that stamp resolves at compile time - a `static_if` arm, a
+`@template_gate`, a value select, an array extent - reads, is a defect - move the constant to the
+template whose body reads it, or make the body read it.**
 
-**A diff that folds kernel classes onto one template, or retargets a dispatch class at another
-template, carries in the PR body, for each affected stamp, its generated source diffed against the
-pre-change tree - the `*_msl` global, or the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes -
-with an empty diff, or names there the difference and the compile-time choice that carries it.**
+**A diff that changes where a `[vk_dispatch]` / `[metal_dispatch]` class's compiled body comes
+from (a different template, a different base shell, another class's body folded in, or a fork out
+of a shared template) carries in the PR body, for each affected stamp, its generated source diffed
+against the pre-change tree - the `*_msl` global, or the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>`
+writes - with an empty diff, or names there the difference and the compile-time choice that
+carries it, or names the behaviour change and the test cell that pins it.**
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
@@ -36,33 +39,34 @@ kernel-binding asymmetries.** A binding counts as read when the compiled
 body reads any field declared on it - fields in the stamp or in the shell may share a binding,
 `@role = "alias"` marks such a view - including a field read only under a run-time flag.
 
-**A diff that forks a kernel class out of a shared template carries in the PR body, from the
-forked class's generated source (its `*_msl` global, or the `.spv` files
-`DASLLAMA_VK_SPV_DUMP=<dir>` writes), the body difference that is more than the compile-time
-choices the template carried.** A fork whose body still differs only on compile-time choices is a twin, and
-twins stamp the template.
+**A kernel class forked out of a shared template whose body still differs from the template only
+on compile-time choices is a twin, and a twin stamps the template - the fork is a defect.**
 
 **A forked kernel class carries a `//!` line above its `[metal_dispatch]` / `[vk_dispatch]`
-declaration naming the compile-time choice it no longer shares with its former siblings.**
+declaration naming the body difference that keeps it out of its former siblings' template.**
 
-**A `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes after arming carries
-`@role = "weight"` on a field at that binding; a diff that leaves it unmarked is a defect.** A
-field the kernel reads only under a run-time flag declares the access that branch performs.
+**A `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes after arming - a binding
+filled before the first encode and never written again - carries `@role = "weight"` on a field at
+that binding.**
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
 performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - either names in the
-PR body the census row of `tests/test_kernel_coverage.das` that dispatches it and that row's
-nonzero count for the new census key from a serving-census run (adding the row or the census
-model when none does), or names it in that file's blind-spot list for its backend -
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - that a stocked model -
+one the `stocked` suite runs on a box with the models present - reaches, names in the PR body the
+census row of `modules/dasLLAMA/tests/test_kernel_coverage.das` that dispatches it and that row's
+nonzero count for the new census key from a serving-census run, adding the row or the census model
+when none does.**
+
+**A diff that adds a GPU kernel class under `dasllama/` that no stocked model reaches names it in
+the blind-spot list of `modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend -
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
 stocked model reaches it and the model-less test cell that dispatches it.**
 
-**Weakening the blind-entry asserts in `tests/test_kernel_coverage.das` - that an entry matches a
-compiled census key, and that it matches no dispatched one - is a defect.**
+**Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
+an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
 
 **Weakening a refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time - an
 `@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
@@ -71,11 +75,11 @@ compiled census key, and that it matches no dispatched one - is a defect.**
 `<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
 source off the `_msl` stem, an empty `release_handles` - or weakening any test cell that holds
 such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
-`test_lens_call_macro_gates` in `tests/test_metal_misc_kernels.das`, `test_vkd_lens_readonly_gate`
-in `tests/test_vulkan_kernels.das`), is a defect.** A refusal
-replaced by a derivation that leaves no such configuration compiling unbound - the `stamp =`
-form's threadgroup-memory global - is not a weakening, and the test cell then holds the derived
-path.
+`test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
+`test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
+defect.** A refusal replaced by a derivation that leaves no such configuration compiling unbound -
+the `stamp =` form's threadgroup-memory global - is not a weakening, and the test cell then holds
+the derived path.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row would leave the rest of each row outside the tracked
@@ -83,9 +87,9 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - is a defect, unless the
-PR body states why the builder cannot serve that site.** A body that only picks, defaults or
-composes generated builders binds nothing.
+`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - whose PR body does not
+state why the generated builder cannot serve that site is a defect.** A body that only picks,
+defaults or composes generated builders binds nothing.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the

@@ -13,13 +13,17 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
+require _resident_feed   // tile_arm_tag, argmax_of, feed_logits
+require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
 
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
 // no q/k/v bias, no q/k norm, GQA, the tied classifier of the 3.2 files. The forced-feed logits-tolerance
 // form of test_gpu_resident_qwen2: the same fixed tokens through the resident chain and the all-CPU chain,
 // the prefill logits and every step's within the bar, the one-step-off control past it. Three carriers -
 // Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M (the batched step's Q8_0 and K-quant planes) -
-// at one window and two windows.
+// at one window and two windows; the 1B also runs the batched bench row's refusal and one served rep.
+// Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without its file
+// under models_dir() (the 8B is large-tier: DASLLAMA_PARITY_FULL=1).
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -30,52 +34,25 @@ def private allow_cpu_prefill_intent() {
 let private LOGIT_BAR_REL = 0.06
 let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
-//! the served tile arm, so a red names which prefill tile it came from
-def private tile_arm_tag() : string {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
-    } else {
-        return "no vulkan module"
+//! the carrier's gate: the JIT, the armed tier and the file; "" where a cell skips
+def private llama_ready(t : T?; file : string) : string {
+    if (!jit_enabled()) {
+        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+        return ""
     }
-}
-
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
+    let path = path_join(models_dir(), file)
+    if (!model_available(t, path)) return ""
+    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+        return ""
     }
-    return bi
-}
-
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    let n = long_length(prompt)
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- out
+    return path
 }
 
 //! `file` through the resident chain and the CPU chain over an `n`-token prompt and eight steps
 def private llama_forced_feed(t : T?; file : string; n : int64) {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return
-    }
-    let path = path_join(models_dir(), file)
-    if (!model_available(t, path)) return
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return
-    }
+    let path = llama_ready(t, file)
+    if (empty(path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
     t |> success(!tr.config.attn_qkv_bias && !tr.config.rope_neox, "the llama arm: no q/k/v bias, the NORM rope")
@@ -90,6 +67,9 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        var passes <- gpu_cpu_passes_()
+        t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
+        delete passes
         delete sg
         moe_gpu_drop_model()   //! every later step is the CPU chain
         t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
@@ -132,6 +112,34 @@ def private llama_cells(t : T?; file : string) {
 [test]
 def test_gpu_resident_llama_1b(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+}
+
+//! the batched bench row on the 1B: a refusal names the streams the device homes against the row's ask and
+//! reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
+[test]
+def test_gpu_resident_llama_batched_row(t : T?) {
+    t |> run("bench_tg_batched_rep: the refusal past the homed streams, then one served rep") @(t : T?) {
+        let path = llama_ready(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        if (empty(path)) return
+        var tr <- load_model_(path, QuantMode.q8)
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let homes = gpu_device_sessions()
+            t |> success(homes >= 1l, "the armed driver homes a stream ({homes})")
+            let refused = bench_tg_batched_rep(tr, homes + 63l, 32l, 4l, 1l)
+            t |> equal(refused.tps, 0.0lf, "a row asking more streams than the device homes reads 0")
+            t |> equal(refused.why, "the device homes {homes} stream(s), the row asks {homes + 63l}", "... and names the refusal")
+            let served = bench_tg_batched_rep(tr, homes, 32l, 4l, 1l)
+            t |> equal(served.why, "", "a row the device homes is served: {served.why}")
+            t |> success(served.tps > 0.0lf, "... at a rate ({served.tps} tok/s summed over {homes} stream(s))")
+            t |> equal(gpu_device_sessions(), homes, "the rep parked every stream: the device homes as many as before")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call of the rep: {passes}")
+            delete passes
+        }
+        delete tr
+    }
 }
 
 [test]

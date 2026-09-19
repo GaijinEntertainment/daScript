@@ -83,7 +83,14 @@ roles 17 and 25). The decode GEMV probe (`harness/vk_gemv_probe.das <n> <d>`) st
 plane copies past the L2 for the DRAM rate; its `single` arm dispatches one plane copy under the
 same hazard chain, so the row reads the chained dispatch's floor past its bytes (4.5 us on every
 format at 0.6 MB planes, RTX 5080) and the served plane L2-warm - the two figures a token's GEMV
-role sits between.
+role sits between. Its `cold` arm dispatches one plane copy a dispatch and takes the ring's copies
+in turn - the served launch size in the DRAM regime - with the warm `single` row as its alternate
+(the pod's RTX PRO 4500, `-jit`, Llama-3.2-1B's shapes: gate 2048x8192 q8 28 us, 0.30 of the
+four-copy streaming row; down 8192x2048 35 us, 0.36; q 2048x2048 13 us, 0.37; cls 344 us, 0.26).
+Its `cols` ruler holds the one-column class beside the N-column class at 1, 2, 4 and 8 rows; the
+chain alternates two output planes under their own hazard bits, so consecutive dispatches overlap
+the way the batched step's GEMVs do and the `vs N single` column compares two overlapped chains;
+the q8 rows engage the row-pair form, and `n2off` holds them to a row a subgroup.
 The reference row is `test-backend-ops perf MUL_MAT_ID` at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
 Two arms read the window chain's own overheads at those shapes rather than a tile: `ts:<fmt>`
 dispatches two m stamps back to back into two planes - plain, with the profile's bottom-of-pipe

@@ -5,8 +5,8 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `../followup_metal.md`.
 
 **A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
-issues asserts on `t`) that dispatches one or more kernel classes and asserts on their output - or a gate
-that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
+issues asserts on `t`) that dispatches one or more kernel classes and asserts on their output -
+or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
@@ -15,8 +15,8 @@ change reaches a test when it alters anything the test's result depends on - the
 shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
 asserts on; a comment-only edit reaches none.
 
-**A PR's `stocked` run carries no `--exclude`** - `--suite stocked --exclude test_ple_modes` is
-the iteration form between PRs; a PR that ships on it never ran the PLE coverage.
+**A PR's `stocked` run carries no `--exclude`** - an excluding run is the iteration form between
+PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the
@@ -26,7 +26,8 @@ weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner a
 suite.
 
 **Invoking dastest directly on a test file that no `run.das` suite lists under `model-free` or
-`stocked` is a defect - run it through `run.das`.**
+`stocked`, and that `test_run_suites.das`'s suite-membership gate does not name as its
+exemption, is a defect - run it through `run.das`.**
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
 touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
@@ -49,8 +50,9 @@ a run of skips is not the coverage the suite owes.
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
 bar a cell the census entry names asserts, a cell's skip condition added, changed or dropped -
 corrects, in the same change, the `CLAUDE.md` census entry of every `[test]` file that runs the
-cell, wherever the cell is defined, numbers and skip clauses included.** A `{a,b}` shorthand naming
-several files, or a suite roster, carries nothing to correct; a file with no census entry owes none.
+cell, wherever the cell is defined, numbers and skip clauses included.** A `{a,b}` shorthand
+naming several files, or a suite roster, carries nothing to correct; a file with no census entry
+owes none.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
@@ -83,8 +85,8 @@ predicate answers on an input the gate already asserts on is not a shrink; dropp
 A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
 that is not a shrink. The pinned set, each with what it pins:
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
-filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
-`test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
+filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
+intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
 (`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
 softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
@@ -92,15 +94,15 @@ run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and th
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
-pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` (which tile the Vulkan
-matmul picks and whether that dispatch splits its reduction across partial planes, on every input
-of the prefill's tile-and-split pick; added rows on those inputs are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
-arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`, `test_pocket_kq_file` and
-`test_pocket_quiet_floor` cells (the published file's tensor formats against the f16 load-time
-quants, the kq lane against the q8 lane, the served lane's quiet floor against the f32 lane's -
-silence is where a lane's per-block scale error is audible, and no per-frame figure shows it);
-`utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local fork pools, shared
-queue policy.
+pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
+(which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
+partial planes, on every input of the prefill's tile-and-split pick; added rows on those inputs
+are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries
+against the arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`,
+`test_pocket_kq_file` and `test_pocket_quiet_floor` cells (the published file's tensor formats
+against the f16 load-time quants, the kq lane against the q8 lane, the served lane's quiet floor
+against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -
+worker-local fork pools, shared queue policy.
 
 **A diff that adds a gate whose expected value is written down where a person edits it - a
 document, a checked-in table, a generated artifact's committed form, a roster - rather than
@@ -185,10 +187,10 @@ beside the dumps under `models_dir()`, named by the test that loads the dump.
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
 defect.**
 
-**A cell, or the `[init]` of the file where the cell is defined, sets every knob its claim
-depends on that outlives one call - any `set_*` / `pin_*` call in `dasllama/` that changes the
-driver's route or the serving lane for the rest of the process - even when the claim needs the
-knob at its DEFAULT value.**
+**A cell, or the `[init]` of the file where the cell is defined, sets every knob - a `set_*` /
+`pin_*` call in `dasllama/` that changes the driver's route or the serving lane for the rest of
+the process - whose value the cell's claim depends on, even when the claim needs the knob at its
+DEFAULT value.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 driver setter it touched back where it found it; `reset_<family>_q8` is the restore.** Why a hook
@@ -203,15 +205,11 @@ whichever lane the box's policy picked.
 **A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
 knob itself mints in memory through the family's `stage_*` + `mint_*` pair, never through a
-`.dlim`-baking loader (`load_<family>_tower` / `load_<family>_encoder` /
-`load_<carrier>_model` / `load_tts_model` / `load_styletts2` / `load_model` /
-`load_model_cached` / `load_model_image`).** A disk bake under a pinned lane GC-purges the
-serving lane's `.dlim` beside the model, and the next direct-image load in another suite panics
-on the wrong identity.
+`.dlim`-baking loader.** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
+beside the model, and the next direct-image load in another suite panics on the wrong identity.
 
-**A cell whose subject IS the lane knob (`load_asr_model` under `set_asr_tower_fp32`) loads
-through the `.dlim`-baking loader, never around it.** The pin is part of what the image
-identity records.
+**A cell whose subject IS the lane knob loads through the `.dlim`-baking loader, never around
+it.** The pin is part of what the image identity records.
 
 **A CPU-vs-GPU arm on Metal - one comparing the two lanes' outputs, not one whose subject is
 the GPU lane's decline - runs its CPU stages on a PLANAR model (the non-blob form, the only

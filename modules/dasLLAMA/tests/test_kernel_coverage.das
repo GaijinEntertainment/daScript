@@ -771,7 +771,13 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das
-    "dn_ba_cls_spv"]
+    "dn_ba_cls_spv",
+    // the N-column decode GEMV leaves serving cannot reach: the q8 row-pair stamps (the pair form serves only past
+    // `g_q8_n2_min_n`, off until a box's token command proves it) and the K-quant N leaves (the zoo's batched row is the
+    // Q8_0 tinyllama; the q8 n2/n4/n8 stamps ride its 2-, 4- and 8-row steps); their coverage is test_vkd_gemv_ncol
+    // in test_vulkan_kernels.das
+    "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
+    "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
@@ -882,8 +888,9 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             }
             vk_kernel_coverage_reset()
             let none : array<int>
-            // llama q8: the resident dense ladder (device prefill + decode) + a B=2 batch step
-            vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2])
+            // llama q8: the resident dense ladder (device prefill + decode) + batch steps at 2, 4 and 8 rows (the q8
+            // N-column GEMV's n2, n4 and n8 stamps; the 1.1B at eight regions fits the card)
+            vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2, 4, 8])
             // gemma3 q8: the per-op arena rails + qk_norm
             vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
             vk_cov_mode_sweep(t)

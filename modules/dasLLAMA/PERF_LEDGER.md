@@ -1853,13 +1853,19 @@ direction-grade.
 
 ### From the Vulkan batched-decode arc (2026-09-19)
 
-Instruments: `benchmarks/lcpp_bench.das --npl 4` (the flat rows and the four-stream row through the
-scheduler's device mode; `DASLLAMA_GPU_PROF=1` for the token command's stamps, which itself costs
-~5% of the rate, so every pair below is profiler-on against profiler-on or off against off), the
-attention ruler `harness/vk_attn_probe.das` (device timestamps a layer), the copy ruler
-`harness/vk_dma_probe.das`; llama.cpp b10660 `llama-batched-bench -npp 512 -ntg 128 -npl 1,4 -fa on`
-the same hour. The pod's RTX PRO 4500 (48 vCPUs, cm2 without decode-vector) unless named; the local
-RTX 5060 Ti carries decode-vector.
+Instruments: `daslang -jit benchmarks/lcpp_bench.das --npl 4` (the flat rows and the four-stream row
+through the scheduler's device mode; the vulkan tier in its cm2 mode and in its KHR (mm) mode as two
+arms, kv f16, the box's tuned sidecar - `DASLLAMA_ALLOW_UNTUNED=1` on the pod, whose sidecar is
+untuned - `DAS_JOBQUE_THREADS=16` locally and the pod's 48 vCPUs; `DASLLAMA_GPU_PROF=1` for the token
+command's stamps, which itself costs ~5% of the rate, so every pair below is profiler-on against
+profiler-on or off against off), the attention ruler `harness/vk_attn_probe.das` (device timestamps
+a layer), the copy ruler `harness/vk_dma_probe.das`; the reference exe llama.cpp b10660
+`llama-batched-bench -m <model> -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on`
+on both boxes the same hour, with `GGML_VK_PERF_LOGGER=1` for its per-kernel reads. The `tg128@4`
+row is the summed served rate over the scheduler step whole - sampling, detokenization and the event
+list inside the clock - where the batched reference exe times the decode call alone, so every ratio
+against it is conservative. The pod's RTX PRO 4500 (48 vCPUs, cm2 without decode-vector) unless
+named; the local RTX 5060 Ti carries decode-vector.
 
 - **The worker spin window on a GPU-served step (pod, Llama-3.2-1B Q8_0, 16 lanes, profiler off):**
   the scheduler's greedy step runs a team-parallel argmax a row, which wakes every worker, and each
@@ -1868,20 +1874,22 @@ RTX 5060 Ti carries decode-vector.
   tg128@4 summed by window: 30 ms 707, 8 ms 698, 4 ms 734, 2 ms 1065, 1 ms 1058, 500 us 1053,
   100 us 1046, 0 (park at once) 1005 - the knee is the step's own length. Shipped: 500 us while the
   resident driver serves (`jobque_spin_gpu_us`); 1B 707 -> 1067, 3B 362 -> 538, 8B 269 -> 364
-  (llama.cpp 1228 / 607 / 275). The flat rows unchanged (the flat bench feeds synthetic ids and
-  never samples).
+  (llama.cpp 1228 / 607 / 275, `external`). The flat rows unchanged (the flat bench feeds synthetic
+  ids and never samples); a `--npl 4` run loads the model at four regions, each region's context a
+  quarter of the plan's, so this section's flat rows are the four-region model's - the plain
+  one-region flat rows are the ones the earlier entries carry [direction-grade - two commits].
 - **The decode attention at four rows (pod, profiler on, us a step over 16 layers):** the
   committed pass (a workgroup a head, two keys a step behind a subgroup reduction) 380 + 70
   combine at its rule's two splits, 327 + 102 at six, 346 + 103 at twelve - the split does not
-  move it; the grouped pass (a workgroup a kv head's four q heads) with the same score loop 367 +
-  103; a thread a key with the row's words eight in flight 255 + 103; the accumulators in
-  registers and the V words prefetched 361 with the combine fused into the last piece. The
+  move it; the shipped grouped pass (a workgroup a kv head's four q heads, the accumulators in
+  registers and the V words prefetched) 361 with the combine fused into the last piece. The
   ruler's per-layer floor at 32 keys unsplit is 8.3 us and a split adds 4 (the release, the
   atomic, the last piece's combine); the ruler reads 14.5 at four rows and 12.6 at one where the
   committed pass's profile read 28 and 8.5 - so the four-row form gains and the one-row form pays
   ~4 us a layer, which the transfer-queue logits repay several times over. The score FMAs, the
   softmax reductions, the K loads and the V loads each price ~2 us of an 18.5 us unsplit layer on
-  the 5060 Ti, the finish 4: no single cost dominates, the chain of them does.
+  the 5060 Ti, the finish 4: no single cost dominates, the chain of them does
+  [direction-grade - two commits].
 - **The logits' trip to host memory (the copy ruler, cached host memory):** the pod's compute-queue
   copy 4.30 GB/s at 512 KB, 2 MB, 8 MB and 32 MB alike (0.95 us a 4 KB page); the transfer queue
   11.2 / 19.4 / 24.7 / 26.8 GB/s including its submit and wait (108 us for the four-row plane
@@ -1889,17 +1897,33 @@ RTX 5060 Ti carries decode-vector.
   host target leaves the copy at 471 us and slows the host's read to 7.8 ms; the classifier
   writing straight into host memory costs 26.7 ms. Shipped: the transfer-queue copy behind a
   compute -> transfer timeline. Pod, 1B, profiler on: the four-row step 3761 -> 3371 us, tg128@4
-  1019 -> 1136, tg128 426 -> 451.
+  1019 -> 1136, tg128 426 -> 451 [direction-grade - two commits].
 - **The scoreboard after the three (pod, profiler off, tg128@4 summed, ours cm2 / ours KHR /
-  llama.cpp; then tg128 ours / theirs):** Llama-3.2-1B Q8_0 1207 / 1206 / 1217 (0.99), flat
-  464 / 404; Llama-3.2-3B Q8_0 580 / 579 / 605 (0.96), flat 194 / 184; Llama-3.1-8B Q4_K_M
-  379 / 379 / 361 (1.05), flat 134 / 132. The RTX 5060 Ti the same session (cm2 with
-  decode-vector, `-c 4096` on both sides): 1B 724 / 744 / 738 (0.98 / 1.01), flat 258 / 242; 3B
-  351 / 352 / 351 (1.00), flat 107 / 104; 8B 250 / 250 / 209 (1.20), flat 78 / 77. The 1B's four-row step under the profiler: GPU 2994 us
-  (qkv 231, rope 65, attn 361, wo 210, gate 486, up 457, down 588, cls 332, the norm and requant
-  sites 250), host 375 (the logits' landing 285, the submit 9); llama.cpp's step 3.26 ms wall with
-  2.82 of kernels (its GEMVs 655 GB/s to our 540-600 on the long-K down plane, its flash
-  attention 251 to our 361).
+  llama.cpp, the llama.cpp figure `external`; then tg128 ours / theirs, theirs `external`):**
+  Llama-3.2-1B Q8_0 1207 / 1206 / 1217 (0.99), flat 464 / 404; Llama-3.2-3B Q8_0 580 / 579 / 605
+  (0.96), flat 194 / 184; Llama-3.1-8B Q4_K_M 379 / 379 / 361 (1.05), flat 134 / 132. The RTX
+  5060 Ti the same session (cm2 with decode-vector, `-c 4096` on both sides): 1B 724 / 744 / 738
+  (0.98 / 1.01), flat 258 / 242; 3B 351 / 352 / 351 (1.00), flat 107 / 104; 8B 250 / 250 / 209
+  (1.20), flat 78 / 77. The 1B's four-row step under the profiler: GPU 2994 us (qkv 231, rope 65,
+  attn 361, wo 210, gate 486, up 457, down 588, cls 332, the norm and requant sites 250), host 375
+  (the logits' landing 285, the submit 9); llama.cpp's step 3.26 ms wall with 2.82 of kernels
+  (`external`, its logger's rows): its `MUL_MAT_VEC` GEMVs 655 GB/s (`external`) to our
+  `Q8GemvNT`'s 540-600 on the long-K down plane, its `FLASH_ATTN_EXT` 251 (`external`) to our
+  `DaAttnT`'s 361 [direction-grade - two processes].
+- **The nb-row planes' footprint, the decision `RD_NB_MAX = 8` rests on:** at nb rows every
+  per-token device plane (x, xb, xq, xs, kv, q, attn, aq, as, gate, up, ffnout, xb2, cos, logits)
+  is nb times its one-row size, and the partials plane is nb times. Llama-3.2-1B (dim 2048, hidden
+  8192, qd 2048, kvd 512, vocab 128256, 16 layers of 32 heads at head 64), one row: x, xb, xb2 and
+  ffnout 4 x 2048 x 4 B = 32 KB; xq 2048 B and xs 64 x 4 B; kv (2048 + 2 x 512) x 4 = 12 KB; q 8 KB;
+  attn 8 KB; aq 2048 B and as 256 B; gate and up 32 KB each; cos one rope table row, 2 x 32 x 4 =
+  256 B; logits 128256 x 4 = 513 KB; the partials 32 heads x 1 split (the pod) x 66 x 4 B = 8.4 KB
+  plus the counters - 0.65 MB a row, the logits four fifths of it: 0.65 MB at nb 1, 2.6 MB at nb 4,
+  5.2 MB at nb 8, against a weight pass the rows share, which streams the whole model once a step
+  whatever nb. The mirror's share: `moe_gpu_binding_cap` takes `RDEC_MIR_SLACK` x 4 x regions bytes
+  off the mirror's binding range (a fragment's slack rows past each region's last plane), and the
+  context is negotiated inside what is left; the per-row planes cost no context. Decision: taken -
+  the planes are megabytes against a weight pass shared across the rows, so the row cap is the
+  command's, not memory's.
 
 ### From the M4 Metal pass (2026-09-13)
 

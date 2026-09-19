@@ -99,6 +99,24 @@ it:
    }
    set_jobque_spin_us(spin_was)   // the platform's default back
 
+The window has a GPU-served twin. While the whole-model GPU driver serves the
+loaded model, the pool carries only the sampler's small work between steps, so
+the workers park after ``set_jobque_spin_gpu_us(us)`` (500 us by default)
+instead of the CPU window - a 30 ms spin there would only heat the cores the
+device does not need. ``get_jobque_spin_gpu_us()`` reads that knob back, and
+``get_jobque_spin_in_force()`` reads whichever of the two windows the pool is
+on right now: the GPU one while a resident model is armed, the CPU one
+otherwise. The switch is process-wide, so a CPU audio or speech route served
+beside a GPU-served model sits under the GPU window too; widen it when that
+route's wake latency shows. The box profile carries it as
+``runtime.jobque_spin_gpu_us``.
+
+.. code-block:: das
+
+   print("in force: {get_jobque_spin_in_force()} us\n")   // the CPU window: no GPU driver armed here
+   set_jobque_spin_gpu_us(2000l)                          // the GPU-served window, for when one is
+   set_jobque_spin_gpu_us(500l)                           // the default back
+
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute
 lanes on one physical core's SMT pair, which roughly halves batched prefill

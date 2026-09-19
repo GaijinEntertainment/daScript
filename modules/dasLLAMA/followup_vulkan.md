@@ -1562,3 +1562,40 @@ module) is independent and can land any time - it is pure structure.
     and a classifier epilogue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched
     step of such a model pays a weight pass a row. The work: each kind's N-row form, the
     recurrent and MoE ones behind their own state and schedule questions.
+72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
+    `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
+    and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
+    N-column leaves, and drop the arms the command declines; `gemv_enc_n` and its ensure/set/enc
+    ladders pair `gemv_enc`'s one for one; `set_ar_rq_rows` is `set_ar_rq_stamp`'s Q8_0 arm over
+    `nb` rows; `xfer_spin_wait` and `xfer_host_wait` wait on one semaphore two ways; and the
+    llama resident test's forced feed restates the qwen2 and gemma ones. The work: one recorder
+    taking `nrows` (the one-row form its `nrows == 1` reading, the declined arms guarded by it), one
+    GEMV entry taking a column count, a fifth `RqStamp` for the row form, one wait with a spin
+    flag, and one shared forced-feed cell parameterized by the family's arm witnesses.
+73. **The decode attention slab runs four heads' arithmetic for every kv head, whatever the
+    group's width.** The score and V loops of `DaAttnT` unroll over `DA_G = 4` slab lanes
+    unconditionally, so a model whose GQA group is one, two or three heads pays two to four times
+    the FMAs a head needs (the shipped scoreboard's llama carriers are all `kv_mul = 4`, the one
+    width where the slab is full). The work: a `kv_mul`-sized stamp family (`DA_G` 1, 2, 4) or the
+    loops bounded by `live`, priced on a `kv_mul = 2` carrier (gemma-2-2b) and a `kv_mul = 1` one
+    through `harness/vk_attn_probe.das`.
+74. **A host-cached session that loses its mirror region before hydration loses its rows.** The
+    driver steals a region by LRU (`rdec_bind_region`) with no handle on the region's owner, and a
+    host-cached session's prompt rows sit on the device alone until a hydration brings them down
+    (`rdec_hydrate_host`), so a third host-cached session over two regions - at its prefill, or in
+    a batched step - takes a region whose owner's rows then exist nowhere; the one-row and batched
+    decode paths meet that owner's next step with the engine-bug panic ("superseded before
+    hydration"), never with a wrong row. A device-home session pins its region and passes as
+    `busy` instead, so the server never reaches the shape. The work: an owner a region can name
+    (cleared where a session is deleted) so the steal hydrates the victim first, or the resident
+    prefill hydrating a host-cached session eagerly where the driver holds more than one region,
+    priced on the flat pp512 row.
+75. **The N-row command's rows on a K-quant carrier are not the one-row command's bit for bit.**
+    On Llama-3.2-1B Q4_K_M two batched rows read up to 0.28 of a logit apart from the sessions alone
+    (0.03 of the max logit; the argmax holds at 30 of 32 compares), the same under
+    `DASLLAMA_VK_FUSE=0`, while the N-column GEMV leaves match the one-column class bit for bit in
+    `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
+    the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
+    `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
+    one-token-off control meanwhile. The work: the arm found by pinning each site's N-row form to
+    its one-row twin in turn, then the exact bar restored in that file.

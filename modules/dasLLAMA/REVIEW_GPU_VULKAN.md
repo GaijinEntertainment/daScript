@@ -42,13 +42,13 @@ next consumer an unfilled residual stream.
 
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true
 branch dispatches through a `moe_gpu_*` or `vk_*` entry, wherever the diff puts it, and whose
-false branch or `continue` routes work to the CPU path - that does not log at load how many
-layers or planes it left on the CPU and the reason it left them is a defect.** A silent decline
-is a fallback a user finds only by profiling.
+false branch or `continue` routes work off the path it armed, to the CPU path or to another
+path inside the tier - is a defect when it does not log, at load, how many layers or planes it
+routed off and why.** A silent decline is a fallback a user finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose false branch or
-`continue` routes work to the CPU path - that does not log the concrete reason it declined,
-once per reason per armed model, is a defect.**
+`continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
+that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
 **A diff that changes what a device limit decides for the tier - which path serves, how much
 it arms, whether it declines - adds that limit to `vk_ext_roster`
@@ -144,10 +144,9 @@ plane; on a copy it loads and spills the whole block per call
 
 **A diff whose probe rows show a format's `DASLLAMA_VK_DECVEC=1` row slower than its `=0` row
 ships one of two fixes in the same change: a hand-written `decode_v4` under `override DECV4 = true`
-on that format's class
-(`dasllama/dasllama_vulkan_classes.das`), re-measured so its `=1` row now beats its `=0` row;
-or `override DECV4 = false` and `override DECVEC = false` together, which puts the format back
-on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
+on that format's class (`dasllama/dasllama_vulkan_classes.das`), re-measured so its `=1` row now
+beats its `=0` row; or `override DECV4 = false` and `override DECVEC = false` together, which puts
+the format back on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 `override DECVEC = false` alone leaves the hand-written twin running.
 
 **A GPU timestamp the resident decode's token command records goes through `rd_ts` with the name
@@ -164,10 +163,12 @@ accessor.** The accessor is a constant composite the driver reads lane-serially 
 while the grid buffer is staged once per workgroup and read by every row that workgroup serves,
 whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
-**A kernel that takes more than one workgroup reduce (`wg_rms_inv` of `RmsWgBase` in
-`dasllama/dasllama_vulkan_classes.das`) never passes the same `slot` to two consecutive
-reduces.** One barrier guards a reduce, so a thread still summing the first reduce's partials would read the
-second's writes out of the same 64 floats.
+**Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
+pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
+the workgroup through a `@workgroup` staging array (`wg_rms_inv` of `RmsWgBase`,
+`dasllama/dasllama_vulkan_classes.das`, takes it as the `slot` argument, 0 or 1); a slot is the run
+of partials one reduce writes into that array. A reduce carries one barrier, so a thread still
+summing the first reduce's partials would read the second's writes out of the same slot.
 
 **A builder in `dasllama/dasllama_vulkan_decode.das` that asks `set_<family>` for a class ensures
 `ensure_<family>` on every path that reaches it.** A set asked of a class whose pipeline is not
@@ -180,15 +181,26 @@ prepare fails on the path that skipped the ensure.
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**A descriptor set the resident decode driver builds over a per-row plane
-(`dasllama/dasllama_vulkan_decode.das`) binds the plane's whole `RDec.nb`-row extent, never one
-row's - the one-row command reads row 0 of the same set.** A set sized to one row makes the N-row
-command read past its binding on every row but the first: an ungated q row sits inside the
-projection row, and a q binding sized to one row zeroed the batched step's second row.
+**A descriptor set the N-row token command - the resident decode command that runs `RDec.nb`
+rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its plane's whole
+`RDec.nb`-row extent, never one row's.** A per-row plane is a buffer `vk_rdec_prepare` sizes to
+one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read past its
+binding on every row but the first.
 
-**A diff that adds a recorded form of the resident token command gives that form its own
-stamp-name list and stamp count, and puts `g_rdq_stamp_names` back to the one-row command's list
-before the recorder returns** (`dasllama/dasllama_vulkan_decode.das`). The profiler reads the
-submitted form's names; a form that keeps the shared list leaves every later one-row profile
-reading another form's role names, and a row count whose split form runs at one split still fills
-the split slot.
+**Every `TokMeta` block a diff fills - in the resident driver, a seam, or a test - writes
+`mirbase`, the row's mirror base in elements; a site with one mirror region writes 0.** The
+attention and the mirror store add that field to every K/V address they touch, so a block left
+unwritten sends a row at whatever base the memory held.
+
+**A diff that adds a recorded form - a recorder that builds the resident token command into its
+own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name
+list and stamp count.** The profiler sums intervals by the recorder's own names.
+
+**A recorder that installs its own stamp names in `g_rdq_stamp_names`
+(`dasllama/dasllama_vulkan_decode.das`) puts the one-row command's list back before it returns.** A
+form that leaves its list installed sends every later one-row profile to another form's role names.
+
+**A diff that submits a transfer copy with `xfer_submit_after`
+(`dasllama/dasllama_vulkan_common.das`) calls `xfer_spin_wait` on the value it returned before it
+submits any command that writes the buffer that copy reads.** The host's wait is the only order
+between the copy's read and that write.

@@ -897,7 +897,14 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
 let private IBENCH_REPS = 3
 let private IBENCH_NPL = 4l   //! the batched row's streams, where the device homes that many (fewer homes, fewer streams; under two, no row)
 
-var private g_ibench_phase = 0   // 0 idle | 1 bind + pp warmup | 2 pp reps | 3 tg warmup | 4 tg tokens | 5 batched reps
+let private IBENCH_PHASE_IDLE = 0
+let private IBENCH_PHASE_BIND = 1   //! the bind and the pp warmup
+let private IBENCH_PHASE_PP = 2
+let private IBENCH_PHASE_TG_WARM = 3
+let private IBENCH_PHASE_TG = 4
+let private IBENCH_PHASE_BATCHED = 5
+
+var private g_ibench_phase = IBENCH_PHASE_IDLE
 var private g_ibench_rep = 0
 var private g_ibench_tok = 0l      // the tg rep's next token position
 var private g_ibench_tok_ns = 0l   // the tg rep's forwards so far, nanoseconds
@@ -916,7 +923,7 @@ var private g_ibench_passes0 = 0l   // the CPU-pass count as the rows began: a G
 
 //! True while the in-process rows run.
 def ibench_running() : bool {
-    return g_ibench_phase != 0
+    return g_ibench_phase != IBENCH_PHASE_IDLE
 }
 
 //! True while any benchmark measures this box - the in-process rows, or the A/B child: every
@@ -1020,17 +1027,8 @@ def private ibench_start(var resp : HttpResponse?) : http_status {
     delete g_ibench_pp
     delete g_ibench_tg
     g_ibench_rep = 0
-    g_ibench_phase = 1
+    g_ibench_phase = IBENCH_PHASE_BIND
     return resp |> JSON("\{\"ok\":true,\"state\":\"running\"}", http_status.ACCEPTED)
-}
-
-//! calls the armed GPU path handed back to the CPU since the model armed, every reason summed
-def private ibench_cpu_passes() : int64 {
-    var n = 0l
-    for (p in gpu_cpu_passes()) {
-        n += p.count
-    }
-    return n
 }
 
 //! a device-home session lets go of its K/V region before it is deleted, or the region stays pinned to a dead session
@@ -1052,7 +1050,7 @@ def private ibench_stop(state, why : string) {
     delete g_ibench_pp
     delete g_ibench_tg
     delete g_ibench_tgb
-    g_ibench_phase = 0
+    g_ibench_phase = IBENCH_PHASE_IDLE
     g_bench_state = state
     if (!empty(why)) {
         ibench_log("run abandoned - {why}")
@@ -1066,7 +1064,7 @@ def private ibench_finish() {
     let path = g_slots[g_ibench_slot].path
     let backend = g_ibench_backend
     let kv = g_ibench_kv
-    let cpu_calls = ibench_cpu_passes() - g_ibench_passes0
+    let cpu_calls = cpu_pass_total() - g_ibench_passes0
     if (cpu_calls > 0l) {
         ibench_log("WARNING: {cpu_calls} of the rows' calls ran on the CPU instead of the GPU - the model card lists the reasons; these numbers are not the GPU's")
     }
@@ -1089,7 +1087,7 @@ def private ibench_finish() {
 //! one step of the rows per tick - the bind and the pp warmup, one pp rep, the tg warmup, or one
 //! tg token - on the default slot's model; a panic inside ends the run as failed, never the server
 def private ibench_tick() {
-    return if (g_ibench_phase == 0)
+    return if (g_ibench_phase == IBENCH_PHASE_IDLE)
     var failure = ""
     let panicked = catch_worker_panic(failure) {
         ibench_step()
@@ -1107,7 +1105,7 @@ def private ibench_step() {
     set_mtp_spec(g_slots[si].sched.mtp)   // the engine's prefill-warm gate follows the benched slot, as it follows the stepped one
     g_cur = si
     let m & = cur_model()
-    if (g_ibench_phase == 1) {
+    if (g_ibench_phase == IBENCH_PHASE_BIND) {
         let device = slot_flavor(g_slots[si]) == "metal" ? "metal" : g_slots[si].backend_effective   // the tier's word speaks only of Vulkan and reads `cpu` under Metal
         ibench_log("in-process: pp{BENCH_PP_TOKENS}/tg{BENCH_TG_TOKENS} x {IBENCH_REPS} reps on {g_slots[si].name} ({device}, kv {g_slots[si].opts.kv_dtype}, {g_ibench_threads} lanes), llama-bench shape - the text, audio and speech routes hold until it finishes")
         let device_home = slot_wants_device_kv(g_slots[si])
@@ -1123,7 +1121,13 @@ def private ibench_step() {
         if (g_ibench_npl < 2l) {
             g_ibench_npl = 0l
         }
-        g_ibench_passes0 = ibench_cpu_passes()
+        let ctx = g_slots[si].model.config.seq_len
+        let batched_ctx = BENCH_PP_TOKENS + BENCH_TG_TOKENS + g_ibench_npl
+        if (g_ibench_npl > 0l && ctx < batched_ctx) {
+            ibench_log("no tg{BENCH_TG_TOKENS}@{g_ibench_npl} row: the served context is {ctx} tokens and the row's streams need {batched_ctx}")
+            g_ibench_npl = 0l
+        }
+        g_ibench_passes0 = cpu_pass_total()
         bench_pp_warm(m, g_ibench_session, BENCH_PP_TOKENS)
         let sane = bench_warm_sanity(m, g_ibench_session)
         if (!sane.ok) {
@@ -1132,17 +1136,17 @@ def private ibench_step() {
             return
         }
         ibench_log("sanity (pp{BENCH_PP_TOKENS}): {sane.detail}")
-        g_ibench_phase = 2
+        g_ibench_phase = IBENCH_PHASE_PP
         g_ibench_rep = 0
-    } elif (g_ibench_phase == 2) {
+    } elif (g_ibench_phase == IBENCH_PHASE_PP) {
         let tps = bench_pp_rep(m, g_ibench_session, BENCH_PP_TOKENS, int64(g_ibench_rep))
         g_ibench_pp |> push(tps)
         ibench_log("pp{BENCH_PP_TOKENS} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {tps:.1f} tok/s")
         g_ibench_rep ++
         if (g_ibench_rep >= IBENCH_REPS) {
-            g_ibench_phase = 3
+            g_ibench_phase = IBENCH_PHASE_TG_WARM
         }
-    } elif (g_ibench_phase == 3) {
+    } elif (g_ibench_phase == IBENCH_PHASE_TG_WARM) {
         bench_tg_warm(m, g_ibench_session)
         let sane = bench_warm_sanity(m, g_ibench_session)
         if (!sane.ok) {
@@ -1151,11 +1155,11 @@ def private ibench_step() {
             return
         }
         ibench_log("sanity (tg{BENCH_TG_TOKENS}): {sane.detail}")
-        g_ibench_phase = 4
+        g_ibench_phase = IBENCH_PHASE_TG
         g_ibench_rep = 0
         g_ibench_tok = 0l
         g_ibench_tok_ns = 0l
-    } elif (g_ibench_phase == 4) {
+    } elif (g_ibench_phase == IBENCH_PHASE_TG) {
         ibench_tg_token(m, si)
     } else {
         ibench_batched_rep(m)
@@ -1179,19 +1183,21 @@ def private ibench_tg_token(m : Model; si : int) {
     if (g_ibench_npl > 0l) {
         ibench_park_session()   //! the flat row's region goes back: the batched row's streams take every region
         delete g_ibench_session
-        g_ibench_phase = 5
+        g_ibench_phase = IBENCH_PHASE_BATCHED
         g_ibench_rep = 0
     } else {
         ibench_finish()
     }
 }
 
-//! one batched rep per tick: the streams' prefills and 128 batched steps, a second or so on a small model
+//! one batched rep per tick: the streams' prefills and 128 batched steps, a second or so on a small model;
+//! a refused rep omits the batched row and the flat rows already measured stand as the result
 def private ibench_batched_rep(m : Model) {
     let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep))
     if (!empty(br.why)) {
-        ibench_log("REFUSED (tg{BENCH_TG_TOKENS}@{g_ibench_npl}): {br.why}")
-        ibench_stop("failed", "")
+        ibench_log("REFUSED (tg{BENCH_TG_TOKENS}@{g_ibench_npl}): {br.why} - the batched row is omitted")
+        g_ibench_npl = 0l
+        ibench_finish()
         return
     }
     g_ibench_tgb |> push(br.tps)

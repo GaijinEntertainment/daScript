@@ -10,6 +10,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
+require dasllama/dasllama_common   // grow_resize: the N-row logits plane sized to the step's rows
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -33,13 +34,6 @@ var g_rd_nrow_bisect = 0   //! a probe's bisect of the N-row command, bits: 1 = 
 def da_nsplit(n_heads, sm_count : int64) : int64 {
     if (sm_count <= 0l || n_heads <= 0l || n_heads >= 2l * sm_count) return 1l
     return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
-}
-
-//! `words` zero words into `dev` at byte `off`: the split attention's arrival counters start at rest
-def private rd_zero_words(dev : uint64; off, words : int64) {
-    var zeros : array<uint>
-    zeros |> resize(words)
-    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), words * 4l)
 }
 
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
@@ -110,6 +104,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.q_gated = q_gated
     r.rot = rot
     rdq_reset()
+    g_rdq_idle_us = 0.0lf   //! the idle ledger is this file's: a new model starts it at zero with the averages
+    g_rdq_prev_last = 0ul
     r.nb = min(regions, RD_NB_MAX)   //! the per-row planes hold a row per region the N-row command can step at once
     let nb = r.nb
     let wide = max(max(qd, hidden), dim)
@@ -121,13 +117,11 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.q_dev = q_gated ? make_device_buf(2l * qd * 4l * nb) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
     r.attn_dev = make_device_buf(qd * 4l * nb)
     r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.sm_count))
-    r.attn_cnt_off = n_heads * DA_NSPLIT_MAX * (head_size + 2l) * nb
+    r.attn_cnt_off = n_heads * max(r.attn_nsplit, 1l) * (head_size + 2l) * nb   //! the pieces: no dispatch splits past the one-row form's count
     r.attn_part_dev = make_device_buf((r.attn_cnt_off + n_heads * nb) * 4l)   //! a counter a (row, kv head, slab) group: a head a group at most, whatever a layer's GQA group
-    rd_zero_words(r.attn_part_dev, r.attn_cnt_off * 4l, n_heads * nb)
+    upload_zeros(r.attn_part_dev, r.attn_cnt_off * 4l, n_heads * nb * 4l)   //! the arrival counters start at rest; the last piece of each group rearms its own
     r.ar_cnt_dev = make_device_buf(16l)
-    var zeros : array<uint>
-    zeros |> resize(4)
-    upload_region_at(r.ar_cnt_dev, 0l, unsafe(addr<uint8 const?>(zeros[0])), 16l)   //! the counter starts at zero; every epilogue dispatch leaves it there
+    upload_zeros(r.ar_cnt_dev, 0l, 16l)   //! the counter starts at zero; every epilogue dispatch leaves it there
     r.aq_dev = make_device_buf(qd * nb)
     r.as_dev = make_device_buf((qd / 32l) * 4l * nb)
     r.gate_dev = make_device_buf(hidden * 4l * nb)
@@ -550,8 +544,8 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.moe_meta1_dev = make_device_buf(META_BYTES)
     r.moe_meta3_dev = make_device_buf(META_BYTES)
     r.moe_meta2_dev = make_device_buf(META_BYTES)
-    r.moe_xq_dev = make_device_buf(dim * r.nb)   //! the routed feed's private quant a row: the sets over it bind the N-row extent
-    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l * r.nb)
+    r.moe_xq_dev = make_device_buf(dim)
+    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l)
     r.egate_dev = make_device_buf(k * nfe * 4l)
     r.eup_dev = make_device_buf(k * nfe * 4l)
     r.edown_dev = make_device_buf(k * dim * 4l)
@@ -576,7 +570,7 @@ def private rd_moe_sets(var L : RLayer) {
     let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
     if (L.xe_own) {
         L.s_quant_xe = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.moe_xq_dev, g_rd.moe_xs_dev),
-            fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+            fixed_array(dim * 4l * nb, dim, (dim / 32l) * 4l), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
     }
     L.pre2_fused = L.moe_g4 && L.xe_own && vk_fuse_on()
     if (L.pre2_fused) {
@@ -1009,7 +1003,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
             fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
         g_rd.fused_sets_made = false
-    g_rd.n_sets_made = false
+        g_rd.n_sets_made = false
         // quantize final xb
         g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
             fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
@@ -1860,11 +1854,12 @@ def private rd_submit_land(var cmd : VkCommandBuffer; nrows : int64) {
     }
 }
 
-//! ... and its wait: the logits are in host memory when it returns
+//! ... and its wait: the logits are in host memory when it returns, and the next submit starts a new landing
 [hot_path]
 def private rd_wait_land {
     if (g_rd_xlog_wait != 0ul) {
         xfer_spin_wait(g_rd_xlog_wait)
+        g_rd_xlog_wait = 0ul
     } else {
         wait_fence()
     }
@@ -1970,7 +1965,25 @@ def vk_rdec_token_n_rows : int64 {
                 || !(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
                     && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
     }
-    return g_rd.nb
+    if (g_rd.n_rail == 0) {
+        g_rd.n_rail = rd_n_rail_engages() ? 1 : -1
+    }
+    return g_rd.n_rail > 0 ? g_rd.nb : 0l
+}
+
+//! the N-column leaves of every plane the command dispatches and its fused Q8_0 site, built on this device; false logs the decline once
+[cold_path]
+def private rd_n_rail_engages : bool {
+    let nb = g_rd.nb
+    var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
+    for (L in g_rd.layers) {
+        ok = (ok && gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
+            && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb))
+    }
+    if (!ok) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: an N-column GEMV class or the N-row fused add+rms+requant class declined on this device - the batched step runs a row at a time\n")
+    }
+    return ok
 }
 
 //! a fused site's N-row set: the rows of x, their add partner, the norms, the quant feed - the Q8_0 twin over `nb` rows
@@ -1984,7 +1997,6 @@ def private set_ar_rq_rows(add : uint64; aclass : uint) : VkDescriptorSet {
 //! the N-row command's fused sites, where a site's feed is Q8_0: the prologue, each layer's FFN step and next step
 def private rd_ensure_n_sets {
     if (g_rd.n_sets_made) return
-    verify(ensure_cls_ar_rq_b(), "vk decode: the N-row fused add+rms+requant rail must engage on a live device")
     if (!kq_sb(g_rd.layers[0].fq)) {
         g_rd.s_prologue_rq_b = set_ar_rq_rows(g_rd.x_dev, VHZ_X)
     }
@@ -1999,16 +2011,6 @@ def private rd_ensure_n_sets {
         }
     }
     g_rd.n_sets_made = true
-}
-
-//! the N-column leaves of every plane the command dispatches, built before the first record
-def private rd_ensure_n_leaves {
-    var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker)
-    for (L in g_rd.layers) {
-        ok = (ok && gemv_cls_ensure_n(L.fq) && gemv_cls_ensure_n(L.fk) && (L.vfk || gemv_cls_ensure_n(L.fv)) && gemv_cls_ensure_n(L.fo)
-            && gemv_cls_ensure_n(L.f1) && gemv_cls_ensure_n(L.f3) && gemv_cls_ensure_n(L.f2))
-    }
-    verify(ok, "vk decode: the N-column GEMV rails must engage on a live device")
 }
 
 //! a GEMV of the N-row command: the N-column form, or under the bisect's bit 2 the one-column form over row 0
@@ -2133,10 +2135,9 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
 
 //! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and split form
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
-def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; twin : bool) {
+def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; twin : bool) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
-    let nrows = nrows_in
     let nr = uint(nrows)
     var one_names <- g_rdq_stamp_names
     let one_overflow = g_rdq_overflow
@@ -2215,11 +2216,11 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
             rd_ts(raw, "t:fin_rq")
         }
         var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(g_rd.vocab))
-        gemv_enc_n(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+        rd_gemv_n(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
         rd_ts(raw, "t:cls")
         if (!g_rd.log_xfer) {
             vhz_dep(raw, h, VHZ_LOG, 0u, true)
-            cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows_in)
+            cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
             rd_ts(raw, "t:dma")
         }
         pfq_end(raw)
@@ -2241,13 +2242,13 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
     g_rdq_overflow = one_overflow
 }
 
-var private @scratch g_rd_logits_n : array<float>   //! the N-row command's logits plane, read off the mapped memory in one pass
+var private @scratch @exact_size g_rd_logits_n : array<float>   //! the N-row command's logits plane, read off the mapped memory in one pass
 
 //! the rows' logits from the mapped plane to their pointers: one read of the plane, then a row a copy
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     let vocab = g_rd.vocab
-    g_rd_logits_n |> resize(vocab * nrows)
+    g_rd_logits_n |> grow_resize(vocab * nrows)
     unsafe {
         memcpy(addr<void?>(g_rd_logits_n[0]), g_rd.logits_host.mapped, vocab * 4l * nrows)
         for (i in range64(nrows)) {
@@ -2261,14 +2262,13 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
-    let twin = g_rd.attn_nsplit > 1l
+    let nsplit = min(g_rd.attn_nsplit, da_nsplit(da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nrows, int64(g_gpu.sm_count)))
+    let has_unsplit_twin = nsplit > 1l
     if (!g_rd.tok_n_recorded[nrows]) {
         rd_fill_gemv_regions_all()
-        rd_ensure_n_leaves()
         rd_ensure_n_sets()
-        let nsplit = min(g_rd.attn_nsplit, da_nsplit(da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nrows, int64(g_gpu.sm_count)))
         rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, false)
-        if (twin) {
+        if (has_unsplit_twin) {
             rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, true)
         }
         g_rd.tok_n_recorded[nrows] = true
@@ -2277,7 +2277,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
     for (i in range64(nrows)) {
         maxpos = max(maxpos, poss[i])
     }
-    let unsplit = twin && maxpos < RD_UNSPLIT_POS
+    let unsplit = has_unsplit_twin && maxpos < RD_UNSPLIT_POS
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     unsafe {

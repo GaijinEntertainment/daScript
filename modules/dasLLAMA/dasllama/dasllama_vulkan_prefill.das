@@ -3252,27 +3252,12 @@ def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
     let xfer = g_gpu.xfer_fam >= 0
     vk_check(vkEndCommandBuffer(raw), null)
     if (xfer) {
-        g_gpu.xfer_value++
-        var sig = g_gpu.xfer_value
-        var tss = VkTimelineSemaphoreSubmitInfo()
-        var sem = g_gpu.xfer_sem
-        var submit = VkSubmitInfo()
-        submit.commandBufferCount = 1u
-        submit.signalSemaphoreCount = 1u
-        let nofence : VkFence
-        unsafe {
-            tss.signalSemaphoreValueCount = 1u
-            tss.pSignalSemaphoreValues = addr(sig)
-            submit.pNext = addr<void?>(tss)
-            submit.pCommandBuffers = addr(raw)
-            submit.pSignalSemaphores = addr(sem)
-            vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
-        }
+        let sig = xfer_submit_after(raw, 0ul)
         if (sync) {
-            xfer_host_wait(g_gpu.xfer_value)
+            xfer_host_wait(sig)
         }
         // the consumer still attaches the GPU-side wait — cross-queue visibility by the book
-        g_gpu.stream_slots[si].wait_value = g_gpu.xfer_value
+        g_gpu.stream_slots[si].wait_value = sig
     } elif (sync) {
         submit_wait(raw)
     } else {

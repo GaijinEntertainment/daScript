@@ -566,8 +566,10 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         moe = ((nk + TILE_READ_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
             + RDEC_PF_ROWS * (c.n_expert + 1l) * 4l + nk * 12l)
     }
+    let nb = max(g_rdec_regions_want, 1l)   //! the N-row command's planes hold a row a region: the logits and the attention pieces scale with it
+    let pieces = hs > 0l ? (qd / hs) * 16l * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
-        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + c.vocab_size * 4l + RDEC_MISC_BYTES + moe
+        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe
 }
 
 //! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse
@@ -707,6 +709,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
 //! the one writer of the flag: the pool's spin window follows the driver's arm and drop
 def private rdec_set_active(on : bool) {
+    if (g_rdec_active == on) return
     g_rdec_active = on
     set_dispatch_gpu_served(on)
 }
@@ -993,7 +996,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
     if (t.wq_offs[l] < 0l || (!kvsh && t.wk_offs[l] < 0l)) return "layer {l} lacks a q/k plane"
     if (!kvsh && t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
     let hs = layer_head_size(c, l)
-    if (hs % 32l != 0l || hs > 512l) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 512)"
+    if (hs % 32l != 0l || (hs > 256l && hs != 512l)) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 256, and 512)"
     return ""
 }
 
@@ -1657,8 +1660,8 @@ def private resident_prefill_ple_rows(t : Model; tokens : array<int64>; npos : i
 
 var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the armed driver (`resident_cos_elems`)
 // the N-row command's gathered rows: the residuals, the rope rows, each row's position, count and region, and where its logits land
-var private @scratch g_rdec_x_n : array<float>
-var private @scratch g_rdec_cos_n : array<float>
+var private @scratch @exact_size g_rdec_x_n : array<float>
+var private @scratch @exact_size g_rdec_cos_n : array<float>
 var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
@@ -2058,8 +2061,8 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim
-    g_rdec_x_n |> resize(dim * nrows)
-    g_rdec_cos_n |> resize(g_rdec_cos_elems * nrows)
+    g_rdec_x_n |> grow_resize(dim * nrows)
+    g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
     g_rdec_lrows |> resize(nrows)
     g_rdec_poss |> resize(nrows)
     g_rdec_cnts |> resize(nrows)
@@ -2078,6 +2081,9 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
             }
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
+                panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+            }
             rdec_take_mirror(t, s, r, pos)
         }
         copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
@@ -2097,7 +2103,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         let pos = g_rdec_poss[i]
         let r = g_rdec_regs[i]
         if (!s.device_kv) {
-            rdec_bind_region(s)   //! the readback reads the selected region: this row's
+            rdec_select_region(r)   //! the readback reads the selected region: this row's, bound above
             for (l in range64(c.n_layers)) {
                 continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
                 let kvd = layer_kv_dim(c, l)
@@ -2127,7 +2133,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
     }
-    if (!ple && c.recr_mask == 0ul && nrows > 1l && rdec_token_n_rows() >= nrows && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
+    if (nrows > 1l && rdec_token_n_rows() >= nrows && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
         return true
     }
     g_rdec_x |> resize(dim)
@@ -2141,6 +2147,9 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
+                panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+            }
             rdec_take_mirror(t, s, r, pos)
         }
         if (c.recr_mask != 0ul) {

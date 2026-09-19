@@ -95,11 +95,13 @@ that a question answered for one backend has an obvious address in the other. Th
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
   and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`
   at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH` and `MetalKqMulMmQ40T` / `TH`, and the four
-  `MetalMoeMulMmQ40*` expert stamps)
-  bind the strip plane unread, so both formats share one set layout and one host bind path; and the
-  split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the mul_mm scaffold's `xf` and `y`
-  bindings unread - they write only the f16 panel at binding 7 - so a format's dequant pass and its
-  mul_mm twins keep one set layout and one host bind path.
+  `MetalMoeMulMmQ40*` expert stamps) bind the strip plane unread, so both formats share one set layout
+  and one host bind path; the split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the
+  mul_mm scaffold's `xf` and `y` bindings unread - they write only the f16 panel at binding 7 - so a
+  format's dequant pass and its mul_mm twins keep one set layout and one host bind path; and the Vulkan
+  `kq_gemv_cls` family binds `gridb` (the grid formats' codebook plane, `kq_grid_dev`) at binding 6 on
+  every stamp, one set layout for the family - the grid stamps (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s) read
+  it, every other stamp (k2, k3, k4, k5, k6, q40, iq4xs, iq4nl) and the N leaves bind it unread.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots, route/mark/want/status
   state, engine-facing forwarders. Vulkan implements it (per-op offload plus resident plumbing, and the decode-era
   seats it alone fills: the cm2 expert chain `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
@@ -109,24 +111,24 @@ that a question answered for one backend has an obvious address in the other. Th
   per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its attention-sink seat
   `install_moe_gpu_resident_sinks` (the per-head sink plane, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am), its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
-  MoE layer, and the routed block on a layer another seat built), its mirror-region seat
-  `install_moe_gpu_resident_regions` (`rdec_select_region` names the region every mirror address and the next token
-  command resolve against; a tier without it serves one region), all behind the route lever `set_gpu_resident_route` /
-  `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the
-  weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple` - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the device). The
-  installs are one-way: a test that arms the tier installs the seats and never restores them,
-  because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
-  deliberately does not, because UMA makes residency moot there and Metal
-  integrates as a whole-forward driver through common's override registries (the ASR-decoder
-  driver is the one exception: whisper is not a `Model`, so its hooks are family registries in
-  `dasllama_whisper`, same decline contract).
-- **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline
-  into the flavor image, upload a model's stacks to the tier, and drive decode/prefill entirely on
-  device. It is device-AGNOSTIC - it holds no device call and requires no GPU module, reaching the
-  hardware only through the `dasllama_gpu_tier` SPI and entering the engine only through common's
-  override registries. `"vulkan"` is the tier string it registers under, not a dependency, which is
-  why it compiles on every box. It requires common back for `Model`/`Session`, so like the Metal
-  drivers it is required from the transformer umbrella, never from common.
+  MoE layer, and the routed block on a layer another seat built), its mirror-region seat `install_moe_gpu_resident_regions`
+  (`rdec_select_region` names the region every mirror address and the next token command resolve against; a tier
+  without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
+  the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps
+  them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the
+  OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the weight-bytes seat
+  `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple`
+  - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the
+  device). The installs are one-way (a test that arms the tier never restores them): no uninstall exists and none is
+  needed, a seat serves whatever model loads next. Metal deliberately does not - UMA makes residency moot there, and
+  Metal integrates as a whole-forward driver through common's override registries (the ASR-decoder driver is the one
+  exception: whisper is not a `Model`, so its hooks are family registries in `dasllama_whisper`, same decline contract).
+- **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline into the flavor
+  image, upload a model's stacks to the tier, and drive decode/prefill entirely on device. It is device-AGNOSTIC - it
+  holds no device call and requires no GPU module, reaching the hardware only through the `dasllama_gpu_tier` SPI and
+  entering the engine only through common's override registries. `"vulkan"` is the tier string it registers under, not
+  a dependency, which is why it compiles on every box. It requires common back for `Model`/`Session`, so like the
+  Metal drivers it is required from the transformer umbrella, never from common.
 - **A dry bake runs the whole resident arm with no device.** `vulkan_bake_role` puts the tier in
   bake mode, and each `rdec_*` device seam answers for itself so the arm walk reaches the end: a
   seam that only records a layout (`vk_rdec_set_emb`) answers true, a seam that would allocate
@@ -135,9 +137,12 @@ that a question answered for one backend has an obvious address in the other. Th
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
-  `mk_grid_dim`, `param_type`). One owner by design - the two lenses' grammars drifted apart
-  when each carried a private copy (metal folded only the literal "1" where vulkan folded any
-  integer). Backend-specific lowering stays in that backend's lens.
+  `mk_grid_dim`, `param_type`). One owner by design: a private copy per lens drifts (metal folding
+  only the literal "1" where vulkan folds any integer). Backend-specific lowering stays in that backend's lens.
+- **The authoritative site of each constant kind.** Tile constant in a kernel body: the literal in the generated `*_msl` global or the
+  SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>` writes every class kernel's words). Grid constant: the class's `[metal_dispatch]` / `[vk_dispatch]`
+  `grid=` spec (`"n/c"` is a CEIL-divide); a `grid = "wgs"` class carries no number there - its grid is the kernel body's workgroup-index
+  decode with the host helper that computes `wgs`. Threadgroup constant: Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. Uniform: the single writer that fills its buffer.
 
 **PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
 question was surveyed and closed against; the tune-time race arms' transient queue is

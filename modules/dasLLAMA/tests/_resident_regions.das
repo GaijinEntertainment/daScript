@@ -259,7 +259,53 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
     }
 }
 
-def cell_regions_batched_steps(t : T?; file : string) {
+//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone: bit for bit
+//! where `exact`, else within the split bar with the one-token-off control (a K-quant carrier's N-row Q8_K sites round
+//! apart from the one-row command's - `../followup_vulkan.md` item 75)
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; exact : bool) {
+    var fa <- feed_a()
+    var fb <- feed_b()
+    var ra <- logits_alone(tr, pa, fa)
+    var rb <- logits_alone(tr, pb, fb)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
+    eval(tr, sb, pb)
+    var ws <- create_batch_workspace(tr)
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    let gen_a = sa.rdec_gen
+    let gen_b = sb.rdec_gen
+    for (st in range64(STEPS)) {
+        var toks <- [fa[st], fb[st]]
+        eval_batch(tr, ws, sess, toks)
+        delete toks
+        if (exact) {
+            hold_equal(t, sa.logits, ra[st + 1l], "batched step {st}, row A")
+            hold_equal(t, sb.logits, rb[st + 1l], "batched step {st}, row B")
+        } else {
+            hold_within(t, sa.logits, ra[st + 1l], ra[st], "batched step {st}, row A")
+            hold_within(t, sb.logits, rb[st + 1l], rb[st], "batched step {st}, row B")
+        }
+    }
+    t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
+    t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
+    var passes <- gpu_cpu_passes_()
+    t |> equal(length(passes), 0, "the device served every call: {passes}")
+    delete passes
+    sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+    unsafe {
+        delete ws
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete ra
+    delete rb
+    delete fa
+    delete fb
+}
+
+def cell_regions_batched_steps(t : T?; file : string; exact : bool = true) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -267,43 +313,30 @@ def cell_regions_batched_steps(t : T?; file : string) {
             setup_dasllama_jobque_()
             var pa <- prompt_a()
             var pb <- prompt_b()
-            var fa <- feed_a()
-            var fb <- feed_b()
-            var ra <- logits_alone(tr, pa, fa)
-            var rb <- logits_alone(tr, pb, fb)
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var sb <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
-            eval(tr, sb, pb)
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
-            let gen_a = sa.rdec_gen
-            let gen_b = sb.rdec_gen
-            for (st in range64(STEPS)) {
-                var toks <- [fa[st], fb[st]]
-                eval_batch(tr, ws, sess, toks)
-                delete toks
-                hold_equal(t, sa.logits, ra[st + 1l], "batched step {st}, row A")
-                hold_equal(t, sb.logits, rb[st + 1l], "batched step {st}, row B")
-            }
-            t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
-            t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
-            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-            unsafe {
-                delete ws
-                delete sess
-            }
-            delete sa
-            delete sb
-            delete ra
-            delete rb
+            batched_steps_body(t, tr, pa, pb, exact)
             delete pa
             delete pb
-            delete fa
-            delete fb
+        }
+        delete tr
+    }
+}
+
+//! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
+//! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
+def cell_regions_batched_steps_split(t : T?; file : string; exact : bool = true) {
+    t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- ramp_ids(WINDOW_ROWS + 8l, 0l, 1000l, 37l, 5000l)
+            var pb <- ramp_ids(WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
+            }
+            batched_steps_body(t, tr, pa, pb, exact)
+            delete pa
+            delete pb
         }
         delete tr
     }

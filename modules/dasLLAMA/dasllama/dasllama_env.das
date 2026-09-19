@@ -350,7 +350,7 @@ struct public VulkanEnv {
     @clarg_doc = "The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it)."
     vk_f16_ffn : bool = true
 
-    @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
+    @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore, and land the resident token command's logits there behind a compute-timeline wait; 0 keeps the single-queue rail, where the token command copies its own logits under its fence."
     vk_xferq : bool = true
 
     @clarg_doc = "Run the cm2 tiles' four-wide decode callback where the device has VK_NV_cooperative_matrix_decode_vector; 0 strips it and serves the scalar callback - the same-build A/B and the fallback probe."

@@ -4109,8 +4109,8 @@ class template DaAttnT {
     @ssbo @binding = 2 @role = "alias" @template_gate = KV16 vw4 : array<uint4>   //! the V mirror as 16-byte words
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
-    @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)], the arrival counters past them; unsplit, any buffer (unread)
-    @ssbo @binding = 5 @role = "alias" partu : array<uint>   //! the partials binding as words: the arrival counters
+    @ssbo @binding = 5 @coherent part : array<float>   //! the split form's partials [head x split x (hs + 2)], the arrival counters past them; unsplit, any buffer (unread); coherent: the last-arriving piece reads the others' stores
+    @ssbo @binding = 5 @role = "alias" @coherent partu : array<uint>   //! the partials binding as words: the arrival counters
     @ssbo @binding = 6 aq : array<int8>      //! the row's quants when `rqk` folds the requant (the wo plane's feed); else any buffer (unwritten)
     @ssbo @binding = 7 aqs : array<float>    //! ... and its block scales
     @ssbo @binding = 8 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
@@ -4301,8 +4301,11 @@ class template DaAttnT {
         barrier()
         let vrow_words = hs / 8u
         let kgroups = 256u / vrow_words
-        let g = tid / vrow_words
-        let w = tid % vrow_words
+        let vw_pow2 = (vrow_words & (vrow_words - 1u)) == 0u
+        let kgroups_per_subgroup = vw_pow2 ? gl_SubgroupSize / vrow_words : 0u   //! whole key groups a subgroup: the fold pairs lanes of one dim slice
+        let folded = kgroups_per_subgroup >= 1u
+        let my_kgroup = folded ? gl_SubgroupID * kgroups_per_subgroup + lane / vrow_words : tid / vrow_words   //! off the subgroup's own lanes where the fold serves
+        let w = folded ? lane % vrow_words : tid % vrow_words
         var acc : float[32]                    // [head * 8 + dim]
         for [unroll] (j in range(32)) {
             acc[j] = 0.0
@@ -4322,7 +4325,7 @@ class template DaAttnT {
                 if (vec) {
                     for [unroll] (b in range(8)) {
                         kw[b] = kw4[krow / 8u + min(uint(b), vrow_words - 1u)]   //! a head of 64 fills eight words, a wider one takes more batches
-                        vw[b] = vw4[(vb + (c0 + min(g + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
+                        vw[b] = vw4[(vb + (c0 + min(my_kgroup + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
                     }
                 }
             }
@@ -4412,11 +4415,11 @@ class template DaAttnT {
                     acc[j * 8 + e] *= alpha[j]
                 }
             }
-            var jj = g
+            var jj = my_kgroup < kgroups ? my_kgroup : clen
             while (jj < clen) {
                 static_if (KV16) {
                     if (vec) {
-                        if (jj != g) {
+                        if (jj != my_kgroup) {
                             for [unroll] (b in range(8)) {
                                 vw[b] = vw4[(vb + (c0 + min(jj + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
                             }
@@ -4458,20 +4461,19 @@ class template DaAttnT {
             c0 += 256u
         }
         let stride = da_attn_part_stride(hs)
-        let kgs = gl_SubgroupSize / vrow_words   //! key groups a subgroup; 0 where a row's words span subgroups (a wide head, a narrow subgroup)
         var r = 1u
-        while (r < kgs) {
+        while (r < kgroups_per_subgroup) {
             for [unroll] (k in range(32)) {
                 acc[k] += subgroupShuffleXor(acc[k], r * vrow_words)
             }
             r *= 2u
         }
-        let folded = kgs >= 1u
         let ngroups_folded = folded ? gl_NumSubgroups : kgroups
         let nsl_hs = ngroups_folded * hs
-        let heads_per_round = max(1u, min(2048u / nsl_hs, 256u / hs))   //! a round's heads: what the slab holds, and what a thread a dim can reduce
-        let has_sum = !folded || lane < vrow_words
-        let slot = folded ? gl_SubgroupID : g
+        let round_cap = min(2048u / nsl_hs, 256u / hs)   //! a round's heads: what the slab holds, and what a thread a dim can reduce
+        let heads_per_round = max(1u, round_cap)
+        let has_sum = folded ? lane < vrow_words : my_kgroup < kgroups
+        let slot = folded ? gl_SubgroupID : my_kgroup
         var hr0 = 0u
         while (hr0 < live) {
             for [unroll] (j in range(4)) {
@@ -9727,8 +9729,8 @@ struct GemvArgs {
 // the scales. The workhorse decode GEMV.
 [vk_dispatch(name = "q8_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Gemv {
-    @ssbo @binding = 0 wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
-    @ssbo @binding = 1 wsh : array<float16>    // per-block f16 weight scales
+    @ssbo @binding = 0 @role = "weight" wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
+    @ssbo @binding = 1 @role = "weight" wsh : array<float16>    // per-block f16 weight scales
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
     @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view: a lane's half-block in one 16-byte load
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
@@ -9778,8 +9780,8 @@ class Q8Gemv {
 //! weight rows and a long row's re-reads halve - the rows a region holds must then be even
 [ |> template_struct_instance]
 class template Q8GemvNT {
-    @ssbo @binding = 0 wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
-    @ssbo @binding = 1 wsh : array<float16>    // per-block f16 weight scales
+    @ssbo @binding = 0 @role = "weight" wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
+    @ssbo @binding = 1 @role = "weight" wsh : array<float16>    // per-block f16 weight scales
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
     @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
@@ -10929,10 +10931,21 @@ def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu
 
-def gemv_cls_ensure_n(fmt : int) : bool {
+//! the q8 row-pair form is armed: `g_q8_n2_min_n` sits under the widest reduction
+def q8_pair_armed() : bool => g_q8_n2_min_n != 0xFFFFFFFFu
+
+//! the N-column leaves of `fmt` for up to `nb` columns: the q8 stamps the ladder can pick, the pair twins only while armed
+def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
     if (fmt == int(KqFmt.q8)) {
-        return (ensure_q8_gemv_n2_cls() && ensure_q8_gemv_n4_cls() && ensure_q8_gemv_n8_cls()
-            && ensure_q8_gemv_n2p_cls() && ensure_q8_gemv_n4p_cls() && ensure_q8_gemv_n8p_cls())
+        let pair = q8_pair_armed()
+        var ok = ensure_q8_gemv_n2_cls() && (!pair || ensure_q8_gemv_n2p_cls())
+        if (nb > 2l) {
+            ok = ok && ensure_q8_gemv_n4_cls() && (!pair || ensure_q8_gemv_n4p_cls())
+        }
+        if (nb > 4l) {
+            ok = ok && ensure_q8_gemv_n8_cls() && (!pair || ensure_q8_gemv_n8p_cls())
+        }
+        return ok
     } elif (fmt == int(KqFmt.k4)) {
         return ensure_kq_gemv_k4_n_cls()
     } elif (fmt == int(KqFmt.k5)) {
@@ -10959,7 +10972,10 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    let pair = pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+    var pair = q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+    if (pair) {   //! the pair twins build on first use, since the lever can move after the family's ensure ran
+        pair = pc.ncols <= 2u ? ensure_q8_gemv_n2p_cls() : (pc.ncols <= 4u ? ensure_q8_gemv_n4p_cls() : ensure_q8_gemv_n8p_cls())
+    }
     let g = pair ? (wgs + 1l) / 2l : wgs   //! a subgroup a row pair: half the row grid
     if (pc.ncols <= 2u) {
         if (pair) {
