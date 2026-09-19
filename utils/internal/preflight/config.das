@@ -5,6 +5,7 @@ module config shared
 
 require strings
 require daslib/fio
+require daslib/rtti   // has_module: whether a static build carries a module the sweep's trees require
 require daslib/json
 require daslib/strings_boost
 require daslib/toml
@@ -93,12 +94,34 @@ let public SWEEP_EXCLUDED <- {
     "utils/internal/ast-fuzz/selftest/" => "deliberately broken fixtures test_ast_fuzz.das owns"
 }
 
+//! a native module a CMake option may leave out of the box's build: its daslang module name, and the shared
+//! artifact a dll build carries it in
+typedef ModuleGate = tuple<name : string; artifact : string>
+
+let private VULKAN_GATE : ModuleGate = (name = "vulkan", artifact = "modules/dasVulkan/dasModuleVulkan.shared_module")
+
+//! trees whose roots require a module the box may not have built (dasVulkan is off by default on Apple):
+//! swept while the box has the module, skipped while it does not
+let public SWEEP_NEEDS_MODULE <- {
+    "examples/vulkan/" => VULKAN_GATE,
+    "examples/vulkan_imgui_cube/" => VULKAN_GATE,
+    "examples/gltf/mesh_viewer_vulkan/" => VULKAN_GATE,
+    "modules/dasVulkan/" => VULKAN_GATE
+}
+
 def public sweep_excluded(path : string) : bool {
     for (prefix in keys(SWEEP_EXCLUDED)) {
         return true if (path |> starts_with(prefix))
     }
+    for (prefix, gate in keys(SWEEP_NEEDS_MODULE), values(SWEEP_NEEDS_MODULE)) {
+        return true if ((path |> starts_with(prefix)) && module_absent(gate))
+    }
     return standalone_module_tree(path)
 }
+
+//! a shared-module build carries the module in its artifact, so the artifact's absence is the module's; a static
+//! build links every module it was configured with, so the running binary is asked whether it has it
+def public module_absent(gate : ModuleGate) : bool => das_is_dll_build() ? !fexist(gate.artifact) : !has_module(gate.name)
 
 //! a module the root build skips - `.daspkg_standalone` beside its CMakeLists.txt, the marker the root
 //! CMakeLists.txt reads - has no artifact for its roots to require, so its trees are the box's, not the sweep's
