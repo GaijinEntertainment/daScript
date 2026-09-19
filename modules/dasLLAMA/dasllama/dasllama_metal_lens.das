@@ -242,11 +242,14 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
 }
 
 // the [metal_kernel] method of a lensed class — the body the access classifier walks. `want`
-// names the method for multi-kernel classes; "" counts every kernel method and returns the
-// first (the single-kernel form's exactly-one check rides on nmatch)
+// names the method for multi-kernel classes, a trailing '*' making it a prefix (the stamp form,
+// where the family names the method it dispatches and the format completes it); "" counts every
+// kernel method and returns the first (the single-kernel form's exactly-one check rides on nmatch)
 def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&) : Function? {
     var kfn : Function?
-    let wanted = empty(want) ? "" : "{st.name}`{want}"
+    let byPrefix = want |> ends_with("*")
+    let stem = byPrefix ? chop(want, 0, length(want) - 1) : want
+    let wanted = empty(want) ? "" : "{st.name}`{stem}"
     mod |> for_each_function("") $(fn) {
         if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
             for (ann in fn.annotations) {
@@ -256,7 +259,7 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
                         if (kfn == null) {
                             kfn = fn
                         }
-                    } elif (fn.name == wanted) {
+                    } elif (byPrefix ? ("{fn.name}" |> starts_with(wanted)) : fn.name == wanted) {
                         nmatch++
                         kfn = fn
                     }
@@ -267,16 +270,101 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
+// ===== the stamp form: one (family, fmt, form) triple for the strings a family derives =====
+// A kernel-family stamp spells `stamp = "<family>:<fmt>:<form>"` and the lens computes the
+// builder name, the pso global, the tgmem constant, the grid, the threadgroup size, the params
+// and the requires contract from it. Every derived string is byte-identical to the long form it
+// replaces, and an argument spelled explicitly wins over the derived one - so an irregular stamp
+// (a pso global carrying a legacy format code, an extra alignment contract) spells only the odd
+// one out, and a class with no `stamp=` takes the long form unchanged.
+struct private StampSpec {
+    name : string
+    pso : string
+    kernel_prefix : string   // "" = the class's one kernel method; else the family's method prefix
+    grid : string
+    params : string
+    requires : string
+    tg : int
+}
+
+// a 128-row M-tile stamp: the tall forms and the dense q8 t128 spell their tile height in the form
+def private stamp_tall(form : string) : bool {
+    return form |> ends_with("128")
+}
+
+def private stamp_form_ok(form : string; rem : bool) : bool {
+    return (form == "t" || form == "th" || form == "th128"
+        || (rem ? form == "thr" : (form == "thdb" || form == "thdb128")))
+}
+
+//! The family table: what each Metal mul_mm family derives from (fmt, form). An empty `name`
+//! back is an unknown family or an unserved form - the caller refuses the compile.
+def private stamp_spec(family, fmt, form : string) : StampSpec {
+    var s : StampSpec
+    s.tg = 128
+    if (family == "kq_mm" && stamp_form_ok(form, false)) {
+        s.name = "enc_kq_mm_{fmt}_{form}_c"   // pso: the dense globals carry a legacy format code
+        s.grid = stamp_tall(form) ? "mp/128, rows/64" : "mp/32, rows/64"
+        s.params = "mp : int64, rows : int64"
+    } elif ((family == "moe_mm" || family == "moe_mm_split") && stamp_form_ok(form, true)) {
+        let split = family == "moe_mm_split"
+        s.name = "pf_enc_moe_mm_{fmt}_{form}_c"
+        s.pso = "g_pf_pso_moe_mm_{fmt}_{form}"
+        if (form == "thr") {
+            s.grid = "4, rows/64, ne"
+        } else {
+            s.grid = split ? "tiles, rows/64, ne" : (stamp_tall(form) ? "npos/128, rows/64, ne" : "npos/32, rows/64, ne")
+        }
+        if (split) {
+            // the split twins ride the dense decode's plane, so the site passes its own dim
+            // uniforms and its tile count; the bucket-scaffold twins take the padded row count
+            s.kernel_prefix = "metal_moe_mulmm"
+            s.params = "mp : int64, rows : int64, ne : int64, tiles : int64"
+            s.requires = "rows % 64"
+        } else {
+            s.params = form == "thr" ? "rows : int64, ne : int64" : "rows : int64, npos : int64, ne : int64"
+        }
+    }
+    return <- s
+}
+
 [structure_macro(name = metal_dispatch)]
 class MetalDispatch : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
         let at = st.at
-        let fn_name = find_arg(args, "name") ?as tString ?? ""
-        let pso = find_arg(args, "pso") ?as tString ?? ""
-        let tgmem = find_arg(args, "tgmem") ?as tString ?? ""
-        let tgi = find_arg(args, "tg") ?as tInt ?? -1
+        var fn_name = find_arg(args, "name") ?as tString ?? ""
+        var pso = find_arg(args, "pso") ?as tString ?? ""
+        var tgmem = find_arg(args, "tgmem") ?as tString ?? ""
+        var tgi = find_arg(args, "tg") ?as tInt ?? -1
         let tgs = find_arg(args, "tg") ?as tString ?? ""
-        let grid = find_arg(args, "grid") ?as tString ?? ""
+        var grid = find_arg(args, "grid") ?as tString ?? ""
+        var params = find_arg(args, "params") ?as tString ?? ""
+        var requires = find_arg(args, "requires") ?as tString ?? ""
+        var kern = find_arg(args, "kernel") ?as tString ?? ""
+        var kprefix = ""
+
+        let stamp = find_arg(args, "stamp") ?as tString ?? ""
+        if (!empty(stamp)) {
+            let parts <- split(stamp, ":")
+            if (length(parts) != 3) {
+                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' must be '<family>:<fmt>:<form>'"
+                return false
+            }
+            let spec <- stamp_spec(strip(parts[0]), strip(parts[1]), strip(parts[2]))
+            if (empty(spec.name)) {
+                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' names no family+form (kq_mm: t/th/th128/thdb/thdb128; moe_mm and moe_mm_split: t/th/th128/thr)"
+                return false
+            }
+            fn_name = empty(fn_name) ? spec.name : fn_name
+            pso = empty(pso) ? spec.pso : pso
+            grid = empty(grid) ? spec.grid : grid
+            params = empty(params) ? spec.params : params
+            requires = empty(requires) ? spec.requires : requires
+            kprefix = spec.kernel_prefix
+            if (tgi <= 0 && empty(tgs)) {
+                tgi = spec.tg
+            }
+        }
 
         if (empty(fn_name)) {
             errors := "[metal_dispatch]: 'name' (the enc_ builder name) is required"
@@ -360,9 +448,27 @@ class MetalDispatch : AstStructureAnnotation {
         }
         sort(bufs) $(a, b) => a.binding < b.binding
 
+        // The [metal_kernel] method this instance dispatches: named by kernel=, else by the stamp
+        // family's method prefix (its classes carry a sibling kernel the family does not
+        // dispatch), else the class's one kernel method. The emitter names that kernel's globals
+        // after `<class>`<method>`, so a stamp derives its tgmem constant from the method found.
+        if (empty(kern) && !empty(kprefix)) {
+            kern = "{kprefix}*"
+        }
+        let multi = !empty(kern)
+        let accessForce = find_arg(args, "access_force") ?as tBool ?? false
+        var nmatch = 0
+        var kfn : Function?
+        if (!accessForce || !empty(stamp)) {
+            kfn = find_kernel_fn(st, compiling_module(), kern, nmatch)
+        }
         if (has_wg && empty(tgmem)) {
-            errors := "[metal_dispatch] {fn_name}: '{st.name}' has @workgroup members but no tgmem= - the generated builder would bind ZERO threadgroup memory and the kernel reads whatever length the encoder last had (garbage, or worse: right by luck). Pass tgmem = \"<msl global>_tgmem\" (the emitter's generated byte-size constant for this kernel's source)"
-            return false
+            if (empty(stamp) || kfn == null) {
+                errors := "[metal_dispatch] {fn_name}: '{st.name}' has @workgroup members but no tgmem= - the generated builder would bind ZERO threadgroup memory and the kernel reads whatever length the encoder last had (garbage, or worse: right by luck). Pass tgmem = \"<msl global>_tgmem\" (the emitter's generated byte-size constant for this kernel's source)"
+                return false
+            }
+            let stem = replace("{kfn.name}", "`", "_")
+            tgmem = "{stem}_msl_tgmem"
         }
 
         // @default = name (bare identifier): a sibling field's name resolves to its builder
@@ -386,9 +492,6 @@ class MetalDispatch : AstStructureAnnotation {
         // Multi-kernel form ([vk_dispatch]'s sibling): N [metal_dispatch] instances on one
         // class, each naming its [metal_kernel] method via kernel= — every instance emits its
         // own builder, binds the full field set, and STAGES its own kernel's derived access.
-        let kern = find_arg(args, "kernel") ?as tString ?? ""
-        let multi = !empty(kern)
-        let accessForce = find_arg(args, "access_force") ?as tBool ?? false
         for (bf in bufs) {   // default: staging follows the (declared or later-derived) role
             bf.hzrole = bf.role
         }
@@ -406,10 +509,13 @@ class MetalDispatch : AstStructureAnnotation {
                     tracked |> insert(bf.name)
                 }
             }
-            var nmatch = 0
-            let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch)
             if (multi && kfn == null) {
                 errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method '{kern}' on {st.name}"
+                delete tracked
+                return false
+            }
+            if (multi && !empty(stamp) && nmatch != 1) {
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods of {st.name} match the stamp family's '{kern}' - one stamp dispatches one kernel"
                 delete tracked
                 return false
             }
@@ -492,7 +598,6 @@ class MetalDispatch : AstStructureAnnotation {
         // gate scans the whole staged set — but reads-then-writes matches the hand-written order).
         var body : array<ExpressionPtr>
         body |> reserve(length(bufs) * 3 + 4)
-        let requires = find_arg(args, "requires") ?as tString ?? ""
         if (!empty(strip(requires))) {
             for (item in split(requires, ",")) {
                 let lr <- split(item, "%")
@@ -538,7 +643,6 @@ class MetalDispatch : AstStructureAnnotation {
                 fn.arguments |> emplace_new <| new Variable(at = at, name := "{bf.off}", _type = const_t(qmacro_type(type<uint64>)))
             }
         }
-        let params = find_arg(args, "params") ?as tString ?? ""
         if (!empty(strip(params))) {
             for (p in split(params, ",")) {
                 let nt <- split(p, ":")
@@ -567,6 +671,49 @@ class MetalDispatch : AstStructureAnnotation {
             return false
         }
         return true
+    }
+}
+
+[call_macro(name = "compile_stamp")]
+class CompileStampMacro : AstCallMacro {
+    //! ``compile_stamp(<Class>_<kernel>_msl, ok)`` - the pipeline compile from ONE kernel stem.
+    //! The emitter names a kernel's source, entry-name and fastmath-flag globals off that stem,
+    //! so spelling it three times only creates a place to pair one kernel's source with another's
+    //! entry name - a compile that succeeds against the wrong kernel.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        if (length(expr.arguments) != 2 || !(expr.arguments[0] is ExprVar)) {
+            macro_error(prog, expr.at, "compile_stamp expects (<Class>_<kernel>_msl, ok), got {describe(expr)}")
+            return <- qmacro(null)
+        }
+        let src = "{(expr.arguments[0] as ExprVar).name}"
+        if (!(src |> ends_with("_msl"))) {
+            macro_error(prog, expr.at, "compile_stamp: '{src}' is not a kernel source global (<Class>_<kernel>_msl)")
+            return <- qmacro(null)
+        }
+        let ent = "{src}_entry"
+        let fm = "{src}_fastmath"
+        return <- qmacro(compile_pso($i(src), $i(ent), $i(fm), $e(expr.arguments[1])))
+    }
+}
+
+[call_macro(name = "release_handles")]
+class ReleaseHandlesMacro : AstCallMacro {
+    //! ``release_handles(a, b, c, ...)`` - one ``release_handle`` per slot named.
+    //! ``release_handle`` nulls its slot THROUGH a reference, so the slots cannot ride an array
+    //! literal: a loop over one would release copies and leave every global pointing at a freed
+    //! object. This is the driver-shutdown spelling for a run of slots.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        if (empty(expr.arguments)) {
+            macro_error(prog, expr.at, "release_handles expects one or more handle slots")
+            return <- qmacro(null)
+        }
+        var blk = new ExprBlock(at = expr.at)
+        for (slot in expr.arguments) {
+            var c = new ExprCall(at = expr.at, name := "release_handle")
+            c.arguments |> emplace_new <| clone_expression(slot)
+            blk.list |> emplace_new <| c
+        }
+        return <- blk
     }
 }
 
