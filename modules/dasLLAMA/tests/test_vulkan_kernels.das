@@ -1250,7 +1250,6 @@ def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
     return bad
 }
 
-//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 //! `bytes` of zero words into `dev` at `off`: the split attention's arrival counters start at rest
 def private zero_upload(dev : uint64; off, bytes : int64) {
     var zeros : array<uint>
@@ -1258,6 +1257,7 @@ def private zero_upload(dev : uint64; off, bytes : int64) {
     upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), bytes)
 }
 
+//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def private nan_sentinel_upload(dev; bytes : int64; off : int64 = 0l) {
     var s : array<uint>
     s |> resize(bytes / 4l)
@@ -3790,6 +3790,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             var tokb = make_host_buf(16l, true)
             var tmc = reinterpret<TokMeta?>(tokb.mapped)
             tmc.cnt = uint(cnt)
+            tmc.mirbase = 0u
             var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb.buf, partd, aqd, asd),
                 fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, int64(qdim), s_bytes),
                 fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
@@ -3917,6 +3918,7 @@ def test_vkd_da_attn(t0 : T?) {
                 var tokb = make_host_buf(16l, true)
                 var tmc = reinterpret<TokMeta?>(tokb.mapped)
                 tmc.cnt = uint(cnt)
+                tmc.mirbase = 0u
                 var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb.buf, yd2, yd2, yd2),   //! unsplit, unfolded: the out rows fill the partials and quant bindings
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
@@ -3946,6 +3948,7 @@ def test_vkd_da_attn(t0 : T?) {
                 var tokb2 = make_host_buf(16l, true)
                 var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
                 tmc2.cnt = uint(cnt)
+                tmc2.mirbase = 0u
                 var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb2.buf, yd2, yd2, yd2),
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
@@ -3982,6 +3985,7 @@ def test_vkd_da_attn(t0 : T?) {
                 var tokb4 = make_host_buf(16l, true)
                 var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
                 tmc4.cnt = uint(cnt)
+                tmc4.mirbase = 0u
                 var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb4.buf, partd, yd2, yd2),
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u))
@@ -4041,6 +4045,7 @@ def test_vkd_da_attn(t0 : T?) {
                     var tokb5 = make_host_buf(16l, true)
                     var tmc5 = reinterpret<TokMeta?>(tokb5.mapped)
                     tmc5.cnt = uint(cnt)
+                    tmc5.mirbase = 0u
                     var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tokb5.buf, partd, yd2, yd2, sinkd),
                         fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
@@ -4095,6 +4100,7 @@ def test_vkd_da_attn(t0 : T?) {
                         var tokb6 = make_host_buf(16l, true)
                         var tmc6 = reinterpret<TokMeta?>(tokb6.mapped)
                         tmc6.cnt = uint(cnt)
+                        tmc6.mirbase = 0u
                         var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tokb6.buf, partd, yd2, yd2, sinkd),
                             fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
                             fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
@@ -8807,6 +8813,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                     var tokb = make_host_buf(16l, true)
                     var tmc = reinterpret<TokMeta?>(tokb.mapped)
                     tmc.cnt = uint(cnt)
+                    tmc.mirbase = 0u
                     var sc = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb.buf, yd2, yd2, yd2),
                         fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
