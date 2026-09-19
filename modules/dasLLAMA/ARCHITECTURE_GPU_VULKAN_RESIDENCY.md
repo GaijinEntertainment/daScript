@@ -51,7 +51,7 @@ row gathered on device where the driver holds the projection, else that row of t
 `eval_batch` already ran.
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
-with scratch and no host cache (`Session.kv_device`), so nothing is allocated per request and
+with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and
 nothing crosses the bus per token: the overrides bring no history up for it, read no row back
 after a batched step and hydrate nothing down. The CPU rails cannot take its call, so a pass
 that reaches one panics with the pass's reason (`rdec_device_home_guard`) - the prefill pin
@@ -74,7 +74,7 @@ stream slot - so the next request adopts the longest opening it shares, short of
 token: a conversation's next turn prefills its new suffix alone, with no copy. A media stream
 parks nothing, its rows not following from its token ids, and neither does a recurrent model's
 stream: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
-per slot before each step (`slot_device_kv`) while the slot is served whole from the device,
+per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
 has a region per stream and no media tower or self-speculation, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
 mode against host-cached twins on the same device, on a qwen2 and on the E-series carrier.
@@ -163,7 +163,7 @@ fitting plan forgoes them - they would only shrink its room - so a decline past 
 placement, a class rail) leaves the per-op rails without a streamed slot, said out loud. The
 tile family the routed block rides is the f16-fed cm2 tiles (`ARCHITECTURE_GPU_VULKAN_MOE.md`
 sec.2.2af), and `DASLLAMA_GPU_RESIDENT=0` keeps the per-op rails for any model, the A/B lever.
-The driver is attempted only when asked for (`gpu_want_resident_asked`): the measured-best set
+The driver is attempted only when asked for (`gpu_resident_requested`): the measured-best set
 asks (`DASLLAMA_GPU=1`, or `auto_tier` on the want), and so does a want that spells its rails
 out one by one and sets `resident` - the server's serving shape, where `gpu_dn = false` must
 still turn one rail off. Rails alone, by env or by want, keep the per-op tier.

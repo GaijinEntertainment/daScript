@@ -8,9 +8,9 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
 **A diff that changes a flag's user-visible text in any of its three copies - the
-`@clarg_doc` in `main.das`, its row in `README.md`, its row in
-`doc/source/reference/utils/dasllama_server.rst` (repo root) - updates the other two in the
-same change, adding the copy where one is missing** - a copy left behind sends the user to a
+`@clarg_doc` in `main.das`, its entry in `README.md` (a table row, or the section that documents
+the key), its row in `doc/source/reference/utils/dasllama_server.rst` (repo root) - updates the
+other two in the same change, adding the copy where one is missing** - a copy left behind sends the user to a
 flag that no longer does what it says.
 
 **A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
@@ -40,11 +40,19 @@ the route that answers with that key first.**
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
 
-**A diff that adds or edits a string the control page prints verbatim to say how a slot is
-served - a `served` or `served_note` value, or the words for a `gpu_cpu_passes` reason - writes
-it in words a reader who never saw the engine understands: never engine vocabulary
-(`resident`, `region`, `mirror`, `pass`, `tier`, `rails`); it says where the weights sit, where
-the streams' caches sit, and what holds the slot back.**
+**A string the control page puts in front of a reader to say how a slot is served - a `served`
+or `served_note` value, the words for a `gpu_cpu_passes` reason - never uses the engine's own
+nouns for its parts (a pass, a region, a mirror, the resident driver, the tier, the rails):
+plain words instead.** A reason's machine name rides only as a tooltip, and the engine's own
+decline text only after a plain sentence that stands without it.
+
+**A `served` value says where the weights sit and, on a GPU slot, where the streams' caches
+sit; a `served_note` value says what holds the slot back.**
+
+**A diff in this folder that calls `create_device_session`, or turns a scheduler's device mode
+on (`set_device_kv`), shows at that call site that the slot's live device-home sessions stay
+within the K/V regions its load armed (`ModelSlot.gpu_regions`).** The driver panics on the
+session that finds no region.
 
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line (today `dasllama_exchange` and `llvm_tune`) -

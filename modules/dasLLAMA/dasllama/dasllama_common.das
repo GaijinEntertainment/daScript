@@ -2070,7 +2070,7 @@ struct Session {
     rdec_gen : int64
     rdec_region : int64         //! the mirror region the claim above sits in (meaningful only while `rdec_gen` matches that region's)
     rdec_host_current : bool
-    kv_device : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated
+    device_kv : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
     tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's
@@ -2462,7 +2462,7 @@ def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = 
 //! ones as the driver has regions; the driver panics where it would hand such a session to the CPU rails.
 def create_device_session_(model : Model; kdt : KVDtype) : Session {
     var s <- make_run_state(model.config, kdt, kdt, false)
-    s.kv_device = true
+    s.device_kv = true
     return <- s
 }
 

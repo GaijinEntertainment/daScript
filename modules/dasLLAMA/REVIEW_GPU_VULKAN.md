@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_MOE.md`. Planned work:
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_MOE.md`,
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work:
 `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
@@ -49,7 +50,8 @@ is a fallback a user finds only by profiling.
 `continue` routes work to the CPU path - that does not log the concrete reason it declined,
 once per reason per armed model, is a defect.**
 
-**A diff that keys a route of the tier on a device limit adds that limit to `vk_ext_roster`
+**A diff that changes what a device limit decides for the tier - which path serves, how much
+it arms, whether it declines - adds that limit to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
 it, or adds the new route to the entry it already has, in the same change.** An extension or a
 `*_supported` probe the roster omits is `check_vk_extension_roster`'s finding (`REVIEW.das`); the

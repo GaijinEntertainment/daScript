@@ -667,8 +667,7 @@ def gpu_device_session_dtype() : KVDtype {
 }
 
 def set_resident_prefill_allowed(allowed : bool) {
-    //! Allow or pin out the resident-decode prefill arm. A multi-stream scheduler pins it OFF for
-    //! good: the single shared mirror plus chunked prefill would leave device-only KV that a
-    //! second stream's steal strands.
+    //! Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has
+    //! K/V regions would strand device-only rows. A device-home session prefills on the device whatever the pin says.
     set_resident_prefill_allowed_(allowed)
 }

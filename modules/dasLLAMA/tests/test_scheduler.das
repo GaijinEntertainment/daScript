@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_scheduler   // the scheduler under test
+require _scheduler_rig   // make_req, drain, toks_of, finished_of
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe
@@ -91,29 +92,6 @@ def private ref_generate(m : Model; prompt : array<int64>; params : SamplingPara
     return <- r
 }
 
-def private make_req(id : int64; prompt : array<int64>; params : SamplingParams; max_new : int64;
-                     stop_ids : array<int64>; seed : int = 0) : PendingReq {
-    var r <- PendingReq(id = id, params = params, max_new = max_new, seed = seed)
-    r.prompt := prompt
-    r.stop_ids := stop_ids
-    return <- r
-}
-
-// step until idle (bounded — a runaway scheduler must not hang the suite)
-def private drain(m : Model; var sch : Scheduler; var events : array<SchedEvent>) {
-    var steps = 0
-    while (scheduler_step(m, sch, events)) {
-        steps ++
-        if (steps > 4096) {
-            panic("test_scheduler: scheduler did not go idle in 4096 steps")
-        }
-    }
-}
-
-def private toks_of(events : array<SchedEvent>; id : int64) : array<int64> {
-    return <- [for (e in events); e.token; where e.stream == id && e.kind == SchedEventKind.piece]
-}
-
 def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
     return <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
 }
@@ -121,15 +99,6 @@ def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
 // both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
 def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
     to_log(LOG_INFO, "{la}: {join(pieces_of(ea, ida), "")}\n{lb}: {join(pieces_of(eb, idb), "")}\n")
-}
-
-def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
-    for (e in events) {
-        if (e.stream == id && e.kind == SchedEventKind.finished) {
-            return e
-        }
-    }
-    return SchedEvent(stream = -1l)
 }
 
 let DN_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
@@ -207,15 +176,11 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             delete sa
             delete sb
             delete events1
-            unsafe {
-                delete sch1
-            }
+            delete sch1
             delete ga
             delete gb
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete refs
             delete pa
             delete pb
@@ -306,9 +271,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
             delete ref
             delete ref2
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete prompt
             delete m
         }
@@ -346,9 +309,7 @@ def test_scheduler_chunk_sizes(t : T?) {
                 to_log(LOG_INFO, "K={K}: \"{text_of(pieces_of(events, int64(ci)))}\" {got}\n")
                 streams |> emplace(got)
                 delete events
-                unsafe {
-                    delete sch
-                }
+                delete sch
             }
             t |> success(first[0] >= 0l, "chunked runs produced tokens")
             for (ci in range(1, 4)) {
@@ -423,9 +384,7 @@ def test_scheduler_batching(t : T?) {
             delete gb
             delete gc
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete refs
             delete pa
             delete pb
@@ -526,15 +485,11 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
                 var cold4 <- toks_of(events, 52l)
                 t |> success(same(warm4, cold4), "continuation attach bit-exact vs cold - donated rows aligned")
                 delete cold4
-                unsafe {
-                    delete sch3
-                }
+                delete sch3
                 delete warm4
                 delete prompt4
                 delete emitted
-                unsafe {
-                    delete sch2
-                }
+                delete sch2
                 delete close
                 delete stops
             } else {
@@ -546,9 +501,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
             delete cold
             delete warm
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete prompt
             delete m
         }
@@ -601,9 +554,7 @@ def test_scheduler_evict_and_context_length(t : T?) {
             set_fused_decode(prev_fused)
             delete ga
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete ref_a
             delete pa
             delete pb
@@ -649,9 +600,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "plain stream queued")
             drain(m, sch0, events0)
             var ref_toks <- toks_of(events0, 1l)
-            unsafe {
-                delete sch0
-            }
+            delete sch0
             // spec: mtp on — the chunked prefill crosses the warm's seam rows, and the paged
             // sessions ride the pool's draft-block slab (the server default rail)
             let prev_spec = get_mtp_spec()
@@ -674,9 +623,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(submit(m, sch1, make_req(3l, prompt, sp, 24l, none, 4242)), "plain sampled stream queued")
             drain(m, sch1, events1)
             var ref_s <- toks_of(events1, 3l)
-            unsafe {
-                delete sch1
-            }
+            delete sch1
             set_mtp_spec(true)
             var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
             var events2 : array<SchedEvent>
@@ -698,9 +645,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(submit(m, sch3, make_req(5l, prompt, gp, 24l, none)), "plain penalized-greedy stream queued")
             drain(m, sch3, events3)
             var ref_p <- toks_of(events3, 5l)
-            unsafe {
-                delete sch3
-            }
+            delete sch3
             set_mtp_spec(true)
             var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
             var events4 : array<SchedEvent>
@@ -715,21 +660,15 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             delete ref_p
             delete events4
             delete events3
-            unsafe {
-                delete sch4
-            }
+            delete sch4
             delete got_s
             delete ref_s
             delete events2
             delete events1
-            unsafe {
-                delete sch2
-            }
+            delete sch2
             delete got
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete ref_toks
             delete events0
             delete prompt
@@ -779,9 +718,7 @@ def test_scheduler_paged_sampled(t : T?) {
             delete cold
             delete warm
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete ref
             delete prompt
             delete m
@@ -861,9 +798,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
                 t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
                 delete got
                 delete events
-                unsafe {
-                    delete sch
-                }
+                delete sch
             }
             // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
             // match generate_embd's span form, not the causal one. The span is [1, np) — everything
@@ -883,9 +818,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             delete causal_ref
             delete got_nc
             delete events_nc
-            unsafe {
-                delete sch_nc
-            }
+            delete sch_nc
             delete span_ref
 
             // paged: the prefix cache is keyed on TOKEN IDS, and a media stream's KV past the splice
@@ -914,9 +847,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             delete paged_toks
             delete text_only
             delete ev
-            unsafe {
-                delete schp
-            }
+            delete schp
             set_prefill_attn_mode(saved_mode)
             delete base
             delete prompt
@@ -928,7 +859,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
 // ===== media validation: submit refuses malformed shapes by panic =====
 
 [test]
-def test_scheduler_media_validation(t : T?) {   // nolint:STYLE038 — one flat story: each malformed shape probes the same submit guard
+def test_scheduler_media_validation(t : T?) {
     t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
@@ -1002,9 +933,7 @@ def test_scheduler_media_validation(t : T?) {   // nolint:STYLE038 — one flat 
             }
             m.config.n_deepstack = 0l
             t |> success(tripped, "narrow image rows on a deepstack decoder panic")
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete prompt
             delete m
         }
@@ -1088,15 +1017,11 @@ def test_scheduler_mrope(t : T?) {
             delete g1
             delete g2
             delete eb
-            unsafe {
-                delete schb
-            }
+            delete schb
             delete tref
             delete got
             delete events
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete mref
             delete sref
             delete prompt
@@ -1152,9 +1077,7 @@ def test_scheduler_mrope_validation(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "a grid with n_media == 0 panics instead of dropping silently")
-            unsafe {
-                delete sch
-            }
+            delete sch
             delete prompt
             delete m
         }

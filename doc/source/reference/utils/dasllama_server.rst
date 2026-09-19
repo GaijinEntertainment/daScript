@@ -123,6 +123,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - ``4096``
      - Context-length cap in tokens
+   * - ``--gpu``
+     -
+     - ``auto``
+     - GPU backend: auto (default: metal/vulkan when detected, else CPU) \| off \| metal \| metal-required \| vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)
    * - ``--tune``
      -
      - ---

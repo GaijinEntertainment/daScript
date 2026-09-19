@@ -208,6 +208,11 @@ entry here:**
   per-call resident overrides say each pass-to-CPU reason once per armed model
   (`rdec_pass_once`) and count every pass by reason in the tier (`gpu_cpu_passes`, zeroed as a
   model arms), which the server's `/v1/stats` carries as `gpu_cpu_passes`. The gap is `followup_vulkan.md` item 1, not a precedent to copy.
+- **Device-home sessions are Vulkan-only.** A session whose K/V lives only in a region of the
+  resident driver's mirror (`create_device_session`, the scheduler's device mode, park and
+  adopt: `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n) has no Metal twin, and
+  `gpu_device_sessions` answers 0 there: Metal's whole-forward driver reads the host cache in
+  unified memory, so it has no mirror to split. The Metal serving gap is `followup_metal.md` sec.16.
 - **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
   it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
   ids, skips the CPU embed loop, and the resident driver gathers the rows on device through

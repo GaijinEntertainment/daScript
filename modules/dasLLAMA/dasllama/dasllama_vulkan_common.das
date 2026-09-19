@@ -1203,6 +1203,8 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "a ReBAR memory type (device-local, host-visible, host-coherent past the 256 MiB window)", present = rebar_memory_type(phys) >= 0,
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
+        VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
+            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -2538,7 +2540,7 @@ var g_rd : RDec?
 //! a layer's first mirror element in the selected region
 def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_elems
 
-//! the bytes each mirror side binds: every region
+//! one mirror side's binding: all `regions` copies end to end
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
 
 //! every region's token command re-records: the sets or planes it references were replaced

@@ -2134,10 +2134,7 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (g_rd != null && g_rd.hybrid && l < long_length(g_rd.layers) && g_rd.layers[l].recurrent) {
         var L & = unsafe(g_rd.layers[l])
         if (L.dn.valid && L.dn.owner_state_addr == intptr(stp)) {
-            if (L.dn.dirty) {
-                dnd_flush_down(L.dn)
-            }
-            dnd_drop_slot(L.dn)
+            dnd_send_home(L.dn)
         }
         return
     }
@@ -2150,10 +2147,15 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (st.owner_state_addr != caller_state_addr) {
         return
     }
+    dnd_send_home(*st)
+}
+
+//! the owner's state goes back to the host where the device holds the newer copy, and the slot is free
+def private dnd_send_home(var st : DnStep) {
     if (st.dirty) {
-        dnd_flush_down(*st)
+        dnd_flush_down(st)
     }
-    dnd_drop_slot(*st)
+    dnd_drop_slot(st)
 }
 
 def private dnd_drop_slot(var st : DnStep) {
@@ -2184,10 +2186,7 @@ def private dnd_flush_down(st : DnStep) {
 def vk_rdec_dn_flush_owners {
     for (L in g_rd.layers) {
         continue if (!L.recurrent || !L.dn.valid)
-        if (L.dn.dirty) {
-            dnd_flush_down(L.dn)
-        }
-        dnd_drop_slot(L.dn)
+        dnd_send_home(L.dn)
     }
 }
 

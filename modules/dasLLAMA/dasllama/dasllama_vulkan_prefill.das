@@ -1425,7 +1425,7 @@ def private pf_setup {
 }
 
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
-//! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
+//! (cos_batch, [npos x hs]) -> the last row's logits, filling the selected mirror region at positions [pos0, pos0 + npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
     let noids : array<int64>

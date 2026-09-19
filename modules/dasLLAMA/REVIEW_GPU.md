@@ -209,21 +209,23 @@ is the default and needs no flag.
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
 
-**A served GPU path that hands a serving shape to the CPU rails, or steps it one row at a time
-where a batched arm is absent, is a defect, never a fallback - a diff that adds such a pass, or
-lands a model family, a backend arm or a session shape whose serving takes one, ships the device
-path for it in the same change.** A serving shape is what the server runs by default: a paged
-session, a batched decode step over several streams, a prefill under a multi-stream scheduler,
-a session at the model's own context. "It runs, on the CPU" is not support: the user who
-selected the GPU gets a fraction of its speed and nothing on the page says so.
+**A diff that adds a call site handing a served GPU decode or prefill to the CPU rails is a
+defect, never a fallback - it ships the device path in the same change, or names the
+`followup_vulkan.md` / `followup_metal.md` item that already carries that shape.** A shape the
+ledger names is answered with its item; one it does not name blocks. "It runs, on the CPU" is
+not support: the user who selected the GPU gets a fraction of its speed.
 
-**A host that keeps more live device-home sessions (`create_device_session`) than
-`gpu_device_sessions` reports for the installed model is a defect - it reads that number before
-it admits a stream, and a stream past it stays host-cached; a scheduler's device mode
-(`set_device_kv`) counts as `max_streams` of them, and goes off before the model leaves the
-device.** Each live device-home session pins
-a mirror region, and the driver panics on the one that finds none: the CPU rails have no cache
-to serve it from.
+**A diff that lands a model family, a backend arm or a session shape whose batched decode step
+runs its rows through the single-row command one after another is a defect - it ships the
+batched dispatch in the same change, or names the ledger item that carries it.** A batched
+dispatch reads each weight plane once for all the step's rows; the per-row step reads it once
+per row.
+
+**A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
+on (`set_device_kv`), shows at that call site that the live device-home sessions stay within
+`gpu_device_sessions()` - a scheduler counts as `max_streams` of them - and turns the mode off
+before `moe_gpu_drop_model`.** Each live device-home session pins a mirror region, and the
+driver panics on the one that finds none: the CPU rails have no cache to serve it from.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 model, one

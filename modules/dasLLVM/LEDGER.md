@@ -9,13 +9,15 @@ leaves when it lands or is refuted.
 - **The split obj cache shares nothing between programs.** A partition's key is the running
   chain over every module before it (`ARCHITECTURE.md` sec.2.1) and its object sits in the
   program's own `.jitted_scripts/<namespace>/`, so two programs over one engine share no
-  object: two dasLLAMA unit tests read 0 of 19 key-named objects in common, while their
+  object: two dasLLAMA unit tests (`tests/test_batch_grid.das` and `tests/test_box_profile.das`,
+  each a `-jit` child of `modules/dasLLAMA/tests/run.das -- --suite model-free`, the `.o` names
+  listed from the namespace folder its log names) read 0 of 19 key-named objects in common, while their
   partitions' own content - each function's mangled name and semantic hash under
-  `DAS_JIT_DUMP_HASHES` - is identical in 11 of 19 partitions carrying 524 of 757 functions,
+  `DAS_JIT_DUMP_HASHES=1` on the same two runs - is identical in 11 of 19 partitions carrying 524 of 757 functions,
   the tune-stamped kernel partition among them (about 12 s of O3 codegen in every file that
-  reaches the engine). No function carried two hashes; partitions differ only by which
+  reaches the engine, on a Threadripper 3990X at 16 lanes). No function carried two hashes; partitions differ only by which
   functions a program uses. After an engine edit each of the module's 146 test children
-  re-emits the engine, 13 to 31 s apiece. The change: key a partition by its own content - the
+  re-emits the engine, 13 to 31 s apiece on that box. The change: key a partition by its own content - the
   semantic hash is what the AOT tier already binds stubs by, and partitions are separate LLVM
   modules - and keep the objects in one folder shared by every program, written to a temp name
   and renamed, swept by age instead of the per-program keep-set.

@@ -1115,14 +1115,14 @@ def public gpu_want_auto : bool
     => g_env_gpu.gpu ?? g_gpu_want.auto_tier
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
-def public gpu_want_resident_asked : bool
+def public gpu_resident_requested : bool
     => gpu_want_auto() || g_gpu_want.resident
 
 //! The whole-model driver will be attempted on this box: the loader then keeps a dense hybrid's
 //! deltanet planes in their file formats (the driver's GEMVs and tiles dispatch per format), and
 //! the vulkan image identity carries the same bit.
 def public gpu_want_dn_native : bool
-    => moe_gpu_resident_installed() && gpu_want_resident_asked()
+    => moe_gpu_resident_installed() && gpu_resident_requested()
 
 //! Effective tier request, env-else-programmatic — the load walk and the GPU backends read
 //! these instead of the raw env vars.
@@ -1548,6 +1548,13 @@ def public set_gpu_cpu_pass_reasons(reasons, words : array<string>) {
     g_gpu_cpu_pass_words := words
     g_gpu_cpu_pass_counts |> clear()
     g_gpu_cpu_pass_counts |> resize(length(reasons))
+}
+
+//! No call has passed yet: the counts are the armed model's, so a drop and every load zero them.
+def public reset_gpu_cpu_passes() {
+    for (n in g_gpu_cpu_pass_counts) {
+        n = 0l
+    }
 }
 
 def public note_gpu_cpu_pass(reason_slot : int) {

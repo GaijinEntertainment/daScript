@@ -10,6 +10,7 @@ require _resident_regions
 // bit-for-bit cells - each recurrent layer's one device state slot goes to whichever session steps, flushed home and
 // brought back exactly - and the scheduler's device mode, where a recurrent model prefills each prompt whole and adopts
 // no earlier rows. The continuation cells are not this model's: its window chain starts the deltanet state from zero.
+// Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "Qwen3.5-0.8B-Q8_0.gguf"
 
 [test]

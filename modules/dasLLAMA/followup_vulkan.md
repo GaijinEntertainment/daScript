@@ -1539,9 +1539,8 @@ module) is independent and can land any time - it is pure structure.
 
 69. **Three serving shapes still leave the resident driver's device, and a fourth serves short.** A slot served whole from
     the device holds its streams' K/V there (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n:
-    regions, device-home sessions, the scheduler's device mode); gemma-4-E2B Q4_K_M on the RTX
-    5060 Ti reads 117 tok/s on one chat stream and 134 tok/s summed over four, `gpu_cpu_passes`
-    empty. `REVIEW_GPU.md` rules each shape below a defect, and `/v1/stats` counts it:
+    regions, device-home sessions, the scheduler's device mode), `gpu_cpu_passes` empty.
+    `REVIEW_GPU.md` rules each shape below a defect, and `/v1/stats` counts it:
     (a) a recurrent model's prefill continuation - the window chain starts the deltanet state
     from zero (`continuation`), so a device-home stream of such a model prefills its prompt in
     one quantum, stalling the other streams for its length, and a next turn re-prefills its

@@ -56,8 +56,8 @@ suite roster, carries nothing to correct; a file with no census entry owes none.
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
-return - updates the test file's header in the same change.** A header is the file's top comment
-block; it names every fact a skip condition in the file keys on.
+return - updates in the same change the header of every `[test]` file that runs the cell, wherever
+the cell is defined.** A header is the file's top comment block; it names every fact its cells skip on.
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -184,7 +184,7 @@ beside the dumps under `models_dir()`, named by the test that loads the dump.
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
 defect.**
 
-**A cell sets every knob its claim depends on that outlives one call - any `set_*` / `pin_*` call
+**A cell, or the `[init]` of the file that carries it, sets every knob its claim depends on that outlives one call - any `set_*` / `pin_*` call
 in `dasllama/` that changes the driver's route or the serving lane for the rest of the process -
 even when the claim needs the knob at its DEFAULT value.**
 
@@ -260,10 +260,9 @@ not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A diff that adds an assert carrying a tolerance bar - a bar value new to the file, or one already
-used there applied at an assert site that did not carry it - or loosens one, ships in the same
-change a control that lands outside the bar.** A bar nothing has ever exceeded is not known to
-discriminate.
+**A diff that adds an assert carrying a tolerance bar, or loosens one, ships in the same change a
+control that lands outside the bar in every cell that holds it - one control a bar value is not
+enough.** A bar nothing has exceeded where it is applied is not known to discriminate there.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

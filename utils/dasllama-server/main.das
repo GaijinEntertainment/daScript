@@ -64,7 +64,7 @@ struct ServerArgs {
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
     metal : string
 
-    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan (a set --metal flag keeps the legacy env-driven path)"
+    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)"
     gpu : string
 
     @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default 2 under --gpu vulkan)"
@@ -995,8 +995,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
-                set_gpu_resident_regions(ent.streams > 0 ? int64(ent.streams) : streams)
-                set_gpu_ctx_max(ectx)
+                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx)
             }
             print("loading {ent.path} ...\n")
             var m <- load_model(ent.path, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant))

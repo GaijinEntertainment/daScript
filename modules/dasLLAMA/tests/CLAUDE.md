@@ -519,20 +519,26 @@ the two prompts differing in content and length so a crossed region cannot land 
 claims unchanged through the batched steps (no history came up from the host again); the same
 with device-home sessions, which allocate no host cache; the pin - with both regions held by
 live device-home sessions a host-cached outsider passes as `busy`, the owners step on
-untouched, and a parked region is the next outsider's; and the scheduler's device mode token
-for token against the host-cached scheduler over four requests on two streams, the second
-turn adopting the rows of the turn it continues. Every cell holds `gpu_cpu_passes_()` empty
+untouched, and a parked region is the next outsider's; and the scheduler's device mode
+against the host-cached scheduler over four requests on two streams (`_scheduler_rig.das`, shared
+with `test_scheduler.das`): token for token where the two sides run one code path - each prompt
+one window-chain call, each step the batched token command, the prefill counter pinning it -
+and for the second turn, which adopts the rows of the turn it continues and so splits its
+prefill, the adopted count alone. Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of
 `test_gpu_resident_qwen2.das`: one prompt prefilled in one call against two calls, cut at 40
-of 57, 512 of 600 and 300 of 900, a prompt one token short the control, then four decoded
-steps over the continued rows; the chat shape (a prompt, steps, a second turn through the
+of 57, 512 of 600 and 300 of 900 (the cuts placed against the engine's `PF_WINDOW`, asserted),
+a prompt one token short the control, then four decoded steps over the continued rows, each
+against the step before it as its control; the chat shape (a prompt, steps, a second turn through the
 window chain against the same tokens stepped one by one); and the parked claim adopted once,
-refused twice, dead once another session took its region. The E2B file runs the bit-for-bit
+refused twice, dead once another session took its region - every site that holds the bar
+carries its own one-token-off control, and every compare logs both sides' argmax. The E2B file runs the bit-for-bit
 cells on the E-series carrier, where a batched row carries its own per-layer-embedding side
 input, and the hybrid file on Qwen3.5-0.8B, where each recurrent layer's one device state slot
 goes to whichever session steps and a second session's prefill sends the first one's state home
 before it zeroes the slot; its scheduler cell holds that a recurrent model adopts no rows. About
-90 s a file; each skips without its model or the armed tier.
+90 s a file on the RTX 5060 Ti box (Threadripper 3990X) under `dastest -jit` with `DASLLAMA_GPU=1`,
+the JIT cache warm; each skips without its model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run

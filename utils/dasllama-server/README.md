@@ -106,6 +106,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--model` | `-m` | *(required)* | GGUF model to serve (here or in `--config`) |
 | `--port` | `-p` | `8080` | Listen port |
 | `--quant` | `-q` | `q8` | Weight quantization: `fp32` \| `q8` \| `q4` - plus the loader's file-format spellings `q4_k` \| `q5_k` \| `q6_k` \| `mxfp4` \| `f16` \| `bf16` (all serve on the `q8` kquant-native tier) |
+| `--gpu` | - | `auto` | GPU backend: auto (default: metal/vulkan when detected, else CPU) \| off \| metal \| metal-required \| vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path). Details: *The gpu key* below |
 | `--kv-dtype` | - | `f16` | KV-cache codec: `f32` \| `f16` \| `q8_0` \| `tq4` (rotated 4-bit; needs pow2 head_size) |
 | `--asr` | `-a` | - | ASR model (whisper/parakeet/qwen3-asr) - enables the `/v1/audio/*` routes |
 | `--asr-workers` | - | `1` | Long-lived ASR request threads; each owns a model and reusable session. Set `2` for two parallel transcriptions |

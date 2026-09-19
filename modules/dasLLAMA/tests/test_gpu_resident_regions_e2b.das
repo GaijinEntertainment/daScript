@@ -8,7 +8,8 @@ require _resident_regions
 
 // gemma-4-E2B Q8_0 (the E-series carrier: a per-layer-embedding side input per token, the upper layers reading the K/V
 // of the ones below): the rig's bit-for-bit cells - the batched step hands each row its own side input - and the
-// scheduler's device mode. The tolerance cells stay the qwen2 file's: their bar is calibrated there.
+// scheduler's device mode. The tolerance cells stay the qwen2 file's: their bar is calibrated there. Skips off the JIT,
+// without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 
 [test]

@@ -337,7 +337,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         kv_ensure(*sp, sp.n_past + 1l)
         ws.positions[i] = sp.n_past
         ws.rope_positions[i] = sp.n_past + sp.rope_pos_delta   // post-image mrope streams rope ahead of their KV index
-        if (s0.kv_pool == null && !sp.kv_device) {
+        if (s0.kv_pool == null && !sp.device_kv) {
             unsafe {
                 ws.kbase[i] = addr(sp.key_cache[0])
                 ws.vbase[i] = addr(sp.value_cache[0])

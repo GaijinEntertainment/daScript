@@ -36,6 +36,7 @@ let QUESTIONS2 = fixed_array("What is the capital of Japan?",
     "What does a linker do?",
     "Which desert is the largest?")
 let MAX_NEW = 32l
+let STREAMS = 4l   // conversations served at once: the scheduler's stream slots, and in section 5 the GPU's K/V regions
 
 // Resolve the model path: last command-line argument ending in .gguf, else $DASLLAMA_MODEL.
 def model_path() : string {
@@ -216,8 +217,8 @@ def section_gpu_slots(m : Model) {
     print("A switched in: '{rearmed}'\n")
 
     // the serving pin: a multi-stream scheduler turns the resident prefill arm OFF
-    // for good — its one shared mirror plus chunked prefill would leave device-only
-    // KV that a second stream's steal strands (dasllama-server does exactly this)
+    // for good — a host-cached stream's chunked prefill would leave device-only KV
+    // that a second stream's steal strands (dasllama-server does exactly this)
     set_resident_prefill_allowed(false)
 }
 
@@ -281,7 +282,7 @@ def section_device_streams(m : Model; var sch : Scheduler) {
 
     // the scheduler does all of the above per stream once it is in device mode;
     // only an idle scheduler switches, and only when every stream gets a region
-    let on = set_device_kv(sch, regions >= 4l)
+    let on = set_device_kv(sch, regions >= STREAMS)
     print("scheduler device mode: {on}\n")
     set_device_kv(sch, false)
 
@@ -296,7 +297,7 @@ def main() {
         print("usage: daslang -jit tutorials/dasLLAMA/13_serving.das -- <model.gguf>\n")
         return
     }
-    set_gpu_resident_regions(4l)   // section 5: a K/V region per stream, asked for before the load
+    set_gpu_resident_regions(STREAMS)   // section 5: a K/V region per stream, asked for before the load
     set_gpu_ctx_max(8192l)         // and at most this many positions in a region
     var m <- load_model(path, QuantMode.q8)
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
@@ -304,7 +305,7 @@ def main() {
         setup_dasllama_jobque()
         section_raw(m)
 
-        var sch <- create_scheduler(m, 4l, 32l, 64l, 16l)   // 4 streams, paged KV, prefix cache on
+        var sch <- create_scheduler(m, STREAMS, 32l, 64l, 16l)   // paged KV, prefix cache on
         let batched = run_round(m, sch, 1l, "batched, cold", QUESTIONS)
         let seq = sequential_round(m)
         print("four conversations: batched {batched / 1000l}ms vs sequential {seq / 1000l}ms\n\n")

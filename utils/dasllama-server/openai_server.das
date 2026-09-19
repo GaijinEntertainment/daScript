@@ -62,6 +62,8 @@ struct ModelSlot {
     opts : SlotOpts = SlotOpts()
     backend_effective : string = "cpu"   // arm outcome: cpu | gpu:rails | gpu:resident
     gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot, one per device-home stream; 0 = not that driver
+    gpu_ask_streams : int64         //! the K/V regions and the context this slot's load asked the whole-model driver for:
+    gpu_ask_ctx : int64             //! the engine keeps one process-wide ask, so a rearm restores the slot's own first
     resident_decline : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
     is_default : bool
     last_used : int64
@@ -217,9 +219,9 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     var slot <- ModelSlot(name = name, path = path, is_default = empty(g_slots))
     slot.model <- m
     slot.opts = opts
-    if (gpu_device_sessions() > 0l) {
-        slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
-    }
+    slot.gpu_ask_streams = g_gpu_ask_streams
+    slot.gpu_ask_ctx = g_gpu_ask_ctx
+    slot_clamp_ctx_to_region(slot)
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
@@ -295,6 +297,25 @@ def private uninstall_slot_marks() {
 // Move the GPU tier's VRAM state to slot `si`: hydrate + drop the current owner's whole state,
 // re-arm `si` from its mmap'd image (the same walk its load ran). Serialized with stepping —
 // only called between scheduler steps.
+var private g_gpu_ask_streams = 0l
+var private g_gpu_ask_ctx = 0l
+
+//! Ask the whole-model GPU driver for a K/V region per stream and at most `ctx` positions in one (0 = the model's own),
+//! for the load or the rearm that follows. `add_model` stamps the ask on its slot.
+def gpu_residency_ask(streams, ctx : int64) {
+    g_gpu_ask_streams = streams
+    g_gpu_ask_ctx = ctx
+    set_gpu_resident_regions(streams)
+    set_gpu_ctx_max(ctx)
+}
+
+//! a stream's context is its region's: a request never runs past the rows the card holds for it
+def private slot_clamp_ctx_to_region(var slot : ModelSlot) {
+    if (gpu_device_sessions() > 0l) {
+        slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
+    }
+}
+
 def private bind_gpu_slot(si : int) {
     if (g_gpu_owner == si || !g_slots[si].gpu_capable) {
         return
@@ -312,9 +333,11 @@ def private bind_gpu_slot(si : int) {
         prev_note = "from {g_slots[prev].name}, "
     }
     install_slot_marks(si)
+    gpu_residency_ask(g_slots[si].gpu_ask_streams, g_slots[si].gpu_ask_ctx)
     // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
     // order-sensitive half of the switch lives in the engine
     g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
+    slot_clamp_ctx_to_region(g_slots[si])
     g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     g_slots[si].gpu_regions = gpu_device_sessions()
     g_gpu_owner = si
@@ -325,13 +348,13 @@ def private bind_gpu_slot(si : int) {
 }
 
 //! Read with the slot's marks installed, so the facade answers for THIS model.
-def private slot_device_kv_want(s : ModelSlot) : bool {
+def private slot_wants_device_kv(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
         && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
 }
 
-def private slot_device_kv(var s : ModelSlot) {
-    let want = slot_device_kv_want(s)
+def private sync_slot_device_kv(var s : ModelSlot) {
+    let want = slot_wants_device_kv(s)
     let was = s.sched.device_kv
     if (set_device_kv(s.sched, want) != was) {
         let kind = want ? "device-home sessions: every stream's K/V stays on the GPU, {gpu_device_session_ctx()} positions each" : "host-cached sessions"
@@ -341,7 +364,7 @@ def private slot_device_kv(var s : ModelSlot) {
 
 def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (slot_flavor(s) == "metal") {
-        return "GPU (Metal): the whole model"
+        return "GPU (Metal): the whole model and every stream's cache, in the memory the CPU and the GPU share"
     }
     if (s.backend_effective != "cpu" && !holds_gpu) {
         return "GPU, off the card now: another model holds it, and this one takes it back once that one is idle"
@@ -350,7 +373,8 @@ def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
         return (device_kv ? "GPU: the whole model and every stream's cache on the card"
             : "GPU: the whole model on the card, the streams' caches on the host")
     }
-    return s.backend_effective == "gpu:rails" ? "GPU in part: some layers' work on the card, the rest on the CPU" : "CPU"
+    return (s.backend_effective == "gpu:rails" ? "GPU in part: some layers' work on the card, the rest on the CPU, the streams' caches on the host"
+        : "CPU")
 }
 
 def private slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
@@ -358,18 +382,22 @@ def private slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : strin
         return ""
     }
     if (s.backend_effective != "gpu:resident") {
-        return s.opts.backend == "cpu" ? "" : s.resident_decline
+        if (s.opts.backend == "cpu" || empty(s.resident_decline)) {
+            return ""
+        }
+        let lead = s.backend_effective == "cpu" ? "the GPU serves nothing of this model" : "the whole model does not run on the GPU, so only part of the work does"
+        return "{lead}. The engine's reason, in its own words: {s.resident_decline}"
     }
     if (device_kv) {
         return ""
     }
     if (s.vision.kind != VisionKind.none || s.audio_armed) {
-        return "a vision or audio tower is armed: its spans evaluate on the host, so every stream's cache stays there and each step passes to the CPU"
+        return "this model also reads images or audio, and those parts of a prompt run on the host: every stream's cache stays there, and each step runs on the CPU"
     }
     if (s.sched.mtp) {
-        return "self-speculation has no GPU arm: every stream's cache stays on the host and each step passes to the CPU"
+        return "self-speculation (the model drafting its own next tokens) has no GPU path yet: every stream's cache stays on the host, and each step runs on the CPU"
     }
-    return "the card holds {s.gpu_regions} stream caches and the slot serves {s.sched.max_streams} streams: every stream's cache stays on the host and each step passes to the CPU"
+    return "the card has room for {s.gpu_regions} stream caches and this model serves {s.sched.max_streams} streams: every stream's cache stays on the host, and each step runs on the CPU"
 }
 
 // Auto-switch policy: move the tier to a gpu-wanting slot only when the current owner is idle
@@ -1001,7 +1029,7 @@ def private ibench_cpu_passes() : int64 {
 
 //! a device-home session lets go of its K/V region before it is deleted, or the region stays pinned to a dead session
 def private ibench_park_session() {
-    if (g_ibench_session.kv_device && g_ibench_slot < length(g_slots)) {
+    if (g_ibench_session.device_kv && g_ibench_slot < length(g_slots)) {
         install_slot_marks(g_ibench_slot)
         gpu_device_kv_park(g_ibench_session)
     }
@@ -1030,7 +1058,7 @@ def private ibench_finish() {
     let name = g_slots[g_ibench_slot].name
     let path = g_slots[g_ibench_slot].path
     let backend = ibench_backend(g_ibench_slot)   // before the stop frees the session it reads
-    let kv = g_ibench_session.kv_device ? "{gpu_device_session_dtype()}" : "{g_slots[g_ibench_slot].opts.kv_dtype}"
+    let kv = g_ibench_session.device_kv ? "{gpu_device_session_dtype()}" : "{g_slots[g_ibench_slot].opts.kv_dtype}"
     let cpu_calls = ibench_cpu_passes() - g_ibench_passes0
     if (cpu_calls > 0l) {
         ibench_log("WARNING: {cpu_calls} of the rows' calls ran on the CPU instead of the GPU - the model card lists the reasons; these numbers are not the GPU's")
@@ -1068,8 +1096,8 @@ def private ibench_step() {
     if (g_ibench_phase == 1) {
         let device = slot_flavor(g_slots[si]) == "metal" ? "metal" : g_slots[si].backend_effective   // the tier's word speaks only of Vulkan and reads `cpu` under Metal
         ibench_log("in-process: pp{BENCH_PP_TOKENS}/tg{BENCH_TG_TOKENS} x {IBENCH_REPS} reps on {g_slots[si].name} ({device}, kv {g_slots[si].opts.kv_dtype}, {g_ibench_threads} lanes), llama-bench shape - the text, audio and speech routes hold until it finishes")
-        let device_home = slot_device_kv_want(g_slots[si])
-        if (!device_home) {
+        let device_home = slot_wants_device_kv(g_slots[si])
+        if (!device_home) {   // a device-home run takes its region's context, which the slot's seq_len already is: nothing to put back
             g_ibench_full_seq = g_slots[si].model.config.seq_len
         }
         ibench_park_session()
@@ -2414,6 +2442,9 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     let quant = pick_quant(quant_spelling)
     var m = Model()
     var failure = ""
+    if (!cpu_only) {
+        gpu_residency_ask(g_sched_defaults.max_streams, js?["ctx"] ?? g_boot_ctx)
+    }
     var failed = catch_worker_panic(failure) {
         delete m   // fresh above; the delete licenses the move on this heap (PERF030)
         m <- load_model(rpath, quant)
@@ -3517,7 +3548,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
         let holds_gpu = i == g_gpu_owner
-        let device_kv = holds_gpu ? slot_device_kv_want(s) : s.sched.device_kv
+        let device_kv = holds_gpu ? slot_wants_device_kv(s) : s.sched.device_kv
         out.models |> push(OaiSlotStats(
             name = s.name, file = base_name(s.path), is_default = s.is_default, is_active = i == g_active,
             holds_gpu = holds_gpu,
@@ -5669,7 +5700,7 @@ def update_server() : bool {
         }
         install_slot_marks(si)
         maybe_bind_gpu(si)
-        slot_device_kv(g_slots[si])
+        sync_slot_device_kv(g_slots[si])
         let t_step = ref_time_ticks()
         busy = scheduler_step(g_slots[si].model, g_slots[si].sched, g_events)
         let step_us = int64(get_time_usec(t_step))
