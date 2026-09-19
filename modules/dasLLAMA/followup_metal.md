@@ -106,7 +106,9 @@ zoo. Facts that decide the order:
   `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
   `ARCHITECTURE_GPU_QUANT_PLANES.md` sec.2.2z); the `*Db` double-buffered shells beside the
   single-tile shells (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c carries the measurement); the
-  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md` sec.1.5); the codebook grid
+  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md` sec.1.5); the four dense
+  mul_mm shells (`MetalF32MulMm` xf/y at 1/2, `MetalQ8MulMm` and `MetalBf16MulMm` at 2/3,
+  `MetalKqMulMmK45T` at 3/4, the MoE base's kargs at 5); the codebook grid
   tables twinned in the Vulkan home (sec.1.5 role table); and the scalar attention trio beside
   the tensor QK/AV pair (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2f).
 - Two thirds of the debt is one family: the per-format GEMV, MvB2/B4 and MvB8 copies - 36
@@ -119,15 +121,12 @@ zoo. Facts that decide the order:
   (`first_row * 2u` -> `* 4u`, `sumf[2]` -> `[4]`, `ib += 4u` -> `2u`) = two constants, F4 + ROWS;
   the `TILED` arm duplicates the b-loop for a measured +2% (k4) - prove the generated MSL
   byte-identical per stamp before and after.
-- Then: the SqAttn `BATCHED` axis (10 templates, ~250 lines; `MetalSqAttnCombT` ships the exact
-  pattern); the `MetalKqMulMmK45T` 12-bool `static_if` ladder into the `stage16` scaffold plus
-  the tensor K45/K6 x Db pair (~285; removes the coupled-bool trap where `MetalKqMulMmIq4nl`
-  must set `IQ4XS` and `IQ4NL`; the Db forms sit on the sanctioned float-A list); the four dense
-  mul_mm shells onto a `MetalMoeMulMmBase` twin (~145); the MoE GEMV `GATHERED` axis (~230, the
-  `float4` x view stays its own axis - a measured 2.25x); the singles (DequantK6H; the bias
-  pair that folds is `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the
-  map and `x`'s offset apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out). Two
-  classes fold only when their (binding number -> field type, `@off`) maps agree: the
+- Then: the decode-side `MetalKqMulMmK45T` 12-bool `static_if` ladder (its prefill twins now
+  derive the split tensor base's decode; the coupled-bool trap where `MetalKqMulMmIq4nl` must
+  set `IQ4XS` and `IQ4NL` lives on in the kernels file); the bias pair that folds,
+  `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the map and `x`'s offset
+  apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out. Two classes fold only when
+  their (binding number -> field type, `@off`) maps agree: the
   SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
   the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
   binding) and the RmsNorm/AddRms pair (the residual at 1 shifts five) stay apart on that rule;
@@ -591,9 +590,10 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 ## 15. Two Metal review gates the M4 pass found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
-`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (eleven today -
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (fourteen today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_split_pso`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_moe_split_enc`, plus the PLE pre-step's
+`pf_moe_split_pso`, `pf_moe_split_builder`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_pso`,
+`pf_kq_split_builder`, `pf_kq_split_tall_builder`, plus the PLE pre-step's
 pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
 other and with the gate's alignment arm) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in

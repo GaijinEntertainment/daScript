@@ -207,10 +207,10 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**A STYLE037 or STYLE038 suppression, `// nolint:` or the file's `options _function_length` /
-`_cyclomatic_complexity`, on a function a `followup_*.md` entry says can be shortened or split
-is a defect - land the ledgered split instead.** The warning keeps the entry visible; an entry
-asking that twin bodies merge into one template does not fire this rule.
+**A diff that adds a `followup_*.md` entry saying a function can be shortened or split drops
+that function's STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length` /
+`_cyclomatic_complexity`) or lands the split in the same change; adding such a suppression to
+a function an entry names is a defect.** An entry asking twin bodies onto one template does not fire it.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -262,20 +262,20 @@ registry does not, `tests/test_env_registry.das` catches.
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, or gives a file there anything of a kind its sec.1
-charter enumerates one by one that the charter does not name, lands, in the same change, the
-edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion, never
-`ARCHITECTURE.md`.**
+**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter's
+holds column does not cover, keeps the charters true in the same change - in an
+`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.**
 
-**A `followup_*.md` row whose work landed in this change is deleted, the rows below keep their
-numbers - text cites rows by number - and when a row lists several items and one landed, that item
-goes and the row stays; every checked-in citation of what was deleted is repointed or dropped.**
+**A `followup_*.md` row whose work landed in this change is deleted and no other row is
+renumbered - text cites rows by number - an item that landed leaves a row that lists several,
+and every checked-in citation of what was deleted is repointed or dropped.**
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
 companion's own opening (its range and the sections it names), and every repointed prose
-`sec.N` / file citation of the moved sections, in the same change.** Prose citations are not
-LINT026-gated, so one naming a section that left its file sends the reader to nothing.
+`sec.N` / file citation of the moved sections, in the same change; a new section takes a
+number `ARCHITECTURE.md`'s index does not list.** Prose citations are not LINT026-gated, so one
+naming a section that left its file sends the reader to nothing.
 
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.

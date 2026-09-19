@@ -265,9 +265,9 @@ Each format stamps `T` (`XT = float`) and `TH` (`XT = float16`); iq3s and iq3xxs
 tall stamp (form 1), the rest have no tall twin yet, none is double-buffered. Every stamp
 compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`) in
 `pf_compile_kq_iquant_tensor_twins`, and `pf_enc_kq_site_mm` dispatches a twin only when both
-the crown flag and the PSO are live - `pf_kq_split_pso` and `pf_kq_split_tall_builder` are the one
-place a (format, form) maps to its pso and builder, a format with no tall stamp answering null so
-its tall arm stays closed. The crown is a RACE verdict (tensor stamp vs simdgroup base
+the crown flag and the PSO are live - `pf_kq_split_pso`, `pf_kq_split_builder` and
+`pf_kq_split_tall_builder` are the one place a (format, form) maps to its pso and builder, a
+format with no tall stamp answering null so its tall arm stays closed. The crown is a RACE verdict (tensor stamp vs simdgroup base
 at one dense shape); whether the box can run tensor kernels at all is a separate fact, the
 toolchain probe `g_pf_tensor_ok` (one quiet compile of the dev-W GEMM at init). A box whose
 Metal has no mpp kernels fails the probe and keeps every base form whatever its sidecar says.

@@ -46,8 +46,8 @@ derive from the format's DENSE split class (sec.2.2aa) with the base's `MOE` axi
 `(e*ndim + n)*nsb + sb` is the plane's superblock, so the decode is one source for both the dense
 and the routed site, and a table format's threadgroup prologue is one override serving both.
 Their bindings are the dense layout's (`xf` 3, `y` 4, the kdim/ndim uniforms at 5 and 6) plus the
-axis-gated `cnt` at 7 and `basep` at 8; `pf_moe_split_pso` and `pf_moe_split_enc` are the one place
-a (format, form) maps to its pso and builder;
+axis-gated `cnt` at 7 and `basep` at 8; `pf_moe_split_pso` and `pf_moe_split_builder` are the one
+place a (format, form) maps to its pso and builder;
 the dispatcher passes the site's dim uniforms, the padded panel's row count for the y span,
 and the tile count as its own parameter - the K-quant twins' `npos/32` (an expert holds at most
 npos rows), never the padded row count, which would launch one tile per padded row and exit all

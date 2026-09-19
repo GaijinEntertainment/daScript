@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Metal quant plane reads
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2y-2.2z: the split scale plane a Metal blob stores a superblock format's
-scale row in, and the iquant GEMV codebook grid read with its per-box f4-slab twin. The GPU
+carries sections 2.2y-2.2z and 2.2an: the split scale plane a Metal blob stores a superblock
+format's scale row in, the iquant GEMV codebook grid read with its per-box f4-slab twin, and
+the GEMV site abstraction the decode families share. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 ### 2.2y The Metal kq split scale plane {#metal-kq-split-scale-plane}
@@ -43,7 +44,7 @@ The `kq_gemv_iq3s_f4` and `kq_gemv_iq3xxs_f4` crowns are raced (`race_gemv_f4_tw
 `kq_gemv_iq2xxs_f4` cannot be settled by an isolated race at all and is minted from a serving
 A/B instead - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21.
 
-### 2.2ab The Metal GEMV site abstraction {#metal-gemv-site}
+### 2.2an The Metal GEMV site abstraction {#metal-gemv-site}
 
 The Metal GEMV families share one site abstraction: `MetalGemvSiteT` carries the site hooks -
 `site_setup`, `y_rows` and the activation read - and its `GATHERED` axis selects the MoE-gathered
