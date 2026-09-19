@@ -9,7 +9,7 @@ tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN
 the prefill window chain that dispatches them (sec.2.2j) and its recurrent block (sec.2.2ad),
 the Q8 requant byte store (sec.2.2p), the decode GEMV family's grid codebook buffer
 (sec.2.2ab), and the tile probe's shared descriptor set layout (sec.2.2ac). What a model has to
-fit on the card first is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n-2.2p; the per-op
+fit on the card first is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n-2.2o and 2.2an-2.2ao; the per-op
 tier's decode-era mechanisms are `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2r-2.2v; the GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 

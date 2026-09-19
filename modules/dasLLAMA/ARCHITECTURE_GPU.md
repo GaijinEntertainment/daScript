@@ -291,7 +291,7 @@ and why they lose.
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
 `ARCHITECTURE_GPU_VULKAN_ATTN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2p in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
+`ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o and 2.2an-2.2ao in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 
 Sections 2.2w-2.2x, the tower attention routes and the tower driver's encode chains, are

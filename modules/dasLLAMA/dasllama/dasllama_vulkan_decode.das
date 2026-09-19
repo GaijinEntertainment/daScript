@@ -25,7 +25,7 @@ require daslib/strings_boost
 let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a window's end
 let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane: one fragment at the widest KV row the prepare admits
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
-let RD_NB_MAX = 8l   //! the N-row token command's rows, at most: the N-column GEMV leaves' width, and what the per-row planes size to
+let RD_NB_MAX = 8l   //! the N-row token command's rows, at most
 var g_rd_nrow_bisect = 0   //! a probe's bisect of the N-row command, bits: 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no rope, 8 = no activation requant - the logits are garbage under any
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
@@ -237,7 +237,7 @@ def vk_rdec_upload_norms(norms : array<float>; obias : bool) {
 def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     let dim = g_rd.dim
     let hid = L.hid
-    let nb = g_rd.nb   //! every per-row plane binds its N-row extent: the one-row command reads row 0 of the same sets
+    let nb = g_rd.nb
     let p1 = arena_planes(f1, b1)
     let p3 = arena_planes(f3, b3)
     let p2 = arena_planes(f2, b2)
@@ -342,7 +342,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let dim = g_rd.dim
         let qd = L.qd
         let kvd = L.kvd
-        let nb = g_rd.nb   //! every per-row plane binds its N-row extent: the one-row command reads row 0 of the same sets
+        let nb = g_rd.nb
         let pq = arena_planes(fq, bq)
         let pk = L.kv_shared ? pq : arena_planes(fk, bk)   //! a shared-KV layer has no k/v planes: the q planes fill the slots, the k/v sets stay unused
         let pv = (L.vfk || L.kv_shared) ? pk : arena_planes(fv, bv)   //! no v plane: the k planes fill the slot, the v set stays unused
@@ -1849,8 +1849,6 @@ def private rd_xlog(nrows : int64) : VkCommandBuffer {
 
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's logits land at (0 = the command carried its own copy, the fence is the wait)
 
-//! a token command's submit: with the transfer queue armed the command signals the compute timeline and its
-//! logits copy follows on the transfer queue; without one the command carries the copy and the fence
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
 def private rd_submit_land(var cmd : VkCommandBuffer; nrows : int64) {
     if (g_rd.log_xfer) {
@@ -1962,9 +1960,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
 
-//! the rows the N-row command can step at once on the armed model: the per-row planes' extent over dense
-//! standard-attention layers, and none where a layer or the tail has no N-row form yet - a recurrent, MoE,
-//! per-layer-embedding or shared-KV layer, a q/k norm, a gated q, a classifier epilogue
+//! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def vk_rdec_token_n_rows : int64 {
     if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.qk_norm || g_rd.q_gated || rd_cls_epi_on()
             || !gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
@@ -2134,16 +2131,13 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     rd_ts(raw, "a:down")
 }
 
-//! the N-row command: the one-row chain's split dispatches over `nrows` rows - the row-parallel kernels over the rows'
-//! planes, the GEMVs as N-column dispatches, the rope, store and attention at each row's own position and region, the
-//! attention at `nsplit` key splits a head - recorded once per row count and split form, its stamps kept apart
-[cold_path]
+//! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and split form
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; twin : bool) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
     let nrows = nrows_in
     let nr = uint(nrows)
-    //! the one-row command's stamp names stay its own: the recorder's list is borrowed for this record and put back
     var one_names <- g_rdq_stamp_names
     let one_overflow = g_rdq_overflow
     unsafe {
@@ -2162,7 +2156,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
         rd_ts(raw, "p:upload")
         //! a Q8_0 feed's site fuses the residual step with its requant (`cls_ar_rq_b`, a row a workgroup); a K-quant feed's
-        //! takes the split pair, since the Q8_K twin has no row form yet
+        //! takes the split pair, since the Q8_K twin has no row form (`followup_vulkan.md` item 70)
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         var xq_ready = !kq_sb(g_rd.layers[0].fq)   //! the site before quantized the rows' feed
         if (xq_ready) {
@@ -2235,7 +2229,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
-    if (!twin) {   //! the stamp names by form: a row count whose split form runs at one split still fills the split slot
+    if (!twin) {
         delete g_rdq_names_n
         g_rdq_names_n <- g_rdq_stamp_names
         g_rdq_n_n = g_pfq_n
@@ -2253,9 +2247,8 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
 
 var private @scratch g_rd_logits_n : array<float>   //! the N-row command's logits plane, read off the mapped memory in one pass
 
-//! the rows' logits from the mapped plane to their pointers: one read of the plane, then a row a copy - four reads
-//! straight off the mapping cost the pod eight times the one (785 us a step against 92)
-[hot_path]
+//! the rows' logits from the mapped plane to their pointers: one read of the plane, then a row a copy
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     let vocab = g_rd.vocab
     g_rd_logits_n |> resize(vocab * nrows)
@@ -2267,10 +2260,8 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     }
 }
 
-//! the N-row submit: `nrows` rows of x and cos/sin, each row's position, its cached count and its mirror region,
-//! one command - the unsplit twin while every row sits under RD_UNSPLIT_POS, as the one-row command picks - and
-//! each row's logits landed at its own pointer
-[hot_path]   // per batched decode step
+//! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
@@ -2279,7 +2270,6 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
         rd_fill_gemv_regions_all()
         rd_ensure_n_leaves()
         rd_ensure_n_sets()
-        //! the split form's key splits: the rows' heads already fill the card, so the split shrinks with the row count
         let nsplit = min(g_rd.attn_nsplit, da_nsplit(da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nrows, int64(g_gpu.sm_count)))
         rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, false)
         if (twin) {

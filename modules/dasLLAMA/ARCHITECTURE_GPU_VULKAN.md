@@ -15,7 +15,7 @@ expert chain on those tiles, and the KHR arm's hand-staged kq tile - are `ARCHIT
 sections 2.2k-2.2m, 2.2q and 2.2ae, and the decode GEMV family's lane split by row length its
 section 2.2ah. What a model has to fit on the card before any of this runs - the residency plan,
 and the marks swap that lets one GPU slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s
-sections 2.2n-2.2p. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
+sections 2.2n-2.2o and 2.2an-2.2ao. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
 sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 The module gate's six Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
