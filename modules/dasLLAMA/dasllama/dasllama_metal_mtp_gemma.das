@@ -12,6 +12,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_batch
 require dasllama/dasllama_mtp_gemma
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_metal_lens   // release_handles
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_decode
 
@@ -72,33 +73,11 @@ def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_
 def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
-    release_handle(g.bx)
-    release_handle(g.bxin)
-    release_handle(g.bxn)
-    release_handle(g.bo)
-    release_handle(g.bq)
-    release_handle(g.battn)
-    release_handle(g.bg)
-    release_handle(g.bu)
-    release_handle(g.bhn)
-    release_handle(g.blog)
-    release_handle(g.bhnext)
-    release_handle(g.btok)
-    release_handle(g.btok_out)
-    release_handle(g.bvtok)
-    release_handle(g.u_one1)
-    release_handle(g.bpart)
-    release_handle(g.bcos)
-    release_handle(g.bsin)
-    release_handle(g.bcos_sw)
-    release_handle(g.bsin_sw)
-    release_handle(g.u_dim)
-    release_handle(g.u_tdim)
-    release_handle(g.u_cat)
-    release_handle(g.u_hidden)
-    release_handle(g.u_vocab)
-    release_handle(g.u_eps)
-    release_handle(g.u_escale)
+    release_handles(g.bx, g.bxin, g.bxn, g.bo, g.bq, g.battn)
+    release_handles(g.bg, g.bu, g.bhn, g.blog, g.bhnext, g.btok)
+    release_handles(g.btok_out, g.bvtok, g.u_one1, g.bpart, g.bcos, g.bsin)
+    release_handles(g.bcos_sw, g.bsin_sw, g.u_dim, g.u_tdim, g.u_cat, g.u_hidden)
+    release_handles(g.u_vocab, g.u_eps, g.u_escale)
     for (u in g.u_qd) {
         metal_release(u)
     }

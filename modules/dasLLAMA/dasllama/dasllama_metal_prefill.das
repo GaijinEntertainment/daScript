@@ -386,52 +386,67 @@ def private ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
     PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sqrt(float(ple)),
         inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
 
-[metal_dispatch(name = "pf_enc_ple_gather", pso = "g_pf_pso_ple_gather", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherQ8 {
-    @ssbo @binding = 0 @role = "weight" @off = "eoff" wsh : array<float16> //!< ple_emb q8 region, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 @role = "weight" @off = "eoff" wqb : array<int8>    //!< the SAME region, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "read" tok : array<uint>    //!< [npos] token ids
-    @ssbo @binding = 3 @role = "write" y : array<float>     //!< [n_layers x npos x ple] layer-major side input
-    @uniform @binding = 4 ka : PleArgs
-
-    [metal_kernel(name="metal_ple_gather_q8_msl")]
-    def metal_ple_gather_q8 {
-        let l = gl_WorkGroupID.x
-        let p = gl_WorkGroupID.y
-        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
-        let el = tok[p] * (ka.nlayers * ka.ple) + l * ka.ple + i
-        let blk = el / 32u
-        let sc = float(wsh[blk * 17u])
-        let q = float(int(wqb[blk * 34u + 2u + (el % 32u)]))
-        y[(l * ka.npos + p) * ka.ple + i] = q * sc * ka.sc0
-    }
-}
-
-//! The K-quant twin of MetalPleGatherQ8 - same grid, same output layout, decoding the table off
-//! its format's native planes, which bind at the TABLE's own base, so `el` is the element index
-//! inside the table and `el / 256` its plane superblock (the gate's two %256 clauses make it so).
+//! The PLE token-table gather: one threadgroup per (layer, position), one thread per PLE column.
+//! The (l, p, i, el) prologue and the layer-major store are one body, `decode_el` the format's own.
+//! Bindings 2/3/4 are shared field for shared field; the q8 blob's two views hold 0/1 alone.
 [ |> template_struct_instance]
-class template MetalPleGatherKqT {
+class template MetalPleGatherBaseT {
+    @template_constant Q8 : bool = false    //!< the q8 table: one interleaved 34B blob, both views of it at 0/1
     @template_constant BLK : uint = 32u     //!< quant-plane uints per superblock (k5's qh strip adds 8)
     @template_constant QH : bool = false    //!< k5: the 5th bit off the qh strip
     @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
-    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> //!< scale plane, half view (k4/k5: d, dmin at 8*blk; q40: the eight per-32-block d)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = "!Q40" ks4 : array<uint4> //!< the SAME 16B block, uint4 view (the packed 6-bit sc/min)
-    @ssbo @binding = 2 @role = "read" tok : array<uint>    //!< [npos] token ids - binding 2/3/4 are MetalPleGatherQ8's, shared field for shared field
+    @template_constant KSC : bool = true    //!< the packed 6-bit sc/min uint4 view - k4 and k5 alone
+    @ssbo @binding = 0 @role = "weight" @off = "eoff" @template_gate = Q8 wsh : array<float16> //!< ple_emb q8 region, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" @off = "eoff" @template_gate = Q8 wqb : array<int8>    //!< the SAME region, byte view (quants at 34*b + 2)
+    @ssbo @binding = 0 @role = "weight" @off = "soff" @template_gate = "!Q8" ksh : array<float16> //!< scale plane, half view (k4/k5: d, dmin at 8*blk; q40: the eight per-32-block d)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = KSC ks4 : array<uint4> //!< the SAME 16B block, uint4 view (the packed 6-bit sc/min)
+    @ssbo @binding = 2 @role = "read" tok : array<uint>    //!< [npos] token ids
     @ssbo @binding = 3 @role = "write" y : array<float>    //!< [n_layers x npos x ple] layer-major side input
     @uniform @binding = 4 ka : PleArgs
-    @ssbo @binding = 6 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view - past the q8 twin's set, which has no separate quant plane
+    @ssbo @binding = 6 @role = "weight" @off = "qoff" @template_gate = "!Q8" kqu : array<uint>    //!< quant plane, uint view
 
-    [metal_kernel]
-    def metal_ple_gather_kq {
+    //! one table element, dequantized off this format's planes - the emitter takes a multi-statement
+    //! method only as a statement, so the value comes back through `v` (kmask_scmn's shape)
+    def abstract decode_el(el : uint; var v : float&) : void
+
+    def gather_body {
         let l = gl_WorkGroupID.x
         let p = gl_WorkGroupID.y
         let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
         let el = tok[p] * (ka.nlayers * ka.ple) + l * ka.ple + i
+        var v = 0.0
+        decode_el(el, v)
+        y[(l * ka.npos + p) * ka.ple + i] = v * ka.sc0
+    }
+}
+
+[metal_dispatch(name = "pf_enc_ple_gather", pso = "g_pf_pso_ple_gather", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherQ8 : MetalPleGatherBaseT {
+    override Q8 = true
+    override KSC = false
+
+    def override decode_el(el : uint; var v : float&) {
+        let blk = el / 32u
+        let sc = float(wsh[blk * 17u])
+        let q = float(int(wqb[blk * 34u + 2u + (el % 32u)]))
+        v = q * sc
+    }
+
+    [metal_kernel(name="metal_ple_gather_q8_msl")]
+    def metal_ple_gather_q8 {
+        gather_body()
+    }
+}
+
+//! The K-quant twin of MetalPleGatherQ8, decoding the table off its format's native planes, which
+//! bind at the TABLE's own base, so `el` is the element index inside the table and `el / 256` its
+//! plane superblock (the gate's two %256 clauses make it so).
+[ |> template_struct_instance]
+class template MetalPleGatherKqT : MetalPleGatherBaseT {
+    def override decode_el(el : uint; var v : float&) {
         let blk = el / 256u
         let js = (el % 256u) / 32u
         let e = el % 32u
-        var v : float
         static_if (Q40) {
             let u = kqu[blk * BLK + js * 4u + (e % 16u) / 4u]
             v = float(ksh[blk * 8u + js]) * (float((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) - 8.0)
@@ -451,7 +466,11 @@ class template MetalPleGatherKqT {
                 v = dsc * float((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) - dmn
             }
         }
-        y[(l * ka.npos + p) * ka.ple + i] = v * ka.sc0
+    }
+
+    [metal_kernel]
+    def metal_ple_gather_kq {
+        gather_body()
     }
 }
 
@@ -467,6 +486,7 @@ class MetalPleGatherK5 : MetalPleGatherKqT {
 [metal_dispatch(name = "pf_enc_ple_gather_q40", pso = "g_pf_pso_ple_gather_q40", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
 class MetalPleGatherQ40 : MetalPleGatherKqT {
     override Q40 = true
+    override KSC = false
 }
 
 [metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
@@ -509,6 +529,9 @@ class MetalPleFinish {
 class template MetalKqMulMmSplitTensorBase {
     @template_constant MT : uint = 32u
     @template_constant TWB : int = 6144     //!< W stage halves: one 64x72 tile; 9216 = the two ping-pong tiles `db_shell` runs
+    @template_constant REM : bool = false   //!< the routed THR stamp's remainder pass
+    @template_constant MOE : bool = false   //!< the routed twin: the bucket count / base planes and `moe_kernel`
+    @template_constant DEQW : bool = false  //!< the dev-W dequant pass: the f16 panel `dequant_shell` writes
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
@@ -516,10 +539,19 @@ class template MetalKqMulMmSplitTensorBase {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
+    //! the gated planes: a role is DERIVED per stamp - a template carries the field unreified, so
+    //! a declared one would be cross-checked against a body that never names it
+    @ssbo @binding = 7 @template_gate = MOE cnt : array<uint>
+    @ssbo @binding = 8 @template_gate = MOE basep : array<uint>
+    @ssbo @binding = 7 @template_gate = DEQW wh : array<float16>
     @workgroup twb : float16[TWB]           //!< W chunk: 64 wrows x 72-half padded rows
 
     //! decodes 16 W elements of chunk kb into the tile at tbase; tbase is 0 on every single-tile shell
     def abstract stage16(work, kb, nBase, nsb, tbase : uint) : void
+
+    //! the format's per-threadgroup table staging (codebook or grid); the formats that decode
+    //! straight off their planes stage nothing, so the hook is empty here and every entry calls it
+    def prologue {}
 
     def stage_tile(lid, kb, nBase, nsb, tbase : uint) {
         var work = lid
@@ -602,6 +634,28 @@ class template MetalKqMulMmSplitTensorBase {
             kb += 2u
         }
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+    }
+
+    //! the routed entry every split-format MoE stamp dispatches: the format table, then the
+    //! expert's bucket rows through moe_shell
+    def moe_kernel {
+        static_if (MOE) {
+            prologue()
+            moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        }
+    }
+
+    //! the dev-W entry every split-format dequant stamp dispatches: one staged 64x64 chunk of the
+    //! format's own decode, written out as the image's f16 panel
+    def dequant_shell {
+        static_if (DEQW) {
+            prologue()
+            dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
+            for (i in range(32)) {
+                let e = gl_LocalInvocationID.x + uint(i) * 128u
+                wh[dequant_idx(e)] = dequant_val(e)
+            }
+        }
     }
 
     def dequant_tile(kb, nBase, nsb : uint) {
@@ -832,11 +886,15 @@ class template MetalKqMulMmIq4xsTensorT : MetalKqMulMmSplitTensorBase {
 
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_iq4xs_t {
+        prologue()
+        run_shell()
+    }
+
+    def override prologue {
         if (gl_LocalInvocationID.x < 16u) {
             stage_lut()
         }
         barrier()
-        run_shell()
     }
 
     def stage_lut {
@@ -886,17 +944,11 @@ class MetalKqMulMmIq4xsTH : MetalKqMulMmIq4xsTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq4xsSplitT : MetalKqMulMmIq4xsTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq4xs_t {
-        if (gl_LocalInvocationID.x < 16u) {
-            stage_lut()
-        }
-        barrier()
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1034,13 +1086,11 @@ class MetalKqMulMmK3TH : MetalKqMulMmK3TensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmK3SplitT : MetalKqMulMmK3TensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_k3_t {
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1122,12 +1172,16 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
 
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_iq3s_t {
+        prologue()
+        run_shell()
+    }
+
+    def override prologue {
         for [unroll_full] (gk in range(4)) {
             let gi = gl_LocalInvocationID.x + uint(gk) * 128u
             gridw3t[gi] = iq3s_gw(int(gi))
         }
         barrier()
-        run_shell()
     }
 
     def override stage16(work, kb, nBase, nsb, tbase : uint) {
@@ -1173,18 +1227,11 @@ class MetalKqMulMmIq3sTH : MetalKqMulMmIq3sTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq3sSplitT : MetalKqMulMmIq3sTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq3s_t {
-        for [unroll_full] (gk in range(4)) {
-            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
-            gridw3t[gi] = iq3s_gw(int(gi))
-        }
-        barrier()
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1222,12 +1269,16 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
 
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_iq3xxs_t {
+        prologue()
+        run_shell()
+    }
+
+    def override prologue {
         for [unroll_full] (gk in range(2)) {
             let gi = gl_LocalInvocationID.x + uint(gk) * 128u
             gridw3xt[gi] = iq3xxs_gw(int(gi))
         }
         barrier()
-        run_shell()
     }
 
     def override stage16(work, kb, nBase, nsb, tbase : uint) {
@@ -1272,18 +1323,11 @@ class MetalKqMulMmIq3xxsTH : MetalKqMulMmIq3xxsTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq3xxsSplitT : MetalKqMulMmIq3xxsTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq3xxs_t {
-        for [unroll_full] (gk in range(2)) {
-            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
-            gridw3xt[gi] = iq3xxs_gw(int(gi))
-        }
-        barrier()
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1364,13 +1408,11 @@ class MetalKqMulMmIq2sTH : MetalKqMulMmIq2sTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq2sSplitT : MetalKqMulMmIq2sTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq2s_t {
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1443,13 +1485,11 @@ class MetalKqMulMmIq2xsTH : MetalKqMulMmIq2xsTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq2xsSplitT : MetalKqMulMmIq2xsTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq2xs_t {
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1522,13 +1562,11 @@ class MetalKqMulMmIq2xxsTH : MetalKqMulMmIq2xxsTensorT {
 
 [ |> template_struct_instance]
 class template MetalMoeMulMmIq2xxsSplitT : MetalKqMulMmIq2xxsTensorT {
-    @template_constant REM : bool = false
-    @ssbo @binding = 7 @role = "read" cnt : array<uint>
-    @ssbo @binding = 8 @role = "read" basep : array<uint>
+    override MOE = true
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq2xxs_t {
-        moe_shell(cnt[gl_WorkGroupID.z], basep[gl_WorkGroupID.z], REM)
+        moe_kernel()
     }
 }
 
@@ -1557,19 +1595,11 @@ class MetalMoeMulMmIq2xxsTHR : MetalMoeMulMmIq2xxsSplitT {
 [ |> template_struct_instance]
 class template MetalKqDequantIq4xsT : MetalKqMulMmIq4xsTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq4xs {
-        if (gl_LocalInvocationID.x < 16u) {
-            stage_lut()
-        }
-        barrier()
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
@@ -1590,115 +1620,77 @@ class MetalKqDequantQ40 : MetalKqDequantIq4xsT {
 [metal_dispatch(name = "enc_kq_dq_k3", pso = "g_pf_pso_dq_kq3", kernel = "metal_kq_dequant_k3", tgmem = "MetalKqDequantK3_metal_kq_dequant_k3_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantK3 : MetalKqMulMmK3TensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_k3 {
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_iq3s", pso = "g_pf_pso_dq_kq33", kernel = "metal_kq_dequant_iq3s", tgmem = "MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantIq3s : MetalKqMulMmIq3sTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq3s {
-        for [unroll_full] (gk in range(4)) {
-            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
-            gridw3t[gi] = iq3s_gw(int(gi))
-        }
-        barrier()
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_iq3xxs", pso = "g_pf_pso_dq_kq34", kernel = "metal_kq_dequant_iq3xxs", tgmem = "MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantIq3xxs : MetalKqMulMmIq3xxsTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq3xxs {
-        for [unroll_full] (gk in range(2)) {
-            let gi = gl_LocalInvocationID.x + uint(gk) * 128u
-            gridw3xt[gi] = iq3xxs_gw(int(gi))
-        }
-        barrier()
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_k2", pso = "g_pf_pso_dq_kq2", kernel = "metal_kq_dequant_k2", tgmem = "MetalKqDequantK2_metal_kq_dequant_k2_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantK2 : MetalKqMulMmK2TensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_k2 {
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_iq2s", pso = "g_pf_pso_dq_kq23", kernel = "metal_kq_dequant_iq2s", tgmem = "MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantIq2s : MetalKqMulMmIq2sTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq2s {
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_iq2xs", pso = "g_pf_pso_dq_kq24", kernel = "metal_kq_dequant_iq2xs", tgmem = "MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantIq2xs : MetalKqMulMmIq2xsTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq2xs {
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
 [metal_dispatch(name = "enc_kq_dq_iq2xxs", pso = "g_pf_pso_dq_kq25", kernel = "metal_kq_dequant_iq2xxs", tgmem = "MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_tgmem", tg = 128, grid = "kdim/64, d/64", params = "kdim : int64, d : int64")]
 class MetalKqDequantIq2xxs : MetalKqMulMmIq2xxsTensorT {
     typedef XT = float16
-    @ssbo @binding = 7 @role = "write" wh : array<float16>
+    override DEQW = true
 
     [metal_kernel]
     def metal_kq_dequant_iq2xxs {
-        dequant_tile(gl_WorkGroupID.x * 2u, gl_WorkGroupID.y * 64u, kdim / 256u)
-        for (i in range(32)) {
-            let e = gl_LocalInvocationID.x + uint(i) * 128u
-            wh[dequant_idx(e)] = dequant_val(e)
-        }
+        dequant_shell()
     }
 }
 
@@ -3616,20 +3608,15 @@ class MetalG4aDw {
     }
 }
 
-//! In-place SiLU over a panel — the gemma4a FFN/conv activation.
+//! In-place SiLU over a panel — the gemma4a FFN/conv activation. The ew1 family's body under this
+//! class's own entry name, which is the census key the serving run records.
 [metal_dispatch(name = "enc_g4a_silu", pso = "g_pf_pso_g4a_silu", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalG4aSilu {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @uniform @binding = 1 total : uint      //!< grid guard
+class MetalG4aSilu : MetalEw1BaseT {
+    def override map(a : float) : float => a / (1.0 + exp(-a))
 
     [metal_kernel(name="metal_g4a_silu_msl")]
     def metal_g4a_silu {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let vv = x[gid]
-        x[gid] = vv / (1.0 + exp(-vv))
+        ew1_body()
     }
 }
 
