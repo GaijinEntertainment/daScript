@@ -3,8 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md` (this folder).
 
-**A test answers to its kind's checklist wherever the diff puts it:** a test whose subject is
-module resolution, module loading or the module cache to `module_cache/REVIEW.md`; a test that
+**A test answers to its kind's checklist wherever the diff puts it:** a test that asserts on
+`require` path lookup, module compile order, or files under the module cache folder to
+`module_cache/REVIEW.md`; a test that
 runs a dasMetal kernel class or creates any Metal object to `metal/REVIEW.md`; an MSL emitter
 fixture - a test that compiles a kernel and checks the emitted MSL - or a change to
 `msl/test_msl_census.das` to `msl/REVIEW.md`; a SPIR-V emitter fixture - a test holding a
@@ -16,3 +17,8 @@ fixture - a test that compiles a kernel and checks the emitted MSL - or a change
 functions or any of its assertions from `dasbind/test_extern_abi.das` is a defect.** The suite is the only
 check of which register or stack slot an interpreted `[extern]` call puts each argument in - the
 JIT never takes that path - so coverage lost there reports green on every lane.
+
+**A change under a `tests/<suite>/` folder that `DAS_AOT_SUITES` (`tests/aot/CMakeLists.txt`)
+lists is green on both the `dastest` run and that suite's `test_aot` lane, and a new file there
+whose name does not start with `_` joins the AOT lane in the same change.** The AOT glob picks
+the file up silently, and the per-PR CI compiles only the language subset.
