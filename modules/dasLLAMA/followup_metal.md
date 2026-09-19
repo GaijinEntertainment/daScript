@@ -590,10 +590,10 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 ## 15. Two Metal review gates the M4 pass found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
-`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (fourteen today -
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_split_pso`, `pf_moe_split_builder`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_pso`,
-`pf_kq_split_builder`, `pf_kq_split_tall_builder`, plus the PLE pre-step's
+`pf_moe_split_stamps`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_stamps`,
+`pf_kq_deep_stamps`, plus the PLE pre-step's
 pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
 other and with the gate's alignment arm) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
@@ -630,12 +630,17 @@ sec.1.5's role table keeps the codebook TABLES per kernel home; it does not reac
 no table in it. The shared-grammar precedent is `dasllama_kernel_access.das`, one owner after two
 private copies drifted. One home for the sign helper, both backends calling it.
 
-## 18. `enc_kq_mvb` is a table wearing thirty-nine `elif`s
+## 18. A kargs-bearing builder cannot be taken by address, so `enc_kq_mvb` stays a ladder
 
 `enc_kq_mvb` (`dasllama/dasllama_metal_kernels.das`) walks thirteen formats by three arms each to
-pick a builder triple, while the per-format doff/soff choice it repeats is already a table
-(`KQ_ROWS_RACE_FORMATS` beside it). A `(fmt -> builder triple)` table with one arm body closes
-the ladder; the sec.15(a) gate then reads one table instead of one ladder.
+pick a builder triple; the per-format doff/soff choice it repeats is a table already
+(`KQ_ROWS_RACE_FORMATS`). A `(fmt -> builder triple)` table needs `@@enc_kq_mvb8_<fmt>_c`, and the
+lens forbids it: `mk_builder_param` sets `flags.ref` on the class field's own `TypeDecl` for a
+kargs uniform instead of a clone, so materializing the builder's function type reports
+`error[30107] can't pass a boxed type by a reference` at the class's kargs line. Every builder of
+a class that binds a kargs uniform is un-addressable; the split pickers table only because their
+classes pass scalars through `params=`. The fix is a cloned parameter type in the lens; the table
+follows, and the sec.15(a) gate then reads one table.
 
 ## 19. The batched and rows w13sw kernels have no activation axis
 
