@@ -654,6 +654,7 @@ struct GpuState {
                                       // the process-lifetime pair (staging, profiler readback) — the
                                       // whole-model drop sweeps this
     model_cmds : array<VkCommandBuffer>   // every alloc_cmd result — freed together at model drop
+    model_xcmds : array<VkCommandBuffer>   //! every alloc_xfer_cmd result - the transfer pool's model-owned commands, freed with the model too
     // FFN mid-chain state (lazy — first FFN dispatch creates it)
     hq_dev : uint64          // device requantized-hidden quants (the down GEMM's activation image)
     hs_dev : uint64          // ... its scales
@@ -1839,6 +1840,10 @@ def vk_drop_model_state {
     if (!empty(g_gpu.model_cmds)) {
         vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), unsafe(addr(g_gpu.model_cmds[0])))
         g_gpu.model_cmds |> clear()
+    }
+    if (!empty(g_gpu.model_xcmds)) {
+        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.xfer_pool), uint(length(g_gpu.model_xcmds)), unsafe(addr(g_gpu.model_xcmds[0])))
+        g_gpu.model_xcmds |> clear()
     }
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
     // (chunks are kept, not destroyed: the next model refills from chunk 0)
@@ -3356,6 +3361,7 @@ def alloc_xfer_cmd : VkCommandBuffer {
     ai.commandBufferCount = 1u
     var raw : VkCommandBuffer
     vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
+    g_gpu.model_xcmds |> push(raw)   // model-owned: freed by the model drop, as alloc_cmd's are
     return raw
 }
 

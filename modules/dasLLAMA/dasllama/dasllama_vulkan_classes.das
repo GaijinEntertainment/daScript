@@ -4469,7 +4469,7 @@ class template DaAttnT {
         let folded = kgs >= 1u
         let ngroups_folded = folded ? gl_NumSubgroups : kgroups
         let nsl_hs = ngroups_folded * hs
-        let heads_per_round = max(1u, 2048u / nsl_hs)
+        let heads_per_round = max(1u, min(2048u / nsl_hs, 256u / hs))   //! a round's heads: what the slab holds, and what a thread a dim can reduce
         let has_sum = !folded || lane < vrow_words
         let slot = folded ? gl_SubgroupID : g
         var hr0 = 0u
