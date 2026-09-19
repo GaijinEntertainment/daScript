@@ -368,9 +368,12 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    B2/B4 + `MetalKqMvB8Iq4xs` (small batch), and an `IQ4XS` arm in `MetalKqMulMmK45T`
    (prefill mul_mm; `MetalKqMulMmIq4xs` stamps it - the template's `static_if` has no `elif`,
    so a new arm re-nests the k4/k5 arm one level deeper, `followup_general.md` item 135). PSO
-   globals + `compile_pso` + `release_pso` lines in the three ladders; every `g_pso_*` global is
-   declared by hand in `dasllama_metal_common.das`, since `[metal_dispatch(pso = ...)]` only
-   names it.
+   globals + `compile_stamp(<Class>_<kernel>_msl, ok)` lines in the compile ladders and a slot in
+   the `release_handles(...)` rosters; a per-format mul_mm stamp declares itself
+   `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` and the lens derives its names; every
+   `g_pso_*` global is declared by hand in `dasllama_metal_common.das`, since the lens only
+   names it. The prefill's per-format picks are tables, one row per format: `pf_kq_split_stamps`
+   (dense split), `pf_kq_deep_stamps` (k4/k5/k6), `pf_moe_split_stamps` (routed split).
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
    predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
@@ -383,8 +386,9 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    (`T`, `TH`, `TH128`, `THR`) off THAT class's MoE template with its own template constants
    instead of authoring a new one - q40 off iq4xs's is the worked case.
    **Serving an expert plane is six ladders, not one** (`followup_metal.md` sec.15 names the
-   dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_pso`, `pf_moe_split_enc`,
-   `pf_moe_th_pso` and `pf_moe_split_th_any` (prefill) plus the `enc_moe_gemv` arm (decode); and
+   dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_stamps` (the per-format
+   row `pf_moe_split_enc` reads), `pf_moe_th_pso` and
+   `pf_moe_split_th_any` (prefill) plus the `enc_moe_gemv` arm (decode); and
    `moe_site_ok`'s alignment arm must answer for the format exactly where `moe_fmt_metal_served`
    does - `test_moe_metal_expert_formats` walks the whole enum and reds on any disagreement. A
    compact-scale format (q40, iq4nl: `kq_scales_of` returns `doff` 0) binds its d plane at `soff`

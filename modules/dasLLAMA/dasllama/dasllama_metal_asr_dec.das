@@ -15,6 +15,7 @@ require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_whisper
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_metal_lens   // release_handles
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_prefill   // metal_prefill_pso_init — the borrowed-builder bring-up seat
 
@@ -112,21 +113,9 @@ def private wd_decline(why : MetalWdecDecline) : bool {
 }
 
 def private wd_release_all {
-    release_handle(g_wd_mblob)
-    release_handle(g_wd_bkxr)
-    release_handle(g_wd_bvxr)
-    release_handle(g_wd_bkc)
-    release_handle(g_wd_bvc)
-    release_handle(g_wd_sx)
-    release_handle(g_wd_sxb)
-    release_handle(g_wd_sxb2)
-    release_handle(g_wd_sq)
-    release_handle(g_wd_sk)
-    release_handle(g_wd_sv)
-    release_handle(g_wd_sh)
-    release_handle(g_wd_slog)
-    release_handle(g_wd_bpms)
-    release_handle(g_wd_bpy)
+    release_handles(g_wd_mblob, g_wd_bkxr, g_wd_bvxr, g_wd_bkc, g_wd_bvc, g_wd_sx)
+    release_handles(g_wd_sxb, g_wd_sxb2, g_wd_sq, g_wd_sk, g_wd_sv, g_wd_sh)
+    release_handles(g_wd_slog, g_wd_bpms, g_wd_bpy)
     g_wd_key = 0ul
     g_wd_len = 0l
     g_wd_window_key = 0ul
@@ -152,10 +141,8 @@ def private wd_region(w : WhisperModel; off, n, rows : int64; rep : bool; mr, kg
                       var staging : array<uint8>; var cur : uint64&) : uint64 {
     cur = (cur + 15ul) & ~15ul
     let at = cur
-    unsafe {
-        q8_region_to_metal_blob(plane_at(w.dqblob, off), plane_at(w.dqscales, off / 32l),
-            n, rows, rep, mr, kgroup, wbias, addr(staging[int64(cur)]))
-    }
+    q8_region_to_metal_blob(plane_at(w.dqblob, off), plane_at(w.dqscales, off / 32l),
+        n, rows, rep, mr, kgroup, wbias, unsafe(addr(staging[int64(cur)])))
     cur += uint64((rows * n / 32l) * 34l)
     return at
 }
@@ -271,9 +258,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     var btmp = pool_acquire(g_wd_pool, g_dev, bytes_rows)
     var bkx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     var bvx = pool_acquire(g_wd_pool, g_dev, bytes_x)
-    unsafe {
-        upload_rows_padded(bx, addr(enc_out[0]), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
-    }
+    upload_rows_padded(bx, unsafe(addr(enc_out[0])), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
     var u_d = uniform_u32(uint(d))
     var u_hs = uniform_u32(uint(hs))
     var u_ta = uniform_u32(uint(ta))

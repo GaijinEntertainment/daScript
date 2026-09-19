@@ -326,8 +326,10 @@ FILE(GLOB AOT_FIXED_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
 list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "failed_|/_")
 
 FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/typemacro/*.das")
-# Exclude the _-prefixed macro modules (compile-time only, options no_aot) and failed_* expect-fixtures
+# Exclude the _-prefixed macro modules (compile-time only, options no_aot) and failed_* expect-fixtures;
+# the reifier's fixture module carries a runtime class a stamp derives, so it is an AOT input
 list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "failed_|/_")
+SET(AOT_TYPEMACRO_MODULE_FILES tests/typemacro/_template_struct_instance_mod.das)
 
 FILE(GLOB AOT_LANGUAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -417,7 +419,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
-set(DAS_AOT_MODULE_SUITES daslib decs glsl language linq macro_boost math quote stbimage)
+set(DAS_AOT_MODULE_SUITES daslib decs glsl language linq macro_boost math quote stbimage typemacro)
 foreach(_s IN LISTS DAS_AOT_MODULE_SUITES)
     string(TOUPPER ${_s} _u)
     add_custom_target(test_aot_${_s}_modules)

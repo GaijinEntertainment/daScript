@@ -1143,23 +1143,21 @@ struct template LayerEncT {
         let c = t.config
         let dim = c.dim
         let ple = c.n_embd_per_layer
-        unsafe {
-            if (g_skip != "ew") {
-                enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
-            }
-            if (g_skip != "gemv") {
-                enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
-            }
-            if (g_skip != "ew") {
-                enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
-            }
-            if (g_skip != "gemv") {
-                enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
-            }
-            if (g_skip != "ew") {
-                var bw_pp = upload_region(addr < void? >(t.fblob[t.ple_post_off + l * dim]), uint64(dim * 4l))
-                enc_rms(enc, r.bxb, 0ul, bw_pp, r.bxb, r.u_dim, r.u_eps)
-            }
+        if (g_skip != "ew") {
+            enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
+        }
+        if (g_skip != "gemv") {
+            enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
+        }
+        if (g_skip != "ew") {
+            enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
+        }
+        if (g_skip != "gemv") {
+            enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
+        }
+        if (g_skip != "ew") {
+            var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
+            enc_rms(enc, r.bxb, 0ul, bw_pp, r.bxb, r.u_dim, r.u_eps)
         }
     }
 }
@@ -1181,10 +1179,8 @@ def private encode_cls_tail(t : Model; var r : StepRes; enc : MetalComputeEncode
     let c = t.config
     let dim = c.dim
     // final rmsnorm (one row) + classifier GEMV — the caller samples straight from s.logits
-    unsafe {
-        var bwfin = upload_region(addr < void? >(t.fblob[norm_off]), uint64(dim * 4l))
-        enc_rms(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps)
-    }
+    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
+    enc_rms(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps)
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     var bcls = r.bnc != null ? r.bnc : r.blog
     enc_site_gemv(enc, t, cls_fmt, t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab)
@@ -1580,18 +1576,14 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     }
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
-    unsafe {
-        var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
-    }
+    var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
+    enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
     var dnli = 0l
     for (l in range64(c.n_layers)) {
         encode_verify_layer(t, r, enc, brt, l, pos, dnli)
     }
-    unsafe {
-        var bwfin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
-    }
+    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[t.rms_final_off])), uint64(dim * 4l))
+    enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
         r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
@@ -1911,24 +1903,20 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
     let hz_g0 = g_hz_gated
     if (r.spec) {
         // speculative head: argmax the previous step's logits, gather the winner's embedding row into r.bx (cls_q8 or tied-k6 planes); the escale slot applies embed_scale in the gather
-        unsafe {
-            enc_argmax(enc, prev_blog, r.btok, r.u_vocab)
-            if (t.cls_q8) {
-                let bemb = blob_of(g_dev, t, t.emb_q8_off)
-                enc_embed(enc, bemb.buf, bemb.boff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
-            } else {
-                let bembq = kq_quants_of(g_dev, t, KqFmt.k6, t.wcls_off)
-                let bembs = kq_scales_of(g_dev, t, KqFmt.k6, t.wcls_off)
-                enc_embed_k6(enc, bembq.buf, bembq.qoff, bembs.buf, bembs.soff, bembs.doff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
-            }
+        enc_argmax(enc, prev_blog, r.btok, r.u_vocab)
+        if (t.cls_q8) {
+            let bemb = blob_of(g_dev, t, t.emb_q8_off)
+            enc_embed(enc, bemb.buf, bemb.boff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
+        } else {
+            let bembq = kq_quants_of(g_dev, t, KqFmt.k6, t.wcls_off)
+            let bembs = kq_scales_of(g_dev, t, KqFmt.k6, t.wcls_off)
+            enc_embed_k6(enc, bembq.buf, bembq.qoff, bembs.buf, bembs.soff, bembs.doff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
         }
     }
     // layer-0 attention norm — the per-layer trailing add+rms is fused and feeds the NEXT layer
     if (g_skip != "ew") {
-        unsafe {
-            var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
-            enc_rms(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps)
-        }
+        var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
+        enc_rms(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps)
     }
     var dnli = 0l   // recurrent-layer index — addresses the dn state/conv mirror slices in order
     for (l in range64(c.n_layers)) {
@@ -2475,7 +2463,7 @@ def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier
     if (bt.use_mm) {
         enc_gemm_mm_b(enc, bw.buf, bw.boff, bx, by, uint64(ycol * 4l), bn, bys, bt.mp, rows)
     } elif (mv_ok) {
-        enc_mv_site(enc, bw.buf, bw.boff, bx, by, n, n / 4l, rows, bt.nrows, ys, uint64(n * 4l), uint64(ycol * 4l))
+        enc_mv_site(enc, bw.buf, bw.boff, bx, by, n, n / 4l, rows, bt.nrows, ys, uint64(ycol * 4l))
     } elif (sk > 0l) {
         enc_gemm_sk_b(enc, bw.buf, bw.boff, bx, bt.bpsk, gemm_sk_ka(n, rows, sk), rows, sk)
         enc_sk_reduce_b(enc, bt.bpsk, by, 32l * rows, sk)
@@ -2972,10 +2960,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's)
     if (g_skip != "ew") {
-        unsafe {
-            var bw_att0 = upload_region(addr < void? >(t.fblob[t.rms_att_off]), uint64(dim * 4l))
-            enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
-        }
+        var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
+        enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
@@ -3021,11 +3007,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var nc_all = false
     if (gpu_logits) {
         // batched final rmsnorm + classifier — the caller's CPU classifier step is skipped
-        unsafe {
-            var bwfin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
-            enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
-            enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64)
-        }
+        var bwfin = upload_region(unsafe(addr < void? >(t.fblob[t.rms_final_off])), uint64(dim * 4l))
+        enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
+        enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64)
         if (u_flcap != null) {
             // final-logit soft cap (gemma2): cap*tanh over the live rows' contiguous logits
             enc_softcap_row(enc, blog, 0ul, u_fltot, u_flcap, nrows * c.vocab_size)
@@ -3168,9 +3152,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_xb = null
     if (!gpu_logits) {
         g_lp_xb = bx   // the CPU-classifier tail reads x_b — sync-only writeback
-        unsafe {
-            g_lp_xb_dst = addr < void? >(ws.scr.x_b[0])
-        }
+        g_lp_xb_dst = unsafe(addr < void? >(ws.scr.x_b[0]))
         g_lp_xb_bytes = nrows * dim * 4l
     }
     g_lp_sessions |> clear()

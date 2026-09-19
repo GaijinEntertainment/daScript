@@ -249,6 +249,10 @@ the spin costs a core's idle and buys the wake's latency. `DASLLAMA_METAL_WAIT_S
 blocking wait alone, the A/B rail. The spin is capped at 200 ms so a stalled step still reaches
 the blocking wait that reports it.
 
+The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal
+values (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index
+wins - what lets the chain predict a bare-argmax sampler's pick bit for bit.
+
 ### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
 
 **The NextN round's verify builds its whole step on one serial compute encoder - the one decode

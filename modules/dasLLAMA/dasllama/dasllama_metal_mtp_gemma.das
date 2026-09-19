@@ -12,6 +12,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_batch
 require dasllama/dasllama_mtp_gemma
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_metal_lens   // release_handles
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_decode
 
@@ -72,33 +73,11 @@ def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_
 def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
-    release_handle(g.bx)
-    release_handle(g.bxin)
-    release_handle(g.bxn)
-    release_handle(g.bo)
-    release_handle(g.bq)
-    release_handle(g.battn)
-    release_handle(g.bg)
-    release_handle(g.bu)
-    release_handle(g.bhn)
-    release_handle(g.blog)
-    release_handle(g.bhnext)
-    release_handle(g.btok)
-    release_handle(g.btok_out)
-    release_handle(g.bvtok)
-    release_handle(g.u_one1)
-    release_handle(g.bpart)
-    release_handle(g.bcos)
-    release_handle(g.bsin)
-    release_handle(g.bcos_sw)
-    release_handle(g.bsin_sw)
-    release_handle(g.u_dim)
-    release_handle(g.u_tdim)
-    release_handle(g.u_cat)
-    release_handle(g.u_hidden)
-    release_handle(g.u_vocab)
-    release_handle(g.u_eps)
-    release_handle(g.u_escale)
+    release_handles(g.bx, g.bxin, g.bxn, g.bo, g.bq, g.battn)
+    release_handles(g.bg, g.bu, g.bhn, g.blog, g.bhnext, g.btok)
+    release_handles(g.btok_out, g.bvtok, g.u_one1, g.bpart, g.bcos, g.bsin)
+    release_handles(g.bcos_sw, g.bsin_sw, g.u_dim, g.u_tdim, g.u_cat, g.u_hidden)
+    release_handles(g.u_vocab, g.u_eps, g.u_escale)
     for (u in g.u_qd) {
         metal_release(u)
     }
@@ -151,9 +130,7 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
         g.u_qd |> push(ubuf_u32(uint(dr.n_heads * dr.hs[l])))
         g.u_scale |> push(ubuf_f32(dr.layer_scale[l]))
     }
-    unsafe {
-        g.bblob = upload_region(addr < void? >(dr.blob[0]), uint64(long_length(dr.blob)))
-    }
+    g.bblob = upload_region(unsafe(addr < void? >(dr.blob[0])), uint64(long_length(dr.blob)))
     g.rope_pos = -1l
     g.ready = true
 }
@@ -369,17 +346,15 @@ def public gemma_drafter_last_logits(var dst : array<float>) {
 def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; anchor : int64; mr : KVMirror) {
     let dr & = g_gemma_drafter
     let dim = dr.dim
-    unsafe {
-        enc_gemv(enc, g.bblob, uint64(dr.pre_proj_off), g.bx, g.bxin, g.u_cat, g.u_dim, dim)
-        for (l in range64(dr.n_layers)) {
-            encode_gemma_layer(t, s, enc, g, l, anchor, mr)
-        }
-        var bw_on = upload_region(addr < void? >(dr.fblob[dr.out_norm_off]), uint64(dim) * 4ul)
-        enc_rms(enc, g.bxin, 0ul, bw_on, g.bhn, g.u_dim, g.u_eps)
-        enc_gemv(enc, g.bblob, uint64(dr.tok_emb_off), g.bhn, g.blog, g.u_dim, g.u_vocab, dr.vocab)
-        enc_argmax(enc, g.blog, g.btok_out, g.u_vocab)
-        enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
+    enc_gemv(enc, g.bblob, uint64(dr.pre_proj_off), g.bx, g.bxin, g.u_cat, g.u_dim, dim)
+    for (l in range64(dr.n_layers)) {
+        encode_gemma_layer(t, s, enc, g, l, anchor, mr)
     }
+    var bw_on = upload_region(unsafe(addr < void? >(dr.fblob[dr.out_norm_off])), uint64(dim) * 4ul)
+    enc_rms(enc, g.bxin, 0ul, bw_on, g.bhn, g.u_dim, g.u_eps)
+    enc_gemv(enc, g.bblob, uint64(dr.tok_emb_off), g.bhn, g.blog, g.u_dim, g.u_vocab, dr.vocab)
+    enc_argmax(enc, g.blog, g.btok_out, g.u_vocab)
+    enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
 }
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]

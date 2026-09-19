@@ -143,9 +143,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
     var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * d * 4l))
     var bout = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
-    unsafe {
-        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, t.patch_dim)
-    }
+    upload_rows_padded(bx0, unsafe(addr(s.x0[0])), npos, mp, t.patch_dim)
     var u_pdim = uniform_u32(uint(t.patch_dim))   // also the patch GEMM's k
     var u_d = uniform_u32(uint(d))                // also the patch GEMM's n and the proj GEMM's k
     var u_eps = uniform_f32(GEMMA4UV_LN_EPS)
@@ -250,10 +248,8 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
-    unsafe {
-        upload_rows_padded(bx, addr(s.x[0]), npos, mp, d)
-        zero_rows(bk, npos, nk64, d)
-    }
+    upload_rows_padded(bx, unsafe(addr(s.x[0])), npos, mp, d)
+    zero_rows(bk, npos, nk64, d)
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
     var u_eps = uniform_f32(t.eps)
@@ -524,7 +520,7 @@ def private g4a_blocks_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : 
         var bpds = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.per_dim_scale))), uint64(t.d_head * 4l))
         pf_enc_rms(enc, c.bx, 0ul, bw_ffn, c.bxb, c.u_d, c.u_eps, npos)
         g4a_mm_site(enc, c.bblob, c.bbounds, lo.c_ff_up, rb, c.bxb, c.bxc, c.bh, lo.ff_up, c.u_in, c.u_out, c.u_d, c.u_ff, c.u_totd, c.u_totff, npos * d, npos * ff, mp, ff)
-        enc_g4a_silu(enc, c.bh, c.u_totff, npos * ff)
+        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
         g4a_mm_site(enc, c.bblob, c.bbounds, lo.c_ff_down, rb + 16ul, c.bh, c.bxc, c.bxb, lo.ff_down, c.u_in, c.u_out, c.u_ff, c.u_d, c.u_totff, c.u_totd, npos * ff, npos * d, mp, d)
         pf_enc_rms(enc, c.bxb, 0ul, bw_ffp, c.bxb, c.u_d, c.u_eps, npos)
         enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
@@ -542,12 +538,12 @@ def private g4a_blocks_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : 
         enc_g4a_glu(enc, c.bh, c.bglu, c.u_d, c.u_totd, npos * d)
         enc_g4a_dw(enc, c.bglu, c.bcvd, c.bblob, uint64(lo.conv_dw * 4l), c.u_d, c.u_totd, npos * d)
         pf_enc_rms(enc, c.bcvd, 0ul, bw_cvn, c.bcvd, c.u_d, c.u_eps, npos)
-        enc_g4a_silu(enc, c.bcvd, c.u_totd, npos * d)
+        enc_g4a_silu(enc, c.bcvd, 0ul, c.u_totd, npos * d)
         g4a_mm_site(enc, c.bblob, c.bbounds, lo.c_pw2, rb + 112ul, c.bcvd, c.bxc, c.bxb, lo.conv_pw2, c.u_in, c.u_out, c.u_d, c.u_d, c.u_totd, c.u_totd, npos * d, npos * d, mp, d)
         enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
         pf_enc_rms(enc, c.bx, 0ul, bw_ffn1, c.bxb, c.u_d, c.u_eps, npos)
         g4a_mm_site(enc, c.bblob, c.bbounds, lo.c_ff_up_1, rb + 128ul, c.bxb, c.bxc, c.bh, lo.ff_up_1, c.u_in, c.u_out, c.u_d, c.u_ff, c.u_totd, c.u_totff, npos * d, npos * ff, mp, ff)
-        enc_g4a_silu(enc, c.bh, c.u_totff, npos * ff)
+        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
         g4a_mm_site(enc, c.bblob, c.bbounds, lo.c_ff_down_1, rb + 144ul, c.bh, c.bxc, c.bxb, lo.ff_down_1, c.u_in, c.u_out, c.u_ff, c.u_d, c.u_totff, c.u_totd, npos * ff, npos * d, mp, d)
         pf_enc_rms(enc, c.bxb, 0ul, bw_ffp1, c.bxb, c.u_d, c.u_eps, npos)
         enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
@@ -573,9 +569,7 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     residency_flush()   // pin/commit before the first submission (the post-CPU-front slack)
     let d = t.d_model
     var c <- g4a_ctx_make(t, npos)
-    unsafe {
-        upload_rows_padded(c.bx, addr(s.x[0]), npos, c.mp, d)
-    }
+    upload_rows_padded(c.bx, unsafe(addr(s.x[0])), npos, c.mp, d)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         g4a_blocks_body(enc, t, c)
@@ -647,7 +641,7 @@ def private cn_blocks_body(enc : MetalComputeEncoder?; t : CanaryEncoder; c : Cn
         enc_ln(enc, c.bx, c.bblob, uint64(lo.nf1_w * 4l), c.bblob, uint64(lo.nf1_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
         enc_f32_mm(enc, c.bblob, uint64(lo.ff1a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
         enc_add_bias_rows(enc, c.bh, 0ul, c.bblob, uint64(lo.ff1a_b * 4l), c.u_ff, c.u_totff, npos * ff)
-        enc_g4a_silu(enc, c.bh, c.u_totff, npos * ff)
+        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
         enc_f32_mm(enc, c.bblob, uint64(lo.ff1b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
         enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.ff1b_b * 4l), c.u_d, c.u_totd, npos * d)
         enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
@@ -676,7 +670,7 @@ def private cn_blocks_body(enc : MetalComputeEncoder?; t : CanaryEncoder; c : Cn
         enc_ln(enc, c.bx, c.bblob, uint64(lo.nf2_w * 4l), c.bblob, uint64(lo.nf2_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
         enc_f32_mm(enc, c.bblob, uint64(lo.ff2a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
         enc_add_bias_rows(enc, c.bh, 0ul, c.bblob, uint64(lo.ff2a_b * 4l), c.u_ff, c.u_totff, npos * ff)
-        enc_g4a_silu(enc, c.bh, c.u_totff, npos * ff)
+        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
         enc_f32_mm(enc, c.bblob, uint64(lo.ff2b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
         enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.ff2b_b * 4l), c.u_d, c.u_totd, npos * d)
         enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
@@ -709,9 +703,7 @@ def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, w
     residency_flush()   // pin/commit before the first submission (the post-CPU-front slack)
     let d = t.d_model
     var c <- cn_ctx_make(t, st, npos, ww)
-    unsafe {
-        upload_rows_padded(c.bx, addr(st.x[0]), npos, c.mp, d)
-    }
+    upload_rows_padded(c.bx, unsafe(addr(st.x[0])), npos, c.mp, d)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         cn_blocks_body(enc, t, c)
@@ -1163,10 +1155,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
-    unsafe {
-        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, pd)
-        zero_rows(bk, npos, nk64, dp)
-    }
+    upload_rows_padded(bx0, unsafe(addr(s.x0[0])), npos, mp, pd)
+    zero_rows(bk, npos, nk64, dp)
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
     var u_hs = uniform_u32(uint(hs))

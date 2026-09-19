@@ -27,11 +27,16 @@ and its base declare, in ascending order - fields sharing a binding share one en
 nothing declares gets none.** The setter checks only how many arguments it got, never which field
 each position carries; such a list restates no binding number, so it is not a hand-binding arm.
 
-**A hand-binding arm outside `dasllama/`, or one whose pipeline source or threadgroup-memory
-size arrives as a function parameter rather than a literal global, states in the PR that its
+**A hand-binding arm whose own function holds neither a `pipeline_from_source` over a literal
+global nor a literal `kn_tgmem` constant - one outside `dasllama/`, one whose source arrives as
+a parameter, one whose pipeline comes back from a shared shell - states in the PR that its
 binding order and push-constant layout were verified by hand against the class declaration.**
 The `REVIEW.das` gate `check_race_bind_numbers` cannot read those arms, so nothing but the PR
 statement catches a mis-numbered bind before it decides a ranking.
+
+**A diff that lifts race scaffolding into a shared shell keeps each race's `kn_kargs` beside the
+`kn_dispatch` it binds, in one function.** The manual-dispatch census fails a function whose
+kargs count differs from its dispatch count.
 
 **A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
@@ -43,8 +48,8 @@ geometry measures the wrong kernel silently.
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
 
-**Scaffolding that race sites in two DIFFERENT engine files share sits in
-`dasllama/dasllama_<gpu>_common.das`.** Scaffolding two races in one file share stays in that
+**Race scaffolding that a race site in another engine file repeats moves to
+`dasllama/dasllama_<gpu>_common.das` in the same change.** Scaffolding two races in one file share stays in that
 file.
 
 **A race whose ranking turns on weight-stream bandwidth sizes its operands past the device's

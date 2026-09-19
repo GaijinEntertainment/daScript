@@ -100,7 +100,17 @@ zoo. Facts that decide the order:
 
 - 296 dispatch classes in `dasllama_metal_kernels.das` (175) + `dasllama_metal_prefill.das`
   (121): 173 are template stamps, 14 ride a `def abstract` base, ~44 are hand-written twins
-  (~3000 lines addressable), ~65 singletons; 15 near-miss pairs must stay apart (listed there).
+  (~3000 lines addressable), ~65 singletons. The near-miss pairs that stay apart are the ones
+  a document rules: the float/quant attention pairs (two binding layouts,
+  `REVIEW_GPU_KERNEL_CLASSES.md`); the f4-slab GEMV crowns `MetalKqGemvIq3sF4` / `Iq3xxsF4` /
+  `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
+  `ARCHITECTURE_GPU_QUANT_PLANES.md` sec.2.2z); the `*Db` double-buffered shells beside the
+  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c carries the measurement); the
+  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md` sec.1.5); the four dense
+  mul_mm shells (`MetalF32MulMm` xf/y at 1/2, `MetalQ8MulMm` and `MetalBf16MulMm` at 2/3,
+  `MetalKqMulMmK45T` at 3/4, the MoE base's kargs at 5); the codebook grid
+  tables twinned in the Vulkan home (sec.1.5 role table); and the scalar attention trio beside
+  the tensor QK/AV pair (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2f).
 - Two thirds of the debt is one family: the per-format GEMV, MvB2/B4 and MvB8 copies - 36
   classes over 12 formats (`MetalKqGemv*` 7985-9319, `MetalKqMv*T` 8368-10970, `MetalKqMvB8*`
   8477-11102) where iq4xs and iq4nl differ in ONE line and iq2s and iq2xs in eight; the shells
@@ -111,18 +121,32 @@ zoo. Facts that decide the order:
   (`first_row * 2u` -> `* 4u`, `sumf[2]` -> `[4]`, `ib += 4u` -> `2u`) = two constants, F4 + ROWS;
   the `TILED` arm duplicates the b-loop for a measured +2% (k4) - prove the generated MSL
   byte-identical per stamp before and after.
-- Then: the SqAttn `BATCHED` axis (10 templates, ~250 lines; `MetalSqAttnCombT` ships the exact
-  pattern); the `MetalKqMulMmK45T` 12-bool `static_if` ladder into the `stage16` scaffold plus
-  the tensor K45/K6 x Db pair (~285; removes the coupled-bool trap where `MetalKqMulMmIq4nl`
-  must set `IQ4XS` and `IQ4NL`; the Db forms sit on the sanctioned float-A list); the four dense
-  mul_mm shells onto a `MetalMoeMulMmBase` twin (~145); the MoE GEMV `GATHERED` axis (~230, the
-  `float4` x view stays its own axis - a measured 2.25x); the zero-risk singles (CrossVx f16/f32,
-  Q8MvB2/B4 onto `MetalGemvB24T`, argmax rows, rope-store batched, DequantK6H,
-  G4aMag/Q3aPow, the bias pair; ~325).
+- Then: the decode-side `MetalKqMulMmK45T` 12-bool `static_if` ladder (its prefill twins now
+  derive the split tensor base's decode; the coupled-bool trap where `MetalKqMulMmIq4nl` must
+  set `IQ4XS` and `IQ4NL` lives on in the kernels file); the bias pair that folds,
+  `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the map and `x`'s offset
+  apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out. Two classes fold only when
+  their (binding number -> field type, `@off`) maps agree: the
+  SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
+  the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
+  binding) and the RmsNorm/AddRms pair (the residual at 1 shifts five) stay apart on that rule;
+  `MetalSqAttnCombT` folds because both its stamps share one kargs struct at one binding. The
+  Q8MvB2/B4 pair stays apart on the emitter: an NR-wide stamp needs a local fixed array of
+  pointers, which has no MSL form.
 - Rules for every conversion: a stamp's `tgmem=` string is `<LeafClass>_<method>_msl_tgmem`, so a
-  hand class becoming a stamp changes it and drops its `[metal_kernel(name=..)]`; a
-  `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
-  infers both arms); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
+  hand class becoming a stamp keeps its names by keeping its named `[metal_kernel(name=..)]`
+  def on the leaf and moving only the shared body to the template; a leaf that inherits a
+  `[metal_kernel]` method AND declares its own emits BOTH kernels (a second
+  `<Leaf>_<method>_msl` global), so a chain splits the shared decode from the kernel-carrying
+  levels; an instance may add fields (the `MetalKqDequant<Fmt>` stamps bind their own `@ssbo`);
+  a `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
+  infers both arms), and on a class template it declares no `@role = "read"`/`"write"` - the
+  census cross-checks declared roles against the unreified body and reads the gated field as
+  unused, while an undeclared role derives the same value; a per-stamp `@off`
+  asymmetry on a shared binding rides a `@template_gate`d field pair at that binding plus one
+  `static_if` accessor arm; a ROWS-style axis that stages per-row values in fixed arrays is not
+  AIR-neutral (Metal's -O2 does not scalar-replace them once a stamp has two rows - the k4 tile,
+  `followup_general.md` item 96); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
   `test_metal_gemm_kernels.das`) are the parity lock per format - green before and after, on the
   M1 first, the M5 pass after.
 - Detect-dupe (`utils/detect-dupe`) over the two files finds the exact-clone shells and the
@@ -563,12 +587,13 @@ either box reaches - leaving `MetalMoeMulMm<Fmt>T` covered by nothing. Unquirked
 uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 `tests/test_kernel_coverage.das` naming that arm as their coverage, the no-coverage note gone.
 
-## 15. Two Metal review gates the M4 pass found the shape of
+## 15. Metal review gates found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
-`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (eleven today -
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_split_pso`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_moe_split_enc`, plus the PLE pre-step's
+`pf_moe_split_stamps`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_stamps`,
+`pf_kq_deep_stamps`, plus the PLE pre-step's
 pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
 other and with the gate's alignment arm) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
@@ -583,6 +608,13 @@ call throw, which the gate in `test_metal_gemv_kernels.das`'s `w13sw_gate` now g
 `name == "..."` arms of `metal_blob_scale_plane` (`dasllama/dasllama_layout.das`) name one
 roster: a format added to the ladder and not the roster loses the split-transform memo and is
 never committed by `metal_blob_commit`.
+(d) A `REVIEW.das` check that two fields sharing one `@binding` in a class template are
+`@template_gate`d on one axis with opposite polarity (`GATHERED ka` beside `"!GATHERED" ndim`):
+a pair gated on two axes stamps a class with two fields, or none, on one buffer index, and
+today only the AIR compare finds it. (e) A `REVIEW.das` check that `compile_pso` is called
+only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two raw callers
+left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
+one kernel's source with another's entry and compile clean.
 
 ## 16. Three model classes have no batched decode arm and step per row under the server
 
@@ -596,3 +628,47 @@ defect. The work, one arm per class: the deltanet step and gated Q batched over 
 recurrent state is per session, the GEMMs are not), the shared expert's triple as one batched
 site beside the routed experts (the CPU batch stack already runs it), and the PLE side input
 gathered per row into the batch step (item 13 is its CPU half).
+
+## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
+
+`ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
+are five identical lines of pure ALU - no table, no backend lowering. `ARCHITECTURE_GPU.md`
+sec.1.5's role table keeps the codebook TABLES per kernel home; it does not reach a helper with
+no table in it. The shared-grammar precedent is `dasllama_kernel_access.das`, one owner after two
+private copies drifted. One home for the sign helper, both backends calling it.
+
+## 18. A kargs-bearing builder cannot be taken by address, so `enc_kq_mvb` stays a ladder
+
+`enc_kq_mvb` (`dasllama/dasllama_metal_kernels.das`) walks thirteen formats by three arms each to
+pick a builder triple; the per-format doff/soff choice it repeats is a table already
+(`KQ_ROWS_RACE_FORMATS`). A `(fmt -> builder triple)` table needs `@@enc_kq_mvb8_<fmt>_c`, and the
+lens forbids it: `mk_builder_param` sets `flags.ref` on the class field's own `TypeDecl` for a
+kargs uniform instead of a clone, so materializing the builder's function type reports
+`error[30107] can't pass a boxed type by a reference` at the class's kargs line. Every builder of
+a class that binds a kargs uniform is un-addressable; the split pickers table only because their
+classes pass scalars through `params=`. The fix is a cloned parameter type in the lens; the table
+follows, and the sec.15(a) gate then reads one table.
+
+## 19. The batched and rows w13sw kernels have no activation axis
+
+`MetalQ8GemvW13SwT.put_act` branches on the `act` uniform between `msl_silu_mul` and
+`msl_geglu_mul`; the batched family (`enc_gemv_w13sw_b`, `enc_gemv_w13sw_rows`) binds no `act`
+and computes SiLU only. Every live caller is SiLU today: the dense batch gates `fuse13` off
+under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
+`moe_dense_shexp` form through `enc_geglu`, so no gelu architecture reaches the `u_moe_nsh`
+path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
+activation; the fix is the `act` binding on the batched family, the same uniform the single-row
+form takes.
+
+## 20. The mv shells' per-format decode cannot cross a free-function boundary
+
+The B2/B4 and B8 mv shells (`MetalKqMvShellT`, `MetalKqMvB8ShellT`) each carry a per-format
+weight decode; for the five iquant formats the two copies are verbatim. One decode per format
+needs either a common class ancestor that declares the format's planes - single inheritance
+puts every format class under exactly one shell - or a free function taking the thread-local
+`float4[8]` stage, and `msl_emit`'s `ufn_param` lowers every fixed-array parameter to
+`threadgroup T*` (the fixed-array contract: only a `@workgroup` member). Two closes: the emitter
+lowers a fixed-array parameter to `thread T*` when every argument at every call site is
+thread-local (the cheaper path, and a lens diagnostic at the call site for the mixed case), or
+the two shells merge into one template on a `B8` axis with the panel gated, so a format class
+becomes the ancestor of both its stamps. ~200 lines behind either.

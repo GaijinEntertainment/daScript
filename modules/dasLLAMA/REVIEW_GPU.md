@@ -2,9 +2,10 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
-for Vulkan - never `followup_general.md`.
+for Vulkan.
 
-**Routed from `REVIEW.md`: a diff it routes here applies this list together with it.**
+**A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
+`followup_metal.md` or `followup_vulkan.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
@@ -132,14 +133,10 @@ from a measurement at the smallest and at the largest value the gated quantity t
 measurements in the PR body.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
-constant's authoritative site, in the same change.** An in-body tile constant is confirmed
-literal in the generated `*_msl` global or the SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>`
-writes every class kernel's words). A grid constant is read off the class's
-`[metal_dispatch]` / `[vk_dispatch]` `grid=` spec, whose `"n/c"` form is a
-CEIL-divide; a grid constant of a `grid = "wgs"` class is read off the kernel body's
-workgroup-index decode together with the host helper that computes `wgs`; a threadgroup
-constant off Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. A uniform's value
-is read at the single writer that fills its buffer.
+constant's authoritative site, in the same change.** The site per kind: the generated `*_msl`
+global or SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>`) for an in-body tile; the `grid=` spec (a
+CEIL divide), or the `wgs` decode plus its host helper, for a grid; the `tg=` /
+`local_size_x` spec for a threadgroup; the single writer for a uniform.
 
 **A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
 host computes that class's `wgs`, changes both in the same change.** The `grid=` spec carries no
@@ -149,11 +146,11 @@ number for these classes, so nothing else ties the two.
 handle alone is not a key - carry the span and the form, the element type and layout the upload
 produces, in the key too.** A hit must cover the request.
 
-**A diff that lands a kernel class, driver arm, or backend capability in a `dasllama/` file
-whose `ARCHITECTURE_GPU.md` sec.1.5 entry - the role table's "holds" column, or the file's own
-sec.1.5 bullet - does not name it adds it there in the same change; code a role table row names in
-its "must not hold" column moves to the file whose row holds it instead.** A driver arm is host code that ensures, binds, or encodes a
-dispatch; a backend capability is a function a driver registers in a hook or capability registry.
+**A diff that gives a `dasllama/` file code outside the role its `ARCHITECTURE_GPU.md` sec.1.5
+entry names - a kernel class, a driver arm, a backend capability, a dispatch-support macro -
+extends that entry in the same change, or moves the code to the file whose entry holds that
+role.** A driver arm is host code that ensures, binds, or encodes a dispatch; a backend
+capability is a function a driver registers in a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -278,11 +275,11 @@ runs only where the gate's `mint_time` flag is false, and the mint-time verdict 
 model's own fields.** The load selects the repacking CPU backend before the GPU backend is
 decided, so a mint-time read bakes a verdict the drivers do not share.
 
-**A diff that gives a Metal dispatch ladder - a flat per-format pick whose last arm is another
-format - an arm for a weight format adds that format to `kq_fmt_gpu_supported`, or, for an
-expert plane, to `moe_fmt_metal_served` (both `dasllama/dasllama_metal_shapes.das`), in the
-same change.** Those predicates are what declines an unserved format, so an unlisted format
-decodes under the layout of the ladder's last arm.
+**A diff that gives a per-format pick that maps a weight format to a Metal pipeline or builder
+- a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
+format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
+`dasllama/dasllama_metal_shapes.das`), in the same change.** Those predicates are what declines
+an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format lands,
 in the same change, the format's compiled pipeline (its `g_pf_pso_ple_gather*` global with its

@@ -2084,39 +2084,9 @@ def test_metal_misc_kernels(t : T?) {
     }
 }
 
-//! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state; `extra`
-//! is spliced verbatim into the dispatch attribute list (the requires= grammar gate rides it)
-def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "") : tuple<rc : int; out : string> {
-    let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
-    let src = join([
-        "options gen2",
-        "options _dasllama_internal = true",
-        "",
-        "require dasllama/dasllama_lint public",
-        "require das_metal",
-        "require metal/msl_shader",
-        "require dasllama/dasllama_metal_common",
-        "require dasllama/dasllama_metal_lens",
-        "",
-        "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]",
-        "class WgFixture \{",
-        "    @ssbo @binding = 0 @role = \"write\" ys : array<float>",
-        "    @workgroup acc : float[64]",
-        "",
-        "    [metal_kernel(name = \"wg_fixture_msl\")]",
-        "    def kmain \{",
-        "        let i = gl_GlobalInvocationID.x",
-        "        acc[gl_LocalInvocationID.x] = 1.0",
-        "        ys[i] = acc[gl_LocalInvocationID.x]",
-        "    \}",
-        "\}",
-        "",
-        "var g_wg_fixture_pso : MetalComputePipeline?",
-        "",
-        "[export]",
-        "def main() \{",
-        "    print(\"ok\\n\")",
-        "\}"], "\n")
+// writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
+// of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
+def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> {
     let dir_r = create_temp_directory_result("dasllama_lens_{tag}")
     if (!(dir_r is value)) {
         return (rc = -1, out = "temp dir failed")
@@ -2135,6 +2105,86 @@ def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "
     return (rc = rc, out = out)
 }
 
+//! the require preamble every lens fixture opens with
+def private lens_fixture_head : string {
+    return join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require das_metal",
+        "require metal/msl_shader",
+        "require dasllama/dasllama_metal_common",
+        "require dasllama/dasllama_metal_lens",
+        ""], "\n")
+}
+
+//! one [metal_kernel] method of the fixture class - `kann` is the annotation line, so a named
+//! kernel and a derived one share this body
+def private wg_kernel_method(kann, mname : string) : string {
+    return join([kann,
+        "    def {mname} \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        acc[gl_LocalInvocationID.x] = 1.0",
+        "        ys[i] = acc[gl_LocalInvocationID.x]",
+        "    \}"], "\n")
+}
+
+//! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state; `extra`
+//! is spliced verbatim into the dispatch attribute list (the requires= grammar gate rides it).
+//! A non-empty `stamp` replaces the hand-written attribute with that `stamp =` spec, so the
+//! class's threadgroup memory can only come from the lens's own derivation - which the program's
+//! main then names. `kname` gives the kernel the emitter's `name =` form, which moves every msl
+//! global of that kernel onto the given stem; `twins` gives the class a second kernel method of
+//! the stamp family's prefix.
+def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = ""; stamp : string = "";
+                             kname : string = ""; twins : bool = false) : tuple<rc : int; out : string> {
+    let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
+    let attr = (empty(stamp)
+        ? "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]"
+        : "[metal_dispatch(stamp = \"{stamp}\", pso = \"g_wg_fixture_pso\")]")
+    let kernname = !empty(kname) ? kname : (empty(stamp) ? "wg_fixture_msl" : "")
+    let kann = empty(kernname) ? "    [metal_kernel]" : "    [metal_kernel(name = \"{kernname}\")]"
+    let kmethods = (twins
+        ? wg_kernel_method(kann, "metal_moe_mulmm_one") + "\n" + wg_kernel_method(kann, "metal_moe_mulmm_two")
+        : wg_kernel_method(kann, "kmain"))
+    let derived = empty(kernname) ? "WgFixture_kmain_msl" : kernname
+    let probe = (empty(stamp) || twins) ? "" : "    assert({derived}_tgmem > 0ul)"
+    let src = join([
+        lens_fixture_head(),
+        attr,
+        "class WgFixture \{",
+        "    @ssbo @binding = 0 @role = \"write\" ys : array<float>",
+        "    @workgroup acc : float[64]",
+        "",
+        kmethods,
+        "\}",
+        "",
+        "var g_wg_fixture_pso : MetalComputePipeline?",
+        "",
+        "[export]",
+        "def main() \{",
+        probe,
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    return spawn_lens_compile(tag, src)
+}
+
+//! spawns a compile of a one-function program whose main carries `body` - the lens's host-side
+//! call macros are refused at a call site, where no class annotation can reach them
+def private spawn_lens_call(tag, body : string) : tuple<rc : int; out : string> {
+    let src = join([
+        lens_fixture_head(),
+        "var g_wgf_slot : MetalBuffer?",
+        "let g_wgf_source = \"msl source text\"",
+        "",
+        "[export]",
+        "def main() \{",
+        body,
+        "\}"], "\n")
+    return spawn_lens_compile(tag, src)
+}
+
 [test]
 def test_lens_tgmem_gate(t : T?) {
     t |> run("[metal_dispatch] on @workgroup state refuses to compile without tgmem=") @(t : T?) {
@@ -2144,6 +2194,16 @@ def test_lens_tgmem_gate(t : T?) {
             t |> success(find(bad.out, "no tgmem=") >= 0, "the refusal names the gate: {bad.out}")
             let good = spawn_wg_fixture(true, "ok")
             t |> equal(0, good.rc, "the tgmem= twin compiles: {good.out}")
+            // the stamped arm: no tgmem= to give, so the builder can only bind the name the lens
+            // derives - main names that same global, and an unresolved one fails the compile
+            let stamped = spawn_wg_fixture(false, "stamp", "", "kq_mm:wgfix:t")
+            t |> equal(0, stamped.rc, "a stamped class derives its tgmem instead of refusing: {stamped.out}")
+            t |> success(find(stamped.out, "no tgmem=") < 0, "the stamped class is not refused: {stamped.out}")
+            // a named kernel moves every msl global off the <Class>_<method>_msl stem, so the
+            // derivation must read the name= the emitter read; main names only wgf_named_tgmem,
+            // and a builder binding the derived spelling cannot resolve it
+            let named = spawn_wg_fixture(false, "stamp_named", "", "kq_mm:wgfix:t", "wgf_named")
+            t |> equal(0, named.rc, "a stamped class with a named kernel binds <name>_tgmem: {named.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }
@@ -2161,6 +2221,60 @@ def test_lens_requires_gate(t : T?) {
             t |> success(bad2.rc != 0, "an item without '%' must not compile")
             let good = spawn_wg_fixture(true, "req_ok", "requires = \"n % 64\", ")
             t |> equal(0, good.rc, "the well-formed twin compiles: {good.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
+def test_lens_stamp_gate(t : T?) {
+    t |> run("[metal_dispatch] stamp= takes a three-token spec naming a served family and form") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let two = spawn_wg_fixture(false, "stamp_two", "", "kq_mm:wgfix")
+            t |> success(two.rc != 0, "a two-token stamp must not compile")
+            t |> success(find(two.out, "must be '<family>:<fmt>:<form>'") >= 0, "the refusal names the spec grammar: {two.out}")
+            let fam = spawn_wg_fixture(false, "stamp_fam", "", "no_such_family:wgfix:t")
+            t |> success(fam.rc != 0, "an unknown family must not compile")
+            t |> success(find(fam.out, "names no family+form") >= 0, "the refusal names the served set: {fam.out}")
+            let form = spawn_wg_fixture(false, "stamp_form", "", "kq_mm:wgfix:zz")
+            t |> success(form.rc != 0, "an unserved form must not compile")
+            t |> success(find(form.out, "names no family+form") >= 0, "the refusal names the served set: {form.out}")
+            // the family matches its kernels by prefix, so a class carrying two of them leaves the
+            // stamp with no one kernel to derive access and threadgroup memory from
+            let twins = spawn_wg_fixture(false, "stamp_twins", "", "moe_mm_split:wgfix:t", "", true)
+            t |> success(twins.rc != 0, "two kernel methods under one stamp must not compile")
+            t |> success(find(twins.out, "one stamp dispatches one kernel") >= 0, "the refusal names the rule: {twins.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
+def test_lens_call_macro_gates(t : T?) {
+    t |> run("compile_stamp and release_handles refuse a shape they cannot spell") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let arity = spawn_lens_call("cs_arity", "    compile_stamp(g_wgf_source)")
+            t |> success(arity.rc != 0, "compile_stamp at one argument must not compile")
+            t |> success(find(arity.out, "compile_stamp expects") >= 0, "the refusal names the form: {arity.out}")
+            let lit = spawn_lens_call("cs_lit", "    var ok = true\n    compile_stamp(\"not a global\", ok)")
+            t |> success(lit.rc != 0, "compile_stamp on a non-variable must not compile")
+            t |> success(find(lit.out, "compile_stamp expects") >= 0, "the refusal names the form: {lit.out}")
+            let stem = spawn_lens_call("cs_stem", "    var ok = true\n    compile_stamp(g_wgf_source, ok)")
+            t |> success(stem.rc != 0, "a source global off the _msl stem must not compile")
+            t |> success(find(stem.out, "is not a kernel source global") >= 0, "the refusal names the stem rule: {stem.out}")
+            let pair = spawn_lens_call("rp_arity", "    race_pso_pair_stamp(g_wgf_slot, \"fam\", g_wgf_source)")
+            t |> success(pair.rc != 0, "race_pso_pair_stamp at three arguments must not compile")
+            t |> success(find(pair.out, "race_pso_pair_stamp expects") >= 0, "the refusal names the form: {pair.out}")
+            let pstem = spawn_lens_call("rp_stem", "    race_pso_pair_stamp(g_wgf_slot, \"fam\", g_wgf_source, g_wgf_source)")
+            t |> success(pstem.rc != 0, "a race arm off the _msl stem must not compile")
+            t |> success(find(pstem.out, "is not a kernel source global") >= 0, "the refusal names the stem rule: {pstem.out}")
+            let none = spawn_lens_call("rh_none", "    release_handles()")
+            t |> success(none.rc != 0, "release_handles with no slots must not compile")
+            t |> success(find(none.out, "expects one or more handle slots") >= 0, "the refusal names the rule: {none.out}")
+            let slot = spawn_lens_call("rh_ok", "    release_handles(g_wgf_slot)")
+            t |> equal(0, slot.rc, "one named slot compiles - the control that the fixture program itself is sound: {slot.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }

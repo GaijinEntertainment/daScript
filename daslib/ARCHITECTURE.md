@@ -182,8 +182,9 @@ Five companions carry a concern each; a section number is unique across all six 
 - **A derived structure carries every ancestor level's fields before annotations run.**
   `st.fields` on the instance already lists what the parser materialized from the whole parent
   chain, so the reifier binds constants, gates and calls from the instance alone and never walks
-  an ancestor's field list. Only methods need the per-level walk, nearest ancestor first, where
-  the first name seen wins.
+  an ancestor's field list for them. Only methods need the per-level walk, nearest ancestor
+  first, where the first name seen wins; a field the surviving concrete parent declares keeps
+  its parent-typed `cast<auto>` finalizer init, which binds the instance's finalizer to the parent's slot type.
 
 ## 26. constant_expression
 

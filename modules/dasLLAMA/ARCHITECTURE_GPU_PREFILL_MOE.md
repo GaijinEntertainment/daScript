@@ -41,10 +41,13 @@ form a tensor view, which is why every tensor twin of the MoE family serves cont
 only.
 
 The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
-derive from the format's DENSE split class (sec.2.2aa) and run its `stage16` under the dense base's
-`moe_shell`, whose expert plane rides `nBase` - `(e*ndim + n)*nsb + sb` is the plane's superblock,
-so the decode is one source for both the dense and the routed site. Their bindings are the dense
-layout's (`xf` 3, `y` 4, the kdim/ndim uniforms at 5 and 6) plus `cnt` at 7 and `basep` at 8;
+derive from the format's DENSE split class (sec.2.2aa) with the base's `MOE` axis set and run its
+`stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -
+`(e*ndim + n)*nsb + sb` is the plane's superblock, so the decode is one source for both the dense
+and the routed site, and a table format's threadgroup prologue is one override serving both.
+Their bindings are the dense layout's (`xf` 3, `y` 4, the kdim/ndim uniforms at 5 and 6) plus the
+axis-gated `cnt` at 7 and `basep` at 8; `pf_moe_split_stamps` is the one place a format maps
+to its psos and builders per form;
 the dispatcher passes the site's dim uniforms, the padded panel's row count for the y span,
 and the tile count as its own parameter - the K-quant twins' `npos/32` (an expert holds at most
 npos rows), never the padded row count, which would launch one tile per padded row and exit all

@@ -20,7 +20,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the qwen25v window ViT, the gemma4a Conformer and canary FastConformer chains with their mel/conv fronts, the conv frontends + the qwen3a padded-weight slab and GPU front/mel) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, qwen25v, encoder_blocks, tower-conv, qwen3a-front, qwen3a-mel, gemma4a, gemma4a-chunk and canary hooks | decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the assistant-drafter driver<br>`dasllama_metal_mtp_gemma` | the gemma-4 assistant drafter on Metal: the sidecar blob upload, the Q-only layer chain reading the TARGET mirror at the two capture layers with the decode's own attention kernels, the speculative round over the batch driver's same-slab verify; registers the `metal` round override and delegates head-less-drafter-less models to `metal_mtp_spec_round` | kernel bodies, mirror ownership |
-| the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
+| the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro and its dispatch-support macros (`compile_stamp`, `release_handles`) | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** - capability probe/arm, `.dlim`
   identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
@@ -82,10 +82,15 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
+  A per-format family stamp is `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` (`kq_mm`, `moe_mm`,
+  `moe_mm_split`): the lens derives every string the long form spells, an explicit argument wins, and the
+  threadgroup-memory global is always `<Class>_<kernel method>_msl_tgmem`. Hosts compile through
+  `compile_stamp(<stem>_msl, ok)` - one spelling, so a source never pairs with another kernel's entry.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no
-  shared bind path may span the two layouts; the in-engine moe mul_mm A/B race harnesses
+  shared bind path may span the two layouts; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
+  2/3/4, `MetalMoeReduce` at 3/4/5 under its gated `inv`) keeps each leaf's numbers; the in-engine moe mul_mm A/B race harnesses
   (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
   and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`

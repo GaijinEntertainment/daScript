@@ -15,6 +15,15 @@ class template public XModKern {
     }
 }
 
+class public XModBase {
+    hits : int
+
+    def bump() : int {
+        hits++
+        return hits
+    }
+}
+
 [structure_macro(name = "tsi_test_bind_kt")]
 class TsiTestBindKt : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {

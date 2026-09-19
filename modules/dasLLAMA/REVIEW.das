@@ -32,6 +32,18 @@ def private ident_prefix(s : string) : string {
     return slice(s, 0, n)
 }
 
+// leading identifier run of `s` with dots kept ("p.base_pso") - a race arm names its pipeline
+// through the field of the pair its shared shell returned
+def private path_prefix(s : string) : string {
+    var n = 0
+    peek_data(s) $(d) {
+        while (n < length(d) && (is_ident_byte(int(d[n])) || int(d[n]) == '.')) {
+            n++
+        }
+    }
+    return slice(s, 0, n)
+}
+
 // trailing identifier run of `s` ("" when s ends with a non-ident byte)
 def private ident_suffix(s : string) : string {
     var n = 0
@@ -359,6 +371,23 @@ def private rb_resolve_class(token : string; class_names : table<string>; kernel
     return ""
 }
 
+// the comma-separated argument at index `i` of a call whose text starts right after its open
+// paren, or "" when the call has no such argument on this line
+def private rb_call_arg(args : string; i : int) : string {
+    var from = 0
+    var n = 0
+    while (n < i) {
+        let c = find(args, ",", from)
+        return "" if (c < 0)
+        from = c + 1
+        n++
+    }
+    let comma = find(args, ",", from)
+    let close = find(args, ")", from)
+    let stop = comma >= 0 && (close < 0 || comma < close) ? comma : close
+    return strip(stop < 0 ? slice(args, from) : slice(args, from, stop))
+}
+
 // the integer between a call's last comma and its closing paren, or -1
 def private rb_trailing_int(line : string) : int {
     let close = find(line, ")")
@@ -379,6 +408,65 @@ def private rb_trailing_int(line : string) : int {
         return -1
     }
     return try_to_int(strip(slice(line, last_comma + 1, close))) ?? -1
+}
+
+// The per-function pipeline map: the calls that bind a local to a class's compiled source -
+// `pipeline_from_source` over a literal global, and the shared `race_pso_pair` shell in either
+// spelling - plus the local-to-local reads of one. True where the line is such a bind and no
+// later check reads it.
+def private rb_track_pso(line : string; class_names : table<string>; kernel_class : table<string; string>;
+                         var pso_class : table<string; string>) : bool {
+    let pf = find(line, "pipeline_from_source(")
+    if (pf >= 0) {
+        let pvar = rb_bound_var(line)
+        let args = slice(line, pf + length("pipeline_from_source("))
+        let c1 = find(args, ",")
+        let src = strip(slice(args, c1 + 1, find(args, ",", c1 + 1)))
+        let cls = rb_resolve_class(src, class_names, kernel_class)
+        if (!empty(pvar) && !empty(cls)) {
+            pso_class[pvar] = cls
+        }
+        return true
+    }
+    // the shared shell hands both pipelines back in one RacePsoPair, so each arm's class comes
+    // off the call's stems (race_pso_pair_stamp) or its source triples
+    let stamped = find(line, "race_pso_pair_stamp(")
+    let plain = find(line, "race_pso_pair(")
+    if (stamped >= 0 || plain >= 0) {
+        let head = stamped >= 0 ? "race_pso_pair_stamp(" : "race_pso_pair("
+        let args = slice(line, (stamped >= 0 ? stamped : plain) + length(head))
+        let pvar = rb_bound_var(line)
+        return true if (empty(pvar))
+        let bcls = rb_resolve_class(rb_call_arg(args, 2), class_names, kernel_class)
+        let tcls = rb_resolve_class(rb_call_arg(args, stamped >= 0 ? 3 : 5), class_names, kernel_class)
+        if (!empty(bcls)) {
+            pso_class["{pvar}.base_pso"] = bcls
+        }
+        if (!empty(tcls)) {
+            pso_class["{pvar}.twin_pso"] = tcls
+        }
+        return true
+    }
+    // an arm reads the pair's pipelines into locals before its timed block
+    let asg = find(line, " = ")
+    if (asg > 0) {
+        var lhs = strip(slice(line, 0, asg))
+        if (lhs |> starts_with("let ") || lhs |> starts_with("var ")) {
+            lhs = slice(lhs, 4)
+        }
+        let cls = pso_class?[path_prefix(strip(slice(line, asg + 3)))] ?? ""
+        if (!empty(cls) && !empty(ident_prefix(lhs))) {
+            pso_class[ident_prefix(lhs)] = cls
+        }
+    }
+    return false
+}
+
+// the name a `var x = ` / `let x = ` line binds ("" when the line binds nothing)
+def private rb_bound_var(line : string) : string {
+    var v = strip(line)
+    v = slice(v, find(v, "var ") >= 0 ? find(v, "var ") + 4 : 0)
+    return ident_prefix(v)
 }
 
 def private check_race_bind_numbers {
@@ -407,23 +495,10 @@ def private check_race_bind_numbers {
                 target = ""
                 continue
             }
-            let pf = find(line, "pipeline_from_source(")
-            if (pf >= 0) {
-                var v = strip(line)
-                v = slice(v, find(v, "var ") >= 0 ? find(v, "var ") + 4 : 0)
-                let pvar = ident_prefix(v)
-                let args = slice(line, pf + length("pipeline_from_source("))
-                let c1 = find(args, ",")
-                let src = strip(slice(args, c1 + 1, find(args, ",", c1 + 1)))
-                let cls = rb_resolve_class(src, class_names, kernel_class)
-                if (!empty(pvar) && !empty(cls)) {
-                    pso_class[pvar] = cls
-                }
-                continue
-            }
+            continue if (rb_track_pso(line, class_names, kernel_class, pso_class))
             let kp = find(line, "kn_pipeline(enc, ")
             if (kp >= 0) {
-                target = pso_class?[ident_prefix(slice(line, kp + length("kn_pipeline(enc, ")))] ?? ""
+                target = pso_class?[path_prefix(slice(line, kp + length("kn_pipeline(enc, ")))] ?? ""
                 continue
             }
             let kt = find(line, "kn_tgmem(enc, ")

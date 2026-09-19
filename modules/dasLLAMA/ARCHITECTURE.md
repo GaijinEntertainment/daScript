@@ -45,8 +45,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that measured out.
 - `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the tower attention routes, and the tower driver's
   encode chains.
-- `ARCHITECTURE_GPU_QUANT_PLANES.md` - sec.2.2y-2.2z: the Metal kq split scale plane, and the
-  iquant GEMV grid read with its f4-slab twin.
+- `ARCHITECTURE_GPU_QUANT_PLANES.md` - sec.2.2y-2.2z, 2.2an: the Metal kq split scale plane, the
+  iquant GEMV grid read with its f4-slab twin, and the Metal GEMV site abstraction.
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill
   driver's GEMM form ladder, dev-W knee map, attention slab, chunked submission, the
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.

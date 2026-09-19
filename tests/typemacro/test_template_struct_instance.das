@@ -204,6 +204,35 @@ def test_tsi_cross_module(t : T?) {
     }
 }
 
+// the template stays HERE while its concrete base XModBase stays in the required module: a
+// same-module pair reifies green either way, so only the split pins the cast<auto> __finalize init
+[ |> template_struct_instance]
+class template XModOverKern : XModBase {
+    @template_constant STEP : int = 1
+
+    def value : int {
+        return hits * STEP
+    }
+}
+
+class XModOverInt : XModOverKern {
+    override STEP = 10
+}
+
+[test]
+def test_tsi_cross_module_base(t : T?) {
+    t |> run("template deriving a concrete class from another module keeps that class as parent") @(t : T?) {
+        unsafe {
+            var inscope k <- new XModOverInt()
+            k->bump()
+            k->bump()
+            var base : XModBase? = k
+            t |> equal(base.hits, 2)
+            t |> equal(k->value(), 20)
+        }
+    }
+}
+
 [test]
 def test_tsi_late_bind(t : T?) {
     t |> run("an alias another macro supplies after the reifier binds at infer") @(t : T?) {

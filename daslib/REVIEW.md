@@ -44,9 +44,10 @@ construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
 decided by a definition outside this folder - a C++ definition, or another module's descriptor
-- with no lint, compile error, or test in the default suite failing when the two sides no longer match, records the
-pair, naming both sides, in whichever `ARCHITECTURE*.md` in this folder holds the daslib file's
-section - adding that section to `ARCHITECTURE.md` when no doc holds one.**
+- with no lint, compile error, or default-suite test (what `dastest` runs over `tests/` with no
+flags) failing when the two sides no longer match, records the pair, naming both sides, in this
+folder's architecture doc.** The section a daslib file's pair lands in is the one that holds that
+file, or a new one in `ARCHITECTURE.md` when none does.
 
 **When a diff changes one side of a recorded pair so the two no longer match, it changes the
 other side in the same diff.**
@@ -56,8 +57,8 @@ other side in the same diff.**
 read as the current tree, and a name that no longer resolves or a scope that no longer holds is
 trusted until someone reads the code.
 
-**A diff adds an architecture-doc entry only for a fact that no lint, compile error, or test in
-the default suite reports when it goes false, and that the code's own names do not make
+**A diff adds an architecture-doc entry only for a fact that no lint, compile error, or
+default-suite test reports when it goes false, and that the code's own names do not make
 self-evident** - a test gated on an environment variable, or run only in a nightly lane, does
 not count.
 
