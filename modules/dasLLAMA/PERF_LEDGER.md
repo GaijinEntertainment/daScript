@@ -1893,7 +1893,9 @@ RTX 5060 Ti carries decode-vector.
 - **The scoreboard after the three (pod, profiler off, tg128@4 summed, ours cm2 / ours KHR /
   llama.cpp; then tg128 ours / theirs):** Llama-3.2-1B Q8_0 1207 / 1206 / 1217 (0.99), flat
   464 / 404; Llama-3.2-3B Q8_0 580 / 579 / 605 (0.96), flat 194 / 184; Llama-3.1-8B Q4_K_M
-  379 / 379 / 361 (1.05), flat 134 / 132. The 1B's four-row step under the profiler: GPU 2994 us
+  379 / 379 / 361 (1.05), flat 134 / 132. The RTX 5060 Ti the same session (cm2 with
+  decode-vector, `-c 4096` on both sides): 1B 724 / 744 / 738 (0.98 / 1.01), flat 258 / 242; 3B
+  351 / 352 / 351 (1.00), flat 107 / 104; 8B 250 / 250 / 209 (1.20), flat 78 / 77. The 1B's four-row step under the profiler: GPU 2994 us
   (qkv 231, rope 65, attn 361, wo 210, gate 486, up 457, down 588, cls 332, the norm and requant
   sites 250), host 375 (the logits' landing 285, the submit 9); llama.cpp's step 3.26 ms wall with
   2.82 of kernels (its GEMVs 655 GB/s to our 540-600 on the long-K down plane, its flash
