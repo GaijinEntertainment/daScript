@@ -3,8 +3,8 @@
 The companion `ARCHITECTURE.md` indexes: the TTS file charters (sec.1.7c) and the mechanisms the
 TTS files implement (sec.2.28-2.30, 2.32-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) is
 the contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
-buffers, the chunk cap and the idle release - is `ARCHITECTURE_TTS_MEMORY.md` (sec.2.31, 2.51,
-2.52).
+buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECTURE_TTS_MEMORY.md`
+(sec.2.31, 2.51-2.53).
 
 ## 1. File charters
 

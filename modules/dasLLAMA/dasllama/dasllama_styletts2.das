@@ -912,7 +912,10 @@ struct St2Scratch {
     @scratch @exact_size dec_har : array<float>
     @scratch @exact_size dec_spec : array<float>
     @scratch @exact_size dec_spec_tm : array<float>
-    @scratch @exact_size so_sines : array<float>
+    @scratch @exact_size so_sines : array<float>   //! one source window's harmonic rows
+    @scratch @exact_size so_noise : array<float>   //! the window's noise draw, when none was captured
+    @scratch @exact_size so_har : array<float>     //! the window's mixed signal before it joins `dec_har`
+    so_carry : SineSourceCarry = SineSourceCarry()   //! the phase state between windows
     @scratch @exact_size hs_padded : array<float>
     @scratch @exact_size hs_re : array<float>
     @scratch @exact_size hs_im : array<float>
@@ -1222,13 +1225,64 @@ def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exac
     }
 }
 
+let private SOURCE_WINDOW_FRAMES = 64l
+var private g_source_window = SOURCE_WINDOW_FRAMES
+
+//! The frame window the harmonic source runs in (`set_styletts2_source_window`; 0 = the whole run).
+def styletts2_source_window() : int64 => g_source_window
+
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-source-stream")]
+def set_styletts2_source_window(frames : int64) {
+    //! Run the harmonic source `frames` phase frames at a time (the default `SOURCE_WINDOW_FRAMES`,
+    //! 0 = the whole run in one window): the same samples either way, the tables sized to the window.
+    if (frames < 0l) {
+        panic("dasLLAMA styletts2: a source window of {frames} frames - zero is the whole run, a window is positive")
+    }
+    g_source_window = frames
+}
+
 //! The harmonic source: sines plus noise from the F0 curve, mixed to one signal of
-//! frames * upsample samples.
+//! frames * upsample samples, a window of frames at a time; `seed` draws the noise unless
+//! `noise` captured it.
+[arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-source-stream")]
 def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_frames : int64;
-                     noise : TtsNoise; @scratch @exact_size var har : array<float>; var sc : St2Scratch) : int64 {
+                     noise : TtsNoise; seed : uint64; @scratch @exact_size var har : array<float>; var sc : St2Scratch) : int64 {
+    let up = cfg.upsample
+    let nh = cfg.n_harm
+    let n = f0_frames * up
+    let nlow = resize_len(n, 1.0 / float(up))
+    let win = g_source_window > 0l ? min(g_source_window, nlow) : nlow
+    var rng = TtsRng()
+    if (!noise.captured) {
+        rng_seed(rng, seed)
+        for (_h in range64(nh)) {
+            rng_uniform(rng)
+        }
+    }
     var sines & = unsafe(sc.so_sines)
-    let n = sine_source(cfg, f0, f0_frames, noise.uniform, noise.normal, sines)
-    linear_rows(d.source_linear, sines, n, har)
+    var nwin & = unsafe(sc.so_noise)
+    var hwin & = unsafe(sc.so_har)
+    sine_carry_reset(sc.so_carry, nh, win)
+    har |> reserve_resize(n)
+    var fa = 0l
+    while (fa < nlow) {
+        let fb = min(fa + win, nlow)
+        let sa = fa * up
+        var rows = 0l
+        if (noise.captured) {
+            rows = sine_source(cfg, f0, f0_frames, noise.uniform, fa, fb, sc.so_carry, noise.normal, sa * nh, sines)
+        } else {
+            let draw = ((fb == nlow ? n : fb * up) - sa) * nh
+            nwin |> reserve_resize(draw)
+            for (i in range64(draw)) {
+                nwin[i] = rng_normal(rng)
+            }
+            rows = sine_source(cfg, f0, f0_frames, noise.uniform, fa, fb, sc.so_carry, nwin, 0l, sines)
+        }
+        linear_rows(d.source_linear, sines, rows, hwin)
+        copy_floats(hwin, 0l, har, sa, rows)
+        fa = fb
+    }
     tanh_inplace(har, n)
     return n
 }
@@ -1448,19 +1502,15 @@ def private generator_tail(d : St2Decoder; var x : array<float>; cc, tt : int64;
     return n
 }
 
-//! Draw the source noise the synthesis needs when none was captured.
-def styletts2_draw_noise(cfg : SineSourceCfg; frames : int64; seed : uint64; var noise : TtsNoise) {
+//! Draw the harmonics' initial phases when no noise was captured; the per-sample normals that
+//! follow them in the stream are drawn by `styletts2_source`, a window at a time.
+def styletts2_draw_noise(cfg : SineSourceCfg; seed : uint64; var noise : TtsNoise) {
     return if (noise.captured)
     var rng = TtsRng()
     rng_seed(rng, seed)
-    let n = frames * cfg.upsample
     unsafe(scratch_resize(noise.uniform, cfg.n_harm))
     for (h in range64(cfg.n_harm)) {
         noise.uniform[h] = rng_uniform(rng)
-    }
-    unsafe(scratch_resize(noise.normal, n * cfg.n_harm))
-    for (i in range64(n * cfg.n_harm)) {
-        noise.normal[i] = rng_normal(rng)
     }
 }
 
@@ -1557,10 +1607,10 @@ def private styletts2_decode(d : St2Decoder; text_c : int64; source : SineSource
     }
     tm.decoder_us = int64(get_time_usec(clock))
     clock = ref_time_ticks()
-    styletts2_draw_noise(source, f2, seed, noise)
+    styletts2_draw_noise(source, seed, noise)
     var har & = unsafe(sc.dec_har)
     var har_spec & = unsafe(sc.dec_spec)
-    let n = styletts2_source(d, source, f0, f2, noise, har, sc)
+    let n = styletts2_source(d, source, f0, f2, noise, seed, har, sc)
     if (tr != null) {
         trace_take(tr.har, har)
     }

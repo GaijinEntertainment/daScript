@@ -2217,31 +2217,59 @@ def private fmaf(a, b, c : float) : float {
     return float(double(a) * double(b) + double(c))
 }
 
-//! Linear resample of x [C][T] by `scale`: bit for bit onnxruntime's trilinear kernel on a
-//! [1][C][T] tensor (ONNX half_pixel; a depth of one halves both depth weights; the unscaled
-//! channel axis weights its own row one and the next zero, the last row averaging itself).
-def resize_linear(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
-    let t_out = int64(floor(float(t) * scale))
-    y |> reserve_resize(c * t_out)
+//! The columns a linear resample of T source columns by `scale` writes.
+def resize_len(t : int64; scale : float) : int64 => int64(floor(float(t) * scale))
+
+//! The two source columns ONNX's half-pixel linear resample taps for output column `to`, with
+//! their weights; the last column averages itself.
+def private resize_taps_onnx(t : int64; scale : float; to : int64) : tuple<i1 : int64; i2 : int64; dx1 : float; dx2 : float> {
+    let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(t - 1l))
+    let i1 = min(int64(in_x), t - 1l)
+    let i2 = min(i1 + 1l, t - 1l)
+    if (i1 == i2) {
+        return (i1 = i1, i2 = i2, dx1 = 0.5, dx2 = 0.5)
+    }
+    return (i1 = i1, i2 = i2, dx1 = abs(in_x - float(i1)), dx2 = abs(in_x - float(i2)))
+}
+
+//! The two source columns PyTorch's upsample_linear1d taps for output column `to` (the source
+//! coordinate in double from the float reciprocal scale `inv`), with their weights.
+def private resize_taps_torch(t : int64; inv : double; to : int64) : tuple<i0 : int64; i1 : int64; l0 : float; l1 : float> {
+    let src = max(0.0, float(inv * (double(to) + 0.5lf) - 0.5lf))
+    let i0 = min(int64(src), t - 1l)
+    let l1 = src - float(i0)
+    return (i0 = i0, i1 = min(i0 + 1l, t - 1l), l0 = 1.0 - l1, l1 = l1)
+}
+
+//! The source columns [lo, hi) a linear resample of T columns by `scale` reads to write the output
+//! columns [to0, to1), on either kernel's taps.
+def resize_span(torch_math : bool; t : int64; scale : float; to0, to1 : int64) : tuple<lo : int64; hi : int64> {
+    if (torch_math) {
+        let inv = double(1.0 / scale)
+        return (lo = resize_taps_torch(t, inv, to0).i0, hi = resize_taps_torch(t, inv, to1 - 1l).i1 + 1l)
+    }
+    return (lo = resize_taps_onnx(t, scale, to0).i1, hi = resize_taps_onnx(t, scale, to1 - 1l).i2 + 1l)
+}
+
+//! Linear resample of a [C][T] source by `scale`, bit for bit onnxruntime's trilinear kernel on a [1][C][T]
+//! tensor (half_pixel; a depth of one halves both depth weights; the unscaled channel axis weights its own row
+//! one, the last averaging itself): `x` from column `x_lo` at stride `x_stride`, the columns [to0, to1) out at `y_stride`.
+def resize_linear(x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
     let half = 0.5
-    for (to in range64(t_out)) {
-        let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(t - 1l))
-        let i1 = min(int64(in_x), t - 1l)
-        let i2 = min(i1 + 1l, t - 1l)
-        var dx1 = abs(in_x - float(i1))
-        var dx2 = abs(in_x - float(i2))
-        if (i1 == i2) {
-            dx1 = 0.5
-            dx2 = 0.5
-        }
+    for (to in range64(to0, to1)) {
+        let tp = resize_taps_onnx(t, scale, to)
+        let i1 = tp.i1 - x_lo
+        let i2 = tp.i2 - x_lo
+        let dx1 = tp.dx1
+        let dx2 = tp.dx2
         for (ci in range64(c)) {
             let c2 = min(ci + 1l, c - 1l)
             let dy1 = c2 == ci ? 0.5 : 0.0
             let dy2 = c2 == ci ? 0.5 : 1.0
-            let x11 = x[ci * t + i1]
-            let x21 = x[ci * t + i2]
-            let x12 = x[c2 * t + i1]
-            let x22 = x[c2 * t + i2]
+            let x11 = x[ci * x_stride + i1]
+            let x21 = x[ci * x_stride + i2]
+            let x12 = x[c2 * x_stride + i1]
+            let x22 = x[c2 * x_stride + i2]
             var acc = fmaf((dx2 * dy2) * half, x11, ((dx1 * dy2) * half) * x21)
             acc = fmaf((dx2 * dy1) * half, x12, acc)
             acc = fmaf((dx1 * dy1) * half, x22, acc)
@@ -2249,29 +2277,39 @@ def resize_linear(x : array<float>; c, t : int64; scale : float; @scratch @exact
             acc = fmaf((dx1 * dy2) * half, x21, acc)
             acc = fmaf((dx2 * dy1) * half, x12, acc)
             acc = fmaf((dx1 * dy1) * half, x22, acc)
-            y[ci * t_out + to] = acc
+            y[ci * y_stride + (to - to0)] = acc
         }
     }
+}
+
+//! Linear resample of x [C][T] by `scale` into y [C][T'], the whole row (the windowed form above).
+def resize_linear(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
+    let t_out = resize_len(t, scale)
+    y |> reserve_resize(c * t_out)
+    resize_linear(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
     return t_out
 }
 
-//! Linear resample of x [C][T] by `scale`, bit for bit what PyTorch's CPU upsample_linear1d
-//! computes (align_corners false, scale_factor given): the source coordinate in double from the
-//! float reciprocal scale, the two taps combined as fma(l0, x0, l1 * x1).
-def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
-    let t_out = int64(floor(float(t) * scale))
-    y |> reserve_resize(c * t_out)
+//! Linear resample of a [C][T] source by `scale`, bit for bit PyTorch's CPU upsample_linear1d (align_corners
+//! false, scale_factor given): the source coordinate in double from the float reciprocal scale, the two taps as
+//! fma(l0, x0, l1 * x1); the window form of `resize_linear` - `x` from `x_lo` at `x_stride`, the columns [to0, to1) out.
+def resize_linear_torch(x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
     let inv = double(1.0 / scale)
-    for (to in range64(t_out)) {
-        let src = max(0.0, float(inv * (double(to) + 0.5lf) - 0.5lf))
-        let i0 = min(int64(src), t - 1l)
-        let i1 = min(i0 + 1l, t - 1l)
-        let l1 = src - float(i0)
-        let l0 = 1.0 - l1
+    for (to in range64(to0, to1)) {
+        let tp = resize_taps_torch(t, inv, to)
+        let i0 = tp.i0 - x_lo
+        let i1 = tp.i1 - x_lo
         for (ci in range64(c)) {
-            y[ci * t_out + to] = fmaf(l0, x[ci * t + i0], l1 * x[ci * t + i1])
+            y[ci * y_stride + (to - to0)] = fmaf(tp.l0, x[ci * x_stride + i0], tp.l1 * x[ci * x_stride + i1])
         }
     }
+}
+
+//! Linear resample of x [C][T] by `scale` into y [C][T'] on PyTorch's arithmetic, the whole row.
+def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
+    let t_out = resize_len(t, scale)
+    y |> reserve_resize(c * t_out)
+    resize_linear_torch(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
     return t_out
 }
 
@@ -2401,57 +2439,127 @@ struct SineSourceCfg {
 }
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
-def private source_resize(cfg : SineSourceCfg; x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
-    return cfg.torch_math ? resize_linear_torch(x, c, t, scale, y) : resize_linear(x, c, t, scale, y)
+def private source_resize(cfg : SineSourceCfg; x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
+    if (cfg.torch_math) {
+        resize_linear_torch(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
+    } else {
+        resize_linear(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
+    }
 }
 
-[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
-def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u, noise_n : array<float>;
-                @exact_size var out : array<float>) : int64 {
-    let n = frames * cfg.upsample
+//! What the sine source carries from one frame window to the next: the cumulative phase per
+//! harmonic, and the phase frames [base, next) the next window's upsample taps still read.
+struct SineSourceCarry {
+    @scratch acc : array<float>       //! per harmonic, the running sum on onnxruntime's arithmetic
+    @scratch acc64 : array<double>    //! per harmonic, PyTorch's double accumulator
+    @scratch @exact_size lowc : array<float>   //! the phase frames, channel-major at stride `stride`
+    base : int64
+    next : int64
+    stride : int64
+}
+
+//! Start a run: the sums at zero, no frame computed, room for `window` frames plus the two the
+//! taps reach back and forward to.
+def sine_carry_reset(var cr : SineSourceCarry; nh, window : int64) {
+    cr.acc |> resize(nh)
+    cr.acc64 |> resize(nh)
+    for (h in range64(nh)) {
+        cr.acc[h] = 0.0
+        cr.acc64[h] = 0.0lf
+    }
+    cr.stride = window + 2l
+    cr.lowc |> reserve_resize(nh * cr.stride)
+    cr.base = 0l
+    cr.next = 0l
+}
+
+//! The phase frames [cr.next, want) appended to the carry and the frames before `keep` dropped: the
+//! cycles at the samples the downsample taps, the resample, the cumulative sum on from the carried state.
+def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64; noise_u : array<float>;
+                              keep, want : int64; var cr : SineSourceCarry) {
     let nh = cfg.n_harm
+    let up = cfg.upsample
+    let down = 1.0 / float(up)
+    let span = resize_span(cfg.torch_math, n, down, cr.next, want)
+    let width = span.hi - span.lo
     var rad & = g_sine_rad
-    rad |> reserve_resize(nh * n)
+    rad |> reserve_resize(nh * width)
     for (h in range64(nh)) {
         let mult = float(h + 1l)
-        for (i in range64(n)) {
-            let cyc = f0[i / cfg.upsample] * mult / cfg.sample_rate
-            rad[h * n + i] = cyc - floor(cyc)
+        for (i in range64(span.lo, span.hi)) {
+            let cyc = f0[i / up] * mult / cfg.sample_rate
+            rad[h * width + (i - span.lo)] = cyc - floor(cyc)
         }
-        if (h > 0l) {
-            rad[h * n] += noise_u[h]
+        if (h > 0l && span.lo == 0l) {
+            rad[h * width] += noise_u[h]
         }
     }
+    let count = want - cr.next
     var low & = g_sine_low
-    let nlow = source_resize(cfg, rad, nh, n, 1.0 / float(cfg.upsample), low)
+    low |> reserve_resize(nh * count)
+    source_resize(cfg, rad, span.lo, width, nh, n, down, cr.next, want, low, count)
+    let held = cr.next - keep
+    if (held + count > cr.stride) {
+        panic("dasLLAMA tts: sine source window of {count} frames past the {cr.stride - 2l} the carry was reset for")
+    }
     for (h in range64(nh)) {
-        var acc = 0.0
-        var acc64 = 0.0lf
-        for (i in range64(nlow)) {
+        let row = h * cr.stride
+        for (k in range64(held)) {
+            cr.lowc[row + k] = cr.lowc[row + (keep - cr.base) + k]
+        }
+        var acc = cr.acc[h]
+        var acc64 = cr.acc64[h]
+        for (k in range64(count)) {
             if (cfg.torch_math) {
-                acc64 += double(low[h * nlow + i])   // PyTorch's CPU cumsum: a double accumulator, each output rounded
+                acc64 += double(low[h * count + k])   // PyTorch's CPU cumsum: a double accumulator, each output rounded
                 acc = float(acc64)
             } else {
-                acc += low[h * nlow + i]
+                acc += low[h * count + k]
             }
-            low[h * nlow + i] = ((acc * 2.0) * PI) * float(cfg.upsample)
+            cr.lowc[row + held + k] = ((acc * 2.0) * PI) * float(up)
         }
+        cr.acc[h] = acc
+        cr.acc64[h] = acc64
     }
-    var phase & = g_sine_phase
-    let nup = source_resize(cfg, low, nh, nlow, float(cfg.upsample), phase)
+    cr.base = keep
+    cr.next = want
+}
+
+//! The harmonic source for the phase frames [fa, fb) of a run of `frames` (the downsample's frames, `resize_len`
+//! of the samples): out [rows][n_harm] for their samples, `rows` back, the last window running to the sample
+//! count. Windows come in order from a reset carry; `noise_n` holds the window's rows from `noise_base` on.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
+def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u : array<float>; fa, fb : int64;
+                var cr : SineSourceCarry; noise_n : array<float>; noise_base : int64; @exact_size var out : array<float>) : int64 {
+    let up = cfg.upsample
+    let n = frames * up
+    let nh = cfg.n_harm
+    let nlow = resize_len(n, 1.0 / float(up))
+    let nup = resize_len(nlow, float(up))
     if (nup != n) {
         panic("dasLLAMA tts: sine source resample {nlow} -> {nup} samples, want {n}")
     }
-    out |> reserve_resize(n * nh)
-    for (i in range64(n)) {
-        let uv = f0[i / cfg.upsample] > cfg.voiced_thr ? 1.0 : 0.0
+    let sa = fa * up
+    let sb = fb == nlow ? n : fb * up
+    let rows = sb - sa
+    let want = min(fb + 1l, nlow)
+    if (cr.next < want) {
+        sine_phase_frames(cfg, f0, n, noise_u, max(fa - 1l, 0l), want, cr)
+    }
+    var phase & = g_sine_phase
+    phase |> reserve_resize(nh * rows)
+    source_resize(cfg, cr.lowc, cr.base, cr.stride, nh, nlow, float(up), sa, sb, phase, rows)
+    out |> reserve_resize(rows * nh)
+    for (r in range64(rows)) {
+        let i = sa + r
+        let uv = f0[i / up] > cfg.voiced_thr ? 1.0 : 0.0
         let noise_amp = uv * cfg.noise_std + (1.0 - uv) * cfg.sine_amp / 3.0
         for (h in range64(nh)) {
-            let s = sin(phase[h * n + i]) * cfg.sine_amp
-            out[i * nh + h] = s * uv + noise_amp * noise_n[i * nh + h]
+            let s = sin(phase[h * rows + r]) * cfg.sine_amp
+            out[r * nh + h] = s * uv + noise_amp * noise_n[noise_base + r * nh + h]
         }
     }
-    return n
+    return rows
 }
 
 // ===== STFT as convolution =====

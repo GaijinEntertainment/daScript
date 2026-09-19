@@ -31,6 +31,19 @@ what it costs today and what the fix would change.
   the batched dispatch that would raise it. Before the regions the same four-stream config served
   on the per-op tier at tg128 34.0 tok/s (the server's in-process bench), its paged sessions
   handed to the CPU on every step.
+- **LANDED (2026-09-18) - the StyleTTS2 harmonic source streams in frame windows
+  (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53).** The source held four tables of samples times
+  harmonics for the whole chunk - the cycles, the upsampled phase, the noise draw and the sine
+  rows, 6.2 MB each for a 7 s sentence and 21.5 MB each at 25 s - to hand `linear_rows` nine
+  values per sample. Only the cumulative phase sum reaches across the chunk, and it runs at frame
+  rate, so the source now runs 64 phase frames (19200 samples) at a time on a carried sum, the
+  resamplers taking a window of columns with the same tap arithmetic and the noise stream drawn
+  in row order a window at a time. Bit-identical PCM on every carrier and length, the say's time
+  unchanged; heap peak after one say on top of the six-buffer entry below: kitten-nano 170 -> 147
+  MB (7 s) and 448 -> 365 (25 s), kokoro-82m 245 -> 222 and 630 -> 554, kitten-mini 222 -> 203
+  and 595 -> 524. What remains is the generator's six stream-sized buffers, which the chunk cap
+  bounds; the generator itself cannot window, because every Snake block's AdaIN takes its
+  statistics over the whole stream.
 - **LANDED (2026-09-18) - the StyleTTS2 generator runs on six buffers, the idle release covers
   its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md` sec.2.51, 2.52).** A
   Kitten or Kokoro say holds its memory in the iSTFTNet generator's `[t][c]` rows, every buffer

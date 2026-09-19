@@ -1,7 +1,7 @@
 # dasLLAMA architecture - text to speech, the memory a synthesis holds
 
 The companion `ARCHITECTURE.md` indexes: the mechanisms that decide what a StyleTTS2-lineage
-synthesis (Kitten, Kokoro) allocates, holds and gives back (sec.2.31, 2.51, 2.52).
+synthesis (Kitten, Kokoro) allocates, holds and gives back (sec.2.31, 2.51-2.53).
 `ARCHITECTURE_COMMON.md` (repo root) is the contract. The block home, the facade and the phoneme
 families are `ARCHITECTURE_TTS.md`; the Pocket family's own memory law is `ARCHITECTURE_POCKET.md`
 sec.2.46.
@@ -57,8 +57,8 @@ or says which three-operand site forces a seventh.
 
 A synthesis runs one chunk at a time (`tts_chunks`), so what it holds is the largest chunk's
 working set, linear in the chunk's length: the carrier's rows fields at the sample count the
-chunk speaks, the sine source's tables at samples times harmonics, the block home's scratch
-globals at the largest rows GEMM the chunk ran. The chunker's cap is the ceiling -
+chunk speaks (the source's tables excepted, sec.2.53), the block home's scratch globals at the
+largest rows GEMM the chunk ran. The chunker's cap is the ceiling -
 `TTS_CHUNK_CHARS` codepoints, a sentence of about twenty-five seconds - and a platform where
 memory is the scarce resource lowers it per model with `tts_set_chunk_chars`: the same text
 speaks in more, shorter pieces, each its own synthesis with its own prosody (a phrase split
@@ -70,3 +70,28 @@ globals - for a caller that says idle memory matters more than the allocation th
 pays. The carrier's source noise goes with it: a synthesis draws its noise from the seed and the
 chunk index, so nothing is lost, except on the parity rail, whose captured noise the release
 keeps by leaving that carrier alone.
+
+### 2.53 The harmonic source streams in frame windows {#tts-source-stream}
+
+The source's tables sit at samples times harmonics - the cycles per sample, the phase
+upsampled back from frame rate, the noise draw, the sine rows - four tables the size of nine
+waveforms to produce one, and every one ran the whole chunk before `linear_rows` mixed the
+harmonics down. Nothing in that chain reaches across the chunk but the cumulative sum, and the
+sum runs at frame rate: one accumulator per harmonic (`SineSourceCarry`, the double one for
+PyTorch's arithmetic beside the float one for onnxruntime's). So `styletts2_source` runs the
+source `SOURCE_WINDOW_FRAMES` phase frames at a time - 64, which is 19200 samples at Kitten's
+and Kokoro's 300x upsample (`set_styletts2_source_window`, 0 for the whole run) - and
+`sine_source` takes a frame window: the cycles for the samples the downsample's
+taps read (`resize_span`, the same tap arithmetic the resample itself runs), the low-rate
+frames the window adds, the sum carried on from the state, then the phase for the window's
+samples from the carried frames - the frame before the window and the one after it stay in the
+carry, because the upsample's taps reach one frame each way - and the sine rows for
+`linear_rows` into the window's slice of the mixed signal. The resamplers are one
+implementation each, the window form; the whole-row `resize_linear` and `resize_linear_torch`
+call it over every column, so the parity tests that hold them to the reference kernels hold the
+window form too. The noise stream is the reference's one stream: `styletts2_draw_noise` opens
+it for the initial phases, and the source reopens it from the same seed, skips those draws, and
+takes the normals in row order a window at a time; a captured stream (the parity rail's) is
+read by window offset instead. The window changes where a value is computed and nothing else -
+no operand, order or rounding - so every window speaks the same samples as the whole run, which
+is what the facade test's window-zero control holds.

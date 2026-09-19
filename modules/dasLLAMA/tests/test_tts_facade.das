@@ -412,11 +412,26 @@ def test_release_and_cap_on_a_model(t : T?) {
             let text = "The first sentence is short. The second one is a little longer than the first! Is the third a question?"
             var inscope first <- synthesize(m, text, "Bella")
             t |> success(long_capacity(m.scratch.gen_a) > 0l, "a synthesis leaves the generator's rows in the carrier")
-            t |> success(long_capacity(m.scratch.noise.normal) > 0l, "and the noise it drew")
+            t |> success(long_capacity(m.scratch.noise.uniform) > 0l, "and the initial phases it drew")
+            t |> equal(long_capacity(m.scratch.noise.normal), 0l, "the per-sample noise is drawn a window at a time, never held")
+            // the source's window is a memory knob, not a numeric one: the whole run in one window speaks the same samples
+            let win0 = styletts2_source_window()
+            defer() {
+                set_styletts2_source_window(win0)
+            }
+            set_styletts2_source_window(0l)
+            var inscope whole <- synthesize(m, text, "Bella")
+            t |> equal(length(whole.pcm), length(first.pcm), "the whole-run source speaks the same length")
+            var window_diff = 0
+            for (a, b in first.pcm, whole.pcm) {
+                window_diff += a == b ? 0 : 1
+            }
+            t |> equal(window_diff, 0, "{window_diff} of {length(first.pcm)} samples move with the source window")
+            set_styletts2_source_window(win0)
             tts_release_scratch(m)
             t |> equal(long_capacity(m.scratch.gen_a), 0l, "the release gives the generator's rows back")
             t |> equal(long_capacity(m.scratch.wave), 0l, "and the waveform")
-            t |> equal(long_capacity(m.scratch.noise.normal), 0l, "and the noise - a synthesis redraws it from the seed")
+            t |> equal(long_capacity(m.scratch.noise.uniform), 0l, "and the phases - a synthesis redraws them from the seed")
             var inscope again <- synthesize(m, text, "Bella")
             t |> equal(length(again.pcm), length(first.pcm), "the next synthesis speaks the same length")
             var differing = 0
