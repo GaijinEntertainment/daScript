@@ -15,6 +15,7 @@ das_lane_python(check_workflow_matrix "Testing the workflow matrix and role cond
 das_lane_python(check_shipped_skills "Testing the shipped-skills gate" "ci/test_check_shipped_skills.py")
 das_lane_python(check_md_ascii "Markdown ASCII gate" "ci/test_fix_md_ascii.py" "ci/fix_md_ascii.py --check")
 das_lane_python(check_wheel_repack "Testing the pip wheel repack" "ci/test_wheel_build.py")
+das_lane_python(check_rpm_spec "Testing the rpm spec render" "ci/test_rpm_build.py")
 
 add_custom_target(check_bundle_smoke
 COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/daslang_bundle
@@ -69,7 +70,7 @@ function(das_lane_group name comment)
 endfunction()
 
 set(DAS_EXTENDED_CORE
-    check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack
+    check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_rpm_spec
     check_example_games check_dasllama_site check_model_mint run_tests_bench_updater
     run_tests_pr_babysit check_dasgen run_tests_review_md run_tests_dastest
     check_lint_changed check_ast_verify_changed check_gated_das check_review_gates

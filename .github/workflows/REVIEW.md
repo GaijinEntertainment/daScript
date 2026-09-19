@@ -9,9 +9,10 @@ pin - is not itself a per-PR check.
 
 **A diff that weakens a per-PR check is a defect: deleting it, or a step it depends on, while
 no per-PR lane still runs its cases, stopping its failure from failing the lane
-(`continue-on-error`, a trailing `|| true`, a swallowed exit code), shrinking what it checks, or
-narrowing its condition to anything but a `matrix.role` condition that still runs it on every
-pull request.**
+(`continue-on-error`, a trailing `|| true`, a swallowed exit code), shrinking what it checks, or, on a
+`pull_request` lane, narrowing its condition to anything but a `matrix.role` condition that
+still runs it on every pull request or the nightly-cron condition the cron rule below
+governs.**
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 
@@ -19,22 +20,30 @@ pull request.**
 `permissions` naming only the scopes its own steps use.** A job with no timeout holds its
 runners until GitHub's six-hour ceiling on one hung step.
 
-**A workflow the diff adds, or whose trigger, matrix, or local mirror the diff changes, adds or
-corrects its row in sec."What CI runs (per-PR + nightly)" of `skills/internal/preflight.md`
-(repo root) in the same change: the row names its trigger and what the lane runs.** A lane the
-table does not list, or lists wrong, is one nobody mirrors before a push.
+**A workflow the diff adds or deletes, or whose trigger or matrix the diff adds, changes, or
+removes, adds, corrects, or deletes its row in sec."What CI runs (per-PR + nightly)" of
+`skills/internal/preflight.md` (repo root) in the same change: the row names its trigger and
+what the lane runs.** A lane the table does not list, or lists wrong, is one nobody mirrors
+before a push.
 
-**The same diff adds or corrects that workflow's own section there - the heading beginning
-`## <workflow>.yml` - which names its local mirror or says it has none; a step the diff adds,
-whatever role runs it, is named in that section's step list and gets a row in the section's
-mirror table when it has a local mirror.** A workflow carrying one section per job
-(`build.yml`) gets the section for the job the diff changes.
+**A workflow the diff adds or deletes, or whose trigger or matrix the diff adds, changes, or
+removes, adds, corrects, or deletes its own section of `skills/internal/preflight.md` (repo
+root) - the heading beginning `## <workflow>.yml` - in the same change; the section names its
+local mirror or says it has none.** A workflow carrying one section per job (`build.yml`) gets
+the section for the job the diff changes; a trigger change there corrects every section that
+names the trigger.
+
+**A step the diff adds, renames, or deletes adds, corrects, or deletes, in the same change, its
+name in the workflow's section of `skills/internal/preflight.md` (repo root) - the section for
+the job that runs it, when the workflow carries one per job - and its row in that section's
+mirror table when the step has a local mirror; a workflow with no section yet gets one, a
+section with no mirror table gets one.**
 
 **A per-PR check leaves the per-PR path only to the nightly cron (`github.event_name ==
 'schedule' || github.event_name == 'workflow_dispatch'`), and the diff either names the
 preflight gate - a check `preflight` runs locally before a push - that keeps it per PR
 (`skills/internal/preflight.md` sec."extended_checks.yml") or states the platform no per-PR
-cell has.** A per-PR job fits 35 minutes; what does not fit moves.
+cell has.** A job on a `pull_request` lane fits 35 minutes; what does not fit moves.
 
 **A diff that adds or changes a per-PR check, or adds, changes, or removes a step a per-PR
 check depends on, states a run of that check's command on one of the lane's platforms, naming

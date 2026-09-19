@@ -2,14 +2,16 @@
 
 The canonical distribution source is the GitHub release: four stable-named bundles
 (`daslang-bundle-{linux-x86_64,linux-arm64,darwin26-arm64,windows-x86_64}.zip`, unix
-modes preserved), each with a sibling `.zip.sha256`, plus a `.deb` for Debian/Ubuntu and
-a pip wheel per bundle - all produced by `release.yml` at prerelease-cut time. Every
+modes preserved), each with a sibling `.zip.sha256`, plus a `.deb` for Debian/Ubuntu, an
+`.rpm` for Fedora per linux arch, and a pip wheel per bundle - all produced by `release.yml`
+at prerelease-cut time. Every
 package manager below is a pointer at those assets, except pip, which the workflow
 publishes itself.
 
 ## The per-release ritual
 
-1. Cut the prerelease tag; `release.yml` uploads bundles + `.sha256` files + the `.deb`.
+1. Cut the prerelease tag; `release.yml` uploads bundles + `.sha256` files + the `.deb` +
+   the `.rpm`s.
 2. **Homebrew tap** (repo `homebrew-daslang`, formula `Formula/daslang.rb` from
    `homebrew-daslang.rb.template`): fill `@TAG@`/`@VERSION@` and the three `@SHA_*@`
    values from the `.sha256` assets, push to the tap.
@@ -23,7 +25,12 @@ publishes itself.
    `sudo apt install ./daslang_<version>_amd64.deb` (binaries land in `/opt/daslang`,
    `daslang`/`daslang-live` symlinked into `/usr/bin`). A hosted apt
    repo is a later tier.
-6. **pip** (automatic): `wheel_build.py` repacks each bundle into a platform wheel
+6. **dnf**: the `.rpm` on the release page installs with
+   `sudo dnf install ./daslang-<version>-1.x86_64.rpm` (or `.aarch64.rpm`) - same layout as
+   the `.deb`, `rpm_build.sh` renders the spec, no dependencies declared. The linux bundle's
+   glibc floor is the runner's (`manylinux_2_38` on the wheels), which every supported Fedora
+   meets; RHEL 9 and its rebuilds do not. A hosted dnf repo is a later tier.
+7. **pip** (automatic): `wheel_build.py` repacks each bundle into a platform wheel
    (`daslang-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
    and the `publish_pypi` job uploads the set through trusted publishing - a plain
    `vX.Y.Z` tag to PyPI, any other tag (RC, beta, ...) to TestPyPI. The wheel is the toolchain minus the C++ embedding
@@ -33,6 +40,10 @@ publishes itself.
    `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`), then `daslang`,
    `dastest`, `lint`, `daspkg`, ... are on PATH and `python -m daslang file.das` works.
    Fixture tests: `python3 ci/test_wheel_build.py`.
+
+8. **site**: the install commands in `site/index.html` (the install tabs) and
+   `site/downloads.html` (the package-manager rows) name the advertised release's assets by
+   file name, so a package form reaches the site with the release that first ships it.
 
 RC dry-runs point the tap and bucket at the RC tag to validate install paths end to
 end; retargeting to the real tag is a hash+tag bump. Templates here are the copies of
