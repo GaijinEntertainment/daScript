@@ -9,29 +9,38 @@ serve is `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j; the token command the decode pas
 
 ### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
 
-**The decode attention dispatches a workgroup per (head, key split) and a combine per head.** One
-workgroup a head leaves a low-head model's attention on a few SMs (four heads of eighty-two), so the
-decode pass (`DaAttnT`) cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`: enough
-workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or the
-heads alone cover it), each running the online softmax over its piece into an unnormalized partial
-(max, denominator, accumulators; an empty piece's weighs nothing); `DaAttnComb` aligns a head's
-partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
-store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
-superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. A split
-device records the token command twice - the split chain and an unsplit twin over the same sets,
-so the once-per-epoch record costs double there and the profiler keeps each form's stamp names and
-restarts its averages when a run crosses between them - and submits the twin while the position is
-under `RD_UNSPLIT_POS` (512): there a head's whole row
-is at most two of the pass's 256-key chunks, less than the combine's own chain, so the split only
-adds a dispatch a layer (gpt-oss-20b on the RTX PRO 4500 at three splits, the `DASLLAMA_GPU_PROF=1`
-token profile of `benchmarks/lcpp_bench.das` under `-jit` in cm2 mode with `DASLLAMA_ALLOW_UNTUNED=1`:
-the combine 147 us a token, the pass no shorter for the split). The scores
-go a subgroup two keys a step, lanes across the dims (one coalesced K row, the dot a subgroup add; on
-the f16 mirror a lane's eight halves are one 16-byte word, `KV16`, and both keys' words are in flight
-before either dot - a piece holds a few keys a subgroup, so the pass is the memory round trips it
-chains); the V pass keeps a thread a dim, eight keys' loads issued before their adds (four a key pair
-on a 512 head) for the same reason - on the RTX PRO 4500 the two together read gemma-3-1b's attention
-384 -> 178 us a token at 128 tokens. The flash tile's cm2 arm (`FaT` at `KHR = false`) runs one
+**The decode attention dispatches a workgroup per (kv head, slab of its q heads, key split), and
+the group's last piece combines.** A workgroup reads its kv head's K and V rows once and scores
+them against the `DA_G` (four) query heads of the GQA group that share them - a slab; a group wider
+than four takes several slabs, a narrower one leaves dead heads whose q rows are zero and whose
+reductions and stores are skipped (`da_attn_row_wgs` counts a row's workgroups). The pass is a chain
+of latencies, not a stream of bytes: a workgroup a head walking two keys a step behind a subgroup
+reduction each read Llama-3.2-1B's sixteen layers at 28 us a four-row step and 8.5 a one-row step on
+the RTX PRO 4500, the same whatever the split, so the pass (`DaAttnT`) spends its threads on
+independent work. A 256-key chunk's scores take a thread a key: the K row's words load eight at a
+time (`KV16`, one round trip a 128 dims), the slab's four dots read the q rows from shared memory,
+and no subgroup reduction sits between the keys; the chunk's first V words load in the same round
+trip, since they wait on nothing the scores compute; the softmax's max and sum a head are one
+subgroup reduction each, the subgroups' values folded by every thread from shared memory; the V
+accumulate keeps a thread a (key group, eight dims) with a head's eight sums in registers, eight
+rows' words in flight; and the finish folds the key groups by subgroup shuffles, then across the
+subgroups through the q slab (spent by then), a round of heads at a time. Few workgroups a row
+leaves a low-head model's attention on a few SMs (one kv head of eighty-two), so the pass cuts the
+attended span into `nsplit` 32-aligned pieces (`da_nsplit` over the row's slab count: enough
+workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or
+the slabs alone cover it), each running the online softmax over its piece into an unnormalized
+piece a head (max, denominator, accumulators; an empty piece's weighs nothing). The pieces land in
+the partials plane, and a group's last piece to land - an arrival counter a (row, kv head, slab)
+past the pieces, atomically bumped after a device-scope release, rearmed to zero by the piece that
+reads it - aligns each head's pieces by their maxes, normalizes, gates and stores the row
+(unsplit, the pass stores it), so no combine dispatch follows and the split costs no second launch.
+The store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax,
+Q8_K superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows either.
+A split device records the token command twice - the split chain and an unsplit twin over the same
+sets, so the once-per-epoch record costs double there and the profiler keeps each form's stamp
+names and restarts its averages when a run crosses between them - and submits the twin while the
+position is under `RD_UNSPLIT_POS` (512): there a head's whole row is at most two of the pass's
+256-key chunks. The flash tile's cm2 arm (`FaT` at `KHR = false`) runs one
 workgroup a (head, 64-row q tile) unsplit, its KHR arm one a (head, 16-row q tile): a key split there
 costs more in partial stores and a combine than the shorter key loop returns on every gemma shape
 measured (`followup_vulkan.md` item 50). A model that softcaps its attention logits (gemma-2) takes

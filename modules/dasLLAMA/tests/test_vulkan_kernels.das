@@ -1251,6 +1251,13 @@ def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
 }
 
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
+//! `bytes` of zero words into `dev` at `off`: the split attention's arrival counters start at rest
+def private zero_upload(dev : uint64; off, bytes : int64) {
+    var zeros : array<uint>
+    zeros |> resize(bytes / 4l)
+    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), bytes)
+}
+
 def private nan_sentinel_upload(dev; bytes : int64; off : int64 = 0l) {
     var s : array<uint>
     s |> resize(bytes / 4l)
@@ -3753,7 +3760,8 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         }
         let q_bytes = int64(qdim) * 4l
         let m_bytes = int64(cnt * kvd) * 4l
-        let p_bytes = int64(nheads * nsplit * (hs + 2)) * 4l
+        let cnt_off = nheads * nsplit * (hs + 2)   //! the arrival counters past the pieces
+        let p_bytes = int64(cnt_off + int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))) * 4l
         let s_bytes = int64(qdim / blk) * 4l
         let qd = make_device_buf(q_bytes)
         let kd = make_device_buf(m_bytes)
@@ -3769,13 +3777,14 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         y_cls |> resize(qdim)
         q_cls |> resize(qdim)
         s_cls |> resize(qdim / blk)
-        verify(ensure_da_attn_cls() && ensure_da_attn_comb_cls(), "the decode attention class rails must engage on a live device")
+        verify(ensure_da_attn_cls(), "the decode attention class rail must engage on a live device")
         unsafe {
             upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
             upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
             upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             nan_sentinel_upload(yd, q_bytes)
-            nan_sentinel_upload(partd, p_bytes)
+            nan_sentinel_upload(partd, int64(cnt_off) * 4l)
+            zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
             nan_sentinel_upload(aqd, int64(qdim))
             nan_sentinel_upload(asd, s_bytes)
             var tokb = make_host_buf(16l, true)
@@ -3784,18 +3793,13 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb.buf, partd, aqd, asd),
                 fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, int64(qdim), s_bytes),
                 fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
-            var scc = set_da_attn_comb_cls(fixed_array(qd, partd, yd, aqd, asd),
-                fixed_array(q_bytes, p_bytes, q_bytes, int64(qdim), s_bytes), fixed_array(1u, 32u, 16u, 64u, 64u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
             var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
-                scale = scale, nsplit = uint(nsplit), rqk = rqk)
-            enc_da_attn_cls(raw, h, sc, pc, int64(nheads * nsplit))
-            if (nsplit > 1) {
-                enc_da_attn_comb_cls(raw, h, scc, pc, int64(nheads))
-            }
+                scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
+            enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
             vhz_dep(raw, h, 16u | 64u, 0u, true)
             cmd_copy_range(raw, yd, 0l, host.buf, 0l, q_bytes)
             cmd_copy_range(raw, aqd, 0l, host.buf, q_bytes, int64(qdim))
@@ -3922,7 +3926,7 @@ def test_vkd_da_attn(t0 : T?) {
                 var h2 : VkHaz
                 var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
                     kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-                enc_da_attn_cls(raw2, h2, sc, pc, int64(nheads))
+                enc_da_attn_cls(raw2, h2, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
                 vhz_dep(raw2, h2, 16u, 0u, true)
                 cmd_copy_whole(raw2, yd2, host.buf, q_bytes)
                 vk_check(vkEndCommandBuffer(raw2), null)
@@ -3951,7 +3955,7 @@ def test_vkd_da_attn(t0 : T?) {
                 var h3 : VkHaz
                 var pc3 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
                     kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, rqk = DA_RQ_NONE)
-                enc_da_attn_cls(raw3, h3, sc2, pc3, int64(nheads))
+                enc_da_attn_cls(raw3, h3, sc2, pc3, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
                 vhz_dep(raw3, h3, 16u, 0u, true)
                 cmd_copy_whole(raw3, yd2, host.buf, q_bytes)
                 vk_check(vkEndCommandBuffer(raw3), null)
@@ -3968,11 +3972,12 @@ def test_vkd_da_attn(t0 : T?) {
             //! the split arm: eight key splits of the 300 (64-key pieces, the last 44 keys wide, three pieces empty),
             //! the partials combined by the second kernel, under the same cap against the same oracle
             let nsplit = 8
-            let p_bytes = int64(nheads * nsplit * (hs + 2)) * 4l
+            let cnt_off = nheads * nsplit * (hs + 2)   //! the arrival counters past the pieces
+            let p_bytes = int64(cnt_off + int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))) * 4l
             let partd = make_device_buf(p_bytes)
-            verify(ensure_da_attn_comb_cls(), "the split attention's combine class rail must engage on a live device")
             unsafe {
-                nan_sentinel_upload(partd, p_bytes)
+                nan_sentinel_upload(partd, int64(cnt_off) * 4l)
+                zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                 nan_sentinel_upload(yd2, q_bytes)
                 var tokb4 = make_host_buf(16l, true)
                 var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
@@ -3980,16 +3985,13 @@ def test_vkd_da_attn(t0 : T?) {
                 var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb4.buf, partd, yd2, yd2),
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u))
-                var sc4c = set_da_attn_comb_cls(fixed_array(qd, partd, yd2, yd2, yd2),
-                    fixed_array(q_bytes, p_bytes, q_bytes, q_bytes, q_bytes), fixed_array(1u, 32u, 16u, 16u, 16u))
                 var raw4 = alloc_cmd()
                 let begin4 = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw4, begin4), null)
                 var h4 : VkHaz
                 var pc4 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, nsplit = uint(nsplit), rqk = DA_RQ_NONE)
-                enc_da_attn_cls(raw4, h4, sc4, pc4, int64(nheads * nsplit))
-                enc_da_attn_comb_cls(raw4, h4, sc4c, pc4, int64(nheads))
+                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, nsplit = uint(nsplit), rqk = DA_RQ_NONE, cntoff = uint(cnt_off))
+                enc_da_attn_cls(raw4, h4, sc4, pc4, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
                 vhz_dep(raw4, h4, 16u, 0u, true)
                 cmd_copy_whole(raw4, yd2, host.buf, q_bytes)
                 vk_check(vkEndCommandBuffer(raw4), null)
@@ -3997,12 +3999,12 @@ def test_vkd_da_attn(t0 : T?) {
                 memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
             }
             let bads = mismatch_approx(y_cls, y_ref)
-            t |> success(bads == 0, "da_attn split {nsplit} ways + the combine matches the CPU oracle under the cap ({bads} of {nheads * hs} off)")
+            t |> success(bads == 0, "da_attn split {nsplit} ways, its last piece combining, matches the CPU oracle under the cap ({bads} of {nheads * hs} off)")
             y_ref[hs + 3] += 0.5
             t |> success(mismatch_approx(y_cls, y_ref) == 1, "split attention control: the bar reds one poisoned element")
             //! the sink arms (gpt-oss): a per-head sink logit, the unsplit pass folding it at its store and the split pass leaving it
-            //! to the combine, both against the oracle with the sink; the sink-free oracle is the control
-            t |> success(ensure_da_attn_sink_cls() && ensure_da_attn_comb_sink_cls(), "the sink twins compile on this device")
+            //! to its last piece's combine, both against the oracle with the sink; the sink-free oracle is the control
+            t |> success(ensure_da_attn_sink_cls(), "the sink twin compiles on this device")
             var sinkh : array<float>
             sinkh |> resize(nheads)
             for (hh in range(nheads)) {   //! a sink past each head's top scaled score: the fixture's 300-key row is flat, so only a dominant phantom key carries measurable mass
@@ -4034,25 +4036,21 @@ def test_vkd_da_attn(t0 : T?) {
                 unsafe {
                     upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
                     nan_sentinel_upload(yd2, q_bytes)
-                    nan_sentinel_upload(partd, p_bytes)
+                    nan_sentinel_upload(partd, int64(cnt_off) * 4l)
+                    zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                     var tokb5 = make_host_buf(16l, true)
                     var tmc5 = reinterpret<TokMeta?>(tokb5.mapped)
                     tmc5.cnt = uint(cnt)
                     var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tokb5.buf, partd, yd2, yd2, sinkd),
                         fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
-                    var sc5c = set_da_attn_comb_sink_cls(fixed_array(qd, partd, yd2, yd2, yd2, sinkd),
-                        fixed_array(q_bytes, p_bytes, q_bytes, q_bytes, q_bytes, sink_bytes), fixed_array(1u, 32u, 16u, 16u, 16u, 0u))
                     var raw5 = alloc_cmd()
                     let begin5 = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw5, begin5), null)
                     var h5 : VkHaz
                     var pc5 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u)
-                    enc_da_attn_sink_cls(raw5, h5, sc5, pc5, int64(nheads * split))
-                    if (split > 1) {
-                        enc_da_attn_comb_sink_cls(raw5, h5, sc5c, pc5, int64(nheads))
-                    }
+                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u, cntoff = uint(cnt_off))
+                    enc_da_attn_sink_cls(raw5, h5, sc5, pc5, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(split)))
                     vhz_dep(raw5, h5, 16u, 0u, true)
                     cmd_copy_whole(raw5, yd2, host.buf, q_bytes)
                     vk_check(vkEndCommandBuffer(raw5), null)
@@ -4092,25 +4090,21 @@ def test_vkd_da_attn(t0 : T?) {
                         upload_region_at(kd16, 0l, addr<uint8 const?>(k16[0]), m16_bytes)
                         upload_region_at(vd16, 0l, addr<uint8 const?>(v16[0]), m16_bytes)
                         nan_sentinel_upload(yd2, q_bytes)
-                        nan_sentinel_upload(partd, p_bytes)
+                        nan_sentinel_upload(partd, int64(cnt_off) * 4l)
+                        zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                         var tokb6 = make_host_buf(16l, true)
                         var tmc6 = reinterpret<TokMeta?>(tokb6.mapped)
                         tmc6.cnt = uint(cnt)
                         var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tokb6.buf, partd, yd2, yd2, sinkd),
                             fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
                             fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
-                        var sc6c = set_da_attn_comb_sink_cls(fixed_array(qd, partd, yd2, yd2, yd2, sinkd),
-                            fixed_array(q_bytes, p_bytes, q_bytes, q_bytes, q_bytes, sink_bytes), fixed_array(1u, 32u, 16u, 16u, 16u, 0u))
                         var raw6 = alloc_cmd()
                         let begin6 = VkCommandBufferBeginInfo()
                         vk_check(vkBeginCommandBuffer(raw6, begin6), null)
                         var h6 : VkHaz
                         var pc6 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u)
-                        enc_da_attn_f16_sink_cls(raw6, h6, sc6, pc6, int64(nheads * split))
-                        if (split > 1) {
-                            enc_da_attn_comb_sink_cls(raw6, h6, sc6c, pc6, int64(nheads))
-                        }
+                            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u, cntoff = uint(cnt_off))
+                        enc_da_attn_f16_sink_cls(raw6, h6, sc6, pc6, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(split)))
                         vhz_dep(raw6, h6, 16u, 0u, true)
                         cmd_copy_whole(raw6, yd2, host.buf, q_bytes)
                         vk_check(vkEndCommandBuffer(raw6), null)
@@ -8821,7 +8815,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                     var h2 : VkHaz
                     var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
                         kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-                    enc_da_attn_f16_cls(raw2, h2, sc, pc, int64(nheads))
+                    enc_da_attn_f16_cls(raw2, h2, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, q_bytes)
                     vk_check(vkEndCommandBuffer(raw2), null)
