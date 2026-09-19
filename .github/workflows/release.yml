@@ -305,16 +305,6 @@ jobs:
         if: matrix.cmake_preset == 'Release'
         shell: bash
         run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target check_bundle_smoke
-      - name: "Checksum"
-        # every package-manager manifest reads its sha256 from this sibling asset
-        if: matrix.cmake_preset == 'Release'
-        shell: bash
-        run: |
-          set -eux
-          cd artifacts
-          f=daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
-          (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") > "$f.sha256"
-          cat "$f.sha256"
       - name: "Build .deb"
         # the apt-installable form of the linux bundle (ci/packaging/README.md)
         if: matrix.cmake_preset == 'Release' && matrix.release_target == 'linux' && matrix.release_arch == 'x86_64'
@@ -322,10 +312,30 @@ jobs:
         run: |
           set -eux
           bash ci/packaging/deb_build.sh ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
-          cd artifacts
-          for d in *.deb; do
-            (sha256sum "$d" 2>/dev/null || shasum -a 256 "$d") > "$d.sha256"
-          done
+      - name: "Build .rpm"
+        # the dnf-installable form of the linux bundle (ci/packaging/README.md); rpmbuild
+        # is an apt package, so both linux cells produce their arch without a Fedora runner
+        if: matrix.cmake_preset == 'Release' && matrix.release_target == 'linux'
+        shell: bash
+        run: |
+          set -eux
+          sudo bash ci/apt_install.sh --no-install-recommends rpm cpio
+          bash ci/packaging/rpm_build.sh ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
+      - name: "Smoke-test .rpm"
+        # the package lists both entry points and its payload runs on the runner that built it
+        if: matrix.cmake_preset == 'Release' && matrix.release_target == 'linux'
+        shell: bash
+        run: |
+          set -eux
+          rpm=$(ls artifacts/*.rpm)
+          rpm -qpi "$rpm"
+          rpm -qpl "$rpm" | grep -qx /usr/bin/daslang
+          rpm -qpl "$rpm" | grep -qx /usr/bin/daslang-live
+          [ "$(rpm -qp --queryformat '%{ARCH}' "$rpm")" = "$(rpm --eval '%{_arch}')" ]
+          mkdir rpm_payload && cd rpm_payload
+          rpm2cpio "../$rpm" | cpio -idm --quiet
+          ./opt/daslang/bin/daslang --version
+          [ "$(readlink usr/bin/daslang)" = /opt/daslang/bin/daslang ]
       - name: "Set up Python for the wheel"
         if: matrix.cmake_preset == 'Release'
         uses: actions/setup-python@v5
@@ -338,10 +348,18 @@ jobs:
         run: |
           set -eux
           python ci/packaging/wheel_build.py ./daslang_bundle "${{ github.event.release.tag_name || '0.0.0-dev' }}" ./artifacts
+      - name: "Checksum every release asset"
+        # every package-manager manifest reads its sha256 from the sibling asset
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          set -eux
           cd artifacts
-          for w in *.whl; do
-            (sha256sum "$w" 2>/dev/null || shasum -a 256 "$w") > "$w.sha256"
+          for f in *; do
+            case "$f" in *.sha256) continue ;; esac
+            (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") > "$f.sha256"
           done
+          cat *.sha256
       - name: "Smoke-test pip wheel"
         # pip on the runner that derived the tag is the first judge of that tag
         if: matrix.cmake_preset == 'Release'
