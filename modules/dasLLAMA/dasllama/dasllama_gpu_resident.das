@@ -2418,7 +2418,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     var plan : ResidentPlan
     if (resident_try) {
-        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
+        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
         seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {

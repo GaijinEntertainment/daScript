@@ -243,8 +243,9 @@ def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes :
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
 // the largest legal single-SSBO binding range (maxStorageBufferRange) — the KV mirror's ceiling
-//! the range a KV mirror side may bind, less the slack every side carries past its planes (at the f32 codec's element size)
-def private vk_binding_cap : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l : 0l
+//! the range a KV mirror side may bind, less the slack each of its `regions` carries past its planes (at the f32 codec's
+//! element size) - the bound `vk_rdec_prepare` holds the mirror to
+def private vk_binding_cap(regions : int64) : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l * regions : 0l
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     if (!arena_rows_ok(n, fmt)) {
