@@ -9715,6 +9715,8 @@ struct GemvArgs {
     bias_on : uint   //! the mx4 gate-up twin: each slot's expert (`rex`) names its gate and up bias rows, `gboff` / `uboff` this layer's base in the planes ([ne x d] rows a layer)
     gboff : uint
     uboff : uint
+    ncols : uint     //! the N-column forms: activation rows dotted against one weight pass, 1 to 8; the one-column forms ignore it
+    ystride : uint   //! ... and the distance between their y rows
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -9763,6 +9765,60 @@ class Q8Gemv {
             let total = subgroupAdd(acc)
             if (subgroupElect()) {
                 y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
+//! the Q8_0 GEMV's N-column form: the lane pair's weight word and scale read once against `pa.ncols` activation
+//! rows (column c's blocks sit c x nb past the region's), the y rows `pa.ystride` apart
+[vk_dispatch(name = "q8_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN : Q8Gemv {
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_n_cls_spv")]
+    def override run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nb = pa.n / 32u
+            let wb0 = regions[r * 2u] + row * nb
+            let xb0 = regions[r * 2u + 1u]
+            let lane = gl_SubgroupInvocationID
+            let bpp = gl_SubgroupSize / 2u
+            var acc : float[8]
+            for [unroll] (c in range(8)) {
+                acc[c] = 0.0
+            }
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + lane / 2u
+                if (b < nb) {
+                    let wv = wq4[(wb0 + bi0) * 2u + lane]
+                    let ws = float(wsh[wb0 + b])
+                    for [unroll] (c in range(8)) {
+                        if (uint(c) < pa.ncols) {
+                            let xb = xb0 + uint(c) * nb
+                            let xbase = (xb + bi0) * 8u + lane * 4u
+                            var idot = sdot4(wv.x, xqw[xbase])
+                            idot += sdot4(wv.y, xqw[xbase + 1u])
+                            idot += sdot4(wv.z, xqw[xbase + 2u])
+                            idot += sdot4(wv.w, xqw[xbase + 3u])
+                            idot += subgroupShuffleXor(idot, 1u)
+                            if (lane % 2u == 0u) {
+                                acc[c] += float(idot) * ws * axs[xb + b]
+                            }
+                        }
+                    }
+                }
+                bi0 += bpp
+            }
+            for [unroll] (c in range(8)) {
+                if (uint(c) < pa.ncols) {
+                    let total = subgroupAdd(acc[c])
+                    if (subgroupElect()) {
+                        y[pa.ybase + uint(c) * pa.ystride + rg] = total
+                    }
+                }
             }
         }
     }
@@ -10466,6 +10522,48 @@ class KqGemvBase {
             y[pa.ybase + rg] = total
         }
     }
+
+    //! the N-column form: a lane's blocks decode once and dot against every column's activation row (column c's
+    //! superblocks sit c x nsb past the region's), `pa.ncols` columns to 8, their y rows `pa.ystride` apart
+    def gemv_shell_n {
+        let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
+        let lane = gl_SubgroupInvocationID
+        let row_lane = lane % lanes_per_row
+        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
+        let live = rg < pa.nreg * pa.d
+        var acc : float[8]
+        for [unroll] (c in range(8)) {
+            acc[c] = 0.0
+        }
+        if (live) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nsb = pa.n / 256u
+            let wsb0 = regions[r * 2u] + row * nsb
+            let xsb0 = regions[r * 2u + 1u]
+            let nb = nsb * 8u
+            var b0 = row_lane
+            while (b0 < nb) {
+                let wsb = wsb0 + b0 / 8u
+                let blk = b0 % 8u
+                let xsb = xsb0 + b0 / 8u
+                for [unroll] (c in range(8)) {
+                    if (uint(c) < pa.ncols) {
+                        acc[c] += blk_contrib(wsb, blk, xsb + uint(c) * nsb)
+                    }
+                }
+                b0 += lanes_per_row
+            }
+        }
+        for [unroll] (c in range(8)) {
+            if (uint(c) < pa.ncols) {
+                let total = fold_lanes(acc[c], lanes_per_row)
+                if (live && row_lane == 0u) {
+                    y[pa.ybase + uint(c) * pa.ystride + rg] = total
+                }
+            }
+        }
+    }
 }
 
 // ===== the q8 batch tile router (class side) =====
@@ -10750,6 +10848,58 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
     gemv_cls_enc(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lanes_per_row))
 }
 
+// ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
+
+def gemv_cls_ensure_n(fmt : int) : bool {
+    if (fmt == int(KqFmt.q8)) {
+        return ensure_q8_gemv_n_cls()
+    } elif (fmt == int(KqFmt.k4)) {
+        return ensure_kq_gemv_k4_n_cls()
+    } elif (fmt == int(KqFmt.k5)) {
+        return ensure_kq_gemv_k5_n_cls()
+    } elif (fmt == int(KqFmt.k6)) {
+        return ensure_kq_gemv_k6_n_cls()
+    } elif (fmt == int(KqFmt.q40)) {
+        return ensure_kq_gemv_q40_n_cls()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        return ensure_kq_gemv_iq4xs_n_cls()
+    }
+    panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
+    return false
+}
+
+//! the q8 leaf carries its own layout; a kq leaf shares the family's
+def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) {
+        return set_q8_gemv_n_cls(bufs, sizes, gbits)
+    }
+    return gemv_cls_set(fmt, bufs, sizes, gbits)
+}
+
+def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+    if (fmt == int(KqFmt.q8)) {
+        enc_q8_gemv_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k4)) {
+        enc_kq_gemv_k4_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k5)) {
+        enc_kq_gemv_k5_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k6)) {
+        enc_kq_gemv_k6_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_kq_gemv_q40_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_kq_gemv_iq4xs_n_cls(raw, h, set_, pc, wgs)
+    } else {
+        panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
+    }
+}
+
+//! the N-column dispatch over `rows` output rows: the one-column lane pick, the grid to match
+def gemv_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
+    pc.lanes_per_row = gemv_lanes_per_row(fmt, int64(pc.n))
+    gemv_cls_enc_n(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lanes_per_row))
+}
+
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
 // Every kq format shares family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves every
 // pipeline (identical inherited members), each leaf keeping its own ensure_/enc_ names.
@@ -10768,6 +10918,14 @@ class KqGemvK4 : KqGemvK4Base {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k4_cls_spv")]
     def run {
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_k4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4N : KqGemvK4Base {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k4_n_cls_spv")]
+    def run {
+        gemv_shell_n()
     }
 }
 
@@ -10859,6 +11017,14 @@ class KqGemvQ40 : KqGemvBase {
     }
 }
 
+[vk_dispatch(name = "kq_gemv_q40_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvQ40N : KqGemvQ40 {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
+    }
+}
+
 // IQ4_XS: w = d*sc*LUT[q] — the q40 nibble tiling decoded through the codebook into signed
 // lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
 [vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -10874,6 +11040,14 @@ class KqGemvIq4xs : KqGemvBase {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
     def run {
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq4xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xsN : KqGemvIq4xs {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
     }
 }
 
@@ -11096,6 +11270,14 @@ class KqGemvK5 : KqGemvBase {
     }
 }
 
+[vk_dispatch(name = "kq_gemv_k5_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK5N : KqGemvK5 {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k5_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
+    }
+}
+
 // Q6_K: q = (ql | qh<<4) - 32 with per-16 SIGNED int8 sub-scales; the lo/hi nibble halves of a
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
 [vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -11132,6 +11314,14 @@ class KqGemvK6 : KqGemvBase {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_cls_spv")]
     def run {
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_k6_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK6N : KqGemvK6 {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
     }
 }
 

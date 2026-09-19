@@ -12,8 +12,12 @@ options _dasllama_internal = true
 // Args: <n> <d> (default 4096 12288, the Qwen3.5-9B FFN gate; 5120 17408 is the 27B's); `single` dispatches ONE
 // plane copy - the served size, L2-warm across the chain - so the row reads the dispatch's own floor past its
 // bytes at the streaming rate (the decode's small planes pay it once per GEMV).
+// `cols` runs the N-column ruler instead: the batched decode step's formats (q8, k4, k6, k5, q40, iq4xs) at their
+// served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows; the last column
+// is the N-column dispatch's wall over N one-column dispatches - under 1 the weight pass is shared, at 1 it is not.
 
 require strings
+require math
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
@@ -30,16 +34,22 @@ let private YBIT = 32u   //! the y buffer's hazard bit in the binding order belo
 
 var private g_single_copy = false
 
-//! lanes_per_row 0 = the whole subgroup; the dispatches stream STREAM_MB of plane copies, or one copy under `single`
-def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb : double; us : double> {
-    let nsb = n / 256
-    let nwsb = d * nsb
-    let qsb_words = int(kq_qsb(fmt) / 4l)
-    let ssb_words = int(kq_dev_ssb(fmt) / 4l)
-    let plane_bytes = nwsb * (qsb_words + ssb_words) * 4   //! under 2^31 for every served shape (the 27B's largest plane is 89 MB)
-    let copies = g_single_copy ? 1 : (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
-    let wq_words = nwsb * qsb_words * copies
-    let ws_words = nwsb * ssb_words * copies
+//! one probe's synthetic planes and activation rows, uploaded; the dispatch geometry rides beside them
+struct private ProbePlanes {
+    wq_bytes : int64
+    ws_bytes : int64
+    xq_bytes : int64
+    xs_bytes : int64
+    y_bytes : int64
+    rg_bytes : int64
+    copies : int
+    wgs : int64
+    pc : GemvArgs
+}
+
+//! the host-side fill of one probe: `wq_words` / `ws_words` of hashed weights, `xq_words` / `xs_count` of activation words
+//! and scales over `xrows` rows, `blocks` weight blocks a plane copy (the region table's stride), the copies' regions
+def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, blocks : int; var p : ProbePlanes) : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; rgd : uint64> {
     var wqh : array<uint>
     var wsh : array<uint>
     var xqh : array<uint>
@@ -48,51 +58,65 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb 
     wqh |> resize(wq_words)
     wsh |> reserve(ws_words)
     wsh |> resize(ws_words)
-    xqh |> resize(nsb * 64)
-    xsh |> resize(nsb)
+    xqh |> resize(xq_words)
+    xsh |> resize(xs_count)
     for (i in range(wq_words)) {
-        wqh[i] = hash_word(uint(i) + uint(int(fmt)) * 77777u)
+        wqh[i] = hash_word(uint(i) + seed * 77777u)
     }
     for (i in range(ws_words)) {
-        wsh[i] = cool_f16_pair(uint(i) + uint(int(fmt)) * 13u)
+        wsh[i] = cool_f16_pair(uint(i) + seed * 13u)
     }
-    for (i in range(nsb * 64)) {
+    for (i in range(xq_words)) {
         xqh[i] = hash_word(uint(i) * 31u + 5u)
     }
-    for (i in range(nsb)) {
+    for (i in range(xs_count)) {
         xsh[i] = 0.5 + float(i % 7) * 0.25
     }
-    let wq_bytes = int64(wq_words) * 4l
-    let ws_bytes = int64(ws_words) * 4l
-    let xq_bytes = int64(nsb) * 256l
-    let xs_bytes = int64(nsb) * 4l
-    let y_bytes = int64(d) * 4l * int64(copies)
-    let rg_bytes = 8l * int64(copies)
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let xsd = make_device_buf(xs_bytes)
-    let yd = make_device_buf(y_bytes)
-    let rgd = make_device_buf(rg_bytes)
-    var regs <- [for (i in range(copies * 2)); (i % 2 == 0) ? uint(i / 2 * nwsb) : 0u]   //! region r: its own plane copy, the one x
-    let wgs = gemv_wgs(int64(d) * int64(copies), lanes_per_row)
+    p.wq_bytes = int64(wq_words) * 4l
+    p.ws_bytes = int64(ws_words) * 4l
+    p.xq_bytes = int64(xq_words) * 4l
+    p.xs_bytes = int64(xs_count) * 4l
+    p.rg_bytes = 8l * int64(p.copies)
+    let wqd = make_device_buf(p.wq_bytes)
+    let wsd = make_device_buf(p.ws_bytes)
+    let xqd = make_device_buf(p.xq_bytes)
+    let xsd = make_device_buf(p.xs_bytes)
+    let yd = make_device_buf(p.y_bytes)
+    let rgd = make_device_buf(p.rg_bytes)
+    var regs <- [for (i in range(p.copies * 2)); (i % 2 == 0) ? uint(i / 2 * blocks) : 0u]   //! region r: its own plane copy, the one x
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), p.wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), p.ws_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), p.xq_bytes)
+        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), p.xs_bytes)
+        upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), p.rg_bytes)
+    }
+    delete wqh
+    delete wsh
+    delete xqh
+    delete xsh
+    return (wqd = wqd, wsd = wsd, xqd = xqd, xsd = xsd, yd = yd, rgd = rgd)
+}
+
+//! DISPATCHES dependent dispatches of `fmt`'s class (`ncols` 0 = the one-column class) over the planes, timed
+//! after a warm-up submit; MB = the weight bytes a dispatch reads
+def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; rgd : uint64>) : tuple<mb : double; us : double> {
     var raw = alloc_cmd()
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-        upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
-        let bufs = fixed_array(wqd, wsd, rgd, xqd, xsd, yd)
-        let sizes = fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes)
+        let bufs = fixed_array(b.wqd, b.wsd, b.rgd, b.xqd, b.xsd, b.yd)
+        let sizes = fixed_array(p.wq_bytes, p.ws_bytes, p.rg_bytes, p.xq_bytes, p.xs_bytes, p.y_bytes)
         let gbits = fixed_array(1u, 2u, 4u, 8u, 16u, YBIT)
-        var s_cls = gemv_cls_set(int(fmt), bufs, sizes, gbits)
+        var s_cls = ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sizes, gbits) : gemv_cls_set(int(fmt), bufs, sizes, gbits)
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = lanes_per_row)
+        var pc = p.pc
         for (_i in range(DISPATCHES)) {
-            gemv_cls_enc(int(fmt), raw, h, s_cls, pc, wgs)
+            if (ncols > 0) {
+                gemv_cls_enc_n(int(fmt), raw, h, s_cls, pc, p.wgs)
+            } else {
+                gemv_cls_enc(int(fmt), raw, h, s_cls, pc, p.wgs)
+            }
             vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
         }
         vk_check(vkEndCommandBuffer(raw), null)
@@ -103,88 +127,71 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb 
         submit_wait(raw)
     }
     let us = double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
-    delete wqh
-    delete wsh
-    delete xqh
-    delete xsh
-    return (mb = double(wq_bytes + ws_bytes) / 1048576.0lf, us = us)
+    return (mb = double(p.wq_bytes + p.ws_bytes) / 1048576.0lf, us = us)
 }
 
-//! the q8 decode GEMV (`q8_gemv_cls`, a subgroup a row) at the same shape and ring: 32 int8 quants and an f16 scale a block
-def private probe_q8(n, d : int) : tuple<mb : double; us : double> {
+//! the plane copies a dispatch streams: STREAM_MB or more, or one copy under `single`
+def private probe_copies(plane_bytes : int) : int => g_single_copy ? 1 : (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
+
+//! lanes_per_row 0 = the whole subgroup; `ncols` 0 dispatches the one-column class, else the N-column class over
+//! that many activation rows
+def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int = 0) : tuple<mb : double; us : double> {
+    let nsb = n / 256
+    let nwsb = d * nsb
+    let qsb_words = int(kq_qsb(fmt) / 4l)
+    let ssb_words = int(kq_dev_ssb(fmt) / 4l)
+    let plane_bytes = nwsb * (qsb_words + ssb_words) * 4   //! under 2^31 for every served shape (the 27B's largest plane is 89 MB)
+    let xrows = max(ncols, 1)
+    var p = ProbePlanes(copies = probe_copies(plane_bytes))
+    p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
+    p.wgs = gemv_wgs(int64(d) * int64(p.copies), lanes_per_row)
+    p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = lanes_per_row,
+        ncols = uint(ncols), ystride = uint(d * p.copies))
+    let b = probe_fill(uint(int(fmt)), nwsb * qsb_words * p.copies, nwsb * ssb_words * p.copies, nsb * 64 * xrows, nsb * xrows, nwsb, p)
+    return probe_time(fmt, ncols, p, b)
+}
+
+//! the q8 decode GEMV (`q8_gemv_cls`, a subgroup a row) at the same shape and ring: 32 int8 quants and an f16 scale a block;
+//! `ncols` as in probe_fmt
+def private probe_q8(n, d : int; ncols : int = 0) : tuple<mb : double; us : double> {
     let nb = n / 32
     let nblk = d * nb
-    let plane_bytes = nblk * 34
-    let copies = g_single_copy ? 1 : (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
-    let wq_words = nblk * 8 * copies
-    let ws_words = (nblk * copies + 1) / 2
-    var wqh : array<uint>
-    var wsh : array<uint>
-    var xqh : array<uint>
-    var xsh : array<float>
-    wqh |> reserve(wq_words)
-    wqh |> resize(wq_words)
-    wsh |> reserve(ws_words)
-    wsh |> resize(ws_words)
-    xqh |> resize(nb * 8)
-    xsh |> resize(nb)
-    for (i in range(wq_words)) {
-        wqh[i] = hash_word(uint(i) + 99991u)
+    let xrows = max(ncols, 1)
+    var p = ProbePlanes(copies = probe_copies(nblk * 34))
+    p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
+    p.wgs = gemv_wgs(int64(d) * int64(p.copies), 0u)
+    p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = 0u,
+        ncols = uint(ncols), ystride = uint(d * p.copies))
+    let b = probe_fill(99991u, nblk * 8 * p.copies, (nblk * p.copies + 1) / 2, nb * 8 * xrows, nb * xrows, nblk, p)
+    return probe_time(KqFmt.q8, ncols, p, b)
+}
+
+//! one probe row of either class at `ncols` (0 = the one-column class)
+def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double; us : double> {
+    if (fmt == KqFmt.q8) {
+        return probe_q8(n, d, ncols)
     }
-    for (i in range(ws_words)) {
-        wsh[i] = cool_f16_pair(uint(i) + 17u)
+    return probe_fmt(fmt, n, d, gemv_lanes_per_row(int(fmt), int64(n)), ncols)
+}
+
+//! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format
+def private cols_ruler(n, d : int) {
+    let fmts = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)
+    for (f in fmts) {
+        verify(gemv_cls_ensure(int(f)) && gemv_cls_ensure_n(int(f)), "vk_gemv_probe: the ruler's gemv class rails must engage on a live device")
     }
-    for (i in range(nb * 8)) {
-        xqh[i] = hash_word(uint(i) * 31u + 5u)
-    }
-    for (i in range(nb)) {
-        xsh[i] = 0.5 + float(i % 7) * 0.25
-    }
-    let wq_bytes = int64(wq_words) * 4l
-    let ws_bytes = int64(ws_words) * 4l
-    let xq_bytes = int64(nb) * 32l
-    let xs_bytes = int64(nb) * 4l
-    let y_bytes = int64(d) * 4l * int64(copies)
-    let rg_bytes = 8l * int64(copies)
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let xsd = make_device_buf(xs_bytes)
-    let yd = make_device_buf(y_bytes)
-    let rgd = make_device_buf(rg_bytes)
-    var regs <- [for (i in range(copies * 2)); (i % 2 == 0) ? uint(i / 2 * nblk) : 0u]
-    let wgs = gemv_wgs(int64(d) * int64(copies), 0u)
-    var raw = alloc_cmd()
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-        upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
-        var s_cls = set_q8_gemv_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd),
-            fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes),
-            fixed_array(1u, 2u, 4u, 8u, 16u, YBIT))
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = 0u)
-        for (_i in range(DISPATCHES)) {
-            enc_q8_gemv_cls(raw, h, s_cls, pc, wgs)
-            vhz_dep(raw, h, YBIT, 0u, true)
+    print("vk_gemv_probe: the N-column ruler at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; GB/s over the weight bytes; the last column = this dispatch's wall over `cols` one-column dispatches\n")
+    print("| fmt    | class | cols |  us/dispatch |    GB/s | vs N single |\n")
+    print("| :----- | :---- | ---: | -----------: | ------: | ----------: |\n")
+    let widths = fixed_array(1, 2, 4, 8)
+    for (f in fmts) {
+        let one = probe_any(f, n, d, 0)
+        print("| {f} | one | 1 | {one.us:12.1f} | {one.mb * 1048576.0lf / (one.us * 1000.0lf):7.1f} | {1.0lf:11.2f} |\n")
+        for (nc in widths) {
+            let r = probe_any(f, n, d, nc)
+            print("| {f} | ncol | {nc} | {r.us:12.1f} | {r.mb * 1048576.0lf / (r.us * 1000.0lf):7.1f} | {r.us / (one.us * double(nc)):11.2f} |\n")
         }
-        vk_check(vkEndCommandBuffer(raw), null)
     }
-    submit_wait(raw)
-    let t0 = ref_time_ticks()
-    for (_i in range(SUBMITS)) {
-        submit_wait(raw)
-    }
-    let us = double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
-    delete wqh
-    delete wsh
-    delete xqh
-    delete xsh
-    return (mb = double(wq_bytes + ws_bytes) / 1048576.0lf, us = us)
 }
 
 [export]
@@ -201,6 +208,10 @@ def main : int {
     if (!ensure_q8_batch_cls()) {
         print("vk_gemv_probe: no Vulkan device\n")
         return 1
+    }
+    if (find_index(args, "cols") >= 0) {
+        cols_ruler(n, d)
+        return 0
     }
     let fmts = fixed_array(KqFmt.k4, KqFmt.q40, KqFmt.k5, KqFmt.k6, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)
     for (f in fmts) {
