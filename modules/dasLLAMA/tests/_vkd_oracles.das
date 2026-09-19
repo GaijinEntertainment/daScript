@@ -8,10 +8,17 @@ options _dasllama_internal = true
 module _vkd_oracles shared public
 
 require dasllama/dasllama_lint public
+require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
+
+//! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
+let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
+
+let MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
 
 def to_u4(w : array<uint>) : array<uint4> {
     var out : array<uint4>
@@ -984,4 +991,301 @@ def k3f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
             }
         }
     }
+}
+
+// the one activation formula (act_mul_sel's shape) — definitional, kept in sync by the arm bars
+def act_mul_ref(v, u : float; gelu : bool) : float {
+    return (gelu ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
+        : (v / (1.0 + exp(-v))) * u)
+}
+
+//! the same over the kernels' act code (ACT_OAI = gpt-oss's clamped swiglu)
+def act_mul_ref(v, u : float; act : uint) : float {
+    if (act == ACT_OAI) {
+        let x = min(v, 7.0)
+        let y = clamp(u, -7.0, 7.0)
+        return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
+    }
+    return act_mul_ref(v, u, act != 0u)
+}
+
+def pack4_ref(v0, v1, v2, v3, id : float) : uint {
+    let q0 = int(round(v0 * id))
+    let q1 = int(round(v1 * id))
+    let q2 = int(round(v2 * id))
+    let q3 = int(round(v3 * id))
+    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+}
+
+// Q8_0 / Q8_K quantize of act(gate)*up rows: sequential amax (max is order-free), linear pack
+def actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
+                 var outq : array<uint>; var outs : array<float>) {
+    actrq_oracle(gh, uh, nelem, q8k, gelu ? ACT_GELU : ACT_SILU, outq, outs)
+}
+
+//! the same over the kernels' act code
+def actrq_oracle(gh, uh : array<float>; nelem : int; q8k : bool; act : uint;
+                 var outq : array<uint>; var outs : array<float>) {
+    let bsz = q8k ? 256 : 32
+    let nblk = nelem / bsz
+    outq |> resize(nelem / 4)
+    outs |> resize(nblk)
+    for (b in range(nblk)) {
+        var m = 0.0
+        for (e in range(bsz)) {
+            m = max(m, abs(act_mul_ref(gh[b * bsz + e], uh[b * bsz + e], act)))
+        }
+        let d = m / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        outs[b] = d
+        for (wj in range(bsz / 4)) {
+            let e0 = b * bsz + wj * 4
+            outq[b * (bsz / 4) + wj] = pack4_ref(
+                act_mul_ref(gh[e0], uh[e0], act), act_mul_ref(gh[e0 + 1], uh[e0 + 1], act),
+                act_mul_ref(gh[e0 + 2], uh[e0 + 2], act), act_mul_ref(gh[e0 + 3], uh[e0 + 3], act), id)
+        }
+    }
+}
+
+// plain Q8_0 / Q8_K requant of f32 rows (no activation — exact modulo round ties)
+def requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
+                   var outq : array<uint>; var outs : array<float>) {
+    let bsz = q8k ? 256 : 32
+    let nblk = nelem / bsz
+    outq |> resize(nelem / 4)
+    outs |> resize(nblk)
+    for (b in range(nblk)) {
+        var m = 0.0
+        for (e in range(bsz)) {
+            m = max(m, abs(src[base + b * bsz + e]))
+        }
+        let d = m / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        outs[b] = d
+        for (wj in range(bsz / 4)) {
+            let e0 = base + b * bsz + wj * 4
+            outq[b * (bsz / 4) + wj] = pack4_ref(src[e0], src[e0 + 1], src[e0 + 2], src[e0 + 3], id)
+        }
+    }
+}
+
+//! the q51 GEMV cell's oracle: `dot_q51q8_scalar`'s float order over the plane words - per block isum = sum q * a
+//! (q = nibble | qh bit << 4), asum = sum a, f += (d * isum + m * asum) * xs
+def q51_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    var f = 0.0
+    for (b in range(nb)) {
+        let wb = wb0 + b
+        let qh = wq[wb * 5 + 4]
+        var isum = 0
+        var asum = 0
+        for (j in range(16)) {
+            let by = byte_u8(wq, wb * 20 + j)
+            let a0 = byte_s8(xq, b * 32 + j)
+            let a1 = byte_s8(xq, b * 32 + j + 16)
+            isum += ((by & 15) | (int((qh >> uint(j)) & 1u) << 4)) * a0 + ((by >> 4) | (int((qh >> uint(j + 16)) & 1u) << 4)) * a1
+            asum += a0 + a1
+        }
+        let dm = unpackHalf2x16(ws[wb])
+        f += (dm.x * float(isum) + dm.y * float(asum)) * xs[b]
+    }
+    return f
+}
+
+//! the mx4 GEMV cell's oracle: `dot_mx4q8_scalar`'s float order over the plane words (byte j: element j low, j + 16 high)
+def mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    var f = 0.0
+    for (b in range(nb)) {
+        let wb = wb0 + b
+        var isum = 0
+        for (j in range(16)) {
+            let by = byte_u8(wq, wb * 16 + j)
+            isum += mx4_mag2(by & 15) * byte_s8(xq, b * 32 + j) + mx4_mag2(by >> 4) * byte_s8(xq, b * 32 + j + 16)
+        }
+        f += float(isum) * mx4_dequant(1, byte_u8(wsb, wb)) * xs[b]
+    }
+    return f
+}
+
+//! the N-column cell's oracle: `ncol_max` columns of [d] rows, column c over its own activation blocks (c x the column
+//! stride) - the q8 plane's per-block int dot x the block scales in sequential block order (the pair cell's oracle), a
+//! kq plane's through `kq_gemv_oracle` with the region naming the column
+def gemv_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
+    var y_ref : array<float>
+    y_ref |> resize(d * ncol_max)
+    let xblk = f == KqFmt.q8 ? n / 32 : n / 256
+    for (c in range(ncol_max)) {
+        if (f == KqFmt.q8) {
+            for (row in range(d)) {
+                var acc = 0.0
+                for (b in range(xblk)) {
+                    let wb = row * xblk + b
+                    let xb = c * xblk + b
+                    var idot = 0
+                    for (j in range(8)) {
+                        idot += sdot4(wqh[wb * 8 + j], xqh[xb * 8 + j])
+                    }
+                    let ws16 = wb % 2 == 0 ? unpackHalf2x16(wsh[wb / 2]).x : unpackHalf2x16(wsh[wb / 2]).y
+                    acc += float(idot) * ws16 * xsh[xb]
+                }
+                y_ref[c * d + row] = acc
+            }
+        } else {
+            var regs <- [0u, uint(c * xblk)]
+            var y_c <- kq_gemv_oracle(int(f), wqh, wsh, xqh, xsh, regs, n, d, 1)
+            for (row in range(d)) {
+                y_ref[c * d + row] = y_c[row]
+            }
+            delete y_c
+            delete regs
+        }
+    }
+    return <- y_ref
+}
+
+//! the schedule's bounds and map offsets for the sched cells: the s dispatch one tile per expert, the
+//! m dispatch every expert's whole columns plus a partial one; the records of both lists precede the maps
+struct SchedShape {
+    map_off : int
+    map_off_mgu : int
+    map_off_mdn : int
+    bound_gu : int
+    bound_dn : int
+    bound_mgu : int
+    bound_mdn : int
+}
+
+def sched_shape(nk, ne, wt_gu, wt_dn : int) : SchedShape {
+    let rt_m = nk / int(SCHED_M_ROWS) + ne
+    var s = SchedShape(map_off = 2 * 4 * ne, bound_gu = ne * wt_gu, bound_dn = ne * wt_dn, bound_mgu = rt_m * wt_gu, bound_mdn = rt_m * wt_dn)
+    s.map_off_mgu = s.map_off + s.bound_gu
+    s.map_off_mdn = s.map_off + s.bound_dn
+    return s
+}
+
+//! expert e's bucket: its first row (the slots of the experts before it) and its row count
+def bucket_start(idx : array<uint>; e : int) : int {
+    var run = 0
+    for (r in idx) {
+        if (int(r) < e) {
+            run++
+        }
+    }
+    return run
+}
+
+def bucket_rows(idx : array<uint>; e : int) : int {
+    var n = 0
+    for (r in idx) {
+        if (int(r) == e) {
+            n++
+        }
+    }
+    return n
+}
+
+//! one piece's record `ri` and its map words on the three planes (the CPU twin of MoeSched.write_piece)
+def oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int; ri : uint; row0, rows, rt, wt_gu, wt_dn, wg_gu, wg_dn, map_gu, map_dn : int) {
+    let rb = int(ri) * 4
+    s1[rb] = bases[0] + uint(e) * bases[1]
+    s3[rb] = bases[2] + uint(e) * bases[3]
+    s2[rb] = bases[4] + uint(e) * bases[5]
+    s1[rb + 1] = uint(row0)
+    s3[rb + 1] = uint(row0)
+    s2[rb + 1] = uint(row0)
+    s1[rb + 2] = uint(rows)
+    s3[rb + 2] = uint(rows)
+    s2[rb + 2] = uint(rows)
+    s1[rb + 3] = uint(wg_gu)
+    s3[rb + 3] = uint(wg_gu)
+    s2[rb + 3] = uint(wg_dn)
+    for (g in range(rt * wt_gu)) {
+        s1[map_gu + wg_gu + g] = ri
+        s3[map_gu + wg_gu + g] = ri
+    }
+    for (g in range(rt * wt_dn)) {
+        s2[map_dn + wg_dn + g] = ri
+    }
+}
+
+//! the CPU twin of MoeSched: the s pieces' records at [0, ne) and the m pieces' at [ne, 2 ne), each in
+//! expert order (empty pieces skipped), the two dispatches' per-wg maps, the sentinel tails past the
+//! real workgroup counts, and inv in slot order
+def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bases : uint[6];
+                 var inv : array<uint>; var s1, s3, s2 : array<uint>) {
+    let nk = length(idx)
+    var cnt : array<int>
+    cnt |> resize(ne)
+    for (r in range(nk)) {
+        cnt[int(idx[r])]++
+    }
+    var start : array<int>
+    start |> resize(ne)
+    var run = 0
+    for (e in range(ne)) {
+        start[e] = run
+        run += cnt[e]
+    }
+    inv |> resize(nk)
+    var cursor := start
+    for (r in range(nk)) {
+        let e = int(idx[r])
+        inv[r] = uint(cursor[e])
+        cursor[e]++
+    }
+    let words = max(sh.map_off_mgu + sh.bound_mgu, sh.map_off_mdn + sh.bound_mdn)
+    s1 |> resize(words)
+    s3 |> resize(words)
+    s2 |> resize(words)
+    for (i in range(words)) {
+        s1[i] = MR_SENT
+        s3[i] = MR_SENT
+        s2[i] = MR_SENT
+    }
+    var ri_s = 0u
+    var ri_m = uint(ne)
+    var wg_gu_s = 0
+    var wg_dn_s = 0
+    var wg_gu_m = 0
+    var wg_dn_m = 0
+    let s_col = int(SCHED_S_ROWS)
+    let m_col = int(SCHED_M_ROWS)
+    for (e in range(ne)) {
+        continue if (cnt[e] == 0)
+        //! the ladder spelled out (the shipped rule is the thing under test): a bucket within the s column
+        //! takes it whole; past it, whole m columns, and a remainder past the s column joins the last as a partial
+        let c = cnt[e]
+        let mrows = c <= s_col ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)
+        let srows = c - mrows
+        if (mrows > 0) {
+            let rt = (mrows + m_col - 1) / m_col
+            oracle_piece(s1, s3, s2, bases, e, ri_m, start[e], mrows, rt, wt_gu, wt_dn, wg_gu_m, wg_dn_m, sh.map_off_mgu, sh.map_off_mdn)
+            wg_gu_m += rt * wt_gu
+            wg_dn_m += rt * wt_dn
+            ri_m++
+        }
+        if (srows > 0) {
+            oracle_piece(s1, s3, s2, bases, e, ri_s, start[e] + mrows, srows, 1, wt_gu, wt_dn, wg_gu_s, wg_dn_s, sh.map_off, sh.map_off)
+            wg_gu_s += wt_gu
+            wg_dn_s += wt_dn
+            ri_s++
+        }
+    }
+    for (g in range(wg_gu_s, sh.bound_gu)) {
+        s1[sh.map_off + g] = SCHED_NONE
+        s3[sh.map_off + g] = SCHED_NONE
+    }
+    for (g in range(wg_dn_s, sh.bound_dn)) {
+        s2[sh.map_off + g] = SCHED_NONE
+    }
+    for (g in range(wg_gu_m, sh.bound_mgu)) {
+        s1[sh.map_off_mgu + g] = SCHED_NONE
+        s3[sh.map_off_mgu + g] = SCHED_NONE
+    }
+    for (g in range(wg_dn_m, sh.bound_mdn)) {
+        s2[sh.map_off_mdn + g] = SCHED_NONE
+    }
+    delete cnt
+    delete start
+    delete cursor
 }

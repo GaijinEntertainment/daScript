@@ -157,15 +157,13 @@ end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
 each module races its OWN families (`metal_tensor_race_decode` in kernels, `metal_tensor_race`
 in prefill) and the tuner calls those public entries.
 
-**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`,
-`MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
-both paths.
+**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
+decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
 Sections 2.28-2.39a - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
 contract, the verify, drafter and batch-driver mechanics, and the decode layer encoder - are `ARCHITECTURE_GPU_MTP.md`.
 
-**The allowed asymmetries between the backends - this list is closed; a new one lands with its
-entry here:**
+**The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
 - **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier
   exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
@@ -183,11 +181,10 @@ entry here:**
   collecting the set over a CPU-only window, `ARCHITECTURE_RUNTIME.md` sec.2.12) - a
   driver-cost shield, not a placement mechanism; memory is still memory.
 - **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
-  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`,
-  which runs the registered reload preps (`register_reload_prep`; the decode driver registers
-  `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
-  story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
-  ownership model.
+  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`, which runs the
+  registered reload preps (`register_reload_prep`; the decode driver registers `discard_pre`), quiesces, and
+  releases the address-keyed region caches. Vulkan's reload story is the unmap notify
+  (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
 - **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
   registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
   the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
@@ -231,9 +228,8 @@ entry here:**
   backfills the stash on the CPU in `forward_prefill_body`. The arms mirror `embed_row`'s
   ladder: a tied q8 table gathers from the resident cls plane, a raw f32 table uploads whole
   to a device plane under a size cap the residency plan counts first, and the kq ladder keeps
-  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids
-  ride a 4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds
-  host-side.
+  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids ride a
+  4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds host-side.
 - **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
   installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
   layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot
@@ -272,9 +268,8 @@ the production dialect against them - the bisect seat when the flash regresses.
   single pass), so it buys 20-25% per column; the Metal-4 tensor op at an m = 8 tile is nearly
   free per column but the dequant stage is the cost - 3.4x a single pass for eight columns where
   the twin does four at 2.7x. Neither moves 3-4 rows; the tensor form beats the eight-column twin
-  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in
-  `benchmarks/matmul/bench_metal_gemv_kernels.das` (the `_depths` ruler records say no depth
-  reaches those rows).
+  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in `benchmarks/matmul/bench_metal_gemv_kernels.das`
+  (the `_depths` ruler records say no depth reaches those rows).
 
 **Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
 every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
@@ -288,10 +283,9 @@ float stamp would need, not a live float operand - and the verify-width lab temp
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.
 
-The positive laws these races established - half operands, stage-only-to-transform,
-consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the
-`modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
-and why they lose.
+The positive laws these races established - half operands, stage-only-to-transform, consecutive staging
+runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the `modules/dasMetal/REVIEW.das` descriptor
+gate; this section keeps only the refuted shapes and why they lose.
 
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
