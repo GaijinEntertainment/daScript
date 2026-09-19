@@ -6621,6 +6621,16 @@ def public kmask_scmn(sv : uint4; js : uint; var sc, mn : uint&) {
     }
 }
 
+// q4_K/q5_K kmask scale decode for ONE half ch (0/1) of the lane's quadrant: kmask_scmn's twin
+// under the mv lane map, where the strip byte is picked by the lane's jl and the half by ch.
+def private kmask_sc_mn_ch(sv : uint4; jl : uint; ch : int; var sc, mn : uint&) {
+    let sy = (sv.y >> (8u * jl)) & 255u
+    let szv = (sv.z >> (8u * jl)) & 255u
+    let sw = (sv.w >> (8u * jl)) & 255u
+    sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+    mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+}
+
 // q4_K/q5_K kmask halfword-pair scale decode — sc/min byte pairs for both 32-halves of the
 // lane's superblock quadrant (x = sc lo-pair, y = min lo-pair, z = sc hi-pair, w = min hi-pair).
 def private kmask_scales(sv : uint4; iq : uint) : uint4 {
@@ -6713,6 +6723,10 @@ def public iq3s_sw(g, nib : uint) : uint {
 def public iq3s_sx(sw, t : uint) : float {
     return float((int((sw >> (t * 8u)) & 255u) ^ 128) - 128)
 }
+
+//! the unsigned twin of iq3s_sx, all four lanes at once: byte b of the packed word as lane b
+def public u8x4_f4(w : uint) : float4 => float4(float(w & 255u), float((w >> 8u) & 255u),
+    float((w >> 16u) & 255u), float(w >> 24u))
 
 // the HALVED iq3xxs grid (iq3xxs_grid, every byte / 2 - the plane convention), one
 // word per call; the GEMV and mul_mm stage it, the mv twins read it directly.
@@ -8354,6 +8368,57 @@ class template MetalKqMvShellT : MetalKqLaneMapsT {
 
     def abstract mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) : void
 
+    //! the lane's 32 decoded weights against the NR x columns at cx4 - the TILED arm of every
+    //! float4-container format lives here once
+    def accum_cols32(cx4, colbase, nb4 : uint; w : float4[8]; var sumf : float[NR]) {
+        static_if (TILED) {
+            for [unroll_full] (b in range(NR)) {
+                let xb4 = (colbase + uint(b)) * nb4 + cx4
+                var acc = 0.0
+                for [unroll_full] (u in range(8)) {
+                    let v = x[xb4 + uint(u)]
+                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                }
+                sumf[b] += acc
+            }
+        } else {
+            for [unroll_full] (b in range(NR)) {
+                let xb4 = uint(b) * nb4 + cx4
+                var acc = 0.0
+                for [unroll_full] (u in range(8)) {
+                    let v = x[xb4 + uint(u)]
+                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                }
+                sumf[b] += acc
+            }
+        }
+    }
+
+    //! accum_cols32's 16-element twin, for the K-quant chunk decodes that stage a flat float[16]
+    def accum_cols16(cx4, colbase, nb4 : uint; w : float[16]; var sumf : float[NR]) {
+        static_if (TILED) {
+            for [unroll_full] (b in range(NR)) {
+                let xb4 = (colbase + uint(b)) * nb4 + cx4
+                var acc = 0.0
+                for [unroll_full] (u in range(4)) {
+                    let v = x[xb4 + uint(u)]
+                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                }
+                sumf[b] += acc
+            }
+        } else {
+            for [unroll_full] (b in range(NR)) {
+                let xb4 = uint(b) * nb4 + cx4
+                var acc = 0.0
+                for [unroll_full] (u in range(4)) {
+                    let v = x[xb4 + uint(u)]
+                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                }
+                sumf[b] += acc
+            }
+        }
+    }
+
     def run_shell {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
@@ -8431,27 +8496,7 @@ class template MetalKqMvK2T : MetalKqMvShellT {
                 }
             }
             let cx4 = sb * 64u + ip * 32u + s * 8u + o4
-            static_if (TILED) {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = (colbase + uint(b)) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            } else {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
+            accum_cols16(cx4, colbase, nb4, w, sumf)
         }
     }
 }
@@ -8483,6 +8528,24 @@ class template MetalKqMvB8ShellT : MetalKqLaneMapsT {
     //! the format's per-lane constants, computed once before the row walk
 
     def abstract mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) : void
+
+    //! the lane's 32 decoded weights against all eight staged X streams at column cxl
+    def accum_panel32(cxl : uint; w : float4[8]; var acc : float4[8]) {
+        for [unroll_full] (b in range(8)) {
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
+            }
+        }
+    }
+
+    //! accum_panel32's 16-element twin, for the K-quant chunk decodes
+    def accum_panel16(cxl : uint; w4 : float4[4]; var acc : float4[8]) {
+        for [unroll_full] (b in range(8)) {
+            for [unroll_full] (u in range(4)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+            }
+        }
+    }
 
     def run_shell {
         let lid = gl_LocalInvocationID.x
@@ -8548,15 +8611,9 @@ class MetalKqMvB8K2 : MetalKqMvB8ShellT {
             var w4 : float4[4]
             for [unroll_full] (u in range(4)) {
                 let qvc = (kqu[qb + uint(u)] >> shr) & 0x03030303
-                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
+                w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            let cxl = ip * 32u + s * 8u + o4
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(4)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                }
-            }
+            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }
@@ -8713,27 +8770,7 @@ class template MetalKqMvK3T : MetalKqMvShellT {
                 }
             }
             let cx4 = sb * 64u + ip * 32u + s * 8u + o4
-            static_if (TILED) {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = (colbase + uint(b)) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            } else {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
+            accum_cols16(cx4, colbase, nb4, w, sumf)
         }
     }
 }
@@ -8790,15 +8827,9 @@ class MetalKqMvB8K3 : MetalKqMvB8ShellT {
             var w4 : float4[4]
             for [unroll_full] (u in range(4)) {
                 let qvc = ((qu[u] >> shr) & 0x03030303) | (((hu[u] >> hsh) & 0x01010101) << 2u)
-                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
+                w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            let cxl = ip * 32u + s * 8u + o4
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(4)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                }
-            }
+            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }
@@ -9032,7 +9063,7 @@ class template MetalKqGemvIq3T : MetalGemvSiteT {
                             let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
                             let gw = iq3xxs_gw(int((qsw >> (8u * uint(k))) & 255u))
                             let fs = iq_sign4(nib)
-                            accv += yv[h * 4 + k] * (float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fs)
+                            accv += yv[h * 4 + k] * (u8x4_f4(gw) * fs)
                         }
                     }
                 } else {
@@ -9046,7 +9077,7 @@ class template MetalKqGemvIq3T : MetalGemvSiteT {
                             let nib = (sgw >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
                             let gw = iq3s_gw(int(idx))
                             let fs = iq_sign4(nib)
-                            accv += yv[h * 4 + k] * (float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fs)
+                            accv += yv[h * 4 + k] * (u8x4_f4(gw) * fs)
                         }
                     }
                 }
@@ -9175,13 +9206,13 @@ class template MetalKqGemvIq3F4T {
             for [unroll_full] (k in range(4)) {
                 let gi = lid + uint(k) * 64u
                 let gw = iq3xxs_gw(int(gi))
-                gridf[gi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u))
+                gridf[gi] = u8x4_f4(gw)
             }
         } else {
             for [unroll_full] (k in range(8)) {
                 let gi = lid + uint(k) * 64u
                 let gw = iq3s_gw(int(gi))
-                gridf[gi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u))
+                gridf[gi] = u8x4_f4(gw)
             }
         }
         barrier()
@@ -9309,8 +9340,8 @@ class template MetalKqGemvIq2sT : MetalGemvSiteT {
                         let s1 = sgb >> 4u
                         let w0 = iq2s_gw(int(idx2))
                         let w1 = iq2s_gw(int(idx2 + 1u))
-                        let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                        let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                        let m0 = u8x4_f4(w0)
+                        let m1 = u8x4_f4(w1)
                         let f0 = iq_sign_apply(m0, s0)
                         let f1 = iq_sign_apply(m1, s1)
                         accv += yv[l * 2u] * f0
@@ -9419,8 +9450,8 @@ class template MetalKqGemvIq2xsT : MetalGemvSiteT {
                         let s1 = sgn >> 4u
                         let w0 = iq2xs_gw(int(idx2))
                         let w1 = iq2xs_gw(int(idx2 + 1u))
-                        let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                        let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                        let m0 = u8x4_f4(w0)
+                        let m1 = u8x4_f4(w1)
                         let f0 = iq_sign_apply(m0, s0)
                         let f1 = iq_sign_apply(m1, s1)
                         accv += yv[h * 4 + wi * 2] * f0
@@ -9504,7 +9535,7 @@ class template MetalKqGemvIq2xxsFam : MetalGemvSiteT {
             for [unroll_full] (gk in range(8)) {
                 let gi = lid + uint(gk) * 64u
                 let w = iq2xxs_gw(int(gi))
-                gridf[gi] = float4(float(w & 255u), float((w >> 8u) & 255u), float((w >> 16u) & 255u), float(w >> 24u))
+                gridf[gi] = u8x4_f4(w)
             }
             barrier()
         }
@@ -9544,8 +9575,8 @@ class template MetalKqGemvIq2xxsFam : MetalGemvSiteT {
                     } else {
                         let w0 = iq2xxs_gw(int(bidx * 2u))
                         let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
-                        m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                        m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+                        m0 = u8x4_f4(w0)
+                        m1 = u8x4_f4(w1)
                     }
                     let f0 = iq_sign_apply(m0, s0)
                     let f1 = iq_sign_apply(m1, s1)
@@ -9659,31 +9690,10 @@ class template MetalKqMvIq3xxsT : MetalKqMvShellT {
                 let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
                 let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
                 let fsd = iq_sign_apply(float4(dl), nib)
-                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+                w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        }
+        accum_cols32(sb * 64u + tx * 8u, colbase, nb4, w, sumf)
     }
 }
 
@@ -9726,15 +9736,10 @@ class MetalKqMvB8Iq3xxs : MetalKqMvB8ShellT {
                 let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
                 let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
                 let fsd = iq_sign_apply(float4(dl), nib)
-                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+                w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
+        accum_panel32(tx * 8u, w, acc)
     }
 }
 
@@ -9764,31 +9769,10 @@ class template MetalKqMvIq3sT : MetalKqMvShellT {
                 let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
                 let gw = iq3s_gw(int(idx))
                 let fsd = iq_sign_apply(float4(dl), nib)
-                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+                w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        }
+        accum_cols32(sb * 64u + tx * 8u, colbase, nb4, w, sumf)
     }
 }
 
@@ -9832,15 +9816,10 @@ class MetalKqMvB8Iq3s : MetalKqMvB8ShellT {
                 let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
                 let gw = iq3s_gw(int(idx))
                 let fsd = iq_sign_apply(float4(dl), nib)
-                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+                w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
+        accum_panel32(tx * 8u, w, acc)
     }
 }
 
@@ -9873,33 +9852,12 @@ class template MetalKqMvIq2sT : MetalKqMvShellT {
             let s1 = sgn >> 4u
             let w0 = iq2s_gw(int(idx2))
             let w1 = iq2s_gw(int(idx2 + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        }
+        accum_cols32(sb * 64u + tx * 8u, colbase, nb4, w, sumf)
     }
 }
 
@@ -9946,17 +9904,12 @@ class MetalKqMvB8Iq2s : MetalKqMvB8ShellT {
             let s1 = sgn >> 4u
             let w0 = iq2s_gw(int(idx2))
             let w1 = iq2s_gw(int(idx2 + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
+        accum_panel32(tx * 8u, w, acc)
     }
 }
 
@@ -9989,33 +9942,12 @@ class template MetalKqMvIq2xsT : MetalKqMvShellT {
             let s1 = sgn >> 4u
             let w0 = iq2xs_gw(int(idx2))
             let w1 = iq2xs_gw(int(idx2 + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        }
+        accum_cols32(sb * 64u + tx * 8u, colbase, nb4, w, sumf)
     }
 }
 
@@ -10062,17 +9994,12 @@ class MetalKqMvB8Iq2xs : MetalKqMvB8ShellT {
             let s1 = sgn >> 4u
             let w0 = iq2xs_gw(int(idx2))
             let w1 = iq2xs_gw(int(idx2 + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
+        accum_panel32(tx * 8u, w, acc)
     }
 }
 
@@ -10102,33 +10029,12 @@ class template MetalKqMvIq2xxsT : MetalKqMvShellT {
             let s1 = sgn >> 4u
             let w0 = iq2xxs_gw(int(bidx * 2u))
             let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
-            }
-        }
+        accum_cols32(sb * 64u + tx * 8u, colbase, nb4, w, sumf)
     }
 }
 
@@ -10172,17 +10078,12 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
             let s1 = sgn >> 4u
             let w0 = iq2xxs_gw(int(bidx * 2u))
             let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
-            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            let m0 = u8x4_f4(w0)
+            let m1 = u8x4_f4(w1)
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
+        accum_panel32(tx * 8u, w, acc)
     }
 }
 
@@ -10379,11 +10280,9 @@ class template MetalKqMvK4T : MetalKqMvShellT {
         let dd = float(ksh[blk * 8u])
         let dm = float(ksh[blk * 8u + 1u])
         for [unroll_full] (ch in range(2)) {
-            let sy = (sv.y >> (8u * jl)) & 255u
-            let szv = (sv.z >> (8u * jl)) & 255u
-            let sw = (sv.w >> (8u * jl)) & 255u
-            let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-            let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+            var sc = 0u
+            var mn = 0u
+            kmask_sc_mn_ch(sv, jl, ch, sc, mn)
             let dl = dd * float(sc)
             let ml = dm * float(mn)
             let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
@@ -10396,27 +10295,7 @@ class template MetalKqMvK4T : MetalKqMvShellT {
                 }
             }
             let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
-            static_if (TILED) {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = (colbase + uint(b)) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            } else {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
+            accum_cols16(cx4, colbase, nb4, w, sumf)
         }
     }
 }
@@ -10439,7 +10318,7 @@ class MetalKqMvB2K4R2 {
     @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel]
-    def metal_kq_mv_k4_r2 {   // nolint:STYLE038 — the two-row tile is the k4 twin body written twice by hand
+    def metal_kq_mv_k4_r2 {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
         let ty = lane / 8u
@@ -10467,16 +10346,12 @@ class MetalKqMvB2K4R2 {
             let ddB = float(ksh[blkB * 8u])
             let dmB = float(ksh[blkB * 8u + 1u])
             for [unroll_full] (ch in range(2)) {
-                let syA = (svA.y >> (8u * jl)) & 255u
-                let szA = (svA.z >> (8u * jl)) & 255u
-                let swA = (svA.w >> (8u * jl)) & 255u
-                let syB = (svB.y >> (8u * jl)) & 255u
-                let szB = (svB.z >> (8u * jl)) & 255u
-                let swB = (svB.w >> (8u * jl)) & 255u
-                let scA = ch == 0 ? (syA & 63u) : ((swA & 0x0Fu) | ((syA >> 6u) << 4u))
-                let mnA = ch == 0 ? (szA & 63u) : ((swA >> 4u) | ((szA >> 6u) << 4u))
-                let scB = ch == 0 ? (syB & 63u) : ((swB & 0x0Fu) | ((syB >> 6u) << 4u))
-                let mnB = ch == 0 ? (szB & 63u) : ((swB >> 4u) | ((szB >> 6u) << 4u))
+                var scA = 0u
+                var mnA = 0u
+                var scB = 0u
+                var mnB = 0u
+                kmask_sc_mn_ch(svA, jl, ch, scA, mnA)
+                kmask_sc_mn_ch(svB, jl, ch, scB, mnB)
                 let dlA = ddA * float(scA)
                 let mlA = dmA * float(mnA)
                 let dlB = ddB * float(scB)
@@ -10572,27 +10447,7 @@ class template MetalKqMvK6T : MetalKqMvShellT {
                 }
             }
             let cx4 = sb * 64u + ip * 32u + s * 8u + o4
-            static_if (TILED) {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = (colbase + uint(b)) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            } else {
-                for [unroll_full] (b in range(NR)) {
-                    let xb4 = uint(b) * nb4 + cx4
-                    var acc = 0.0
-                    for [unroll_full] (u in range(4)) {
-                        let v = x[xb4 + uint(u)]
-                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                    }
-                    sumf[b] += acc
-                }
-            }
+            accum_cols16(cx4, colbase, nb4, w, sumf)
         }
     }
 }
@@ -10644,11 +10499,9 @@ class template MetalKqMvK5T : MetalKqMvShellT {
             hq[u] = kqu[blk * 40u + 32u + lo + uint(u)]
         }
         for [unroll_full] (ch in range(2)) {
-            let sy = (sv.y >> (8u * jl)) & 255u
-            let szv = (sv.z >> (8u * jl)) & 255u
-            let sw = (sv.w >> (8u * jl)) & 255u
-            let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-            let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+            var sc = 0u
+            var mn = 0u
+            kmask_sc_mn_ch(sv, jl, ch, sc, mn)
             let dl = dd * float(sc)
             let ml = dm * float(mn)
             let qb = blk * 40u + (q4i + uint(ch) * 2u) * 8u + lo
@@ -10663,15 +10516,7 @@ class template MetalKqMvK5T : MetalKqMvShellT {
                 }
             }
             let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                }
-                sumf[b] += acc
-            }
+            accum_cols16(cx4, colbase, nb4, w, sumf)
         }
     }
 }
@@ -10728,11 +10573,9 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
             }
         }
         for [unroll_full] (ch in range(2)) {
-            let sy = (sv.y >> (8u * jl)) & 255u
-            let szv = (sv.z >> (8u * jl)) & 255u
-            let sw = (sv.w >> (8u * jl)) & 255u
-            let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-            let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+            var sc = 0u
+            var mn = 0u
+            kmask_sc_mn_ch(sv, jl, ch, sc, mn)
             let dl = dd * float(sc)
             let ml = dm * float(mn)
             static_if (QH) {
@@ -10746,12 +10589,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
                         float(((qvv >> (16u + nsh)) & 15u) | (((hv >> 16u) & 1u) << 4u)),
                         float(((qvv >> (24u + nsh)) & 15u) | (((hv >> 24u) & 1u) << 4u))) * dl - float4(ml)
                 }
-                let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
-                for [unroll_full] (b in range(8)) {
-                    for [unroll_full] (u in range(4)) {
-                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                    }
-                }
+                accum_panel16((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
             } else {
                 var w4 : float4[4]
                 for [unroll_full] (u in range(4)) {
@@ -10759,12 +10597,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
                     w4[u] = float4(float((qvv >> nsh) & 15u), float((qvv >> (8u + nsh)) & 15u),
                         float((qvv >> (16u + nsh)) & 15u), float((qvv >> (24u + nsh)) & 15u)) * dl - float4(ml)
                 }
-                let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
-                for [unroll_full] (b in range(8)) {
-                    for [unroll_full] (u in range(4)) {
-                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                    }
-                }
+                accum_panel16((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
             }
         }
     }
@@ -10819,15 +10652,9 @@ class MetalKqMvB8K6 : MetalKqMvB8ShellT {
             var w4 : float4[4]
             for [unroll_full] (u in range(4)) {
                 let qvc = ((qu[u] >> shr) & 0x0F0F0F0F) | (((hu[u] >> hsh) & 0x03030303) << 4u)
-                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
+                w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            let cxl = ip * 32u + s * 8u + o4
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(4)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                }
-            }
+            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }

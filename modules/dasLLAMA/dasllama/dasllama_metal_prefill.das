@@ -1152,7 +1152,7 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
             let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
             let gw = gridw3t[idx]
             let fsd = iq_sign_apply(float4(dsc), nib)
-            let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+            let mv = u8x4_f4(gw) * fsd
             twb[tb0 + uint(k) * 4u] = float16(mv.x)
             twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
             twb[tb0 + uint(k) * 4u + 2u] = float16(mv.z)
@@ -1251,7 +1251,7 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
             let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
             let gw = gridw3xt[(qsw >> (8u * uint(k))) & 255u]
             let fsd = iq_sign_apply(float4(dsc), nib)
-            let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
+            let mv = u8x4_f4(gw) * fsd
             twb[tb0 + uint(k) * 4u] = float16(mv.x)
             twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
             twb[tb0 + uint(k) * 4u + 2u] = float16(mv.z)
