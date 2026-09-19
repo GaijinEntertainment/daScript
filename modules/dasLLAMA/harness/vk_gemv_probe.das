@@ -15,6 +15,7 @@ options _dasllama_internal = true
 // `cols` runs the N-column ruler instead: the batched decode step's formats (q8, k4, k6, k5, q40, iq4xs) at their
 // served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows; the last column
 // is the N-column dispatch's wall over N one-column dispatches - under 1 the weight pass is shared, at 1 it is not.
+// `n2off` holds the q8 rows to the one-row-a-subgroup form (the two-row twin serves past `g_q8_n2_min_n` otherwise).
 
 require strings
 require math
@@ -174,7 +175,8 @@ def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double;
     return probe_fmt(fmt, n, d, gemv_lanes_per_row(int(fmt), int64(n)), ncols)
 }
 
-//! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format
+//! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format (the q8 row
+//! takes its two-rows-a-subgroup twin past Q8_N2_MIN_N, as the token command does)
 def private cols_ruler(n, d : int) {
     let fmts = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)
     for (f in fmts) {
@@ -208,6 +210,9 @@ def main : int {
     if (!ensure_q8_batch_cls()) {
         print("vk_gemv_probe: no Vulkan device\n")
         return 1
+    }
+    if (find_index(args, "n2off") >= 0) {   //! the q8 ruler on the one-row-a-subgroup form alone
+        g_q8_n2_min_n = 0xFFFFFFFFu
     }
     if (find_index(args, "cols") >= 0) {
         cols_ruler(n, d)

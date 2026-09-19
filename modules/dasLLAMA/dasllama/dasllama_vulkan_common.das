@@ -2660,6 +2660,13 @@ var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its s
 var g_rdq_n_unsplit = 0u
 var g_rdq_overflow_unsplit = false
 var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
+var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
+var g_rdq_n_n = 0u
+var g_rdq_overflow_n = false
+var g_rdq_names_n_unsplit : array<string>
+var g_rdq_n_n_unsplit = 0u
+var g_rdq_overflow_n_unsplit = false
+var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a switch between the one-row and N-row forms restarts the averages
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
