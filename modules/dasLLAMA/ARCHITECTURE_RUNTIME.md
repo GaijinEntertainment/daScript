@@ -231,7 +231,15 @@ and parallel sections about twice as long as the K-quant dot now makes them. Wit
 spinning is the faster arm where it was measured: Pocket TTS in Chrome reads 1.7x real time parked
 against 2.3x spinning, the same text, three runs each. A slower box may still prefer parking, and
 the knobs are unchanged for it - a box profile's `jobque_spin_us` and the setter override the
-default, and a program reads the value in force through `get_jobque_spin_us`. The pool's size
+default, and a program reads the value in force through `get_jobque_spin_us`. The window is the
+CPU chain's: while the whole-model GPU driver serves the loaded model the pool carries only the
+sampler's argmax between steps, and a worker still spinning when the step's command is submitted
+starves the driver's submission thread - on a 48-vCPU pod Llama-3.2-1B at four streams read 707
+tok/s summed under the 30 ms window and 1053 under 500 us, the knee at the step's own length. So
+the driver's arm and drop (`rdec_set_active`) report to `set_dispatch_gpu_served`, which pushes
+the GPU window (`g_jobque_spin_gpu_us`, 500 us; a box profile's `jobque_spin_gpu_us` and its setter
+override it) to a live queue at once, and `setup_dasllama_jobque` reads whichever window is in
+force (`get_jobque_spin_in_force_`) for a queue made after the load. The pool's size
 is the runtime's (`src/misc/job_que.cpp`): the browser's reported cores, capped and floored by
 `DAS_MAX_HW_JOBS` and `DAS_MIN_WEB_JOBS` (eight and four unless the build overrides them), minus
 one for the computing main thread - seven workers on a real box, the pool

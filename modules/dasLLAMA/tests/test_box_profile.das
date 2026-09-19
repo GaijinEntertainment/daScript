@@ -29,6 +29,7 @@ def private restore_defaults() {
     set_q4_chunks_per_job(4)
     set_q8_batch_chunks_per_job(4)
     set_jobque_spin_us_(30000l)
+    set_jobque_spin_gpu_us_(500l)
     set_jobque_join_poll(50l)
     set_team_rank_gate(-1)
     clear_mtp_depth()
@@ -48,7 +49,7 @@ def test_runtime_section_applies(t : T?) {
         + "\"attn_par_threshold\":50000,\"requant_par_threshold\":128000,"
         + "\"norm_par_threshold\":128000,\"rope_par_threshold\":50000,\"kv_store_par_threshold\":128000,"
         + "\"act_par_threshold\":50000,\"q8_chunks_per_job\":3,\"q4_chunks_per_job\":5,"
-        + "\"q8_batch_chunks_per_job\":2,\"jobque_spin_us\":1000,\"jobque_join_poll\":10,"
+        + "\"q8_batch_chunks_per_job\":2,\"jobque_spin_us\":1000,\"jobque_spin_gpu_us\":250,\"jobque_join_poll\":10,"
         + "\"team_rank_gate\":1\}\}")
     t |> success(fwrite(path, js), "profile written")
     apply_box_profile_runtime(path)
@@ -67,6 +68,7 @@ def test_runtime_section_applies(t : T?) {
     t |> equal(get_q4_chunks_per_job(), 5, "q4_chunks_per_job applied")
     t |> equal(get_q8_batch_chunks_per_job(), 2, "q8_batch_chunks_per_job applied")
     t |> equal(get_jobque_spin_us_(), 1000l, "jobque_spin_us stored")
+    t |> equal(get_jobque_spin_gpu_us_(), 250l, "jobque_spin_gpu_us stored")
     t |> equal(get_jobque_join_poll(), 10l, "jobque_join_poll stored")
     t |> equal(get_team_rank_gate(), 1, "team_rank_gate stored")
     remove(path)

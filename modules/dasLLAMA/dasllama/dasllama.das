@@ -523,8 +523,27 @@ def set_jobque_spin_us(v : int64) {
 }
 
 def get_jobque_spin_us() : int64 {
-    //! The spin window in force — ``set_jobque_spin_us``'s read half.
+    //! The CPU spin window — ``set_jobque_spin_us``'s read half. The window the pool runs at
+    //! the moment is ``get_jobque_spin_in_force``.
     return get_jobque_spin_us_()
+}
+
+def set_jobque_spin_gpu_us(v : int64) {
+    //! The workers' spin-before-park window while the whole-model GPU driver serves the loaded
+    //! model (default 500 us; a worker still spinning at the step's submit starves the driver).
+    //! A live queue takes it the moment the driver arms or drops; a later queue at its setup.
+    set_jobque_spin_gpu_us_(v)
+}
+
+def get_jobque_spin_gpu_us() : int64 {
+    //! The GPU-served spin window — ``set_jobque_spin_gpu_us``'s read half.
+    return get_jobque_spin_gpu_us_()
+}
+
+def get_jobque_spin_in_force() : int64 {
+    //! The spin window the pool runs right now: the GPU window while the whole-model driver
+    //! serves the loaded model, the CPU window otherwise.
+    return get_jobque_spin_in_force_()
 }
 
 def set_single_thread(on : bool) {

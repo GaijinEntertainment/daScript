@@ -80,6 +80,7 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
     t |> success(!tr.config.attn_qkv_bias && !tr.config.rope_neox, "the llama arm: no q/k/v bias, the NORM rope")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
+    t |> equal(get_jobque_spin_in_force(), get_jobque_spin_gpu_us(), "the armed driver put the GPU-served spin window in force")
     with_job_que() {
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
@@ -91,6 +92,7 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
         delete sg
         moe_gpu_drop_model()   //! every later step is the CPU chain
+        t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
         var sc <- create_session(tr, mirror_kv_dtype())
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
