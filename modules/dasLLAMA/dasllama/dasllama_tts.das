@@ -57,9 +57,9 @@ def finalize(var m : TtsModel) {
 
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-idle-release")]
 def tts_release_scratch(var m : TtsModel) {
-    //! Free the activation scratch a synthesis or a clone left behind - the carrier of either family
-    //! and the block home's scratch globals; the next run grows them back for a few milliseconds of
-    //! allocation. For a platform where idle memory matters, called when nothing is queued.
+    //! Free the activation scratch a synthesis or a clone left behind - the carrier of either family (a
+    //! StyleTTS2 carrier whose noise the parity rail captured stays) and the block home's scratch globals;
+    //! the next run grows them back for a few milliseconds. For a platform where idle memory matters, called when nothing is queued.
     if (!m.scratch.noise.captured) {
         delete m.scratch
     }

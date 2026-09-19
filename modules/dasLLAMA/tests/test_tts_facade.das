@@ -456,8 +456,9 @@ def private samples_off(a, b : array<float>) : int {
 def test_source_stream_contract(t : T?) {
     t |> run("the drawn noise is the captured stream's layout: phases first, then the normals in row order") @(t : T?) {
         {   // a bare block: the defer is a per-call cleanup, not the lambda's finalizer
+        let win0 = styletts2_source_window()
         defer() {
-            set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+            set_styletts2_source_window(win0)
         }
         set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
         let cfg = SineSourceCfg()
@@ -530,9 +531,10 @@ def test_release_and_cap_on_a_model(t : T?) {
         }
         with_job_que() {
             setup_dasllama_jobque_()
-            // the source window is process state: the cell establishes the default it claims against and leaves it there
+            // the source window is process state: the cell establishes the default it claims against and puts back what it found
+            let win0 = styletts2_source_window()
             defer() {
-                set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+                set_styletts2_source_window(win0)
             }
             set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
             var inscope m <- load_tts_model(gguf)

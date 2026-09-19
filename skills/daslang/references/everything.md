@@ -3248,7 +3248,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 
 - `synthesize` - Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols, synthesize; the chunks concatenate, the timings sum.
 - `synthesize_stream` - Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as soon as it exists, in order.
-- `tts_release_scratch` - Free the activation scratch a synthesis or a clone left behind - the carrier of either family and the block home's scratch globals; the next run grows them back for a few milliseconds of allocation.
+- `tts_release_scratch` - Free the activation scratch a synthesis or a clone left behind - the carrier of either family (a StyleTTS2 carrier whose noise the parity rail captured stays) and the block home's scratch globals; the next run grows them back for a few milliseconds.
 - `tts_set_chunk_chars` - Cap the chunk a synthesis speaks at `chars` codepoints (default `TTS_CHUNK_CHARS`; under one is refused): the peak memory a say holds is the largest chunk's, so a memory-tight platform lowers it and the same text speaks in more, shorter pieces, each its own synthesis.
 
 ### The served lane

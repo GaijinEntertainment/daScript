@@ -179,7 +179,8 @@ let POCKET_CODEC_WINDOW_DEFAULT = 16l
 var private g_pocket_codec_window = TtsStreamWindow(frames = POCKET_CODEC_WINDOW_DEFAULT)
 
 //! Set how many latent frames the codec's encoder and decoder run per stream step; 0 runs a
-//! whole chunk or clip in one step. The activations scale with the window, the output does not.
+//! whole chunk or clip in one step, a negative count is refused, and every set prints one info
+//! line. The activations scale with the window, the output does not.
 def set_pocket_codec_window(frames : int64) {
     stream_window_set(g_pocket_codec_window, frames, "set_pocket_codec_window")
 }

@@ -1233,8 +1233,9 @@ def styletts2_source_window() : int64 => g_source_window.frames
 
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-source-stream")]
 def set_styletts2_source_window(frames : int64) {
-    //! Run the harmonic source `frames` phase frames at a time (the default `SOURCE_WINDOW_FRAMES`,
-    //! 0 = the whole run in one window): the same samples either way, the tables sized to the window.
+    //! Run the harmonic source `frames` phase frames at a time (the default `SOURCE_WINDOW_FRAMES`; 0 = the
+    //! whole run in one window; a negative count is refused; every set prints one info line): the same
+    //! samples either way, the tables sized to the window.
     stream_window_set(g_source_window, frames, "set_styletts2_source_window")
 }
 
