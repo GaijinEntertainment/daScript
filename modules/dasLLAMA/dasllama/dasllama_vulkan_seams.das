@@ -154,13 +154,14 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
         tm.cnt = uint(cnt)
+        tm.mirbase = 0u   //! the seam's mirror starts at 0: the attention adds the row's base to its push
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
             kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-        enc_da_attn_cls(raw, h, g_gpu.da_set, pc, int64(n_heads))
+        enc_da_attn_cls(raw, h, g_gpu.da_set, pc, da_attn_row_wgs(int64(n_heads), kv_mul, 1l))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)

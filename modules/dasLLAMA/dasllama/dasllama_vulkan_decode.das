@@ -122,8 +122,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.attn_dev = make_device_buf(qd * 4l * nb)
     r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.sm_count))
     r.attn_cnt_off = n_heads * DA_NSPLIT_MAX * (head_size + 2l) * nb
-    r.attn_part_dev = make_device_buf((r.attn_cnt_off + da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l) * nb) * 4l)
-    rd_zero_words(r.attn_part_dev, r.attn_cnt_off * 4l, da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l) * nb)
+    r.attn_part_dev = make_device_buf((r.attn_cnt_off + n_heads * nb) * 4l)   //! a counter a (row, kv head, slab) group: a head a group at most, whatever a layer's GQA group
+    rd_zero_words(r.attn_part_dev, r.attn_cnt_off * 4l, n_heads * nb)
     r.ar_cnt_dev = make_device_buf(16l)
     var zeros : array<uint>
     zeros |> resize(4)
@@ -174,7 +174,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // cos layout: this token's cos[half]+sin[half] per rope class, one class's row after the other
     // (the qkn class twin reads its norm rows from the norms buffer directly, so nothing else rides the cos plane)
     r.cos_elems = cos_elems
-    r.cos_dev = make_device_buf(r.cos_elems * 4l)
+    r.cos_dev = make_device_buf(r.cos_elems * 4l * nb)   //! a row's rope row each, the N-row command's rows behind the first
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.logits_dev = make_device_buf(vocab * 4l * nb, r.log_xfer)
     r.dummy = make_device_buf(256l)
@@ -410,7 +410,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
-        let partbytes = (g_rd.attn_cnt_off + da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nb) * 4l
+        let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
         //! the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
         if (g_rd.has_sinks) {   //! the sink twins bind the sink plane past the pass's eight
             let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev)
@@ -550,8 +550,8 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.moe_meta1_dev = make_device_buf(META_BYTES)
     r.moe_meta3_dev = make_device_buf(META_BYTES)
     r.moe_meta2_dev = make_device_buf(META_BYTES)
-    r.moe_xq_dev = make_device_buf(dim)
-    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l)
+    r.moe_xq_dev = make_device_buf(dim * r.nb)   //! the routed feed's private quant a row: the sets over it bind the N-row extent
+    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l * r.nb)
     r.egate_dev = make_device_buf(k * nfe * 4l)
     r.eup_dev = make_device_buf(k * nfe * 4l)
     r.edown_dev = make_device_buf(k * dim * 4l)
@@ -2183,14 +2183,10 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows_in, nsplit : int64; t
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            if (kq_sb(L.f1)) {
+            if (kq_sb(L.f1)) {   //! a K-quant feed: the split pair, its requant the Q8_K one
                 enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
                 rd_ts(raw, "a:ar1")
-                if (kq_sb(L.f1)) {
-                    enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
-                } else {
-                    enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
-                }
+                enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
                 rd_ts(raw, "a:rq_f")
             } else {
                 enc_cls_ar_rq_b(raw, h, L.s_addr_ffn_rq_b, pc8, nrows)
@@ -3170,6 +3166,7 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
         tm.pos = uint(a.pos)
         tm.cnt = uint(a.pos + 1l)
+        tm.mirbase = 0u   //! the block's mirror rides the push: the attention adds the row's base to it
     }
     let ts1 = ref_time_ticks()
     submit_wait(g_gpu.span_cmd)
@@ -3756,6 +3753,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
         tm.pos = uint(pos)
         tm.cnt = uint(pos + 1l)
+        tm.mirbase = 0u
     }
     let ts1 = ref_time_ticks()
     submit_wait(L.cmd)
