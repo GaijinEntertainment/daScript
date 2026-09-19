@@ -506,21 +506,30 @@ class MetalPleFinish {
 
 
 [ |> template_struct_instance]
-class template MetalKqMulMmK45TensorT {
+class template MetalKqMulMmSplitTensorBase {
     @template_constant MT : uint = 32u
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> //!< 16B scale blocks, half view (d, dmin at 8*blk)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   //!< the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
+    @template_constant TWB : int = 6144     //!< W stage halves: one 64x72 tile; 9216 = the two ping-pong tiles `db_shell` runs
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
     @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[6144]          //!< W chunk: 64 wrows x 72-half padded rows (bk=64; 12288B lands mid-plateau)
-    @template_constant BLK : uint = 32u
-    @template_constant QH : bool = false
+    @workgroup twb : float16[TWB]           //!< W chunk: 64 wrows x 72-half padded rows
 
-    [metal_kernel(float_a_ok=true)]
-    def metal_kq_mulmm_t {
+    //! decodes 16 W elements of chunk kb into the tile at tbase; tbase is 0 on every single-tile shell
+    def abstract stage16(work, kb, nBase, nsb, tbase : uint) : void
+
+    def stage_tile(lid, kb, nBase, nsb, tbase : uint) {
+        var work = lid
+        while (work < 256u) {
+            stage16(work, kb, nBase, nsb, tbase)
+            work += gl_WorkGroupSize.x
+        }
+    }
+
+    def run_shell {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
         let nkb = kdim / 32u
@@ -531,49 +540,131 @@ class template MetalKqMulMmK45TensorT {
         tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            var work = lid
-            while (work < 256u) {
-                let j = work >> 2u
-                let sub = work & 3u
-                let jsl = kb + (sub >> 1u)
-                let sb = jsl / 8u
-                let js = jsl % 8u
-                let kh = (sub & 1u) * 16u
-                let blk = (nBase + j) * nsb + sb
-                let sv = ks4[blk]
-                var sc = 0u
-                var mn = 0u
-                kmask_scmn(sv, js, sc, mn)
-                let dsc = float(ksh[blk * 8u]) * float(sc)
-                let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-                static_if (QH) {
-                    let nsh = (js & 1u) * 4u
-                    let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
-                    let hb = blk * BLK + 32u + kh / 4u
-                    let tb0 = j * 72u + (sub >> 1u) * 32u + kh
-                    for [unroll_full] (k in range(4)) {
-                        let u = kqu[qb + uint(k)]
-                        let hu = kqu[hb + uint(k)]
-                        let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
-                        for [unroll_full] (c in range(4)) {
-                            twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
-                        }
-                    }
-                } else {
-                    for [unroll_full] (t in range(16)) {
-                        let e = kh + uint(t)
-                        let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                        twb[j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
-                    }
-                }
-                work += gl_WorkGroupSize.x
-            }
+            stage_tile(lid, kb, nBase, nsb, 0u)
             barrier()
             tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
             barrier()
             kb += 2u
         }
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+    }
+
+    //! the double-buffered twin of run_shell: TWB = 9216 holds two ping-pong tiles and the loop
+    //! runs ONE barrier per chunk, staging chunk b+1 while the tensor op reads chunk b
+    [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    def db_shell {
+        let mBase = gl_WorkGroupID.x * MT
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        var acc : float[8192]
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
+        stage_tile(gl_LocalInvocationID.x, 0u, nBase, nsb, 0u)
+        var kb = 0u
+        while (kb < nkb) {
+            barrier()
+            if (kb + 2u < nkb) {
+                stage_tile(gl_LocalInvocationID.x, kb + 2u, nBase, nsb, (((kb / 2u) + 1u) & 1u) * 4608u)
+            }
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, unsafe(addr(twb[((kb / 2u) & 1u) * 4608u])), MT, 64u, 64u)
+            kb += 2u
+        }
+        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+    }
+
+    // expert e is the grid's z; its ce bucket rows start at rbase in the contiguous X/y panels
+    def moe_shell(ce, rbase : uint; rem : bool) {
+        let e = gl_WorkGroupID.z
+        let mBase = gl_WorkGroupID.x * MT + (rem ? ce / 128u * 128u : 0u)
+        let lim = MT == 128u ? ce / 128u * 128u : (ce + 31u) / 32u * 32u
+        if (mBase >= lim) {
+            return
+        }
+        let nBase = gl_WorkGroupID.y * 64u
+        let nkb = kdim / 32u
+        let nsb = kdim / 256u
+        let lid = gl_LocalInvocationID.x
+        var acc : float[8192]
+        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
+        var kb = 0u
+        while (kb < nkb) {
+            //! the expert plane base rides the stage16 call - a stage_tile argument is emitted once outside the work loop, which moves the decode's shape
+            var work = lid
+            while (work < 256u) {
+                stage16(work, kb, e * ndim + nBase, nsb, 0u)
+                work += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
+            barrier()
+            kb += 2u
+        }
+        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+    }
+
+    def dequant_tile(kb, nBase, nsb : uint) {
+        stage_tile(gl_LocalInvocationID.x, kb, nBase, nsb, 0u)
+        barrier()
+    }
+
+    // staged element e (wrow j = e/64, k c = e%64) -> its index in the f16 panel; dequant_val(e) is its value
+    def dequant_idx(e : uint) : uint => (gl_WorkGroupID.y * 64u + (e >> 6u)) * kdim + gl_WorkGroupID.x * 64u + (e & 63u)
+
+    def dequant_val(e : uint) : float16 => twb[(e >> 6u) * 72u + (e & 63u)]
+}
+
+//! the q4_K / q5_K decode, one source for the single-tile and the double-buffered shells:
+//! kdh = the 16B scale blocks' half view (d, dmin at 8*blk), ksc the same buffer's uint4 view,
+//! kqu the quant plane (qs at BLK*blk; k5's qh at BLK*blk+32)
+[ |> template_struct_instance]
+class template MetalKqMulMmK45DecodeT : MetalKqMulMmSplitTensorBase {
+    @template_constant BLK : uint = 32u
+    @template_constant QH : bool = false
+
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let kh = (sub & 1u) * 16u
+        let blk = (nBase + j) * nsb + sb
+        let sv = ksc[blk]
+        var sc = 0u
+        var mn = 0u
+        kmask_scmn(sv, js, sc, mn)
+        let dsc = float(kdh[blk * 8u]) * float(sc)
+        let dmn = float(kdh[blk * 8u + 1u]) * float(mn)
+        static_if (QH) {
+            let nsh = (js & 1u) * 4u
+            let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
+            let hb = blk * BLK + 32u + kh / 4u
+            let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
+            for [unroll_full] (k in range(4)) {
+                let u = kqu[qb + uint(k)]
+                let hu = kqu[hb + uint(k)]
+                let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
+                for [unroll_full] (c in range(4)) {
+                    twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
+                }
+            }
+        } else {
+            for [unroll_full] (t in range(16)) {
+                let e = kh + uint(t)
+                let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                twb[tbase + j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
+            }
+        }
+    }
+}
+
+[ |> template_struct_instance]
+class template MetalKqMulMmK45TensorT : MetalKqMulMmK45DecodeT {
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_t {
+        run_shell()
     }
 }
 
@@ -617,89 +708,14 @@ class MetalKqMulMmK5TH128 : MetalKqMulMmK45TensorT {
     override MT = 128u
 }
 
-// MT is the M tile
 [ |> template_struct_instance]
-class template MetalKqMulMmDbShellT {
-    @template_constant MT : uint = 32u
-    @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
-    @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[9216]          //!< two 64x72-half ping-pong tiles (18432B)
+class template MetalKqMulMmK45DbT : MetalKqMulMmK45DecodeT {
+    override TWB = 9216
 
-    def abstract stage_chunk(kb0, tbase, nBase, nsb : uint) : void
-
-    [metal_kernel(float_a_ok=true), arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_db {
-        let mBase = gl_WorkGroupID.x * MT
-        let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
-        let nsb = kdim / 256u
-        var acc : float[8192]
-        var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
-        stage_chunk(0u, 0u, nBase, nsb)
-        var kb = 0u
-        while (kb < nkb) {
-            barrier()
-            if (kb + 2u < nkb) {
-                stage_chunk(kb + 2u, (((kb / 2u) + 1u) & 1u) * 4608u, nBase, nsb)
-            }
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, unsafe(addr(twb[((kb / 2u) & 1u) * 4608u])), MT, 64u, 64u)
-            kb += 2u
-        }
-        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+        db_shell()
     }
-}
-
-[ |> template_struct_instance]
-class template MetalKqMulMmK45DbT : MetalKqMulMmDbShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> //!< 16B scale blocks, half view (d, dmin at 8*blk)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   //!< the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
-    @template_constant BLK : uint = 32u
-    @template_constant QH : bool = false
-
-    def override stage_chunk(kb0, tbase, nBase, nsb : uint) {
-        var work = gl_LocalInvocationID.x
-        while (work < 256u) {
-            let j = work >> 2u
-            let sub = work & 3u
-            let jsl = kb0 + (sub >> 1u)
-            let sb = jsl / 8u
-            let js = jsl % 8u
-            let kh = (sub & 1u) * 16u
-            let blk = (nBase + j) * nsb + sb
-            let sv = ks4[blk]
-            var sc = 0u
-            var mn = 0u
-            kmask_scmn(sv, js, sc, mn)
-            let dsc = float(ksh[blk * 8u]) * float(sc)
-            let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            static_if (QH) {
-                let nsh = (js & 1u) * 4u
-                let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
-                let hb = blk * BLK + 32u + kh / 4u
-                let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
-                for [unroll_full] (k in range(4)) {
-                    let u = kqu[qb + uint(k)]
-                    let hu = kqu[hb + uint(k)]
-                    let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> js) & 0x01010101) << 4u)
-                    for [unroll_full] (c in range(4)) {
-                        twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * float((qv >> (8u * uint(c))) & 255u) - dmn)
-                    }
-                }
-            } else {
-                for [unroll_full] (t in range(16)) {
-                    let e = kh + uint(t)
-                    let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                    twb[tbase + j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
-                }
-            }
-            work += gl_WorkGroupSize.x
-        }
-    }
-
 }
 
 [metal_dispatch(name = "enc_kq_mm_k4_thdb_c", pso = "g_pf_pso_kq_mm4_thdb", tgmem = "MetalKqMulMmK4THDb_metal_kq_mulmm_db_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
@@ -728,66 +744,46 @@ class MetalKqMulMmK5THDb128 : MetalKqMulMmK45DbT {
     override MT = 128u
 }
 
+//! the q6_K decode, one source for the single-tile and the double-buffered shells: kdh = the d
+//! plane (scale buffer at byte nsb*16; s0off = the caller's doff), ksc the 16B sub-scale blocks
+//! in the same buffer at 0, kqu the quant plane (ql at 48*blk, qh at 48*blk+32)
 [ |> template_struct_instance]
-class template MetalKqMulMmK6TensorT {
-    @template_constant MT : uint = 32u
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> //!< d plane (scale buffer at byte nsb*16; s0off = the caller's doff)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>   //!< 16B sub-scale blocks, same buffer at 0
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< ql at 48*blk, qh at 48*blk+32
-    @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
-    @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[6144]
+class template MetalKqMulMmK6DecodeT : MetalKqMulMmSplitTensorBase {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
+        let j = work >> 2u
+        let sub = work & 3u
+        let jsl = kb + (sub >> 1u)
+        let sb = jsl / 8u
+        let js = jsl % 8u
+        let half6 = js / 4u
+        let gg = js % 4u
+        let nsh = (gg / 2u) * 4u
+        let hsh = gg * 2u
+        let kh = (sub & 1u) * 16u
+        let ile = kh / 16u
+        let blk = (nBase + j) * nsb + sb
+        let dall = float(kdh[blk])
+        let si = half6 * 8u + gg * 2u + ile
+        let sv = ksc[blk]
+        let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+        let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+        let dsc = dall * s6
+        for [unroll_full] (t in range(16)) {
+            let k = uint(t) / 4u
+            let c = uint(t) % 4u
+            let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+            let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
+            let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
+            twb[tbase + j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * (float(q) - 32.0))
+        }
+    }
+}
 
+[ |> template_struct_instance]
+class template MetalKqMulMmK6TensorT : MetalKqMulMmK6DecodeT {
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_k6_t {
-        let mBase = gl_WorkGroupID.x * MT
-        let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
-        let nsb = kdim / 256u
-        let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
-        var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
-        var kb = 0u
-        while (kb < nkb) {
-            var work = lid
-            while (work < 256u) {
-                let j = work >> 2u
-                let sub = work & 3u
-                let jsl = kb + (sub >> 1u)
-                let sb = jsl / 8u
-                let js = jsl % 8u
-                let half6 = js / 4u
-                let gg = js % 4u
-                let nsh = (gg / 2u) * 4u
-                let hsh = gg * 2u
-                let kh = (sub & 1u) * 16u
-                let ile = kh / 16u
-                let blk = (nBase + j) * nsb + sb
-                let dall = float(kdh[blk])
-                let si = half6 * 8u + gg * 2u + ile
-                let sv = ksc[blk]
-                let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
-                let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
-                let dsc = dall * s6
-                for [unroll_full] (t in range(16)) {
-                    let k = uint(t) / 4u
-                    let c = uint(t) % 4u
-                    let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
-                    let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
-                    let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                    twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * (float(q) - 32.0))
-                }
-                work += gl_WorkGroupSize.x
-            }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
-            barrier()
-            kb += 2u
-        }
-        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+        run_shell()
     }
 }
 
@@ -808,44 +804,13 @@ class MetalKqMulMmK6TH128 : MetalKqMulMmK6TensorT {
 }
 
 [ |> template_struct_instance]
-class template MetalKqMulMmK6DbT : MetalKqMulMmDbShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> //!< d plane (scale buffer at byte nsb*16; s0off = the caller's doff)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>   //!< 16B sub-scale blocks, same buffer at 0
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< ql at 48*blk, qh at 48*blk+32
+class template MetalKqMulMmK6DbT : MetalKqMulMmK6DecodeT {
+    override TWB = 9216
 
-    def override stage_chunk(kb0, tbase, nBase, nsb : uint) {
-        var work = gl_LocalInvocationID.x
-        while (work < 256u) {
-            let j = work >> 2u
-            let sub = work & 3u
-            let jsl = kb0 + (sub >> 1u)
-            let sb = jsl / 8u
-            let js = jsl % 8u
-            let half6 = js / 4u
-            let gg = js % 4u
-            let nsh = (gg / 2u) * 4u
-            let hsh = gg * 2u
-            let kh = (sub & 1u) * 16u
-            let ile = kh / 16u
-            let blk = (nBase + j) * nsb + sb
-            let dall = float(kdh[blk])
-            let si = half6 * 8u + gg * 2u + ile
-            let sv = ksc[blk]
-            let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
-            let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
-            let dsc = dall * s6
-            for [unroll_full] (t in range(16)) {
-                let k = uint(t) / 4u
-                let c = uint(t) % 4u
-                let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
-                let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
-                let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                twb[tbase + j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * (float(q) - 32.0))
-            }
-            work += gl_WorkGroupSize.x
-        }
+    [metal_kernel(float_a_ok=true)]
+    def metal_kq_mulmm_db {
+        db_shell()
     }
-
 }
 
 [metal_dispatch(name = "enc_kq_mm_k6_thdb_c", pso = "g_pf_pso_kq_mm6_thdb", tgmem = "MetalKqMulMmK6THDb_metal_kq_mulmm_db_msl_tgmem", tg = 128, grid = "mp/32, rows/64", params = "mp : int64, rows : int64")]
@@ -857,89 +822,6 @@ class MetalKqMulMmK6THDb : MetalKqMulMmK6DbT {
 class MetalKqMulMmK6THDb128 : MetalKqMulMmK6DbT {
     typedef XT = float16
     override MT = 128u
-}
-
-[ |> template_struct_instance]
-class template MetalKqMulMmSplitTensorBase {
-    @template_constant MT : uint = 32u
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
-    @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[6144]          //!< W chunk: 64 wrows x 72-half padded rows
-
-    def abstract stage16(work, kb, nBase, nsb : uint) : void
-
-    def run_shell {
-        let mBase = gl_WorkGroupID.x * MT
-        let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
-        let nsb = kdim / 256u
-        let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
-        var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
-        var kb = 0u
-        while (kb < nkb) {
-            var work = lid
-            while (work < 256u) {
-                stage16(work, kb, nBase, nsb)
-                work += gl_WorkGroupSize.x
-            }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
-            barrier()
-            kb += 2u
-        }
-        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
-    }
-
-    // expert e is the grid's z; its ce bucket rows start at rbase in the contiguous X/y panels
-    def moe_shell(ce, rbase : uint; rem : bool) {
-        let e = gl_WorkGroupID.z
-        let mBase = gl_WorkGroupID.x * MT + (rem ? ce / 128u * 128u : 0u)
-        let lim = MT == 128u ? ce / 128u * 128u : (ce + 31u) / 32u * 32u
-        if (mBase >= lim) {
-            return
-        }
-        let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
-        let nsb = kdim / 256u
-        let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
-        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
-        var kb = 0u
-        while (kb < nkb) {
-            var work = lid
-            while (work < 256u) {
-                stage16(work, kb, e * ndim + nBase, nsb)
-                work += gl_WorkGroupSize.x
-            }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
-            barrier()
-            kb += 2u
-        }
-        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
-    }
-
-    def dequant_tile(kb, nBase, nsb : uint) {
-        var work = gl_LocalInvocationID.x
-        while (work < 256u) {
-            stage16(work, kb, nBase, nsb)
-            work += gl_WorkGroupSize.x
-        }
-        barrier()
-    }
-
-    // staged element e (wrow j = e/64, k c = e%64) -> its index in the f16 panel; dequant_val(e) is its value
-    def dequant_idx(e : uint) : uint => (gl_WorkGroupID.y * 64u + (e >> 6u)) * kdim + gl_WorkGroupID.x * 64u + (e & 63u)
-
-    def dequant_val(e : uint) : float16 => twb[(e >> 6u) * 72u + (e & 63u)]
 }
 
 [ |> template_struct_instance]
@@ -965,7 +847,7 @@ class template MetalKqMulMmIq4xsTensorT : MetalKqMulMmSplitTensorBase {
         }
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -986,7 +868,7 @@ class template MetalKqMulMmIq4xsTensorT : MetalKqMulMmSplitTensorBase {
         for [unroll_full] (k in range(4)) {
             let u = kqu[qb + uint(k)]
             for [unroll_full] (c in range(4)) {
-                twb[j * 72u + (sub >> 1u) * 32u + kh + uint(k) * 4u + uint(c)] = float16(dsc * iq4lutt[(u >> (8u * uint(c) + nsh)) & 15u])
+                twb[tbase + j * 72u + (sub >> 1u) * 32u + kh + uint(k) * 4u + uint(c)] = float16(dsc * iq4lutt[(u >> (8u * uint(c) + nsh)) & 15u])
             }
         }
     }
@@ -1103,7 +985,7 @@ class template MetalKqMulMmK3TensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1127,7 +1009,7 @@ class template MetalKqMulMmK3TensorT : MetalKqMulMmSplitTensorBase {
         let hb = blk * 24u + 16u + ile * 4u
         let nsh = gg3 * 2u
         let hsh = hf3 * 4u + gg3
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let u = kqu[qb + uint(k)]
             let hu = kqu[hb + uint(k)]
@@ -1191,7 +1073,7 @@ class template MetalKqMulMmK2TensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1213,7 +1095,7 @@ class template MetalKqMulMmK2TensorT : MetalKqMulMmSplitTensorBase {
         let dsc3 = dsc * 0.000000059604644775390625
         let qb = blk * 16u + hf3 * 8u + ile * 4u
         let nsh = gg3 * 2u
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let qv = (kqu[qb + uint(k)] >> nsh) & 0x03030303
             twb[tb0 + uint(k) * 4u] = float16(dsc * float(qv & 255u) - dmn)
@@ -1248,7 +1130,7 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1263,7 +1145,7 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
         let qsw = kqu[blk * 26u + js * 2u + ile]
         let qh3 = (kqu[blk * 26u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
         let sgw3 = kqu[blk * 26u + 18u + js]
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let b3 = ile * 4u + uint(k)
             let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh3 << (8u - b3)) & 256u)
@@ -1348,7 +1230,7 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1362,7 +1244,7 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
         let dsc = float(kdh[blk]) * float(((int(scw >> ((js & 3u) * 8u)) & 255) ^ 128) - 128)
         let qsw = kqu[blk * 24u + js * 2u + ile]
         let aux3 = kqu[blk * 24u + 16u + js]
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let q3 = ile * 2u + uint(k) / 2u
             let sgb = ksign7m((aux3 >> (7u * q3)) & 127u)
@@ -1440,7 +1322,7 @@ class template MetalKqMulMmIq2sTensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1456,7 +1338,7 @@ class template MetalKqMulMmIq2sTensorT : MetalKqMulMmSplitTensorBase {
         let qw2 = kqu[blk * 18u + js]
         let sgw2 = kqu[blk * 18u + 8u + js]
         let qh2 = (kqu[blk * 18u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let l2 = ile * 2u + uint(k) / 2u
             let idx2 = (((qw2 >> (8u * l2)) & 255u) | ((qh2 << (8u - 2u * l2)) & 0x300u)) * 2u + uint(k) % 2u
@@ -1521,7 +1403,7 @@ class template MetalKqMulMmIq2xsTensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1535,7 +1417,7 @@ class template MetalKqMulMmIq2xsTensorT : MetalKqMulMmSplitTensorBase {
         let scw = si2 < 8u ? (si2 < 4u ? sv.x : sv.y) : (si2 < 12u ? sv.z : sv.w)
         let dsc = float(kdh[blk]) * float((scw >> ((si2 & 3u) * 8u)) & 255u)
         let qw2 = kqu[blk * 16u + js * 2u + ile]
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let w16 = (qw2 >> (16u * (uint(k) / 2u))) & 0xFFFFu
             let idx2 = (w16 & 511u) * 2u + uint(k) % 2u
@@ -1600,7 +1482,7 @@ class template MetalKqMulMmIq2xxsTensorT : MetalKqMulMmSplitTensorBase {
         run_shell()
     }
 
-    def override stage16(work, kb, nBase, nsb : uint) {
+    def override stage16(work, kb, nBase, nsb, tbase : uint) {
         let j = work >> 2u
         let sub = work & 3u
         let jsl = kb + (sub >> 1u)
@@ -1614,7 +1496,7 @@ class template MetalKqMulMmIq2xxsTensorT : MetalKqMulMmSplitTensorBase {
         let dsc = float(kdh[blk]) * float((scw >> ((js & 3u) * 8u)) & 255u)
         let gw2 = kqu[blk * 16u + js * 2u]
         let aux2 = kqu[blk * 16u + js * 2u + 1u]
-        let tb0 = j * 72u + (sub >> 1u) * 32u + kh
+        let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let q3 = ile * 2u + uint(k) / 2u
             let bidx = (gw2 >> (8u * q3)) & 255u
@@ -2396,12 +2278,21 @@ class MetalMoeMulMmBase : MetalMmTileBase {
     @ssbo @binding = 9 @role = "read" bkt : array<uint>
 
     //! a format owns bindings 0..2 - its weight views; its plane stride rides ka.eplane
-    def abstract wbase(e, nBase, lr0 : uint) : uint    //! expert plane origin, in the format's block unit
+    def sb_unit() : uint => 32u   //! the weight plane's block unit; the K-quants override it to the 256-quant superblock
+    def wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / sb_unit())   //! expert plane origin, in that unit
     def abstract stage_a(wb, kb, il0, tA0 : uint) : void   //! decode one k-block into the A tile
 
     def stage_init(wb, il0 : uint) {}   //! format prologue: bind carried-pointer state (q8's walk)
 
     def stage_acc(var acc : simdgroup_float8x8[8]) {}   //! accumulator seed hook (mx4's per-expert bias)
+
+    //! publishes a decoded A half into the shared W tile, fenced against the previous math loop
+    def publish_a(var va : float16[16]; tA0 : uint) {
+        barrier()
+        for [unroll_full] (i in range(16)) {
+            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+        }
+    }
 
     def run {
         let e = gl_WorkGroupID.z
@@ -2464,8 +2355,6 @@ class MetalMoeMulMmQ8 : MetalMoeMulMmBase {
     scur : float16 const?   //!< carried scale pointer
     qp : int8 const?        //!< carried quant pointer
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
-
     def override stage_init(wb, il0 : uint) {
         scur = unsafe(addr(wsh[wb * 17u]))
         qp = unsafe(addr(wqb[wb * 34u + 2u + il0 * 16u]))
@@ -2477,10 +2366,7 @@ class MetalMoeMulMmQ8 : MetalMoeMulMmBase {
         for [unroll_full] (i in range(16)) {
             va[i] = float16(float(unsafe(qp[i])) * sA)
         }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
+        publish_a(va, tA0)
         scur = unsafe(scur + 17)
         qp = unsafe(qp + 34)
     }
@@ -2491,13 +2377,17 @@ class MetalMoeMulMmQ8 : MetalMoeMulMmBase {
     }
 }
 
-[metal_dispatch(name = "pf_enc_moe_mm_k4_c", pso = "g_pf_pso_moe_mm_k4", tgmem = "metal_moe_mulmm_k4_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
-class MetalMoeMulMmK4 : MetalMoeMulMmBase {
+//! the q4_K / q5_K register-tile decode of the routed simdgroup family: BLK is the superblock's
+//! quant-plane stride in uints, QH the q5_K 5th-bit overlay that rides after the nibbles
+[ |> template_struct_instance]
+class template MetalMoeMulMmK45T : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @template_constant BLK : uint = 32u
+    @template_constant QH : bool = false
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
+    def override sb_unit() : uint => 256u
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -2510,21 +2400,34 @@ class MetalMoeMulMmK4 : MetalMoeMulMmBase {
         kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-        let qb = blk * 32u + (js / 2u) * 8u + il0 * 4u
-        let nsh = (js & 1u) * 4u
-        for [unroll_full] (k in range(4)) {
-            let u = kqu[qb + uint(k)]
-            for [unroll_full] (c in range(4)) {
-                let q = (u >> (8u * uint(c) + nsh)) & 15u
-                va[k * 4 + c] = float16(dsc * float(q) - dmn)
+        let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
+        static_if (QH) {
+            let hb = blk * BLK + 32u + il0 * 4u
+            let nsh = (js & 1u) * 4u
+            for [unroll_full] (k in range(4)) {
+                let u = kqu[qb + uint(k)]
+                let hu = kqu[hb + uint(k)]
+                for [unroll_full] (c in range(4)) {
+                    let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
+                    va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                }
+            }
+        } else {
+            let nsh = (js & 1u) * 4u
+            for [unroll_full] (k in range(4)) {
+                let u = kqu[qb + uint(k)]
+                for [unroll_full] (c in range(4)) {
+                    let q = (u >> (8u * uint(c) + nsh)) & 15u
+                    va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                }
             }
         }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
+        publish_a(va, tA0)
     }
+}
 
+[metal_dispatch(name = "pf_enc_moe_mm_k4_c", pso = "g_pf_pso_moe_mm_k4", tgmem = "metal_moe_mulmm_k4_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
+class MetalMoeMulMmK4 : MetalMoeMulMmK45T {
     [metal_kernel(name="metal_moe_mulmm_k4_msl")]
     def metal_moe_mulmm_k4 {
         run()
@@ -2532,40 +2435,9 @@ class MetalMoeMulMmK4 : MetalMoeMulMmBase {
 }
 
 [metal_dispatch(name = "pf_enc_moe_mm_k5_c", pso = "g_pf_pso_moe_mm_k5", tgmem = "metal_moe_mulmm_k5_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
-class MetalMoeMulMmK5 : MetalMoeMulMmBase {
-    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16>
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
-
-    def override stage_a(wb, kb, il0, tA0 : uint) {
-        var va : float16[16]
-        let sb = kb / 8u
-        let js = kb % 8u
-        let blk = wb + sb
-        let sv = ks4[blk]
-        var sc = 0u
-        var mn = 0u
-        kmask_scmn(sv, js, sc, mn)
-        let dsc = float(ksh[blk * 8u]) * float(sc)
-        let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-        let qb = blk * 40u + (js / 2u) * 8u + il0 * 4u
-        let hb = blk * 40u + 32u + il0 * 4u
-        let nsh = (js & 1u) * 4u
-        for [unroll_full] (k in range(4)) {
-            let u = kqu[qb + uint(k)]
-            let hu = kqu[hb + uint(k)]
-            for [unroll_full] (c in range(4)) {
-                let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
-                va[k * 4 + c] = float16(dsc * float(q) - dmn)
-            }
-        }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
-    }
+class MetalMoeMulMmK5 : MetalMoeMulMmK45T {
+    override BLK = 40u
+    override QH = true
 
     [metal_kernel(name="metal_moe_mulmm_k5_msl")]
     def metal_moe_mulmm_k5 {
@@ -2577,8 +2449,6 @@ class MetalMoeMulMmK5 : MetalMoeMulMmBase {
 class MetalMoeMulMmQ51 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" @off = "soff" wsh : array<float16> //!< scale plane (d at 2*blk, m at 2*blk+1)
     @ssbo @binding = 1 @role = "weight" @off = "qoff" wqu : array<uint>    //!< quant plane, uint view (block at 5*blk; qh at +4)
-
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -2597,10 +2467,7 @@ class MetalMoeMulMmQ51 : MetalMoeMulMmBase {
                 va[k * 4 + c] = float16(d * float(q) + m)
             }
         }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
+        publish_a(va, tA0)
     }
 
     [metal_kernel(name="metal_moe_mulmm_q51_msl")]
@@ -2615,7 +2482,7 @@ class MetalMoeMulMmK6 : MetalMoeMulMmBase {
     @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
+    def override sb_unit() : uint => 256u
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -2647,10 +2514,7 @@ class MetalMoeMulMmK6 : MetalMoeMulMmBase {
             va[k * 4 + 2] = float16(dsc_sh16 * float(qv & 16711680u) - dmn)
             va[k * 4 + 3] = float16(dsc_sh24 * float(qv & 4278190080u) - dmn)
         }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
+        publish_a(va, tA0)
     }
 
     [metal_kernel(name="metal_moe_mulmm_k6_msl")]
@@ -2666,8 +2530,6 @@ class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
     @ssbo @binding = 12 @role = "weight" wbias : array<float> //!< [ne x ndim] per-expert bias rows (hasb models)
     @ssbo @binding = 13 @role = "weight" vtab : array<float>  //!< [16] signed doubled-e2m1 values (host-built)
     @workgroup vt : float[32]
-
-    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
 
     def override stage_init(wb, il0 : uint) {
         let lid = gl_LocalInvocationID.x
@@ -2701,10 +2563,7 @@ class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
                 va[w * 4 + c] = float16(vt[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
             }
         }
-        barrier()
-        for [unroll_full] (i in range(16)) {
-            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-        }
+        publish_a(va, tA0)
     }
 
     [metal_kernel(name="metal_moe_mulmm_mx4_msl")]
@@ -5483,7 +5342,7 @@ def private devw_mirror_run(var k : auto(K)?; fmt : KqFmt; kq, ks : array<uint8>
     for (nb in range64(d / 64l)) {
         for (kb2 in range64(kdim / 64l)) {
             for (work in range(256)) {
-                k->stage16(uint(work), uint(kb2 * 2l), uint(nb * 64l), nsb)
+                k->stage16(uint(work), uint(kb2 * 2l), uint(nb * 64l), nsb, 0u)
             }
             for (j in range64(64l)) {
                 for (c in range64(64l)) {

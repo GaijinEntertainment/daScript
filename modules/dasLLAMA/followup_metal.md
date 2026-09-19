@@ -128,8 +128,12 @@ zoo. Facts that decide the order:
   Q8MvB2/B4 onto `MetalGemvB24T`, argmax rows, rope-store batched, DequantK6H,
   G4aMag/Q3aPow, the bias pair; ~325).
 - Rules for every conversion: a stamp's `tgmem=` string is `<LeafClass>_<method>_msl_tgmem`, so a
-  hand class becoming a stamp changes it and drops its `[metal_kernel(name=..)]`; a
-  `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
+  hand class becoming a stamp keeps its names by keeping its named `[metal_kernel(name=..)]`
+  def on the leaf and moving only the shared body to the template; a leaf that inherits a
+  `[metal_kernel]` method AND declares its own emits BOTH kernels (a second
+  `<Leaf>_<method>_msl` global), so a chain splits the shared decode from the kernel-carrying
+  levels; an instance may add fields (the `MetalKqDequant<Fmt>` stamps bind their own `@ssbo`);
+  a `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
   infers both arms); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
   `test_metal_gemm_kernels.das`) are the parity lock per format - green before and after, on the
   M1 first, the M5 pass after.
