@@ -1265,16 +1265,18 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
     g_rdec_note_weight_bytes = f
 }
 
-def private moe_gpu_no_binding_cap : int64 => 0l
+[unused_argument(regions)]
+def private moe_gpu_no_binding_cap(regions : int64) : int64 => 0l
 var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
 
-//! The tier's largest legal single-SSBO binding range in bytes (0 = no tier / unknown). The
-//! resident KV mirror binds one range per side, so the ctx negotiation must cap against it.
-def public set_moe_gpu_binding_cap(f : function<() : int64>) {
+//! The tier's largest legal single-SSBO binding range in bytes for planes shared by `regions` K/V mirror
+//! regions (0 = no tier / unknown). The resident KV mirror binds one range per side, every region
+//! carrying its own slack past its planes, so the ctx negotiation must cap against it.
+def public set_moe_gpu_binding_cap(f : function<(regions : int64) : int64>) {
     g_moe_gpu_binding_cap = f
 }
 
-def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
+def public moe_gpu_binding_cap(regions : int64) : int64 => invoke(g_moe_gpu_binding_cap, regions)
 
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
