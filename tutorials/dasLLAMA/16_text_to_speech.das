@@ -302,7 +302,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         if (m.kind != TtsKind.pocket) {
             tts_set_chunk_chars(m, 60)
             var short_pieces = 0
-            synthesize_stream(m, TEXT, vname, 1.0) $(chunk) {
+            synthesize_stream(m, TEXT, vname, 1.0) $(_chunk) {
                 short_pieces++
             }
             print("tts_set_chunk_chars(60): the same text in {short_pieces} pieces, at the peak of the longest\n")

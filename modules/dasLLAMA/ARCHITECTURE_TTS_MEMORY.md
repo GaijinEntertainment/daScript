@@ -87,9 +87,11 @@ frames the window adds, the sum carried on from the state, then the phase for th
 samples from the carried frames - the frame before the window and the one after it stay in the
 carry, because the upsample's taps reach one frame each way - and the sine rows for
 `linear_rows` into the window's slice of the mixed signal. The resamplers are one
-implementation each, the window form; the whole-row `resize_linear` and `resize_linear_torch`
-call it over every column, so the parity tests that hold them to the reference kernels hold the
-window form too. The noise stream is the reference's one stream: `styletts2_draw_noise` opens
+implementation each, the window form; the whole-row `resize_linear` runs it over every column,
+which is the form the kernel tests hold to the reference arithmetic, and the block test holds the
+window form at offsets and strides off the whole row bit-equal to it. The window knob is a
+`TtsStreamWindow`, the record Pocket's codec window is too (`ARCHITECTURE_POCKET.md` sec.2.46):
+a set is announced, a negative count refused. The noise stream is the reference's one stream: `styletts2_draw_noise` opens
 it for the initial phases, and the source reopens it from the same seed, skips those draws, and
 takes the normals in row order a window at a time; a captured stream (the parity rail's) is
 read by window offset instead. The window changes where a value is computed and nothing else -

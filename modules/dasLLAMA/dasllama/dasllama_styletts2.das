@@ -1225,20 +1225,17 @@ def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exac
     }
 }
 
-let private SOURCE_WINDOW_FRAMES = 64l
-var private g_source_window = SOURCE_WINDOW_FRAMES
+let SOURCE_WINDOW_FRAMES = 64l
+var private g_source_window = TtsStreamWindow(frames = SOURCE_WINDOW_FRAMES)
 
 //! The frame window the harmonic source runs in (`set_styletts2_source_window`; 0 = the whole run).
-def styletts2_source_window() : int64 => g_source_window
+def styletts2_source_window() : int64 => g_source_window.frames
 
 [arch(at = "../ARCHITECTURE_TTS_MEMORY.md#tts-source-stream")]
 def set_styletts2_source_window(frames : int64) {
     //! Run the harmonic source `frames` phase frames at a time (the default `SOURCE_WINDOW_FRAMES`,
     //! 0 = the whole run in one window): the same samples either way, the tables sized to the window.
-    if (frames < 0l) {
-        panic("dasLLAMA styletts2: a source window of {frames} frames - zero is the whole run, a window is positive")
-    }
-    g_source_window = frames
+    stream_window_set(g_source_window, frames, "set_styletts2_source_window")
 }
 
 //! The harmonic source: sines plus noise from the F0 curve, mixed to one signal of
@@ -1251,7 +1248,7 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
     let nh = cfg.n_harm
     let n = f0_frames * up
     let nlow = resize_len(n, 1.0 / float(up))
-    let win = g_source_window > 0l ? min(g_source_window, nlow) : nlow
+    let win = stream_window_for(g_source_window, nlow)
     var rng = TtsRng()
     if (!noise.captured) {
         rng_seed(rng, seed)

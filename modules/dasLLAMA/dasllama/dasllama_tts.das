@@ -75,6 +75,8 @@ def tts_set_chunk_chars(var m : TtsModel; chars : int) {
         panic("dasLLAMA tts: a chunk cap of {chars} codepoints - the chunk cap takes at least one")
     }
     m.chunk_chars = chars
+    let which = chars == TTS_CHUNK_CHARS ? "the default" : "off the default {TTS_CHUNK_CHARS}"
+    to_log(LOG_INFO, "dasLLAMA tts: tts_set_chunk_chars: a synthesis speaks {chars} codepoints a chunk - {which}\n")
 }
 
 def load_tts_model(path : string) : TtsModel {

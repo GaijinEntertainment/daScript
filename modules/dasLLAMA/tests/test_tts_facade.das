@@ -8,7 +8,8 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_kitten   // kitten_token_ids: the symbol table's drop rule, model-free
-require dasllama/dasllama_styletts2   // the voices table: a hand-built model whose pack names no language
+require dasllama/dasllama_styletts2   // the voices table: a hand-built model whose pack names no language; the source's stream
+require dasllama/dasllama_tts_blocks   // TtsRng, TtsLinear, SineSourceCfg: the source's noise stream held to its own layout
 require dasllama/dasllama_unicode   // the chunker counts codepoints, so the cells do too
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the batch lane cap
 require daslib/jobque_boost
@@ -26,6 +27,14 @@ def private cpt_count(s : string) : int {
     return length(c)
 }
 
+def private peak_abs(a : array<float>) : float {
+    var peak = 0.0
+    for (x in a) {
+        peak = max(peak, abs(x))
+    }
+    return peak
+}
+
 def private panic_text_of(blk : block<() : void>) : string {
     var why = ""
     try {
@@ -40,8 +49,11 @@ def private panic_text_of(blk : block<() : void>) : string {
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
 // a whitespace-free run, the appended punctuation), the normalizer the facade exposes
 // (`tts_normalize`), the WAV writer's container (header fields, sample round trip), the timings'
-// own rtf guard, the kitten symbol table's drop rule, and the chunk cap knob on the model's own
-// chunker (`tts_set_chunk_chars`, its floor refused by name).
+// own rtf guard, the kitten symbol table's drop rule, the chunk cap knob on the model's own
+// chunker (`tts_set_chunk_chars`, its floor refused by name), the release keeping a captured
+// carrier, and the harmonic source's noise stream on a hand-built decoder: the drawn stream
+// speaks the captured stream's samples, another seed another stream, the window knob reaching
+// the carry (the whole run, five frames) with the same samples, a negative window refused.
 // Model-gated (`kitten-nano.gguf` + the front-end packs under models_dir()): the facade's
 // phonemes (`tts_phonemize`) against the corpus fixture's own inventory, the streaming
 // form's chunks concatenate to the buffered form's audio with summed timings, the two
@@ -396,29 +408,142 @@ def test_chunk_cap_knob(t : T?) {
         }
         t |> success(find(why, "chunk cap") >= 0, "the refusal names the knob: {why}")
     }
+    t |> run("the release keeps a carrier whose noise was captured, and empties one whose noise was drawn") @(t : T?) {
+        var inscope m = TtsModel()
+        m.kind = TtsKind.kitten
+        m.scratch.gen_a |> reserve(16)
+        m.scratch.gen_a |> resize(16)
+        m.scratch.noise.captured = true
+        tts_release_scratch(m)
+        t |> success(long_capacity(m.scratch.gen_a) >= 16l, "the parity rail's captured noise keeps its carrier")
+        m.scratch.noise.captured = false
+        tts_release_scratch(m)
+        t |> equal(long_capacity(m.scratch.gen_a), 0l, "a drawn carrier goes")
+    }
+}
+
+// the source's noise is one stream the reference draws in one order - the harmonics' initial
+// phases, then the normals row by row - split between styletts2_draw_noise and the source
+def private captured_stream(cfg : SineSourceCfg; n : int64; seed : uint64) : TtsNoise {
+    var r = TtsRng()
+    rng_seed(r, seed)
+    var inscope noise = TtsNoise(captured = true)
+    noise.uniform |> resize(cfg.n_harm)
+    for (h in range64(cfg.n_harm)) {
+        noise.uniform[h] = rng_uniform(r)
+    }
+    noise.normal |> resize(n * cfg.n_harm)
+    for (i in range64(n * cfg.n_harm)) {
+        noise.normal[i] = rng_normal(r)
+    }
+    return <- noise
+}
+
+def private source_from(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise : TtsNoise; seed : uint64;
+                        var har : array<float>; var sc : St2Scratch) {
+    styletts2_source(d, cfg, f0, frames, noise, seed, har, sc)
+}
+
+def private samples_off(a, b : array<float>) : int {
+    var diffs = length(a) == length(b) ? 0 : 1
+    for (x, y in a, b) {
+        diffs += x == y ? 0 : 1
+    }
+    return diffs
+}
+
+[test]
+def test_source_stream_contract(t : T?) {
+    t |> run("the drawn noise is the captured stream's layout: phases first, then the normals in row order") @(t : T?) {
+        {   // a bare block: the defer is a per-call cleanup, not the lambda's finalizer
+        defer() {
+            set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+        }
+        set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+        let cfg = SineSourceCfg()
+        let frames = 100l
+        let n = frames * cfg.upsample
+        var r = TtsRng()
+        rng_seed(r, 5ul)
+        var inscope d = St2Decoder()
+        d.source_linear = TtsLinear(nin = cfg.n_harm, nout = 1l)
+        d.source_linear.w |> resize(cfg.n_harm)
+        for (h in range64(cfg.n_harm)) {
+            d.source_linear.w[h] = rng_uniform(r) - 0.5
+        }
+        linear_prepare(d.source_linear)
+        var inscope f0 : array<float>
+        f0 |> resize(frames)
+        for (i in range64(frames)) {
+            f0[i] = i % 13l == 0l ? 0.0 : 120.0 + 200.0 * rng_uniform(r)
+        }
+        let seed = 77ul
+        var inscope captured <- captured_stream(cfg, n, seed)
+        var inscope sc_c = St2Scratch()
+        var inscope har_c : array<float>
+        source_from(d, cfg, f0, frames, captured, 0ul, har_c, sc_c)
+        var inscope drawn = TtsNoise()
+        styletts2_draw_noise(cfg, seed, drawn)
+        t |> equal(long_length(drawn.normal), 0l, "the phases' draw leaves the normals to the source")
+        var inscope sc_d = St2Scratch()
+        var inscope har_d : array<float>
+        source_from(d, cfg, f0, frames, drawn, seed, har_d, sc_d)
+        t |> equal(long_length(har_d), n, "{n} samples")
+        t |> equal(samples_off(har_c, har_d), 0, "the drawn stream speaks the captured stream's samples")
+        t |> equal(sc_d.so_carry.stride, SOURCE_WINDOW_FRAMES + 2l, "the default window plus its two halo frames is what the carry held")
+        // the control: another seed is another stream
+        var inscope other = TtsNoise()
+        styletts2_draw_noise(cfg, seed + 1ul, other)
+        var inscope sc_o = St2Scratch()
+        var inscope har_o : array<float>
+        source_from(d, cfg, f0, frames, other, seed + 1ul, har_o, sc_o)
+        t |> success(int64(samples_off(har_c, har_o)) > n / 2l, "another seed moves most samples")
+        // the knob reaches the run: the whole run in one window, then five frames a window, each the same samples
+        set_styletts2_source_window(0l)
+        var inscope har_w : array<float>
+        source_from(d, cfg, f0, frames, drawn, seed, har_w, sc_d)
+        t |> equal(sc_d.so_carry.stride, frames + 2l, "window 0 ran the whole run in one window")
+        t |> equal(samples_off(har_c, har_w), 0, "and speaks the same samples")
+        set_styletts2_source_window(5l)
+        source_from(d, cfg, f0, frames, drawn, seed, har_w, sc_d)
+        t |> equal(sc_d.so_carry.stride, 7l, "a five-frame window ran five frames a step")
+        t |> equal(samples_off(har_c, har_w), 0, "and speaks the same samples")
+        }
+    }
+    t |> run("a negative window is refused by name") @(t : T?) {
+        let why = panic_text_of() {
+            set_styletts2_source_window(-1l)
+        }
+        t |> success(find(why, "set_styletts2_source_window") >= 0, "the refusal names the knob: {why}")
+        t |> equal(styletts2_source_window(), SOURCE_WINDOW_FRAMES, "and the window stays where it was")
+    }
 }
 
 [test]
 def test_release_and_cap_on_a_model(t : T?) {
     t |> run("the release empties the carrier and the next synthesis speaks the same samples; a cap makes more chunks") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
+        return if (!model_available(t, gguf))
+        if (!stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
+            t |> skip("the front-end packs not present")
             return
         }
         with_job_que() {
             setup_dasllama_jobque_()
+            // the source window is process state: the cell establishes the default it claims against and leaves it there
+            defer() {
+                set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+            }
+            set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
             var inscope m <- load_tts_model(gguf)
             let text = "The first sentence is short. The second one is a little longer than the first! Is the third a question?"
+            var inscope default_chunks <- tts_chunks(m, tts_normalize(text))
+            t |> equal(length(default_chunks), 3, "three sentences under the default cap")
             var inscope first <- synthesize(m, text, "Bella")
             t |> success(long_capacity(m.scratch.gen_a) > 0l, "a synthesis leaves the generator's rows in the carrier")
             t |> success(long_capacity(m.scratch.noise.uniform) > 0l, "and the initial phases it drew")
             t |> equal(long_capacity(m.scratch.noise.normal), 0l, "the per-sample noise is drawn a window at a time, never held")
             // the source's window is a memory knob, not a numeric one: the whole run in one window speaks the same samples
-            let win0 = styletts2_source_window()
-            defer() {
-                set_styletts2_source_window(win0)
-            }
             set_styletts2_source_window(0l)
             var inscope whole <- synthesize(m, text, "Bella")
             t |> equal(length(whole.pcm), length(first.pcm), "the whole-run source speaks the same length")
@@ -427,7 +552,7 @@ def test_release_and_cap_on_a_model(t : T?) {
                 window_diff += a == b ? 0 : 1
             }
             t |> equal(window_diff, 0, "{window_diff} of {length(first.pcm)} samples move with the source window")
-            set_styletts2_source_window(win0)
+            set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
             tts_release_scratch(m)
             t |> equal(long_capacity(m.scratch.gen_a), 0l, "the release gives the generator's rows back")
             t |> equal(long_capacity(m.scratch.wave), 0l, "and the waveform")
@@ -447,14 +572,16 @@ def test_release_and_cap_on_a_model(t : T?) {
                 chunks++
                 capped |> push_from(chunk.pcm)
             }
-            t |> success(chunks > 3, "{chunks} chunks where the default cap made three")
-            var peak = 0.0
-            for (x in capped) {
-                peak = max(peak, abs(x))
-            }
+            t |> success(chunks > 3, "{chunks} chunks at a 24-codepoint cap, more than the three sentences")
+            let peak = peak_abs(capped)
             t |> success(peak > 0.05 && peak <= 1.0, "the capped synthesis is audible speech (peak {peak})")
+            var inscope silent : array<float>
+            silent |> resize(length(capped))
+            t |> success(!(peak_abs(silent) > 0.05), "the peak floor's control: a silent buffer of the same length lands under it")
             let ratio = float(length(capped)) / float(length(first.pcm))
             t |> success(ratio > 0.7 && ratio < 1.5, "and about as long as the uncapped one ({ratio})")
+            let half = ratio * 0.5
+            t |> success(!(half > 0.7 && half < 1.5), "the length band's control: half the capped stream lands outside it ({half})")
         }
     }
 }

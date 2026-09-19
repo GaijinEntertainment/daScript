@@ -631,7 +631,7 @@ def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; @scratch va
 
 // ===== convolution =====
 
-// ===== kernel-private scratch: module globals, one per buffer (ARCHITECTURE_TTS.md sec.2.31) =====
+// ===== kernel-private scratch: module globals, one per buffer (ARCHITECTURE_TTS_MEMORY.md sec.2.31) =====
 var @scratch g_conv_col : array<float>
 var @scratch g_conv_ytm : array<float>
 var @scratch g_convt_xtm : array<float>
@@ -2282,14 +2282,6 @@ def resize_linear(x : array<float>; x_lo, x_stride, c, t : int64; scale : float;
     }
 }
 
-//! Linear resample of x [C][T] by `scale` into y [C][T'], the whole row (the windowed form above).
-def resize_linear(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
-    let t_out = resize_len(t, scale)
-    y |> reserve_resize(c * t_out)
-    resize_linear(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
-    return t_out
-}
-
 //! Linear resample of a [C][T] source by `scale`, bit for bit PyTorch's CPU upsample_linear1d (align_corners
 //! false, scale_factor given): the source coordinate in double from the float reciprocal scale, the two taps as
 //! fma(l0, x0, l1 * x1); the window form of `resize_linear` - `x` from `x_lo` at `x_stride`, the columns [to0, to1) out.
@@ -2305,13 +2297,36 @@ def resize_linear_torch(x : array<float>; x_lo, x_stride, c, t : int64; scale : 
     }
 }
 
-//! Linear resample of x [C][T] by `scale` into y [C][T'] on PyTorch's arithmetic, the whole row.
-def resize_linear_torch(x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
+//! Linear resample of x [C][T] by `scale` into y [C][T'], the whole row on either kernel's arithmetic
+//! (`torch_math`: PyTorch's, else onnxruntime's) - the window forms over every column.
+def resize_linear(torch_math : bool; x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     let t_out = resize_len(t, scale)
     y |> reserve_resize(c * t_out)
-    resize_linear_torch(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
+    if (torch_math) {
+        resize_linear_torch(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
+    } else {
+        resize_linear(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
+    }
     return t_out
 }
+
+//! A stream knob: the frames one step of a windowed stage covers, 0 for the whole run in one step.
+struct TtsStreamWindow {
+    frames : int64
+}
+
+//! Set a stream window and say so - a window changes footprint, never output; under zero is refused.
+def stream_window_set(var w : TtsStreamWindow; frames : int64; knob : string) {
+    if (frames < 0l) {
+        panic("dasLLAMA tts: {knob}({frames}) - zero is the whole run, a window is positive")
+    }
+    w.frames = frames
+    let how = frames == 0l ? "the whole run in one window" : "{frames} frames a window"
+    to_log(LOG_INFO, "dasLLAMA tts: {knob}: {how}\n")
+}
+
+//! The frames one step covers on a run of `total`: the knob clamped to the run, or the whole run at 0.
+def stream_window_for(w : TtsStreamWindow; total : int64) : int64 => w.frames <= 0l ? total : min(w.frames, total)
 
 // ===== alignment =====
 
@@ -2450,8 +2465,8 @@ def private source_resize(cfg : SineSourceCfg; x : array<float>; x_lo, x_stride,
 //! What the sine source carries from one frame window to the next: the cumulative phase per
 //! harmonic, and the phase frames [base, next) the next window's upsample taps still read.
 struct SineSourceCarry {
-    @scratch acc : array<float>       //! per harmonic, the running sum on onnxruntime's arithmetic
-    @scratch acc64 : array<double>    //! per harmonic, PyTorch's double accumulator
+    @scratch @exact_size acc : array<float>       //! per harmonic, the running sum on onnxruntime's arithmetic
+    @scratch @exact_size acc64 : array<double>    //! per harmonic, PyTorch's double accumulator
     @scratch @exact_size lowc : array<float>   //! the phase frames, channel-major at stride `stride`
     base : int64
     next : int64
@@ -2461,8 +2476,8 @@ struct SineSourceCarry {
 //! Start a run: the sums at zero, no frame computed, room for `window` frames plus the two the
 //! taps reach back and forward to.
 def sine_carry_reset(var cr : SineSourceCarry; nh, window : int64) {
-    cr.acc |> resize(nh)
-    cr.acc64 |> resize(nh)
+    cr.acc |> reserve_resize(nh)
+    cr.acc64 |> reserve_resize(nh)
     for (h in range64(nh)) {
         cr.acc[h] = 0.0
         cr.acc64[h] = 0.0lf

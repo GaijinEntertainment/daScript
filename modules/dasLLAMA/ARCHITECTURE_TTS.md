@@ -68,7 +68,9 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid /
   tanh / ELU, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
   half-to-even rounding, PCG32 with a polar normal (a generator nobody seeded refuses), the
-  harmonic-plus-noise sine source, multi-head attention, and the STFT pieces (edge pad, magnitude
+  harmonic-plus-noise sine source over a frame window with its carried phase (`SineSourceCarry`),
+  the stream window knob record both windowed families share (`TtsStreamWindow`), multi-head
+  attention, and the STFT pieces (edge pad, magnitude
   and phase, polar to rectangular, reflection pad); for the continuous-audio family
   (`ARCHITECTURE_POCKET.md`) the causal cached attention over a per-layer `TtsKvCache` (keys
   transposed per head, values per head, a key window; the queries go in blocks, each scored over
@@ -91,7 +93,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   prosody (F0, energy) -> decoder -> iSTFTNet generator, with a stopwatch per stage
   (`TtsTimings`) and `StyleTts2Trace` collecting the stage tensors the parity rail compares.
   The served carrier rides the image rail (sec.2.32) and every synthesis reuses one activation
-  carrier (sec.2.31). The generator carries the sec.2.14 hook slot
+  carrier (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31). The generator carries the sec.2.14 hook slot
   (`register_styletts2_generator_gpu`, `styletts2_generator_gpu_stats`): a driver takes the
   rows-form input, the style and the source spectrum as rows and answers with the waveform or
   declines; the SineGen phase chain and the harmonic STFT stay on the CPU in both routes
@@ -131,8 +133,10 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   `tts_normalize` (the spoken form a synthesis reads; it consults no pack) and `tts_phonemize`
   (a normalized sentence in the front end's inventory, before a family rewrites its symbols;
   the language form takes a code from `caps` and refuses undeclared languages), the lane pin
-  (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
-  chunk - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
+  (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), the chunk cap (`tts_set_chunk_chars`, per
+  model - the peak a say holds is the largest chunk's, `ARCHITECTURE_TTS_MEMORY.md` sec.2.52),
+  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  chunk by default - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary; a chunk the split left without a closing mark gets a comma under
   Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and

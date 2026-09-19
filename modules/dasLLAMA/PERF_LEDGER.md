@@ -38,8 +38,11 @@ what it costs today and what the fix would change.
   values per sample. Only the cumulative phase sum reaches across the chunk, and it runs at frame
   rate, so the source now runs 64 phase frames (19200 samples) at a time on a carried sum, the
   resamplers taking a window of columns with the same tap arithmetic and the noise stream drawn
-  in row order a window at a time. Bit-identical PCM on every carrier and length, the say's time
-  unchanged; heap peak after one say on top of the six-buffer entry below: kitten-nano 170 -> 147
+  in row order a window at a time. Bit-identical PCM on every carrier and length (FNV over the
+  samples, one probe program over both trees); on one thread, five reps, cv under 2%, the say
+  takes what it took - kitten-nano 345 ms -> 343, kokoro 1.56 s -> 1.55, kitten-mini 0.91 s -> 0.91
+  at 7 s, 1.23 s -> 1.24, 4.95 -> 4.95, 3.13 -> 3.14 at 25 s; heap peak after one say on top of
+  the six-buffer entry below: kitten-nano 170 -> 147
   MB (7 s) and 448 -> 365 (25 s), kokoro-82m 245 -> 222 and 630 -> 554, kitten-mini 222 -> 203
   and 595 -> 524. What remains is the generator's six stream-sized buffers, which the chunk cap
   bounds; the generator itself cannot window, because every Snake block's AdaIN takes its

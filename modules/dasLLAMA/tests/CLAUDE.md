@@ -981,12 +981,28 @@ the appended comma as Kitten's driver rule and the bare text Kokoro's sends), th
 facade exposes (`tts_normalize`: abbreviation, decimal, money, clock, date, ordinal, percentage,
 unit, empty), the voice refusal a pack whose name carries NO language draws (hand-built model -
 the sentence must not render an empty code), the WAV container, the codec's malformed-lead and
-astral arms, kitten's dropped-symbol rule, and the `rtf` guard; model-gated (`kitten-nano.gguf` +
-the front-end packs): the streaming form's chunks concatenate to the buffered synthesis sample for
-sample, one synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus
-rail, the model-keyed chunker's Kitten arm (the driver's comma - the arm no model-free cell
-reaches), and the language form of `tts_phonemize` - the declared language reads as the bare form
-does, an undeclared one panics at the call site.
+astral arms, kitten's dropped-symbol rule, the `rtf` guard, and the chunk cap knob on the
+model's own chunker (`tts_set_chunk_chars` on a hand-built model: sixty short words one chunk at
+the default, ten or more pieces each under a 30-codepoint cap, the default restored; a cap under
+one refused by name), the release keeping a carrier whose noise was captured and emptying a drawn
+one, and the harmonic source's noise stream on a hand-built decoder (a captured stream drawn in
+the reference's order - phases, then normals row by row - against the phases from
+`styletts2_draw_noise` plus the source's own per-window draw, sample-identical; another seed
+moving most samples; the window knob read back from the carry's stride at the default, the whole
+run and five frames, each speaking the same samples; a negative window refused by name); model-gated
+(`kitten-nano.gguf` through `model_available` + the front-end
+packs): the streaming form's chunks concatenate to the buffered synthesis sample for sample, one
+synthesis at one lane and the other at the box's lanes, the phonemizer on the corpus rail, the
+model-keyed chunker's Kitten arm (the driver's comma - the arm no model-free cell reaches), the
+language form of `tts_phonemize` - the declared language reads as the bare form does, an
+undeclared one panics at the call site - and the idle release with the cap: the three-sentence
+text makes three chunks at the default cap, a synthesis leaves the generator rows and the
+initial phases in the carrier and no per-sample noise, the source's window-zero control speaks
+the same samples as the default window (the window set to `SOURCE_WINDOW_FRAMES` before the
+first synthesis and left there), `tts_release_scratch` empties the rows, the waveform and the
+phases and the next synthesis is sample-identical, and a 24-codepoint cap speaks the same text in
+more than three chunks, audible (peak over 0.05, a silent buffer the control) and 0.7 to 1.5 the
+uncapped length (half the stream the control).
 `test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
@@ -999,8 +1015,14 @@ sites the cap never touches - each axis carrying a witness arm that its narrow l
 rows GEMM to fewer lanes than its wide one) and the must-panic cells for the rows conv's shape
 refusals; then the continuous-audio family's kernels - the causal cached attention (`TtsKvCache`,
 `attention_causal_rows`) against its double-precision reference at a prompt, a decode step, a
-key window and a one-key window, bit-equal on both split axes, the cache's overflow panic - and
-`elu_rows`, `layer_scale_rows` and `pad_edge_left_rows` against their scalar forms.
+key window and a one-key window, bit-equal on both split axes, the cache's overflow panic -
+`elu_rows`, `layer_scale_rows` and `pad_edge_left_rows` against their scalar forms; and the
+harmonic source's window forms: each resampler's window form (output columns from the source
+columns its taps read, both at strides off the whole row, on both arithmetics and at the source's
+two scales plus two more) bit-equal to the whole row, the source itself in 1-, 5- and 16-frame
+windows bit-equal to the whole run on both arithmetics over a synthetic F0 with unvoiced frames
+and a drawn noise stream, its mix through `linear_rows` in windows bit-equal to the whole
+run's on both split axes, and a window past the carry's reset refused.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,

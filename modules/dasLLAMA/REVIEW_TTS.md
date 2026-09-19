@@ -1,7 +1,8 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`. Planned
+work: `followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 `REVIEW.md`.**
@@ -26,20 +27,26 @@ a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written do
 loops included.**
 
 **A block in `dasllama/dasllama_tts_blocks.das` that gains a rows form (token-major [T][C])
-ships its channel-major form and a `tests/test_tts_blocks.das` cell holding the two at the
-dot-envelope bar - each element within a tolerance times the sum of `|w|*|x|` feeding it -
-in the same change.** The channel-major form is what the parity rail and any GPU driver are
+ships its channel-major form and a cell in the `tests/` file that holds that kernel family's
+cells, holding the two at the dot-envelope bar - each element within a tolerance times the sum
+of `|w|*|x|` feeding it - in the same change.** The channel-major form is what the parity rail and any GPU driver are
 checked against.
 
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
 is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md` sec.2.28.
 
 **A new arithmetic path in `dasllama/dasllama_tts_blocks.das` - a kernel, a weight lane of one,
-a layout - ships a `tests/test_tts_blocks.das` numeric cell in the same change, against the leaf
-it applies per row or a double-precision form of its arithmetic; a path whose rows split across
-workers, wherever the split happens - its own `maybe_parallel_for` / `lanes_for_work`, or a
-backend kernel it hands a row block to - also ships the bit-equality cell on both axes that move
-the split, the batch lane cap and the jobque worker limit.**
+a layout, or a window form of one (a form that computes one window of the whole-row result at a
+time) - ships a numeric cell in the same change, in the `tests/` file that holds that kernel
+family's cells (`test_tts_blocks.das`; `test_tower_asr_kernels.das` for the shared resamplers),
+against the leaf it applies per row - the single-row reference kernel the path calls for each
+row - or a double-precision form of its arithmetic; a window form also ships a cell holding it
+bit for bit equal to the whole-row form.**
+
+**A new arithmetic path in `dasllama/dasllama_tts_blocks.das` whose rows split across workers -
+in its own `maybe_parallel_for` / `lanes_for_work`, or in a backend kernel it hands a row block
+to - also ships a bit-equality cell on both axes that move the split, the batch lane cap and the
+jobque worker limit.**
 
 **A `read_*` call in `dasllama/dasllama_styletts2.das` that leaves a conv or linear on the
 channel-major default while the forward assembly runs it through a rows kernel is a defect -
@@ -54,10 +61,15 @@ worker that wants a lane pins where it loads, never through the context that spa
 that outlives its load silently changes the lane of the next model loaded in the process; a pin
 set in another context never arrives.
 
-**A diff that reorders the float operations of `sine_source` or `source_resize`
-(`dasllama/dasllama_tts_blocks.das`), or changes the rounding of any step in the phase they
-build, is a defect.** One float32 ulp of the accumulated phase is a hundredth of a radian, so
-only the reference's own operation order reproduces the reference.
+**A diff that reorders the float operations, or changes the rounding of any step, of the phase
+the harmonic source builds (`dasllama/dasllama_tts_blocks.das`: the cycles, the resamples, the
+cumulative sum, wherever a refactor puts them) is a defect.** One float32 ulp of the accumulated
+phase is a hundredth of a radian, so only the reference's own operation order reproduces the
+reference.
+
+**A diff that moves or rewrites any step of the phase the harmonic source builds
+(`dasllama/dasllama_tts_blocks.das`) without changing its arithmetic ships, in the PR body, the
+PCM hash of one synthesis per family before and after, and the two match.**
 
 **A tensor operator - a conv, a norm, an activation, a resampler, an LSTM, an RNG, or an STFT
 step - implemented in a TTS family file is a defect; it goes in
@@ -88,13 +100,21 @@ expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
 the call site instead.**
 
+**A diff that makes a windowed TTS stage - one that runs its input a window at a time over a
+carry, the state one window hands to the next - produce a different result on the f32 lane,
+beyond float noise, than the same stage run over the whole input in one pass is a defect.** This
+rule binds the stage a family file assembles from kernels; a window form inside one kernel ships
+bit-for-bit equality with the whole-row form instead (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53,
+`ARCHITECTURE_POCKET.md` sec.2.46).
+
+**A diff that adds a windowed TTS stage ships, in the same change, the cell that runs that stage
+windowed and over the whole input in one pass and holds the two together within float noise, in
+the `tests/` file that holds that stage's cells.**
+
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
 stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the
-first (`ARCHITECTURE_POCKET.md` sec.2.46) - and a diff that pads one symmetrically, trims the
-final output by hand, or makes a window's output differ from the whole run's on the f32 lane
-beyond float noise is a defect.** `test_pocket_codec_stream` holds a one-frame window and the
-default to the whole run; `harness/pocket_oracle.py` checks the package's own whole-chunk decode
-against its frame-by-frame stream.
+first (`ARCHITECTURE_POCKET.md` sec.2.46) - and a diff that pads one symmetrically or trims the
+final output by hand is a defect.**
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
 (`q8_linear` / `kq_tensor` / `head_q8_linear` / `dense_codec_conv` in
