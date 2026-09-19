@@ -886,7 +886,8 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
 // A bundle carries no daslang to spawn and no llama-bench to compare against, so /bench runs the
 // llama-bench rows itself on the served model: pp512 and tg128, an untimed warmup then three
 // timed reps each - one pp prefill, or one tg token, per tick, so the HTTP surface stays live
-// between them. Every route that reaches the model or the cores holds for the run's duration
+// between them - and, on a slot whose device homes streams, tg128@N: N device-home streams through
+// the scheduler's device mode, the summed rate, one rep a tick. Every route that reaches the model or the cores holds for the run's duration
 // (the text, audio and speech routes with a 503, the model-switching, bake and download routes
 // with a 409): work admitted mid-row would share the cores with it and the numbers would
 // measure the contention. The rows run llama-bench's flat session, sized to the rows, under the
@@ -894,8 +895,9 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
 // state, so a number never travels without what produced it.
 
 let private IBENCH_REPS = 3
+let private IBENCH_NPL = 4l   //! the batched row's streams, where the device homes that many (fewer homes, fewer streams; under two, no row)
 
-var private g_ibench_phase = 0   // 0 idle | 1 bind + pp warmup | 2 pp reps | 3 tg warmup | 4 tg tokens
+var private g_ibench_phase = 0   // 0 idle | 1 bind + pp warmup | 2 pp reps | 3 tg warmup | 4 tg tokens | 5 batched reps
 var private g_ibench_rep = 0
 var private g_ibench_tok = 0l      // the tg rep's next token position
 var private g_ibench_tok_ns = 0l   // the tg rep's forwards so far, nanoseconds
@@ -905,6 +907,10 @@ var private g_ibench_t0 : int64
 var private g_ibench_full_seq = 0l   // the benched model's served seq_len, restored when the rows' session goes
 var private g_ibench_pp : array<double>
 var private g_ibench_tg : array<double>
+var private g_ibench_tgb : array<double>   //! the batched row's reps, the summed rate each
+var private g_ibench_npl = 0l              //! ... its streams; 0 = the slot homes too few for the row
+var private g_ibench_kv = ""               //! the codec the rows ran, and the device that served them, read before the flat session goes
+var private g_ibench_backend = ""
 var private g_ibench_session : Session
 var private g_ibench_passes0 = 0l   // the CPU-pass count as the rows began: a GPU slot's rows that move it say so
 
@@ -1045,6 +1051,7 @@ def private ibench_stop(state, why : string) {
     g_ibench_full_seq = 0l
     delete g_ibench_pp
     delete g_ibench_tg
+    delete g_ibench_tgb
     g_ibench_phase = 0
     g_bench_state = state
     if (!empty(why)) {
@@ -1057,8 +1064,8 @@ def private ibench_finish() {
     let tg = bench_row("tg{BENCH_TG_TOKENS}", g_ibench_tg)
     let name = g_slots[g_ibench_slot].name
     let path = g_slots[g_ibench_slot].path
-    let backend = ibench_backend(g_ibench_slot)   // before the stop frees the session it reads
-    let kv = g_ibench_session.device_kv ? "{gpu_device_session_dtype()}" : "{g_slots[g_ibench_slot].opts.kv_dtype}"
+    let backend = g_ibench_backend
+    let kv = g_ibench_kv
     let cpu_calls = ibench_cpu_passes() - g_ibench_passes0
     if (cpu_calls > 0l) {
         ibench_log("WARNING: {cpu_calls} of the rows' calls ran on the CPU instead of the GPU - the model card lists the reasons; these numbers are not the GPU's")
@@ -1066,8 +1073,15 @@ def private ibench_finish() {
     let exec = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "interpreted")
     let tune = ibench_tune_state()
     let elapsed = double(get_time_nsec(g_ibench_t0)) / 1.0e9lf   // the 64-bit clock: three reps of a big model on a slow box can pass the 32-bit microsecond one
-    ibench_log("ours: pp{BENCH_PP_TOKENS} {pp.mean:.1f} ± {pp.sd:.1f} tok/s · tg{BENCH_TG_TOKENS} {tg.mean:.1f} ± {tg.sd:.1f} tok/s ({IBENCH_REPS} reps, {elapsed:.1f}s, {backend}, kv {kv}, {exec}, tune {tune})")
-    g_bench_result_json = "\{\"mode\":\"inprocess\",\"ours_pp\":{pp.mean},\"ours_tg\":{tg.mean},\"pp_sd\":{pp.sd},\"tg_sd\":{tg.sd},\"reps\":{IBENCH_REPS},\"model\":{json_str(name)},\"gguf\":{json_str(base_name(path))},\"backend\":{json_str(backend)},\"kv\":{json_str(kv)},\"exec\":{json_str(exec)},\"tune\":{json_str(tune)},\"threads\":{g_ibench_threads},\"elapsed_s\":{elapsed:.1f},\"ts\":{created_ts()},\"ref_cmd\":{json_str(ibench_ref_cmd(path, g_ibench_threads, backend))}}"
+    var tgb_text = ""
+    var tgb_json = ""
+    if (g_ibench_npl > 0l) {   //! the batched row: its rate is the streams' summed one
+        let tgb = bench_row("tg{BENCH_TG_TOKENS}@{g_ibench_npl}", g_ibench_tgb)
+        tgb_text = " · tg{BENCH_TG_TOKENS}@{g_ibench_npl} {tgb.mean:.1f} ± {tgb.sd:.1f} tok/s summed over {g_ibench_npl} streams"
+        tgb_json = ",\"ours_tgb\":{tgb.mean},\"tgb_sd\":{tgb.sd},\"npl\":{g_ibench_npl}"
+    }
+    ibench_log("ours: pp{BENCH_PP_TOKENS} {pp.mean:.1f} ± {pp.sd:.1f} tok/s · tg{BENCH_TG_TOKENS} {tg.mean:.1f} ± {tg.sd:.1f} tok/s{tgb_text} ({IBENCH_REPS} reps, {elapsed:.1f}s, {backend}, kv {kv}, {exec}, tune {tune})")
+    g_bench_result_json = "\{\"mode\":\"inprocess\",\"ours_pp\":{pp.mean},\"ours_tg\":{tg.mean},\"pp_sd\":{pp.sd},\"tg_sd\":{tg.sd}{tgb_json},\"reps\":{IBENCH_REPS},\"model\":{json_str(name)},\"gguf\":{json_str(base_name(path))},\"backend\":{json_str(backend)},\"kv\":{json_str(kv)},\"exec\":{json_str(exec)},\"tune\":{json_str(tune)},\"threads\":{g_ibench_threads},\"elapsed_s\":{elapsed:.1f},\"ts\":{created_ts()},\"ref_cmd\":{json_str(ibench_ref_cmd(path, g_ibench_threads, backend))}}"
     ibench_stop("done", "")
     to_log(LOG_INFO, "dasllama-server: bench complete\n")
 }
@@ -1104,6 +1118,11 @@ def private ibench_step() {
         delete g_ibench_session   // the previous run's cache, when a run ended without its stop
         g_ibench_session <- (device_home ? create_device_session(g_slots[si].model, gpu_device_session_dtype())
             : bench_session(g_slots[si].model, BENCH_PP_TOKENS, BENCH_TG_TOKENS, g_slots[si].opts.kv_dtype, g_slots[si].opts.kv_dtype))
+        g_ibench_kv = device_home ? "{gpu_device_session_dtype()}" : "{g_slots[si].opts.kv_dtype}"
+        g_ibench_npl = device_home ? min(IBENCH_NPL, gpu_device_sessions()) : 0l   //! the batched row needs a region a stream
+        if (g_ibench_npl < 2l) {
+            g_ibench_npl = 0l
+        }
         g_ibench_passes0 = ibench_cpu_passes()
         bench_pp_warm(m, g_ibench_session, BENCH_PP_TOKENS)
         let sane = bench_warm_sanity(m, g_ibench_session)
@@ -1136,22 +1155,50 @@ def private ibench_step() {
         g_ibench_rep = 0
         g_ibench_tok = 0l
         g_ibench_tok_ns = 0l
+    } elif (g_ibench_phase == 4) {
+        ibench_tg_token(m, si)
     } else {
-        // one token per tick: a tg rep is 128 forwards, seconds on a real model, and the tick
-        // between them is what answers the supervisor's health probe
-        g_ibench_tok_ns += bench_tg_step(m, g_ibench_session, g_ibench_tok, int64(g_ibench_rep))
-        g_ibench_tok ++
-        if (g_ibench_tok >= BENCH_TG_TOKENS) {
-            let tps = double(BENCH_TG_TOKENS) * 1.0e9lf / double(g_ibench_tok_ns)
-            g_ibench_tg |> push(tps)
-            ibench_log("tg{BENCH_TG_TOKENS} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {tps:.1f} tok/s")
-            g_ibench_rep ++
-            g_ibench_tok = 0l
-            g_ibench_tok_ns = 0l
-            if (g_ibench_rep >= IBENCH_REPS) {
-                ibench_finish()
-            }
-        }
+        ibench_batched_rep(m)
+    }
+}
+
+//! one tg token per tick: a tg rep is 128 forwards, seconds on a real model, and the tick between them is what answers
+//! the supervisor's health probe; the last rep hands over to the batched row, or finishes
+def private ibench_tg_token(m : Model; si : int) {
+    g_ibench_tok_ns += bench_tg_step(m, g_ibench_session, g_ibench_tok, int64(g_ibench_rep))
+    g_ibench_tok ++
+    if (g_ibench_tok < BENCH_TG_TOKENS) return
+    let tps = double(BENCH_TG_TOKENS) * 1.0e9lf / double(g_ibench_tok_ns)
+    g_ibench_tg |> push(tps)
+    ibench_log("tg{BENCH_TG_TOKENS} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {tps:.1f} tok/s")
+    g_ibench_rep ++
+    g_ibench_tok = 0l
+    g_ibench_tok_ns = 0l
+    if (g_ibench_rep < IBENCH_REPS) return
+    g_ibench_backend = ibench_backend(si)   // before the flat session goes
+    if (g_ibench_npl > 0l) {
+        ibench_park_session()   //! the flat row's region goes back: the batched row's streams take every region
+        delete g_ibench_session
+        g_ibench_phase = 5
+        g_ibench_rep = 0
+    } else {
+        ibench_finish()
+    }
+}
+
+//! one batched rep per tick: the streams' prefills and 128 batched steps, a second or so on a small model
+def private ibench_batched_rep(m : Model) {
+    let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep))
+    if (!empty(br.why)) {
+        ibench_log("REFUSED (tg{BENCH_TG_TOKENS}@{g_ibench_npl}): {br.why}")
+        ibench_stop("failed", "")
+        return
+    }
+    g_ibench_tgb |> push(br.tps)
+    ibench_log("tg{BENCH_TG_TOKENS}@{g_ibench_npl} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {br.tps:.1f} tok/s summed")
+    g_ibench_rep ++
+    if (g_ibench_rep >= IBENCH_REPS) {
+        ibench_finish()
     }
 }
 
