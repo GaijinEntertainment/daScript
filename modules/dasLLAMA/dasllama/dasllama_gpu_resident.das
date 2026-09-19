@@ -1830,6 +1830,39 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return done
 }
 
+//! A pass that leaves the CPU rails a whole history: the session's device-only rows come down first. Always false, the override's answer.
+def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b : int64) : bool {
+    if (rdec_device_only(s)) {
+        rdec_hydrate_host(t, s)
+    }
+    rdec_pass_once(kind, a, b)
+    return false
+}
+
+//! The region a prefill of `s` from `start_pos` lands in, or -1 where it passes. A session past the region count takes the
+//! least recently used region (fine for serial flows; a stranded owner's decode fails LOUD via the ownership guard). A
+//! continuation needs rows [0, start_pos) live there: kept where the session owns them, else brought up from the host.
+def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) : int64 {
+    let r = rdec_bind_region(s)
+    if (start_pos == 0l) {
+        return r
+    }
+    let owns = rdec_owns(s, r)
+    if (owns && g_rdec_regions[r].cnt >= start_pos) {
+        g_rdec_regions[r].cnt = start_pos   // rows past the start are dead: the windows rewrite them
+        return r
+    }
+    if (owns && !s.rdec_host_current) {
+        rdec_pass_once(RdecPass.gap, start_pos, g_rdec_regions[r].cnt)   // our own region short of the start: nothing on the host past cnt either
+        return -1l
+    }
+    if (!owns && s.rdec_gen != 0l && !s.rdec_host_current) {
+        panic("dasLLAMA resident prefill: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
+    }
+    rdec_take_mirror(t, s, r, start_pos)
+    return r
+}
+
 def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_pos : int64) : bool {
     if (!g_rdec_active) {
         return false
@@ -1850,43 +1883,39 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         rdec_pass_once(RdecPass.span, 0l, 0l)
         return false
     }
-    if (start_pos != 0l) {
-        // continuation over OUR device-held history: hydrate host KV, then decline to the CPU loop
-        if (rdec_device_only(s)) {
-            rdec_hydrate_host(t, s)
-        }
-        rdec_pass_once(RdecPass.continuation, start_pos, 0l)
-        return false
-    }
-    if (npos > g_rdec_cap) {
-        rdec_pass_once(RdecPass.cap, npos, g_rdec_cap)
-        return false
-    }
-    // a session past the region count takes the least recently used region — fine for serial flows; a stranded owner's decode fails LOUD via the ownership guard
     let c = t.config
-    let r = rdec_bind_region(s)
-    if (c.recr_mask != 0ul) {
+    if (start_pos != 0l && c.recr_mask != 0ul) {   //! the window chain starts the deltanet state from zero: a recurrent model's continuation is the CPU loop's
+        return rdec_pass_hydrated(t, s, RdecPass.continuation, start_pos, 0l)
+    }
+    if (start_pos + npos > g_rdec_cap) {
+        return rdec_pass_hydrated(t, s, RdecPass.cap, start_pos + npos, g_rdec_cap)
+    }
+    let r = rdec_prefill_region(t, s, start_pos)
+    if (r < 0l) {
+        return false
+    }
+    if (start_pos == 0l && c.recr_mask != 0ul) {
         dn_reset(s)
     }
     let ce = g_rdec_cos_elems
     g_rdec_tmp |> resize(npos * ce)   // the rope-plane batch borrows the scratch row
     var cb & = g_rdec_tmp
     let ts_rope = ref_time_ticks()
-    resident_prefill_rope_rows(t, s.rope_pos_delta, npos, ce, cb)
+    resident_prefill_rope_rows(t, s.rope_pos_delta + start_pos, npos, ce, cb)
     let us_rope = get_time_usec(ts_rope)
     var us_gather = 0
     let ts_run = ref_time_ticks()
     if (s.embed_gpu_pending) {
-        rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, s.logits)
+        rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, start_pos, s.logits)
         s.embed_gpu_pending = false
         s.ple_gpu_pending = false   //! the ids form gathers the side rows on device too: no late CPU pre-step
     } else {
         if (s.ple_gpu_pending) {
             us_gather = resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
-            rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, s.logits)
+            rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, start_pos, s.logits)
             s.ple_gpu_pending = false
         } else {
-            rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
+            rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
         }
     }
     if (g_env_gpu.gpu_prof) {
@@ -1901,7 +1930,11 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         }
         s.dn_pos = npos
     }
-    rdec_claim(s, r, npos)   // the region now holds [0, npos) — the decode's continuity witness
+    if (start_pos == 0l) {
+        rdec_claim(s, r, npos)   // the region now holds [0, npos) — the decode's continuity witness
+    } else {
+        g_rdec_regions[r].cnt = start_pos + npos   // the claim stands: the continuation extended its rows
+    }
     s.rdec_host_current = false
     g_rdec_prefills++
     prefill_override_logits_done()
@@ -1987,10 +2020,10 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return true
 }
 
-[hot_path, unused_argument(t), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
+[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     return (active_prefill_override() == "vulkan" && g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
-        && start_pos == 0l && npos <= g_rdec_cap
+        && (start_pos == 0l || t.config.recr_mask == 0ul) && start_pos + npos <= g_rdec_cap
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }

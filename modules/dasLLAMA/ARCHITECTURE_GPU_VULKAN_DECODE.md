@@ -247,6 +247,9 @@ mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its
 once on a recurrent layer. The attention geometry (head size, q and kv widths) is the first
 attention layer's - on qwen35 layer 0 is recurrent.
 
+The mirror holds that layout once per region, a region a session's whole history, and the token
+command records once per region (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).
+
 The attention-side planes the driver uploads beside its norms - the q/k/v projection bias, the
 sink logits and the output bias - are `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am.
 
@@ -276,9 +279,10 @@ no state crosses the bus at the seam. The session's deltanet position is the pro
 **A session whose rows the mirror lacks takes the mirror from the host cache.** A session that
 prefilled on the CPU rails (a pinned-off resident prefill, a CPU-only session) or that another
 session's prefill superseded is hydrated on the host; the decode override uploads the attention
-layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
-same sync the batch decode does per row. The gap decline remains for a session that owns the
-mirror and asks past its rows.
+layers' rows `[0, pos)` into its region (`rdec_take_mirror`), mints a generation and serves. The
+batch decode does the same sync for a row whose region does not already hold `[0, pos)`, and
+steps a row in place where it does. The gap decline remains for a session that owns its
+region and asks past its rows.
 
 **The token command's profile bills its intervals by the recorder's stamp names.** Under
 `DASLLAMA_GPU_PROF=1` the recorder stamps a bottom-of-pipe timestamp after each named group of

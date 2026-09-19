@@ -94,8 +94,8 @@ def private d_token(x : array<float>; cossin : array<float>; ple_row : array<flo
     }
 }
 
-[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, logits)]
-def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {}
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
+def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {}
 
 [unused_argument(l, kp, vp, npos)]
 def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
@@ -123,8 +123,8 @@ var private g_ids_scale = 0.0
 var private g_emb_block = -1l
 var private g_emb_f32_vocab = -1l
 
-[unused_argument(tokens, cos_batch)]
-def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+[unused_argument(tokens, cos_batch, pos0)]
+def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>) {
     g_ids_npos = npos
     g_ids_scale = emb_scale
     if (!empty(logits)) {
@@ -327,7 +327,7 @@ def test_rdec_prefill_ids_seam(t : T?) {
         let cosb : array<float>
         var logits : array<float>
         logits |> resize(4)
-        rdec_prefill_ids(ids, 1.5, cosb, 1l, logits)
+        rdec_prefill_ids(ids, 1.5, cosb, 1l, 0l, logits)
         t |> equal(g_ids_npos, 1l)
         t |> equal(g_ids_scale, 1.5)
         t |> equal(logits[0], 43.0)

@@ -120,6 +120,106 @@ def test_regions_interleaved_single_steps(t : T?) {
     }
 }
 
+//! of the last logits' max |logit|: the window chain at two window splits of one prompt reduces its attention in two orders,
+//! and the 0.5B's own device-vs-CPU rounding reads 0.30-0.50 of a 9.5-18 max logit (`test_gpu_resident_qwen2.das`'s bar)
+let private SPLIT_BAR_REL = 0.06
+
+def private prose_ids(n, salt : int64) : array<int64> => <- [for (i in range64(n)); 1000l + ((i + salt) * 37l) % 5000l]
+
+//! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
+def private continue_at(t : T?; tr : Model; n, cut : int64) {
+    var prompt <- prose_ids(n, 0l)
+    var head <- [for (i in range64(cut)); prompt[i]]
+    var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
+    var feed <- feed_a()
+    //! the control's session first, and gone before the compared pair: two regions hold two live sessions
+    var short <- create_session(tr, mirror_kv_dtype())
+    var less <- [for (i in range64(n - 1l)); prompt[i]]
+    forward_prefill(tr, short, less, n - 1l, 0l)
+    var short_logits <- logits_of(short, tr.config.vocab_size)
+    delete short
+    var whole <- create_session(tr, mirror_kv_dtype())
+    var split <- create_session(tr, mirror_kv_dtype())
+    let served0 = moe_gpu_resident_prefills()
+    forward_prefill(tr, whole, prompt, n, 0l)
+    forward_prefill(tr, split, head, cut, 0l)
+    forward_prefill(tr, split, tail, n - cut, cut)
+    t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
+    let bar = SPLIT_BAR_REL * logits_maxabs(whole.logits)
+    let diff = logits_maxdiff(split.logits, whole.logits)
+    t |> success(diff <= bar, "{n} tokens cut at {cut}: the continued prefill's logits within {bar} of the one-call prefill's (maxdiff {diff})")
+    let off = logits_maxdiff(split.logits, short_logits)
+    t |> success(off > bar, "{n} tokens cut at {cut} control: a prompt one token short reads past the bar (maxdiff {off} vs {bar})")
+    delete short_logits
+    for (st in range64(4l)) {
+        forward(tr, whole, feed[st], n + st)
+        forward(tr, split, feed[st], n + st)
+        let sbar = SPLIT_BAR_REL * logits_maxabs(whole.logits)
+        let sdiff = logits_maxdiff(split.logits, whole.logits)
+        t |> success(sdiff <= sbar, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows within {sbar} (maxdiff {sdiff})")
+    }
+    delete whole
+    delete split
+    delete prompt
+    delete head
+    delete tail
+    delete less
+    delete feed
+}
+
+[test]
+def test_prefill_continues_on_the_device(t : T?) {
+    t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
+        if (!regions_ready(t)) return
+        var tr <- load_two_regions(t)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
+            continue_at(t, tr, 600l, 512l)   // the cut on the window boundary
+            continue_at(t, tr, 900l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+        }
+        delete tr
+    }
+    t |> run("the chat shape: a prompt, decoded steps, a second turn's prompt over that history, decoded steps") @(t : T?) {
+        if (!regions_ready(t)) return
+        var tr <- load_two_regions(t)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var turn1 <- prose_ids(40l, 0l)
+            var said <- feed_a()
+            var turn2 <- prose_ids(20l, 7l)
+            var chat <- create_session(tr, mirror_kv_dtype())
+            var steps <- create_session(tr, mirror_kv_dtype())
+            eval(tr, chat, turn1)
+            eval(tr, steps, turn1)
+            for (st in range64(STEPS)) {
+                forward(tr, chat, said[st], 40l + st)
+                forward(tr, steps, said[st], 40l + st)
+            }
+            chat.n_past = 40l + STEPS
+            eval(tr, chat, turn2)   //! one window-chain call from position 48
+            for (i in range64(20l)) {   //! the same twenty tokens through the token command, one position each
+                forward(tr, steps, turn2[i], 40l + STEPS + i)
+            }
+            let bar = SPLIT_BAR_REL * logits_maxabs(steps.logits)
+            let diff = logits_maxdiff(chat.logits, steps.logits)
+            t |> success(diff <= bar, "the second turn through the window chain within {bar} of the same tokens stepped one by one (maxdiff {diff})")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+            delete chat
+            delete steps
+            delete turn1
+            delete said
+            delete turn2
+        }
+        delete tr
+    }
+}
+
 [test]
 def test_regions_batched_steps(t : T?) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {

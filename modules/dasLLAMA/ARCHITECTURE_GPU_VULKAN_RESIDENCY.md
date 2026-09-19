@@ -28,6 +28,23 @@ the cap is skipped, the plan sizes a mirror the device prepare refuses, and the 
 declines to the per-op rails with the dense FFN on the CPU. The prepare keeps its own guard for
 direct callers.
 
+**The mirror is `regions` consecutive copies of the per-layer layout, and a region is one
+session's whole history.** A host asks for the count before the load (`set_gpu_resident_regions`,
+one by default; a server's stream count), the plan sizes every region's K/V at `seq_cap`, and
+the binding cap divides by the count, since both sides stay one buffer and one binding. A region
+is an element offset (`rd_mir_base`: the layer's base plus the selected region's stride), folded
+on the host into the `layerbase` push constant of every kernel that stores or reads a mirror row
+and into the sync, readback and hydrate offsets, so no kernel knows regions exist. The push
+constant is baked as the token command records, so the driver records one command per region
+(and one unsplit twin) and `vk_rdec_select_region` names the region the next call resolves
+against; the window chain encodes per call and reads the same accessor. The resident module owns
+who sits where (`RdecRegion`: rows, the owning claim's generation, a last-bind tick): a session
+binds its own region while its claim stands, else the least recently used one, which its next
+claim takes. Two sessions in two regions step between each other, or in one batched step, with no
+K/V crossing the bus - `tests/test_gpu_resident_regions.das` holds each bit for bit to the
+session alone. A session past the region count takes another's region and brings its history up
+from the host, as every session did on the single mirror.
+
 **The auto arm sizes against the room the OS reports on the adapter, where the OS reports
 it.** Vulkan cannot see the desktop: `VK_EXT_memory_budget` reads a flat 16024 MB on the 16 GB
 reference card with 3 GiB of another process's memory resident, and so does the process's own

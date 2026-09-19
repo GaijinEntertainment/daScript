@@ -1427,11 +1427,11 @@ def private pf_setup {
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
-def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {
+def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
     let noids : array<int64>
     vk_demotion_check("prefill")
     assert(!ple_raw || g_rd.ple_gpu, "vk_rdec_prefill: raw per-layer-embedding rows without the projection on device")
-    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, logits)
+    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, pos0, logits)
 }
 
 def ple_proj_shape_ok(dim, all : int64) : bool
@@ -1475,13 +1475,13 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>) {
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
     vk_demotion_check("prefill")
     let ple_tbl = pf_ple_tbl_on()
     assert(g_rd.ple == 0l || ple_tbl, "vk_rdec_prefill_ids: a per-layer-embedding model without its token table and projection on device")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, logits)   //! the ids form gathers a per-layer-embedding model's side rows from the device table and finishes the pre-step there
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits)   //! the ids form gathers a per-layer-embedding model's side rows from the device table and finishes the pre-step there
 }
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
@@ -1551,7 +1551,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
-                   cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {
+                   cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
@@ -1592,7 +1592,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let all = g_rd.n_layers * g_rd.ple
                 upload_region_at(g_rd.pf_ple, 0l, addr<uint8 const?>(ple_rows[int(w0 * all)]), wlen * all * 4l)
             }
-            if (w0 == 0l && g_rd.hybrid) {
+            if (pos0 + w0 == 0l && g_rd.hybrid) {
                 g_rd.dn_parity = 0
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
@@ -1606,7 +1606,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pfq_begin(raw)
             pfq_ts(raw)   // q0: submit start
             var h : VkHaz
-            if (w0 == 0l && g_rd.hybrid) {
+            if (pos0 + w0 == 0l && g_rd.hybrid) {
                 pf_dn_zero(raw, h)
             }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
@@ -1749,7 +1749,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-                    layerbase = mirb, npos = uint(wlen), pos0 = uint(w0),
+                    layerbase = mirb, npos = uint(wlen), pos0 = uint(pos0 + w0),
                     voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
                     boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
                     cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
@@ -1761,7 +1761,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
                     let khr = g_rd.layers[l].pf_fakhr
-                    var pcf = FaArgs(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
+                    var pcf = FaArgs(rows = uint(wlen), w0 = uint(pos0 + w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
                         scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
                         sinkoff = uint(l * g_rd.n_heads))
@@ -1770,7 +1770,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                         hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
-                        w0 = uint(w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window,
+                        w0 = uint(pos0 + w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window,
                         cap = g_rd.layers[l].attn_cap)
                     if (fa128) {
                         if (g_rd.kv16) {
