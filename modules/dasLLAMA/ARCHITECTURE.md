@@ -64,7 +64,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   tiles the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
   ladder, the class-pipeline build seat, the MoE expert chain on those tiles, the KHR arm's
   hand-staged kq tile - and the decode GEMV family's lane split by row length.
-- `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o: what a model has to fit on the card
+- `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2p: what a model has to fit on the card
   before the driver runs - the residency plan, and the GPU-slot marks swap that lets one slot
   serve many models.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2v: the per-op tier's decode era - the decode
