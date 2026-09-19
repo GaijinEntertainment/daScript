@@ -704,6 +704,8 @@ struct GpuState {
     xfer_sem : VkSemaphore
     xfer_value : uint64           // last signaled timeline value
     pend_wait : uint64            // value the NEXT compute submit must wait for (0 = none)
+    cmp_sem : VkSemaphore         //! the compute -> transfer timeline: a token command's signal, which its logits copy on the transfer queue waits for
+    cmp_value : uint64            //! its last signaled value
     // deltanet chain state (lazy — first DN dispatch creates it)
     dn_meta : HostBuf             // dn kernel params staging
     dn_meta_dev : uint64
@@ -1327,6 +1329,7 @@ def vk_moe_init : bool {
             vk_check(vkAllocateCommandBuffers(dev_raw(), xai, addr(g_gpu.xfer_cmd)), null)
             sci.pNext = addr<void?>(tci)
             vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
+            vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
     }
@@ -2417,6 +2420,9 @@ struct RDec {
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
     x_host, logits_host : HostBuf
+    log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
+    xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands, one a row count (0 = the one-row command's), recorded on first use
+    xlog_recorded : array<bool>
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
@@ -3300,7 +3306,7 @@ def alloc_cmd : VkCommandBuffer {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
+def private submit_core(var raw : VkCommandBuffer; fence : VkFence; signal : bool = false) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
     // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
@@ -3310,6 +3316,8 @@ def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
     var wstage : VkPipelineStageFlags
     wstage.transfer = true
     wstage.compute_shader = true
+    var csem = g_gpu.cmp_sem
+    var sval = g_gpu.cmp_value + 1ul
     unsafe {
         submit.pCommandBuffers = addr(raw)
         if (wval > 0ul) {
@@ -3321,7 +3329,75 @@ def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
             submit.pWaitDstStageMask = addr<uint?>(wstage)
             g_gpu.pend_wait = 0ul
         }
+        if (signal) {   //! the compute timeline: the transfer queue's copy of this command's output waits for it
+            tss.signalSemaphoreValueCount = 1u
+            tss.pSignalSemaphoreValues = addr(sval)
+            submit.pNext = addr<void?>(tss)
+            submit.signalSemaphoreCount = 1u
+            submit.pSignalSemaphores = addr(csem)
+            g_gpu.cmp_value = sval
+        }
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
+    }
+}
+
+//! a compute submit with no fence that signals the compute timeline; returns the value to wait for
+def submit_signal(var raw : VkCommandBuffer) : uint64 {
+    var nofence : VkFence
+    submit_core(raw, nofence, true)
+    return g_gpu.cmp_value
+}
+
+//! a persistent command on the transfer queue's pool
+def alloc_xfer_cmd : VkCommandBuffer {
+    var ai = VkCommandBufferAllocateInfo()
+    ai.commandPool = boost_value_to_vk(g_gpu.xfer_pool)
+    ai.level = VkCommandBufferLevel.PRIMARY
+    ai.commandBufferCount = 1u
+    var raw : VkCommandBuffer
+    vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
+    return raw
+}
+
+//! a transfer-queue submit that waits for the compute timeline at `cmp_val` and signals the transfer timeline; returns the value to wait for
+def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
+    g_gpu.xfer_value++
+    var sig = g_gpu.xfer_value
+    var wval = cmp_val
+    var tss = VkTimelineSemaphoreSubmitInfo()
+    var wsem = g_gpu.cmp_sem
+    var ssem = g_gpu.xfer_sem
+    var wstage : VkPipelineStageFlags
+    wstage.transfer = true
+    var submit = VkSubmitInfo()
+    submit.commandBufferCount = 1u
+    submit.waitSemaphoreCount = 1u
+    submit.signalSemaphoreCount = 1u
+    let nofence : VkFence
+    unsafe {
+        tss.waitSemaphoreValueCount = 1u
+        tss.pWaitSemaphoreValues = addr(wval)
+        tss.signalSemaphoreValueCount = 1u
+        tss.pSignalSemaphoreValues = addr(sig)
+        submit.pNext = addr<void?>(tss)
+        submit.pCommandBuffers = addr(xraw)
+        submit.pWaitSemaphores = addr(wsem)
+        submit.pWaitDstStageMask = addr<uint?>(wstage)
+        submit.pSignalSemaphores = addr(ssem)
+        vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
+    }
+    return sig
+}
+
+//! spin until the transfer timeline reaches `v`: a blocking wait pays the OS wake-up latency a step
+def xfer_spin_wait(v : uint64) {
+    let sem = g_gpu.xfer_sem
+    var cur = 0ul
+    while (true) {
+        vk_check(vkGetSemaphoreCounterValue(dev_raw(), sem, cur), null)
+        if (cur >= v) {
+            break
+        }
     }
 }
 

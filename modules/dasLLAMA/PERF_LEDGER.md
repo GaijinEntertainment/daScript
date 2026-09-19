@@ -1851,6 +1851,54 @@ direction-grade.
   Decision: taken - the browser pages read the small forms (storywish the one-voice file, parrot
   the 19-voice one), the q8 file stays the desktop default of the served set.
 
+### From the Vulkan batched-decode arc (2026-09-19)
+
+Instruments: `benchmarks/lcpp_bench.das --npl 4` (the flat rows and the four-stream row through the
+scheduler's device mode; `DASLLAMA_GPU_PROF=1` for the token command's stamps, which itself costs
+~5% of the rate, so every pair below is profiler-on against profiler-on or off against off), the
+attention ruler `harness/vk_attn_probe.das` (device timestamps a layer), the copy ruler
+`harness/vk_dma_probe.das`; llama.cpp b10660 `llama-batched-bench -npp 512 -ntg 128 -npl 1,4 -fa on`
+the same hour. The pod's RTX PRO 4500 (48 vCPUs, cm2 without decode-vector) unless named; the local
+RTX 5060 Ti carries decode-vector.
+
+- **The worker spin window on a GPU-served step (pod, Llama-3.2-1B Q8_0, 16 lanes, profiler off):**
+  the scheduler's greedy step runs a team-parallel argmax a row, which wakes every worker, and each
+  then spins the 30 ms window across the whole GPU step (all sixteen at 100% in `top`); on the
+  48-vCPU VM that starves the driver's submission thread - the four-row command's head read 2.7 ms.
+  tg128@4 summed by window: 30 ms 707, 8 ms 698, 4 ms 734, 2 ms 1065, 1 ms 1058, 500 us 1053,
+  100 us 1046, 0 (park at once) 1005 - the knee is the step's own length. Shipped: 500 us while the
+  resident driver serves (`jobque_spin_gpu_us`); 1B 707 -> 1067, 3B 362 -> 538, 8B 269 -> 364
+  (llama.cpp 1228 / 607 / 275). The flat rows unchanged (the flat bench feeds synthetic ids and
+  never samples).
+- **The decode attention at four rows (pod, profiler on, us a step over 16 layers):** the
+  committed pass (a workgroup a head, two keys a step behind a subgroup reduction) 380 + 70
+  combine at its rule's two splits, 327 + 102 at six, 346 + 103 at twelve - the split does not
+  move it; the grouped pass (a workgroup a kv head's four q heads) with the same score loop 367 +
+  103; a thread a key with the row's words eight in flight 255 + 103; the accumulators in
+  registers and the V words prefetched 361 with the combine fused into the last piece. The
+  ruler's per-layer floor at 32 keys unsplit is 8.3 us and a split adds 4 (the release, the
+  atomic, the last piece's combine); the ruler reads 14.5 at four rows and 12.6 at one where the
+  committed pass's profile read 28 and 8.5 - so the four-row form gains and the one-row form pays
+  ~4 us a layer, which the transfer-queue logits repay several times over. The score FMAs, the
+  softmax reductions, the K loads and the V loads each price ~2 us of an 18.5 us unsplit layer on
+  the 5060 Ti, the finish 4: no single cost dominates, the chain of them does.
+- **The logits' trip to host memory (the copy ruler, cached host memory):** the pod's compute-queue
+  copy 4.30 GB/s at 512 KB, 2 MB, 8 MB and 32 MB alike (0.95 us a 4 KB page); the transfer queue
+  11.2 / 19.4 / 24.7 / 26.8 GB/s including its submit and wait (108 us for the four-row plane
+  against 487). The 5060 Ti: 6.3 / 5.7 / 5.6 / 5.5 against 5.1 / 9.8 / 12.7 / 13.8. An uncached
+  host target leaves the copy at 471 us and slows the host's read to 7.8 ms; the classifier
+  writing straight into host memory costs 26.7 ms. Shipped: the transfer-queue copy behind a
+  compute -> transfer timeline. Pod, 1B, profiler on: the four-row step 3761 -> 3371 us, tg128@4
+  1019 -> 1136, tg128 426 -> 451.
+- **The scoreboard after the three (pod, profiler off, tg128@4 summed, ours cm2 / ours KHR /
+  llama.cpp; then tg128 ours / theirs):** Llama-3.2-1B Q8_0 1207 / 1206 / 1217 (0.99), flat
+  464 / 404; Llama-3.2-3B Q8_0 580 / 579 / 605 (0.96), flat 194 / 184; Llama-3.1-8B Q4_K_M
+  379 / 379 / 361 (1.05), flat 134 / 132. The 1B's four-row step under the profiler: GPU 2994 us
+  (qkv 231, rope 65, attn 361, wo 210, gate 486, up 457, down 588, cls 332, the norm and requant
+  sites 250), host 375 (the logits' landing 285, the submit 9); llama.cpp's step 3.26 ms wall with
+  2.82 of kernels (its GEMVs 655 GB/s to our 540-600 on the long-K down plane, its flash
+  attention 251 to our 361).
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

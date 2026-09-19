@@ -101,6 +101,20 @@ variance break, because a heat-soaked re-run lands low with a clean cv and a cv-
 keep it. Map warming can only make a re-run faster, so a slower axis says the box was still
 shedding the previous cell's heat and `--das-settle` is short for that tier.
 
+**The two decode rulers beside the GEMV probe read against rows of their own run.**
+`harness/vk_attn_probe.das [rows] [cnt] [hs] [heads] [kv_mul]` times the token command's attention
+pass a layer on the device clock across the key-split ladder; a row's alternates are the other
+splits of the same run, and the reference-engine row is llama.cpp's `FLASH_ATTN_EXT` line from
+`GGML_VK_PERF_LOGGER=1 llama-batched-bench -m <gguf> -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -ngl 99 -fa on`
+(b10660 on the RTX PRO 4500 at Llama-3.2-1B's shape, four rows: 15.7 us a layer, its split-k
+reduce inside). The ruler reproduces the token command's stamps for the shipped pass and is the
+only clock that separates a change's fixed cost from its per-key cost; the token profile
+(`DASLLAMA_GPU_PROF=1`, which itself takes ~5% of the rate) stays the number a kernel is judged
+by, since the ruler's static fixture has read a retired pass three times off its profile.
+`harness/vk_dma_probe.das` times one device-to-host copy at four sizes on the compute queue by
+the device clock and on the transfer queue by the host clock in the same run: each queue's row
+is the other's alternate, and the pod's 4.3 GB/s against 19-27 is the whole verdict.
+
 ### 2.10 Sanctioned instrumentation rails
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers

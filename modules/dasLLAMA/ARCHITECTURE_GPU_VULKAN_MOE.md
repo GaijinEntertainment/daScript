@@ -14,7 +14,7 @@ expert GEMMs run on and the per-op tier's MoE expert chain are
 `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and 2.2ae, and the lane split of
 the decode GEMV family the token command's expert GEMVs take is its section 2.2ah. What a model has to fit
 on the card before any of this runs - the residency plan that sizes the expert planes, and the
-marks swap - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The GPU backend
+marks swap - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2p. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 ### 2.2af The MoE block of the prefill window {#vk-prefill-moe-block}

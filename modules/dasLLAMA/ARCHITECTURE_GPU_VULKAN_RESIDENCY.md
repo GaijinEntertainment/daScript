@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2n-2.2o: the residency plan that sizes a whole model before a byte
-uploads, and the marks swap that lets one GPU slot serve many models. The prefill chain and byte
+document carries sections 2.2n-2.2p: the residency plan that sizes a whole model before a byte
+uploads, the marks swap that lets one GPU slot serve many models, and the token command's logits
+landing on the transfer queue. The prefill chain and byte
 stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
 2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
 `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
@@ -187,3 +188,24 @@ Without that drop the second model's stacks
 land beside the first's, and the offset-keyed stack lookup serves whichever model's plane
 registered that offset first: the decode attention block asserts on the geometry change, and a
 model whose geometry matches decodes the earlier model's weights.
+
+### 2.2p The token command's logits leave on the transfer queue {#logits-transfer-queue}
+
+**A token command signals the compute timeline, and its logits copy follows on the transfer
+queue.** On a box behind an IOMMU the compute queue's `vkCmdCopyBuffer` into cached host memory
+moves a page a microsecond - the RTX PRO 4500 pod reads 4.3 GB/s at every size from 512 KB to
+32 MB (`harness/vk_dma_probe.das`), so a four-row step's 2 MB logits plane cost 480 us of a 3.5 ms
+command - while the transfer family's copy engine moves the same plane at 19-27 GB/s (108 us
+with the submit and the wait; the RTX 5060 Ti reads 5.7 against 9.8). So a device with the
+transfer family armed (`RDec.log_xfer`) records the token command without the copy: the submit
+signals `g_gpu.cmp_sem`, the compute -> transfer timeline (`submit_signal`), the transfer queue
+takes a recorded copy command a row count (`rd_xlog`, `RDec.xlog_cmd`) that waits for that value
+at the transfer stage and signals the transfer timeline (`xfer_submit_after`), and the host spins
+on the transfer timeline's counter (`xfer_spin_wait`) instead of the fence - a blocking wait
+would pay the OS wake-up a step, as the fence wait's spin already knows. The logits planes are
+CONCURRENT between the two families (`make_device_buf` / `make_host_buf` at `xfer_shared`), so no
+ownership transfer sits on the path; the host orders the next step behind the copy, so the
+command's next write of the plane never races its read. Without a transfer family the command
+carries the copy and the fence as before (`rd_submit_land` / `rd_wait_land` choose). Pod,
+Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371 us, tg128@4 1019 -> 1136
+summed, tg128 426 -> 451.
