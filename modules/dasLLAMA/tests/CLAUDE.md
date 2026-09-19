@@ -365,11 +365,11 @@ partner (the output bias row past the norm row) against the seam and the CPU ora
 `test_vkd_act_family` runs the unbiased act kernels under the clamped swiglu beside silu and adds
 the biased twins (`q8_actrq_b_cls`, `actf16_b_cls`) over a six-expert bias plane, `test_vkd_fa_cm2`
 / `test_vkd_fa_khr` and `test_vkd_da_attn` add the sink arms (the h64 flash stamps whole and under
-a 40-key window; the token command's f32 and f16 sink twins unsplit and split with the sink
-combine), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
+a 40-key window; the token command's f32 and f16 sink twins unsplit and split, the last piece's
+combine seeding the sink), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
 the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
-the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+unsplit and split - the pass stores the row either way, its last piece combining), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture

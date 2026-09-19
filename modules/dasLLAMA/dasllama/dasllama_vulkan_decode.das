@@ -35,6 +35,13 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
     return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
 }
 
+//! `words` zero words into `dev` at byte `off`: the split attention's arrival counters start at rest
+def private rd_zero_words(dev : uint64; off, words : int64) {
+    var zeros : array<uint>
+    zeros |> resize(words)
+    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), words * 4l)
+}
+
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 //! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
@@ -113,8 +120,10 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l * nb)
     r.q_dev = q_gated ? make_device_buf(2l * qd * 4l * nb) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
     r.attn_dev = make_device_buf(qd * 4l * nb)
-    r.attn_nsplit = da_nsplit(n_heads, int64(g_gpu.sm_count))
-    r.attn_part_dev = make_device_buf(n_heads * DA_NSPLIT_MAX * (head_size + 2l) * 4l * nb)
+    r.attn_nsplit = da_nsplit(da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l), int64(g_gpu.sm_count))
+    r.attn_cnt_off = n_heads * DA_NSPLIT_MAX * (head_size + 2l) * nb
+    r.attn_part_dev = make_device_buf((r.attn_cnt_off + da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l) * nb) * 4l)
+    rd_zero_words(r.attn_part_dev, r.attn_cnt_off * 4l, da_attn_row_wgs(n_heads, n_heads / (kv_dim / head_size), 1l) * nb)
     r.ar_cnt_dev = make_device_buf(16l)
     var zeros : array<uint>
     zeros |> resize(4)
@@ -395,28 +404,18 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
-        let partbytes = g_rd.n_heads * DA_NSPLIT_MAX * (g_rd.head_size + 2l) * 4l * nb
-        //! the partials ride the attention-out bit (written by the pass, read by the combine that writes the row); the folded requant lands in the wo feed's aq/as
+        let partbytes = (g_rd.attn_cnt_off + da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nb) * 4l
+        //! the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
         if (g_rd.has_sinks) {   //! the sink twins bind the sink plane past the pass's eight
             let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev)
             let asizes = fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, 16l * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes)
             let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u)
             L.s_attn = kv16 ? set_da_attn_f16_sink_cls(abufs, asizes, abits) : set_da_attn_sink_cls(abufs, asizes, abits)
-            if (g_rd.attn_nsplit > 1l) {
-                verify(ensure_da_attn_comb_sink_cls(), "vk decode: the split attention's sink combine class rail must engage on a live device")
-                L.s_attn_comb = set_da_attn_comb_sink_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
-                    fixed_array(qplane, partbytes, qd * 4l * nb, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
-            }
         } else {
             let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev)
             let asizes = fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, 16l * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb)
             let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ)
             L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
-            if (g_rd.attn_nsplit > 1l) {
-                verify(ensure_da_attn_comb_cls(), "vk decode: the split attention's combine class rail must engage on a live device")
-                L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
-                    fixed_array(qplane, partbytes, qd * 4l * nb, qd * nb, (qd / 32l) * 4l * nb), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ))
-            }
         }
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
@@ -853,8 +852,7 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
     }
     let khr = !cm2_fa_on()
     let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
-        && (g_rd.kv16 ? ensure_da_attn_f16_sink_cls() : ensure_da_attn_sink_cls())
-        && (g_rd.attn_nsplit <= 1l || ensure_da_attn_comb_sink_cls()))
+        && (g_rd.kv16 ? ensure_da_attn_f16_sink_cls() : ensure_da_attn_sink_cls()))
     if (!stamps_ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an attention-sink kernel class declined on this device, the resident driver declines\n")
         return false
@@ -1297,27 +1295,20 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
-        rowwg = uint(g_rd.n_heads * nsplit))
+        cntoff = uint(g_rd.attn_cnt_off))
+    let awgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)
     if (g_rd.has_sinks) {
         if (g_rd.kv16) {
-            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
         } else {
-            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
         }
     } elif (g_rd.kv16) {
-        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, awgs)
     } else {
-        enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+        enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
     }
     rd_ts(raw, "a:attn")
-    if (nsplit > 1l) {
-        if (g_rd.has_sinks) {
-            enc_da_attn_comb_sink_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
-        } else {
-            enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
-        }
-        rd_ts(raw, "a:attc")
-    }
     if (rqk == DA_RQ_NONE) {   //! a head the fold cannot block (a K-quant wo plane under a head off 256): the separate requant
         if (kq_sb(L.fo)) {
             enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
@@ -2029,8 +2020,8 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     var pca = DaAttnArgs(kvd = uint(kvd), hs = hs, kv_mul = uint(L.kv_mul),
         kbase = uint(L.mir_base), vbase = uint(L.mir_base), scale = g_rd.scale, qstride = hs, gated = 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
-        rowwg = uint(g_rd.n_heads * nsplit), qrow = kvrow)
-    let awgs = g_rd.n_heads * nsplit * nrows
+        rowwg = uint(da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
+    let awgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit) * nrows
     if ((g_rd_nrow_bisect & 1) != 0) {   // TEMP bisect: no attention
     } elif (g_rd.has_sinks) {
         if (g_rd.kv16) {
@@ -2044,14 +2035,6 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
     }
     rd_ts(raw, "a:attn")
-    if (nsplit > 1l && (g_rd_nrow_bisect & 1) == 0) {
-        if (g_rd.has_sinks) {
-            enc_da_attn_comb_sink_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads * nrows)
-        } else {
-            enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads * nrows)
-        }
-        rd_ts(raw, "a:attc")
-    }
     if (rqk == DA_RQ_NONE) {
         if (kq_sb(L.fo)) {
             var pcq_k = RqArgs(inbase = 0u, nblk = uint(qd / 256l) * nr)
@@ -2227,7 +2210,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
         rd_ensure_n_leaves()
         rd_ensure_n_sets()
         //! the split form's key splits: the rows' heads already fill the card, so the split shrinks with the row count
-        let nsplit = min(g_rd.attn_nsplit, da_nsplit(g_rd.n_heads * nrows, int64(g_gpu.sm_count)))
+        let nsplit = min(g_rd.attn_nsplit, da_nsplit(da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nrows, int64(g_gpu.sm_count)))
         rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, false)
         if (twin) {
             rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, true)
@@ -3655,8 +3638,8 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
             neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u, boff = 0u, hasb = hb)
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
-    var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-    enc_da_attn_f16_cls(raw, h, L.s_attn, pca, n_heads)
+    var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)   //! unsplit: no counters
+    enc_da_attn_f16_cls(raw, h, L.s_attn, pca, da_attn_row_wgs(n_heads, kv_mul, 1l))
     rq_enc(raw, h, L.s_rq, fo, qd)
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_enc(fo, raw, h, L.s_wo, pcw, dim)

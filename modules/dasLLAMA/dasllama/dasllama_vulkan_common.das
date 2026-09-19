@@ -2255,7 +2255,6 @@ struct RLayer {
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
     s_rope : VkDescriptorSet        // rope + KV store class set
     s_attn : VkDescriptorSet        // decode attention class set
-    s_attn_comb : VkDescriptorSet   //! the split attention's combine (a head's partials into its row)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
@@ -2381,7 +2380,8 @@ struct RDec {
     xq_dev, xs_dev : uint64       // quantized activation (shared across the layer's GEMVs)
     q_dev, kv_dev : uint64        // roped q; the k/v projection buffer rope reads (k@qd, v@qd+kvd)
     attn_dev : uint64             // attention output
-    attn_part_dev : uint64        //! the split decode attention's partials [heads x DA_NSPLIT_MAX x (head_size + 2)]
+    attn_part_dev : uint64        //! the split decode attention's pieces [rows x heads x DA_NSPLIT_MAX x (head_size + 2)], then its arrival counters
+    attn_cnt_off : int64          //! the counters' word offset in that plane
     ar_cnt_dev : uint64           //! the epilogue GEMVs' arrival counter (one word: the dispatches are sequential), zero between dispatches
     attn_nsplit : int64           //! key splits a head the token command dispatches (1 = the unsplit pass; `da_nsplit`)
     aq_dev, as_dev : uint64       // quantized attn (wo input)

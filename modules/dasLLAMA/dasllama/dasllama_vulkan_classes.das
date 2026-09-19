@@ -4075,15 +4075,21 @@ struct DaAttnArgs {
     gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
     window : uint   //! a sliding layer attends the last `window` positions of the cnt; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
-    nsplit : uint   //! the key range split across this many workgroups a head, each leaving a (max, denom, acc) partial for `DaAttnComb`; 0 or 1 = one workgroup a head stores y itself
+    nsplit : uint   //! the key range split across this many workgroups a group, each leaving a (max, denom, acc) piece a head that the group's last piece combines; 0 or 1 = one workgroup a group stores the rows itself
     rqk : uint      //! the row's requant folded into the store: 0 = Q8_0 blocks of 32, 1 = Q8_K superblocks of 256 (a head a multiple of 256), 2 = none (the row alone)
     sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
-    rowwg : uint    //! (head, split) workgroups a row: the dispatch past them is the N-row command's next row, which reads its own `tok` entry
+    rowwg : uint    //! (kv head, slab, split) workgroups a row - `da_attn_row_wgs`: the dispatch past them is the N-row command's next row, which reads its own `tok` entry; 0 = the whole dispatch is row 0
     qrow : uint     //! a row's stride in q (the projection row's width); 0 in the one-row command
+    cntoff : uint   //! the split form's arrival counters, a word a (row, kv head, slab) group, at this word offset of the partials binding: zero between dispatches
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
 def da_attn_part_stride(hs : uint) : uint => hs + 2u
+
+let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four
+
+//! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
+def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 => n_heads / kv_mul * ((kv_mul + int64(DA_G) - 1l) / int64(DA_G)) * nsplit
 
 let DA_RQ_Q8 = 0u    //! `DaAttnArgs.rqk`: the wo plane reads Q8_0 activations
 let DA_RQ_Q8K = 1u   //! ... Q8_K activations
@@ -4092,8 +4098,9 @@ let DA_RQ_NONE = 2u  //! ... no fold: a separate requant serves (or nothing read
 //! the Q8_0 block scale of a head row's dim: the 32-lane group's amax over 127 (the group is the block on a 32- or 64-wide subgroup)
 def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 
-// decode attention (one query row): a wg per (head, key split), GQA, KT-typed K/V mirror. Online
-// softmax over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
+// decode attention (one query row a head): a wg per (kv head, slab of its DA_G q heads, key split), KT-typed
+// K/V mirror read once for the slab. Online softmax over 256-position chunks (a running max/denom a
+// head, alpha-rescaled V accumulators) — any cnt works.
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
@@ -4102,17 +4109,20 @@ class template DaAttnT {
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
     @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
     @ssbo @binding = 2 vmir : array<KT>      // the V mirror plane
+    @ssbo @binding = 2 @role = "alias" @template_gate = KV16 vw4 : array<uint4>   //! the V mirror as 16-byte words
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
-    @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)]; unsplit, any buffer (unread)
+    @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)], the arrival counters past them; unsplit, any buffer (unread)
+    @ssbo @binding = 5 @role = "alias" partu : array<uint>   //! the partials binding as words: the arrival counters
     @ssbo @binding = 6 aq : array<int8>      //! the row's quants when `rqk` folds the requant (the wo plane's feed); else any buffer (unwritten)
     @ssbo @binding = 7 aqs : array<float>    //! ... and its block scales
     @ssbo @binding = 8 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
-    @workgroup qrow : float[512]   // this head's query row (hs <= 512)
-    @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
-    @workgroup sgp : float[64]     // per-subgroup partials
-    @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
+    @workgroup qrow : float[2048]  //! the slab's query rows, DA_G x 512 (hs <= 512); a dead head's row is zero
+    @workgroup sc : float[1024]    //! the slab's chunk scores, DA_G x 256
+    @workgroup sgp : float[128]    //! per-subgroup partials, DA_G x 32: a chunk's maxes in a head's lower half, its sums in the upper
+    @workgroup ml : float[16]      //! a head's [running max, running softmax denom, -, -], DA_G quads
+    @workgroup arrived : uint[1]   //! the split form: the pieces of this group that finished before this one
 
     //! one V mirror element as f32
     def vld(i : uint) : float => float(vmir[i])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
@@ -4193,228 +4203,356 @@ class template DaAttnT {
                 }
                 aq[h * hs + d + 256u] = q8_quant1(o2, id2)
             }
+            barrier()   //! the slab's next head reuses sgp
         }
     }
 
+    //! the aligned max's seed: the head's sink logit on the sink stamp (the phantom key), the floor elsewhere
+    def seed_m(h : uint) : float {
+        static_if (SINK) {
+            return sinks[pa.sinkoff + h]
+        } else {
+            return -3.0e38
+        }
+    }
+
+    //! ... and the aligned denominator's: the phantom key's mass against the aligned max, once for the head
+    def seed_l(h : uint; m : float) : float {
+        static_if (SINK) {
+            return exp(sinks[pa.sinkoff + h] - m)
+        } else {
+            return 0.0
+        }
+    }
+
+    //! the split form's end, run by the group's last piece: a head's pieces aligned by their maxes, normalized, then the row
+    def combine_head(h, hflat, hs, nsplit, stride, qb, qstride, tid : uint; wide : bool) {
+        let hb = hflat * nsplit * stride
+        var m = seed_m(h)
+        var sp = 0u
+        while (sp < nsplit) {
+            m = max(m, part[hb + sp * stride])
+            sp++
+        }
+        var l = seed_l(h, m)
+        var o = 0.0
+        var o2 = 0.0
+        sp = 0u
+        while (sp < nsplit) {
+            let pb = hb + sp * stride
+            let wgt = exp(part[pb] - m)
+            l += part[pb + 1u] * wgt
+            if (tid < hs) {
+                o += part[pb + 2u + tid] * wgt
+            }
+            if (wide) {
+                o2 += part[pb + 2u + tid + 256u] * wgt
+            }
+            sp++
+        }
+        let linv = 1.0 / l
+        finish_head(h, hflat, hs, qb, qstride, tid, o * linv, o2 * linv, wide)
+    }
+
+    //! one head's finished value (`o` at dim tid, `o2` at tid + 256 on a wide head) gated and stored, the unsplit form's end
+    def finish_head(h, hflat, hs, qb, qstride, tid : uint; o, o2 : float; wide : bool) {
+        var og = o
+        var og2 = o2
+        if (pa.gated != 0u && (wide || tid < hs)) {
+            og = og / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
+            if (wide) {
+                og2 = og2 / (1.0 + exp(-q[qb + h * qstride + hs + tid + 256u]))
+            }
+        }
+        store_row(hflat, hs, tid, og, og2, wide)
+    }
+
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE037,STYLE038 — the online-softmax pass over a slab of heads, one shape for every head width and form
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
         let rowwg = max(pa.rowwg, 1u)
-        let row = gl_WorkGroupID.x / rowwg
-        let wg = gl_WorkGroupID.x % rowwg
+        let row = pa.rowwg == 0u ? 0u : gl_WorkGroupID.x / rowwg   //! a one-row dispatch leaves rowwg 0: the whole dispatch is row 0
+        let wg = pa.rowwg == 0u ? gl_WorkGroupID.x : gl_WorkGroupID.x % rowwg
         let cnt = tok[row].cnt
-        let h = wg / nsplit
         let sp = wg % nsplit
-        let hflat = gl_WorkGroupID.x / nsplit   //! the row's head in the attention-out and partial planes, whose row stride is the heads' width
+        let grp = wg / nsplit   //! the row's (kv head, slab)
+        let nslab = (pa.kv_mul + DA_G - 1u) / DA_G
+        let kvh = grp / nslab
+        let h0 = kvh * pa.kv_mul + (grp % nslab) * DA_G   //! the slab's first q head
+        let live = min(DA_G, pa.kv_mul - (grp % nslab) * DA_G)   //! its heads: a group's last slab may be short
+        let hflat0 = row * (pa.kvd / hs * pa.kv_mul) + h0   //! the slab's first head in the attention-out and partial planes, whose row stride is the heads' width
         let qb = row * pa.qrow
         let kbase = pa.kbase + tok[row].mirbase
         let vbase = pa.vbase + tok[row].mirbase
-        let kvh = h / pa.kv_mul
         let tid = gl_LocalInvocationID.x
         let wide = hs > 256u
-        let npart = wide ? 1u : 256u / hs     // V-phase partial groups; thread tid = group g, output dim c
-        let g = wide ? 0u : tid / hs
-        let c = wide ? tid : tid % hs
         let qstride = pa.qstride == 0u ? hs : pa.qstride
-        let dpl = hs / gl_SubgroupSize        // the score pass: a lane's dims of the K row
         let lane = gl_SubgroupInvocationID
         var i = tid
         while (i < hs) {
-            qrow[i] = q[qb + h * qstride + i]
+            for [unroll] (j in range(4)) {
+                let hj = uint(j)
+                qrow[hj * 512u + i] = hj < live ? q[qb + (h0 + hj) * qstride + i] : 0.0
+            }
             i += 256u
         }
-        if (tid == 0u) {
-            ml[1u] = 0.0
+        if (tid < DA_G) {
+            ml[tid * 4u] = -3.0e38
+            ml[tid * 4u + 1u] = 0.0
         }
         barrier()
-        var acc = 0.0             // this thread's V partial (group g's slice of dim c)
-        var acc2 = 0.0            // the wide head's second dim, c + 256
-        var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
+        // V accumulate lives in registers: a thread a (key group, eight dims) of the chunk, a head's
+        // eight sums each; the key groups fold through the shared slab once per head at the end
+        let nwv = hs / 8u                      // words a V row
+        let npart = 256u / nwv                 // key groups
+        let g = tid / nwv
+        let w = tid % nwv
+        var acc : float[32]                    // [head * 8 + dim]
+        for [unroll] (j in range(32)) {
+            acc[j] = 0.0
+        }
         let cstart = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
         let per = ((cnt - cstart + nsplit - 1u) / nsplit + 31u) & ~31u
         var c0 = min(cnt, cstart + sp * per)
         let cend = min(cnt, cstart + (sp + 1u) * per)
+        let vec = KV16 && (kbase & 7u) == 0u && (vbase & 7u) == 0u && (pa.kvd & 7u) == 0u   //! the f16 stamp with every mirror row on a 16-byte word: rows load as words
+        let vb = vbase + kvh * hs + w * 8u
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
-            var kk = gl_SubgroupID
-            while (kk < clen) {
-                let kk2 = kk + gl_NumSubgroups
-                let kkb = min(kk2, clen - 1u)   //! a lone last key reads a live row twice and stores once
-                let krow = kbase + (c0 + kk) * pa.kvd + kvh * hs + lane * dpl
-                let krow2 = kbase + (c0 + kkb) * pa.kvd + kvh * hs + lane * dpl
-                var pv = 0.0
-                var pv2 = 0.0
-                let vec = KV16 && dpl % 8u == 0u && (kbase & 7u) == 0u   //! the f16 stamp on a head of 256 (one word a lane) or 512 (two), the row base on a word
+            // the chunk's loads go out together, one round trip: this thread's key row (the scores)
+            // and its first eight V rows, which wait on nothing the scores compute
+            let krow = kbase + (c0 + min(tid, clen - 1u)) * pa.kvd + kvh * hs
+            var kw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
+            var vw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
+            static_if (KV16) {
+                if (vec) {
+                    for [unroll] (b in range(8)) {
+                        kw[b] = kw4[krow / 8u + min(uint(b), nwv - 1u)]   //! a head of 64 fills eight words, a wider one takes more batches
+                        vw[b] = vw4[(vb + (c0 + min(g + uint(b) * npart, clen - 1u)) * pa.kvd) / 8u]
+                    }
+                }
+            }
+            // scores: a thread a key of the chunk, the slab's four dots from the shared q rows (a broadcast read a dim)
+            if (tid < clen) {
+                var pv : float[4]
+                for [unroll] (j in range(4)) {
+                    pv[j] = 0.0
+                }
                 static_if (KV16) {
                     if (vec) {
-                        let nw = dpl / 8u
                         var wi = 0u
-                        while (wi < nw) {
-                            let w0 = kw4[krow / 8u + wi]
-                            let w1 = kw4[krow2 / 8u + wi]
-                            pv += kdot8(w0, lane * dpl + wi * 8u)
-                            pv2 += kdot8(w1, lane * dpl + wi * 8u)
-                            wi++
+                        while (wi < nwv) {
+                            if (wi != 0u) {
+                                for [unroll] (b in range(8)) {
+                                    kw[b] = kw4[krow / 8u + min(wi + uint(b), nwv - 1u)]
+                                }
+                            }
+                            for [unroll] (b in range(8)) {
+                                let wb = wi + uint(b)
+                                if (wb < nwv) {
+                                    for [unroll] (j in range(4)) {
+                                        pv[j] += kdot8(kw[b], uint(j) * 512u + wb * 8u)
+                                    }
+                                }
+                            }
+                            wi += 8u
                         }
                     }
                 }
                 if (!vec) {
                     var di = 0u
-                    while (di < dpl) {
-                        let qv = qrow[lane * dpl + di]
-                        pv += qv * float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                        pv2 += qv * float(kmir[krow2 + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                    while (di < hs) {
+                        let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                        for [unroll] (j in range(4)) {
+                            pv[j] += qrow[uint(j) * 512u + di] * kv0
+                        }
                         di++
                     }
                 }
-                let sv = subgroupAdd(pv)
-                let sv2 = subgroupAdd(pv2)
-                if (lane == 0u) {
-                    sc[kk] = attn_softcap(sv * pa.scale, pa.cap)
-                    if (kk2 < clen) {
-                        sc[kk2] = attn_softcap(sv2 * pa.scale, pa.cap)
-                    }
+                for [unroll] (j in range(4)) {
+                    sc[uint(j) * 256u + tid] = attn_softcap(pv[j] * pa.scale, pa.cap)
                 }
-                kk += 2u * gl_NumSubgroups
             }
             barrier()
-            let s = tid < clen ? sc[tid] : -3.0e38
-            let tmax = subgroupMax(s)
-            if (lane == 0u) {
-                sgp[gl_SubgroupID] = tmax
+            // the chunk's max a head: the subgroups' maxes land in sgp, every thread folds them itself
+            var s : float[4]
+            for [unroll] (j in range(4)) {
+                let hj = uint(j)
+                s[j] = tid < clen && hj < live ? sc[hj * 256u + tid] : -3.0e38
+                let tmax = subgroupMax(s[j])
+                if (lane == 0u) {
+                    sgp[hj * 32u + gl_SubgroupID] = tmax
+                }
             }
             barrier()
-            if (tid == 0u) {
-                var m = mrun
+            var alpha : float[4]
+            for [unroll] (j in range(4)) {
+                let hj = uint(j)
+                var mnew = ml[hj * 4u]
                 var sgi = 0u
                 while (sgi < gl_NumSubgroups) {
-                    m = max(m, sgp[sgi])
+                    mnew = max(mnew, sgp[hj * 32u + sgi])
                     sgi++
                 }
-                ml[0u] = m
+                alpha[j] = exp(ml[hj * 4u] - mnew)
+                // exp + chunk sum; denom rescale rides the same alpha; the sums take the slab's upper half
+                let e = tid < clen && hj < live ? exp(s[j] - mnew) : 0.0
+                sc[hj * 256u + tid] = e
+                let tsum = subgroupAdd(e)
+                if (lane == 0u) {
+                    sgp[hj * 32u + 16u + gl_SubgroupID] = tsum
+                }
             }
             barrier()
-            let mnew = ml[0u]
-            let alpha = exp(mrun - mnew)
-            mrun = mnew
-            // exp + chunk sum; denom rescale rides the same alpha
-            let e = tid < clen ? exp(s - mnew) : 0.0
-            sc[tid] = e
-            let tsum = subgroupAdd(e)
-            if (lane == 0u) {
-                sgp[gl_SubgroupID] = tsum
-            }
-            barrier()
-            if (tid == 0u) {
+            if (tid < DA_G) {   //! a thread a head carries the running max and denominator forward
+                var mnew = ml[tid * 4u]
                 var lsum = 0.0
                 var sgi = 0u
                 while (sgi < gl_NumSubgroups) {
-                    lsum += sgp[sgi]
+                    mnew = max(mnew, sgp[tid * 32u + sgi])
+                    lsum += sgp[tid * 32u + 16u + sgi]
                     sgi++
                 }
-                ml[1u] = ml[1u] * alpha + lsum
+                ml[tid * 4u + 1u] = ml[tid * 4u + 1u] * exp(ml[tid * 4u] - mnew) + lsum
+                ml[tid * 4u] = mnew
             }
-            // V accumulate: group g strides the chunk, rescaled by this chunk's alpha
-            acc *= alpha
-            acc2 *= alpha
-            let vb = vbase + kvh * hs + c
-            if (wide) {
-                var jj = 0u
-                while (jj + 3u < clen) {
-                    let r0 = vb + (c0 + jj) * pa.kvd
-                    let r1 = r0 + pa.kvd
-                    let r2 = r1 + pa.kvd
-                    let r3 = r2 + pa.kvd
-                    let v0 = vld(r0)
-                    let v1 = vld(r1)
-                    let v2 = vld(r2)
-                    let v3 = vld(r3)
-                    let u0 = vld(r0 + 256u)
-                    let u1 = vld(r1 + 256u)
-                    let u2 = vld(r2 + 256u)
-                    let u3 = vld(r3 + 256u)
-                    acc += (sc[jj] * v0 + sc[jj + 1u] * v1) + (sc[jj + 2u] * v2 + sc[jj + 3u] * v3)
-                    acc2 += (sc[jj] * u0 + sc[jj + 1u] * u1) + (sc[jj + 2u] * u2 + sc[jj + 3u] * u3)
-                    jj += 4u
+            for [unroll] (j in range(4)) {
+                for [unroll] (e in range(8)) {
+                    acc[j * 8 + e] *= alpha[j]
                 }
-                while (jj < clen) {
+            }
+            // V accumulate: the group strides the chunk's keys, eight rows' words a step (a head of 64: the chunk in one, prefetched)
+            var jj = g
+            while (jj < clen) {
+                static_if (KV16) {
+                    if (vec) {
+                        if (jj != g) {
+                            for [unroll] (b in range(8)) {
+                                vw[b] = vw4[(vb + (c0 + min(jj + uint(b) * npart, clen - 1u)) * pa.kvd) / 8u]
+                            }
+                        }
+                        for [unroll] (b in range(8)) {
+                            let kb = jj + uint(b) * npart
+                            if (kb < clen) {
+                                let a = unpackHalf2x16(vw[b].x)
+                                let bb = unpackHalf2x16(vw[b].y)
+                                let cc = unpackHalf2x16(vw[b].z)
+                                let d = unpackHalf2x16(vw[b].w)
+                                for [unroll] (j in range(4)) {
+                                    let sj = sc[uint(j) * 256u + kb]
+                                    acc[j * 8] += sj * a.x
+                                    acc[j * 8 + 1] += sj * a.y
+                                    acc[j * 8 + 2] += sj * bb.x
+                                    acc[j * 8 + 3] += sj * bb.y
+                                    acc[j * 8 + 4] += sj * cc.x
+                                    acc[j * 8 + 5] += sj * cc.y
+                                    acc[j * 8 + 6] += sj * d.x
+                                    acc[j * 8 + 7] += sj * d.y
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!vec) {
                     let vrow = vb + (c0 + jj) * pa.kvd
-                    acc += sc[jj] * vld(vrow)
-                    acc2 += sc[jj] * vld(vrow + 256u)
-                    jj++
+                    for [unroll] (e in range(8)) {
+                        let v = vld(vrow + uint(e))
+                        for [unroll] (j in range(4)) {
+                            acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
+                        }
+                    }
                 }
-            } elif (tid < npart * hs) {
-                var jj = g
-                let step = npart * pa.kvd
-                while (jj + 7u * npart < clen) {
-                    let r0 = vb + (c0 + jj) * pa.kvd
-                    let v0 = vld(r0)
-                    let v1 = vld(r0 + step)
-                    let v2 = vld(r0 + 2u * step)
-                    let v3 = vld(r0 + 3u * step)
-                    let v4 = vld(r0 + 4u * step)
-                    let v5 = vld(r0 + 5u * step)
-                    let v6 = vld(r0 + 6u * step)
-                    let v7 = vld(r0 + 7u * step)
-                    acc += ((sc[jj] * v0 + sc[jj + npart] * v1) + (sc[jj + 2u * npart] * v2 + sc[jj + 3u * npart] * v3)) + ((sc[jj + 4u * npart] * v4 + sc[jj + 5u * npart] * v5) + (sc[jj + 6u * npart] * v6 + sc[jj + 7u * npart] * v7))
-                    jj += 8u * npart
-                }
-                while (jj < clen) {
-                    acc += sc[jj] * vld(vb + (c0 + jj) * pa.kvd)
-                    jj += npart
-                }
+                jj += vec ? 8u * npart : npart
             }
-            barrier()   // sc/sgp settle before the next chunk overwrites them
+            barrier()   // sc/sgp/ml settle before the next chunk overwrites them
             c0 += 256u
         }
-        let pb = gl_WorkGroupID.x * da_attn_part_stride(hs)   // this (row, head, split)'s partial
-        let linv = unsplit_linv(h, mrun, ml[1u])
-        if (wide) {   // one group: every thread holds two finished dims
-            if (nsplit > 1u) {
-                if (tid == 0u) {
-                    part[pb] = mrun
-                    part[pb + 1u] = ml[1u]
+        // the finish: a head's key-group sums fold inside the subgroup by shuffles, then across the
+        // subgroups through the q slab (spent by now), a round of heads at a time; a round's thread takes
+        // a (head, dim) and writes the piece, or gates and requantizes the row
+        let stride = da_attn_part_stride(hs)
+        let kgs = gl_SubgroupSize / nwv   //! key groups a subgroup; 0 where a row's words span subgroups (a wide head, a narrow subgroup)
+        var r = 1u
+        while (r < kgs) {
+            for [unroll] (k in range(32)) {
+                acc[k] += subgroupShuffleXor(acc[k], r * nwv)
+            }
+            r *= 2u
+        }
+        let folded = kgs >= 1u
+        let nsl = folded ? gl_NumSubgroups : npart   //! the slab's groups a head after the fold
+        let nsl_hs = nsl * hs
+        let hpr = max(1u, 2048u / nsl_hs)   //! heads a round of the 2048-float slab
+        let mine = !folded || lane < nwv   //! the lanes holding a fold's sums
+        let slot = folded ? gl_SubgroupID : g
+        var hr0 = 0u
+        while (hr0 < live) {
+            for [unroll] (j in range(4)) {
+                let hj = uint(j)
+                if (hj >= hr0 && hj < hr0 + hpr && hj < live && mine) {
+                    for [unroll] (e in range(8)) {
+                        qrow[(hj - hr0) * nsl_hs + slot * hs + w * 8u + uint(e)] = acc[j * 8 + e]
+                    }
                 }
-                part[pb + 2u + tid] = acc
-                part[pb + 2u + tid + 256u] = acc2
-                return
             }
-            var o = acc * linv
-            var o2 = acc2 * linv
-            if (pa.gated != 0u) {
-                o = o / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
-                o2 = o2 / (1.0 + exp(-q[qb + h * qstride + hs + tid + 256u]))
+            barrier()
+            let hr = wide ? 0u : tid / hs
+            let dd = wide ? tid : tid % hs
+            if (hr < hpr && hr0 + hr < live) {
+                let h = hr0 + hr
+                var tot = 0.0
+                var tot2 = 0.0
+                var sl = 0u
+                while (sl < nsl) {
+                    tot += qrow[hr * nsl_hs + sl * hs + dd]
+                    if (wide) {
+                        tot2 += qrow[hr * nsl_hs + sl * hs + dd + 256u]
+                    }
+                    sl++
+                }
+                let mrun = ml[h * 4u]
+                let l = ml[h * 4u + 1u]
+                let pb = ((hflat0 + h) * nsplit + sp) * stride   // this (row, head, split)'s piece
+                if (nsplit > 1u) {
+                    if (dd == 0u) {
+                        part[pb] = mrun
+                        part[pb + 1u] = l
+                    }
+                    part[pb + 2u + dd] = tot
+                    if (wide) {
+                        part[pb + 2u + dd + 256u] = tot2
+                    }
+                } else {
+                    let linv = unsplit_linv(h0 + h, mrun, l)
+                    finish_head(h0 + h, hflat0 + h, hs, qb, qstride, dd, tot * linv, tot2 * linv, wide)
+                }
             }
-            store_row(hflat, hs, tid, o, o2, true)
-            return
+            barrier()   //! the slab settles before the next round
+            hr0 += hpr
         }
-        // cross-group reduce (sc reused as the partial slab: slot tid == g * hs + c)
-        sc[tid] = acc
-        barrier()
-        var tot = 0.0
-        if (tid < hs) {
-            var gg = 0u
-            while (gg < npart) {
-                tot += sc[gg * hs + tid]
-                gg++
-            }
-        }
-        if (nsplit > 1u) {
+        if (nsplit > 1u) {   //! the split form: the group's last piece to land combines the heads' rows, and rearms the counter
+            let rowgroups = pa.rowwg == 0u ? gl_NumWorkGroups.x / nsplit : pa.rowwg / nsplit
+            let ci = pa.cntoff + row * rowgroups + grp
+            memoryBarrierBuffer()
+            barrier()
             if (tid == 0u) {
-                part[pb] = mrun
-                part[pb + 1u] = ml[1u]
+                arrived[0] = atomicAdd(partu[ci], 1u)
             }
-            if (tid < hs) {
-                part[pb + 2u + tid] = tot
+            barrier()
+            if (arrived[0] + 1u == nsplit) {
+                memoryBarrierBuffer()
+                for [unroll] (j in range(4)) {
+                    let hj = uint(j)
+                    if (hj < live) {
+                        combine_head(h0 + hj, hflat0 + hj, hs, nsplit, stride, qb, qstride, tid, wide)
+                    }
+                }
+                if (tid == 0u) {
+                    partu[ci] = 0u
+                }
             }
-            return
         }
-        var o = SINK ? tot * linv : tot / ml[1u]
-        if (pa.gated != 0u && tid < hs) {
-            o = o / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
-        }
-        store_row(hflat, hs, tid, o, 0.0, false)
     }
 }
 
@@ -4440,147 +4578,6 @@ class DaAttnSink : DaAttnT {
 class DaAttnF16Sink : DaAttnT {
     typedef KT = float16
     override KV16 = true
-    override SINK = true
-}
-
-//! the split decode attention's combine: one wg a head over its nsplit partials, each weighed e^(m_s - M) against the aligned max
-[ |> template_struct_instance]
-class template DaAttnCombT {
-    @template_constant SINK : bool = false   //! the sink stamp (gpt-oss): the head's sink logit joins the aligned max and denominator, once, here - the pieces carry none
-    @ssbo @binding = 0 q : array<float>      //! the query rows, for the gate half of a gated head
-    @ssbo @binding = 1 part : array<float>   //! [head x split x (hs + 2)]
-    @ssbo @binding = 2 y : array<float>      //! attention out rows
-    @ssbo @binding = 3 aq : array<int8>      //! the row's quants when `rqk` folds the requant; else any buffer (unwritten)
-    @ssbo @binding = 4 aqs : array<float>    //! ... and its block scales
-    @ssbo @binding = 5 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamp: the per-head sink logits, `pa.sinkoff` the layer's row
-    @push_constant pa : DaAttnArgs
-    @workgroup wsum : float[2]   //! [0] = the aligned max, [1] = the aligned denom
-    @workgroup sgp : float[64]   //! the Q8_K fold's per-subgroup maxes (two superblocks on a wide head)
-
-    //! the aligned max's seed: the head's sink logit on the sink stamp (the phantom key), the floor elsewhere
-    def seed_m(h : uint) : float {
-        static_if (SINK) {
-            return sinks[pa.sinkoff + h]
-        } else {
-            return -3.0e38
-        }
-    }
-
-    //! ... and the aligned denominator's: the phantom key's mass against the aligned max, once for the head
-    def seed_l(h : uint; m : float) : float {
-        static_if (SINK) {
-            return exp(sinks[pa.sinkoff + h] - m)
-        } else {
-            return 0.0
-        }
-    }
-
-    //! the head's finished value at dim `d`: the aligned partials summed and normalized, then the gate
-    def dim_value(hb, stride, nsplit, h, hs, d : uint; m, linv : float) : float {
-        var o = 0.0
-        var s = 0u
-        while (s < nsplit) {
-            o += part[hb + s * stride + 2u + d] * exp(part[hb + s * stride] - m)
-            s++
-        }
-        o *= linv
-        if (pa.gated != 0u) {
-            let qstride = pa.qstride == 0u ? hs : pa.qstride
-            o = o / (1.0 + exp(-q[h * qstride + hs + d]))
-        }
-        return o
-    }
-
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
-    def run {   // nolint:STYLE037,STYLE038 — the combine and its folded requant, the two head widths in one pass
-        let hs = pa.hs
-        let nsplit = max(pa.nsplit, 1u)
-        let h = gl_WorkGroupID.x
-        let tid = gl_LocalInvocationID.x
-        let stride = da_attn_part_stride(hs)
-        let hb = h * nsplit * stride
-        if (tid == 0u) {
-            var m = seed_m(h)
-            var s = 0u
-            while (s < nsplit) {
-                m = max(m, part[hb + s * stride])
-                s++
-            }
-            var l = seed_l(h, m)
-            s = 0u
-            while (s < nsplit) {
-                l += part[hb + s * stride + 1u] * exp(part[hb + s * stride] - m)
-                s++
-            }
-            wsum[0u] = m
-            wsum[1u] = l
-        }
-        barrier()
-        let m = wsum[0u]
-        let linv = 1.0 / wsum[1u]
-        let wide = hs > 256u
-        let live = tid < hs
-        let o = live ? dim_value(hb, stride, nsplit, h, hs, tid, m, linv) : 0.0
-        let o2 = wide ? dim_value(hb, stride, nsplit, h, hs, tid + 256u, m, linv) : 0.0
-        if (live) {
-            y[h * hs + tid] = o
-        }
-        if (wide) {
-            y[h * hs + tid + 256u] = o2
-        }
-        if (pa.rqk == DA_RQ_Q8) {
-            if (live) {
-                let dq = da_q8_blk_d(o)
-                if ((tid & 31u) == 0u) {
-                    aqs[(h * hs + tid) >> 5u] = dq
-                }
-                aq[h * hs + tid] = q8_quant1(o, dq != 0.0 ? 1.0 / dq : 0.0)
-            }
-            if (wide) {
-                let dq2 = da_q8_blk_d(o2)
-                if ((tid & 31u) == 0u) {
-                    aqs[(h * hs + tid + 256u) >> 5u] = dq2
-                }
-                aq[h * hs + tid + 256u] = q8_quant1(o2, dq2 != 0.0 ? 1.0 / dq2 : 0.0)
-            }
-        } elif (pa.rqk == DA_RQ_Q8K) {
-            let m1 = subgroupMax(abs(o))
-            let m2 = subgroupMax(abs(o2))
-            if (gl_SubgroupInvocationID == 0u) {
-                sgp[gl_SubgroupID] = m1
-                sgp[32u + gl_SubgroupID] = m2
-            }
-            barrier()
-            var mx1 = 0.0
-            var mx2 = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                mx1 = max(mx1, sgp[sgi])
-                mx2 = max(mx2, sgp[32u + sgi])
-                sgi++
-            }
-            let d1 = mx1 / 127.0
-            let b1 = (h * hs) >> 8u
-            if (tid == 0u) {
-                aqs[b1] = d1
-            }
-            aq[h * hs + tid] = q8_quant1(o, d1 != 0.0 ? 1.0 / d1 : 0.0)
-            if (wide) {
-                let d2 = mx2 / 127.0
-                if (tid == 0u) {
-                    aqs[b1 + 1u] = d2
-                }
-                aq[h * hs + tid + 256u] = q8_quant1(o2, d2 != 0.0 ? 1.0 / d2 : 0.0)
-            }
-        }
-    }
-}
-
-[vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
-class DaAttnComb : DaAttnCombT {}
-
-[vk_dispatch(name = "da_attn_comb_sink_cls", grid = "nheads", params = "nheads : int64")]
-class DaAttnCombSink : DaAttnCombT {
     override SINK = true
 }
 
