@@ -114,14 +114,19 @@ def test_sweep_excluded(t : T?) {
         t |> success(!empty(why), "every exclusion carries its reason")
     }
     // a module-gated tree follows the box: swept with the artifact built, skipped without it
-    let vulkan_absent = module_artifact_absent(SWEEP_NEEDS_MODULE?["examples/vulkan/"] ?? "")
+    t |> success(key_exists(SWEEP_NEEDS_MODULE, "examples/vulkan/"), "the vulkan examples are a module-gated tree")
+    var vulkan_absent = false
+    SWEEP_NEEDS_MODULE |> get("examples/vulkan/") $(gate) {
+        t |> equal(gate.name, "vulkan", "the gate names the daslang module")
+        vulkan_absent = module_absent(gate)
+    }
     let absent_text = vulkan_absent ? "absent" : "present"
     t |> equal(sweep_excluded("examples/vulkan/one_source_path_tracer/main.das"), vulkan_absent,
-        "a vulkan example is excluded exactly when the box built no dasVulkan artifact ({absent_text})")
+        "a vulkan example is excluded exactly when the box has no dasVulkan ({absent_text})")
     t |> equal(sweep_excluded("examples/vulkan_imgui_cube/main.das"), vulkan_absent, "and so is the imgui cube")
     t |> success(!sweep_excluded("examples/vulkan_less/main.das"), "a prefix match is on the whole path segment here too")
-    for (artifact in values(SWEEP_NEEDS_MODULE)) {
-        t |> success(artifact |> ends_with(".shared_module"), "every module gate names a shared artifact: {artifact}")
+    for (gate in values(SWEEP_NEEDS_MODULE)) {
+        t |> success(!empty(gate.name) && (gate.artifact |> ends_with(".shared_module")), "every module gate names a module and its shared artifact: {gate.name} / {gate.artifact}")
     }
 }
 
