@@ -88,7 +88,7 @@ def upload_processed_primitive(p : ProcessedPrimitive) : GltfGlPrimitive {
     var at = 16
     if ((p.attributes & VERTEX_UV) != 0){packed_attribute(3u, 2, GL_HALF_FLOAT, false, p.stride, at); at += 4}
     if ((p.attributes & VERTEX_TANGENT) != 0){packed_attribute(2u, 4, GL_INT_2_10_10_10_REV, true, p.stride, at); at += 4}
-    if ((p.attributes & VERTEX_SKIN) != 0){packed_attribute(6u, 4, GL_UNSIGNED_SHORT, false, p.stride, at); packed_attribute(7u, 4, GL_UNSIGNED_SHORT, true, p.stride, at + 8); at += 16}
+    if ((p.attributes & VERTEX_SKIN) != 0){packed_attribute(6u, 4, GL_UNSIGNED_BYTE, false, p.stride, at); packed_attribute(7u, 4, GL_UNSIGNED_BYTE, true, p.stride, at + 4); at += 8}
     if ((p.attributes & VERTEX_UV1) != 0){packed_attribute(4u, 2, GL_HALF_FLOAT, false, p.stride, at); at += 4}
     if ((p.attributes & VERTEX_COLOR) != 0){packed_attribute(5u, 4, GL_UNSIGNED_BYTE, true, p.stride, at)}
     glGenBuffers(1, unsafe(addr(out.ebo))); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out.ebo)

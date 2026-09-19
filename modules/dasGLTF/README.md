@@ -169,9 +169,9 @@ These are versioned daslang runtime formats, not standard glTF files. Node names
 hierarchies, materials, skins, animation data and bounds are retained. Geometry
 contains explicit attribute flags/strides and meshoptimizer-encoded buffers.
 Positions stay float32. Normals/tangents use signed 10-bit components; UVs use
-binary16; joints and weights use 16-bit components. Optional UV1/vertex colour
+binary16; joints and weights use 8-bit components. Optional UV1/vertex colour
 retention is part of `ProcessingProfile`. The default PBR profile uses 20 bytes for
-textured rigid vertices and 36 for textured skinned vertices, adding tangents only
+textured rigid vertices and 28 for textured skinned vertices, adding tangents only
 for normal-mapped materials. No simplification or LOD generation is performed.
 
 Processing deduplicates vertices, improves cache/fetch order, and encodes buffers.

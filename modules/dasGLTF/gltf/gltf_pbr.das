@@ -55,16 +55,30 @@ def gltf_pbr_vs {
         // The palette already maps into world space (joint.world * inverseBind), so u_model is not
         // applied. clamp to the palette size: a skin with > GLTF_MAX_JOINTS joints (or malformed
         // JOINTS_0) would otherwise index u_joints out of range -> undefined shader behavior.
+        let weights = float4(1.0 - a_weights0.y - a_weights0.z - a_weights0.w, a_weights0.yzw)
+        let p = float4(a_position, 1.0); let n = float4(a_normal, 0.0); let t = float4(a_tangent.xyz, 0.0)
         let jx = clamp(int(a_joints0.x), 0, GLTF_MAX_JOINTS - 1)
-        let jy = clamp(int(a_joints0.y), 0, GLTF_MAX_JOINTS - 1)
-        let jz = clamp(int(a_joints0.z), 0, GLTF_MAX_JOINTS - 1)
-        let jw = clamp(int(a_joints0.w), 0, GLTF_MAX_JOINTS - 1)
-        world = gltf_skin_point(u_joints[jx], u_joints[jy], u_joints[jz], u_joints[jw],
-            a_weights0, float4(a_position, 1.0))
-        wnormal = gltf_skin_point(u_joints[jx], u_joints[jy], u_joints[jz], u_joints[jw],
-            a_weights0, float4(a_normal, 0.0)).xyz
-        wtangent = gltf_skin_point(u_joints[jx], u_joints[jy], u_joints[jz], u_joints[jw],
-            a_weights0, float4(a_tangent.xyz, 0.0)).xyz
+        world = (u_joints[jx] * p) * weights.x
+        wnormal = (u_joints[jx] * n).xyz * weights.x
+        wtangent = (u_joints[jx] * t).xyz * weights.x
+        if (weights.y > 0.0) {
+            let jy = clamp(int(a_joints0.y), 0, GLTF_MAX_JOINTS - 1)
+            world += (u_joints[jy] * p) * weights.y
+            wnormal += (u_joints[jy] * n).xyz * weights.y
+            wtangent += (u_joints[jy] * t).xyz * weights.y
+            if (weights.z > 0.0) {
+                let jz = clamp(int(a_joints0.z), 0, GLTF_MAX_JOINTS - 1)
+                world += (u_joints[jz] * p) * weights.z
+                wnormal += (u_joints[jz] * n).xyz * weights.z
+                wtangent += (u_joints[jz] * t).xyz * weights.z
+                if (weights.w > 0.0) {
+                    let jw = clamp(int(a_joints0.w), 0, GLTF_MAX_JOINTS - 1)
+                    world += (u_joints[jw] * p) * weights.w
+                    wnormal += (u_joints[jw] * n).xyz * weights.w
+                    wtangent += (u_joints[jw] * t).xyz * weights.w
+                }
+            }
+        }
     } else {
         world = u_model * float4(a_position, 1.0)
         // u_normal_matrix is inverse-transpose(u_model 3x3), so normals stay correct under

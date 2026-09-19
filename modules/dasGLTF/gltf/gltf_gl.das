@@ -1,4 +1,5 @@
 options gen2
+require gltf/gltf_skinning
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -154,9 +155,9 @@ def private upload_primitive(prim : GltfPrimitive) : GltfGlPrimitive {
     var verts : array<GltfGlVertex>
     verts |> resize(length(prim.vertices))
     for (i in range(length(prim.vertices))) {
-        let v = prim.vertices[i]
+        let v = prim.vertices[i]; let skin = canonicalize_skin_influences(v.joints0, v.weights0)
         verts[i] = GltfGlVertex(position = v.position, normal = v.normal, tangent = v.tangent,
-            uv0 = v.uv0, uv1 = v.uv1, color0 = v.color0, joints0 = v.joints0, weights0 = v.weights0)
+            uv0 = v.uv0, uv1 = v.uv1, color0 = v.color0, joints0 = skin.joints, weights0 = skin.weights)
     }
     with (glp) {
         glGenVertexArrays(1, safe_addr(vao))

@@ -53,6 +53,7 @@ def main(){
         }else{inputs |> push(clone(arg))}
     }
     if (empty(output)){panic("Specify --out; original assets are never overwritten")}
+    let full_regeneration = empty(inputs)
     if (empty(inputs)){
         if (empty(root)){panic("Specify --root or input files")}
         dir_rec(root) $(file, is_dir){if (!is_dir && (ends_with(file, ".gltf") || ends_with(file, ".glb"))){inputs |> push("{root}/{file}")}}
@@ -61,7 +62,8 @@ def main(){
     sort(inputs); mkdir_rec(output)
     var profile = ProcessingProfile(texture_cache = cache)
     var catalog : ProcessedCatalog
-    sscan_json(fread("{output}/asset-build.json"), catalog); catalog.version = DAS_GLTF_VERSION
+    sscan_json(fread("{output}/asset-build.json"), catalog)
+    prepare_processed_catalog(catalog, full_regeneration)
     let totals = convert_inputs(inputs, root, output, binary, force, profile, catalog)
     sort(catalog.assets) $(a, b) => a.path < b.path
     if (!fwrite("{output}/asset-build.json", sprint_json(catalog, false))){panic("Could not write asset build manifest")}
