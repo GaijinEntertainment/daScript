@@ -1911,12 +1911,12 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 //! standard-attention layers, and none where a layer or the tail has no N-row form yet - a recurrent, MoE,
 //! per-layer-embedding or shared-KV layer, a q/k norm, a gated q, a classifier epilogue
 def vk_rdec_token_n_rows : int64 {
-    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.qk_norm || g_rd.q_gated || rd_cls_epi_on()) return 0l
-    if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
+    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.qk_norm || g_rd.q_gated || rd_cls_epi_on()
+            || !gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
     for (L in g_rd.layers) {
-        if (L.moe || L.recurrent || L.ple || L.kv_shared) return 0l
-        if (!(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
-                && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
+        if (L.moe || L.recurrent || L.ple || L.kv_shared
+                || !(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
+                    && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
     }
     return g_rd.nb
 }
@@ -2130,9 +2130,9 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
 
 //! the N-row submit: `nrows` rows of x and cos/sin, each row's position, its cached count and its mirror region,
 //! one command - the unsplit twin while every row sits under RD_UNSPLIT_POS, as the one-row command picks - and
-//! the rows' logits back
+//! each row's logits landed at its own pointer straight from the mapped plane
 [hot_path]   // per batched decode step
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; var logits : array<float>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
     let twin = g_rd.attn_nsplit > 1l
@@ -2165,13 +2165,17 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
+        let lbytes = g_rd.vocab * 4l
+        let lmapped = reinterpret<uint8?>(g_rd.logits_host.mapped)
         if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
             submit_nowait(cmd)
             let t2 = ref_time_ticks()
             wait_fence()
             let t3 = ref_time_ticks()
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * nrows)
+            for (i in range64(nrows)) {
+                memcpy(addr<void?>(*lrows[i]), lmapped + i * lbytes, lbytes)
+            }
             let t4 = ref_time_ticks()
             g_rdq_host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
             g_rdq_host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
@@ -2179,7 +2183,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
         } else {
             submit_wait(cmd)
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * nrows)
+            for (i in range64(nrows)) {
+                memcpy(addr<void?>(*lrows[i]), lmapped + i * lbytes, lbytes)
+            }
         }
     }
     g_rd.tokens_served += nrows
