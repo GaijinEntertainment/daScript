@@ -517,7 +517,9 @@ carries the bias and the driver armed on it; skips without the model or the arme
 llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
-the file is a llama with neither bias nor NEOX rope; skips without the model or the armed tier.
+the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
+GPU-served window in force while the driver is armed, the CPU window back after the drop; skips
+without the model or the armed tier.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das` and
 `test_gpu_resident_regions_hybrid.das` (`_resident_regions.das` carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through

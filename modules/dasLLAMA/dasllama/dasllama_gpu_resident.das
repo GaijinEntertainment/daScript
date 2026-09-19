@@ -705,6 +705,11 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 // ===== the resident whole-stack decode driver (dense models that fully fit) =====
 
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
+//! the one writer of the flag: the pool's spin window follows the driver's arm and drop
+def private rdec_set_active(on : bool) {
+    g_rdec_active = on
+    set_dispatch_gpu_served(on)
+}
 var private g_rdec_emb_gpu = false
 var private g_rdec_cap = 0l             // a mirror region's context, as the driver armed (<= model ctx when VRAM-capped)
 var private g_rdec_gen_seq = 0l
@@ -1119,7 +1124,7 @@ def private log_resident_image(planes : array<tuple<n : int64; rows : int64; f :
 //! every decline logs its reason through `rdec_decline`.
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentPlan) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
-    g_rdec_active = false
+    rdec_set_active(false)
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
     g_rdec_pass_said |> clear()
@@ -1518,7 +1523,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     rdec_upload_norms(norms, c.attn_out_bias)
     delete norms
-    g_rdec_active = true
+    rdec_set_active(true)
     g_rdec_decline_reason = ""
     g_rdec_memory_decline = false
     g_rdec_regions |> clear()
@@ -2225,7 +2230,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     st.rdec_kvdt = g_rdec_kvdt
     st.rdec_emb_gpu = g_rdec_emb_gpu
     st.rdec_ple_proj = rdec_ple_proj_on()
-    g_rdec_active = false
+    rdec_set_active(false)
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
@@ -2234,7 +2239,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     moe_gpu_marks_restore(st.marks)
-    g_rdec_active = st.rdec_active
+    rdec_set_active(st.rdec_active)
     delete g_rdec_regions
     g_rdec_regions <- st.rdec_regions
     g_rdec_cap = st.rdec_cap
@@ -2347,7 +2352,7 @@ def moe_gpu_drop_model_() {
         return
     }
     moe_gpu_dn_invalidate()
-    g_rdec_active = false
+    rdec_set_active(false)
     reset_gpu_cpu_passes()
     g_rdec_regions |> clear()
     g_rdec_cap = 0l

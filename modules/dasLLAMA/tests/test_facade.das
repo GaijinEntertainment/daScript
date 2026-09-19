@@ -55,6 +55,14 @@ def test_facade_jobque_spin_knob(t : T?) {
         t |> equal(get_jobque_spin_us(), 1234l, "the facade setter lands on the engine knob")
         set_jobque_spin_us(30000l)
     }
+    t |> run("the GPU-served window: its own knob, in force only while the resident driver reports the model served") @(t : T?) {
+        t |> equal(get_jobque_spin_gpu_us(), 500l, "the default GPU-served window is 500 us")
+        t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "no driver armed: the CPU window is in force")
+        set_jobque_spin_gpu_us(777l)
+        t |> equal(get_jobque_spin_gpu_us(), 777l, "the facade setter lands on the engine knob")
+        t |> equal(get_jobque_spin_in_force(), 30000l, "the GPU knob alone moves nothing: the CPU window stays in force")
+        set_jobque_spin_gpu_us(500l)
+    }
 }
 
 [test]

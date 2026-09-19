@@ -165,6 +165,26 @@ var g_jobque_spin_us = 30000l
 def set_jobque_spin_us_(v : int64) { g_jobque_spin_us = max(v, 0l) }
 def get_jobque_spin_us_() : int64 { return g_jobque_spin_us }
 
+//! the window while the GPU serves the whole model: the pool carries only the sampler's argmax
+//! between steps, and a worker still spinning when the step's command is submitted starves the
+//! driver's submission thread (48-vCPU pod, Llama-3.2-1B at four streams: 30 ms 707 tok/s, 500 us 1053)
+var g_jobque_spin_gpu_us = 500l
+def set_jobque_spin_gpu_us_(v : int64) { g_jobque_spin_gpu_us = max(v, 0l) }
+def get_jobque_spin_gpu_us_() : int64 { return g_jobque_spin_gpu_us }
+var g_dispatch_gpu_served = false
+//! the window the pool runs: the GPU window while the resident driver serves the model, the CPU window otherwise
+def get_jobque_spin_in_force_() : int64 => g_dispatch_gpu_served ? g_jobque_spin_gpu_us : g_jobque_spin_us
+
+//! the resident driver reports its arm and its drop here; a live queue takes the window at once,
+//! a queue made later reads it in `setup_dasllama_jobque_`
+[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
+def public set_dispatch_gpu_served(on : bool) {
+    g_dispatch_gpu_served = on
+    if (is_job_que_available()) {
+        set_jobque_worker_spin(int(min(get_jobque_spin_in_force_(), 2147483647l)))
+    }
+}
+
 // Join-poll level for fork/join joins (see setup_dasllama_jobque): level*1024*128 relax-rounds
 // on the joining thread before it parks (0 = park immediately); the poll burns only the
 // calling thread and is bounded (~100ms).
@@ -266,7 +286,7 @@ def setup_dasllama_jobque_() {
     // 96-lane dispatch is ~1ms x ~160 dispatches/decoded token — EPYC 9654 measured Llama-1B
     // decode 7.6 -> 43 t/s (5.7x) and prefill-512 2x from this one switch
     set_jobque_team_mode(true)
-    set_jobque_worker_spin(int(min(g_jobque_spin_us, 2147483647l)))
+    set_jobque_worker_spin(int(min(get_jobque_spin_in_force_(), 2147483647l)))
     set_jobque_join_spin(int(min(g_jobque_join_poll, 2147483647l)))
     set_jobque_worker_limit(g_dispatch_worker_limit > 0 ? g_dispatch_worker_limit : -1)   // -1 = unlimited
     if (g_team_rank_gate >= 0 && is_none(g_env_core.jobque_team_rank_gate)) {

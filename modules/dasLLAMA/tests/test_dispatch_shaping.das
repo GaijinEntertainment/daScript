@@ -25,6 +25,19 @@ def private pin_shaping_baseline() {
 }
 
 [test]
+def test_gpu_served_spin_window(t : T?) {
+    //! the resident driver's arm and drop move the pool between the CPU and the GPU-served spin windows
+    with_job_que() {
+        setup_dasllama_jobque_()
+        t |> equal(get_jobque_spin_in_force_(), get_jobque_spin_us_(), "nothing served: the CPU window")
+        set_dispatch_gpu_served(true)
+        t |> equal(get_jobque_spin_in_force_(), get_jobque_spin_gpu_us_(), "served: the GPU window")
+        set_dispatch_gpu_served(false)
+        t |> equal(get_jobque_spin_in_force_(), get_jobque_spin_us_(), "dropped: the CPU window again")
+    }
+}
+
+[test]
 def test_gemv_chunks_default(t : T?) {
     t |> equal(get_gemv_chunks_per_lane(), 8, "the shipped default - retune the ladder tables if this moves")
 }
