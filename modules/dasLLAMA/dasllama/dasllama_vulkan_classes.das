@@ -9789,80 +9789,46 @@ class Q8Gemv {
     }
 }
 
-//! the Q8_0 GEMV's N-column form: the lane pair's weight word and scale read once against `pa.ncols` activation
-//! rows (column c's blocks sit c x nb past the region's), each row's half-block one 16-byte load, the y rows `pa.ystride` apart
-[vk_dispatch(name = "q8_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvN : Q8Gemv {
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_n_cls_spv")]
-    def override run {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
-            let nb = pa.n / 32u
-            let wb0 = regions[r * 2u] + row * nb
-            let xb0 = regions[r * 2u + 1u]
-            let lane = gl_SubgroupInvocationID
-            let bpp = gl_SubgroupSize / 2u
-            var acc : float[8]
-            for [unroll] (c in range(8)) {
-                acc[c] = 0.0
-            }
-            var bi0 = 0u
-            while (bi0 < nb) {
-                let b = bi0 + lane / 2u
-                if (b < nb) {
-                    let wv = wq4[(wb0 + bi0) * 2u + lane]
-                    let ws = float(wsh[wb0 + b])
-                    for [unroll] (c in range(8)) {
-                        if (uint(c) < pa.ncols) {
-                            let xb = xb0 + uint(c) * nb
-                            let xv = xq4[(xb + bi0) * 2u + lane]
-                            var idot = sdot4(wv.x, xv.x)
-                            idot += sdot4(wv.y, xv.y)
-                            idot += sdot4(wv.z, xv.z)
-                            idot += sdot4(wv.w, xv.w)
-                            idot += subgroupShuffleXor(idot, 1u)
-                            if (lane % 2u == 0u) {
-                                acc[c] += float(idot) * ws * axs[xb + b]
-                            }
-                        }
-                    }
-                }
-                bi0 += bpp
-            }
-            for [unroll] (c in range(8)) {
-                if (uint(c) < pa.ncols) {
-                    let total = subgroupAdd(acc[c])
-                    if (subgroupElect()) {
-                        y[pa.ybase + uint(c) * pa.ystride + rg] = total
-                    }
-                }
-            }
-        }
-    }
-}
+//! the Q8_0 GEMV's N-column forms: `NC` activation rows (column c's blocks c x nb past the region's, `pa.ncols` of
+//! them live) against a lane pair's weight word and scale read once, each row's half-block one 16-byte load, the y
+//! rows `pa.ystride` apart; the `R2` stamps take two output rows a subgroup, so every activation load feeds two
+//! weight rows and a long row's re-reads halve - the rows a region holds must then be even
+[ |> template_struct_instance]
+class template Q8GemvNT {
+    @ssbo @binding = 0 wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
+    @ssbo @binding = 1 wsh : array<float16>    // per-block f16 weight scales
+    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
+    @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : GemvArgs
+    @template_constant NC : int = 4       //!< the columns a lane dots per weight word
+    @template_constant R2 : bool = false  //!< two output rows a subgroup
 
-//! the N-column form over two output rows a subgroup: a lane pair's activation words feed two weight rows, halving the
-//! activation re-reads a long row pays; the rows a region holds must be even
-[vk_dispatch(name = "q8_gemv_n2_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvN2 : Q8Gemv {
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_n2_cls_spv")]
-    def override run {
-        let pg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID   // the row pair
-        let pairs = pa.d / 2u
-        if (pg < pa.nreg * pairs) {
-            let r = pg / pairs
-            let row = (pg % pairs) * 2u
+    //! the row pair's second weight word and scale at block `b`, dotted against the same activation word
+    def pair_dot(wv1 : uint4; xv : uint4) : int {
+        var i1 = sdot4(wv1.x, xv.x)
+        i1 += sdot4(wv1.y, xv.y)
+        i1 += sdot4(wv1.z, xv.z)
+        i1 += sdot4(wv1.w, xv.w)
+        return i1 + subgroupShuffleXor(i1, 1u)
+    }
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
+    def run {
+        let sg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        let per = R2 ? pa.d / 2u : pa.d   // the subgroups a region takes: a row each, or a row pair
+        if (sg < pa.nreg * per) {
+            let r = sg / per
+            let row = R2 ? (sg % per) * 2u : sg % per
             let nb = pa.n / 32u
             let wb0 = regions[r * 2u] + row * nb
-            let wb1 = wb0 + nb
             let xb0 = regions[r * 2u + 1u]
             let lane = gl_SubgroupInvocationID
             let bpp = gl_SubgroupSize / 2u
             var acc0 : float[8]
             var acc1 : float[8]
-            for [unroll] (c in range(8)) {
+            for [unroll] (c in range(NC)) {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
             }
@@ -9871,46 +9837,81 @@ class Q8GemvN2 : Q8Gemv {
                 let b = bi0 + lane / 2u
                 if (b < nb) {
                     let wv0 = wq4[(wb0 + bi0) * 2u + lane]
-                    let wv1 = wq4[(wb1 + bi0) * 2u + lane]
                     let ws0 = float(wsh[wb0 + b])
-                    let ws1 = float(wsh[wb1 + b])
-                    for [unroll] (c in range(8)) {
+                    for [unroll] (c in range(NC)) {
                         if (uint(c) < pa.ncols) {
                             let xb = xb0 + uint(c) * nb
                             let xv = xq4[(xb + bi0) * 2u + lane]
-                            var i0 = sdot4(wv0.x, xv.x)
-                            i0 += sdot4(wv0.y, xv.y)
-                            i0 += sdot4(wv0.z, xv.z)
-                            i0 += sdot4(wv0.w, xv.w)
-                            var i1 = sdot4(wv1.x, xv.x)
-                            i1 += sdot4(wv1.y, xv.y)
-                            i1 += sdot4(wv1.z, xv.z)
-                            i1 += sdot4(wv1.w, xv.w)
-                            i0 += subgroupShuffleXor(i0, 1u)
-                            i1 += subgroupShuffleXor(i1, 1u)
-                            if (lane % 2u == 0u) {
-                                let xs = axs[xb + b]
-                                acc0[c] += float(i0) * ws0 * xs
-                                acc1[c] += float(i1) * ws1 * xs
+                            let i0 = pair_dot(wv0, xv)
+                            static_if (R2) {
+                                let i1 = pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
+                                if (lane % 2u == 0u) {
+                                    let xs = axs[xb + b]
+                                    acc0[c] += float(i0) * ws0 * xs
+                                    acc1[c] += float(i1) * float(wsh[wb0 + nb + b]) * xs
+                                }
+                            } else {
+                                if (lane % 2u == 0u) {
+                                    acc0[c] += float(i0) * ws0 * axs[xb + b]
+                                }
                             }
                         }
                     }
                 }
                 bi0 += bpp
             }
-            for [unroll] (c in range(8)) {
+            for [unroll] (c in range(NC)) {
                 if (uint(c) < pa.ncols) {
                     let t0 = subgroupAdd(acc0[c])
-                    let t1 = subgroupAdd(acc1[c])
-                    if (subgroupElect()) {
-                        let yb = pa.ybase + uint(c) * pa.ystride + r * pa.d + row
-                        y[yb] = t0
-                        y[yb + 1u] = t1
+                    static_if (R2) {
+                        let t1 = subgroupAdd(acc1[c])
+                        if (subgroupElect()) {
+                            let yb = pa.ybase + uint(c) * pa.ystride + r * pa.d + row
+                            y[yb] = t0
+                            y[yb + 1u] = t1
+                        }
+                    } else {
+                        if (subgroupElect()) {
+                            y[pa.ybase + uint(c) * pa.ystride + sg] = t0
+                        }
                     }
                 }
             }
         }
     }
+}
+
+[vk_dispatch(name = "q8_gemv_n2_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN2 : Q8GemvNT {
+    override NC = 2
+}
+
+[vk_dispatch(name = "q8_gemv_n4_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN4 : Q8GemvNT {
+    override NC = 4
+}
+
+[vk_dispatch(name = "q8_gemv_n8_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN8 : Q8GemvNT {
+    override NC = 8
+}
+
+[vk_dispatch(name = "q8_gemv_n2p_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN2P : Q8GemvNT {
+    override NC = 2
+    override R2 = true
+}
+
+[vk_dispatch(name = "q8_gemv_n4p_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN4P : Q8GemvNT {
+    override NC = 4
+    override R2 = true
+}
+
+[vk_dispatch(name = "q8_gemv_n8p_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvN8P : Q8GemvNT {
+    override NC = 8
+    override R2 = true
 }
 
 struct GemvArArgs {
@@ -10942,12 +10943,14 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 //! the formats with an N-column leaf
 def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs)
 
-//! the reduction width from which the q8 N-column form takes two rows a subgroup: the activation re-reads a row pays outweigh the pair's extra registers (the ruler moves it)
-var g_q8_n2_min_n = 4096u
+//! the reduction width from which the q8 N-column form takes two rows a subgroup - off until a box's token command proves the
+//! pair (the RTX PRO 4500's down GEMV read 750 us a step under the pair against 587 a row a subgroup); the ruler moves it
+var g_q8_n2_min_n = 0xFFFFFFFFu
 
 def gemv_cls_ensure_n(fmt : int) : bool {
     if (fmt == int(KqFmt.q8)) {
-        return ensure_q8_gemv_n_cls() && ensure_q8_gemv_n2_cls()
+        return (ensure_q8_gemv_n2_cls() && ensure_q8_gemv_n4_cls() && ensure_q8_gemv_n8_cls()
+            && ensure_q8_gemv_n2p_cls() && ensure_q8_gemv_n4p_cls() && ensure_q8_gemv_n8p_cls())
     } elif (fmt == int(KqFmt.k4)) {
         return ensure_kq_gemv_k4_n_cls()
     } elif (fmt == int(KqFmt.k5)) {
@@ -10963,21 +10966,40 @@ def gemv_cls_ensure_n(fmt : int) : bool {
     return false
 }
 
-//! the q8 leaf carries its own layout; a kq leaf shares the family's
+//! the q8 stamps share one layout of their own; a kq leaf shares the family's
 def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
-        return set_q8_gemv_n_cls(bufs, sizes, gbits)
+        return set_q8_gemv_n4_cls(bufs, sizes, gbits)
     }
     return gemv_cls_set(fmt, bufs, sizes, gbits)
 }
 
+//! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
+def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+    let pair = pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+    let g = pair ? (wgs + 1l) / 2l : wgs   //! a subgroup a row pair: half the row grid
+    if (pc.ncols <= 2u) {
+        if (pair) {
+            enc_q8_gemv_n2p_cls(raw, h, set_, pc, g)
+        } else {
+            enc_q8_gemv_n2_cls(raw, h, set_, pc, g)
+        }
+    } elif (pc.ncols <= 4u) {
+        if (pair) {
+            enc_q8_gemv_n4p_cls(raw, h, set_, pc, g)
+        } else {
+            enc_q8_gemv_n4_cls(raw, h, set_, pc, g)
+        }
+    } elif (pair) {
+        enc_q8_gemv_n8p_cls(raw, h, set_, pc, g)
+    } else {
+        enc_q8_gemv_n8_cls(raw, h, set_, pc, g)
+    }
+}
+
 def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     if (fmt == int(KqFmt.q8)) {
-        if (pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u) {
-            enc_q8_gemv_n2_cls(raw, h, set_, pc, (wgs + 1l) / 2l)   //! a subgroup a row pair: half the row grid
-        } else {
-            enc_q8_gemv_n_cls(raw, h, set_, pc, wgs)
-        }
+        q8_gemv_n_enc(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k4)) {
         enc_kq_gemv_k4_n_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k5)) {

@@ -1651,10 +1651,10 @@ def private resident_prefill_ple_rows(t : Model; tokens : array<int64>; npos : i
 }
 
 var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the armed driver (`resident_cos_elems`)
-// the N-row command's gathered rows: the residuals, the rope rows, the logits back, and each row's position, count and region
+// the N-row command's gathered rows: the residuals, the rope rows, each row's position, count and region, and where its logits land
 var private @scratch g_rdec_x_n : array<float>
 var private @scratch g_rdec_cos_n : array<float>
-var private @scratch g_rdec_tmp_n : array<float>
+var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
 var private @scratch g_rdec_regs : array<int64>
@@ -2056,7 +2056,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let dim = c.dim
     g_rdec_x_n |> resize(dim * nrows)
     g_rdec_cos_n |> resize(g_rdec_cos_elems * nrows)
-    g_rdec_tmp_n |> resize(c.vocab_size * nrows)
+    g_rdec_lrows |> resize(nrows)
     g_rdec_poss |> resize(nrows)
     g_rdec_cnts |> resize(nrows)
     g_rdec_regs |> resize(nrows)
@@ -2081,10 +2081,11 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_poss[i] = pos
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
+        g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
     }
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_tmp_n)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
@@ -2106,7 +2107,6 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         }
         g_rdec_regions[r].cnt = pos + 1l
         s.rdec_host_current = !s.device_kv
-        copy_floats(g_rdec_tmp_n, i * c.vocab_size, s.logits, 0l, c.vocab_size)
     }
     prof_add("nrow_land", ts_land)
     batch_decode_override_logits_done()
