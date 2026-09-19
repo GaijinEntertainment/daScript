@@ -1722,6 +1722,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
         }
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
+        rd_ts(raw, "t:dma")   //! the logits' trip to host memory, billed apart: on a box whose host-visible memory is slow it is the step's largest interval
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
@@ -2156,6 +2157,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
         rd_ts(raw, "t:cls")
         vhz_dep(raw, h, VHZ_LOG, 0u, true)
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+        rd_ts(raw, "t:dma")
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
