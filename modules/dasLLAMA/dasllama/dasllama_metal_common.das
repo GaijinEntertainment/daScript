@@ -547,9 +547,7 @@ def zero_rows(var buf : MetalBuffer?; from, to, width : int64) {
 
 //! Copy `rows` rows of `width` floats from `src` into `buf` and zero the pad rows up to `mp`.
 def upload_rows_padded(var buf : MetalBuffer?; src : void?; rows, mp, width : int64) {
-    unsafe {
-        memcpy(metal_buffer_contents(buf), src, rows * width * 4l)
-    }
+    unsafe(memcpy(metal_buffer_contents(buf), src, rows * width * 4l))
     zero_rows(buf, rows, mp, width)
 }
 
@@ -767,9 +765,7 @@ def residency_reset {
         metal_release(g_rset)
         g_rset = null
     }
-    unsafe {
-        delete g_rset_seen
-    }
+    delete g_rset_seen
     g_rset_tried = false
     g_rset_dirty = false
     g_rset_count = 0l
@@ -794,9 +790,7 @@ def pool_acquire_untracked_pinned(var pool : MetalBufferPool; dev : MetalDevice?
 def private region_upload_new(key : uint64; src : void?; bytes : uint64) : MetalBuffer? {
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_dev, bytes)
-    unsafe {
-        memcpy(metal_buffer_contents(buf), src, bytes)
-    }
+    unsafe(memcpy(metal_buffer_contents(buf), src, bytes))
     residency_note(buf)
     g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
@@ -1074,9 +1068,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     for (mr in values(g_mirrors)) {
         mirror_release(mr)
     }
-    unsafe {
-        delete g_mirrors
-    }
+    delete g_mirrors
     g_mirror_bytes = 0ul
     metal_release(g_arena)
     g_arena_bytes = min(want, ceil_bytes)
@@ -1655,9 +1647,7 @@ def private gr_encode_node(enc : MetalComputeEncoder?; n : KNode) {
     for (b in range(n.nbind)) {
         let kb = g_gr_binds[n.bind0 + b]
         if (kb.nbytes > 0ul) {
-            unsafe {
-                metal_set_bytes(enc, addr<void?>(g_gr_bytes[int(kb.off)]), kb.nbytes, kb.slot)
-            }
+            metal_set_bytes(enc, unsafe(addr<void?>(g_gr_bytes[int(kb.off)])), kb.nbytes, kb.slot)
         } else {
             metal_set_buffer(enc, kb.buf, kb.off, kb.slot)
         }
@@ -2085,18 +2075,14 @@ def private regions_release_all {
         }
         e.buf = null
     }
-    unsafe {
-        delete g_regions
-    }
+    delete g_regions
     for (e in values(g_regions_cat3)) {
         if (e.buf != null) {
             metal_release(e.buf)
         }
         e.buf = null
     }
-    unsafe {
-        delete g_regions_cat3
-    }
+    delete g_regions_cat3
     for (b in g_region_retire) {
         if (b != null) {
             metal_release(b)
@@ -2108,22 +2094,16 @@ def private regions_release_all {
 def metal_common_release {
     kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
     // schedules key on PSO pointers — a re-init reallocates PSOs, so cached classes would lie
-    unsafe {
-        delete g_gr_scheds
-    }
+    delete g_gr_scheds
     nc_logits_release()
     for (mr in values(g_mirrors)) {
         mirror_release(mr)
     }
-    unsafe {
-        delete g_mirrors
-    }
+    delete g_mirrors
     for (dmr in values(g_dn_mirrors)) {
         dn_mirror_release(dmr)
     }
-    unsafe {
-        delete g_dn_mirrors
-    }
+    delete g_dn_mirrors
     g_mirror_bytes = 0ul
     if (g_arena != null) {
         metal_release(g_arena)
@@ -2196,9 +2176,7 @@ struct public MetalTensorRaceResult {
 def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
     var b = metal_new_buffer(dev, bytes)
     if (src != null) {
-        unsafe {
-            memcpy(metal_buffer_contents(b), src, bytes)
-        }
+        unsafe(memcpy(metal_buffer_contents(b), src, bytes))
     }
     return b
 }

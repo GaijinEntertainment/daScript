@@ -141,10 +141,8 @@ def private wd_region(w : WhisperModel; off, n, rows : int64; rep : bool; mr, kg
                       var staging : array<uint8>; var cur : uint64&) : uint64 {
     cur = (cur + 15ul) & ~15ul
     let at = cur
-    unsafe {
-        q8_region_to_metal_blob(plane_at(w.dqblob, off), plane_at(w.dqscales, off / 32l),
-            n, rows, rep, mr, kgroup, wbias, addr(staging[int64(cur)]))
-    }
+    q8_region_to_metal_blob(plane_at(w.dqblob, off), plane_at(w.dqscales, off / 32l),
+        n, rows, rep, mr, kgroup, wbias, unsafe(addr(staging[int64(cur)])))
     cur += uint64((rows * n / 32l) * 34l)
     return at
 }
@@ -260,9 +258,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     var btmp = pool_acquire(g_wd_pool, g_dev, bytes_rows)
     var bkx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     var bvx = pool_acquire(g_wd_pool, g_dev, bytes_x)
-    unsafe {
-        upload_rows_padded(bx, addr(enc_out[0]), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
-    }
+    upload_rows_padded(bx, unsafe(addr(enc_out[0])), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
     var u_d = uniform_u32(uint(d))
     var u_hs = uniform_u32(uint(hs))
     var u_ta = uniform_u32(uint(ta))
