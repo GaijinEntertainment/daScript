@@ -141,7 +141,9 @@ Any trait name not on this list is dispatched to the user-extensible typeinfo-ma
 ## static_if, static_assert, concept_assert
 
 `static_if (cond) { } static_elif (cond) { } else { }` - parentheses required; only the selected
-branch is compiled, so the others may be invalid for the current types.
+branch is compiled, so the others may be invalid for the current types. Each arm is a lexical
+scope: a `let` inside an arm is not visible after the block, so declare the variable before the
+`static_if` and assign in the arms.
 
 Statement form only. A value-position ternary `cond ? a : b` infers BOTH arms even when `cond`
 is a compile-time constant, so arms whose types diverge (or where one arm is invalid for the

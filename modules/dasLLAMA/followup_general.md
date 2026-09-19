@@ -569,18 +569,6 @@
     resolves against the repo root explicitly or the run REFUSES (exit 2) when the walk
     yields zero files - an empty scan is never a pass.
 
-48. **The cross-module template-base reifier defect is unrecorded outside one code comment.**
-    `class template X : Base` with `Base` in another module fails reification -
-    `error[30915]: can't initialize field __finalize` (the stamped instance keeps the base
-    module's `self` type; `daslib/typemacro_boost.das`'s `__finalize` rewrite only covers the
-    same-module autoinfer-cast shape). `MetalAttnAVMmSgT` (dasllama_metal_prefill.das)
-    hand-inlines `MetalMmTileBase`'s tiles + `acc_quad` because of it - a hot primitive with
-    a second unsynced copy. Done = fix the reifier to re-point `__finalize` at the stamped
-    instance type for a cross-module parent (25-line repro: base class in module A,
-    `[template_struct_instance]` template extending it in module B; the same-module control
-    compiles), then collapse the inline copy back onto the base; until then any drift between
-    the copies is a review hazard.
-
 49. **The MoE kq tensor twins (K4/K5/K6) are gated by the DENSE kq crowns - a race that never
     measured them.** `pf_compile_moe_kq_twins` keys on `metal_tensor_crowned("kq_mulmm_k4")`
     etc. (dense 512x2048x1024 race), but the kernels it arms add the per-expert plane fold,
