@@ -634,3 +634,16 @@ under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
 path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
 activation; the fix is the `act` binding on the batched family, the same uniform the single-row
 form takes.
+
+## 20. The mv shells' per-format decode cannot cross a free-function boundary
+
+The B2/B4 and B8 mv shells (`MetalKqMvShellT`, `MetalKqMvB8ShellT`) each carry a per-format
+weight decode; for the five iquant formats the two copies are verbatim. One decode per format
+needs either a common class ancestor that declares the format's planes - single inheritance
+puts every format class under exactly one shell - or a free function taking the thread-local
+`float4[8]` stage, and `msl_emit`'s `ufn_param` lowers every fixed-array parameter to
+`threadgroup T*` (the fixed-array contract: only a `@workgroup` member). Two closes: the emitter
+lowers a fixed-array parameter to `thread T*` when every argument at every call site is
+thread-local (the cheaper path, and a lens diagnostic at the call site for the mixed case), or
+the two shells merge into one template on a `B8` axis with the panel gated, so a format class
+becomes the ancestor of both its stamps. ~200 lines behind either.
