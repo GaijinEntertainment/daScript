@@ -40,6 +40,12 @@ the route that answers with that key first.**
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
 
+**A diff that adds or edits a string the control page prints verbatim to say how a slot is
+served - a `served` or `served_note` value, or the words for a `gpu_cpu_passes` reason - writes
+it in words a reader who never saw the engine understands: never engine vocabulary
+(`resident`, `region`, `mirror`, `pass`, `tier`, `rails`); it says where the weights sit, where
+the streams' caches sit, and what holds the slot back.**
+
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line (today `dasllama_exchange` and `llvm_tune`) -
 outside a `static_if (typeinfo module_exists(...))` arm on that module, or on a module whose own

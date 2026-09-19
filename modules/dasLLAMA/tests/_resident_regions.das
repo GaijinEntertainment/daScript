@@ -141,7 +141,7 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     var head <- [for (i in range64(cut)); prompt[i]]
     var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
     var feed <- feed_a()
-    //! the control's session first, and gone before the compared pair: two regions hold two live sessions
+    // the control's session first, and gone before the compared pair: two regions hold two live sessions
     var short <- create_session(tr, mirror_kv_dtype())
     var less <- [for (i in range64(n - 1l)); prompt[i]]
     forward_prefill(tr, short, less, n - 1l, 0l)
@@ -208,8 +208,8 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
                 forward(tr, steps, said[st], 40l + st)
             }
             chat.n_past = 40l + STEPS
-            eval(tr, chat, turn2)   //! one window-chain call from position 48
-            for (i in range64(20l)) {   //! the same twenty tokens through the token command, one position each
+            eval(tr, chat, turn2)
+            for (i in range64(20l)) {
                 forward(tr, steps, turn2[i], 40l + STEPS + i)
             }
             let bar = SPLIT_BAR_REL * logits_maxabs(steps.logits)
@@ -242,7 +242,7 @@ def cell_regions_batched_steps(t : T?; file : string) {
             var rb <- alone(tr, pb, fb)
             var sa <- create_session(tr, mirror_kv_dtype())
             var sb <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)   //! `eval` advances `n_past`, the position a batched step reads
+            eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
             eval(tr, sb, pb)
             var ws <- create_batch_workspace(tr)
             var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
@@ -278,8 +278,6 @@ def cell_regions_batched_steps(t : T?; file : string) {
     }
 }
 
-// ===== device-home sessions: no host cache, the region is the only copy =====
-
 def private device_session(tr : Model) : Session => <- create_device_session(tr, gpu_device_session_dtype())
 
 def cell_device_home_sessions(t : T?; file : string) {
@@ -303,7 +301,7 @@ def cell_device_home_sessions(t : T?; file : string) {
             eval(tr, sb, pb)
             hold_equal(t, sb.logits, rb[0], "device-home B's prefill")
             let half = STEPS / 2l
-            for (st in range64(half)) {   //! single steps, interleaved
+            for (st in range64(half)) {
                 var ta <- [fa[st]]
                 var tb <- [fb[st]]
                 eval(tr, sa, ta)
@@ -315,7 +313,7 @@ def cell_device_home_sessions(t : T?; file : string) {
             }
             var ws <- create_batch_workspace(tr)
             var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
-            for (st in range64(half, STEPS)) {   //! then batched
+            for (st in range64(half, STEPS)) {
                 var toks <- [fa[st], fb[st]]
                 eval_batch(tr, ws, sess, toks)
                 delete toks
@@ -343,6 +341,10 @@ def cell_device_home_sessions(t : T?; file : string) {
         }
         delete tr
     }
+    case_device_home_pin(t, file)
+}
+
+def private case_device_home_pin(t : T?; file : string) {
     t |> run("a live device-home session's region is never handed to another session: the outsider passes, the owners step on") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -359,7 +361,7 @@ def cell_device_home_sessions(t : T?; file : string) {
             eval(tr, sa, pa)
             eval(tr, sb, pb)
             var outsider <- create_session(tr, mirror_kv_dtype())
-            eval(tr, outsider, pa)   //! both regions are held: the CPU rails serve the host-cached outsider
+            eval(tr, outsider, pa)
             var passes <- gpu_cpu_passes_()
             t |> success(length(passes) == 1 && passes[0].reason == "busy", "the outsider's call passed as busy, and only it: {passes}")
             delete passes
@@ -421,7 +423,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             let claim2 = gpu_device_kv_park(second)
             var a <- create_session(tr, mirror_kv_dtype())
             var b <- create_session(tr, mirror_kv_dtype())
-            eval(tr, a, tail)   //! two outsiders take both regions: the parked rows are gone
+            eval(tr, a, tail)
             eval(tr, b, tail)
             t |> success(!gpu_device_kv_adopt(third, claim2, 40l), "a claim dies when another session takes its region")
             gpu_device_kv_park(third)
@@ -437,8 +439,6 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
     }
 }
 
-// ===== the scheduler's device mode =====
-
 def private make_req(id : int64; prompt : array<int64>; max_new : int64) : PendingReq {
     var r <- PendingReq(id = id, params = SamplingParams(), max_new = max_new)
     r.prompt := prompt
@@ -450,7 +450,7 @@ def private drain(m : Model; var sch : Scheduler; var events : array<SchedEvent>
     while (scheduler_step(m, sch, events)) {
         steps ++
         if (steps > 4096) {
-            panic("test_gpu_resident_regions: the scheduler did not go idle in 4096 steps")
+            panic("_resident_regions: the scheduler did not go idle in 4096 steps")
         }
     }
 }
@@ -478,17 +478,14 @@ def private serve_four(m : Model; device : bool; var events : array<SchedEvent>)
     submit(m, sch, make_req(3l, pc, 8l))
     drain(m, sch, events)
     var turn2 <- prose_ids(33l, 11l)
-    turn2 |> push_from(toks_of(events, 3l))
-    turn2 |> push_from(prose_ids(20l, 5l))
+    turn2 |> push_from(toks_of(events, 3l), prose_ids(20l, 5l))
     submit(m, sch, make_req(4l, turn2, 8l))
     drain(m, sch, events)
     delete pa
     delete pb
     delete pc
     delete turn2
-    unsafe {
-        delete sch
-    }
+    delete sch
     return on
 }
 
@@ -506,7 +503,7 @@ def cell_scheduler_device_mode(t : T?; file : string) {
                 var th <- toks_of(host, id)
                 var td <- toks_of(dev, id)
                 t |> equal(length(td), 8, "request {id} ran its eight tokens on the device")
-                t |> success(length(th) == length(td) && logits_same_ids(th, td), "request {id}: device-home {td} against host-cached {th}")
+                t |> success(length(th) == length(td) && same_ids(th, td), "request {id}: device-home {td} against host-cached {th}")
                 delete th
                 delete td
             }
@@ -526,7 +523,7 @@ def cell_scheduler_device_mode(t : T?; file : string) {
     }
 }
 
-def private logits_same_ids(a, b : array<int64>) : bool {
+def private same_ids(a, b : array<int64>) : bool {
     for (x, y in a, b) {
         if (x != y) return false
     }

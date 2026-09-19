@@ -61,8 +61,8 @@ struct ModelSlot {
     sched : Scheduler = Scheduler()
     opts : SlotOpts = SlotOpts()
     backend_effective : string = "cpu"   // arm outcome: cpu | gpu:rails | gpu:resident
-    gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot: the streams it serves device-home (0 off that driver)
-    gpu_note : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
+    gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot, one per device-home stream; 0 = not that driver
+    resident_decline : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
     is_default : bool
     last_used : int64
     sw_count : int64                // gpu-switch telemetry (count / total usec)
@@ -217,7 +217,6 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     var slot <- ModelSlot(name = name, path = path, is_default = empty(g_slots))
     slot.model <- m
     slot.opts = opts
-    // a slot the device serves whole holds its streams' K/V there, a region each: a stream's context is the region's
     if (gpu_device_sessions() > 0l) {
         slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
     }
@@ -226,7 +225,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
     slot.gpu_regions = gpu_device_sessions()
     slot.backend_effective = gpu_slot_capture(slot.gpu_marks)
-    slot.gpu_note = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    slot.resident_decline = slot.backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     let was_gpu = slot.backend_effective != "cpu"
     var probe <- create_chat_renderer(slot.model, "", 1l)
     // reporting the raw template default would show the page a checked box for a family whose
@@ -316,7 +315,7 @@ def private bind_gpu_slot(si : int) {
     // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
     // order-sensitive half of the switch lives in the engine
     g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
-    g_slots[si].gpu_note = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
+    g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     g_slots[si].gpu_regions = gpu_device_sessions()
     g_gpu_owner = si
     let us = int64(get_time_usec(t0))
@@ -325,10 +324,7 @@ def private bind_gpu_slot(si : int) {
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
 }
 
-//! A slot the device serves whole, with a K/V region per stream and no media tower or self-speculation (both leave the
-//! device), admits DEVICE-HOME sessions; any other slot admits host-cached ones. Called with the slot's marks installed,
-//! so the facade answers for THIS model; an idle scheduler is the only one that switches.
-//! whether the slot the GPU is armed for serves its streams device-home: the whole-model driver, no media tower, no self-speculation, a K/V region per stream
+//! Read with the slot's marks installed, so the facade answers for THIS model.
 def private slot_device_kv_want(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
         && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
@@ -343,7 +339,6 @@ def private slot_device_kv(var s : ModelSlot) {
     }
 }
 
-//! How a slot is served, for a reader who never saw the engine: where the weights are, and where the streams' caches are.
 def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (slot_flavor(s) == "metal") {
         return "GPU (Metal): the whole model"
@@ -358,13 +353,12 @@ def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     return s.backend_effective == "gpu:rails" ? "GPU in part: some layers' work on the card, the rest on the CPU" : "CPU"
 }
 
-//! Why the slot is not served better, "" when nothing holds it back: the whole-model driver's own reason, or what keeps the caches off the card.
 def private slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (s.backend_effective != "cpu" && !holds_gpu) {
         return ""
     }
     if (s.backend_effective != "gpu:resident") {
-        return s.opts.backend == "cpu" ? "" : s.gpu_note
+        return s.opts.backend == "cpu" ? "" : s.resident_decline
     }
     if (device_kv) {
         return ""
@@ -884,6 +878,7 @@ var private g_ibench_full_seq = 0l   // the benched model's served seq_len, rest
 var private g_ibench_pp : array<double>
 var private g_ibench_tg : array<double>
 var private g_ibench_session : Session
+var private g_ibench_passes0 = 0l   // the CPU-pass count as the rows began: a GPU slot's rows that move it say so
 
 //! True while the in-process rows run.
 def ibench_running() : bool {
@@ -995,8 +990,26 @@ def private ibench_start(var resp : HttpResponse?) : http_status {
     return resp |> JSON("\{\"ok\":true,\"state\":\"running\"}", http_status.ACCEPTED)
 }
 
+//! calls the armed GPU path handed back to the CPU since the model armed, every reason summed
+def private ibench_cpu_passes() : int64 {
+    var n = 0l
+    for (p in gpu_cpu_passes()) {
+        n += p.count
+    }
+    return n
+}
+
+//! a device-home session lets go of its K/V region before it is deleted, or the region stays pinned to a dead session
+def private ibench_park_session() {
+    if (g_ibench_session.kv_device && g_ibench_slot < length(g_slots)) {
+        install_slot_marks(g_ibench_slot)
+        gpu_device_kv_park(g_ibench_session)
+    }
+}
+
 //! ends the run in `state`; `why` names an abandoned run in the log the page shows
 def private ibench_stop(state, why : string) {
+    ibench_park_session()
     delete g_ibench_session
     if (g_ibench_full_seq != 0l && g_ibench_slot < length(g_slots)) {   // the rows shrank the model's seq_len to their session; the serving session was built at the full one
         g_slots[g_ibench_slot].model.config.seq_len = g_ibench_full_seq
@@ -1017,7 +1030,11 @@ def private ibench_finish() {
     let name = g_slots[g_ibench_slot].name
     let path = g_slots[g_ibench_slot].path
     let backend = ibench_backend(g_ibench_slot)   // before the stop frees the session it reads
-    let kv = "{g_slots[g_ibench_slot].opts.kv_dtype}"
+    let kv = g_ibench_session.kv_device ? "{gpu_device_session_dtype()}" : "{g_slots[g_ibench_slot].opts.kv_dtype}"
+    let cpu_calls = ibench_cpu_passes() - g_ibench_passes0
+    if (cpu_calls > 0l) {
+        ibench_log("WARNING: {cpu_calls} of the rows' calls ran on the CPU instead of the GPU - the model card lists the reasons; these numbers are not the GPU's")
+    }
     let exec = is_standalone_exe() ? "exe-native" : (jit_enabled() ? "jit" : "interpreted")
     let tune = ibench_tune_state()
     let elapsed = double(get_time_nsec(g_ibench_t0)) / 1.0e9lf   // the 64-bit clock: three reps of a big model on a slow box can pass the 32-bit microsecond one
@@ -1051,9 +1068,15 @@ def private ibench_step() {
     if (g_ibench_phase == 1) {
         let device = slot_flavor(g_slots[si]) == "metal" ? "metal" : g_slots[si].backend_effective   // the tier's word speaks only of Vulkan and reads `cpu` under Metal
         ibench_log("in-process: pp{BENCH_PP_TOKENS}/tg{BENCH_TG_TOKENS} x {IBENCH_REPS} reps on {g_slots[si].name} ({device}, kv {g_slots[si].opts.kv_dtype}, {g_ibench_threads} lanes), llama-bench shape - the text, audio and speech routes hold until it finishes")
+        let device_home = slot_device_kv_want(g_slots[si])
+        if (!device_home) {
+            g_ibench_full_seq = g_slots[si].model.config.seq_len
+        }
+        ibench_park_session()
         delete g_ibench_session   // the previous run's cache, when a run ended without its stop
-        g_ibench_full_seq = g_slots[si].model.config.seq_len
-        g_ibench_session <- bench_session(g_slots[si].model, BENCH_PP_TOKENS, BENCH_TG_TOKENS, g_slots[si].opts.kv_dtype, g_slots[si].opts.kv_dtype)
+        g_ibench_session <- (device_home ? create_device_session(g_slots[si].model, gpu_device_session_dtype())
+            : bench_session(g_slots[si].model, BENCH_PP_TOKENS, BENCH_TG_TOKENS, g_slots[si].opts.kv_dtype, g_slots[si].opts.kv_dtype))
+        g_ibench_passes0 = ibench_cpu_passes()
         bench_pp_warm(m, g_ibench_session, BENCH_PP_TOKENS)
         let sane = bench_warm_sanity(m, g_ibench_session)
         if (!sane.ok) {
@@ -3343,7 +3366,7 @@ struct private OaiSlotStats {
     thinking_default : bool   // this family's own default when a request sends no enable_thinking
     last_used_s : float       // seconds since this slot last admitted a request (-1 = never)
     served : string           //!< how this slot is served, in plain words: where the weights sit and where the streams' caches do
-    served_note : string      //!< why it is not served better (the whole-model driver's decline, the tower that keeps the caches on the host); "" when there is nothing to say
+    served_note : string      //!< why it is not served better; "" when nothing holds the slot back
     device_kv : bool          //!< the streams' K/V caches live on the GPU, a region each
     sw_count : int64          // P2 gpu-switch telemetry
     sw_avg_ms : float
@@ -3351,6 +3374,7 @@ struct private OaiSlotStats {
 
 struct private OaiCpuPass {
     reason : string
+    words : string   //!< the reason as the control page prints it
     count : int64
 }
 
@@ -3488,7 +3512,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         thinking_default = g_slots[g_default_slot].think_default,
         media_pending = g_media_pending, media_rows = g_media_rows,
         mrope_streams = g_slots[g_active].sched.mrope_streams)
-    out.gpu_cpu_passes <- [for (p in gpu_cpu_passes()); OaiCpuPass(reason = p.reason, count = p.count)]
+    out.gpu_cpu_passes <- [for (p in gpu_cpu_passes()); OaiCpuPass(reason = p.reason, words = p.words, count = p.count)]
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -5533,9 +5557,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     if (!empty(g_slots)) {
         set_mtp_spec(g_slots[g_active].sched.mtp)
     }
-    // host-cached sessions (a slot with a media tower, the embeddings route) can outnumber the driver's K/V regions, and a
-    // resident prefill would leave device-only rows another session's claim strands: their prefill stays off the device.
-    // A device-home stream (slot_device_kv) prefills there whatever this pin says.
+    // a resident prefill would strand device-only rows when host-cached sessions outnumber the driver's K/V regions; device-home streams prefill on the device regardless
     set_resident_prefill_allowed(false)
     g_server = new OpenAiServer()
     g_server->init(port)

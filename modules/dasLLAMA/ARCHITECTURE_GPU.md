@@ -104,7 +104,9 @@ that a question answered for one backend has an obvious address in the other. Th
   per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its attention-sink seat
   `install_moe_gpu_resident_sinks` (the per-head sink plane, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am), its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
-  MoE layer, and the routed block on a layer another seat built) behind the route lever `set_gpu_resident_route` /
+  MoE layer, and the routed block on a layer another seat built), its mirror-region seat
+  `install_moe_gpu_resident_regions` (`rdec_select_region` names the region every mirror address and the next token
+  command resolve against; a tier without it serves one region), all behind the route lever `set_gpu_resident_route` /
   `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the
   weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple` - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the device). The
   installs are one-way: a test that arms the tier installs the seats and never restores them,

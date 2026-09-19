@@ -746,7 +746,7 @@ function renderModels(s) {
             (passTotal > 0
                 ? '<div class="line warn" data-cpu-passes title="calls the GPU handed back to the CPU since this model loaded, by reason">' +
                   fmt(passTotal) + ' call' + (passTotal > 1 ? 's' : '') + ' ran on the CPU instead of the GPU: ' +
-                  passes.map(x => esc(x.reason) + ' ' + fmt(x.count)).join(' · ') + '</div>' : '') +
+                  passes.map(x => '<span title="' + esc(x.reason) + '">' + esc(x.words || x.reason) + ' (' + fmt(x.count) + ')</span>').join(' · ') + '</div>' : '') +
             '<div class="line">ctx ' + fmt(m.ctx) + ' · backend ' + esc(backLine) +
                 ' · ' + (m.weights_bytes / 1e9).toFixed(1) + ' GB weights · ' + (m.kv_bytes / 1e9).toFixed(2) + ' GB kv</div>' +
             '<div class="line">streams ' + m.active + ' / queued ' + m.queued +

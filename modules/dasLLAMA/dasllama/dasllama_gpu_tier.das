@@ -348,6 +348,7 @@ def public install_moe_gpu_resident_regions(select_region : RdecSelectRegionFn) 
 def public rdec_regions_installed() : bool => g_rdec_regions_installed
 
 //! Every mirror address and the next token command resolve against mirror region `region`.
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_select_region(region : int64) { invoke(g_rdec_select_region, region) }
 def public rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) { invoke(g_rdec_set_dn_layer, l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp) }
 def public rdec_upload_dn_ba(rows : array<float>) { invoke(g_rdec_upload_dn_ba, rows) }
@@ -1113,9 +1114,7 @@ def public dasllama_noisy() : bool {
 def public gpu_want_auto : bool
     => g_env_gpu.gpu ?? g_gpu_want.auto_tier
 
-//! The whole-model driver is asked for: by the measured-best set (``DASLLAMA_GPU=1`` or ``auto_tier``),
-//! or by a want that spells its rails out and sets ``resident`` (the serving shape, one rail still
-//! switchable off); ``gpu_want_resident`` is the lever that keeps the rails regardless.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def public gpu_want_resident_asked : bool
     => gpu_want_auto() || g_gpu_want.resident
 
@@ -1540,23 +1539,24 @@ def gpu_tier_status_() : GpuTierStatus {
 }
 
 var private g_gpu_cpu_pass_reasons : array<string>
+var private g_gpu_cpu_pass_words : array<string>
 var private g_gpu_cpu_pass_counts : array<int64>
 
 //! Name the reasons a served GPU path hands a call to the CPU rails, in slot order, and zero the counts - the driver that counts them registers as it arms a model.
-def public set_gpu_cpu_pass_reasons(reasons : array<string>) {
+def public set_gpu_cpu_pass_reasons(reasons, words : array<string>) {
     g_gpu_cpu_pass_reasons := reasons
+    g_gpu_cpu_pass_words := words
     g_gpu_cpu_pass_counts |> clear()
     g_gpu_cpu_pass_counts |> resize(length(reasons))
 }
 
-//! Count one call handed to the CPU rails under the reason registered at `slot`.
-def public note_gpu_cpu_pass(slot : int) {
-    g_gpu_cpu_pass_counts[slot]++
+def public note_gpu_cpu_pass(reason_slot : int) {
+    g_gpu_cpu_pass_counts[reason_slot]++
 }
 
 //! Calls the served GPU path handed to the CPU rails since the model armed, one row per reason that fired - an empty answer is the device serving every call.
-def gpu_cpu_passes_() : array<tuple<reason : string; count : int64>> {
-    return <- [for (r, n in g_gpu_cpu_pass_reasons, g_gpu_cpu_pass_counts); (reason = r, count = n); where n > 0l]
+def gpu_cpu_passes_() : array<tuple<reason : string; words : string; count : int64>> {
+    return <- [for (r, w, n in g_gpu_cpu_pass_reasons, g_gpu_cpu_pass_words, g_gpu_cpu_pass_counts); (reason = r, words = w, count = n); where n > 0l]
 }
 
 //! Upload one weight stack ([rows x n] at woff) as the GPU tier's row-major planes — q8 (fmt 0):

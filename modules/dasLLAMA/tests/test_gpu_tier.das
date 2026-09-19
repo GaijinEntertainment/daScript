@@ -228,9 +228,7 @@ def test_gpu_tier_contract(t : T?) {
     }
 }
 
-//! The whole-model driver is asked for by the measured-best set or by `resident` beside rails
-//! spelled out (the server's serving shape); rails alone ask for nothing. Env-backed: an exported
-//! DASLLAMA_GPU answers ahead of the want, so the rails-alone arms assert the DELTA against it.
+//! env-backed: an exported DASLLAMA_GPU answers ahead of the want, so the rails-alone arms assert the DELTA against the ambient answer, never false
 [test]
 def test_gpu_tier_resident_ask(t : T?) {
     let ambient = g_env_gpu.gpu ?? false
@@ -245,10 +243,9 @@ def test_gpu_tier_resident_ask(t : T?) {
     t |> equal(gpu_want_resident_asked(), ambient, "a zero want resets to the ambient env answer")
 }
 
-//! The CPU-pass counters: only a reason that fired is reported, and registering again zeroes them.
 [test]
 def test_gpu_cpu_passes(t : T?) {
-    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"])
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"], ["a codec", "pages", "the cap"])
     t |> equal(length(gpu_cpu_passes_()), 0, "nothing fired: the device served every call")
     note_gpu_cpu_pass(1)
     note_gpu_cpu_pass(1)
@@ -256,10 +253,11 @@ def test_gpu_cpu_passes(t : T?) {
     let fired <- gpu_cpu_passes_()
     t |> equal(length(fired), 2, "one row per reason that fired")
     t |> equal(fired[0].reason, "paged")
+    t |> equal(fired[0].words, "pages", "a reason's words ride with its name")
     t |> equal(fired[0].count, 2l)
     t |> equal(fired[1].reason, "cap")
     t |> equal(fired[1].count, 1l)
-    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"])
+    set_gpu_cpu_pass_reasons(["codec", "paged", "cap"], ["a codec", "pages", "the cap"])
     t |> equal(length(gpu_cpu_passes_()), 0, "a model arming again starts from zero")
 }
 

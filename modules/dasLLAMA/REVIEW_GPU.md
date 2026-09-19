@@ -217,6 +217,14 @@ session, a batched decode step over several streams, a prefill under a multi-str
 a session at the model's own context. "It runs, on the CPU" is not support: the user who
 selected the GPU gets a fraction of its speed and nothing on the page says so.
 
+**A host that keeps more live device-home sessions (`create_device_session`) than
+`gpu_device_sessions` reports for the installed model is a defect - it reads that number before
+it admits a stream, and a stream past it stays host-cached; a scheduler's device mode
+(`set_device_kv`) counts as `max_streams` of them, and goes off before the model leaves the
+device.** Each live device-home session pins
+a mirror region, and the driver panics on the one that finds none: the CPU rails have no cache
+to serve it from.
+
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 model, one
 K-quant model, and one model of a format outside both, for each of the three the trim path

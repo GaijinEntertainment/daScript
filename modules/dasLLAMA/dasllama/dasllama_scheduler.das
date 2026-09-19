@@ -110,9 +110,8 @@ struct DoneStream {
     done_at : int64                         // ref_time_ticks at reap
 }
 
-//! a prefill chunk's size: the scheduler's quantum; on a device-home stream at least the device's window, and the whole
-//! head at once for a model whose device prefill cannot continue from a position past zero
-def private device_quantum(m : Model; sch : Scheduler; head_end : int64) : int64 {
+//! on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
+def private prefill_quantum(m : Model; sch : Scheduler; head_end : int64) : int64 {
     if (!sch.device_kv) {
         return sch.chunk_tokens
     }
@@ -142,9 +141,7 @@ struct Scheduler {
     pool : KVPool
     prefix : PrefixCache
     kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
-    // device serving (`set_device_kv`): admitted sessions are DEVICE-HOME - their K/V lives only in the GPU driver's regions -
-    // and a finished stream parks its region's claim so a later request sharing its opening tokens adopts the rows
-    device_kv : bool
+    device_kv : bool                        //! admitted sessions are DEVICE-HOME: their K/V lives only in the GPU driver's regions (`set_device_kv`)
     parked : array<ParkedKv>
     mtp : bool                              // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
     // per-step gather scratch. @do_not_delete is load-bearing: delete of a plain array<T?>
@@ -195,8 +192,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
 }
 
 //! Serve the streams admitted from here on as DEVICE-HOME sessions (`on`), or as the scheduler was created. Only an idle
-//! scheduler switches - one batched step takes one kind of session - so the answer is what it now does. The caller turns it
-//! on while the installed model answers `gpu_device_sessions() >= max_streams`, and off before the model leaves the device.
+//! scheduler switches - one batched step takes one kind of session - so the answer is what it now does.
 def set_device_kv(var sch : Scheduler; on : bool) : bool {
     if (sch.device_kv != on && empty(sch.streams)) {
         sch.device_kv = on
@@ -405,7 +401,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
-            let adopts = st.n_media == 0l && gpu_device_prefill_continues(m)   // media rows do not follow from the token ids; a recurrent model starts every prompt from zero
+            let adopts = st.n_media == 0l && gpu_device_prefill_continues(m)
             let matched = adopts ? parked_attach(sch, st.session, st.prompt) : 0l
             st.n_prefilled = matched
             st.n_cached = matched
@@ -532,7 +528,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.prefill_tokens += sch.streams[i].n_media
         } else {
             let head_end = media_pending ? sch.streams[i].media_at : np
-            let quantum = device_quantum(m, sch, head_end)
+            let quantum = prefill_quantum(m, sch, head_end)
             let take = min(quantum, head_end - sch.streams[i].n_prefilled)
             sch.chunk |> resize(take)
             for (k in range64(take)) {
@@ -601,10 +597,8 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
     prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
 }
 
-//! The device twin of the donation: the finished stream's region stays claimed under its token list, newest last,
-//! at most one parked claim per stream slot (the driver hands the least recently used region to a session with none).
 def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
-    if (st.n_media != 0l || !gpu_device_prefill_continues(m)) {   // rows nobody can adopt (they do not follow from the token ids, or the model prefills from zero): the region goes back
+    if (st.n_media != 0l || !gpu_device_prefill_continues(m)) {
         gpu_device_kv_park(st.session)
         return
     }

@@ -43,7 +43,12 @@ binds its own region while its claim stands, else the least recently used one, w
 claim takes. Two sessions in two regions step between each other, or in one batched step, with no
 K/V crossing the bus - `tests/test_gpu_resident_regions.das` holds each bit for bit to the
 session alone. A session past the region count takes another's region and brings its history up
-from the host, as every session did on the single mirror.
+from the host, as every session did on the single mirror. An owner whose region another session
+took is served from the host or not at all: where its rows never came down, its next prefill or
+decode panics rather than read another session's history. A batched step over a
+per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
+row gathered on device where the driver holds the projection, else that row of the pre-step
+`eval_batch` already ran.
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
 with scratch and no host cache (`Session.kv_device`), so nothing is allocated per request and

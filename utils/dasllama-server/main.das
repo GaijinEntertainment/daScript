@@ -612,10 +612,7 @@ def private gpu_detail_dn(cfg : ServerArgs) : bool
 def private gpu_detail_attn(cfg : ServerArgs) : bool
     => cfg_sourced("gpu_attn") ? cfg.gpu_attn : true
 
-//! The serving want under `gpu = vulkan`: the whole-model resident driver asked for outright
-//! (`resident`, never `auto_tier` - the rail booleans stay explicit, so a `gpu_dn = false` still
-//! turns its rail off), the expert stacks sized to the budget unless pinned, and the resident
-//! shared expert (measured +8.3% on decode).
+[arch(at = "README.md#gpu-key")]
 def private vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
     => GpuTierWant(resident = true,
                    moe_layers = gpu_detail_layers(cfg), moe_stream = gpu_detail_stream(cfg),
@@ -998,7 +995,6 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
-                // a K/V region per stream, each the slot's context: every stream's history stays on the device
                 set_gpu_resident_regions(ent.streams > 0 ? int64(ent.streams) : streams)
                 set_gpu_ctx_max(ectx)
             }

@@ -1470,7 +1470,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     g_rd.s_tok_ple_ar = set_cls_ar(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.tok_plep),
         fixed_array(all * 4l, all * 4l, g_rd.ple * 4l, all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
     g_rd.ple_gpu = true
-    rd_invalidate_token()   //! the token command re-records with the pre-step's finish at its head
+    rd_invalidate_token()
     return true
 }
 
@@ -1481,7 +1481,7 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     vk_demotion_check("prefill")
     let ple_tbl = pf_ple_tbl_on()
     assert(g_rd.ple == 0l || ple_tbl, "vk_rdec_prefill_ids: a per-layer-embedding model without its token table and projection on device")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits)   //! the ids form gathers a per-layer-embedding model's side rows from the device table and finishes the pre-step there
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits)
 }
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)

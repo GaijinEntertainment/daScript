@@ -2070,7 +2070,7 @@ struct Session {
     rdec_gen : int64
     rdec_region : int64         //! the mirror region the claim above sits in (meaningful only while `rdec_gen` matches that region's)
     rdec_host_current : bool
-    kv_device : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated, and a CPU path reaching this session is a defect, never a route
+    kv_device : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
     tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's

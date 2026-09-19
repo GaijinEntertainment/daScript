@@ -499,9 +499,9 @@ def gpu_tier_status() : dasllama_gpu_tier::GpuTierStatus {
     return gpu_tier_status_()
 }
 
-def gpu_cpu_passes() : array<tuple<reason : string; count : int64>> {
+def gpu_cpu_passes() : array<tuple<reason : string; words : string; count : int64>> {
     //! Calls the armed GPU path handed back to the CPU rails since the model armed, one row per
-    //! reason that fired. Empty means the device served every call; a served model keeps it empty.
+    //! reason that fired: its name, the same in words a status page prints, the count. Empty means the device served every call.
     return <- gpu_cpu_passes_()
 }
 

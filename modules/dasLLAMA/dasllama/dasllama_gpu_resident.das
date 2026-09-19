@@ -635,7 +635,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         return p
     }
     let (krow, vrow) = resident_kv_row_bytes(t, kdt, vdt)
-    p.kv_bytes = g_rdec_regions_want * seq_cap * (krow + vrow)   //! every mirror region holds `seq_cap` positions
+    p.kv_bytes = g_rdec_regions_want * seq_cap * (krow + vrow)
     p.scratch_bytes = rdec_scratch_bytes(t)
     fill_plan_room(p)
     var n_moe = 0l
@@ -704,7 +704,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
 var private g_rdec_emb_gpu = false
 var private g_rdec_cap = 0l             // a mirror region's context, as the driver armed (<= model ctx when VRAM-capped)
-var private g_rdec_gen = 0l             // the ownership generation source (bumped per claim, never reused)
+var private g_rdec_gen_seq = 0l
 
 //! One mirror region: a session's whole K/V history on the device.
 struct RdecRegion {
@@ -718,15 +718,12 @@ var private g_rdec_regions : array<RdecRegion>
 var private g_rdec_tick = 0l
 var private g_rdec_regions_want = 1l
 
-//! Ask the resident driver for `n` mirror regions on the models this process loads next, so `n` sessions keep their K/V
-//! on the device at once (a server's stream count); each region holds the armed context, and the plan sizes them all.
+//! Ask the resident driver for `n` mirror regions on the models this process loads next: `n` sessions then keep their K/V on the device at once.
 def set_gpu_resident_regions_(n : int64) {
     g_rdec_regions_want = max(n, 1l)
 }
 
-//! The mirror region `s` prefills and decodes in, selected on the driver: its own while its claim stands, else the
-//! least recently used one no live device-home session holds, which the caller's next claim takes over; -1 when
-//! every region is held (the call passes - a device-home session past the region count is its host's defect).
+//! The mirror region `s` prefills and decodes in, or -1 when every region holds a live device-home session and the call must pass.
 def private rdec_bind_region(var s : Session) : int64 {
     var r = s.rdec_region
     let n = long_length(g_rdec_regions)
@@ -749,23 +746,19 @@ def private rdec_bind_region(var s : Session) : int64 {
     return r
 }
 
-//! `s` owns the rows of region `r`
 def private rdec_owns(s : Session; r : int64) : bool => s.rdec_gen != 0l && g_rdec_regions[r].gen == s.rdec_gen
 
-//! `s` takes region `r` with `cnt` live rows
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
-    g_rdec_regions[r].gen = ++g_rdec_gen
+    g_rdec_regions[r].gen = ++g_rdec_gen_seq
     g_rdec_regions[r].pinned = s.kv_device
-    s.rdec_gen = g_rdec_gen
+    s.rdec_gen = g_rdec_gen_seq
     s.rdec_region = r
 }
 var private g_rdec_kvdt = KVDtype.f16   // the ARMED mirror codec — sessions must match to be served
 var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed_)
 
-//! Allow/forbid the whole-prefill resident override for HOST-CACHED sessions. A multi-stream host whose sessions can
-//! outnumber the mirror regions pins it OFF: a prefill would leave device-only K/V that another session's claim
-//! strands. Device-home sessions prefill on the device whatever the pin says - their regions are never taken.
+//! Allow/forbid the whole-prefill resident override for HOST-CACHED sessions; a device-home session prefills on the device whatever the pin says.
 def set_resident_prefill_allowed_(allowed : bool) {
     g_resident_prefill_allowed = allowed
 }
@@ -785,8 +778,8 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({cnt} positions x {c.n_layers} layers)\n")
 }
 
-//! `s` owns live rows its host cache lacks: hydrating is the only way they survive a steal, a continuation on the CPU rails or a drop (a device-home session has no host cache to fill)
-def private rdec_device_only(s : Session) : bool {
+//! only hydration saves them from a steal, a CPU-rails continuation or a drop (a device-home session has no host cache to fill)
+def private rdec_has_device_only_rows(s : Session) : bool {
     let r = s.rdec_region
     return (!s.kv_device && s.rdec_gen != 0l && r >= 0l && r < long_length(g_rdec_regions) && g_rdec_regions[r].gen == s.rdec_gen
         && g_rdec_regions[r].cnt > 0l && !s.rdec_host_current)
@@ -866,7 +859,7 @@ def rdec_decline_say(reason : string; memory : bool = false) {
     to_log(LOG_WARNING, "dasLLAMA: resident driver declined - {reason}; the per-op rails serve\n")
 }
 
-//! why the whole-model driver does not serve the last loaded model ("" when it armed, or no tier was asked for): its decline, or why it was never attempted; `moe_gpu_resident_memory_decline` says whether it was the card's room
+//! why the whole-model driver does not serve the last loaded model ("" when it armed, or no tier was asked for): its decline, or why it was never attempted
 def gpu_resident_decline_() : string => g_rdec_decline_reason
 
 //! true when the last decline was the residency plan not fitting the card - the remedy is a shorter context or a smaller file, not a driver fix
@@ -1128,7 +1121,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
     g_rdec_pass_said |> clear()
-    set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"])
+    set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"], [for (k in type<RdecPass>); rdec_pass_words(k)])
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed()) return rdec_decline("the tier installed no resident-driver seams")
     if (t.quant != QuantMode.q8) return rdec_decline("weights are not in the q8 serving mode ({t.quant})")
@@ -1699,13 +1692,27 @@ def private rdec_pass_once(kind : RdecPass; a, b : int64) {
     to_log(LOG_INFO, "dasLLAMA: resident override passed a call to the CPU rails - {rdec_pass_text(kind, a, b)} (said once per reason)\n")
 }
 
-//! A device-home session has no host cache: the CPU rails cannot take its call, so the pass just counted is a defect.
-[cold_path]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_device_home_guard(s : Session; done : bool; what : string) {
     if (done || !s.kv_device) {
         return
     }
     panic("dasLLAMA resident {what}: a device-home session was handed to the CPU rails - {rdec_pass_text(g_rdec_last_pass.kind, g_rdec_last_pass.a, g_rdec_last_pass.b)}")
+}
+
+//! why a call went to the CPU, for a reader who never saw the engine: what a status page prints beside the count
+[cold_path]
+def private rdec_pass_words(kind : RdecPass) : string {
+    if (kind == RdecPass.codec) return "the stream's cache format is not the one the GPU holds"
+    if (kind == RdecPass.paged) return "the stream keeps its cache in pages on the host, which the GPU path does not read"
+    if (kind == RdecPass.gap) return "the GPU's copy of the stream's cache was behind the stream"
+    if (kind == RdecPass.cap) return "the stream ran past the context the GPU holds"
+    if (kind == RdecPass.superseded) return "another stream took the GPU's copy of the cache"
+    if (kind == RdecPass.continuation) return "a prompt continued a conversation the GPU prefills only from its start"
+    if (kind == RdecPass.span) return "the prompt carried an image or audio span"
+    if (kind == RdecPass.rewind) return "the stream stepped back in a conversation the GPU only steps forward"
+    if (kind == RdecPass.busy) return "every GPU cache slot was held by a live stream"
+    return "a prompt was read on the CPU: the server keeps host-cached streams off the GPU's prompt path"
 }
 
 [cold_path]
@@ -1738,7 +1745,7 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     let c = t.config
-    if (s.kv_device) {   //! nothing on the host to bring up: a fresh session claims an empty region, and rows lost to another claim exist nowhere
+    if (s.kv_device) {   //! a device-home session has nothing on the host to bring up: it claims an empty region
         if (pos != 0l) {
             panic("dasLLAMA resident driver: a device-home session at position {pos} holds no mirror region - more live device-home sessions than the driver has regions ({long_length(g_rdec_regions)})")
         }
@@ -1791,7 +1798,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     }
     if (pos + 1l > g_rdec_cap) {
         // capacity exhausted: hydrate host KV from the mirror, then the CPU rails take over
-        if (rdec_device_only(s)) {
+        if (rdec_has_device_only_rows(s)) {
             rdec_hydrate_host(t, s)
         }
         rdec_pass_once(RdecPass.cap, pos, g_rdec_cap)
@@ -1840,7 +1847,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     } else {
         rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
-    g_rdec_regions[r].cnt = pos + 1l   // region continuity: rows [0, pos] are now live
+    g_rdec_regions[r].cnt = pos + 1l
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
     return true
@@ -1867,18 +1874,17 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return done
 }
 
-//! A pass that leaves the CPU rails a whole history: the session's device-only rows come down first. Always false, the override's answer.
+//! Always false, the override's answer: the CPU rails take the call, so the session's device-only rows come down first.
 def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b : int64) : bool {
-    if (rdec_device_only(s)) {
+    if (rdec_has_device_only_rows(s)) {
         rdec_hydrate_host(t, s)
     }
     rdec_pass_once(kind, a, b)
     return false
 }
 
-//! The region a prefill of `s` from `start_pos` lands in, or -1 where it passes. A session past the region count takes the
-//! least recently used region (fine for serial flows; a stranded owner's decode fails LOUD via the ownership guard). A
-//! continuation needs rows [0, start_pos) live there: kept where the session owns them, else brought up from the host.
+//! The region a prefill of `s` from `start_pos` lands in, or -1 where the call passes.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) : int64 {
     let r = rdec_bind_region(s)
     if (start_pos == 0l || r < 0l) {
@@ -1904,7 +1910,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (!g_rdec_active) {
         return false
     }
-    if (!g_resident_prefill_allowed && !s.kv_device) {   //! the pin guards host-cached sessions, whose device-only rows another session's prefill would strand; a device-home session's region is its own
+    if (!g_resident_prefill_allowed && !s.kv_device) {
         rdec_pass_once(RdecPass.pinned_off, 0l, 0l)
         return false
     }
@@ -1921,7 +1927,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         return false
     }
     let c = t.config
-    if (start_pos != 0l && c.recr_mask != 0ul) {   //! the window chain starts the deltanet state from zero: a recurrent model's continuation is the CPU loop's
+    if (start_pos != 0l && c.recr_mask != 0ul) {
         return rdec_pass_hydrated(t, s, RdecPass.continuation, start_pos, 0l)
     }
     if (start_pos + npos > g_rdec_cap) {
@@ -1968,9 +1974,9 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         s.dn_pos = npos
     }
     if (start_pos == 0l) {
-        rdec_claim(s, r, npos)   // the region now holds [0, npos) — the decode's continuity witness
+        rdec_claim(s, r, npos)
     } else {
-        g_rdec_regions[r].cnt = start_pos + npos   // the claim stands: the continuation extended its rows
+        g_rdec_regions[r].cnt = start_pos + npos
     }
     s.rdec_host_current = false
     g_rdec_prefills++
@@ -1991,7 +1997,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return done
 }
 
-//! every row in the armed codec on a flat cache, within the region's context and at its recurrent state's next position - or the whole step passes
+//! all rows or none: one row the driver cannot serve passes the whole step
 def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     for (i in range64(nrows)) {
@@ -2016,8 +2022,7 @@ def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : ar
     return true
 }
 
-//! row `i`'s per-layer-embedding side input for the token command: the raw table row where the driver finishes the
-//! pre-step on device, else this row of the pre-step `eval_batch` already ran for the whole batch
+//! row `i`'s side input for the token command: the table row gathered on device, else row `i` of the pre-step `eval_batch` already ran
 def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
     if (rdec_ple_proj_on()) {
         g_rdec_one_tok |> resize(1l)
@@ -2046,7 +2051,6 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = ws.positions[i]
-        // the session's region already holds [0, pos) when it stepped there last; else its history comes up from the host (same codec — byte rows)
         let r = rdec_bind_region(s)
         if (r < 0l) {
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
@@ -2070,7 +2074,6 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             rdec_batch_ple_row(t, ws, i)
         }
         rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, g_rdec_tmp)
-        // write the new token's K/V back to this session's host cache at pos (a device-home session has none), then scatter logits
         for (l in range64(c.n_layers)) {
             continue if (s.kv_device || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)
@@ -2082,7 +2085,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             }
         }
         g_rdec_regions[r].cnt = pos + 1l
-        s.rdec_host_current = !s.kv_device   // the row just read back keeps a host cache whole
+        s.rdec_host_current = !s.kv_device
         copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
     }
     batch_decode_override_logits_done()
@@ -2166,12 +2169,10 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
 //! How many device-home sessions the INSTALLED model serves at once: the armed driver's region count, 0 when the driver is not armed.
 def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions) : 0l
 
-//! A device-home session of `t` prefills from a position past zero: a prompt in chunks, a turn over the turns before it.
-//! False for a recurrent model - the window chain starts the deltanet state from zero - whose host prefills each prompt whole, from zero.
+//! A device-home session of `t` prefills from a position past zero - false for a recurrent model, whose prompt prefills whole, from zero.
 def gpu_device_prefill_continues_(t : Model) : bool => t.config.recr_mask == 0ul
 
-//! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none). The host keeps
-//! the claim to hand the rows to a later session; until then any session may take the region, and the claim dies with it.
+//! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none), which dies when another session takes the region.
 def gpu_device_kv_park_(var s : Session) : int64 {
     let claim = s.rdec_gen
     if (rdec_owns(s, s.rdec_region)) {
@@ -2181,8 +2182,7 @@ def gpu_device_kv_park_(var s : Session) : int64 {
     return claim
 }
 
-//! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s`, under a claim of its own - the kept
-//! one is spent. False when another session took the region since, or the region holds fewer rows: `s` then starts empty.
+//! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s` under a claim of its own; false when the region was taken or holds fewer rows.
 def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
     if (!g_rdec_active || claim == 0l) {
         return false
@@ -2192,7 +2192,7 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
         if (g_rdec_regions[r].cnt < npos) {
             return false
         }
-        rdec_claim(s, r, npos)   //! rows past `npos` are dead: the next prefill rewrites them
+        rdec_claim(s, r, npos)
         s.rdec_host_current = false
         s.n_past = npos
         return true
@@ -2248,7 +2248,7 @@ def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
 def moe_gpu_hydrate_session_(t : Model; var s : Session) {
     // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
     // session must never receive them (the gen match alone is ambiguous at generation 0)
-    if (g_rdec_active && rdec_device_only(s)
+    if (g_rdec_active && rdec_has_device_only_rows(s)
             && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null) {
         rdec_hydrate_host(t, s)
     }
@@ -2409,7 +2409,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     if (resident_try) {
         let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
         if (bctx > 0l) {
-            seq_cap = min(seq_cap, bctx / g_rdec_regions_want)   //! the regions share each side's one binding
+            seq_cap = min(seq_cap, bctx / g_rdec_regions_want)
         }
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {

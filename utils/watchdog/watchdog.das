@@ -239,8 +239,7 @@ def private is_program_candidate(path, fname : string) : bool {
 }
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
-//! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent,
-//! and `bin/Release/watchdog.exe` in an MSVC tree finds the `daslang.exe` in its own directory.
+//! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent.
 def private daslang_roots(program_dir, cwd : string) : array<string> {
     return <- [cwd, program_dir, dir_name(program_dir)]
 }

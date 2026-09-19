@@ -43,8 +43,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         return false
     }
     let esz = kv16 ? 2l : 4l
-    // each mirror side binds as ONE SSBO range, every region and its slack included: past maxStorageBufferRange (or the
-    // shaders' uint word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
+    // every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
     let mir_bound = (mir_elems + RDEC_MIR_SLACK) * regions
     if (mir_bound * esz > vk_max_storage_range() || mir_bound > 4_294_967_295l) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side plus the {RDEC_MIR_SLACK} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
@@ -176,15 +175,14 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.cmd_unsplit |> resize(regions)
     for (ri in range64(regions)) {
         r.cmd |> push(alloc_cmd())
-        if (r.attn_nsplit > 1l) {   //! the unsplit twin exists only where the attention splits
+        if (r.attn_nsplit > 1l) {
             r.cmd_unsplit[ri] = alloc_cmd()
         }
     }
     return true
 }
 
-//! Every mirror address and the next token command resolve against mirror region `region`: a
-//! region is one session's K/V history, so the caller selects its session's before each call.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def vk_rdec_select_region(region : int64) {
     assert(g_rd != null && region >= 0l && region < g_rd.regions, "vk_rdec_select_region: no such mirror region")
     g_rd.region = region
@@ -2182,7 +2180,6 @@ def private dnd_flush_down(st : DnStep) {
     }
 }
 
-//! A prefill from position zero overwrites every recurrent layer's state slot: a slot another session's state still lives in goes home first.
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
 def vk_rdec_dn_flush_owners {
     for (L in g_rd.layers) {
