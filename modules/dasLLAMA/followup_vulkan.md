@@ -1551,6 +1551,14 @@ module) is independent and can land any time - it is pure structure.
     (c) Self-speculation, which has no Vulkan arm. (d) A host-cached outsider - the embeddings
     route - while every region is held by a live stream (`busy`). Two costs ride beside them:
     the regions share each side's single binding, so their total stops at the binding range (a
-    buffer per region lifts it), and the batched step runs its rows through the token command
-    one after another - a weight pass a row, where a batched GEMV reads the weights once for
-    every row, which is what the four-stream rate above is short of.
+    buffer per region lifts it).
+70. **The N-row command's K-quant feeds take the split residual pair.** `cls_ar_rq_b` fuses the
+    residual step with its requant a row a workgroup for a Q8_0 feed; the Q8_K twin has no row
+    form, so every site whose consumer reads superblocks (`rd_ensure_n_sets` skips it) runs the
+    add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
+    the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
+71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
+    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer, a q/k norm, a gated q
+    and a classifier epilogue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched
+    step of such a model pays a weight pass a row. The work: each kind's N-row form, the
+    recurrent and MoE ones behind their own state and schedule questions.

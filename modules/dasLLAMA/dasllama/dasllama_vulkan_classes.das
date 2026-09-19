@@ -4098,9 +4098,6 @@ let DA_RQ_NONE = 2u  //! ... no fold: a separate requant serves (or nothing read
 //! the Q8_0 block scale of a head row's dim: the 32-lane group's amax over 127 (the group is the block on a 32- or 64-wide subgroup)
 def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 
-// decode attention (one query row a head): a wg per (kv head, slab of its DA_G q heads, key split), KT-typed
-// K/V mirror read once for the slab. Online softmax over 256-position chunks (a running max/denom a
-// head, alpha-rescaled V accumulators) — any cnt works.
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
@@ -4272,15 +4269,15 @@ class template DaAttnT {
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
         let rowwg = max(pa.rowwg, 1u)
-        let row = pa.rowwg == 0u ? 0u : gl_WorkGroupID.x / rowwg   //! a one-row dispatch leaves rowwg 0: the whole dispatch is row 0
+        let row = pa.rowwg == 0u ? 0u : gl_WorkGroupID.x / rowwg
         let wg = pa.rowwg == 0u ? gl_WorkGroupID.x : gl_WorkGroupID.x % rowwg
         let cnt = tok[row].cnt
         let sp = wg % nsplit
-        let grp = wg / nsplit   //! the row's (kv head, slab)
+        let kvslab = wg / nsplit
         let nslab = (pa.kv_mul + DA_G - 1u) / DA_G
-        let kvh = grp / nslab
-        let h0 = kvh * pa.kv_mul + (grp % nslab) * DA_G   //! the slab's first q head
-        let live = min(DA_G, pa.kv_mul - (grp % nslab) * DA_G)   //! its heads: a group's last slab may be short
+        let kvh = kvslab / nslab
+        let h0 = kvh * pa.kv_mul + (kvslab % nslab) * DA_G   //! the slab's first q head
+        let live = min(DA_G, pa.kv_mul - (kvslab % nslab) * DA_G)   //! its heads: a group's last slab may be short
         let hflat0 = row * (pa.kvd / hs * pa.kv_mul) + h0   //! the slab's first head in the attention-out and partial planes, whose row stride is the heads' width
         let qb = row * pa.qrow
         let kbase = pa.kbase + tok[row].mirbase
@@ -4302,12 +4299,10 @@ class template DaAttnT {
             ml[tid * 4u + 1u] = 0.0
         }
         barrier()
-        // V accumulate lives in registers: a thread a (key group, eight dims) of the chunk, a head's
-        // eight sums each; the key groups fold through the shared slab once per head at the end
-        let nwv = hs / 8u                      // words a V row
-        let npart = 256u / nwv                 // key groups
-        let g = tid / nwv
-        let w = tid % nwv
+        let vrow_words = hs / 8u
+        let kgroups = 256u / vrow_words
+        let g = tid / vrow_words
+        let w = tid % vrow_words
         var acc : float[32]                    // [head * 8 + dim]
         for [unroll] (j in range(32)) {
             acc[j] = 0.0
@@ -4320,20 +4315,17 @@ class template DaAttnT {
         let vb = vbase + kvh * hs + w * 8u
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
-            // the chunk's loads go out together, one round trip: this thread's key row (the scores)
-            // and its first eight V rows, which wait on nothing the scores compute
             let krow = kbase + (c0 + min(tid, clen - 1u)) * pa.kvd + kvh * hs
             var kw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
             var vw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
             static_if (KV16) {
                 if (vec) {
                     for [unroll] (b in range(8)) {
-                        kw[b] = kw4[krow / 8u + min(uint(b), nwv - 1u)]   //! a head of 64 fills eight words, a wider one takes more batches
-                        vw[b] = vw4[(vb + (c0 + min(g + uint(b) * npart, clen - 1u)) * pa.kvd) / 8u]
+                        kw[b] = kw4[krow / 8u + min(uint(b), vrow_words - 1u)]   //! a head of 64 fills eight words, a wider one takes more batches
+                        vw[b] = vw4[(vb + (c0 + min(g + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
                     }
                 }
             }
-            // scores: a thread a key of the chunk, the slab's four dots from the shared q rows (a broadcast read a dim)
             if (tid < clen) {
                 var pv : float[4]
                 for [unroll] (j in range(4)) {
@@ -4342,15 +4334,15 @@ class template DaAttnT {
                 static_if (KV16) {
                     if (vec) {
                         var wi = 0u
-                        while (wi < nwv) {
+                        while (wi < vrow_words) {
                             if (wi != 0u) {
                                 for [unroll] (b in range(8)) {
-                                    kw[b] = kw4[krow / 8u + min(wi + uint(b), nwv - 1u)]
+                                    kw[b] = kw4[krow / 8u + min(wi + uint(b), vrow_words - 1u)]
                                 }
                             }
                             for [unroll] (b in range(8)) {
                                 let wb = wi + uint(b)
-                                if (wb < nwv) {
+                                if (wb < vrow_words) {
                                     for [unroll] (j in range(4)) {
                                         pv[j] += kdot8(kw[b], uint(j) * 512u + wb * 8u)
                                     }
@@ -4375,7 +4367,6 @@ class template DaAttnT {
                 }
             }
             barrier()
-            // the chunk's max a head: the subgroups' maxes land in sgp, every thread folds them itself
             var s : float[4]
             for [unroll] (j in range(4)) {
                 let hj = uint(j)
@@ -4396,7 +4387,6 @@ class template DaAttnT {
                     sgi++
                 }
                 alpha[j] = exp(ml[hj * 4u] - mnew)
-                // exp + chunk sum; denom rescale rides the same alpha; the sums take the slab's upper half
                 let e = tid < clen && hj < live ? exp(s[j] - mnew) : 0.0
                 sc[hj * 256u + tid] = e
                 let tsum = subgroupAdd(e)
@@ -4422,18 +4412,17 @@ class template DaAttnT {
                     acc[j * 8 + e] *= alpha[j]
                 }
             }
-            // V accumulate: the group strides the chunk's keys, eight rows' words a step (a head of 64: the chunk in one, prefetched)
             var jj = g
             while (jj < clen) {
                 static_if (KV16) {
                     if (vec) {
                         if (jj != g) {
                             for [unroll] (b in range(8)) {
-                                vw[b] = vw4[(vb + (c0 + min(jj + uint(b) * npart, clen - 1u)) * pa.kvd) / 8u]
+                                vw[b] = vw4[(vb + (c0 + min(jj + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
                             }
                         }
                         for [unroll] (b in range(8)) {
-                            let kb = jj + uint(b) * npart
+                            let kb = jj + uint(b) * kgroups
                             if (kb < clen) {
                                 let a = unpackHalf2x16(vw[b].x)
                                 let bb = unpackHalf2x16(vw[b].y)
@@ -4463,34 +4452,31 @@ class template DaAttnT {
                         }
                     }
                 }
-                jj += vec ? 8u * npart : npart
+                jj += vec ? 8u * kgroups : kgroups
             }
             barrier()   // sc/sgp/ml settle before the next chunk overwrites them
             c0 += 256u
         }
-        // the finish: a head's key-group sums fold inside the subgroup by shuffles, then across the
-        // subgroups through the q slab (spent by now), a round of heads at a time; a round's thread takes
-        // a (head, dim) and writes the piece, or gates and requantizes the row
         let stride = da_attn_part_stride(hs)
-        let kgs = gl_SubgroupSize / nwv   //! key groups a subgroup; 0 where a row's words span subgroups (a wide head, a narrow subgroup)
+        let kgs = gl_SubgroupSize / vrow_words   //! key groups a subgroup; 0 where a row's words span subgroups (a wide head, a narrow subgroup)
         var r = 1u
         while (r < kgs) {
             for [unroll] (k in range(32)) {
-                acc[k] += subgroupShuffleXor(acc[k], r * nwv)
+                acc[k] += subgroupShuffleXor(acc[k], r * vrow_words)
             }
             r *= 2u
         }
         let folded = kgs >= 1u
-        let nsl = folded ? gl_NumSubgroups : npart   //! the slab's groups a head after the fold
-        let nsl_hs = nsl * hs
-        let hpr = max(1u, 2048u / nsl_hs)   //! heads a round of the 2048-float slab
-        let mine = !folded || lane < nwv   //! the lanes holding a fold's sums
+        let ngroups_folded = folded ? gl_NumSubgroups : kgroups
+        let nsl_hs = ngroups_folded * hs
+        let heads_per_round = max(1u, 2048u / nsl_hs)
+        let has_sum = !folded || lane < vrow_words
         let slot = folded ? gl_SubgroupID : g
         var hr0 = 0u
         while (hr0 < live) {
             for [unroll] (j in range(4)) {
                 let hj = uint(j)
-                if (hj >= hr0 && hj < hr0 + hpr && hj < live && mine) {
+                if (hj >= hr0 && hj < hr0 + heads_per_round && hj < live && has_sum) {
                     for [unroll] (e in range(8)) {
                         qrow[(hj - hr0) * nsl_hs + slot * hs + w * 8u + uint(e)] = acc[j * 8 + e]
                     }
@@ -4499,12 +4485,12 @@ class template DaAttnT {
             barrier()
             let hr = wide ? 0u : tid / hs
             let dd = wide ? tid : tid % hs
-            if (hr < hpr && hr0 + hr < live) {
+            if (hr < heads_per_round && hr0 + hr < live) {
                 let h = hr0 + hr
                 var tot = 0.0
                 var tot2 = 0.0
                 var sl = 0u
-                while (sl < nsl) {
+                while (sl < ngroups_folded) {
                     tot += qrow[hr * nsl_hs + sl * hs + dd]
                     if (wide) {
                         tot2 += qrow[hr * nsl_hs + sl * hs + dd + 256u]
@@ -4529,11 +4515,11 @@ class template DaAttnT {
                 }
             }
             barrier()   //! the slab settles before the next round
-            hr0 += hpr
+            hr0 += heads_per_round
         }
-        if (nsplit > 1u) {   //! the split form: the group's last piece to land combines the heads' rows, and rearms the counter
+        if (nsplit > 1u) {
             let rowgroups = pa.rowwg == 0u ? gl_NumWorkGroups.x / nsplit : pa.rowwg / nsplit
-            let ci = pa.cntoff + row * rowgroups + grp
+            let ci = pa.cntoff + row * rowgroups + kvslab
             memoryBarrierBuffer()
             barrier()
             if (tid == 0u) {
@@ -10940,8 +10926,7 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 //! the formats with an N-column leaf
 def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs)
 
-//! the reduction width from which the q8 N-column form takes two rows a subgroup - off until a box's token command proves the
-//! pair (the RTX PRO 4500's down GEMV read 750 us a step under the pair against 587 a row a subgroup); the ruler moves it
+//! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu
 
 def gemv_cls_ensure_n(fmt : int) : bool {
@@ -10972,6 +10957,7 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
 }
 
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     let pair = pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
     let g = pair ? (wgs + 1l) / 2l : wgs   //! a subgroup a row pair: half the row grid

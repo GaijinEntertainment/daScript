@@ -179,3 +179,16 @@ prepare fails on the path that skipped the ensure.
 `dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
+
+**A descriptor set the resident decode driver builds over a per-row plane
+(`dasllama/dasllama_vulkan_decode.das`) binds the plane's whole `RDec.nb`-row extent, never one
+row's - the one-row command reads row 0 of the same set.** A set sized to one row makes the N-row
+command read past its binding on every row but the first: an ungated q row sits inside the
+projection row, and a q binding sized to one row zeroed the batched step's second row.
+
+**A diff that adds a recorded form of the resident token command gives that form its own
+stamp-name list and stamp count, and puts `g_rdq_stamp_names` back to the one-row command's list
+before the recorder returns** (`dasllama/dasllama_vulkan_decode.das`). The profiler reads the
+submitted form's names; a form that keeps the shared list leaves every later one-row profile
+reading another form's role names, and a row count whose split form runs at one split still fills
+the split slot.

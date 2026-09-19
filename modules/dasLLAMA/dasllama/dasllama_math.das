@@ -165,9 +165,6 @@ var g_jobque_spin_us = 30000l
 def set_jobque_spin_us_(v : int64) { g_jobque_spin_us = max(v, 0l) }
 def get_jobque_spin_us_() : int64 { return g_jobque_spin_us }
 
-//! the window while the GPU serves the whole model: the pool carries only the sampler's argmax
-//! between steps, and a worker still spinning when the step's command is submitted starves the
-//! driver's submission thread (48-vCPU pod, Llama-3.2-1B at four streams: 30 ms 707 tok/s, 500 us 1053)
 var g_jobque_spin_gpu_us = 500l
 def set_jobque_spin_gpu_us_(v : int64) { g_jobque_spin_gpu_us = max(v, 0l) }
 def get_jobque_spin_gpu_us_() : int64 { return g_jobque_spin_gpu_us }
@@ -175,8 +172,6 @@ var g_dispatch_gpu_served = false
 //! the window the pool runs: the GPU window while the resident driver serves the model, the CPU window otherwise
 def get_jobque_spin_in_force_() : int64 => g_dispatch_gpu_served ? g_jobque_spin_gpu_us : g_jobque_spin_us
 
-//! the resident driver reports its arm and its drop here; a live queue takes the window at once,
-//! a queue made later reads it in `setup_dasllama_jobque_`
 [arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
 def public set_dispatch_gpu_served(on : bool) {
     g_dispatch_gpu_served = on

@@ -2053,9 +2053,8 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
     copy_floats(ws.scr.ple_inp, i * all, g_rdec_ple_rows, 0l, all)
 }
 
-//! the step's rows through the N-row token command, one weight pass for all: regions bound, histories brought up, one submit,
-//! each host-cached row's K/V read back and its logits landed; false when a row found no region or two rows one region,
-//! and the caller's row-at-a-time loop serves the step
+//! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim
