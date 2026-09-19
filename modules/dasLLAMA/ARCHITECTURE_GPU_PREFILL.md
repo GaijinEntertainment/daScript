@@ -265,13 +265,16 @@ Each format stamps `T` (`XT = float`) and `TH` (`XT = float16`); iq3s and iq3xxs
 tall stamp (form 1), the rest have no tall twin yet, none is double-buffered. Every stamp
 compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`) in
 `pf_compile_kq_iquant_tensor_twins`, and `pf_enc_kq_site_mm` dispatches a twin only when both
-the crown flag and the PSO are live. The crown is a RACE verdict (tensor stamp vs simdgroup base
+the crown flag and the PSO are live - `pf_kq_split_pso` and `pf_kq_split_tall_builder` are the one
+place a (format, form) maps to its pso and builder, a format with no tall stamp answering null so
+its tall arm stays closed. The crown is a RACE verdict (tensor stamp vs simdgroup base
 at one dense shape); whether the box can run tensor kernels at all is a separate fact, the
 toolchain probe `g_pf_tensor_ok` (one quiet compile of the dev-W GEMM at init). A box whose
 Metal has no mpp kernels fails the probe and keeps every base form whatever its sidecar says.
 
 The same classes carry the family's dev-W dequant pass (form 2): `MetalKqDequant<Fmt>` derives
-from the format's tensor class, adds the f16 panel binding, and runs the inherited `stage16`
+from the format's tensor class, sets the base's `DEQW` axis (which gates the f16 panel binding
+at 7 and the `dequant_shell` entry), and runs the inherited `stage16`
 over one 64x64 chunk per threadgroup into `twb`, then stores the tile into the panel; the
 site dispatcher offers these formats the dev-W arm ahead of their staged stamps. The staged
 stamp re-dequantizes W per 32-row tile, the whole gap on a small model: the 1B split-scale files

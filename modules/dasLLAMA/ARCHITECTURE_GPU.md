@@ -82,6 +82,11 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
+  A per-format family stamp is `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` (families `kq_mm`,
+  `moe_mm`, `moe_mm_split`): the lens derives every string the long form spells from the three tokens,
+  an argument spelled beside `stamp` wins, and the threadgroup-memory global is always
+  `<Class>_<kernel method>_msl_tgmem`. Hosts compile through `compile_stamp(<stem>_msl, ok)` - one
+  spelling, so a source never pairs with another kernel's entry - and release through `release_handles`.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no

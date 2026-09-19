@@ -33,6 +33,13 @@ binding order and push-constant layout were verified by hand against the class d
 The `REVIEW.das` gate `check_race_bind_numbers` cannot read those arms, so nothing but the PR
 statement catches a mis-numbered bind before it decides a ranking.
 
+**A diff that lifts race scaffolding into a shared shell keeps each race's `kn_kargs` and
+`kn_dispatch` calls in that race's own function.** The manual-dispatch census tallies kargs
+against dispatches per function after inlining, so a shell that takes the encode blocks as
+parameters merges every caller's tally into one and fails an unrelated caller with a nonsense
+count; the shell owns the result record, the pipelines and the bails, and the encode lines stay
+at their site.
+
 **A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or

@@ -145,7 +145,11 @@ zoo. Facts that decide the order:
   census cross-checks declared roles against the unreified body and reads the gated field as
   unused, while an undeclared role derives the same value; a method used in value position is
   an arrow-form single return, so a multi-statement format hook hands its value back through
-  a `var T&` parameter (the emitter's carve-out to the return-the-result rule); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
+  a `var T&` parameter (the emitter's carve-out to the return-the-result rule); a per-stamp `@off`
+  asymmetry on a shared binding rides a `@template_gate`d field pair at that binding plus one
+  `static_if` accessor arm; a ROWS-style axis that stages per-row values in fixed arrays is not
+  AIR-neutral (Metal's -O2 does not scalar-replace them once a stamp has two rows - the k4 tile,
+  `followup_general.md` item 96); the kernel-unit gates (`tests/test_metal_gemv_kernels.das`,
   `test_metal_gemm_kernels.das`) are the parity lock per format - green before and after, on the
   M1 first, the M5 pass after.
 - Detect-dupe (`utils/detect-dupe`) over the two files finds the exact-clone shells and the
