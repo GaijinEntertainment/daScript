@@ -143,6 +143,7 @@ jobs:
             -DDAS_HV_DISABLED=ON \
             -DDAS_LLVM_DISABLED=ON \
             -DDAS_GLFW_DISABLED=ON \
+            -DDAS_VULKAN_DISABLED=OFF \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja

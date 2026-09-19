@@ -31,7 +31,7 @@ daslang -load_module <path-to-dasVulkan> examples/enumerate.das                 
 
 Building the module requires no Vulkan SDK - the vendored headers and volk's runtime loading cover it. The LunarG SDK (validation layers, glslang) is recommended for development.
 
-**Running** needs a Vulkan loader + driver at runtime. Linux: `mesa-vulkan-drivers` (lavapipe) or a vendor ICD. **macOS**: `brew install molten-vk vulkan-loader vulkan-tools` - dasVulkan finds the Homebrew loader and enables MoltenVK portability automatically, so the offscreen examples and the windowed `examples/window_triangle.das` just work on Apple GPUs with no env vars.
+**Running** needs a Vulkan loader + driver at runtime. Linux: `mesa-vulkan-drivers` (lavapipe) or a vendor ICD. **macOS** (an opt-in: configure with `-DDAS_VULKAN_DISABLED=OFF`, the module is off by default on Apple): `brew install molten-vk vulkan-loader vulkan-tools` - dasVulkan finds the Homebrew loader and enables MoltenVK portability automatically, so the offscreen examples and the windowed `examples/window_triangle.das` just work on Apple GPUs with no env vars.
 
 ## Acknowledgements
 

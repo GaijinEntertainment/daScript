@@ -8,9 +8,9 @@ things live: `CLAUDE.md`.
 ## 1. The two layers
 
 dasVulkan binds [Vulkan](https://www.vulkan.org/) from the Khronos `vk.xml` registry and lives
-in-tree at `modules/dasVulkan/`. It builds by default: the root CMake option
-`DAS_VULKAN_DISABLED` defaults to `OFF`, and the headers plus volk are vendored, so building
-needs no Vulkan SDK.
+in-tree at `modules/dasVulkan/`. It builds by default on Linux and Windows: the root CMake option
+`DAS_VULKAN_DISABLED` defaults to `OFF` there and to `ON` on Apple (sec.9), and the headers plus
+volk are vendored, so building needs no Vulkan SDK.
 
 - **`vulkan`** - the raw binding: the full API, core and extensions, generated as a daslang
   C++ module dispatching through [volk](https://github.com/zeux/volk). It mirrors the C API
@@ -141,9 +141,14 @@ distinction; it is visible only when calling the raw layer directly.
 
 ## 9. Portability: macOS and MoltenVK {#portability-subset}
 
-macOS works through MoltenVK with no opt-in. The host needs one setup step,
-`brew install molten-vk vulkan-loader vulkan-tools`; four pieces then make it work, all of them
-platform-agnostic in the code:
+macOS runs through MoltenVK as an opt-in: an Apple build leaves the module out unless it is
+configured with `-DDAS_VULKAN_DISABLED=OFF`, because MoltenVK's compute limits (a 32 KB
+workgroup memory cap) decline the kernel classes the module's consumers serve, and what
+MoltenVK proves does not carry to a native Vulkan device - so a Mac pays the module's build
+and compile time for nothing by default. The nightly Vulkan lane's macOS job opts in and
+proves the loader path. With the opt-in the host needs one setup step, `brew install molten-vk
+vulkan-loader vulkan-tools`; four pieces then make it work, all of them platform-agnostic in
+the code:
 
 - **Loader discovery.** `das_volkInitialize` (`src/dasVULKAN.main.cpp`, `__APPLE__` branch)
   falls back to dlopen of the loader from `$VULKAN_SDK` or the Homebrew prefix when the

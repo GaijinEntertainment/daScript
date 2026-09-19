@@ -178,8 +178,9 @@ scratch/lifetime mechanism for chained structs, and an API-shape decision
 
 ## macOS - **DONE** (MoltenVK)
 
-macOS works with no opt-in: `brew install molten-vk vulkan-loader vulkan-tools`
-and the offscreen suite + windowed examples run on Apple GPUs via MoltenVK. Three
+macOS works as an opt-in (`-DDAS_VULKAN_DISABLED=OFF`; the module is off by default on Apple):
+`brew install molten-vk vulkan-loader vulkan-tools`, and the offscreen suite + windowed
+examples run on Apple GPUs via MoltenVK. Three
 pieces made it work, all platform-agnostic:
 
 - **Loader discovery** - `das_volkInitialize` (`src/dasVULKAN.main.cpp`, `__APPLE__`)
