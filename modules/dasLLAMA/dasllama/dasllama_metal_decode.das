@@ -2475,7 +2475,7 @@ def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier
     if (bt.use_mm) {
         enc_gemm_mm_b(enc, bw.buf, bw.boff, bx, by, uint64(ycol * 4l), bn, bys, bt.mp, rows)
     } elif (mv_ok) {
-        enc_mv_site(enc, bw.buf, bw.boff, bx, by, n, n / 4l, rows, bt.nrows, ys, uint64(n * 4l), uint64(ycol * 4l))
+        enc_mv_site(enc, bw.buf, bw.boff, bx, by, n, n / 4l, rows, bt.nrows, ys, uint64(ycol * 4l))
     } elif (sk > 0l) {
         enc_gemm_sk_b(enc, bw.buf, bw.boff, bx, bt.bpsk, gemm_sk_ka(n, rows, sk), rows, sk)
         enc_sk_reduce_b(enc, bt.bpsk, by, 32l * rows, sk)

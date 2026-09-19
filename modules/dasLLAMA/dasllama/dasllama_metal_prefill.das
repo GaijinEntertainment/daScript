@@ -520,12 +520,12 @@ class MetalPleFinish {
 [ |> template_struct_instance]
 class template MetalKqMulMmSplitTensorBase {
     @template_constant MT : uint = 32u
-    @template_constant TWB : int = 6144     //!< W stage halves: one 64x72 tile; 9216 = the two ping-pong tiles `db_shell` runs
+    @template_constant TWB : int = 6144     //!< W stage halves: one 64 wcols x 72-half padded tile (12288B lands mid-plateau); 9216 = the two ping-pong tiles `db_shell` runs
     @template_constant REM : bool = false   //!< the routed THR stamp's remainder pass
     @template_constant MOE : bool = false
     @template_constant DEQW : bool = false
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>  //!< the SAME buffer as binding 0, uint4 view
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
     @ssbo @binding = 3 @off = "xoff" xf : array<XT> //!< raw activations (float, or the converted f16 panel)
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
@@ -592,10 +592,10 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
-    def moe_shell(ecount, rbase : uint; rem : bool) {
+    def moe_shell(erows, rbase : uint; rem : bool) {
         let e = gl_WorkGroupID.z
-        let mBase = gl_WorkGroupID.x * MT + (rem ? ecount / 128u * 128u : 0u)
-        let lim = MT == 128u ? ecount / 128u * 128u : (ecount + 31u) / 32u * 32u
+        let mBase = gl_WorkGroupID.x * MT + (rem ? erows / 128u * 128u : 0u)
+        let lim = MT == 128u ? erows / 128u * 128u : (erows + 31u) / 32u * 32u
         if (mBase >= lim) {
             return
         }
@@ -4186,8 +4186,8 @@ var private g_pf_logits_cpu = false            //!< set_metal_prefill_logits_cpu
 var private g_pf_skip = ""
 
 //! an "only" family keeps the routing and drops every stage downstream, so it knocks out this one too
-def private pf_skip_moe_stage(own : string) : bool {
-    return (g_pf_skip == own || g_pf_skip == "moe_only_route" || g_pf_skip == "moe_only_router" || g_pf_skip == "moe_only_sel")
+def private pf_skip_moe_stage(stage : string) : bool {
+    return (g_pf_skip == stage || g_pf_skip == "moe_only_route" || g_pf_skip == "moe_only_router" || g_pf_skip == "moe_only_sel")
 }
 
 def private pf_skip_moe_mm : bool => pf_skip_moe_stage("moe_mm") || g_pf_skip == "moe_no_mm_act"
@@ -5356,54 +5356,37 @@ typedef KqSplitEnc = function<(enc : MetalComputeEncoder?; bkdh : MetalBuffer?; 
                                bkqu : MetalBuffer?; qoff : uint64; bxf : MetalBuffer?; xoff : uint64; by : MetalBuffer?; yoff : uint64;
                                bkdim : MetalBuffer?; bndim : MetalBuffer?; mp : int64; rows : int64) : void>
 
-def private pf_kq_split_crowned(fmt : KqFmt) : bool {
-    if (fmt == KqFmt.iq4xs) return g_pf_kq_mm44_tensor
-    if (fmt == KqFmt.iq4nl) return g_pf_kq_mm45_tensor
-    if (fmt == KqFmt.q40) return g_pf_kq_mm40_tensor
-    if (fmt == KqFmt.k3) return g_pf_kq_mm3_tensor
-    if (fmt == KqFmt.iq3s) return g_pf_kq_mm33_tensor
-    if (fmt == KqFmt.iq3xxs) return g_pf_kq_mm34_tensor
-    if (fmt == KqFmt.k2) return g_pf_kq_mm2_tensor
-    if (fmt == KqFmt.iq2s) return g_pf_kq_mm23_tensor
-    if (fmt == KqFmt.iq2xs) return g_pf_kq_mm24_tensor
-    if (fmt == KqFmt.iq2xxs) return g_pf_kq_mm25_tensor
-    return false
+//! one dense split-scale format's crown flag, compiled twins and their builders, in one row: the
+//! t (f32 X) and th (half-X) forms every split format stamps, plus the 128-row tall form only
+//! iq3s and iq3xxs stamp - a format that stamps no tall twin leaves both th128 cells null
+struct private KqSplitStamps {
+    crown : bool
+    pso_t, pso_th, pso_th128 : MetalComputePipeline?
+    enc_t, enc_th, enc_th128 : KqSplitEnc
 }
 
-def private pf_kq_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePipeline? {   // nolint:STYLE037 — flat per-format pick
-    if (fmt == KqFmt.iq4xs) return form == MoeSplitForm.t ? g_pf_pso_kq_mm44_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm44_th : null)
-    if (fmt == KqFmt.iq4nl) return form == MoeSplitForm.t ? g_pf_pso_kq_mm45_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm45_th : null)
-    if (fmt == KqFmt.q40) return form == MoeSplitForm.t ? g_pf_pso_kq_mm40_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm40_th : null)
-    if (fmt == KqFmt.k3) return form == MoeSplitForm.t ? g_pf_pso_kq_mm3_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm3_th : null)
-    if (fmt == KqFmt.iq3s) return form == MoeSplitForm.t ? g_pf_pso_kq_mm33_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm33_th : (form == MoeSplitForm.th128 ? g_pf_pso_kq_mm33_th128 : null))
-    if (fmt == KqFmt.iq3xxs) return form == MoeSplitForm.t ? g_pf_pso_kq_mm34_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm34_th : (form == MoeSplitForm.th128 ? g_pf_pso_kq_mm34_th128 : null))
-    if (fmt == KqFmt.k2) return form == MoeSplitForm.t ? g_pf_pso_kq_mm2_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm2_th : null)
-    if (fmt == KqFmt.iq2s) return form == MoeSplitForm.t ? g_pf_pso_kq_mm23_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm23_th : null)
-    if (fmt == KqFmt.iq2xs) return form == MoeSplitForm.t ? g_pf_pso_kq_mm24_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm24_th : null)
-    if (fmt == KqFmt.iq2xxs) return form == MoeSplitForm.t ? g_pf_pso_kq_mm25_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm25_th : null)
-    return null
-}
-
-def private pf_kq_split_builder(fmt : KqFmt; half : bool) : KqSplitEnc {   // nolint:STYLE037 — flat per-format pick
-    if (fmt == KqFmt.iq4xs) return half ? @@enc_kq_mm_iq4xs_th_c : @@enc_kq_mm_iq4xs_t_c
-    if (fmt == KqFmt.iq4nl) return half ? @@enc_kq_mm_iq4nl_th_c : @@enc_kq_mm_iq4nl_t_c
-    if (fmt == KqFmt.q40) return half ? @@enc_kq_mm_q40_th_c : @@enc_kq_mm_q40_t_c
-    if (fmt == KqFmt.k3) return half ? @@enc_kq_mm_k3_th_c : @@enc_kq_mm_k3_t_c
-    if (fmt == KqFmt.iq3s) return half ? @@enc_kq_mm_iq3s_th_c : @@enc_kq_mm_iq3s_t_c
-    if (fmt == KqFmt.iq3xxs) return half ? @@enc_kq_mm_iq3xxs_th_c : @@enc_kq_mm_iq3xxs_t_c
-    if (fmt == KqFmt.k2) return half ? @@enc_kq_mm_k2_th_c : @@enc_kq_mm_k2_t_c
-    if (fmt == KqFmt.iq2s) return half ? @@enc_kq_mm_iq2s_th_c : @@enc_kq_mm_iq2s_t_c
-    if (fmt == KqFmt.iq2xs) return half ? @@enc_kq_mm_iq2xs_th_c : @@enc_kq_mm_iq2xs_t_c
-    if (fmt == KqFmt.iq2xxs) return half ? @@enc_kq_mm_iq2xxs_th_c : @@enc_kq_mm_iq2xxs_t_c
-    panic("metal prefill: weight format {fmt} has no dense split twin - pf_kq_split_fmt admitted it")
-    return @@enc_kq_mm_iq4xs_t_c   //! unreachable - the panic above is the unserved-format guard
-}
-
-def private pf_kq_split_tall_builder(fmt : KqFmt) : KqSplitEnc {
-    if (fmt == KqFmt.iq3s) return @@enc_kq_mm_iq3s_th128_c
-    if (fmt == KqFmt.iq3xxs) return @@enc_kq_mm_iq3xxs_th128_c
-    panic("metal prefill: weight format {fmt} stamps no tall dense twin - pf_kq_split_pso admitted it")
-    return @@enc_kq_mm_iq3s_th128_c   //! unreachable - the panic above is the unserved-form guard
+def private pf_kq_split_stamps(fmt : KqFmt) : KqSplitStamps {
+    if (fmt == KqFmt.iq4xs) return KqSplitStamps(crown = g_pf_kq_mm44_tensor, pso_t = g_pf_pso_kq_mm44_t, pso_th = g_pf_pso_kq_mm44_th,
+        enc_t = @@enc_kq_mm_iq4xs_t_c, enc_th = @@enc_kq_mm_iq4xs_th_c)
+    if (fmt == KqFmt.iq4nl) return KqSplitStamps(crown = g_pf_kq_mm45_tensor, pso_t = g_pf_pso_kq_mm45_t, pso_th = g_pf_pso_kq_mm45_th,
+        enc_t = @@enc_kq_mm_iq4nl_t_c, enc_th = @@enc_kq_mm_iq4nl_th_c)
+    if (fmt == KqFmt.q40) return KqSplitStamps(crown = g_pf_kq_mm40_tensor, pso_t = g_pf_pso_kq_mm40_t, pso_th = g_pf_pso_kq_mm40_th,
+        enc_t = @@enc_kq_mm_q40_t_c, enc_th = @@enc_kq_mm_q40_th_c)
+    if (fmt == KqFmt.k3) return KqSplitStamps(crown = g_pf_kq_mm3_tensor, pso_t = g_pf_pso_kq_mm3_t, pso_th = g_pf_pso_kq_mm3_th,
+        enc_t = @@enc_kq_mm_k3_t_c, enc_th = @@enc_kq_mm_k3_th_c)
+    if (fmt == KqFmt.iq3s) return KqSplitStamps(crown = g_pf_kq_mm33_tensor, pso_t = g_pf_pso_kq_mm33_t, pso_th = g_pf_pso_kq_mm33_th,
+        pso_th128 = g_pf_pso_kq_mm33_th128, enc_t = @@enc_kq_mm_iq3s_t_c, enc_th = @@enc_kq_mm_iq3s_th_c, enc_th128 = @@enc_kq_mm_iq3s_th128_c)
+    if (fmt == KqFmt.iq3xxs) return KqSplitStamps(crown = g_pf_kq_mm34_tensor, pso_t = g_pf_pso_kq_mm34_t, pso_th = g_pf_pso_kq_mm34_th,
+        pso_th128 = g_pf_pso_kq_mm34_th128, enc_t = @@enc_kq_mm_iq3xxs_t_c, enc_th = @@enc_kq_mm_iq3xxs_th_c, enc_th128 = @@enc_kq_mm_iq3xxs_th128_c)
+    if (fmt == KqFmt.k2) return KqSplitStamps(crown = g_pf_kq_mm2_tensor, pso_t = g_pf_pso_kq_mm2_t, pso_th = g_pf_pso_kq_mm2_th,
+        enc_t = @@enc_kq_mm_k2_t_c, enc_th = @@enc_kq_mm_k2_th_c)
+    if (fmt == KqFmt.iq2s) return KqSplitStamps(crown = g_pf_kq_mm23_tensor, pso_t = g_pf_pso_kq_mm23_t, pso_th = g_pf_pso_kq_mm23_th,
+        enc_t = @@enc_kq_mm_iq2s_t_c, enc_th = @@enc_kq_mm_iq2s_th_c)
+    if (fmt == KqFmt.iq2xs) return KqSplitStamps(crown = g_pf_kq_mm24_tensor, pso_t = g_pf_pso_kq_mm24_t, pso_th = g_pf_pso_kq_mm24_th,
+        enc_t = @@enc_kq_mm_iq2xs_t_c, enc_th = @@enc_kq_mm_iq2xs_th_c)
+    if (fmt == KqFmt.iq2xxs) return KqSplitStamps(crown = g_pf_kq_mm25_tensor, pso_t = g_pf_pso_kq_mm25_t, pso_th = g_pf_pso_kq_mm25_th,
+        enc_t = @@enc_kq_mm_iq2xxs_t_c, enc_th = @@enc_kq_mm_iq2xxs_th_c)
+    return KqSplitStamps(crown = false)   //! pf_kq_split_fmt admits only the rows above
 }
 
 struct private KqDeepStamps {
@@ -5455,24 +5438,22 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
         }
     }
     if (pf_kq_split_fmt(fmt)) {
-        let pso_t = pf_kq_split_pso(fmt, MoeSplitForm.t)
-        let pso_th = pf_kq_split_pso(fmt, MoeSplitForm.th)
-        let pso_th128 = pf_kq_split_pso(fmt, MoeSplitForm.th128)
-        if (!pf_kq_split_crowned(fmt) || pso_t == null) {
+        let ss <- pf_kq_split_stamps(fmt)
+        if (!ss.crown || ss.pso_t == null) {
             enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, yoff, bk, bn, mp, rows)
             return
         }
         let d0 = (fmt == KqFmt.iq4nl || fmt == KqFmt.q40) ? bs.soff : bs.doff
-        if (bxh != null && pso_th128 != null && pso_th != null && tallkq_pick(mp, rows, kdim, pf_tall_on())) {
+        if (bxh != null && ss.pso_th128 != null && ss.pso_th != null && tallkq_pick(mp, rows, kdim, pf_tall_on())) {
             let r0 = mp / 128l * 128l
-            invoke(pf_kq_split_tall_builder(fmt), enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, r0, rows)
+            invoke(ss.enc_th128, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, r0, rows)
             if (mp - r0 > 0l) {
-                invoke(pf_kq_split_builder(fmt, true), enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * rows * 4l), bk, bn, mp - r0, rows)
+                invoke(ss.enc_th, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * rows * 4l), bk, bn, mp - r0, rows)
             }
-        } elif (bxh != null && pso_th != null) {
-            invoke(pf_kq_split_builder(fmt, true), enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, mp, rows)
+        } elif (bxh != null && ss.pso_th != null) {
+            invoke(ss.enc_th, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, mp, rows)
         } else {
-            invoke(pf_kq_split_builder(fmt, false), enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, yoff, bk, bn, mp, rows)
+            invoke(ss.enc_t, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, yoff, bk, bn, mp, rows)
         }
         return
     }
@@ -5568,38 +5549,44 @@ typedef MoeSplitEnc = function<(enc : MetalComputeEncoder?; bkdh : MetalBuffer?;
                                 bkdim : MetalBuffer?; bndim : MetalBuffer?; bcnt : MetalBuffer?; bbasep : MetalBuffer?;
                                 mp : int64; rows : int64; ne : int64; tiles : int64) : void>
 
-def private pf_moe_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePipeline? {   // nolint:STYLE037 — flat per-format pick
-    if (fmt == KqFmt.k3) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_k3_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_k3_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_k3_th128 : g_pf_pso_moe_mm_k3_thr))
-    if (fmt == KqFmt.iq4xs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq4xs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq4xs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq4xs_th128 : g_pf_pso_moe_mm_iq4xs_thr))
-    if (fmt == KqFmt.q40) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_q40_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_q40_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_q40_th128 : g_pf_pso_moe_mm_q40_thr))
-    if (fmt == KqFmt.iq3s) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq3s_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq3s_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq3s_th128 : g_pf_pso_moe_mm_iq3s_thr))
-    if (fmt == KqFmt.iq3xxs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq3xxs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq3xxs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq3xxs_th128 : g_pf_pso_moe_mm_iq3xxs_thr))
-    if (fmt == KqFmt.iq2s) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq2s_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq2s_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq2s_th128 : g_pf_pso_moe_mm_iq2s_thr))
-    if (fmt == KqFmt.iq2xs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq2xs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq2xs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq2xs_th128 : g_pf_pso_moe_mm_iq2xs_thr))
-    if (fmt == KqFmt.iq2xxs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq2xxs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq2xxs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq2xxs_th128 : g_pf_pso_moe_mm_iq2xxs_thr))
-    return null
+//! one expert-plane format's four compiled twins and their builders, in one row - a pso and the
+//! builder that dispatches it are the same cell's pair, so neither can be picked without the other
+struct private MoeSplitStamps {
+    pso_t, pso_th, pso_th128, pso_thr : MetalComputePipeline?
+    enc_t, enc_th, enc_th128, enc_thr : MoeSplitEnc
+}
+
+def private pf_moe_split_stamps(fmt : KqFmt) : MoeSplitStamps {
+    if (fmt == KqFmt.k3) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_k3_t, pso_th = g_pf_pso_moe_mm_k3_th, pso_th128 = g_pf_pso_moe_mm_k3_th128, pso_thr = g_pf_pso_moe_mm_k3_thr,
+        enc_t = @@pf_enc_moe_mm_k3_t_c, enc_th = @@pf_enc_moe_mm_k3_th_c, enc_th128 = @@pf_enc_moe_mm_k3_th128_c, enc_thr = @@pf_enc_moe_mm_k3_thr_c)
+    if (fmt == KqFmt.iq4xs) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq4xs_t, pso_th = g_pf_pso_moe_mm_iq4xs_th, pso_th128 = g_pf_pso_moe_mm_iq4xs_th128, pso_thr = g_pf_pso_moe_mm_iq4xs_thr,
+        enc_t = @@pf_enc_moe_mm_iq4xs_t_c, enc_th = @@pf_enc_moe_mm_iq4xs_th_c, enc_th128 = @@pf_enc_moe_mm_iq4xs_th128_c, enc_thr = @@pf_enc_moe_mm_iq4xs_thr_c)
+    if (fmt == KqFmt.q40) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_q40_t, pso_th = g_pf_pso_moe_mm_q40_th, pso_th128 = g_pf_pso_moe_mm_q40_th128, pso_thr = g_pf_pso_moe_mm_q40_thr,
+        enc_t = @@pf_enc_moe_mm_q40_t_c, enc_th = @@pf_enc_moe_mm_q40_th_c, enc_th128 = @@pf_enc_moe_mm_q40_th128_c, enc_thr = @@pf_enc_moe_mm_q40_thr_c)
+    if (fmt == KqFmt.iq3s) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq3s_t, pso_th = g_pf_pso_moe_mm_iq3s_th, pso_th128 = g_pf_pso_moe_mm_iq3s_th128, pso_thr = g_pf_pso_moe_mm_iq3s_thr,
+        enc_t = @@pf_enc_moe_mm_iq3s_t_c, enc_th = @@pf_enc_moe_mm_iq3s_th_c, enc_th128 = @@pf_enc_moe_mm_iq3s_th128_c, enc_thr = @@pf_enc_moe_mm_iq3s_thr_c)
+    if (fmt == KqFmt.iq3xxs) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq3xxs_t, pso_th = g_pf_pso_moe_mm_iq3xxs_th, pso_th128 = g_pf_pso_moe_mm_iq3xxs_th128, pso_thr = g_pf_pso_moe_mm_iq3xxs_thr,
+        enc_t = @@pf_enc_moe_mm_iq3xxs_t_c, enc_th = @@pf_enc_moe_mm_iq3xxs_th_c, enc_th128 = @@pf_enc_moe_mm_iq3xxs_th128_c, enc_thr = @@pf_enc_moe_mm_iq3xxs_thr_c)
+    if (fmt == KqFmt.iq2s) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq2s_t, pso_th = g_pf_pso_moe_mm_iq2s_th, pso_th128 = g_pf_pso_moe_mm_iq2s_th128, pso_thr = g_pf_pso_moe_mm_iq2s_thr,
+        enc_t = @@pf_enc_moe_mm_iq2s_t_c, enc_th = @@pf_enc_moe_mm_iq2s_th_c, enc_th128 = @@pf_enc_moe_mm_iq2s_th128_c, enc_thr = @@pf_enc_moe_mm_iq2s_thr_c)
+    if (fmt == KqFmt.iq2xs) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq2xs_t, pso_th = g_pf_pso_moe_mm_iq2xs_th, pso_th128 = g_pf_pso_moe_mm_iq2xs_th128, pso_thr = g_pf_pso_moe_mm_iq2xs_thr,
+        enc_t = @@pf_enc_moe_mm_iq2xs_t_c, enc_th = @@pf_enc_moe_mm_iq2xs_th_c, enc_th128 = @@pf_enc_moe_mm_iq2xs_th128_c, enc_thr = @@pf_enc_moe_mm_iq2xs_thr_c)
+    if (fmt == KqFmt.iq2xxs) return MoeSplitStamps(pso_t = g_pf_pso_moe_mm_iq2xxs_t, pso_th = g_pf_pso_moe_mm_iq2xxs_th, pso_th128 = g_pf_pso_moe_mm_iq2xxs_th128, pso_thr = g_pf_pso_moe_mm_iq2xxs_thr,
+        enc_t = @@pf_enc_moe_mm_iq2xxs_t_c, enc_th = @@pf_enc_moe_mm_iq2xxs_th_c, enc_th128 = @@pf_enc_moe_mm_iq2xxs_th128_c, enc_thr = @@pf_enc_moe_mm_iq2xxs_thr_c)
+    return MoeSplitStamps()   //! pf_moe_split_fmt admits only the rows above
 }
 
 def private pf_moe_split_th_any() : bool => g_pf_pso_moe_mm_k3_th != null || g_pf_pso_moe_mm_iq4xs_th != null || g_pf_pso_moe_mm_q40_th != null || g_pf_pso_moe_mm_iq3s_th != null || g_pf_pso_moe_mm_iq3xxs_th != null || g_pf_pso_moe_mm_iq2s_th != null || g_pf_pso_moe_mm_iq2xs_th != null || g_pf_pso_moe_mm_iq2xxs_th != null
-
-def private pf_moe_split_builder(fmt : KqFmt; form : MoeSplitForm) : MoeSplitEnc {   // nolint:STYLE037 - flat per-format pick
-    if (fmt == KqFmt.k3) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_k3_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_k3_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_k3_th128_c : @@pf_enc_moe_mm_k3_thr_c))
-    if (fmt == KqFmt.iq4xs) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq4xs_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq4xs_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq4xs_th128_c : @@pf_enc_moe_mm_iq4xs_thr_c))
-    if (fmt == KqFmt.q40) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_q40_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_q40_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_q40_th128_c : @@pf_enc_moe_mm_q40_thr_c))
-    if (fmt == KqFmt.iq3s) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq3s_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq3s_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq3s_th128_c : @@pf_enc_moe_mm_iq3s_thr_c))
-    if (fmt == KqFmt.iq3xxs) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq3xxs_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq3xxs_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq3xxs_th128_c : @@pf_enc_moe_mm_iq3xxs_thr_c))
-    if (fmt == KqFmt.iq2s) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq2s_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq2s_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq2s_th128_c : @@pf_enc_moe_mm_iq2s_thr_c))
-    if (fmt == KqFmt.iq2xs) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq2xs_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq2xs_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq2xs_th128_c : @@pf_enc_moe_mm_iq2xs_thr_c))
-    if (fmt == KqFmt.iq2xxs) return form == MoeSplitForm.t ? @@pf_enc_moe_mm_iq2xxs_t_c : (form == MoeSplitForm.th ? @@pf_enc_moe_mm_iq2xxs_th_c : (form == MoeSplitForm.th128 ? @@pf_enc_moe_mm_iq2xxs_th128_c : @@pf_enc_moe_mm_iq2xxs_thr_c))
-    panic("metal moe prefill: expert plane format {fmt} has no split twin - pf_moe_split_fmt admitted it")
-    return @@pf_enc_moe_mm_k3_t_c   //! unreachable - the panic above is the unserved-format guard
-}
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets")]
 def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : MoeSplitForm;
                              bs : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64>; bq : tuple<buf : MetalBuffer?; qoff : uint64>;
                              bx, by, bkd, bnd, bcnt, bbase : MetalBuffer?; mpad, rows, ne, tiles : int64) {
-    let encf = pf_moe_split_builder(fmt, form)
+    let ms <- pf_moe_split_stamps(fmt)
+    let encf = form == MoeSplitForm.t ? ms.enc_t : (form == MoeSplitForm.th ? ms.enc_th : (form == MoeSplitForm.th128 ? ms.enc_th128 : ms.enc_thr))
+    if (encf == null) {
+        panic("metal moe prefill: expert plane format {fmt} has no split twin - pf_moe_split_fmt admitted it")
+    }
     let d0 = fmt == KqFmt.q40 ? bs.soff : bs.doff
     invoke(encf, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
 }
@@ -5620,7 +5607,7 @@ def private pf_moe_twins_ready(t : Model) : bool {
         let fe1 = fmt_at(t.we1_fmt, l)
         let fe3 = fmt_at(t.we3_fmt, l)
         for (f in [fe1, fmt_at(t.we2_fmt, l), fe3]) {
-            if (pf_moe_split_fmt(f) && pf_moe_split_pso(f, MoeSplitForm.t) == null) {
+            if (pf_moe_split_fmt(f) && pf_moe_split_stamps(f).pso_t == null) {
                 return false
             }
         }
@@ -5646,11 +5633,12 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
     if (pf_moe_split_fmt(fmt)) {
         let bq = kq_quants_of(g_dev, t, fmt, stack_off)
         let bs = kq_scales_of(g_dev, t, fmt, stack_off)
-        if (!contiguous || pf_moe_split_pso(fmt, MoeSplitForm.t) == null || bkd == null || bnd == null) {
+        let ms <- pf_moe_split_stamps(fmt)
+        if (!contiguous || ms.pso_t == null || bkd == null || bnd == null) {
             panic("metal moe prefill: {fmt} experts serve through the tensor twins over contiguous rows only - pf_moe_twins_ready admitted the model")
         }
-        if (bxh != null && pf_moe_split_pso(fmt, MoeSplitForm.th) != null) {
-            if (pf_moe_tall_pick(npos, int64(ka.nk), ne, pf_moe_split_pso(fmt, MoeSplitForm.th128), pf_moe_split_pso(fmt, MoeSplitForm.thr))) {
+        if (bxh != null && ms.pso_th != null) {
+            if (pf_moe_tall_pick(npos, int64(ka.nk), ne, ms.pso_th128, ms.pso_thr)) {
                 pf_moe_split_enc(enc, fmt, MoeSplitForm.th128, bs, bq, bxh, by, bkd, bnd, bcnt, bbase, mpad, rows, ne, npos / 128l)
                 pf_moe_split_enc(enc, fmt, MoeSplitForm.thr, bs, bq, bxh, by, bkd, bnd, bcnt, bbase, mpad, rows, ne, 4l)
             } else {
@@ -7242,43 +7230,11 @@ def dasllama_metal_prefill_register() {
 }
 
 
-//! ok false means verdict already holds the answer, the pipelines are released, and nothing is timed
-struct private RacePsoPair {
-    base_pso, twin_pso : MetalComputePipeline?
-    verdict : MetalTensorRaceResult
-    ok : bool
-}
-
-def private race_pso_pair(dev : MetalDevice?; family : string;
-                          base_src, base_entry : string; base_fm : bool;
-                          twin_src, twin_entry : string; twin_fm : bool) : RacePsoPair {
-    var p = RacePsoPair(base_pso = null, twin_pso = null, ok = false,
-        verdict = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = ""))
-    var err = ""
-    p.base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
-    if (p.base_pso == null) {
-        p.verdict.note = "base pso: {err}"
-        return p
-    }
-    p.twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
-    if (p.twin_pso == null) {
-        p.verdict.winner = "simdgroup"
-        p.verdict.note = "twin pso: {err}"
-        metal_release(p.base_pso)
-        p.base_pso = null
-        return p
-    }
-    p.ok = true
-    return p
-}
-
 def private race_hmm_tall(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
     let m = 512
     let kdim = 2048
     let ndim = 2048
-    var p = race_pso_pair(dev, "hmm_tall",
-        MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath,
-        MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath)
+    var p = race_pso_pair_stamp(dev, "hmm_tall", MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl)
     return p.verdict if (!p.ok)
     var res = p.verdict
     let base_pso = p.base_pso
@@ -7327,9 +7283,7 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
     let m = 512
     let kdim = 2048
     let ndim = 1024
-    var p = race_pso_pair(dev, "mulmm_bf16",
-        metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath,
-        MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath)
+    var p = race_pso_pair_stamp(dev, "mulmm_bf16", metal_bf16_mulmm_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl)
     return p.verdict if (!p.ok)
     var res = p.verdict
     let base_pso = p.base_pso
@@ -7383,9 +7337,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     let kdim = 2048
     let ndim = 1024
     let nkb = kdim / 32
-    var p = race_pso_pair(dev, "mulmm_q8",
-        metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath,
-        MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath)
+    var p = race_pso_pair_stamp(dev, "mulmm_q8", metal_q8_mulmm_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl)
     return p.verdict if (!p.ok)
     var res = p.verdict
     let base_pso = p.base_pso
@@ -7441,9 +7393,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     let ndim = 1024
     let nkb = kdim / 32
     let eblk = ndim * nkb
-    var p = race_pso_pair(dev, "moe_mulmm_q8",
-        metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath,
-        MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_fastmath)
+    var p = race_pso_pair_stamp(dev, "moe_mulmm_q8", metal_moe_mulmm_q8_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl)
     return p.verdict if (!p.ok)
     var res = p.verdict
     let base_pso = p.base_pso
@@ -7515,9 +7465,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     let ndim = 1024
     let nkb = kdim / 32
     let eblk = ndim * nkb
-    var p = race_pso_pair(dev, "moe_mulmm_mx4",
-        metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath,
-        MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_fastmath)
+    var p = race_pso_pair_stamp(dev, "moe_mulmm_mx4", metal_moe_mulmm_mx4_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl)
     return p.verdict if (!p.ok)
     var res = p.verdict
     let base_pso = p.base_pso

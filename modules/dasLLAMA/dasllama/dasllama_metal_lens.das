@@ -682,6 +682,32 @@ class CompileStampMacro : AstCallMacro {
     }
 }
 
+[call_macro(name = "race_pso_pair_stamp")]
+class RacePsoPairStampMacro : AstCallMacro {
+    //! ``race_pso_pair_stamp(dev, "family", <Base>_msl, <Twin>_msl)`` - a race's two pipelines
+    //! from ONE kernel stem each. It spells `race_pso_pair`'s triples for the same reason
+    //! `compile_stamp` spells one: a hand-written entry name pairs one kernel's source with
+    //! another's entry, and the race then times a kernel nobody named. One line also keeps both
+    //! stems where `check_race_bind_numbers` (REVIEW.das) reads the arm's class.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        if (length(expr.arguments) != 4 || !(expr.arguments[2] is ExprVar) || !(expr.arguments[3] is ExprVar)) {
+            macro_error(prog, expr.at, "race_pso_pair_stamp expects (dev, family, <Base>_msl, <Twin>_msl), got {describe(expr)}")
+            return <- qmacro(null)
+        }
+        let base = "{(expr.arguments[2] as ExprVar).name}"
+        let twin = "{(expr.arguments[3] as ExprVar).name}"
+        for (src in [base, twin]) {
+            if (!(src |> ends_with("_msl"))) {
+                macro_error(prog, expr.at, "race_pso_pair_stamp: '{src}' is not a kernel source global (<Class>_<kernel>_msl)")
+                return <- qmacro(null)
+            }
+        }
+        return <- qmacro(race_pso_pair($e(expr.arguments[0]), $e(expr.arguments[1]),
+            $i(base), $i("{base}_entry"), $i("{base}_fastmath"),
+            $i(twin), $i("{twin}_entry"), $i("{twin}_fastmath")))
+    }
+}
+
 [call_macro(name = "release_handles")]
 class ReleaseHandlesMacro : AstCallMacro {
     //! ``release_handles(a, b, c, ...)`` - one ``release_handle`` per slot named.

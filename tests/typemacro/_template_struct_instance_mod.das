@@ -25,7 +25,7 @@ class public XModBase {
 }
 
 [ |> template_struct_instance]
-class template public XModOverBase : XModBase {
+class template public XModOverKern : XModBase {
     @template_constant STEP : int = 1
 
     def value : int {

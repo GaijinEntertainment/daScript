@@ -2356,6 +2356,38 @@ def kq_race_verdict(var res : MetalTensorRaceResult; by_a, by_b : MetalBuffer?; 
     }
 }
 
+//! ok false means verdict already holds the answer, the pipelines are released, and nothing is timed
+struct public RacePsoPair {
+    base_pso, twin_pso : MetalComputePipeline?
+    verdict : MetalTensorRaceResult
+    ok : bool
+}
+
+//! the `race_pso_pair_stamp` macro is the spelling a race arm uses - it names each side by its
+//! ONE `_msl` stem, so the entry name and the fastmath flag cannot drift onto another kernel's
+def race_pso_pair(dev : MetalDevice?; family : string;
+                  base_src, base_entry : string; base_fm : bool;
+                  twin_src, twin_entry : string; twin_fm : bool) : RacePsoPair {
+    var p = RacePsoPair(base_pso = null, twin_pso = null, ok = false,
+        verdict = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = ""))
+    var err = ""
+    p.base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
+    if (p.base_pso == null) {
+        p.verdict.note = "base pso: {err}"
+        return p
+    }
+    p.twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
+    if (p.twin_pso == null) {
+        p.verdict.winner = "simdgroup"
+        p.verdict.note = "twin pso: {err}"
+        metal_release(p.base_pso)
+        p.base_pso = null
+        return p
+    }
+    p.ok = true
+    return p
+}
+
 // interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp
 // as a phantom winner (reds-dig2; sequential blocks INVERTED m4's kq verdicts). Best-of/side;
 // ~150ms of burn first, else round 1 bills the governor's ramp to the base side alone.

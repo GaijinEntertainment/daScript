@@ -2085,9 +2085,17 @@ def test_metal_misc_kernels(t : T?) {
 }
 
 //! spawns a compile of a one-class [metal_dispatch] program carrying @workgroup state; `extra`
-//! is spliced verbatim into the dispatch attribute list (the requires= grammar gate rides it)
-def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "") : tuple<rc : int; out : string> {
+//! is spliced verbatim into the dispatch attribute list (the requires= grammar gate rides it).
+//! A non-empty `stamp` replaces the hand-written attribute with that `stamp =` spec and drops
+//! the kernel's explicit name, so the class's threadgroup memory can only come from the lens's
+//! own derivation - which the program's main then names.
+def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = ""; stamp : string = "") : tuple<rc : int; out : string> {
     let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
+    let attr = (empty(stamp)
+        ? "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]"
+        : "[metal_dispatch(stamp = \"{stamp}\", pso = \"g_wg_fixture_pso\")]")
+    let kann = empty(stamp) ? "    [metal_kernel(name = \"wg_fixture_msl\")]" : "    [metal_kernel]"
+    let probe = empty(stamp) ? "" : "    assert(WgFixture_kmain_msl_tgmem > 0ul)"
     let src = join([
         "options gen2",
         "options _dasllama_internal = true",
@@ -2098,12 +2106,12 @@ def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "
         "require dasllama/dasllama_metal_common",
         "require dasllama/dasllama_metal_lens",
         "",
-        "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]",
+        attr,
         "class WgFixture \{",
         "    @ssbo @binding = 0 @role = \"write\" ys : array<float>",
         "    @workgroup acc : float[64]",
         "",
-        "    [metal_kernel(name = \"wg_fixture_msl\")]",
+        kann,
         "    def kmain \{",
         "        let i = gl_GlobalInvocationID.x",
         "        acc[gl_LocalInvocationID.x] = 1.0",
@@ -2115,6 +2123,7 @@ def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = "
         "",
         "[export]",
         "def main() \{",
+        probe,
         "    print(\"ok\\n\")",
         "\}"], "\n")
     let dir_r = create_temp_directory_result("dasllama_lens_{tag}")
@@ -2144,6 +2153,11 @@ def test_lens_tgmem_gate(t : T?) {
             t |> success(find(bad.out, "no tgmem=") >= 0, "the refusal names the gate: {bad.out}")
             let good = spawn_wg_fixture(true, "ok")
             t |> equal(0, good.rc, "the tgmem= twin compiles: {good.out}")
+            // the stamped arm: no tgmem= to give, so the builder can only bind the name the lens
+            // derives - main names that same global, and an unresolved one fails the compile
+            let stamped = spawn_wg_fixture(false, "stamp", "", "kq_mm:wgfix:t")
+            t |> equal(0, stamped.rc, "a stamped class derives its tgmem instead of refusing: {stamped.out}")
+            t |> success(find(stamped.out, "no tgmem=") < 0, "the stamped class is not refused: {stamped.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }

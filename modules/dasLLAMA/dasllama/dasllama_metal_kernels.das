@@ -1106,14 +1106,15 @@ class template MetalArgmaxT {
     @uniform @binding = 2 n : uint
     @workgroup redv : float[32]
     @workgroup redi : uint[32]
-    @template_constant ROWS : bool = false
+    @template_constant PER_ROW : bool = false
 
+    [arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
     def argmax_row {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
         var base = 0u    // nolint:LINT003,LINT010 — the single stamp reads these inits, the
-        var slot = 0u    // nolint:LINT003,LINT010 — ROWS stamp overwrites them in its arm
-        static_if (ROWS) {
+        var slot = 0u    // nolint:LINT003,LINT010 — PER_ROW stamp overwrites them in its arm
+        static_if (PER_ROW) {
             let row = gl_WorkGroupID.x
             base = row * n
             slot = row
@@ -1194,9 +1195,9 @@ class MetalEmbedQ8 {
 
 [metal_dispatch(name = "enc_argmax_rows", pso = "g_pso_argmax_rows", tgmem = "metal_argmax_rows_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalArgmaxRows : MetalArgmaxT {
-    override ROWS = true
+    override PER_ROW = true
 
-    [metal_kernel(name="metal_argmax_rows_msl"), arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
+    [metal_kernel(name="metal_argmax_rows_msl")]
     def metal_argmax_rows {
         argmax_row()
     }
@@ -1844,8 +1845,8 @@ class template MetalGemvB24T {
         let lane = gl_SubgroupInvocationID
         let nb4 = ndim / 4u
         let nb = ndim / 32u
-        var accg : float[NR]
-        var accu : float[NR]                // nolint:LINT002 — the W13 arms alone accumulate into it
+        var acc_gate : float[NR]
+        var acc_up : float[NR]                // nolint:LINT002 — the W13 arms alone accumulate into it
         var cb = 0u
         while (cb + 64u <= nb4) {
             barrier()                       // previous round done reading the panel
@@ -1862,19 +1863,19 @@ class template MetalGemvB24T {
                 let k = cb + uint(i) * 32u + lane
                 let bi = row * nb + k / 8u
                 let qb = bi * 34u + 2u + (k % 8u) * 4u
-                let wg = w4_at(wqb, wsh, bi, qb)
+                let w_gate = w4_at(wqb, wsh, bi, qb)
                 let kt = uint(i) * 32u + lane
                 static_if (W13) {
-                    let wu = w4_at(wqb3, wsh3, bi, qb)
+                    let w_up = w4_at(wqb3, wsh3, bi, qb)
                     for [unroll_full] (b in range(NR)) {
                         let xv = txp[uint(b) * 64u + kt]
-                        accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
-                        accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
+                        acc_gate[b] += w_gate.x * xv.x + w_gate.y * xv.y + w_gate.z * xv.z + w_gate.w * xv.w
+                        acc_up[b] += w_up.x * xv.x + w_up.y * xv.y + w_up.z * xv.z + w_up.w * xv.w
                     }
                 } else {
                     for [unroll_full] (b in range(NR)) {
                         let xv = txp[uint(b) * 64u + kt]
-                        accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
+                        acc_gate[b] += w_gate.x * xv.x + w_gate.y * xv.y + w_gate.z * xv.z + w_gate.w * xv.w
                     }
                 }
             }
@@ -1884,26 +1885,26 @@ class template MetalGemvB24T {
         while (k < nb4) {
             let bi = row * nb + k / 8u
             let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let wg = w4_at(wqb, wsh, bi, qb)
+            let w_gate = w4_at(wqb, wsh, bi, qb)
             static_if (W13) {
-                let wu = w4_at(wqb3, wsh3, bi, qb)
+                let w_up = w4_at(wqb3, wsh3, bi, qb)
                 for [unroll_full] (b in range(NR)) {
                     let xv = x[uint(b) * nb4 + k]
-                    accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
-                    accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
+                    acc_gate[b] += w_gate.x * xv.x + w_gate.y * xv.y + w_gate.z * xv.z + w_gate.w * xv.w
+                    acc_up[b] += w_up.x * xv.x + w_up.y * xv.y + w_up.z * xv.z + w_up.w * xv.w
                 }
             } else {
                 for [unroll_full] (b in range(NR)) {
                     let xv = x[uint(b) * nb4 + k]
-                    accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
+                    acc_gate[b] += w_gate.x * xv.x + w_gate.y * xv.y + w_gate.z * xv.z + w_gate.w * xv.w
                 }
             }
             k += gl_SubgroupSize
         }
         for [unroll_full] (b in range(NR)) {
-            let g = simd_sum(accg[b])
+            let g = simd_sum(acc_gate[b])
             static_if (W13) {
-                let u = simd_sum(accu[b])
+                let u = simd_sum(acc_up[b])
                 if (lane == 0u) {
                     y[uint(b) * ddim + row] = msl_silu_mul(g, u)
                 }
@@ -4249,22 +4250,23 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
     }
 }
 
-//! the tile block is handed BYTE offsets off the site's x row width n and y row stride ys
-def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; xoff, yoff : uint64) : void>) {
+//! the tile block is handed its live row count and BYTE offsets off the site's x row width n and
+//! y row stride ys - a form that grids over four rows ignores the count, an mv form binds it
+def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; live : int64; xoff, yoff : uint64) : void>) {
     assert(nrows <= 12l, "three B4 tiles cover twelve rows")
-    invoke(tile, nrows > 2l, 0ul, 0ul)
+    invoke(tile, nrows > 2l, min(nrows, 4l), 0ul, 0ul)
     if (nrows > 4l) {
-        invoke(tile, true, uint64(4l * n * 4l), uint64(4l * ys * 4l))
+        invoke(tile, true, min(nrows - 4l, 4l), uint64(4l * n * 4l), uint64(4l * ys * 4l))
     }
     if (nrows > 8l) {
-        invoke(tile, true, uint64(8l * n * 4l), uint64(8l * ys * 4l))
+        invoke(tile, true, nrows - 8l, uint64(8l * n * 4l), uint64(8l * ys * 4l))
     }
 }
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
-    enc_rows_tiles(nrows, n, ys) $(four; xo, yo) {
+    enc_rows_tiles(nrows, n, ys) $(four; _live; xo, yo) {
         enc_gemv_b(enc, four, bw, boff, bx, by, bn, bd, bys, d, yoff + yo, xo)
     }
 }
@@ -4285,18 +4287,14 @@ def enc_mv_b(enc : MetalComputeEncoder?; four : bool; bwblob : MetalBuffer?; wbo
 
 // one mv GEMV site: a single form dispatch at B <= 4, two 4-column tiles at B = 5..8 (the
 // reference's own shape — it never switches to GEMM below B = 9; the weights stream twice but
-// stay the fast skinny form). xrowb = the x row stride in bytes; the tiles differ only in nrows.
+// stay the fast skinny form). The tiles differ only in their live row count.
 def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
-                bx, by : MetalBuffer?; n, xs4, d, nrows, ys : int64; xrowb : uint64;
+                bx, by : MetalBuffer?; n, xs4, d, nrows, ys : int64;
                 yoff : uint64 = 0ul) {
-    var ka = Q8MvArgs(ndim = uint(n), ddim = uint(d), nrows = uint(min(nrows, 4l)),
-        xs4 = uint(xs4), ys = uint(ys))
-    enc_mv_b(enc, nrows > 2l, bwblob, wboff, bx, by, ka, 0ul, yoff)
-    if (nrows > 4l) {
-        // the rows-5..8 dispatch offsets y by 4 rows of the SITE's y row stride — fused-buffer
-        // segment sites included
-        ka.nrows = uint(nrows - 4l)
-        enc_mv_b(enc, true, bwblob, wboff, bx, by, ka, 4ul * xrowb, yoff + uint64(4l * ys * 4l))
+    var ka = Q8MvArgs(ndim = uint(n), ddim = uint(d), nrows = 0u, xs4 = uint(xs4), ys = uint(ys))
+    enc_rows_tiles(nrows, n, ys) $(four; live; xo, yo) {
+        ka.nrows = uint(live)
+        enc_mv_b(enc, four, bwblob, wboff, bx, by, ka, xo, yoff + yo)
     }
 }
 
@@ -4315,7 +4313,7 @@ def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?;
 // the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
 def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
                         bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
-    enc_rows_tiles(nrows, n, hidden) $(four; xo, yo) {
+    enc_rows_tiles(nrows, n, hidden) $(four; _live; xo, yo) {
         enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, hidden, xo, yo)
     }
 }
@@ -4533,16 +4531,10 @@ def private race_decode_family(dev : MetalDevice?; queue : MetalCommandQueue?; f
                                twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                                m, kdim, ndim, out_n : int; grid : uint3; var ka : Q8GemmArgs;
                                bind_extra : block<(enc : MetalComputeEncoder?; slot_y : MetalBuffer?) : void>) : MetalTensorRaceResult {
-    var err = ""
-    var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
-    if (base_pso == null) {
-        return MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "base pso: {err}")
-    }
-    var twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
-    if (twin_pso == null) {
-        metal_release(base_pso)
-        return MetalTensorRaceResult(family = family, winner = "simdgroup", base_ms = -1.0lf, twin_ms = -1.0lf, note = "twin pso: {err}")
-    }
+    var p = race_pso_pair(dev, family, base_src, base_entry, base_fm, twin_src, twin_entry, twin_fm)
+    return p.verdict if (!p.ok)
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     let res = race_gemmb_family(dev, queue, family, m, kdim, ndim, out_n, grid, base_pso, twin_pso, base_tgmem, twin_tgmem, ka) $(enc, slot_y) {
         invoke(bind_extra, enc, slot_y)
     }
@@ -4569,7 +4561,6 @@ let KQ_ROWS_RACE_FORMATS <- [
     (fmt = KqFmt.iq2xxs, qu = 16, sform = KqRaceScaleForm.split_d)
 ]
 
-[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_kq_rig_pair(queue : MetalCommandQueue?; family : string; qu_per_sb : int; sform : KqRaceScaleForm;
                              n, rows : int;
                              base_arm, twin_arm : block<(enc : MetalComputeEncoder?; rig : KqRaceRig; var ka : KqMvArgs) : void>) : MetalTensorRaceResult {
@@ -4587,6 +4578,7 @@ def private race_kq_rig_pair(queue : MetalCommandQueue?; family : string; qu_per
 }
 
 //! needs the decode PSOs - the caller runs `metal_decode_init` first
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
     let n = 2048
     let rows = 8192
@@ -4603,6 +4595,7 @@ def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : in
     })
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult {
     let n = 2048
     let rows = 8192
@@ -4718,24 +4711,15 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
                               base_src, base_entry : string; base_fm : bool;
                               twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                               qu_per_sb : int; base_gdiv, twin_gdiv : int) : MetalTensorRaceResult {
-    var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let kdim = 2048
     let ndim = 8192
     let nsb = kdim / 256
     let nblk = ndim * nsb
-    var err = ""
-    var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
-    if (base_pso == null) {
-        res.note = "base pso: {err}"
-        return res
-    }
-    var twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
-    if (twin_pso == null) {
-        res.winner = "simdgroup"
-        res.note = "twin pso: {err}"
-        metal_release(base_pso)
-        return res
-    }
+    var p = race_pso_pair(dev, family, base_src, base_entry, base_fm, twin_src, twin_entry, twin_fm)
+    return p.verdict if (!p.ok)
+    var res = p.verdict
+    let base_pso = p.base_pso
+    let twin_pso = p.twin_pso
     var qplane : array<uint>
     qplane |> resize(nblk * qu_per_sb)
     for (i in range(nblk * qu_per_sb)) {
@@ -6302,7 +6286,9 @@ def public kmask_scmn(sv : uint4; js : uint; var sc, mn : uint&) {
     }
 }
 
-//! q4_K/q5_K sc/min for ONE half (ch) of the lane's quadrant - kmask_scmn under the mv lane map
+//! q4_K/q5_K sc/min for ONE half (ch) of the lane's quadrant. It IS `kmask_scmn(sv, jl + 4*ch)`,
+//! and stays its own body: forwarding leaves the sub-block index a run-time value, so the
+//! quadrant's byte extracts stop folding and seven mv kernels' AIR changes
 def private kmask_sc_mn_ch(sv : uint4; jl : uint; ch : int; var sc, mn : uint&) {
     let sy = (sv.y >> (8u * jl)) & 255u
     let szv = (sv.z >> (8u * jl)) & 255u
@@ -7090,7 +7076,7 @@ class template MetalMoeCombineT {
         let row = gl_WorkGroupID.y
         var acc = 0.0
         var j = 0u
-        // each site walks the slots with the address form its own indexing hoists best out of the loop
+        //! the slot order is the CPU axpy chain's, bit for bit - never a tree or a simd fold
         static_if (GATHERED) {
             while (j < nk) {
                 acc += selw[row * 2u * nk + nk + j] * dn[inv[row * nk + j] * dim + gid]
@@ -8009,50 +7995,34 @@ class template MetalKqMvShellT : MetalKqLaneMapsT {
     def abstract mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) : void
 
     def accum_cols32(cx4, colbase, nb4 : uint; w : float4[8]; var sumf : float[NR]) {
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
+        for [unroll_full] (b in range(NR)) {
+            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            static_if (TILED) {
+                rowb = colbase + uint(b)
             }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(8)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
-                }
-                sumf[b] += acc
+            let xb4 = rowb * nb4 + cx4
+            var acc = 0.0
+            for [unroll_full] (u in range(8)) {
+                let v = x[xb4 + uint(u)]
+                acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
             }
+            sumf[b] += acc
         }
     }
 
     def accum_cols16(cx4, colbase, nb4 : uint; w : float[16]; var sumf : float[NR]) {
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                }
-                sumf[b] += acc
+        for [unroll_full] (b in range(NR)) {
+            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            static_if (TILED) {
+                rowb = colbase + uint(b)
             }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
-                }
-                sumf[b] += acc
+            let xb4 = rowb * nb4 + cx4
+            var acc = 0.0
+            for [unroll_full] (u in range(4)) {
+                let v = x[xb4 + uint(u)]
+                acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
             }
+            sumf[b] += acc
         }
     }
 
@@ -8161,23 +8131,18 @@ class template MetalKqMvB8ShellT : MetalKqLaneMapsT {
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
+    @template_constant PANEL_COLS : int = 8   //!< float4 columns one accum_panel call folds
 
     //! the format's per-lane constants, computed once before the row walk
 
     def abstract mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) : void
 
-    def accum_panel32(cxl : uint; w : float4[8]; var acc : float4[8]) {
+    //! the staged X panel's eight streams times one lane's decoded weights - the column run a
+    //! lane decodes at once, which is also the weight array's extent
+    def accum_panel(cxl : uint; w : float4[PANEL_COLS]; var acc : float4[8]) {
         for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(8)) {
+            for [unroll_full] (u in range(PANEL_COLS)) {
                 acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-            }
-        }
-    }
-
-    def accum_panel16(cxl : uint; w4 : float4[4]; var acc : float4[8]) {
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(4)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
             }
         }
     }
@@ -8219,6 +8184,7 @@ class template MetalKqMvB8ShellT : MetalKqLaneMapsT {
 // the k2 B8 twin: the k3 B8 shell minus the hmask, per-element w = q*d*sc - dmin*mn
 [metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K2 : MetalKqMvB8ShellT {
+    override PANEL_COLS = 4
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view
@@ -8248,7 +8214,7 @@ class MetalKqMvB8K2 : MetalKqMvB8ShellT {
                 let qvc = (kqu[qb + uint(u)] >> shr) & 0x03030303
                 w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
+            accum_panel(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }
@@ -8413,6 +8379,7 @@ class MetalKqMvB4K3 : MetalKqMvK3T {
 // lane + mask compose
 [metal_dispatch(name = "enc_kq_mvb8_k3_c", pso = "g_pso_kq_mvb8_k3", tgmem = "metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K3 : MetalKqMvB8ShellT {
+    override PANEL_COLS = 4
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale strips, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k3 quant plane, uint view (qs at 24*blk, hmask at 24*blk+16)
@@ -8449,7 +8416,7 @@ class MetalKqMvB8K3 : MetalKqMvB8ShellT {
                 let qvc = ((qu[u] >> shr) & 0x03030303) | (((hu[u] >> hsh) & 0x01010101) << 2u)
                 w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
+            accum_panel(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }
@@ -9210,7 +9177,7 @@ class MetalKqMvB8Iq3xxs : MetalKqMvB8ShellT {
                 w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        accum_panel32(tx * 8u, w, acc)
+        accum_panel(tx * 8u, w, acc)
     }
 }
 
@@ -9290,7 +9257,7 @@ class MetalKqMvB8Iq3s : MetalKqMvB8ShellT {
                 w[h * 4 + wi] = u8x4_f4(gw) * fsd
             }
         }
-        accum_panel32(tx * 8u, w, acc)
+        accum_panel(tx * 8u, w, acc)
     }
 }
 
@@ -9380,7 +9347,7 @@ class MetalKqMvB8Iq2s : MetalKqMvB8ShellT {
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        accum_panel32(tx * 8u, w, acc)
+        accum_panel(tx * 8u, w, acc)
     }
 }
 
@@ -9470,7 +9437,7 @@ class MetalKqMvB8Iq2xs : MetalKqMvB8ShellT {
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        accum_panel32(tx * 8u, w, acc)
+        accum_panel(tx * 8u, w, acc)
     }
 }
 
@@ -9554,7 +9521,7 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
             w[l * 2] = iq_sign_apply(m0, s0) * dl
             w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
-        accum_panel32(tx * 8u, w, acc)
+        accum_panel(tx * 8u, w, acc)
     }
 }
 
@@ -10011,6 +9978,7 @@ class MetalKqMvB4K5 : MetalKqMvK5T {
 // on the weight-decode axis (its 48B superblock walk shares no SB_UINTS/QH shape with these).
 [ |> template_struct_instance]
 class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
+    override PANEL_COLS = 4
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (qs at SB_UINTS*blk; k5 qh at SB_UINTS*blk+32)
@@ -10060,7 +10028,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
                         float(((qvv >> (16u + nsh)) & 15u) | (((hv >> 16u) & 1u) << 4u)),
                         float(((qvv >> (24u + nsh)) & 15u) | (((hv >> 24u) & 1u) << 4u))) * dl - float4(ml)
                 }
-                accum_panel16((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
+                accum_panel((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
             } else {
                 var w4 : float4[4]
                 for [unroll_full] (u in range(4)) {
@@ -10068,7 +10036,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
                     w4[u] = float4(float((qvv >> nsh) & 15u), float((qvv >> (8u + nsh)) & 15u),
                         float((qvv >> (16u + nsh)) & 15u), float((qvv >> (24u + nsh)) & 15u)) * dl - float4(ml)
                 }
-                accum_panel16((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
+                accum_panel((q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo, w4, acc)
             }
         }
     }
@@ -10088,6 +10056,7 @@ class MetalKqMvB8K5 : MetalKqMvB8K45T {
 
 [metal_dispatch(name = "enc_kq_mvb8_k6_c", pso = "g_pso_kq_mvb8_k6", tgmem = "metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
 class MetalKqMvB8K6 : MetalKqMvB8ShellT {
+    override PANEL_COLS = 4
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
@@ -10125,7 +10094,7 @@ class MetalKqMvB8K6 : MetalKqMvB8ShellT {
                 let qvc = ((qu[u] >> shr) & 0x0F0F0F0F) | (((hu[u] >> hsh) & 0x03030303) << 4u)
                 w4[u] = u8x4_f4(qvc) * dl - float4(ml)
             }
-            accum_panel16(ip * 32u + s * 8u + o4, w4, acc)
+            accum_panel(ip * 32u + s * 8u + o4, w4, acc)
         }
     }
 }

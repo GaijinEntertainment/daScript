@@ -204,7 +204,7 @@ def test_tsi_cross_module(t : T?) {
     }
 }
 
-class XModOverInt : XModOverBase {
+class XModOverInt : XModOverKern {
     override STEP = 10
 }
 
