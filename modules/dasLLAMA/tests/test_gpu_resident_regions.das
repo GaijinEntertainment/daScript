@@ -41,3 +41,23 @@ def test_device_kv_park_adopt(t : T?) {
 def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
 }
+
+[test]
+def test_gpu_resident_regions_scheduler_chunks(t : T?) {
+    cell_scheduler_device_prefill_chunks(t, REGIONS_FILE)
+}
+
+[test]
+def test_gpu_resident_regions_guards(t : T?) {
+    cell_device_home_guards(t, REGIONS_FILE)
+}
+
+[test]
+def test_gpu_resident_regions_reports(t : T?) {
+    cell_driver_reports(t, REGIONS_FILE)
+}
+
+[test]
+def test_gpu_resident_regions_passes(t : T?) {
+    cell_passes_with_their_rows(t, REGIONS_FILE)
+}

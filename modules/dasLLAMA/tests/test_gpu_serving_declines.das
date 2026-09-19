@@ -363,6 +363,17 @@ def test_mm_tile_widths_64_dense_width(t : T?) {
 }
 
 [test]
+def test_resident_region_ctx(t : T?) {
+    t |> run("a region's context is its share of the mirror side's one binding") @(t : T?) {
+        t |> equal(resident_region_ctx(131072l, 65535l, 1l), 65535l, "one region takes the whole binding")
+        t |> equal(resident_region_ctx(131072l, 65535l, 4l), 16383l, "four regions take a quarter each")
+        t |> equal(resident_region_ctx(8192l, 65535l, 4l), 8192l, "a session context under its share stands")
+        t |> equal(resident_region_ctx(131072l, 0l, 4l), 131072l, "no binding cap known: the context stands")
+        t |> equal(resident_region_ctx(131072l, 65535l, 0l), 65535l, "a region count under one plans one region")
+    }
+}
+
+[test]
 def test_resident_binding_ctx(t : T?) {
     t |> run("the KV mirror's binding cap counts the attention layers' rows, whatever layer 0 is") @(t : T?) {
         let bcap = 4_294_967_295l   //! the 4 GiB maxStorageBufferRange of the NV/AMD drivers

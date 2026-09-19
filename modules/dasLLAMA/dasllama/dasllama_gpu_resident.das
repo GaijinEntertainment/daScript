@@ -601,6 +601,9 @@ def private fill_plan_room(var p : ResidentPlan) {
 
 //! 0 = no cap known, or no attention layer.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+//! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
+def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
+
 def resident_binding_ctx(c : Config; dt : KVDtype; bcap : int64) : int64 {
     var side = 0l
     for (l in range64(c.n_layers)) {
@@ -1897,7 +1900,7 @@ def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) :
         return r
     }
     if (owns && !s.rdec_host_current) {
-        rdec_pass_once(RdecPass.gap, start_pos, g_rdec_regions[r].cnt)   // our own region short of the start: nothing on the host past cnt either
+        rdec_pass_hydrated(t, s, RdecPass.gap, start_pos, g_rdec_regions[r].cnt)   // our own region short of the start: the CPU takes the call over the rows the region does hold
         return -1l
     }
     if (!owns && s.rdec_gen != 0l && !s.rdec_host_current) {
@@ -2206,6 +2209,9 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
 //! The positions one device-home session holds: the armed driver's per-region context.
 def gpu_device_session_ctx_() : int64 => g_rdec_cap
 
+//! The rows the device prefills in one window: a host that prefills a device-home session in chunks makes them at least this long.
+def gpu_device_prefill_window_() : int64 => RDEC_PF_ROWS
+
 //! The K/V codec a device-home session carries: the armed driver's mirror codec.
 def gpu_device_session_dtype_() : KVDtype => g_rdec_kvdt
 
@@ -2413,9 +2419,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     var plan : ResidentPlan
     if (resident_try) {
         let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
-        if (bctx > 0l) {
-            seq_cap = min(seq_cap, bctx / g_rdec_regions_want)
-        }
+        seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's

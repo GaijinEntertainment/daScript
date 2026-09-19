@@ -309,11 +309,11 @@ def gpu_residency_ask(streams, ctx : int64) {
     set_gpu_ctx_max(ctx)
 }
 
-//! a stream's context is its region's: a request never runs past the rows the card holds for it
+//! a stream's context is its region's where the driver armed any: a request never runs past the rows the card holds for it
+def region_clamped_ctx(seq_len, regions, region_ctx : int64) : int64 => regions > 0l ? min(seq_len, region_ctx) : seq_len
+
 def private slot_clamp_ctx_to_region(var slot : ModelSlot) {
-    if (gpu_device_sessions() > 0l) {
-        slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
-    }
+    slot.model.config.seq_len = region_clamped_ctx(slot.model.config.seq_len, gpu_device_sessions(), gpu_device_session_ctx())
 }
 
 def private bind_gpu_slot(si : int) {
@@ -348,7 +348,7 @@ def private bind_gpu_slot(si : int) {
 }
 
 //! Read with the slot's marks installed, so the facade answers for THIS model.
-def private slot_wants_device_kv(s : ModelSlot) : bool {
+def slot_wants_device_kv(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
         && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
 }
@@ -362,7 +362,7 @@ def private sync_slot_device_kv(var s : ModelSlot) {
     }
 }
 
-def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
+def slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (slot_flavor(s) == "metal") {
         return "GPU (Metal): the whole model and every stream's cache, in the memory the CPU and the GPU share"
     }
@@ -377,7 +377,7 @@ def private slot_served(s : ModelSlot; device_kv, holds_gpu : bool) : string {
         : "CPU")
 }
 
-def private slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
+def slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (s.backend_effective != "cpu" && !holds_gpu) {
         return ""
     }

@@ -29,6 +29,7 @@ require _model_tier public   // models_dir() + model_available() presence/size-t
 
 //! the rig's context: the mirror regions' cap and every host-cached session's K/V cache - a model max of 131072 is gigabytes of each
 let REGIONS_RIG_CTX = 8192l
+let private CAPPED_RIG_CTX = 4096l   //! the cap cell's context: the smallest the driver arms a capped mirror at, so a prompt reaches its end in seconds
 
 [init]
 def private regions_rig_init() {
@@ -323,6 +324,7 @@ def cell_device_home_sessions(t : T?; file : string) {
             var fb <- feed_b()
             var ra <- logits_alone(tr, pa, fa)
             var rb <- logits_alone(tr, pb, fb)
+            set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
             var sa <- device_session(tr)
             var sb <- device_session(tr)
             t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
@@ -341,6 +343,8 @@ def cell_device_home_sessions(t : T?; file : string) {
                 delete ta
                 delete tb
             }
+            moe_gpu_hydrate_session(tr, sa)
+            t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
             var ws <- create_batch_workspace(tr)
             var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
             for (st in range64(half, STEPS)) {
@@ -350,8 +354,9 @@ def cell_device_home_sessions(t : T?; file : string) {
                 hold_equal(t, sa.logits, ra[st + 1l], "device-home batched step {st}, row A")
                 hold_equal(t, sb.logits, rb[st + 1l], "device-home batched step {st}, row B")
             }
+            set_resident_prefill_allowed(true)
             var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
             delete passes
             sess |> clear()
             unsafe {
@@ -446,6 +451,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             t |> success(claim != 0l, "a session that prefilled on the device parks a claim")
             var second <- device_session(tr)
             let served0 = moe_gpu_resident_prefills()
+            t |> success(!gpu_device_kv_adopt(second, claim, 999l) && second.n_past == 0l, "a claim over 57 rows refuses 999 of them, and the adopter stays empty")
             t |> success(gpu_device_kv_adopt(second, claim, 40l), "the claim stands: the adopter takes 40 of its 57 rows")
             t |> equal(second.n_past, 40l, "the adopter continues from the adopted rows")
             eval(tr, second, tail)
@@ -462,6 +468,9 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             eval(tr, b, tail)
             t |> success(!gpu_device_kv_adopt(third, claim2, 40l), "a claim dies when another session takes its region")
             gpu_device_kv_park(third)
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
             delete a
             delete b
             delete third
@@ -478,7 +487,7 @@ def private cached_of(events : array<SchedEvent>; id : int64) : int64 => finishe
 
 //! three requests through a two-stream scheduler, then a second turn that opens with the last one's prompt and reply
 //! (two slots park two claims: the third request's arrival is what evicts the first's rows); every prompt is one prefill chunk
-def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : bool {
+def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int> {
     var sch <- create_scheduler(m, 2l, 4l, 64l)
     let on = set_device_kv(sch, device)
     var pa <- prompt_a()
@@ -496,8 +505,9 @@ def private serve_four(m : Model; device : bool; var events : array<SchedEvent>)
     delete pb
     delete pc
     delete turn2
+    let parked = length(sch.parked)
     delete sch
-    return on
+    return (on = on, parked = parked)
 }
 
 def cell_scheduler_device_mode(t : T?; file : string) {
@@ -509,9 +519,12 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             var host : array<SchedEvent>
             var dev : array<SchedEvent>
             let served0 = moe_gpu_resident_prefills()
-            t |> success(!serve_four(tr, false, host), "the control scheduler serves host-cached sessions")
+            t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
-            t |> success(serve_four(tr, true, dev), "an idle scheduler switches to device-home sessions")
+            let served = serve_four(tr, true, dev)
+            t |> success(served.on, "an idle scheduler switches to device-home sessions")
+            // four turns on two stream slots: the first turn's claim is evicted by the third's, the third's is spent by the turn that adopts it
+            t |> equal(served.parked, gpu_device_prefill_continues(tr) ? 2 : 0, "parked claims stay within the stream slots, and a model whose prefill cannot continue parks none")
             // one code path on both sides: each prompt enters the window chain once and each step the batched token command;
             // a device-home stream differs by the host copy it skips. The adopting turn splits its prefill, so it holds no token compare
             t |> equal(served1 - served0, 4l, "the host-cached side prefilled its four prompts on the device, one call each")
@@ -543,3 +556,174 @@ def cell_scheduler_device_mode(t : T?; file : string) {
     }
 }
 
+def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
+    t |> run("a device-home stream prefills in the device's windows, and a model whose prefill cannot continue in one call") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var sch <- create_scheduler(tr, 2l, 4l, 64l)
+            t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
+            var long_prompt <- prose_ids(WINDOW_ROWS + 188l, 3l)
+            var events : array<SchedEvent>
+            let served0 = moe_gpu_resident_prefills()
+            submit(tr, sch, make_req(1l, long_prompt, 2l))
+            drain(tr, sch, events)
+            let calls = moe_gpu_resident_prefills() - served0
+            // the scheduler's own chunk is 64 tokens: eleven calls, were the device window not the floor
+            t |> equal(calls, gpu_device_prefill_continues(tr) ? 2l : 1l, "{long_length(long_prompt)} tokens reach the device in window-sized chunks, or whole where the model's prefill cannot continue ({calls} calls)")
+            t |> equal(length(toks_of(events, 1l)), 2, "and the stream ran its two tokens")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+            set_device_kv(sch, false)
+            delete events
+            delete long_prompt
+            delete sch
+        }
+        delete tr
+    }
+}
+
+def cell_device_home_guards(t : T?; file : string) {
+    t |> run("a device-home session that finds no region panics with the reason, and the owners step on") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var fa <- feed_a()
+            var ra <- logits_alone(tr, pa, fa)
+            var sa <- device_session(tr)
+            var sb <- device_session(tr)
+            eval(tr, sa, pa)
+            eval(tr, sb, pb)
+            var third <- device_session(tr)
+            var tripped = false
+            try {
+                eval(tr, third, pa)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
+            var passes <- gpu_cpu_passes_()
+            t |> success(length(passes) == 1 && passes[0].reason == "busy", "the refused call was counted as busy, and only it: {passes}")
+            delete passes
+            var ta <- [fa[0]]
+            eval(tr, sa, ta)
+            hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
+            gpu_device_kv_park(sa)
+            gpu_device_kv_park(sb)
+            gpu_device_kv_park(third)
+            delete ta
+            delete third
+            delete sa
+            delete sb
+            delete ra
+            delete pa
+            delete pb
+            delete fa
+        }
+        delete tr
+    }
+}
+
+def cell_driver_reports(t : T?; file : string) {
+    t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        let n = gpu_cpu_pass_reason_count()
+        t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
+        for (i in range(n)) {
+            note_gpu_cpu_pass(i)
+        }
+        var passes <- gpu_cpu_passes_()
+        t |> equal(length(passes), n, "every reason fired once")
+        var seen : table<string>
+        for (p in passes) {
+            t |> success(!empty(p.words) && p.words != p.reason && !key_exists(seen, p.words), "{p.reason} reads in words of its own: {p.words}")
+            seen |> insert(p.words)
+        }
+        delete passes
+        delete seen
+        reset_gpu_cpu_passes()
+        var none <- gpu_cpu_passes_()
+        t |> equal(length(none), 0, "a reset counter reports nothing")
+        delete none
+        let kv = mirror_kv_dtype()
+        let cap = gpu_device_session_ctx()
+        t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
+        set_gpu_resident_regions_(1l)
+        let one = resident_plan(tr, cap, kv, kv)
+        set_gpu_resident_regions_(4l)
+        let four = resident_plan(tr, cap, kv, kv)
+        set_gpu_resident_regions_(0l)
+        let zero = resident_plan(tr, cap, kv, kv)
+        set_gpu_resident_regions_(2l)
+        let two = resident_plan(tr, cap, kv, kv)
+        set_gpu_resident_regions_(1l)
+        t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
+        t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
+        let held = gpu_tier_status_().vram_bytes
+        t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
+        delete tr
+    }
+    t |> run("a load under a switched-off whole-model route says it was never attempted") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        let route0 = gpu_want_resident()
+        set_gpu_resident_route(false)
+        var tr <- load_model_(path_join(models_dir(), file), QuantMode.q8)
+        set_gpu_resident_route(route0)
+        t |> success(!moe_gpu_resident_active(), "the whole-model driver did not arm")
+        t |> success(gpu_resident_decline_() |> starts_with("not attempted"), "and the reason says so: {gpu_resident_decline_()}")
+        delete tr
+    }
+}
+
+def cell_passes_with_their_rows(t : T?; file : string) {
+    t |> run("a prefill that skips positions passes as a gap, its device rows brought down first") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var head <- prose_ids(40l, 0l)
+            var tail <- prose_ids(10l, 9l)
+            var s <- create_session(tr, mirror_kv_dtype())
+            eval(tr, s, head)
+            t |> success(!s.rdec_host_current, "the prompt's rows live on the device alone")
+            forward_prefill(tr, s, tail, 10l, 50l)
+            var passes <- gpu_cpu_passes_()
+            t |> success(length(passes) == 1 && passes[0].reason == "gap" && passes[0].count == 1l, "positions 40 to 49 were never written: the call passed as a gap ({passes})")
+            t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
+            delete passes
+            delete s
+            delete head
+            delete tail
+        }
+        delete tr
+    }
+    t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        set_gpu_ctx_max(CAPPED_RIG_CTX)
+        var tr <- load_two_regions(t, file)
+        set_gpu_ctx_max(REGIONS_RIG_CTX)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
+            var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
+            var tail <- prose_ids(200l, 9l)
+            var s <- create_session(tr, mirror_kv_dtype())
+            eval(tr, s, head)
+            forward_prefill(tr, s, tail, 200l, CAPPED_RIG_CTX - 96l)
+            var passes <- gpu_cpu_passes_()
+            t |> success(length(passes) == 1 && passes[0].reason == "cap" && passes[0].count == 1l, "200 tokens from 96 short of the region's end: the call passed as cap ({passes})")
+            t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
+            delete passes
+            delete s
+            delete head
+            delete tail
+        }
+        delete tr
+    }
+}

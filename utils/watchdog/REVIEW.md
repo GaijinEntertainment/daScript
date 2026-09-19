@@ -3,9 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff that changes the paths `find_daslang` tries (`watchdog.das`) updates the refusal text
-that lists them and step 3 of `README.md`'s "Running it", in the same change** - a refusal that
-names paths the supervisor no longer tries sends the user to the wrong folder.
+**A diff that changes the paths `find_daslang` tries (`watchdog.das`) - the names it looks for
+or the roots it is handed - updates every refusal text that names them and the "Layout
+discovery" step of `README.md`'s "Running it", in the same change** - a refusal that names paths
+the supervisor no longer tries sends the user to the wrong folder.
 
 **A diff that adds a field key to a JSON-lines log line describes it in the `## The log`
 section of `README.md`, in the same change** - that section is the list a rename sweep starts

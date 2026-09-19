@@ -68,12 +68,12 @@ deltanet state from zero.
 
 **The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
 idle `Scheduler` (one batched step takes one kind of session): admitted streams are
-device-home, their prefill quantum is at least the 512-row window (`DEVICE_CHUNK_TOKENS`),
+device-home, their prefill quantum is at least the device's window (`gpu_device_prefill_window`),
+a media request is refused at `submit` (a device-home session serves no media span),
 and a reaped stream parks its claim under the token list its rows hold - one parked claim a
 stream slot - so the next request adopts the longest opening it shares, short of its last
-token: a conversation's next turn prefills its new suffix alone, with no copy. A media stream
-parks nothing, its rows not following from its token ids, and neither does a recurrent model's
-stream: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
+token: a conversation's next turn prefills its new suffix alone, with no copy. A recurrent
+model's stream parks nothing: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
 per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
 has a region per stream and no media tower or self-speculation, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the

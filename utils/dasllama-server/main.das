@@ -613,7 +613,7 @@ def private gpu_detail_attn(cfg : ServerArgs) : bool
     => cfg_sourced("gpu_attn") ? cfg.gpu_attn : true
 
 [arch(at = "README.md#gpu-key")]
-def private vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
+def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
     => GpuTierWant(resident = true,
                    moe_layers = gpu_detail_layers(cfg), moe_stream = gpu_detail_stream(cfg),
                    vram_mb = int64(cfg.gpu_vram_mb), dn = gpu_detail_dn(cfg),

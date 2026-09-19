@@ -115,10 +115,8 @@ def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 
     if (!sch.device_kv) {
         return sch.chunk_tokens
     }
-    return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, DEVICE_CHUNK_TOKENS) : head_end
+    return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
 }
-
-let DEVICE_CHUNK_TOKENS = 512l   //! a device-home stream's prefill quantum is at least the device's prefill window: a smaller chunk is one submit per chunk for no bounded-stall gain
 
 //! A finished device-home stream's K/V rows, kept on the device for the next request that opens with the same tokens.
 struct ParkedKv {
@@ -220,6 +218,9 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     }
     if (req.n_media < 0l) {
         panic("dasllama_scheduler: negative n_media {req.n_media} (stream {req.id})")
+    }
+    if (req.n_media > 0l && sch.device_kv) {
+        panic("dasllama_scheduler: a media request in device mode (stream {req.id}) - a device-home session serves no media span; the wiring keeps `set_device_kv` off for a model that takes media")
     }
     if (req.n_media > 0l) {
         if (req.media_at < 0l || req.media_at > np) {
@@ -402,8 +403,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
-            let adopts = st.n_media == 0l && gpu_device_prefill_continues(m)
-            let matched = adopts ? parked_attach(sch, st.session, st.prompt) : 0l
+            let matched = parked_attach(sch, st.session, st.prompt)   // a model whose prefill cannot continue parks nothing, so nothing matches
             st.n_prefilled = matched
             st.n_cached = matched
             sch.cached_tokens += matched
@@ -599,7 +599,7 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
 }
 
 def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
-    if (st.n_media != 0l || !gpu_device_prefill_continues(m)) {
+    if (!gpu_device_prefill_continues(m)) {
         gpu_device_kv_park(st.session)
         return
     }

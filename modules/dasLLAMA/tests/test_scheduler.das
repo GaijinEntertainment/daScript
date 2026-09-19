@@ -859,6 +859,70 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
 // ===== media validation: submit refuses malformed shapes by panic =====
 
 [test]
+def test_scheduler_device_mode_switch(t : T?) {
+    t |> run("only an idle scheduler switches its session kind (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            var none : array<int64>
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, SamplingParams(), 4l, none)), "a request queued")
+            scheduler_step(m, sch, events)
+            t |> success(!set_device_kv(sch, true), "a scheduler with a live stream keeps the session kind it has")
+            drain(m, sch, events)
+            t |> success(set_device_kv(sch, true), "the same scheduler, idle, switches")
+            t |> success(!set_device_kv(sch, false), "and back")
+            delete events
+            delete sch
+            delete prompt
+            delete m
+        }
+    }
+    t |> run("submit refuses a media request in device mode, and takes it with the mode off (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var taken = false
+            var tripped = false
+            for (device in fixed_array(false, true)) {
+                set_device_kv(sch, device)
+                tripped = false
+                try {
+                    var req <- PendingReq(id = device ? 2l : 1l, params = SamplingParams(), max_new = 1l, media_at = 1l, n_media = 2l)
+                    req.prompt := prompt
+                    req.media_embd |> resize(2l * m.config.dim)
+                    taken = submit(m, sch, req)
+                } recover {
+                    tripped = true
+                }
+                if (device) {
+                    t |> success(tripped, "device mode: a device-home session serves no media span, so submit panics")
+                } else {
+                    t |> success(taken && !tripped, "host-cached mode takes the same request (the control)")
+                    var events : array<SchedEvent>
+                    drain(m, sch, events)
+                    delete events
+                }
+            }
+            set_device_kv(sch, false)
+            delete sch
+            delete prompt
+            delete m
+        }
+    }
+}
+
+[test]
 def test_scheduler_media_validation(t : T?) {
     t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {

@@ -1,9 +1,9 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_MOE.md`,
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work:
+docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
+`ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work:
 `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together

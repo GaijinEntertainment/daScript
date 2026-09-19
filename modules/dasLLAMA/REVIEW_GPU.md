@@ -209,23 +209,29 @@ is the default and needs no flag.
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
 
-**A diff that adds a call site handing a served GPU decode or prefill to the CPU rails is a
-defect, never a fallback - it ships the device path in the same change, or names the
-`followup_vulkan.md` / `followup_metal.md` item that already carries that shape.** A shape the
-ledger names is answered with its item; one it does not name blocks. "It runs, on the CPU" is
-not support: the user who selected the GPU gets a fraction of its speed.
+**A diff that adds a call site handing a whole served GPU decode or prefill call to the CPU
+path is a defect - it ships the device path in the same change.** A call that runs on the CPU
+gives the user who selected the GPU a fraction of its speed.
 
 **A diff that lands a model family, a backend arm or a session shape whose batched decode step
-runs its rows through the single-row command one after another is a defect - it ships the
-batched dispatch in the same change, or names the ledger item that carries it.** A batched
-dispatch reads each weight plane once for all the step's rows; the per-row step reads it once
-per row.
+dispatches its rows one at a time - one command per row, rather than all the step's rows in one
+dispatch - is a defect; it ships the batched dispatch in the same change.** A batched dispatch
+reads each weight plane once for all the step's rows; the per-row step reads it once per row.
 
 **A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
-on (`set_device_kv`), shows at that call site that the live device-home sessions stay within
-`gpu_device_sessions()` - a scheduler counts as `max_streams` of them - and turns the mode off
-before `moe_gpu_drop_model`.** Each live device-home session pins a mirror region, and the
-driver panics on the one that finds none: the CPU rails have no cache to serve it from.
+on (`set_device_kv`), shows at that call site that the live device-home sessions - a device-home
+session keeps its K/V only in a device K/V region and has no host cache - stay within
+`gpu_device_sessions()`, a scheduler counting as its own `max_streams` of them.** The driver
+panics on a device-home session that finds no region.
+
+**Every `RdecPass` value has its own reader-facing sentence in `rdec_pass_words`, in plain
+words that name no part of the engine - no pass, region, mirror, resident driver, tier or
+rails.** A status page prints those words; a value with none prints its machine name instead.
+
+**A diff that drops a model (`moe_gpu_drop_model`) a device-mode scheduler serves turns that
+scheduler's device mode off (`set_device_kv(sch, false)`) before its next step, in the same
+change.** The drop releases the regions, and a scheduler left in device mode admits the next
+stream as device-home onto none.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 model, one

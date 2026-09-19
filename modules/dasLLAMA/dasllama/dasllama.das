@@ -661,6 +661,11 @@ def gpu_device_session_ctx() : int64 {
     return gpu_device_session_ctx_()
 }
 
+def gpu_device_prefill_window() : int64 {
+    //! The positions the device prefills in one window - the shortest chunk worth handing a device-home session.
+    return gpu_device_prefill_window_()
+}
+
 def gpu_device_session_dtype() : KVDtype {
     //! The K/V codec a device-home session must carry: the armed driver's.
     return gpu_device_session_dtype_()

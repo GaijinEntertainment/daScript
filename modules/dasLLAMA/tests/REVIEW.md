@@ -48,16 +48,17 @@ a run of skips is not the coverage the suite owes.
 
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
 bar a cell the census entry names asserts, a cell's skip condition added, changed or dropped -
-corrects that file's `CLAUDE.md` census entry, numbers and skip clauses included, in the same
-change.** A `{a,b}` shorthand naming several files at once, or a
-suite roster, carries nothing to correct; a file with no census entry owes none.
+corrects, in the same change, the `CLAUDE.md` census entry of every `[test]` file that runs the
+cell, wherever the cell is defined, numbers and skip clauses included.** A `{a,b}` shorthand naming
+several files, or a suite roster, carries nothing to correct; a file with no census entry owes none.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
-return - updates in the same change the header of every `[test]` file that runs the cell, wherever
-the cell is defined.** A header is the file's top comment block; it names every fact its cells skip on.
+return - updates in the same change the header of every `[test]` file that runs the cell,
+wherever the cell is defined.** A header is the file's top comment block; it names every fact
+the cells that file runs skip on.
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -184,9 +185,10 @@ beside the dumps under `models_dir()`, named by the test that loads the dump.
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
 defect.**
 
-**A cell, or the `[init]` of the file that carries it, sets every knob its claim depends on that outlives one call - any `set_*` / `pin_*` call
-in `dasllama/` that changes the driver's route or the serving lane for the rest of the process -
-even when the claim needs the knob at its DEFAULT value.**
+**A cell, or the `[init]` of the file where the cell is defined, sets every knob its claim
+depends on that outlives one call - any `set_*` / `pin_*` call in `dasllama/` that changes the
+driver's route or the serving lane for the rest of the process - even when the claim needs the
+knob at its DEFAULT value.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 driver setter it touched back at its default; `reset_<family>_q8` is the restore.** Why a hook
@@ -261,8 +263,8 @@ not exact-value: it is not float-portable.
 maxdiff on green as well as red, is a defect.**
 
 **A diff that adds an assert carrying a tolerance bar, or loosens one, ships in the same change a
-control that lands outside the bar in every cell that holds it - one control a bar value is not
-enough.** A bar nothing has exceeded where it is applied is not known to discriminate there.
+control that lands outside the bar in every cell that holds it.** A bar nothing has exceeded
+where it is applied is not known to discriminate there.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

@@ -1550,6 +1550,9 @@ def public set_gpu_cpu_pass_reasons(reasons, words : array<string>) {
     g_gpu_cpu_pass_counts |> resize(length(reasons))
 }
 
+//! how many pass reasons the armed driver registered: a test walks them all
+def public gpu_cpu_pass_reason_count() : int => length(g_gpu_cpu_pass_reasons)
+
 //! No call has passed yet: the counts are the armed model's, so a drop and every load zero them.
 def public reset_gpu_cpu_passes() {
     for (n in g_gpu_cpu_pass_counts) {

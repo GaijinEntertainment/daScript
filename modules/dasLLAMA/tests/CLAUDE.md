@@ -433,7 +433,9 @@ The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so the
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
-deltanet decode step, and skips otherwise.
+deltanet decode step, and skips otherwise. `test_scheduler_device_mode_switch` holds the device
+mode's two CPU-decidable contracts: only an idle scheduler switches its session kind, and
+`submit` refuses a media request in device mode while it takes the same request with the mode off.
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
@@ -456,7 +458,9 @@ only case that isolates the roster, since no format one admits the other refuses
 carries an off-lattice dense width past `mm_tile_widths_64_ok` and past `decode_shape_decline`
 on both the decode and the batch needs mask, and the same width on a dense twin declines
 both. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
-the OS's room where the OS answers.
+the OS's room where the OS answers. `test_resident_region_ctx` is a mirror region's share of its
+side's one binding: the whole of it at one region, a quarter at four, the session's own context
+where that is shorter, and one region for a count under one.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -513,11 +517,13 @@ carries the bias and the driver armed on it; skips without the model or the arme
 `test_gpu_resident_regions_hybrid.das` (`_resident_regions.das` carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
-itself, so no CPU chain runs. The bit-for-bit cells: a session stepped between another
+itself, so no CPU reference chain runs. The bit-for-bit cells: a session stepped between another
 session's single steps, and a batched step over both, each read what the session reads alone,
 the two prompts differing in content and length so a crossed region cannot land there, the
 claims unchanged through the batched steps (no history came up from the host again); the same
-with device-home sessions, which allocate no host cache; the pin - with both regions held by
+with device-home sessions, which allocate no host cache, prefill on the device under the
+server's prefill pin (`set_resident_prefill_allowed(false)`) and come through a hydrate
+untouched; the pin - with both regions held by
 live device-home sessions a host-cached outsider passes as `busy`, the owners step on
 untouched, and a parked region is the next outsider's; and the scheduler's device mode
 against the host-cached scheduler over four requests on two streams (`_scheduler_rig.das`, shared
@@ -531,14 +537,21 @@ of 57, 512 of 600 and 300 of 900 (the cuts placed against the engine's `PF_WINDO
 a prompt one token short the control, then four decoded steps over the continued rows, each
 against the step before it as its control; the chat shape (a prompt, steps, a second turn through the
 window chain against the same tokens stepped one by one); and the parked claim adopted once,
-refused twice, dead once another session took its region - every site that holds the bar
+then refused twice (spent by its adoption, and dead after another session took its region) - every site that holds the bar
 carries its own one-token-off control, and every compare logs both sides' argmax. The E2B file runs the bit-for-bit
 cells on the E-series carrier, where a batched row carries its own per-layer-embedding side
 input, and the hybrid file on Qwen3.5-0.8B, where each recurrent layer's one device state slot
 goes to whichever session steps and a second session's prefill sends the first one's state home
-before it zeroes the slot; its scheduler cell holds that a recurrent model adopts no rows. About
-90 s a file on the RTX 5060 Ti box (Threadripper 3990X) under `dastest -jit` with `DASLLAMA_GPU=1`,
-the JIT cache warm; each skips without its model or the armed tier.
+before it zeroes the slot; its scheduler cells hold that a recurrent model parks and adopts no rows and prefills a long
+prompt in one call, where the qwen2 carrier's 700 tokens reach the device in two window-sized
+chunks under a 64-token scheduler chunk. The qwen2 file also holds the guards - a third
+device-home session over two regions panics with its `busy` counted and the owners step on
+untouched - the driver's reports (every pass reason reads in words of its own, the plan's K/V
+scales with the region count and a count under one plans one, the tier status counts both
+mirror sides, a load under a switched-off route says `not attempted`), and the two passes that
+bring their rows down first: a prefill that skips positions (`gap`) and one past the region's
+context (`cap`, on a load capped at 4096 positions). Each skips without its model or the armed
+tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
@@ -1224,6 +1237,9 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   (the hyphenated directory is unreachable by path require).
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
+- `utils/dasllama-server/test_slot_served.das` - requires the server and its program root
+  (`openai_server`, `main`) by bare same-dir name: the served strings, the device-mode
+  predicate and the vulkan want over hand-built slots, model-free.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

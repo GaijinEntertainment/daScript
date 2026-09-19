@@ -704,13 +704,16 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
                 }
                 let logs = js?["log"]
                 var sanity = false
+                var warned = false
                 if (logs != null && logs is _array) {
                     for (lv in logs as _array) {
                         let line : string = lv ?? ""
                         sanity = sanity || find(line, "sanity (pp512)") >= 0
+                        warned = warned || find(line, "ran on the CPU instead of the GPU") >= 0
                     }
                 }
                 t |> success(sanity, "the pp warmup passed the logit sanity check and said so")
+                t |> success(!warned, "a CPU slot's rows pass nothing to the CPU from a GPU: no warning line")
                 unsafe {
                     delete js
                 }

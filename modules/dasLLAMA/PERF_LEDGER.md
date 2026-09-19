@@ -11,6 +11,26 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-18) - a K/V mirror region per stream trades context for concurrency, not
+  for throughput (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The resident driver's
+  mirror is one allocation a side; `set_gpu_resident_regions` splits it, and the residency plan
+  pays for the regions out of each stream's context. gemma-4-E2B-it-Q4_K_M.gguf served by
+  `daslang -jit utils/dasllama-server/main.das -- --config <toml>` (`backend = "gpu"`, the vulkan
+  tier in its default cm2 mode, kv f16, the box's tuned sidecar, `DAS_JOBQUE_THREADS=16`, no other
+  override) on a Threadripper 3990X with an RTX 5060 Ti 16 GB under Windows; the instrument is
+  128-token chat requests at temperature 0 through `/v1/chat/completions`, a rate being completion
+  tokens over the request's wall, prefill included, and the footprint `/v1/stats`'s
+  `gpu_vram_bytes`. At `streams = 1`: one region of 131072 positions, a 2304 MB mirror, 3628 MiB
+  on the device, one stream 147.9 / 150.8 / 149.6 tok/s, four requests queued on the one slot
+  148.9 tok/s summed. At `streams = 4`: four regions of 49926 positions, a 3510 MB mirror, 4836
+  MiB on the device, one stream 148.8 / 151.8 / 152.3 tok/s, four requests at once 140.9 tok/s
+  summed, `gpu_cpu_passes` empty in both. The decision: the server asks for a region per stream
+  (1208 MiB and 62% of the context, on this model), because four conversations then move
+  together instead of waiting in a queue; the summed rate does not rise, since the batched step
+  still dispatches its rows one at a time - `followup_vulkan.md` item 69's closing paragraph is
+  the batched dispatch that would raise it. Before the regions the same four-stream config served
+  on the per-op tier at tg128 34.0 tok/s (the server's in-process bench), its paged sessions
+  handed to the CPU on every step.
 - **LANDED (2026-09-18) - the Pocket codec streams in windows of 16 latent frames
   (`ARCHITECTURE_POCKET.md` sec.2.46).** The codec's activations, about 20 MB per second of
   audio across the chain's ping-pong rows, were the say's and the clone's working set: 116 MB

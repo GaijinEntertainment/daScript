@@ -47,6 +47,10 @@ call, so a boundary inside the span changes the mask. A driver declining the who
 CPU loop, or splitting command buffers per layer, is not a split, and the one call may also
 carry the surrounding head and tail tokens.
 
+**A diff that adds a session kind or an admission mode to an in-process scheduler either serves
+a stream carrying decoded media on it or refuses that stream at admission - a mode that admits
+such a stream onto a path that panics later, or drops its rows, is a defect.**
+
 **A media splice written at the seam as anything other than two token spans plus a row block is
 a defect, everywhere the splice appears** - the two-span form is what keeps BPE merges from
 crossing the media.

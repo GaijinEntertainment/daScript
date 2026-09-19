@@ -257,6 +257,7 @@ def section_device_streams(m : Model; var sch : Scheduler) {
         return
     }
     print("the device holds {regions} streams, {gpu_device_session_ctx()} positions each, K/V in {gpu_device_session_dtype()}\n")
+    print("it prefills {gpu_device_prefill_window()} positions a window: a prompt in chunks hands it at least that many at a time\n")
 
     // turn one: prefill, then park
     var first <- create_device_session(m, gpu_device_session_dtype())
