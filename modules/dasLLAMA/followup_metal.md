@@ -143,9 +143,7 @@ zoo. Facts that decide the order:
   a `@template_gate`d field may be named only inside a `static_if` arm on its own axis (a ternary
   infers both arms), and on a class template it declares no `@role = "read"`/`"write"` - the
   census cross-checks declared roles against the unreified body and reads the gated field as
-  unused, while an undeclared role derives the same value; a method used in value position is
-  an arrow-form single return, so a multi-statement format hook hands its value back through
-  a `var T&` parameter (the emitter's carve-out to the return-the-result rule); a per-stamp `@off`
+  unused, while an undeclared role derives the same value; a per-stamp `@off`
   asymmetry on a shared binding rides a `@template_gate`d field pair at that binding plus one
   `static_if` accessor arm; a ROWS-style axis that stages per-row values in fixed arrays is not
   AIR-neutral (Metal's -O2 does not scalar-replace them once a stamp has two rows - the k4 tile,

@@ -242,9 +242,8 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
 }
 
 // the [metal_kernel] method of a lensed class — the body the access classifier walks. `want`
-// names the method for multi-kernel classes, a trailing '*' making it a prefix (the stamp form,
-// where the family names the method it dispatches and the format completes it); "" counts every
-// kernel method and returns the first (the single-kernel form's exactly-one check rides on nmatch)
+// names the method for multi-kernel classes, a trailing '*' making it a prefix; "" counts every
+// kernel method and returns the first
 def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&) : Function? {
     var kfn : Function?
     let byPrefix = want |> ends_with("*")
@@ -270,13 +269,6 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
-// ===== the stamp form: one (family, fmt, form) triple for the strings a family derives =====
-// A kernel-family stamp spells `stamp = "<family>:<fmt>:<form>"` and the lens computes the
-// builder name, the pso global, the tgmem constant, the grid, the threadgroup size, the params
-// and the requires contract from it. Every derived string is byte-identical to the long form it
-// replaces, and an argument spelled explicitly wins over the derived one - so an irregular stamp
-// (a pso global carrying a legacy format code, an extra alignment contract) spells only the odd
-// one out, and a class with no `stamp=` takes the long form unchanged.
 struct private StampSpec {
     name : string
     pso : string
@@ -297,8 +289,7 @@ def private stamp_form_ok(form : string; rem : bool) : bool {
         || (rem ? form == "thr" : (form == "thdb" || form == "thdb128")))
 }
 
-//! The family table: what each Metal mul_mm family derives from (fmt, form). An empty `name`
-//! back is an unknown family or an unserved form - the caller refuses the compile.
+//! an empty `name` back is an unknown family or an unserved form - the caller refuses the compile
 def private stamp_spec(family, fmt, form : string) : StampSpec {
     var s : StampSpec
     s.tg = 128
@@ -316,8 +307,6 @@ def private stamp_spec(family, fmt, form : string) : StampSpec {
             s.grid = split ? "tiles, rows/64, ne" : (stamp_tall(form) ? "npos/128, rows/64, ne" : "npos/32, rows/64, ne")
         }
         if (split) {
-            // the split twins ride the dense decode's plane, so the site passes its own dim
-            // uniforms and its tile count; the bucket-scaffold twins take the padded row count
             s.kernel_prefix = "metal_moe_mulmm"
             s.params = "mp : int64, rows : int64, ne : int64, tiles : int64"
             s.requires = "rows % 64"
@@ -448,10 +437,7 @@ class MetalDispatch : AstStructureAnnotation {
         }
         sort(bufs) $(a, b) => a.binding < b.binding
 
-        // The [metal_kernel] method this instance dispatches: named by kernel=, else by the stamp
-        // family's method prefix (its classes carry a sibling kernel the family does not
-        // dispatch), else the class's one kernel method. The emitter names that kernel's globals
-        // after `<class>`<method>`, so a stamp derives its tgmem constant from the method found.
+        // a stamp family's classes carry sibling kernels it does not dispatch, so the family matches by prefix
         if (empty(kern) && !empty(kprefix)) {
             kern = "{kprefix}*"
         }

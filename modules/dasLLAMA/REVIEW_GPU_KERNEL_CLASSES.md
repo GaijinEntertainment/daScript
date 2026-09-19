@@ -87,3 +87,9 @@ and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
+
+**A kernel-class method a compiled body calls in value position - inside an expression rather
+than as its own statement - is a single arrow-form (`=>`) return; a method that needs more than
+one statement hands its value back through a `var T&` parameter instead.** The emitter splices a
+value-position method as one expression, so a multi-statement body reaches the kernel as a
+statement and its value never arrives.

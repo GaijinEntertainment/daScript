@@ -209,7 +209,7 @@ class template MetalDequantK45T {
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view
     @ssbo @binding = 3 @role = "write" wh : array<float16>
     @uniform @binding = 4 ka : CvtArgs
-    @template_constant BLK : uint = 32u
+    @template_constant SB_UINTS : uint = 32u
     @template_constant QH : bool = false
 
     [metal_kernel]
@@ -229,12 +229,12 @@ class template MetalDequantK45T {
         for (t in range(32)) {
             let e = uint(t)
             static_if (QH) {
-                let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
-                let hu = kqu[blk * BLK + 32u + e / 4u]
+                let u = kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u]
+                let hu = kqu[blk * SB_UINTS + 32u + e / 4u]
                 let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
                 wh[blk * 256u + js * 32u + e] = float16(dsc * float(q) - dmn)
             } else {
-                let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                let q = (kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
                 wh[blk * 256u + js * 32u + e] = float16(dsc * float(q) - dmn)
             }
         }
@@ -246,7 +246,7 @@ class MetalDequantK4H : MetalDequantK45T {}
 
 [metal_dispatch(name = "enc_dequant_k5h", pso = "g_pf_pso_dq_k5", tg = 256, grid = "total/256", params = "total : int64")]
 class MetalDequantK5H : MetalDequantK45T {
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
@@ -386,13 +386,10 @@ def private ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
     PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sqrt(float(ple)),
         inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
 
-//! The PLE token-table gather: one threadgroup per (layer, position), one thread per PLE column.
-//! The (l, p, i, el) prologue and the layer-major store are one body, `decode_el` the format's own.
-//! Bindings 2/3/4 are shared field for shared field; the q8 blob's two views hold 0/1 alone.
 [ |> template_struct_instance]
 class template MetalPleGatherBaseT {
     @template_constant Q8 : bool = false    //!< the q8 table: one interleaved 34B blob, both views of it at 0/1
-    @template_constant BLK : uint = 32u     //!< quant-plane uints per superblock (k5's qh strip adds 8)
+    @template_constant SB_UINTS : uint = 32u     //!< k5's qh strip adds 8
     @template_constant QH : bool = false    //!< k5: the 5th bit off the qh strip
     @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
     @template_constant KSC : bool = true    //!< the packed 6-bit sc/min uint4 view - k4 and k5 alone
@@ -405,8 +402,6 @@ class template MetalPleGatherBaseT {
     @uniform @binding = 4 ka : PleArgs
     @ssbo @binding = 6 @role = "weight" @off = "qoff" @template_gate = "!Q8" kqu : array<uint>    //!< quant plane, uint view
 
-    //! one table element, dequantized off this format's planes - the emitter takes a multi-statement
-    //! method only as a statement, so the value comes back through `v` (kmask_scmn's shape)
     def abstract decode_el(el : uint; var v : float&) : void
 
     def gather_body {
@@ -438,9 +433,6 @@ class MetalPleGatherQ8 : MetalPleGatherBaseT {
     }
 }
 
-//! The K-quant twin of MetalPleGatherQ8, decoding the table off its format's native planes, which
-//! bind at the TABLE's own base, so `el` is the element index inside the table and `el / 256` its
-//! plane superblock (the gate's two %256 clauses make it so).
 [ |> template_struct_instance]
 class template MetalPleGatherKqT : MetalPleGatherBaseT {
     def override decode_el(el : uint; var v : float&) {
@@ -448,7 +440,7 @@ class template MetalPleGatherKqT : MetalPleGatherBaseT {
         let js = (el % 256u) / 32u
         let e = el % 32u
         static_if (Q40) {
-            let u = kqu[blk * BLK + js * 4u + (e % 16u) / 4u]
+            let u = kqu[blk * SB_UINTS + js * 4u + (e % 16u) / 4u]
             v = float(ksh[blk * 8u + js]) * (float((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) - 8.0)
         } else {
             let sv = ks4[blk]
@@ -457,9 +449,9 @@ class template MetalPleGatherKqT : MetalPleGatherBaseT {
             kmask_scmn(sv, js, sc, mn)
             let dsc = float(ksh[blk * 8u]) * float(sc)
             let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
+            let u = kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u]
             static_if (QH) {
-                let hu = kqu[blk * BLK + 32u + e / 4u]
+                let hu = kqu[blk * SB_UINTS + 32u + e / 4u]
                 let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
                 v = dsc * float(q) - dmn
             } else {
@@ -479,7 +471,7 @@ class MetalPleGatherK4 : MetalPleGatherKqT {}
 
 [metal_dispatch(name = "pf_enc_ple_gather_k5", pso = "g_pf_pso_ple_gather_k5", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
 class MetalPleGatherK5 : MetalPleGatherKqT {
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
@@ -530,8 +522,8 @@ class template MetalKqMulMmSplitTensorBase {
     @template_constant MT : uint = 32u
     @template_constant TWB : int = 6144     //!< W stage halves: one 64x72 tile; 9216 = the two ping-pong tiles `db_shell` runs
     @template_constant REM : bool = false   //!< the routed THR stamp's remainder pass
-    @template_constant MOE : bool = false   //!< the routed twin: the bucket count / base planes and `moe_kernel`
-    @template_constant DEQW : bool = false  //!< the dev-W dequant pass: the f16 panel `dequant_shell` writes
+    @template_constant MOE : bool = false
+    @template_constant DEQW : bool = false
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
@@ -539,8 +531,6 @@ class template MetalKqMulMmSplitTensorBase {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    //! the gated planes: a role is DERIVED per stamp - a template carries the field unreified, so
-    //! a declared one would be cross-checked against a body that never names it
     @ssbo @binding = 7 @template_gate = MOE cnt : array<uint>
     @ssbo @binding = 8 @template_gate = MOE basep : array<uint>
     @ssbo @binding = 7 @template_gate = DEQW wh : array<float16>
@@ -549,8 +539,7 @@ class template MetalKqMulMmSplitTensorBase {
     //! decodes 16 W elements of chunk kb into the tile at tbase; tbase is 0 on every single-tile shell
     def abstract stage16(work, kb, nBase, nsb, tbase : uint) : void
 
-    //! the format's per-threadgroup table staging (codebook or grid); the formats that decode
-    //! straight off their planes stage nothing, so the hook is empty here and every entry calls it
+    //! the format's per-threadgroup table staging - empty here, and every entry calls it
     def prologue {}
 
     def stage_tile(lid, kb, nBase, nsb, tbase : uint) {
@@ -581,8 +570,6 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
-    //! the double-buffered twin of run_shell: TWB = 9216 holds two ping-pong tiles and the loop
-    //! runs ONE barrier per chunk, staging chunk b+1 while the tensor op reads chunk b
     [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
     def db_shell {
         let mBase = gl_WorkGroupID.x * MT
@@ -605,11 +592,10 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
-    // expert e is the grid's z; its ce bucket rows start at rbase in the contiguous X/y panels
-    def moe_shell(ce, rbase : uint; rem : bool) {
+    def moe_shell(ecount, rbase : uint; rem : bool) {
         let e = gl_WorkGroupID.z
-        let mBase = gl_WorkGroupID.x * MT + (rem ? ce / 128u * 128u : 0u)
-        let lim = MT == 128u ? ce / 128u * 128u : (ce + 31u) / 32u * 32u
+        let mBase = gl_WorkGroupID.x * MT + (rem ? ecount / 128u * 128u : 0u)
+        let lim = MT == 128u ? ecount / 128u * 128u : (ecount + 31u) / 32u * 32u
         if (mBase >= lim) {
             return
         }
@@ -622,7 +608,7 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            //! the expert plane base rides the stage16 call - a stage_tile argument is emitted once outside the work loop, which moves the decode's shape
+            // the expert plane base rides the stage16 call - a stage_tile argument is emitted once outside the work loop, which moves the decode's shape
             var work = lid
             while (work < 256u) {
                 stage16(work, kb, e * ndim + nBase, nsb, 0u)
@@ -636,8 +622,6 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
-    //! the routed entry every split-format MoE stamp dispatches: the format table, then the
-    //! expert's bucket rows through moe_shell
     def moe_kernel {
         static_if (MOE) {
             prologue()
@@ -645,8 +629,6 @@ class template MetalKqMulMmSplitTensorBase {
         }
     }
 
-    //! the dev-W entry every split-format dequant stamp dispatches: one staged 64x64 chunk of the
-    //! format's own decode, written out as the image's f16 panel
     def dequant_shell {
         static_if (DEQW) {
             prologue()
@@ -663,18 +645,15 @@ class template MetalKqMulMmSplitTensorBase {
         barrier()
     }
 
-    // staged element e (wrow j = e/64, k c = e%64) -> its index in the f16 panel; dequant_val(e) is its value
+    // staged element e -> its index in the f16 panel (wrow j = e/64, k column c = e%64)
     def dequant_idx(e : uint) : uint => (gl_WorkGroupID.y * 64u + (e >> 6u)) * kdim + gl_WorkGroupID.x * 64u + (e & 63u)
 
     def dequant_val(e : uint) : float16 => twb[(e >> 6u) * 72u + (e & 63u)]
 }
 
-//! the q4_K / q5_K decode, one source for the single-tile and the double-buffered shells:
-//! kdh = the 16B scale blocks' half view (d, dmin at 8*blk), ksc the same buffer's uint4 view,
-//! kqu the quant plane (qs at BLK*blk; k5's qh at BLK*blk+32)
 [ |> template_struct_instance]
 class template MetalKqMulMmK45DecodeT : MetalKqMulMmSplitTensorBase {
-    @template_constant BLK : uint = 32u
+    @template_constant SB_UINTS : uint = 32u
     @template_constant QH : bool = false
 
     def override stage16(work, kb, nBase, nsb, tbase : uint) {
@@ -693,8 +672,8 @@ class template MetalKqMulMmK45DecodeT : MetalKqMulMmSplitTensorBase {
         let dmn = float(kdh[blk * 8u + 1u]) * float(mn)
         static_if (QH) {
             let nsh = (js & 1u) * 4u
-            let qb = blk * BLK + (js / 2u) * 8u + kh / 4u
-            let hb = blk * BLK + 32u + kh / 4u
+            let qb = blk * SB_UINTS + (js / 2u) * 8u + kh / 4u
+            let hb = blk * SB_UINTS + 32u + kh / 4u
             let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
             for [unroll_full] (k in range(4)) {
                 let u = kqu[qb + uint(k)]
@@ -707,7 +686,7 @@ class template MetalKqMulMmK45DecodeT : MetalKqMulMmSplitTensorBase {
         } else {
             for [unroll_full] (t in range(16)) {
                 let e = kh + uint(t)
-                let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                let q = (kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
                 twb[tbase + j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
             }
         }
@@ -735,14 +714,14 @@ class MetalKqMulMmK4TH : MetalKqMulMmK45TensorT {
 [metal_dispatch(stamp = "kq_mm:k5:t", pso = "g_pf_pso_kq_mm5_t")]
 class MetalKqMulMmK5T : MetalKqMulMmK45TensorT {
     typedef XT = float
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
 [metal_dispatch(stamp = "kq_mm:k5:th", pso = "g_pf_pso_kq_mm5_th")]
 class MetalKqMulMmK5TH : MetalKqMulMmK45TensorT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
@@ -757,7 +736,7 @@ class MetalKqMulMmK4TH128 : MetalKqMulMmK45TensorT {
 [metal_dispatch(stamp = "kq_mm:k5:th128", pso = "g_pf_pso_kq_mm5_th128")]
 class MetalKqMulMmK5TH128 : MetalKqMulMmK45TensorT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
     override MT = 128u
 }
@@ -786,21 +765,18 @@ class MetalKqMulMmK4THDb128 : MetalKqMulMmK45DbT {
 [metal_dispatch(stamp = "kq_mm:k5:thdb", pso = "g_pf_pso_kq_mm5_thdb")]
 class MetalKqMulMmK5THDb : MetalKqMulMmK45DbT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
 [metal_dispatch(stamp = "kq_mm:k5:thdb128", pso = "g_pf_pso_kq_mm5_thdb128")]
 class MetalKqMulMmK5THDb128 : MetalKqMulMmK45DbT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
     override MT = 128u
 }
 
-//! the q6_K decode, one source for the single-tile and the double-buffered shells: kdh = the d
-//! plane (scale buffer at byte nsb*16; s0off = the caller's doff), ksc the 16B sub-scale blocks
-//! in the same buffer at 0, kqu the quant plane (ql at 48*blk, qh at 48*blk+32)
 [ |> template_struct_instance]
 class template MetalKqMulMmK6DecodeT : MetalKqMulMmSplitTensorBase {
     def override stage16(work, kb, nBase, nsb, tbase : uint) {
@@ -2039,7 +2015,7 @@ class template MetalMoeMulMmK45TensorT : MetalMoeMulMmKqTensorBase {
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
     @workgroup twb : float16[6144]
-    @template_constant BLK : uint = 32u
+    @template_constant SB_UINTS : uint = 32u
     @template_constant QH : bool = false
 
     [metal_kernel(float_a_ok=true)]
@@ -2065,12 +2041,12 @@ class template MetalMoeMulMmK45TensorT : MetalMoeMulMmKqTensorBase {
         for [unroll_full] (t in range(16)) {
             let el = kh + uint(t)
             static_if (QH) {
-                let u = kqu[blk * BLK + (js / 2u) * 8u + el / 4u]
-                let hu = kqu[blk * BLK + 32u + el / 4u]
+                let u = kqu[blk * SB_UINTS + (js / 2u) * 8u + el / 4u]
+                let hu = kqu[blk * SB_UINTS + 32u + el / 4u]
                 let q = ((u >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (el % 4u) + js)) & 1u) << 4u)
                 twb[j * 72u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
             } else {
-                let q = (kqu[blk * BLK + (js / 2u) * 8u + el / 4u] >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u
+                let q = (kqu[blk * SB_UINTS + (js / 2u) * 8u + el / 4u] >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u
                 twb[j * 72u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
             }
         }
@@ -2102,21 +2078,21 @@ class MetalMoeMulMmK4THR : MetalMoeMulMmK45TensorT {
 [metal_dispatch(stamp = "moe_mm:k5:t")]
 class MetalMoeMulMmK5T : MetalMoeMulMmK45TensorT {
     typedef XT = float
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
 [metal_dispatch(stamp = "moe_mm:k5:th")]
 class MetalMoeMulMmK5TH : MetalMoeMulMmK45TensorT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 }
 
 [metal_dispatch(stamp = "moe_mm:k5:th128")]
 class MetalMoeMulMmK5TH128 : MetalMoeMulMmK45TensorT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
     override MT = 128u
 }
@@ -2124,7 +2100,7 @@ class MetalMoeMulMmK5TH128 : MetalMoeMulMmK45TensorT {
 [metal_dispatch(stamp = "moe_mm:k5:thr")]
 class MetalMoeMulMmK5THR : MetalMoeMulMmK45TensorT {
     typedef XT = float16
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
     override REM = true
 }
@@ -2356,14 +2332,12 @@ class MetalMoeMulMmQ8 : MetalMoeMulMmBase {
     }
 }
 
-//! the q4_K / q5_K register-tile decode of the routed simdgroup family: BLK is the superblock's
-//! quant-plane stride in uints, QH the q5_K 5th-bit overlay that rides after the nibbles
 [ |> template_struct_instance]
 class template MetalMoeMulMmK45T : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @template_constant BLK : uint = 32u
+    @template_constant SB_UINTS : uint = 32u
     @template_constant QH : bool = false
 
     def override sb_unit() : uint => 256u
@@ -2379,9 +2353,9 @@ class template MetalMoeMulMmK45T : MetalMoeMulMmBase {
         kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-        let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
+        let qb = blk * SB_UINTS + (js / 2u) * 8u + il0 * 4u
         static_if (QH) {
-            let hb = blk * BLK + 32u + il0 * 4u
+            let hb = blk * SB_UINTS + 32u + il0 * 4u
             let nsh = (js & 1u) * 4u
             for [unroll_full] (k in range(4)) {
                 let u = kqu[qb + uint(k)]
@@ -2415,7 +2389,7 @@ class MetalMoeMulMmK4 : MetalMoeMulMmK45T {
 
 [metal_dispatch(name = "pf_enc_moe_mm_k5_c", pso = "g_pf_pso_moe_mm_k5", tgmem = "metal_moe_mulmm_k5_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
 class MetalMoeMulMmK5 : MetalMoeMulMmK45T {
-    override BLK = 40u
+    override SB_UINTS = 40u
     override QH = true
 
     [metal_kernel(name="metal_moe_mulmm_k5_msl")]
@@ -3608,8 +3582,7 @@ class MetalG4aDw {
     }
 }
 
-//! In-place SiLU over a panel — the gemma4a FFN/conv activation. The ew1 family's body under this
-//! class's own entry name, which is the census key the serving run records.
+//! the ew1 family's body under this class's OWN entry name - the census key a serving run records
 [metal_dispatch(name = "enc_g4a_silu", pso = "g_pf_pso_g4a_silu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalG4aSilu : MetalEw1BaseT {
     def override map(a : float) : float => a / (1.0 + exp(-a))
@@ -4212,8 +4185,7 @@ var private g_pf_logits_cpu = false            //!< set_metal_prefill_logits_cpu
 //! g_pf_skip comparisons below.
 var private g_pf_skip = ""
 
-//! A routed-MoE stage is knocked out by its OWN family name, and by every "only" family that
-//! stops the chain before it - those keep the routing and drop everything downstream.
+//! an "only" family keeps the routing and drops every stage downstream, so it knocks out this one too
 def private pf_skip_moe_stage(own : string) : bool {
     return (g_pf_skip == own || g_pf_skip == "moe_only_route" || g_pf_skip == "moe_only_router" || g_pf_skip == "moe_only_sel")
 }
@@ -4807,8 +4779,6 @@ def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64
     return devw_tile_pick(rows, d, kdim, slow_fb, g_pf_bwh_bytes)
 }
 
-//! The half-X panel a consumer GEMM reads: the producer's dual-store twin when it already wrote
-//! one, else one conversion pass over the f32 panel (which has its own row floor).
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
 def private pf_hx_panel(enc : MetalComputeEncoder?; var twin : MetalBuffer?; bx : MetalBuffer?; rows, kdim : int64; skip_convert : bool = false) : MetalBuffer? {
     return twin != null ? twin : pf_cvt_panel(enc, bx, rows, kdim, skip_convert)
@@ -4817,8 +4787,6 @@ def private pf_hx_panel(enc : MetalComputeEncoder?; var twin : MetalBuffer?; bx 
 //! the DBUF pick: the double-buffered twin serves when the knob is on and its PSO compiled
 def private pf_dbuf(pso : MetalComputePipeline?) : bool => g_pf_env_dbuf && pso != null
 
-//! A borrowed kernel set serves only where EVERY PSO of it compiled - one absent stamp and the
-//! driver keeps its host route, because a partly-armed set would dispatch into a null pipeline.
 def private psos_ready(psos) : bool {
     for (pso in psos) {
         if (pso == null) {
@@ -5384,13 +5352,10 @@ def private pf_compile_kq_dequant_passes(var ok : bool&) {
     g_pf_pso_dq_kq25 = compile_stamp(MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl, ok)
 }
 
-//! Every dense tensor mul_mm builder the lens stamps carries this signature - the split layout's
-//! d plane at its own offset, the sub-scale plane, the quant plane, X, y and the two dim uniforms.
 typedef KqSplitEnc = function<(enc : MetalComputeEncoder?; bkdh : MetalBuffer?; s0off : uint64; bksc : MetalBuffer?; soff : uint64;
                                bkqu : MetalBuffer?; qoff : uint64; bxf : MetalBuffer?; xoff : uint64; by : MetalBuffer?; yoff : uint64;
                                bkdim : MetalBuffer?; bndim : MetalBuffer?; mp : int64; rows : int64) : void>
 
-//! did this split format's dense race crown its tensor stamp on this box
 def private pf_kq_split_crowned(fmt : KqFmt) : bool {
     if (fmt == KqFmt.iq4xs) return g_pf_kq_mm44_tensor
     if (fmt == KqFmt.iq4nl) return g_pf_kq_mm45_tensor
@@ -5405,8 +5370,6 @@ def private pf_kq_split_crowned(fmt : KqFmt) : bool {
     return false
 }
 
-//! the dense stamp's PSO, null where the format carries no such stamp - only iq3s and iq3xxs
-//! stamp the tall th128 form, so th128 answers null for the other eight and their tall arm closes
 def private pf_kq_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePipeline? {   // nolint:STYLE037 — flat per-format pick
     if (fmt == KqFmt.iq4xs) return form == MoeSplitForm.t ? g_pf_pso_kq_mm44_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm44_th : null)
     if (fmt == KqFmt.iq4nl) return form == MoeSplitForm.t ? g_pf_pso_kq_mm45_t : (form == MoeSplitForm.th ? g_pf_pso_kq_mm45_th : null)
@@ -5421,7 +5384,6 @@ def private pf_kq_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePipe
     return null
 }
 
-//! the two forms every split format stamps: the f32-X base, and its half-X twin
 def private pf_kq_split_builder(fmt : KqFmt; half : bool) : KqSplitEnc {   // nolint:STYLE037 — flat per-format pick
     if (fmt == KqFmt.iq4xs) return half ? @@enc_kq_mm_iq4xs_th_c : @@enc_kq_mm_iq4xs_t_c
     if (fmt == KqFmt.iq4nl) return half ? @@enc_kq_mm_iq4nl_th_c : @@enc_kq_mm_iq4nl_t_c
@@ -5437,7 +5399,6 @@ def private pf_kq_split_builder(fmt : KqFmt; half : bool) : KqSplitEnc {   // no
     return @@enc_kq_mm_iq4xs_t_c   //! unreachable - the panic above is the unserved-format guard
 }
 
-//! the tall 128-row in-kernel-dequant stamp, which only iq3s and iq3xxs carry
 def private pf_kq_split_tall_builder(fmt : KqFmt) : KqSplitEnc {
     if (fmt == KqFmt.iq3s) return @@enc_kq_mm_iq3s_th128_c
     if (fmt == KqFmt.iq3xxs) return @@enc_kq_mm_iq3xxs_th128_c
@@ -5445,9 +5406,6 @@ def private pf_kq_split_tall_builder(fmt : KqFmt) : KqSplitEnc {
     return @@enc_kq_mm_iq3s_th128_c   //! unreachable - the panic above is the unserved-form guard
 }
 
-//! Every stamp the K-quant deep class (k4/k5/k6) carries at one dense site: its crown, which of
-//! the five forms compiled, and which builder each names. The d plane is the class's one layout
-//! difference - k6 keeps an f16 d tail at doff, k4 and k5 a compact scale both bindings read at soff.
 struct private KqDeepStamps {
     crown : bool
     d_soff : bool
@@ -5504,7 +5462,6 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
             enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, yoff, bk, bn, mp, rows)
             return
         }
-        //! iq4nl and q40 carry a compact scale plane, so both their scale bindings take soff
         let d0 = (fmt == KqFmt.iq4nl || fmt == KqFmt.q40) ? bs.soff : bs.doff
         if (bxh != null && pso_th128 != null && pso_th != null && tallkq_pick(mp, rows, kdim, pf_tall_on())) {
             let r0 = mp / 128l * 128l
@@ -5523,7 +5480,6 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     //! in-kernel-dequant stamp reads the quant plane once per 128-row tile instead of
     //! materializing and re-streaming a 2B/element f16 panel
     let ks <- pf_kq_deep_stamps(fmt)
-    //! k6 carries an f16 d tail at doff; k4 and k5 carry a compact scale, so both bindings take soff
     let d0 = ks.d_soff ? bs.soff : bs.doff
     if (ks.crown && bxh != null && ks.pso_th128 != null && tallkq_pick(mp, rows, kdim, pf_tall_on())) {
         let r0 = mp / 128l * 128l
@@ -5599,9 +5555,7 @@ def private pf_moe_th_pso(fmt : KqFmt) : MetalComputePipeline? {
     return null
 }
 
-//! The stamp a split-format dispatch takes - the f32-X base, its half-X twin, and the tall pair
-//! (128-row floor + remainder). The dense sites pick from the same names; only the routed expert
-//! sites reach `thr`, whose grid is the four-tile remainder sweep.
+//! t = the f32-X base, th its half-X twin, th128 the 128-row tall floor, thr the tall remainder
 enum MoeSplitForm {
     t
     th
@@ -5609,9 +5563,6 @@ enum MoeSplitForm {
     thr
 }
 
-//! Every split-format expert builder the lens stamps carries this signature - the dense split
-//! layout's bindings plus the bucket rail's cnt and basep - so the 32 stamps are ONE call
-//! through a per-(format, form) pick.
 typedef MoeSplitEnc = function<(enc : MetalComputeEncoder?; bkdh : MetalBuffer?; s0off : uint64; bksc : MetalBuffer?; soff : uint64;
                                 bkqu : MetalBuffer?; qoff : uint64; bxf : MetalBuffer?; xoff : uint64; by : MetalBuffer?; yoff : uint64;
                                 bkdim : MetalBuffer?; bndim : MetalBuffer?; bcnt : MetalBuffer?; bbasep : MetalBuffer?;
@@ -5649,8 +5600,6 @@ def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : Moe
                              bs : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64>; bq : tuple<buf : MetalBuffer?; qoff : uint64>;
                              bx, by, bkd, bnd, bcnt, bbase : MetalBuffer?; mpad, rows, ne, tiles : int64) {
     let encf = pf_moe_split_builder(fmt, form)
-    //! q40's scale plane is compact, so BOTH its scale bindings take soff where every other
-    //! split format binds the d plane at doff
     let d0 = fmt == KqFmt.q40 ? bs.soff : bs.doff
     invoke(encf, enc, bs.buf, d0, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
 }
@@ -5684,9 +5633,6 @@ def private pf_moe_twins_ready(t : Model) : bool {
     return true
 }
 
-//! The gathered expert sites' tall gate: the 128-row stamp pays only where the bucket set holds
-//! a full tile per expert, and only where BOTH its stamps - the 128-row body and the remainder -
-//! compiled on this box.
 def private pf_moe_tall_pick(npos, nk, ne : int64; pso_th128, pso_thr : MetalComputePipeline?) : bool {
     return pf_tall_on() && npos * nk >= 128l * ne && pso_th128 != null && pso_thr != null
 }
@@ -7296,18 +7242,13 @@ def dasllama_metal_prefill_register() {
 }
 
 
-//! what a tensor A/B race opens with, once for every race in this file: `ok` false means
-//! `verdict` already holds the answer and nothing is timed - a box whose toolchain cannot build
-//! the tensor twin leaves the simdgroup kernel crowned, and the base pipeline is already released.
+//! ok false means verdict already holds the answer, the pipelines are released, and nothing is timed
 struct private RacePsoPair {
     base_pso, twin_pso : MetalComputePipeline?
     verdict : MetalTensorRaceResult
     ok : bool
 }
 
-//! a plain call rather than a shell taking the timed blocks: merging the races into one body would
-//! merge their kn_kargs/kn_dispatch tallies too, and the manual-dispatch census reads them per
-//! function (`dasllama_metal_lens.das`)
 def private race_pso_pair(dev : MetalDevice?; family : string;
                           base_src, base_entry : string; base_fm : bool;
                           twin_src, twin_entry : string; twin_fm : bool) : RacePsoPair {

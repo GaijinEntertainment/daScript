@@ -42,3 +42,11 @@ twin exactly when that PSO is non-null, so a box with no crown never compiles it
 The `kq_gemv_iq3s_f4` and `kq_gemv_iq3xxs_f4` crowns are raced (`race_gemv_f4_twin`).
 `kq_gemv_iq2xxs_f4` cannot be settled by an isolated race at all and is minted from a serving
 A/B instead - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21.
+
+### 2.2ab The Metal GEMV site abstraction {#metal-gemv-site}
+
+The Metal GEMV families share one site abstraction: `MetalGemvSiteT` carries the site hooks -
+`site_setup`, `y_rows` and the activation read - and its `GATHERED` axis selects the MoE-gathered
+site (a `MoeGemvArgs` uniform plus `sel[slot]`) over the plain `ndim`/`ddim` pair, so a format's
+dot walks one weight row against the x row at either site and a stamp carries only its own x and
+y bindings.

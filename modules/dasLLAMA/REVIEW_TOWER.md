@@ -45,3 +45,8 @@ past its allocation only on specific canvas sizes.
 **A diff that changes a family's CPU encoder block loop also changes that family's chain in
 `dasllama/dasllama_metal_tower.das` in the same change, dispatch for dispatch - and the
 reverse.** The CPU loop is the chain's specification and the parity cells its instrument.
+
+**A driver route that dispatches a borrowed kernel set - the builders one driver borrows from
+another driver's bring-up - is gated on every pipeline of that set having compiled, never on a
+subset; one absent pipeline keeps the host route.** A partly-armed set dispatches into a null
+pipeline.
