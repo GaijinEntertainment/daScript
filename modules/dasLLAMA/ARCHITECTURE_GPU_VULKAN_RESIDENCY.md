@@ -57,8 +57,9 @@ every region pinned passes as `busy`. A finished session parks (`gpu_device_kv_p
 pin drops, and the claim it answers keeps naming the rows until another session takes the
 region; `gpu_device_kv_adopt` hands the first `npos` of them to a fresh session under a claim
 of its own, the next prefill rewriting whatever lay past. `gpu_device_sessions` answers how
-many a host may hold - the region count, zero for a recurrent model, whose prefill cannot
-continue on the device.
+many a host may hold - the region count - and `gpu_device_prefill_continues` whether a
+session's prefill may start past zero: not on a recurrent model, whose window chain starts the
+deltanet state from zero.
 
 **The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
 idle `Scheduler` (one batched step takes one kind of session): admitted streams are
@@ -66,7 +67,8 @@ device-home, their prefill quantum is at least the 512-row window (`DEVICE_CHUNK
 and a reaped stream parks its claim under the token list its rows hold - one parked claim a
 stream slot - so the next request adopts the longest opening it shares, short of its last
 token: a conversation's next turn prefills its new suffix alone, with no copy. A media stream
-parks nothing, its rows not following from its token ids. `dasllama-server` turns the mode on
+parks nothing, its rows not following from its token ids, and neither does a recurrent model's
+stream: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
 per slot before each step (`slot_device_kv`) while the slot is served whole from the device,
 has a region per stream and no media tower or self-speculation, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the

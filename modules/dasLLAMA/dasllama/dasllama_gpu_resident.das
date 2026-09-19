@@ -2163,9 +2163,12 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     st.rdec_ple_proj = false
 }
 
-//! How many device-home sessions the INSTALLED model serves at once: the armed driver's region count, 0 when the
-//! driver is not armed or the window chain cannot continue this model's prefill (a recurrent model's state starts from zero).
-def gpu_device_sessions_(t : Model) : int64 => g_rdec_active && t.config.recr_mask == 0ul ? long_length(g_rdec_regions) : 0l
+//! How many device-home sessions the INSTALLED model serves at once: the armed driver's region count, 0 when the driver is not armed.
+def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions) : 0l
+
+//! A device-home session of `t` prefills from a position past zero: a prompt in chunks, a turn over the turns before it.
+//! False for a recurrent model - the window chain starts the deltanet state from zero - whose host prefills each prompt whole, from zero.
+def gpu_device_prefill_continues_(t : Model) : bool => t.config.recr_mask == 0ul
 
 //! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none). The host keeps
 //! the claim to hand the rows to a later session; until then any session may take the region, and the claim dies with it.

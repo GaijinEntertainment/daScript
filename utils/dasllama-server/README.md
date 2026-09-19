@@ -362,9 +362,10 @@ the device in 512-token windows, the streams decode in one batched step, and a c
 next turn picks up its earlier turns' rows from the region they were left in. A stream's
 context is a region's: `ctx`, or what the card's room divided by the stream count allows, and a
 request that fills it ends with a `length` stop. `/v1/stats` counts every call the device handed
-back to the CPU (`gpu_cpu_passes`); a slot served this way keeps it empty. A slot with a vision
-or audio tower, a recurrent (deltanet) model and self-speculation keep host-cached sessions for
-now, and show their passes there. The per-op rails arm beneath the driver as the
+back to the CPU (`gpu_cpu_passes`); a slot served this way keeps it empty. A recurrent (deltanet)
+model is served the same way with two differences: a prompt prefills in one piece, and a next
+turn re-prefills its whole transcript. A slot with a vision or audio tower, and self-speculation,
+keep host-cached sessions for now, and show their passes there. The per-op rails arm beneath the driver as the
 fallback for a model that does not fit: expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
 the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a

@@ -2182,6 +2182,18 @@ def private dnd_flush_down(st : DnStep) {
     }
 }
 
+//! A prefill from position zero overwrites every recurrent layer's state slot: a slot another session's state still lives in goes home first.
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
+def vk_rdec_dn_flush_owners {
+    for (L in g_rd.layers) {
+        continue if (!L.recurrent || !L.dn.valid)
+        if (L.dn.dirty) {
+            dnd_flush_down(L.dn)
+        }
+        dnd_drop_slot(L.dn)
+    }
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // a model drop, never the served token
 def vk_dn_step_invalidate {
     if (g_gpu == null) {

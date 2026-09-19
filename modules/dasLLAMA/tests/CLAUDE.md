@@ -509,8 +509,8 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
-`test_gpu_resident_regions.das` and `test_gpu_resident_regions_e2b.das` (`_resident_regions.das`
-carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
+`test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das` and
+`test_gpu_resident_regions_hybrid.das` (`_resident_regions.das` carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
 itself, so no CPU chain runs. The bit-for-bit cells: a session stepped between another
@@ -529,7 +529,10 @@ steps over the continued rows; the chat shape (a prompt, steps, a second turn th
 window chain against the same tokens stepped one by one); and the parked claim adopted once,
 refused twice, dead once another session took its region. The E2B file runs the bit-for-bit
 cells on the E-series carrier, where a batched row carries its own per-layer-embedding side
-input. About 90 s a file; both skip without the model or the armed tier.
+input, and the hybrid file on Qwen3.5-0.8B, where each recurrent layer's one device state slot
+goes to whichever session steps and a second session's prefill sends the first one's state home
+before it zeroes the slot; its scheduler cell holds that a recurrent model adopts no rows. About
+90 s a file; each skips without its model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run

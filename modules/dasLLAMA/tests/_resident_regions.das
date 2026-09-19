@@ -288,7 +288,7 @@ def cell_device_home_sessions(t : T?; file : string) {
         var tr <- load_two_regions(t, file)
         with_job_que() {
             setup_dasllama_jobque_()
-            t |> equal(gpu_device_sessions(tr), 2l, "the armed driver serves a device-home session per region")
+            t |> equal(gpu_device_sessions(), 2l, "the armed driver serves a device-home session per region")
             var pa <- prompt_a()
             var pb <- prompt_b()
             var fa <- feed_a()
@@ -511,7 +511,11 @@ def cell_scheduler_device_mode(t : T?; file : string) {
                 delete td
             }
             t |> equal(cached_of(host, 4l), 0l, "the host-cached flat scheduler keeps no prefix")
-            t |> success(cached_of(dev, 4l) >= 33l, "the second turn adopted the rows of the turn it continues from the device ({cached_of(dev, 4l)} of them)")
+            if (gpu_device_prefill_continues(tr)) {
+                t |> success(cached_of(dev, 4l) >= 33l, "the second turn adopted the rows of the turn it continues from the device ({cached_of(dev, 4l)} of them)")
+            } else {
+                t |> equal(cached_of(dev, 4l), 0l, "a recurrent model's turn prefills whole, from zero: nothing is adopted")
+            }
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "the device served every call of both runs: {passes}")
             delete passes

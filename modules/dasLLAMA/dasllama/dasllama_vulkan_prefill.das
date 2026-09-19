@@ -1556,6 +1556,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
+    if (pos0 == 0l && g_rd.hybrid) {
+        vk_rdec_dn_flush_owners()
+    }
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow

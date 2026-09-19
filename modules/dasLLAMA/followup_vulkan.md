@@ -1537,16 +1537,17 @@ module) is independent and can land any time - it is pure structure.
     `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
     the resident's mean gap to a bar the CPU chain's gap sets.
 
-69. **Four serving shapes still leave the resident driver's device.** A slot served whole from
+69. **Three serving shapes still leave the resident driver's device, and a fourth serves short.** A slot served whole from
     the device holds its streams' K/V there (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n:
     regions, device-home sessions, the scheduler's device mode); gemma-4-E2B Q4_K_M on the RTX
     5060 Ti reads 117 tok/s on one chat stream and 134 tok/s summed over four, `gpu_cpu_passes`
     empty. `REVIEW_GPU.md` rules each shape below a defect, and `/v1/stats` counts it:
     (a) a recurrent model's prefill continuation - the window chain starts the deltanet state
-    from zero, so a second chunk or a second turn goes to the CPU loop (`continuation`), and such
-    a slot keeps host-cached paged sessions, whose every call passes (`paged`). The work: the
-    chain entered with the session's device state bound, and a state slot per region - one slot a
-    layer means a flush and an upload on every change of stream. (b) A slot with a vision or
+    from zero (`continuation`), so a device-home stream of such a model prefills its prompt in
+    one quantum, stalling the other streams for its length, and a next turn re-prefills its
+    whole transcript. The work: the chain entered with the session's device state bound. Beside
+    it, each recurrent layer has ONE device state slot, so two streams stepping turn about pay a
+    flush and an upload a layer a token; a slot per region removes both. (b) A slot with a vision or
     audio tower: the span eval is not the chain's (`span`), so the whole slot stays host-cached.
     (c) Self-speculation, which has no Vulkan arm. (d) A host-cached outsider - the embeddings
     route - while every region is held by a live stream (`busy`). Two costs ride beside them:

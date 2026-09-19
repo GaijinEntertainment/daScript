@@ -216,7 +216,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     slot.model <- m
     slot.opts = opts
     // a slot the device serves whole holds its streams' K/V there, a region each: a stream's context is the region's
-    if (gpu_device_sessions(slot.model) > 0l) {
+    if (gpu_device_sessions() > 0l) {
         slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
     }
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
@@ -324,7 +324,7 @@ def private bind_gpu_slot(si : int) {
 //! so the facade answers for THIS model; an idle scheduler is the only one that switches.
 def private slot_device_kv(var s : ModelSlot) {
     let want = (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
-        && !s.sched.mtp && gpu_device_sessions(s.model) >= s.sched.max_streams)
+        && !s.sched.mtp && gpu_device_sessions() >= s.sched.max_streams)
     let was = s.sched.device_kv
     if (set_device_kv(s.sched, want) != was) {
         let kind = want ? "device-home sessions: every stream's K/V stays on the GPU, {gpu_device_session_ctx()} positions each" : "host-cached sessions"

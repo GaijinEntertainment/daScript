@@ -175,7 +175,9 @@ different session sends the resident copy home to its owner's buffers when it is
 cold-uploads its own state and takes the slot. A flush request (`vk_dn_step_flush`) writes only
 when the requester is the owner - a foreign session's state is already on its host, so the
 request is a no-op there. Two sessions decoding turn about on the tier therefore pay a flush
-and an upload per recurrent layer per switch, and each reads its own state.
+and an upload per recurrent layer per switch, and each reads its own state. The resident
+prefill takes the slots the same way: a prompt from position zero zeroes every slot, so the
+chain first sends home whatever another session left dirty there (`vk_rdec_dn_flush_owners`).
 
 **A session's identity outlives nothing.** Every Session with deltanet state carries a
 `DnOwner` token whose range is that state's host addresses; the token's finalizer - run by the

@@ -71,7 +71,7 @@ def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
 def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region, so
     //! no host cache is allocated and nothing crosses the bus per token. Valid only while
-    //! ``gpu_device_sessions(model)`` answers a count: hold at most that many live ones, in the
+    //! ``gpu_device_sessions()`` answers a count: hold at most that many live ones, in the
     //! driver's codec (``gpu_device_session_dtype``). A call the device cannot serve panics.
     return <- create_device_session_(model, kv_dtype)
 }
@@ -625,11 +625,17 @@ def set_gpu_ctx_max(n : int64) {
     set_gpu_ctx_max_(n)
 }
 
-def gpu_device_sessions(model : Model) : int64 {
+def gpu_device_sessions() : int64 {
     //! How many DEVICE-HOME sessions (``create_device_session``) the installed model serves at once:
-    //! the armed driver's region count, 0 when the model is not served whole from the device or
-    //! its prefill cannot continue there (a recurrent model).
-    return gpu_device_sessions_(model)
+    //! the armed driver's region count, 0 when the model is not served whole from the device.
+    return gpu_device_sessions_()
+}
+
+def gpu_device_prefill_continues(model : Model) : bool {
+    //! A device-home session of ``model`` prefills from a position past zero - a prompt in chunks,
+    //! a turn over the turns before it. False for a recurrent model: prefill each prompt whole,
+    //! from position zero, and adopt no earlier rows.
+    return gpu_device_prefill_continues_(model)
 }
 
 def gpu_device_kv_park(var session : Session) : int64 {
