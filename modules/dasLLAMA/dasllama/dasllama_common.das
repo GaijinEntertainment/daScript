@@ -394,6 +394,7 @@ struct BatchWorkspace {
     scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
     scr_codec_uid : uint64
     positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
+    row_tokens : array<int64> //! row i's token id this step: a device override gathers a row's own side input from it
     rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
     logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
     // row i's cache base pointers (into sessions[i]; valid per call). @do_not_delete is load-bearing:
@@ -2069,6 +2070,7 @@ struct Session {
     rdec_gen : int64
     rdec_region : int64         //! the mirror region the claim above sits in (meaningful only while `rdec_gen` matches that region's)
     rdec_host_current : bool
+    kv_device : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated, and a CPU path reaching this session is a defect, never a route
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
     tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's
@@ -2453,6 +2455,15 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
 //! `kdt`/`vdt` pick this session's KV-cache codec (per-session state, no globals).
 def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32) : Session {
     return <- make_run_state(model.config, kdt, vdt)
+}
+
+//! Create a DEVICE-HOME session: scratch and no host cache - its K/V lives only in the armed GPU driver's mirror
+//! region, so nothing crosses the bus per token and nothing is allocated per request. The caller holds as many live
+//! ones as the driver has regions; the driver panics where it would hand such a session to the CPU rails.
+def create_device_session_(model : Model; kdt : KVDtype) : Session {
+    var s <- make_run_state(model.config, kdt, kdt, false)
+    s.kv_device = true
+    return <- s
 }
 
 //! Allocate a PAGED run state over a caller-owned pool: the flat slabs stay empty and cache pages

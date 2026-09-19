@@ -995,12 +995,15 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (empty(ent.name)) {
                 ent.name = base_name(ent.path)
             }
+            let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
+                // a K/V region per stream, each the slot's context: every stream's history stays on the device
+                set_gpu_resident_regions(ent.streams > 0 ? int64(ent.streams) : streams)
+                set_gpu_ctx_max(ectx)
             }
             print("loading {ent.path} ...\n")
             var m <- load_model(ent.path, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant))
-            let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (ectx > 0l) {
                 m.config.seq_len = min(m.config.seq_len, ectx)
             }

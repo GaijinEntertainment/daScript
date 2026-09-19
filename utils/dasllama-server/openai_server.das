@@ -215,6 +215,10 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     var slot <- ModelSlot(name = name, path = path, is_default = empty(g_slots))
     slot.model <- m
     slot.opts = opts
+    // a slot the device serves whole holds its streams' K/V there, a region each: a stream's context is the region's
+    if (gpu_device_sessions(slot.model) > 0l) {
+        slot.model.config.seq_len = min(slot.model.config.seq_len, gpu_device_session_ctx())
+    }
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
     // its set re-installed (install_slot_marks); an armed capture makes this slot the GPU owner.
@@ -313,6 +317,19 @@ def private bind_gpu_slot(si : int) {
     g_slots[si].sw_count ++
     g_slots[si].sw_us += us
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
+}
+
+//! A slot the device serves whole, with a K/V region per stream and no media tower or self-speculation (both leave the
+//! device), admits DEVICE-HOME sessions; any other slot admits host-cached ones. Called with the slot's marks installed,
+//! so the facade answers for THIS model; an idle scheduler is the only one that switches.
+def private slot_device_kv(var s : ModelSlot) {
+    let want = (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
+        && !s.sched.mtp && gpu_device_sessions(s.model) >= s.sched.max_streams)
+    let was = s.sched.device_kv
+    if (set_device_kv(s.sched, want) != was) {
+        let kind = want ? "device-home sessions: every stream's K/V stays on the GPU, {gpu_device_session_ctx()} positions each" : "host-cached sessions"
+        to_log(LOG_INFO, "dasllama-server: {s.name} admits {kind}\n")
+    }
 }
 
 // Auto-switch policy: move the tier to a gpu-wanting slot only when the current owner is idle
@@ -5464,9 +5481,9 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     if (!empty(g_slots)) {
         set_mtp_spec(g_slots[g_active].sched.mtp)
     }
-    // the single shared KV mirror + chunked multi-stream prefill don't mix: a second stream's
-    // resident prefill would strand the first's device-only KV. The batch-decode override (which
-    // resyncs host<->mirror per step) stays on; per-slot mirrors re-enable device prefill here.
+    // host-cached sessions (a slot with a media tower, the embeddings route) can outnumber the driver's K/V regions, and a
+    // resident prefill would leave device-only rows another session's claim strands: their prefill stays off the device.
+    // A device-home stream (slot_device_kv) prefills there whatever this pin says.
     set_resident_prefill_allowed(false)
     g_server = new OpenAiServer()
     g_server->init(port)
@@ -5578,6 +5595,7 @@ def update_server() : bool {
         }
         install_slot_marks(si)
         maybe_bind_gpu(si)
+        slot_device_kv(g_slots[si])
         let t_step = ref_time_ticks()
         busy = scheduler_step(g_slots[si].model, g_slots[si].sched, g_events)
         let step_us = int64(get_time_usec(t_step))

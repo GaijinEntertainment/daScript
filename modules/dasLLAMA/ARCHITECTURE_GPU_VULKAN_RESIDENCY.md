@@ -29,7 +29,7 @@ declines to the per-op rails with the dense FFN on the CPU. The prepare keeps it
 direct callers.
 
 **The mirror is `regions` consecutive copies of the per-layer layout, and a region is one
-session's whole history.** A host asks for the count before the load (`set_gpu_resident_regions`,
+session's whole history.** A host asks for the count before the load (`set_gpu_resident_regions`, the facade's verb,
 one by default; a server's stream count), the plan sizes every region's K/V at `seq_cap`, and
 the binding cap divides by the count, since both sides stay one buffer and one binding. A region
 is an element offset (`rd_mir_base`: the layer's base plus the selected region's stride), folded
@@ -44,6 +44,33 @@ claim takes. Two sessions in two regions step between each other, or in one batc
 K/V crossing the bus - `tests/test_gpu_resident_regions.das` holds each bit for bit to the
 session alone. A session past the region count takes another's region and brings its history up
 from the host, as every session did on the single mirror.
+
+**A device-home session's region is its only copy.** `create_device_session` makes a session
+with scratch and no host cache (`Session.kv_device`), so nothing is allocated per request and
+nothing crosses the bus per token: the overrides bring no history up for it, read no row back
+after a batched step and hydrate nothing down. The CPU rails cannot take its call, so a pass
+that reaches one panics with the pass's reason (`rdec_device_home_guard`) - the prefill pin
+is the one gate it walks past, because the pin guards host-cached sessions whose device-only
+rows another session's claim would strand. Its region is pinned while it lives
+(`RdecRegion.pinned`): no other session is handed it, and a host-cached outsider that finds
+every region pinned passes as `busy`. A finished session parks (`gpu_device_kv_park`): the
+pin drops, and the claim it answers keeps naming the rows until another session takes the
+region; `gpu_device_kv_adopt` hands the first `npos` of them to a fresh session under a claim
+of its own, the next prefill rewriting whatever lay past. `gpu_device_sessions` answers how
+many a host may hold - the region count, zero for a recurrent model, whose prefill cannot
+continue on the device.
+
+**The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
+idle `Scheduler` (one batched step takes one kind of session): admitted streams are
+device-home, their prefill quantum is at least the 512-row window (`DEVICE_CHUNK_TOKENS`),
+and a reaped stream parks its claim under the token list its rows hold - one parked claim a
+stream slot - so the next request adopts the longest opening it shares, short of its last
+token: a conversation's next turn prefills its new suffix alone, with no copy. A media stream
+parks nothing, its rows not following from its token ids. `dasllama-server` turns the mode on
+per slot before each step (`slot_device_kv`) while the slot is served whole from the device,
+has a region per stream and no media tower or self-speculation, and sizes the slot's context
+to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
+mode against host-cached twins on the same device, on a qwen2 and on the E-series carrier.
 
 **The auto arm sizes against the room the OS reports on the adapter, where the OS reports
 it.** Vulkan cannot see the desktop: `VK_EXT_memory_budget` reads a flat 16024 MB on the 16 GB

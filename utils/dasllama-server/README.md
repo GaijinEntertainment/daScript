@@ -356,8 +356,16 @@ one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out, and 
 resolves to `off` before any want is constructed). Per-model
 support is unchanged - a model the armed tier cannot serve falls back to the CPU with the
 reason on the control page. `gpu = vulkan` asks for the **whole-model resident driver** first - a
-model that fits the card serves entirely from VRAM - and arms the per-op rails beneath it as the
-fallback for one that does not: expert stacks sized
+model that fits the card serves entirely from VRAM, and so do its streams: the driver holds a
+K/V region per stream (`streams`), a request's cache lives only there, the prompt prefills on
+the device in 512-token windows, the streams decode in one batched step, and a conversation's
+next turn picks up its earlier turns' rows from the region they were left in. A stream's
+context is a region's: `ctx`, or what the card's room divided by the stream count allows, and a
+request that fills it ends with a `length` stop. `/v1/stats` counts every call the device handed
+back to the CPU (`gpu_cpu_passes`); a slot served this way keeps it empty. A slot with a vision
+or audio tower, a recurrent (deltanet) model and self-speculation keep host-cached sessions for
+now, and show their passes there. The per-op rails arm beneath the driver as the
+fallback for a model that does not fit: expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
 the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override

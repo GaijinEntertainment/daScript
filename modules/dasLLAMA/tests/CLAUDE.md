@@ -509,14 +509,27 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
-`test_gpu_resident_regions.das` - stocked suite, `-jit` only; the resident driver's mirror regions
-(the same qwen2, loaded at two regions through `set_gpu_resident_regions`): two sessions hold
-their K/V on the device at once. The instrument is the driver against itself, so no CPU chain
-runs: a session stepped between another session's single steps, and a batched step over both,
-each read bit for bit what the session reads alone, the two prompts differing in content and
-length so a crossed region cannot land there. The batched cell also holds both claims unchanged
-through every step (no history came up from the host again) and both cells hold
-`gpu_cpu_passes_()` empty. About a minute; skips without the model or the armed tier.
+`test_gpu_resident_regions.das` and `test_gpu_resident_regions_e2b.das` (`_resident_regions.das`
+carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
+regions and the device-home sessions over them (a carrier loaded at two regions through
+`set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
+itself, so no CPU chain runs. The bit-for-bit cells: a session stepped between another
+session's single steps, and a batched step over both, each read what the session reads alone,
+the two prompts differing in content and length so a crossed region cannot land there, the
+claims unchanged through the batched steps (no history came up from the host again); the same
+with device-home sessions, which allocate no host cache; the pin - with both regions held by
+live device-home sessions a host-cached outsider passes as `busy`, the owners step on
+untouched, and a parked region is the next outsider's; and the scheduler's device mode token
+for token against the host-cached scheduler over four requests on two streams, the second
+turn adopting the rows of the turn it continues. Every cell holds `gpu_cpu_passes_()` empty
+(the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of
+`test_gpu_resident_qwen2.das`: one prompt prefilled in one call against two calls, cut at 40
+of 57, 512 of 600 and 300 of 900, a prompt one token short the control, then four decoded
+steps over the continued rows; the chat shape (a prompt, steps, a second turn through the
+window chain against the same tokens stepped one by one); and the parked claim adopted once,
+refused twice, dead once another session took its region. The E2B file runs the bit-for-bit
+cells on the E-series carrier, where a batched row carries its own per-layer-embedding side
+input. About 90 s a file; both skip without the model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run

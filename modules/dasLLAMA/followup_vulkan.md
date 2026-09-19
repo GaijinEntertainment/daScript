@@ -1537,16 +1537,20 @@ module) is independent and can land any time - it is pure structure.
     `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
     the resident's mean gap to a bar the CPU chain's gap sets.
 
-69. **The resident driver serves no session the server runs by default.** Every resident
-    override - prefill, single decode, batched decode, the embed gate, the hydrate path - declines
-    a paged session (`RdecPass.paged`: the one mirror serves the flat cache only), and
-    `dasllama-server` serves paged with the prefix cache on it, so a served request decodes on
-    the per-op rails: gemma-4-E2B Q4_K_M on the RTX 5060 Ti reads 157 tok/s tg128 on the bench
-    route's flat session and about 31 tok/s on a chat request. The server also pins the resident
-    prefill off for the process (`set_resident_prefill_allowed(false)`): the single shared mirror
-    and a second stream's chunked prefill would strand the first stream's device-only rows, so
-    every prompt prefills on the CPU rails (pp512 201 tok/s on that box against 2667 on a flat
-    session). `REVIEW_GPU.md` rules this shape a defect. The work: a paged-aware decode (the
-    mirror keyed by page, or the pages mirrored per stream) and a per-stream prefill that owns
-    its rows on the device, so the scheduler's chunked prefill and batched decode step ride the
-    driver; until then the page's served-how block names the pass.
+69. **Four serving shapes still leave the resident driver's device.** A slot served whole from
+    the device holds its streams' K/V there (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n:
+    regions, device-home sessions, the scheduler's device mode); gemma-4-E2B Q4_K_M on the RTX
+    5060 Ti reads 117 tok/s on one chat stream and 134 tok/s summed over four, `gpu_cpu_passes`
+    empty. `REVIEW_GPU.md` rules each shape below a defect, and `/v1/stats` counts it:
+    (a) a recurrent model's prefill continuation - the window chain starts the deltanet state
+    from zero, so a second chunk or a second turn goes to the CPU loop (`continuation`), and such
+    a slot keeps host-cached paged sessions, whose every call passes (`paged`). The work: the
+    chain entered with the session's device state bound, and a state slot per region - one slot a
+    layer means a flush and an upload on every change of stream. (b) A slot with a vision or
+    audio tower: the span eval is not the chain's (`span`), so the whole slot stays host-cached.
+    (c) Self-speculation, which has no Vulkan arm. (d) A host-cached outsider - the embeddings
+    route - while every region is held by a live stream (`busy`). Two costs ride beside them:
+    the regions share each side's single binding, so their total stops at the binding range (a
+    buffer per region lifts it), and the batched step runs its rows through the token command
+    one after another - a weight pass a row, where a batched GEMV reads the weights once for
+    every row, which is what the four-stream rate above is short of.

@@ -68,6 +68,14 @@ def create_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
     return <- create_session_(model, kv_dtype, kv_dtype)
 }
 
+def create_device_session(model : Model; kv_dtype : KVDtype = KVDtype.f16) : Session {
+    //! Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region, so
+    //! no host cache is allocated and nothing crosses the bus per token. Valid only while
+    //! ``gpu_device_sessions(model)`` answers a count: hold at most that many live ones, in the
+    //! driver's codec (``gpu_device_session_dtype``). A call the device cannot serve panics.
+    return <- create_device_session_(model, kv_dtype)
+}
+
 def create_kv_pool(model : Model; page_rows : int64 = 64l; kv_dtype : KVDtype = KVDtype.f16) : KVPool {
     //! Create a caller-owned PAGED KV pool over ``model``'s cache geometry. Sessions created over it
     //! allocate cache pages of ``page_rows`` positions on demand instead of the full ``seq_len`` slab
@@ -603,6 +611,48 @@ def moe_gpu_drop_model() {
     //! evict half of a slot switch. Caller guarantees quiescence: no step in flight, every live
     //! session hydrated first.
     moe_gpu_drop_model_()
+}
+
+def set_gpu_resident_regions(n : int64) {
+    //! Ask the whole-model GPU driver for ``n`` K/V regions on the models loaded next, so ``n``
+    //! sessions keep their K/V on the device at once - a server's stream count. One by default.
+    set_gpu_resident_regions_(n)
+}
+
+def set_gpu_ctx_max(n : int64) {
+    //! Cap the whole-model GPU driver's K/V context at ``n`` positions per region for the models
+    //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it.
+    set_gpu_ctx_max_(n)
+}
+
+def gpu_device_sessions(model : Model) : int64 {
+    //! How many DEVICE-HOME sessions (``create_device_session``) the installed model serves at once:
+    //! the armed driver's region count, 0 when the model is not served whole from the device or
+    //! its prefill cannot continue there (a recurrent model).
+    return gpu_device_sessions_(model)
+}
+
+def gpu_device_kv_park(var session : Session) : int64 {
+    //! A FINISHED device-home session lets go of its K/V region and answers the claim its rows stay
+    //! under (0 = none) - call it before every such session's ``delete``. Keep the claim and
+    //! ``gpu_device_kv_adopt`` hands the rows to a later session: a prefix cache with no copy.
+    return gpu_device_kv_park_(session)
+}
+
+def gpu_device_kv_adopt(var session : Session; claim : int64; npos : int64) : bool {
+    //! Hand the first ``npos`` rows a kept ``claim`` holds to the fresh device-home ``session``, whose
+    //! ``n_past`` becomes ``npos``. False when the rows are gone (another session took the region).
+    return gpu_device_kv_adopt_(session, claim, npos)
+}
+
+def gpu_device_session_ctx() : int64 {
+    //! The positions one device-home session holds - the armed driver's per-region context.
+    return gpu_device_session_ctx_()
+}
+
+def gpu_device_session_dtype() : KVDtype {
+    //! The K/V codec a device-home session must carry: the armed driver's.
+    return gpu_device_session_dtype_()
 }
 
 def set_resident_prefill_allowed(allowed : bool) {

@@ -6,20 +6,14 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require _resident_regions
 
-// Qwen2.5-0.5B-Instruct Q8_0 (the smallest carrier the whole-model driver takes): every cell of the rig - two sessions
-// in two mirror regions, the prefill continued from a position past zero, device-home sessions, the region pin, the
-// parked claim and the scheduler's device mode. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
-// serves, or without the file under models_dir().
-let private REGIONS_FILE = "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
+// gemma-4-E2B Q8_0 (the E-series carrier: a per-layer-embedding side input per token, the upper layers reading the K/V
+// of the ones below): the rig's bit-for-bit cells - the batched step hands each row its own side input - and the
+// scheduler's device mode. The tolerance cells stay the qwen2 file's: their bar is calibrated there.
+let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 
 [test]
 def test_regions_interleaved_single_steps(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)
-}
-
-[test]
-def test_prefill_continues_on_the_device(t : T?) {
-    cell_prefill_continues_on_the_device(t, REGIONS_FILE)
 }
 
 [test]
@@ -30,11 +24,6 @@ def test_regions_batched_steps(t : T?) {
 [test]
 def test_device_home_sessions(t : T?) {
     cell_device_home_sessions(t, REGIONS_FILE)
-}
-
-[test]
-def test_device_kv_park_adopt(t : T?) {
-    cell_device_kv_park_adopt(t, REGIONS_FILE)
 }
 
 [test]
