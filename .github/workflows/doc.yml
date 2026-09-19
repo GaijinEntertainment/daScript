@@ -12,6 +12,15 @@ on:
       - 'modules/dasLLAMA/dasllama/**'
       - 'modules/dasImgui/**'
       - 'modules/dasVulkan/**'
+      - 'modules/dasAudio/audio/**'
+      - 'modules/dasAudio/strudel/**'
+      - 'modules/dasGLTF/gltf/**'
+      - 'modules/dasHV/dashv/**'
+      - 'modules/dasOPENAI/openai/**'
+      - 'modules/dasPEG/peg/**'
+      - 'modules/dasPUGIXML/pugixml/**'
+      - 'modules/dasSpirv/spirv/**'
+      - 'modules/dasStbImage/stbimage/**'
   pull_request:
     paths:
       - 'doc/**'
@@ -20,6 +29,15 @@ on:
       - 'modules/dasLLAMA/dasllama/**'
       - 'modules/dasImgui/**'
       - 'modules/dasVulkan/**'
+      - 'modules/dasAudio/audio/**'
+      - 'modules/dasAudio/strudel/**'
+      - 'modules/dasGLTF/gltf/**'
+      - 'modules/dasHV/dashv/**'
+      - 'modules/dasOPENAI/openai/**'
+      - 'modules/dasPEG/peg/**'
+      - 'modules/dasPUGIXML/pugixml/**'
+      - 'modules/dasSpirv/spirv/**'
+      - 'modules/dasStbImage/stbimage/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

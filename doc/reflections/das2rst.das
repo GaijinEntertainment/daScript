@@ -1944,7 +1944,7 @@ def document_module_gltf_processed(_root : string) {
     var mod = find_module("gltf_processed")
     var groups <- array<DocGroup>(
         group_by_regex("Processing types", mod, %regex~.*(ProcessingProfile|ProcessedPrimitive|ProcessedMesh|ProcessedAsset|ProcessedCatalogEntry|ProcessedCatalog|ProcessedManifest)$%%),
-        group_by_regex("Validation and persistence", mod, %regex~.*(processed_valid|save_processed|load_processed|load_and_process_gltf)$%%),
+        group_by_regex("Validation and persistence", mod, %regex~.*(processed_valid|save_processed|load_processed|load_and_process_gltf|prepare_processed_catalog)$%%),
         group_by_regex("Geometry processing", mod, %regex~.*(processed_stride|processed_vertex_bytes|processed_indices|process_primitive|process_gltf|unpack_processed_geometry)$%%)
     )
     document("Backend-neutral glTF geometry and texture preprocessing, validation, and persistence", mod, "gltf_processed.rst", groups)
