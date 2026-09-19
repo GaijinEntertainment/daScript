@@ -3248,6 +3248,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 
 - `synthesize` - Text -> speech: normalize, chunk by sentence, phonemize, map into the family's symbols, synthesize; the chunks concatenate, the timings sum.
 - `synthesize_stream` - Text -> speech, one sentence-sized chunk at a time: the block receives each chunk's audio as soon as it exists, in order.
+- `tts_release_scratch` - Free the activation scratch a synthesis or a clone left behind - the Pocket carrier and the block home's scratch globals; the next run grows them back for a few milliseconds of allocation.
 
 ### The served lane
 
@@ -5941,6 +5942,7 @@ The JOBQUE_BOOST module provides high-level job queue abstractions built on the 
 - `pop` - Blocking pop from the stream.
 - `pop_and_clone_one` - reads one command from channel
 - `pop_archive` - Blocking pop + deserialize via `daslib/archive`.
+- `pop_archive_with_timeout` - Pop + deserialize, waiting at most `timeout_ms`.
 - `pop_one` - reads one command from channel
 - `pop_with_timeout` - Pop from channel with timeout in milliseconds.
 - `pop_with_timeout_clone` - Pop from channel with timeout and clone.

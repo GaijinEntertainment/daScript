@@ -1735,3 +1735,11 @@
     model is coherent, tracking llama.cpp's exact tokens is not the bar. The option, if a carrier
     ever needs it: a Q8_0-form activation path for q40 and iq4nl through the CPU kq cores and the
     Vulkan decode GEMV, the q51 pairing as the template.
+153. **The codec stream's small windows starve the lanes.** A 16-frame window hands the codec
+    transformer 256 rows and the first conv stages a few hundred, and `maybe_parallel_for` over
+    `matmul_chunks` / `lanes_for_work` splits them across every worker: on one thread a window
+    beats the whole run by 3-6% (`PERF_LEDGER.md`, the 2026-09-18 entry), on fourteen it trails
+    by up to a tenth. Two ways of sizing the same dispatch coexist - the rows kernels' chunking
+    and the lane count the queue was set up with. Done looks like: the lanes following the rows
+    at the small end, measured on the window sweep with the discipline's cv, and `stream_conv`
+    writing a transposed conv's window rows straight into `y` instead of through `sc.ct`.

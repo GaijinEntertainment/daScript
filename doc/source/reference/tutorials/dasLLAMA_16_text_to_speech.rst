@@ -264,6 +264,21 @@ refuses by name; a phoneme model panics here: it has no voice to take.
        let mine <- synthesize(m, "daslang speaks in my voice.", "me")
    }
 
+Giving the scratch back
+=======================
+
+A synthesis leaves its activation rows inside the model, sized to the largest
+one so far, so the next one pays no allocation. On a phone's browser tab that
+idle memory is what runs out first. ``tts_release_scratch`` gives the rows back,
+and the next synthesis grows them again for a few milliseconds. Call it when
+nothing is queued: the browser examples' speech threads call it after half a
+second with no request waiting.
+
+.. code-block:: das
+
+   tts_release_scratch(m)
+   let again <- synthesize(m, "It speaks as before.", vname)
+
 Prepared voice prompts
 ======================
 

@@ -853,47 +853,68 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     let stride = c.stride
     let d = k * cout
     let has_bias = !empty(c.b)
+    // blocks of input rows from the last down: an output row still takes its taps in kk order
+    let lift_rows = clamp(ROWS_STACK_BYTES / (d * 4l) / 4l * 4l, 64l, t_in)
     var v & = g_rows_v
-    v |> reserve_resize(t_in * d)
+    v |> reserve_resize(lift_rows * d)
     var vp = unsafe(addr(v[0]))
     let xp = unsafe(addr<float const?>(x[0]))
     let wp = unsafe(addr<float const?>(c.wtr[0]))
-    let chunks_in = matmul_chunks(int(t_in), ROWS_OVERSPLIT, t_in * cin * d)
-    maybe_parallel_for(0, int(t_in), chunks_in) $(rb, re) {
-        unsafe {
-            let rb4 = tile_edge(int64(rb), t_in)
-            let re4 = tile_edge(int64(re), t_in)
-            for (i in range64(rb4 * d, re4 * d)) {
-                vp[i] = 0.0
-            }
-            if (re4 > rb4) {
-                gemm_f32_jo(vp + rb4 * d, xp + rb4 * cin, wp, re4 - rb4, cin, d)
-            }
-        }
-    }
     var yp = unsafe(addr(y[0]))
     let vcp = unsafe(addr<float const?>(v[0]))
     let b4p = has_bias ? unsafe(addr<float4 const?>(c.b[0])) : null
-    let chunks_out = matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * d)
-    maybe_parallel_for(0, int(t_out), chunks_out) $(rb, re) {
+    let c4 = cout / 4l
+    maybe_parallel_for(0, int(t_out), matmul_chunks(int(t_out), ROWS_OVERSPLIT, t_out * cout)) $(rb, re) {
         unsafe {
-            let c4 = cout / 4l
             for (p in range64(int64(rb), int64(re))) {
                 var y4 = reinterpret<float4?>(yp + p * cout)
                 for (j in range64(c4)) {
                     y4[j] = has_bias ? b4p[j] : float4(0.0)
                 }
-                for (kk in range64(k)) {
-                    let q = p + pad_l - kk * dil
-                    if (q >= 0l && q % stride == 0l && q / stride < t_in) {
-                        let v4 = reinterpret<float4 const?>(vcp + (q / stride) * d + kk * cout)
-                        for (j in range64(c4)) {
-                            y4[j] += v4[j]
+            }
+        }
+    }
+    var q1 = t_in
+    while (q1 > 0l) {
+        let q0 = max(0l, q1 - lift_rows)
+        let rows = q1 - q0
+        let chunks_in = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * cin * d)
+        maybe_parallel_for(0, int(rows), chunks_in) $(rb, re) {
+            unsafe {
+                let rb4 = tile_edge(int64(rb), rows)
+                let re4 = tile_edge(int64(re), rows)
+                for (i in range64(rb4 * d, re4 * d)) {
+                    vp[i] = 0.0
+                }
+                if (re4 > rb4) {
+                    gemm_f32_jo(vp + rb4 * d, xp + (q0 + rb4) * cin, wp, re4 - rb4, cin, d)
+                }
+            }
+        }
+        // the output rows this block's inputs reach
+        let p0 = max(0l, q0 * stride - pad_l)
+        let p1 = min(t_out, (q1 - 1l) * stride + (k - 1l) * dil - pad_l + 1l)
+        if (p1 > p0) {
+            let chunks_out = matmul_chunks(int(p1 - p0), ROWS_OVERSPLIT, (p1 - p0) * d)
+            maybe_parallel_for(0, int(p1 - p0), chunks_out) $(rb, re) {
+                unsafe {
+                    for (p in range64(p0 + int64(rb), p0 + int64(re))) {
+                        var y4 = reinterpret<float4?>(yp + p * cout)
+                        for (kk in range64(k)) {
+                            let q = p + pad_l - kk * dil
+                            continue if (q < 0l || q % stride != 0l)
+                            let qi = q / stride
+                            continue if (qi < q0 || qi >= q1)
+                            let v4 = reinterpret<float4 const?>(vcp + (qi - q0) * d + kk * cout)
+                            for (j in range64(c4)) {
+                                y4[j] += v4[j]
+                            }
                         }
                     }
                 }
             }
         }
+        q1 = q0
     }
 }
 
@@ -1176,6 +1197,42 @@ def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>)
 var @scratch g_kq_xq : array<int8>
 var @scratch g_kq_xs : array<float>
 var @scratch g_kq_xbs : array<int>
+
+def tts_blocks_release_scratch() {
+    //! Free the block home's scratch globals - the tap lift, the requant images, the attention head
+    //! rows and the rest; every kernel grows its own back on the next call. For a platform where
+    //! idle memory matters more than the allocation a run then pays (`tts_release_scratch`).
+    delete g_conv_col
+    delete g_conv_ytm
+    delete g_convt_xtm
+    delete g_convt_v
+    delete g_rows_v
+    delete g_q8_xq
+    delete g_q8_xs
+    delete g_q8_xst
+    delete g_q8_xss
+    delete g_rows_xst
+    delete g_adain_h
+    delete g_adain_mean
+    delete g_adain_ssq
+    delete g_adain_scale
+    delete g_adain_shift
+    delete g_colsum_part
+    delete g_lstm_h
+    delete g_lstm_c
+    delete g_lstm_xin
+    delete g_lstm_gates
+    delete g_lstm_gates2
+    delete g_snake_inv
+    delete g_sine_rad
+    delete g_sine_low
+    delete g_sine_phase
+    delete g_kq_xq
+    delete g_kq_xs
+    delete g_kq_xbs
+    delete g_att_heads
+    delete g_catt_heads
+}
 
 //! Give a layer the K-quant planes of its [nout][nin] weight (`fmt` the kernel-layer id, 4 =
 //! Q4_K; the planes as the GGUF transcoder wrote them) and repack them for the active backend

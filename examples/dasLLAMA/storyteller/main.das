@@ -122,6 +122,8 @@ var g_clips_played = 0
 var g_rail_restarted = false      // the smoke rail's restart fires once
 
 //! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice
+let IDLE_RELEASE_MS = 500   //! the speech thread waits this long for a sentence before it gives the engine's scratch back
+
 [arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
 def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done : Channel?) {
     new_thread() <| @capture(= say, = speech, = now, = done) {
@@ -138,8 +140,9 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
         var inscope c <- caps(m)
         let voice = empty(voice_pick) ? c.voices[length(c.voices) - 1] : voice_pick
         var running = true
+        var released = false
         while (running) {
-            say |> pop_archive() $(var l : Line&) {
+            let got = say |> pop_archive_with_timeout(IDLE_RELEASE_MS) $(var l : Line&) {
                 if (empty(l.text)) {
                     running = false
                     return
@@ -155,6 +158,12 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
                 var inscope clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
+            }
+            if (got) {
+                released = false
+            } elif (!released) {
+                tts_release_scratch(m)   // nothing queued: idle memory is what a phone's tab runs out of
+                released = true
             }
         }
         say |> release()
@@ -326,7 +335,9 @@ def init() {
     g_model.config.seq_len = max(g_model.config.seq_len, STORY_CONTEXT)   // the session's KV cache is sized to it
     allow_cpu_prefill()
     g_say = unsafe(stream_create())
+    g_say |> append(1)   // one producer on the books: the speech thread's pop waits for a sentence instead of returning empty at once
     g_speech = unsafe(stream_create())
+    g_speech |> append(1)
     g_story_now = seq_box_create()
     g_story_now |> publish(g_stories)
     g_speech_done = unsafe(channel_create())

@@ -371,6 +371,98 @@ def private head_over_frames(m : PocketModel; var sc : PocketScratch; conds, x0 
     return <- out
 }
 
+// the rows of the codec chain's ping-pong scratch, the window's working set
+def private codec_scratch_bytes(sc : PocketScratch) : int64 {
+    return (long_capacity(sc.ca) + long_capacity(sc.cb) + long_capacity(sc.cc) + long_capacity(sc.cpad) + long_capacity(sc.cs) + long_capacity(sc.ct)) * 4l
+}
+
+let STREAM_BAR = 1.0e-5   // absolute, on a waveform or a latent frame: float noise of the same sums in another batching
+
+// windowed against whole: the same output within float noise, and a bar that a poisoned expectation trips
+def private stream_diff(t : T?; tag : string; ours, ref : array<float>) {
+    if (length(ours) != length(ref)) {
+        t |> failure("{tag}: {length(ours)} elements against the whole run's {length(ref)}")
+        return
+    }
+    let d = max_abs_diff(ours, ref)
+    to_log(LOG_INFO, "pocket {tag}: maxdiff {d} over {length(ref)}\n")
+    t |> success(d <= STREAM_BAR, "{tag}: maxdiff {d} <= {STREAM_BAR}")
+    if (!empty(ref)) {
+        var inscope poisoned := ref
+        poisoned[0] += 2.0 * STREAM_BAR
+        t |> success(max_abs_diff(ours, poisoned) > STREAM_BAR, "{tag}: the bar discriminates a poisoned expectation")
+    }
+}
+
+//! the codec stream (ARCHITECTURE_POCKET.md sec.2.46): a chunk decoded and a clip encoded a
+//! window of frames per step give the whole run's output on the f32 lane, one frame per step
+//! included, with the activations scaling with the window
+[test]
+def test_pocket_codec_stream(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    var picked = -1
+    for (i, c in iter_range(man.cases), man.cases) {
+        if (c.stages && picked < 0) {
+            picked = i
+        }
+    }
+    if (picked < 0) {
+        t |> skip("no oracle dump with stages under {oracle_dir()}")
+        return
+    }
+    let c & = unsafe(man.cases[picked])
+    with_job_que() {
+        setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+            set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
+        }
+        set_pocket_q8(false)   // the f32 lane: the served GEMMs' result depends on how many rows they batch
+        var inscope m <- load_pocket(path)
+        var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+        let frames = int64(c.n_frames)
+        set_pocket_codec_window(0l)
+        var inscope whole = PocketScratch()
+        var inscope ref_wave : array<float>
+        pocket_decode_latents(m, dump["latent"].f, frames, whole, ref_wave)
+        var inscope ref_lat : array<float>
+        let ref_frames = pocket_encode_latents(m, dump["voice_pcm"].f, whole, ref_lat)
+        let whole_bytes = codec_scratch_bytes(whole)
+        t |> equal(long_length(ref_wave), frames * m.frame_samples, "the whole run decodes frames * frame_samples samples")
+        for (w in [1l, POCKET_CODEC_WINDOW_DEFAULT]) {
+            set_pocket_codec_window(w)
+            var inscope sc = PocketScratch()
+            var inscope wave : array<float>
+            pocket_decode_latents(m, dump["latent"].f, frames, sc, wave)
+            stream_diff(t, "{c.id} decode, window {w}", wave, ref_wave)
+            var inscope lat : array<float>
+            let lframes = pocket_encode_latents(m, dump["voice_pcm"].f, sc, lat)
+            t |> equal(lframes, ref_frames, "window {w}: the clip's frame count")
+            stream_diff(t, "{c.id} encode, window {w}", lat, ref_lat)
+            let bytes = codec_scratch_bytes(sc)
+            to_log(LOG_INFO, "pocket codec scratch: window {w} {bytes} bytes, whole run {whole_bytes}\n")
+            if (frames > 4l * w) {
+                t |> success(bytes * 2l < whole_bytes, "window {w}: the codec scratch is under half the whole run's ({bytes} against {whole_bytes})")
+            }
+            // the release: every carried buffer gone, and the next run grows them back to the same output
+            pocket_release_scratch(sc)
+            t |> equal(codec_scratch_bytes(sc), 0l, "window {w}: the released carrier holds no codec rows")
+            t |> equal(long_capacity(sc.qkv) + long_capacity(sc.h), 0l, "window {w}: the released carrier holds no transformer rows")
+            var inscope again : array<float>
+            pocket_decode_latents(m, dump["latent"].f, frames, sc, again)
+            stream_diff(t, "{c.id} decode after the release, window {w}", again, ref_wave)
+        }
+        // a voice's caches reserve the rows a chunk of the budget can take, not a flat slack
+        var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, whole)
+        let budget = int64(POCKET_MAX_TOKENS) + pocket_max_frames(int64(POCKET_MAX_TOKENS)) + 1l
+        t |> equal(vs.caches[0].cap, vs.len + budget, "the voice's caches hold the clip plus one chunk of the budget ({vs.len} + {budget} rows)")
+    }
+}
+
 [test]
 def test_pocket_frames(t : T?) {
     let path = gguf_path()
@@ -1076,14 +1168,18 @@ def test_pocket_long_chunk(t : T?) {
         var inscope chunks <- tts_chunks(m, text)
         t |> equal(length(chunks), 1, "an unsplittable text is one chunk")
         var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
-        t |> success(length(ids) >= 194, "{length(ids)} tokens: past the 1024-row slack with its frame cap")
+        t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
         var inscope a <- synthesize(m, text, "alba")
         t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
         var grown = 0l
+        var first = 0l
+        var need = 0l
         m.pocket.voice_states |> get("alba") $(vs) {
             grown = vs.caches[0].cap
+            first = vs.len + int64(POCKET_MAX_TOKENS) + pocket_max_frames(int64(POCKET_MAX_TOKENS)) + 1l
+            need = vs.len + long_length(ids) + pocket_max_frames(long_length(ids)) + 1l
         }
-        t |> success(grown > 63l + 1024l + 1024l, "the voice's caches grew past the slack ({grown} positions)")
+        t |> success(grown > first && grown >= need, "the voice's caches grew past the budget's rows to the chunk's ({grown} positions, sized {first}, the chunk needs {need})")
         // the next short sentence on the same voice still starts from the voice alone
         var inscope b <- synthesize(m, "And a short one after it.", "alba")
         t |> success(speech_stats(b.pcm).rms > 0.01, "a short sentence after the long one speaks")

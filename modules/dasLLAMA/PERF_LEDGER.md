@@ -11,6 +11,28 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-18) - the Pocket codec streams in windows of 16 latent frames
+  (`ARCHITECTURE_POCKET.md` sec.2.46).** The codec's activations, about 20 MB per second of
+  audio across the chain's ping-pong rows, were the say's and the clone's working set: 116 MB
+  for a 5.7 s chunk, 233 MB for an 11 s clip (das heap counters, the English q8 file, M5 Max);
+  at 16 frames they are 41 MB whatever the run's length, 21 MB at 8. On one thread (26 runs, cv
+  under 1%) a window is cache-sized rows and beats the whole run: the 5.7 s decode 374 ms -> 365
+  at 16 and 360 at 8, the 11 s encode 710 -> 672 and 664. On fourteen threads the rows a step
+  hands the workers thin out: codec minima 81-89 ms for the whole run against 93 at 16, 94 at 8,
+  106 at 4, inside a run-to-run band of a tenth (cv 5-7%, void by the discipline; the say's total
+  196-217 ms whole, 204 at 16). The remaining cost is the lane split at a few hundred rows -
+  `followup_general.md` row 153. What a say still leaves behind, by the heap report's blocks:
+  the roster voice's state (six layers, keys and values), the model's `PocketScratch` at 57 MB,
+  and the block home's own scratch globals - `conv1d_rows_transposed`'s tap lift and the
+  attention head scratch at 6 MB. Nothing leaks; the scratch is sized to the largest run it saw.
+  Two levers landed with it: the voice's caches reserve the rows one chunk of the budget can
+  take instead of a flat 1024 (54 MB -> 19 MB a voice, cap 411 rows for a 126-row clip), and the
+  tap lift runs a cache-sized block of input rows at a time from the last block down, so an
+  output row sums its taps in the same order (66 MB on the whole run, 15 at 16 frames -> 4 MB;
+  the whole-run decode on one thread 374 -> 360 ms for the cache-sized rows). A say now adds 87
+  MB to the heap where it added 133, and `tts_release_scratch` gives the carrier and the globals
+  back when the caller says idle memory matters: the browser examples' speech threads call it
+  after half a second with nothing queued.
 - **LANDED (2026-09-16) - the browser build runs on every engine; `+relaxed-simd` leaves the
   wasm feature string.** WebKit implements none of the relaxed opcodes, and the previous entry's
   `+relaxed-simd` put `f32x4.relaxed_max` (the backend's lowering of an `nnan` vector max, which

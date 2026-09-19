@@ -97,6 +97,13 @@ struct PocketVoiceState {
     len : int64
 }
 
+struct PocketConvCarry {
+    //! a codec conv's carry between two windows of a stream: the last rows it saw, which lead
+    //! the next window
+    @scratch @exact_size rows : array<float>   // [n][cin]
+    n : int64
+}
+
 struct PocketModel {
     family : string
     name : string
@@ -166,6 +173,19 @@ def reset_pocket_q8() {
     g_pocket_q8_pin = PocketLane.unset
 }
 
+// ===== the codec's window: the latent frames a stream step covers =====
+
+let POCKET_CODEC_WINDOW_DEFAULT = 16l
+var private g_pocket_codec_window = POCKET_CODEC_WINDOW_DEFAULT
+
+//! Set how many latent frames the codec's encoder and decoder run per stream step; 0 runs a
+//! whole chunk or clip in one step. The activations scale with the window, the output does not.
+def set_pocket_codec_window(frames : int64) {
+    g_pocket_codec_window = frames
+}
+
+def pocket_codec_window() : int64 => g_pocket_codec_window
+
 //! Would the next load serve its GEMMs as q8 - the pin when set, the policy otherwise.
 def pocket_serves_q8() : bool => pocket_serve_q8_()
 
@@ -221,12 +241,17 @@ struct PocketScratch {
     @scratch @exact_size latents : array<float>  // [frames][latent_dim], denormalized
     @scratch @exact_size conds : array<float>    // [frames][d]: every frame's conditioning row, the parity rail's witness
     @scratch @exact_size eos_logits : array<float>
-    @scratch @exact_size ca : array<float>       // the codec chain's ping-pong rows
+    @scratch @exact_size ca : array<float>       // the codec chain's ping-pong rows, one window wide
     @scratch @exact_size cb : array<float>
     @scratch @exact_size cc : array<float>
     @scratch @exact_size cpad : array<float>
+    @scratch @exact_size cs : array<float>       // a stream conv's input: the carried rows, then the window
+    @scratch @exact_size ct : array<float>       // a transposed stream conv's whole output, the window's rows cut from it
+    @scratch @exact_size lw : array<float>       // the window's latent frames
     @scratch @exact_size wave : array<float>
     codec_caches : array<TtsKvCache>
+    dec_carry : array<PocketConvCarry>           // the decoder's convs, in chain order
+    enc_carry : array<PocketConvCarry>
     rng : TtsRng
 }
 
@@ -256,8 +281,21 @@ def finalize(var sc : PocketScratch) {
     delete sc.cb
     delete sc.cc
     delete sc.cpad
+    delete sc.cs
+    delete sc.ct
+    delete sc.lw
     delete sc.wave
     delete sc.codec_caches
+    delete sc.dec_carry
+    delete sc.enc_carry
+}
+
+def pocket_release_scratch(var sc : PocketScratch) {
+    //! Free every buffer the carrier holds and the block home's scratch globals its kernels grew;
+    //! the next synthesis or clone grows them back. For a platform where idle memory matters more
+    //! than a few milliseconds of allocation per run.
+    finalize(sc)
+    tts_blocks_release_scratch()
 }
 
 // ===== the GGUF =====
@@ -381,7 +419,8 @@ def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string;
 
 // a causal conv's context is its geometry: a forward conv's left zero pad of `k - stride`, or
 // the `k - stride` tail of a transposed conv the stream never emits
-[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-shot-codec")]
+//! a codec conv carries no pad: its causal context is the stream's carry
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-codec-stream")]
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; stride, groups : int64; transposed : bool) : TtsConv1d {
     var c = TtsConv1d()
     let wname = "{prefix}.weight"
@@ -392,10 +431,10 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
     c.groups = groups
     c.transposed = transposed
     c.served_rows = true
+    c.pad_l = 0l
+    c.pad_r = 0l
     if (is_q8_tensor(m, wname)) {
         read_conv_q8(m, bytes, wname, c)
-        c.pad_l = c.k - stride
-        c.pad_r = 0l
         return <- c
     }
     c.w <- read_arr(m, bytes, wname)
@@ -404,13 +443,9 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
     if (transposed) {
         c.cin = m.tensors[ti].dims[2]
         c.cout = m.tensors[ti].dims[1] * groups
-        c.pad_l = 0l
-        c.pad_r = c.k - stride
     } else {
         c.cout = m.tensors[ti].dims[2]
         c.cin = m.tensors[ti].dims[1] * groups
-        c.pad_l = c.k - stride
-        c.pad_r = 0l
     }
     conv1d_prepare(c, false, g_stage_repack)
     return <- c
@@ -531,7 +566,6 @@ def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMim
             panic("dasLLAMA pocket: the downsampler's kernel {mm.downsample.k} and the upsampler's {2l * mm.frame_steps} disagree on the frame stride")
         }
         mm.downsample.stride = mm.frame_steps
-        mm.downsample.pad_l = 0l   // replicate-padded by the caller, `frame_steps` rows
     }
     mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", n_layers, d, heads, ffn, context, period, true)
     mm.dec_in <- read_conv(m, bytes, "mimi.decoder.model.0.conv", 1l, 1l, false)
@@ -735,14 +769,92 @@ def private caches_init(var caches : array<TtsKvCache>; tf : PocketTransformer; 
 
 // ===== the codec =====
 
-def private res_conv_rows(b : PocketResConv; x : array<float>; t : int64; var sc : PocketScratch; @scratch @exact_size var y : array<float>) {
+// ===== the codec stream: a chunk or a clip in windows, each conv carrying its last rows =====
+
+def private copy_span(var dst : array<float>; doff : int64; src : array<float>; soff, n : int64) {
+    return if (n <= 0l)
+    unsafe {
+        memcpy(addr<void?>(dst[doff]), addr<void const?>(src[soff]), n * 4l)
+    }
+}
+
+//! the rows a conv sees again ahead of a window: a forward conv its last `k - stride` inputs
+//! (the causal pad's width, zeros before the first window), a transposed one the inputs whose
+//! taps reach past the rows it emitted
+def private carry_rows(c : TtsConv1d) : int64 {
+    return c.transposed ? (c.k + c.stride - 1l) / c.stride - 1l : c.k - c.stride
+}
+
+def private carry_init(var cr : PocketConvCarry; c : TtsConv1d) {
+    cr.n = c.transposed ? 0l : carry_rows(c)
+    cr.rows |> reserve_resize(cr.n * c.cin)
+    for (i in range64(cr.n * c.cin)) {
+        cr.rows[i] = 0.0
+    }
+}
+
+//! the first window's carry for a conv whose pad replicates the edge: `n` copies of the window's first row
+def private carry_replicate(var cr : PocketConvCarry; x : array<float>; n, w : int64) {
+    cr.n = n
+    cr.rows |> reserve_resize(n * w)
+    for (r in range64(n)) {
+        copy_span(cr.rows, r * w, x, 0l, w)
+    }
+}
+
+//! x [n][cin], one window of a stream, through a codec conv: the carried rows lead the window,
+//! the conv runs over both unpadded, y takes the window's own output rows and the carry the
+//! window's tail. Returns the rows of y.
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-codec-stream")]
+def private stream_conv(c : TtsConv1d; var cr : PocketConvCarry; x : array<float>; n : int64; var sc : PocketScratch; @scratch @exact_size var y : array<float>) : int64 {
+    let w = c.cin
+    let need = carry_rows(c)
+    let tin = cr.n + n
+    if (cr.n > 0l) {
+        sc.cs |> reserve_resize(tin * w)
+        copy_span(sc.cs, 0l, cr.rows, 0l, cr.n * w)
+        copy_span(sc.cs, cr.n * w, x, 0l, n * w)
+    }
+    var t_out = 0l
+    if (c.transposed) {
+        if (c.groups != 1l) {
+            conv1d_rows_transposed_depthwise(c, cr.n > 0l ? sc.cs : x, tin, sc.ct)
+        } else {
+            conv1d_rows(c, cr.n > 0l ? sc.cs : x, tin, sc.ct)
+        }
+        t_out = n * c.stride
+        y |> reserve_resize(t_out * c.cout_s)
+        copy_span(y, 0l, sc.ct, cr.n * c.stride * c.cout_s, t_out * c.cout_s)
+    } else {
+        conv1d_rows(c, cr.n > 0l ? sc.cs : x, tin, y)
+        t_out = conv1d_out_len(c, tin)
+    }
+    if (need > 0l) {
+        if (cr.n > 0l) {
+            copy_span(cr.rows, 0l, sc.cs, (tin - need) * w, need * w)
+        } else {
+            cr.rows |> reserve_resize(need * w)
+            copy_span(cr.rows, 0l, x, (n - need) * w, need * w)
+        }
+        cr.n = need
+    }
+    return t_out
+}
+
+def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : array<float>; t : int64; var sc : PocketScratch; @scratch @exact_size var y : array<float>) {
     let w = b.conv1.cin
     copy_rows(sc.cc, x, t * w)
     elu_rows(sc.cc, t * w)
-    conv1d_rows(b.conv1, sc.cc, t, sc.cpad)
+    stream_conv(b.conv1, cr, sc.cc, t, sc, sc.cpad)
     elu_rows(sc.cpad, t * b.conv1.cout_s)
     conv1d_rows(b.conv2, sc.cpad, t, y)
     add_rows(y, x, t * w)
+}
+
+//! the window in frames a stream runs: the knob, else the whole run
+def private codec_window(frames : int64) : int64 {
+    let w = g_pocket_codec_window
+    return w <= 0l ? frames : min(w, frames)
 }
 
 //! The clip's latent frames [frames][latent_dim] through the codec encoder - the voice prompt's
@@ -755,57 +867,104 @@ def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketSc
     let n = long_length(pcm)
     let frames = (n + m.frame_samples - 1l) / m.frame_samples
     let padded = frames * m.frame_samples
-    sc.ca |> reserve_resize(padded)
-    for (i in range64(padded)) {
-        sc.ca[i] = i < n ? pcm[i] : 0.0
+    let nr = long_length(mm.ratios)
+    let fs = mm.frame_steps
+    let ld = mm.downsample.cout_s
+    var ec & = unsafe(sc.enc_carry)
+    ec |> resize(3l + 2l * nr)
+    carry_init(ec[0], mm.enc_in)
+    for (i in range64(nr)) {
+        carry_init(ec[1l + 2l * i], mm.enc_res[i].conv1)
+        carry_init(ec[2l + 2l * i], mm.enc_down[i])
     }
-    var t = padded
-    conv1d_rows(mm.enc_in, sc.ca, t, sc.cb)
-    for (i in range64(long_length(mm.ratios))) {
-        res_conv_rows(mm.enc_res[i], sc.cb, t, sc, sc.ca)
-        elu_rows(sc.ca, t * mm.enc_down[i].cin)
-        conv1d_rows(mm.enc_down[i], sc.ca, t, sc.cb)
-        t = conv1d_out_len(mm.enc_down[i], t)
+    carry_init(ec[1l + 2l * nr], mm.enc_out)
+    ec[2l + 2l * nr].n = 0l   // the downsampler's first carry replicates the edge, set below
+    caches_init(sc.codec_caches, mm.enc_tf, frames * fs)
+    latents |> reserve_resize(frames * ld)
+    let window = codec_window(frames) * m.frame_samples
+    var s0 = 0l
+    var pos = 0l
+    var fout = 0l
+    while (s0 < padded) {
+        let ns = min(window, padded - s0)
+        sc.ca |> reserve_resize(ns)
+        for (i in range64(ns)) {
+            let s = s0 + i
+            sc.ca[i] = s < n ? pcm[s] : 0.0
+        }
+        var t = ns
+        stream_conv(mm.enc_in, ec[0], sc.ca, t, sc, sc.cb)
+        for (i in range64(nr)) {
+            res_conv_stream(mm.enc_res[i], ec[1l + 2l * i], sc.cb, t, sc, sc.ca)
+            elu_rows(sc.ca, t * mm.enc_down[i].cin)
+            t = stream_conv(mm.enc_down[i], ec[2l + 2l * i], sc.ca, t, sc, sc.cb)
+        }
+        elu_rows(sc.cb, t * mm.enc_out.cin)
+        stream_conv(mm.enc_out, ec[1l + 2l * nr], sc.cb, t, sc, sc.ca)
+        transformer_rows(mm.enc_tf, sc.ca, t, pos, sc.codec_caches, sc)
+        pos += t
+        if (s0 == 0l) {
+            carry_replicate(ec[2l + 2l * nr], sc.ca, fs, mm.enc_tf.d)
+        }
+        let fw = stream_conv(mm.downsample, ec[2l + 2l * nr], sc.ca, t, sc, sc.cb)
+        copy_span(latents, fout * ld, sc.cb, 0l, fw * ld)
+        fout += fw
+        s0 += ns
     }
-    elu_rows(sc.cb, t * mm.enc_out.cin)
-    conv1d_rows(mm.enc_out, sc.cb, t, sc.ca)
-    caches_init(sc.codec_caches, mm.enc_tf, t)
-    transformer_rows(mm.enc_tf, sc.ca, t, 0l, sc.codec_caches, sc)
-    pad_edge_left_rows(sc.ca, t, mm.enc_tf.d, mm.frame_steps, sc.cb)
-    conv1d_rows(mm.downsample, sc.cb, t + mm.frame_steps, latents)
-    return conv1d_out_len(mm.downsample, t + mm.frame_steps)
+    return fout
 }
 
 //! Latent frames [frames][latent_dim] (denormalized) through the codec decoder into
-//! `frames * frame_samples` PCM samples - the whole chunk in one pass, which the causal padding
-//! makes sample-identical to the reference's frame-by-frame stream.
-[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-shot-codec")]
+//! `frames * frame_samples` PCM samples, a window of frames per stream step, every conv
+//! carrying its rows between steps - the output the whole chunk in one step gives.
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-codec-stream")]
 def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) {
     let mm & = unsafe(m.mimi)
-    conv1d_rows(mm.quant_proj, latents, frames, sc.ca)
-    conv1d_rows_transposed_depthwise(mm.upsample, sc.ca, frames, sc.cb)
-    var t = conv1d_out_len(mm.upsample, frames)
-    caches_init(sc.codec_caches, mm.dec_tf, t)
-    transformer_rows(mm.dec_tf, sc.cb, t, 0l, sc.codec_caches, sc)
-    conv1d_rows(mm.dec_in, sc.cb, t, sc.ca)
-    for (i in range64(long_length(mm.ratios))) {
-        elu_rows(sc.ca, t * mm.dec_up[i].cin)
-        conv1d_rows(mm.dec_up[i], sc.ca, t, sc.cb)
-        t = conv1d_out_len(mm.dec_up[i], t)
-        res_conv_rows(mm.dec_res[i], sc.cb, t, sc, sc.ca)
+    let nr = long_length(mm.ratios)
+    let ld = mm.quant_proj.cin
+    var dc & = unsafe(sc.dec_carry)
+    dc |> resize(3l + 2l * nr)
+    carry_init(dc[0], mm.upsample)
+    carry_init(dc[1], mm.dec_in)
+    for (i in range64(nr)) {
+        carry_init(dc[2l + 2l * i], mm.dec_up[i])
+        carry_init(dc[3l + 2l * i], mm.dec_res[i].conv1)
     }
-    elu_rows(sc.ca, t * mm.dec_out.cin)
-    conv1d_rows(mm.dec_out, sc.ca, t, sc.cb)
-    wave |> reserve_resize(t)
+    carry_init(dc[2l + 2l * nr], mm.dec_out)
+    caches_init(sc.codec_caches, mm.dec_tf, frames * mm.frame_steps)
+    wave |> reserve_resize(frames * m.frame_samples)
+    let window = codec_window(frames)
     let stride = mm.dec_out.cout_s
-    for (i in range64(t)) {
-        wave[i] = sc.cb[i * stride]
+    var f0 = 0l
+    var pos = 0l
+    var out = 0l
+    while (f0 < frames) {
+        let n = min(window, frames - f0)
+        sc.lw |> reserve_resize(n * ld)
+        copy_span(sc.lw, 0l, latents, f0 * ld, n * ld)
+        conv1d_rows(mm.quant_proj, sc.lw, n, sc.ca)
+        var t = stream_conv(mm.upsample, dc[0], sc.ca, n, sc, sc.cb)
+        transformer_rows(mm.dec_tf, sc.cb, t, pos, sc.codec_caches, sc)
+        pos += t
+        stream_conv(mm.dec_in, dc[1], sc.cb, t, sc, sc.ca)
+        for (i in range64(nr)) {
+            elu_rows(sc.ca, t * mm.dec_up[i].cin)
+            t = stream_conv(mm.dec_up[i], dc[2l + 2l * i], sc.ca, t, sc, sc.cb)
+            res_conv_stream(mm.dec_res[i], dc[3l + 2l * i], sc.cb, t, sc, sc.ca)
+        }
+        elu_rows(sc.ca, t * mm.dec_out.cin)
+        stream_conv(mm.dec_out, dc[2l + 2l * nr], sc.ca, t, sc, sc.cb)
+        for (i in range64(t)) {
+            wave[out + i] = sc.cb[i * stride]
+        }
+        out += t
+        f0 += n
     }
 }
 
 // ===== the voice prompt =====
 
-let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's text and frames may take before the caches grow
+let private VOICE_CACHE_GROW = 64l   // rows past a chunk's need the caches grow by, so a run of chunks of one length grows once
 let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from: the state is the clip's frames per layer
 
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
@@ -834,7 +993,7 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
         rows[bos * d + i] = proj[i]
     }
     vs.len = frames + bos
-    caches_init(vs.caches, m.backbone, vs.len + VOICE_CACHE_SLACK)
+    caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
     transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc)
     return <- vs
 }
@@ -1143,14 +1302,19 @@ def private grow_cache(var kc : TtsKvCache; cap : int64) {
     kv_cache_grow(kc, cap)
 }
 
+//! the rows a chunk of `n_txt` tokens can take after the voice: its text and every frame the cap allows
+def private chunk_rows(n_txt : int64) : int64 {
+    return n_txt + pocket_max_frames(n_txt) + 1l
+}
+
 // the voice's rows stay; the previous chunk's text and frames are forgotten, and a chunk the
 // caches cannot hold - `n_txt` text rows plus every frame the cap allows - grows them first
 def private caches_ready(var vs : PocketVoiceState; n_txt : int64) {
-    let need = vs.len + n_txt + pocket_max_frames(n_txt) + 1l
+    let need = vs.len + chunk_rows(n_txt)
     for (kc in vs.caches) {
         kc.n = vs.len
         if (kc.cap < need) {
-            grow_cache(kc, need + VOICE_CACHE_SLACK)
+            grow_cache(kc, need + VOICE_CACHE_GROW)
         }
     }
 }

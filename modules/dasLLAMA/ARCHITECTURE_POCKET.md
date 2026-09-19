@@ -20,7 +20,7 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   causal backbone, the one-step flow head, the Mimi-derived codec with or without its encoder,
   the roster and its voice states built from the stored frames), the activation carrier
   (`PocketScratch`), and the assembly - the voice prompt (sec.2.47), the text prompt, the frame
-  loop (sec.2.48), the codec decoder over a chunk's latents (sec.2.46) - plus the reference
+  loop (sec.2.48), the codec stream over a chunk's latents or a clip (sec.2.46) - plus the reference
   driver's text preparation and chunker (sec.2.49). `pocket_speak` is the facade's entry; the
   seams `pocket_encode_latents`, `pocket_decode_latents`, `pocket_voice_state`, `pocket_head`
   and `pocket_synthesize` (with the oracle's noise draws and teacher-forced frames) are what
@@ -33,18 +33,36 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
 
 ## 2. Mechanisms
 
-### 2.46 The codec runs a chunk in one shot {#pocket-one-shot-codec}
+### 2.46 The codec runs a chunk in windows, every conv carrying its rows {#pocket-codec-stream}
 
-The reference streams the codec frame by frame through convolutions that carry state: a forward
-conv keeps its last `kernel - stride` input samples, a transposed conv a `kernel - stride`
-partial tail it adds into the next call. Both are exactly a causal conv over the whole sequence:
-the forward conv's state is a left zero pad of `kernel - stride` (the downsampling conv
-replicates the first row instead), the transposed conv's tail is the last `kernel - stride`
-outputs the stream never emits. The converted geometry says so - `pad_l = k - stride` on a
-forward conv, `pad_r = k - stride` on a transposed one - and the rows kernels apply it, so a
-chunk's latents decode in one pass to exactly `frames * frame_samples` samples, and the oracle
-script checks the claim against the package's own frame-by-frame output (1e-6 apart).
-Nothing in the family carries conv state.
+The codec's activations sit at audio rate - about 20 MB per second of audio across the chain's
+ping-pong rows, on the encoder and the decoder alike - so a chunk or a clip run in one pass is
+the say's working set, and on a phone's browser tab the one that runs it out of memory. The
+decoder runs a chunk `POCKET_CODEC_WINDOW_DEFAULT` latent frames per step (`set_pocket_codec_window`,
+0 for the whole run), the encoder a clip the same count of frames in samples, and the
+activations scale with the window instead of the run. Each conv is causal, so a window's
+output depends on the window and on the rows before it that the conv's taps reach: a forward conv
+its last `k - stride` inputs, a transposed one (every one in the file is `k = 2 * stride`) its
+last input row. `PocketConvCarry` holds those rows per conv, `stream_conv` runs the conv over
+the carried rows followed by the window with no pad at all (`read_conv` zeroes both pads), takes
+the window's own output rows - a transposed conv's are the ones after the carried rows' stride
+and before the tail its taps leave unfinished - and keeps the window's tail as the next carry.
+The first window's carry is the reference's pad: `k - stride` zero rows on a forward conv
+(`carry_init`), `frame_steps` copies of the first row on the encoder's downsampler
+(`carry_replicate`), nothing on a transposed conv. The two codec transformers stream through
+their KV caches at the window's position, as the backbone already does. A window is one output
+row's worth of sums in the same order the whole run computes them, so on the f32 lane the
+windowed output equals the one-shot output to float noise at every window, one frame included
+(`test_pocket_codec_stream`); on the q8 lane the served GEMMs' result depends on how many rows
+they batch, so a window's output differs from the one-shot's the way two chunk lengths already
+do, and the rig, not a per-element bar, holds that lane. The oracle script's own check - the
+package's whole-chunk decode against its frame-by-frame stream, 1e-6 apart - is the reference's
+statement of the same fact. What a run leaves behind is the carrier (`PocketScratch`, sized to
+the largest window it saw) and the block home's scratch globals - the transposed conv's tap
+lift, a cache-sized block of input rows at a time, the attention head rows, the requant images;
+`pocket_release_scratch` (the facade's `tts_release_scratch`) frees them all and the next run
+grows them back, for a platform where idle memory matters more than the allocation a run then
+pays.
 
 ### 2.47 A voice is the backbone's memory of a clip {#pocket-voice-state}
 
@@ -53,9 +71,11 @@ frames at 12.5 Hz, through `speaker_proj` into the backbone's width, and - with 
 front - through the backbone at positions 0.., filling every layer's key-value cache. That cache
 (`PocketVoiceState`, `len` positions) is the voice. A synthesis appends its text and frames after
 `len` and a later one forgets them by resetting each cache's fill to `len`; nothing is copied.
-The caches are sized for the clip plus 1024 rows and grow, the voice's rows kept, when a chunk's
-text plus every frame its cap allows needs more - one unsplittable run of two hundred tokens is
-such a chunk. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
+The caches are sized for the clip plus the rows a chunk of the reference's budget can take -
+`POCKET_MAX_TOKENS` text rows and every frame its cap allows, about 285 - and grow by a small
+slack, the voice's rows kept, when a chunk needs more - one unsplittable run of two hundred
+tokens is such a chunk; a voice is about 20 MB of keys and values, not the 54 MB a flat 1024-row
+slack cost. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
 per layer, and the codec encoder's attention is a query block by the 250-key window it sees.
 The roster rides the GGUF as each clip's latent frames (`voice_latents.<name>`, the package's
 own codec encoder over the clip at conversion), and a voice's state is built from them on first

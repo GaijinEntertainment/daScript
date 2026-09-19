@@ -164,6 +164,8 @@ var g_single_applied = false
 // ===== the speech thread =====
 
 //! the speech thread's setup rides its own stream ahead of the asks: the model path
+let IDLE_RELEASE_MS = 500   //! the speech thread waits this long for a request before it gives the engine's scratch back
+
 [arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
 def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done : Channel?) {
     new_thread() <| @capture(= ask, = answer, = now, = done) {
@@ -177,8 +179,9 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
         var inscope ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate, voices := c.voices)
         answer |> push_archive(ready)
         var running = true
+        var released = false
         while (running) {
-            ask |> pop_archive() $(var a : Ask&) {
+            let got = ask |> pop_archive_with_timeout(IDLE_RELEASE_MS) $(var a : Ask&) {
                 if (a.kind == 3) {
                     running = false
                 } elif (a.kind == 4) {
@@ -207,6 +210,12 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
                         answer |> push_archive(clip)
                     }
                 }
+            }
+            if (got) {
+                released = false
+            } elif (!released) {
+                tts_release_scratch(m)   // nothing queued: idle memory is what a phone's tab runs out of
+                released = true
             }
         }
         ask |> release()
@@ -1103,7 +1112,9 @@ def init() {
     delete g_vad_model
     g_vad_model <- load_vad_model(empty(g_args.vad_model) ? "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin" : path_join(g_args.models, g_args.vad_model))
     g_ask = unsafe(stream_create())
+    g_ask |> append(1)   // one producer on the books: the speech thread's pop waits for a request instead of returning empty at once
     g_answer = unsafe(stream_create())
+    g_answer |> append(1)
     g_say_now = seq_box_create()
     g_say_now |> publish(g_says)
     g_speech_done = unsafe(channel_create())

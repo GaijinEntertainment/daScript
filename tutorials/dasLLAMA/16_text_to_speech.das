@@ -23,6 +23,7 @@ require strings
 //   - TtsTimings and rtf — per-stage wall time, and seconds spent per second of speech
 //   - tts_chunks — the sentence splitter one synthesis takes at a time
 //   - tts_register_voice — a voice cloned from a few seconds of audio, on a model that can
+//   - tts_release_scratch — the activation rows given back while nothing is queued
 //
 // Three families run through these verbs, and load_tts_model tells them apart from the GGUF's
 // own architecture metadata:
@@ -283,5 +284,15 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
                 }
             }
         }
+
+        // ──────────────────────────────────────────────────────────────────────
+        //
+        // A synthesis leaves its activation rows inside the model, sized to the largest one so
+        // far, so the next one pays no allocation. On a phone's browser tab that idle memory is
+        // what runs out first: tts_release_scratch gives the rows back, and the next synthesis
+        // grows them again for a few milliseconds. Call it when nothing is queued.
+        tts_release_scratch(m)
+        let after <- synthesize(m, TEXT, vname)
+        print("\ntts_release_scratch: the next synthesis speaks as before - {seconds(after.pcm, after.sample_rate)} s\n")
     }
 }
