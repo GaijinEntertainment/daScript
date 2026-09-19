@@ -2200,7 +2200,7 @@ class template MetalGemvW13SwB24T {
             let g = simd_sum(accg[b])
             let u = simd_sum(accu[b])
             if (lane == 0u) {
-                y[uint(b) * hidden + row] = (g / (1.0 + exp(-g))) * u
+                y[uint(b) * hidden + row] = msl_silu_mul(g, u)
             }
         }
     }
@@ -6761,9 +6761,12 @@ def public ksign7m(v : uint) : uint {
     return v | ((t & 1u) << 7u)
 }
 
+// m with element b negated where bit b of the sign nibble is set
+def public iq_sign_apply(m : float4; nib : uint) : float4 => float4((nib & 1u) != 0u ? -m.x : m.x, (nib & 2u) != 0u ? -m.y : m.y,
+    (nib & 4u) != 0u ? -m.z : m.z, (nib & 8u) != 0u ? -m.w : m.w)
+
 // the four signs of a grid word from its sign nibble: bit b set flips element b
-def public iq_sign4(nib : uint) : float4 => float4((nib & 1u) != 0u ? -1.0 : 1.0, (nib & 2u) != 0u ? -1.0 : 1.0,
-    (nib & 4u) != 0u ? -1.0 : 1.0, (nib & 8u) != 0u ? -1.0 : 1.0)
+def public iq_sign4(nib : uint) : float4 => iq_sign_apply(float4(1.0), nib)
 
 // iq2xxs_grid as low/high word pairs (word 2i = magnitudes 0..3 of u64 entry i, word
 // 2i+1 = 4..7); the same all-literal program-scope-constant form as its grid siblings.
@@ -9308,10 +9311,8 @@ class template MetalKqGemvIq2sT : MetalGemvSiteT {
                         let w1 = iq2s_gw(int(idx2 + 1u))
                         let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
                         let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-                        let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                            (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
-                        let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                            (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                        let f0 = iq_sign_apply(m0, s0)
+                        let f1 = iq_sign_apply(m1, s1)
                         accv += yv[l * 2u] * f0
                         accv += yv[l * 2u + 1u] * f1
                     }
@@ -9420,10 +9421,8 @@ class template MetalKqGemvIq2xsT : MetalGemvSiteT {
                         let w1 = iq2xs_gw(int(idx2 + 1u))
                         let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
                         let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-                        let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                            (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
-                        let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                            (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                        let f0 = iq_sign_apply(m0, s0)
+                        let f1 = iq_sign_apply(m1, s1)
                         accv += yv[h * 4 + wi * 2] * f0
                         accv += yv[h * 4 + wi * 2 + 1] * f1
                     }
@@ -9548,10 +9547,8 @@ class template MetalKqGemvIq2xxsFam : MetalGemvSiteT {
                         m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
                         m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
                     }
-                    let f0 = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                        (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w)
-                    let f1 = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                        (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w)
+                    let f0 = iq_sign_apply(m0, s0)
+                    let f1 = iq_sign_apply(m1, s1)
                     accv += yv[q3 * 2] * f0
                     accv += yv[q3 * 2 + 1] * f1
                 }
@@ -9661,8 +9658,7 @@ class template MetalKqMvIq3xxsT : MetalKqMvShellT {
                 let sgb = ksign7m((aux >> (7u * q3)) & 127u)
                 let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
                 let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
-                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                let fsd = iq_sign_apply(float4(dl), nib)
                 w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
         }
@@ -9729,8 +9725,7 @@ class MetalKqMvB8Iq3xxs : MetalKqMvB8ShellT {
                 let sgb = ksign7m((aux >> (7u * q3)) & 127u)
                 let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
                 let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
-                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                let fsd = iq_sign_apply(float4(dl), nib)
                 w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
         }
@@ -9768,8 +9763,7 @@ class template MetalKqMvIq3sT : MetalKqMvShellT {
                 let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
                 let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
                 let gw = iq3s_gw(int(idx))
-                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                let fsd = iq_sign_apply(float4(dl), nib)
                 w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
         }
@@ -9837,8 +9831,7 @@ class MetalKqMvB8Iq3s : MetalKqMvB8ShellT {
                 let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
                 let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
                 let gw = iq3s_gw(int(idx))
-                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                let fsd = iq_sign_apply(float4(dl), nib)
                 w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
         }
@@ -9882,10 +9875,8 @@ class template MetalKqMvIq2sT : MetalKqMvShellT {
             let w1 = iq2s_gw(int(idx2 + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cx4 = sb * 64u + tx * 8u
         static_if (TILED) {
@@ -9957,10 +9948,8 @@ class MetalKqMvB8Iq2s : MetalKqMvB8ShellT {
             let w1 = iq2s_gw(int(idx2 + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
@@ -10002,10 +9991,8 @@ class template MetalKqMvIq2xsT : MetalKqMvShellT {
             let w1 = iq2xs_gw(int(idx2 + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cx4 = sb * 64u + tx * 8u
         static_if (TILED) {
@@ -10077,10 +10064,8 @@ class MetalKqMvB8Iq2xs : MetalKqMvB8ShellT {
             let w1 = iq2xs_gw(int(idx2 + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
@@ -10119,10 +10104,8 @@ class template MetalKqMvIq2xxsT : MetalKqMvShellT {
             let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cx4 = sb * 64u + tx * 8u
         static_if (TILED) {
@@ -10191,10 +10174,8 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
             let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
             let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
             let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
+            w[l * 2] = iq_sign_apply(m0, s0) * dl
+            w[l * 2 + 1] = iq_sign_apply(m1, s1) * dl
         }
         let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {

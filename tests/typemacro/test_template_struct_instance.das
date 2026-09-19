@@ -204,6 +204,24 @@ def test_tsi_cross_module(t : T?) {
     }
 }
 
+class XModOverInt : XModOverBase {
+    override STEP = 10
+}
+
+[test]
+def test_tsi_cross_module_base(t : T?) {
+    t |> run("template deriving a concrete class from another module keeps that class as parent") @(t : T?) {
+        unsafe {
+            var inscope k <- new XModOverInt()
+            k->bump()
+            k->bump()
+            var base : XModBase? = k
+            t |> equal(base.hits, 2)
+            t |> equal(k->value(), 20)
+        }
+    }
+}
+
 [test]
 def test_tsi_late_bind(t : T?) {
     t |> run("an alias another macro supplies after the reifier binds at infer") @(t : T?) {

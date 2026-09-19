@@ -100,7 +100,15 @@ zoo. Facts that decide the order:
 
 - 296 dispatch classes in `dasllama_metal_kernels.das` (175) + `dasllama_metal_prefill.das`
   (121): 173 are template stamps, 14 ride a `def abstract` base, ~44 are hand-written twins
-  (~3000 lines addressable), ~65 singletons; 15 near-miss pairs must stay apart (listed there).
+  (~3000 lines addressable), ~65 singletons. The near-miss pairs that stay apart are the ones
+  a document rules: the float/quant attention pairs (two binding layouts,
+  `REVIEW_GPU_KERNEL_CLASSES.md`); the f4-slab GEMV crowns `MetalKqGemvIq3sF4` / `Iq3xxsF4` /
+  `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
+  `ARCHITECTURE_GPU_QUANT_PLANES.md` sec.2.2z); the `*Db` double-buffered shells beside the
+  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c carries the measurement); the
+  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md` sec.1.5); the codebook grid
+  tables twinned in the Vulkan home (sec.1.5 role table); and the scalar attention trio beside
+  the tensor QK/AV pair (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2f).
 - Two thirds of the debt is one family: the per-format GEMV, MvB2/B4 and MvB8 copies - 36
   classes over 12 formats (`MetalKqGemv*` 7985-9319, `MetalKqMv*T` 8368-10970, `MetalKqMvB8*`
   8477-11102) where iq4xs and iq4nl differ in ONE line and iq2s and iq2xs in eight; the shells
@@ -596,3 +604,29 @@ defect. The work, one arm per class: the deltanet step and gated Q batched over 
 recurrent state is per session, the GEMMs are not), the shared expert's triple as one batched
 site beside the routed experts (the CPU batch stack already runs it), and the PLE side input
 gathered per row into the batch step (item 13 is its CPU half).
+
+## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
+
+`ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
+are five identical lines of pure ALU - no table, no backend lowering. `ARCHITECTURE_GPU.md`
+sec.1.5's role table keeps the codebook TABLES per kernel home; it does not reach a helper with
+no table in it. The shared-grammar precedent is `dasllama_kernel_access.das`, one owner after two
+private copies drifted. One home for the sign helper, both backends calling it.
+
+## 18. `enc_kq_mvb` is a table wearing thirty-nine `elif`s
+
+`enc_kq_mvb` (`dasllama/dasllama_metal_kernels.das`) walks thirteen formats by three arms each to
+pick a builder triple, while the per-format doff/soff choice it repeats is already a table
+(`KQ_ROWS_RACE_FORMATS` beside it). A `(fmt -> builder triple)` table with one arm body closes
+the ladder; the sec.15(a) gate then reads one table instead of one ladder.
+
+## 19. The batched and rows w13sw kernels have no activation axis
+
+`MetalQ8GemvW13SwT.put_act` branches on the `act` uniform between `msl_silu_mul` and
+`msl_geglu_mul`; the batched family (`enc_gemv_w13sw_b`, `enc_gemv_w13sw_rows`) binds no `act`
+and computes SiLU only. Every live caller is SiLU today: the dense batch gates `fuse13` off
+under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
+`moe_dense_shexp` form through `enc_geglu`, so no gelu architecture reaches the `u_moe_nsh`
+path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
+activation; the fix is the `act` binding on the batched family, the same uniform the single-row
+form takes.

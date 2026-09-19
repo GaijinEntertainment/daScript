@@ -1269,8 +1269,7 @@ class template MetalKqMulMmIq3sTensorT : MetalKqMulMmSplitTensorBase {
             let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh3 << (8u - b3)) & 256u)
             let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
             let gw = gridw3t[idx]
-            let fsd = float4((nib & 1u) != 0u ? -dsc : dsc, (nib & 2u) != 0u ? -dsc : dsc,
-                             (nib & 4u) != 0u ? -dsc : dsc, (nib & 8u) != 0u ? -dsc : dsc)
+            let fsd = iq_sign_apply(float4(dsc), nib)
             let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             twb[tb0 + uint(k) * 4u] = float16(mv.x)
             twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
@@ -1369,8 +1368,7 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
             let sgb = ksign7m((aux3 >> (7u * q3)) & 127u)
             let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
             let gw = gridw3xt[(qsw >> (8u * uint(k))) & 255u]
-            let fsd = float4((nib & 1u) != 0u ? -dsc : dsc, (nib & 2u) != 0u ? -dsc : dsc,
-                             (nib & 4u) != 0u ? -dsc : dsc, (nib & 8u) != 0u ? -dsc : dsc)
+            let fsd = iq_sign_apply(float4(dsc), nib)
             let mv = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             twb[tb0 + uint(k) * 4u] = float16(mv.x)
             twb[tb0 + uint(k) * 4u + 1u] = float16(mv.y)
@@ -3316,35 +3314,14 @@ class MetalAttnAVMmTP : MetalAttnAVMmTensorT {
     override PADFREE = true
 }
 
-//! acc_quad is inlined, not inherited: a class template extending a base class from another module trips the reified struct's finalizer typing.
 [ |> template_struct_instance]
-class template MetalAttnAVMmSgT {
+class template MetalAttnAVMmSgT : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" att : array<float16>  //!< [n_heads x qrows x np32] RAW scores, f16 slab
     @ssbo @binding = 1 @role = "read" v : array<float4>    //!< [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    //!< [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
     @ssbo @binding = 4 @role = "read" stat : array<float>  //!< [n_heads x qrows x 2] rowmax, 1/sum
-    @workgroup ta : float16[2048]           //!< V tiles (pos row, col col)
-    @workgroup tb : float16[1024]           //!< P tiles (token row, pos col)
     @template_constant PADFREE : bool = false
-
-    def acc_quad(aB, bB : uint; var ma : simdgroup_half8x8[4]; var mb : simdgroup_half8x8[2]; var mc : simdgroup_float8x8[8]) {
-        var acur = unsafe(addr(ta[aB]))
-        var bcur = unsafe(addr(tb[bB]))
-        for [unroll_full] (_ik in range(4)) {
-            for [unroll_full] (i in range(4)) {
-                simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-            }
-            for [unroll_full] (i in range(2)) {
-                simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-            }
-            for [unroll_full] (i in range(8)) {
-                simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-            }
-            acur = unsafe(acur + 512)
-            bcur = unsafe(bcur + 256)
-        }
-    }
 
     [metal_kernel]
     def metal_attn_av_mm {
