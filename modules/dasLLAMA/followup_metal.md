@@ -587,7 +587,7 @@ either box reaches - leaving `MetalMoeMulMm<Fmt>T` covered by nothing. Unquirked
 uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 `tests/test_kernel_coverage.das` naming that arm as their coverage, the no-coverage note gone.
 
-## 15. Two Metal review gates the M4 pass found the shape of
+## 15. Metal review gates found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
 `dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
@@ -608,6 +608,13 @@ call throw, which the gate in `test_metal_gemv_kernels.das`'s `w13sw_gate` now g
 `name == "..."` arms of `metal_blob_scale_plane` (`dasllama/dasllama_layout.das`) name one
 roster: a format added to the ladder and not the roster loses the split-transform memo and is
 never committed by `metal_blob_commit`.
+(d) A `REVIEW.das` check that two fields sharing one `@binding` in a class template are
+`@template_gate`d on one axis with opposite polarity (`GATHERED ka` beside `"!GATHERED" ndim`):
+a pair gated on two axes stamps a class with two fields, or none, on one buffer index, and
+today only the AIR compare finds it. (e) A `REVIEW.das` check that `compile_pso` is called
+only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two raw callers
+left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
+one kernel's source with another's entry and compile clean.
 
 ## 16. Three model classes have no batched decode arm and step per row under the server
 
