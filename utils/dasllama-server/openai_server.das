@@ -353,8 +353,8 @@ def slot_wants_device_kv(s : ModelSlot) : bool {
         && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
 }
 
-def private sync_slot_device_kv(var s : ModelSlot) {
-    let want = slot_wants_device_kv(s)
+def private sync_slot_device_kv(var s : ModelSlot; holds_gpu : bool) {
+    let want = holds_gpu && slot_wants_device_kv(s)   // a slot the tier is not armed for keeps host-cached sessions until it holds the card again
     let was = s.sched.device_kv
     if (set_device_kv(s.sched, want) != was) {
         let kind = want ? "device-home sessions: every stream's K/V stays on the GPU, {gpu_device_session_ctx()} positions each" : "host-cached sessions"
@@ -5700,7 +5700,7 @@ def update_server() : bool {
         }
         install_slot_marks(si)
         maybe_bind_gpu(si)
-        sync_slot_device_kv(g_slots[si])
+        sync_slot_device_kv(g_slots[si], si == g_gpu_owner)
         let t_step = ref_time_ticks()
         busy = scheduler_step(g_slots[si].model, g_slots[si].sched, g_events)
         let step_us = int64(get_time_usec(t_step))

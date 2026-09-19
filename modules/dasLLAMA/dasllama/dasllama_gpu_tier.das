@@ -1544,6 +1544,9 @@ var private g_gpu_cpu_pass_counts : array<int64>
 
 //! Name the reasons a served GPU path hands a call to the CPU rails, in slot order, and zero the counts - the driver that counts them registers as it arms a model.
 def public set_gpu_cpu_pass_reasons(reasons, words : array<string>) {
+    if (length(reasons) != length(words)) {
+        panic("dasLLAMA GPU tier: {length(reasons)} pass reasons registered with {length(words)} texts - one text per reason")
+    }
     g_gpu_cpu_pass_reasons := reasons
     g_gpu_cpu_pass_words := words
     g_gpu_cpu_pass_counts |> clear()
@@ -1561,6 +1564,9 @@ def public reset_gpu_cpu_passes() {
 }
 
 def public note_gpu_cpu_pass(reason_slot : int) {
+    if (reason_slot < 0 || reason_slot >= length(g_gpu_cpu_pass_counts)) {
+        panic("dasLLAMA GPU tier: pass reason {reason_slot} outside the {length(g_gpu_cpu_pass_counts)} registered - the driver registers its reasons as it arms")
+    }
     g_gpu_cpu_pass_counts[reason_slot]++
 }
 
