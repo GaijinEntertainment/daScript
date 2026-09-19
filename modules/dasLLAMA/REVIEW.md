@@ -111,9 +111,9 @@ that ran both candidates interleaved in one process under one instrument, and pu
 rows, each naming its arm, in the PR body.** A reading taken across two processes or two commits
 says which way the wall clock moved, not which implementation to adopt.
 
-**A change to an allocation reached from a load, bake, or convert path (judge a shared helper
-at each call site) that trades footprint against wall-clock, either way, ships the measured
-pair - peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
+**A change to an allocation that trades footprint against wall-clock, either way, wherever the
+allocation sits, ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`
+with the decision it settles.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
@@ -262,10 +262,10 @@ registry does not, `tests/test_env_registry.das` catches.
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter lists
-one by one - a weight format, a serving lane (the quant form a tensor serves from), a data
-structure - that the charter does not name, lands, in the same change, the edit that keeps the
-charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.**
+**A diff that adds a file under `dasllama/`, or gives a file there anything of a kind its sec.1
+charter enumerates one by one that the charter does not name, lands, in the same change, the
+edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion, never
+`ARCHITECTURE.md`.**
 
 **A `followup_*.md` row whose work landed in this change is deleted, the rows below keep their
 numbers - text cites rows by number - and when a row lists several items and one landed, that item
@@ -291,10 +291,10 @@ profile re-runs the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
-**A buffer in `dasllama/` whose element count scales with a model dimension (a count the model
-file sets: layers, dim, experts, vocab, positions) is declared `@exact_size`, and every `resize`
-of it follows a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper
-(`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`, `zeroed_resize`), the
-builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled out - whatever the size
-looks like at today's shapes.** PERF032 holds the pair on an annotated buffer; a bare grow past
-the heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.
+**A buffer in `dasllama/` whose element count scales with a model dimension - any count the
+model file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the
+same count - a `dasllama/dasllama_common.das` sizing helper (`reserve_resize`, `grow_resize`,
+`ensure_length`, `overwrite_resize`, `zeroed_resize`), the builtin `scratch_resize` on a
+`@scratch` carrier, or the pair spelled out - whatever the size looks like at today's shapes.**
+PERF032 holds the pair on an annotated buffer; a bare grow past the heap's unreserved-size cap
+(64 MB) panics the load on the first big model, not at the call site.

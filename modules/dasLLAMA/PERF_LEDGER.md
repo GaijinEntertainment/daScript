@@ -31,6 +31,47 @@ what it costs today and what the fix would change.
   the batched dispatch that would raise it. Before the regions the same four-stream config served
   on the per-op tier at tg128 34.0 tok/s (the server's in-process bench), its paged sessions
   handed to the CPU on every step.
+- **LANDED (2026-09-18) - the StyleTTS2 harmonic source streams in frame windows
+  (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53).** The source held four tables of samples times
+  harmonics for the whole chunk - the cycles, the upsampled phase, the noise draw and the sine
+  rows, 6.2 MB each for a 7 s sentence and 21.5 MB each at 25 s - to hand `linear_rows` nine
+  values per sample. Only the cumulative phase sum reaches across the chunk, and it runs at frame
+  rate, so the source now runs 64 phase frames (19200 samples) at a time on a carried sum, the
+  resamplers taking a window of columns with the same tap arithmetic and the noise stream drawn
+  in row order a window at a time. Bit-identical PCM on every carrier and length (FNV over the
+  samples, one probe program over both trees); on one thread, five reps, cv under 2%, the say
+  takes what it took - kitten-nano 345 ms -> 343, kokoro 1.56 s -> 1.55, kitten-mini 0.91 s -> 0.91
+  at 7 s, 1.23 s -> 1.24, 4.95 -> 4.95, 3.13 -> 3.14 at 25 s; heap peak after one say on top of
+  the six-buffer entry below: kitten-nano 170 -> 147
+  MB (7 s) and 448 -> 365 (25 s), kokoro-82m 245 -> 222 and 630 -> 554, kitten-mini 222 -> 203
+  and 595 -> 524. What remains is the generator's six stream-sized buffers, which the chunk cap
+  bounds; the generator itself cannot window, because every Snake block's AdaIN takes its
+  statistics over the whole stream.
+- **LANDED (2026-09-18) - the StyleTTS2 generator runs on six buffers, the idle release covers
+  its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md` sec.2.51, 2.52).** A
+  Kitten or Kokoro say holds its memory in the iSTFTNet generator's `[t][c]` rows, every buffer
+  the stage's whole stream and the count of them live at once the footprint: nine same-size
+  fields, three of which held values dead by the time the next was written. Six fields now
+  carry the same roles (the block input doubles as the pair's second conv output, the noise
+  branch's rows as the stage stream, its residual as each Snake block's), which moves values
+  between addresses and nothing else - the PCM is bit-identical on every carrier and length
+  (FNV over the samples, before and after). Heap peak after one say, das heap counters, the q8
+  lane, M5 Max, one process on the box: kitten-nano 196 -> 170 MB for a 7 s sentence and 539
+  -> 448 for a 25 s one, kokoro-82m 299 -> 245 and 800 -> 630, kitten-mini 269 -> 222 and 752
+  -> 595 (the model itself 42 MB; the peak is per chunk and linear in its length). On one thread,
+  five reps, cv under 2%, the say takes what it took: kitten-nano 345 ms -> 345, kokoro 1.56 s
+  -> 1.56, kitten-mini 0.92 s -> 0.91 at 7 s; 1.25 s -> 1.23, 5.00 -> 4.95, 3.14 -> 3.13 at 25 s.
+  `tts_release_scratch` deleted the block home's globals but left the `St2Scratch` carrier
+  (109 MB of the 7 s kitten-nano say's 167) to keep a noise state a synthesis redraws from its
+  seed anyway; it now frees the carrier too unless the parity rail captured the noise, and the
+  heap after the release reads the model alone on every carrier. `tts_set_chunk_chars` lowers
+  the 400-codepoint chunk cap per model, so a memory-tight build bounds the peak directly.
+  One trap on the way: the after-tree read 15% slower in the generator on the 7 s says (400 ms
+  against 345, reproducible across processes) with one probe program and identical to the
+  before-tree with any other - the JIT cache had pinned one codegen of that program, and the
+  op buckets under the profiling rail were equal to the millisecond (`followup_general.md`
+  row 154).
+
 - **LANDED (2026-09-18) - the Pocket codec streams in windows of 16 latent frames
   (`ARCHITECTURE_POCKET.md` sec.2.46).** The codec's activations, about 20 MB per second of
   audio across the chain's ping-pong rows, were the say's and the clone's working set: 116 MB

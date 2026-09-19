@@ -412,7 +412,7 @@ def document_module_dasllama_tts(_root : string) {
         group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_has_phonemes|finalize)$%%),
         group_by_regex("Voices", mod, %regex~(tts_register_voice|tts_prepare_voice_prompt|tts_voice_prompt_valid|tts_register_voice_prompt)$%%),
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
-        group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch)$%%),
+        group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch|tts_set_chunk_chars)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),
         group_by_regex("Timings", mod, %regex~(rtf|timings_line)$%%)
     )

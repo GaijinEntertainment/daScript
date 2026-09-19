@@ -279,6 +279,17 @@ second with no request waiting.
    tts_release_scratch(m)
    let again <- synthesize(m, "It speaks as before.", vname)
 
+The rows are sized by the longest chunk a synthesis speaks, so the peak a say
+holds is the chunk cap's. A Kitten or Kokoro model speaks a sentence of up to
+``TTS_CHUNK_CHARS`` codepoints in one piece; ``tts_set_chunk_chars`` lowers
+that, and the same text speaks in more, shorter pieces at a lower peak. Each
+piece is its own synthesis, so a phrase cut in two is read as two phrases.
+
+.. code-block:: das
+
+   tts_set_chunk_chars(m, 120)
+   let low <- synthesize(m, TEXT, vname)
+
 Prepared voice prompts
 ======================
 

@@ -95,10 +95,12 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42: the sub-block-packed k3/k6 planes, the grid
   formats' panel and row-group decodes, the VBMI symbol lattice, and the tier that selects on the
   target rather than the host.
-- `ARCHITECTURE_TTS.md` - sec.2.28-2.35, 2.43: the TTS block home's two layouts, tap stacking, the
-  padded concat width, the per-synthesis carrier, the served carrier on the image rail, the
-  sine source's operation order, the heteronym context, the rig's scoring, and the two-tier
-  phoneme pack.
+- `ARCHITECTURE_TTS.md` - sec.2.28-2.30, 2.32-2.35, 2.43: the TTS block home's two layouts, tap
+  stacking, the padded concat width, the served carrier on the image rail, the sine source's
+  operation order, the heteronym context, the rig's scoring, and the two-tier phoneme pack.
+- `ARCHITECTURE_TTS_MEMORY.md` - sec.2.31, 2.51-2.53: the per-synthesis carrier, the
+  generator's six buffers, the chunk-sized peak with its cap and the idle release, and the
+  harmonic source streaming in frame windows.
 - `ARCHITECTURE_POCKET.md` - sec.2.46-2.50: the Pocket codec's windowed stream, a voice as the
   backbone's key-value memory, the one-step head's baked timestep constants, the released
   chunker, and the published file's served quants.

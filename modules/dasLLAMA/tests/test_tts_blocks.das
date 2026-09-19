@@ -1494,3 +1494,181 @@ def test_rows_conv_refuses_the_wrong_shape(t : T?) {
         t |> success(tripped, "conv1d_pad_cin panics when a depthwise conv's cout is not its cin")
     }
 }
+
+// ===== the harmonic source's window forms: a window is where a value is computed, never what =====
+
+// the window form of a resampler on either arithmetic - output columns [to0, to1) from the source
+// columns its taps read, both held at strides off the whole row - bit-equal to the whole row
+def private window_resize_arm(t : T?; torch_math : bool) {
+    var r = TtsRng()
+    rng_seed(r, torch_math ? 21ul : 20ul)
+    let c = 3l
+    let tt = 300l
+    let name = torch_math ? "resize_linear_torch" : "resize_linear"
+    for (scale in [1.0 / 300.0, 300.0, 0.5, 2.0]) {   // the source's two scales, and two off them
+        var inscope x : array<float>
+        rand_fill(r, x, c * tt, 1.0)
+        var inscope whole : array<float>
+        let t_out = resize_linear(torch_math, x, c, tt, scale, whole)
+        let to0 = t_out / 3l
+        let to1 = min(to0 + 7l, t_out)
+        let span = resize_span(torch_math, tt, scale, to0, to1)
+        let width = span.hi - span.lo
+        let x_stride = width + 5l
+        var inscope xw : array<float>
+        xw |> resize(c * x_stride)
+        for (ci in range64(c)) {
+            for (i in range64(width)) {
+                xw[ci * x_stride + i] = x[ci * tt + span.lo + i]
+            }
+        }
+        let y_stride = (to1 - to0) + 3l
+        var inscope yw : array<float>
+        yw |> resize(c * y_stride)
+        if (torch_math) {
+            resize_linear_torch(xw, span.lo, x_stride, c, tt, scale, to0, to1, yw, y_stride)
+        } else {
+            resize_linear(xw, span.lo, x_stride, c, tt, scale, to0, to1, yw, y_stride)
+        }
+        var diffs = 0
+        for (ci in range64(c)) {
+            for (k in range64(to1 - to0)) {
+                diffs += yw[ci * y_stride + k] == whole[ci * t_out + to0 + k] ? 0 : 1
+            }
+        }
+        t |> equal(diffs, 0, "{name} scale={scale}: the window [{to0}, {to1}) from source columns [{span.lo}, {span.hi}) at strides {x_stride}/{y_stride} - {diffs} values off the whole row")
+    }
+}
+
+def private append_range(var dst : array<float>; src : array<float>; off, n : int64) {
+    let at = long_length(dst)
+    dst |> resize(at + n)
+    for (i in range64(n)) {
+        dst[at + i] = src[off + i]
+    }
+}
+
+// the source over a whole run of `frames`, `window` phase frames a step (0 = one step): the rows
+// of every window in order
+def private sine_run(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u, noise_n : array<float>;
+                     window : int64; var out : array<float>) {
+    let nlow = resize_len(frames * cfg.upsample, 1.0 / float(cfg.upsample))
+    let win = window <= 0l ? nlow : window
+    var inscope cr = SineSourceCarry()
+    sine_carry_reset(cr, cfg.n_harm, win)
+    var inscope rows : array<float>
+    var fa = 0l
+    while (fa < nlow) {
+        let fb = min(fa + win, nlow)
+        let got = sine_source(cfg, f0, frames, noise_u, fa, fb, cr, noise_n, fa * cfg.upsample * cfg.n_harm, rows)
+        append_range(out, rows, 0l, got * cfg.n_harm)
+        fa = fb
+    }
+}
+
+def private sine_window_arm(t : T?; torch_math : bool) {
+    var cfg = SineSourceCfg()
+    cfg.torch_math = torch_math
+    let frames = 23l
+    let n = frames * cfg.upsample
+    var r = TtsRng()
+    rng_seed(r, torch_math ? 31ul : 30ul)
+    var inscope f0 : array<float>
+    f0 |> resize(frames)
+    for (i in range64(frames)) {   // voiced frames around 100-400 Hz, two unvoiced ones the threshold decides
+        f0[i] = (i == 5l || i == 17l) ? 0.0 : 100.0 + 300.0 * rng_uniform(r)
+    }
+    var inscope noise_u : array<float>
+    noise_u |> resize(cfg.n_harm)
+    for (h in range64(cfg.n_harm)) {
+        noise_u[h] = rng_uniform(r)
+    }
+    var inscope noise_n : array<float>
+    noise_n |> resize(n * cfg.n_harm)
+    for (i in range64(n * cfg.n_harm)) {
+        noise_n[i] = rng_normal(r)
+    }
+    var inscope whole : array<float>
+    sine_run(cfg, f0, frames, noise_u, noise_n, 0l, whole)
+    t |> equal(long_length(whole), n * cfg.n_harm, "{n} samples of {cfg.n_harm} harmonics from the whole run")
+    let name = torch_math ? "PyTorch's arithmetic" : "onnxruntime's arithmetic"
+    for (window in [1l, 5l, 16l]) {
+        var inscope windowed : array<float>
+        sine_run(cfg, f0, frames, noise_u, noise_n, window, windowed)
+        t |> equal(long_length(windowed), long_length(whole), "{name}, {window}-frame windows: the same sample count")
+        var diffs = 0
+        for (a, b in whole, windowed) {
+            diffs += a == b ? 0 : 1
+        }
+        t |> equal(diffs, 0, "{name}, {window}-frame windows: {diffs} of {long_length(whole)} source values move with the window")
+    }
+    // the mix the source hands linear_rows: a window's rows through the rows GEMM equal the whole run's
+    // rows, on both axes that move the row split
+    var inscope l = TtsLinear(nin = cfg.n_harm, nout = 1l)
+    rand_fill(r, l.w, cfg.n_harm, 1.0)
+    rand_fill(r, l.b, 1l, 0.5)
+    linear_prepare(l)
+    var inscope har_whole : array<float>
+    linear_rows(l, whole, n, har_whole)
+    for (axis in [SplitAxis.lane_cap, SplitAxis.worker_limit]) {
+        for (narrow in [true, false]) {
+            at_split(axis, narrow) {
+                var inscope har : array<float>
+                let step = 5l * cfg.upsample
+                var sa = 0l
+                while (sa < n) {
+                    let rows = min(step, n - sa)
+                    var inscope xw : array<float>
+                    append_range(xw, whole, sa * cfg.n_harm, rows * cfg.n_harm)
+                    var inscope hw : array<float>
+                    linear_rows(l, xw, rows, hw)
+                    append_range(har, hw, 0l, rows)
+                    sa += rows
+                }
+                var diffs = 0
+                for (a, b in har_whole, har) {
+                    diffs += a == b ? 0 : 1
+                }
+                t |> equal(diffs, 0, "{name}, the mix in windows at the {narrow ? "narrow" : "wide"} {axis_name(axis)}: {diffs} of {n} samples off the whole run")
+            }
+        }
+    }
+}
+
+[test]
+def test_source_windows(t : T?) {
+    t |> run("a resampler's window form equals the whole row at offsets and strides off it") @(t : T?) {
+        window_resize_arm(t, false)
+        window_resize_arm(t, true)
+    }
+    t |> run("a window past the carry's reset is refused") @(t : T?) {
+        let cfg = SineSourceCfg()
+        let frames = 10l
+        var inscope f0 : array<float>
+        f0 |> resize(frames)
+        for (i in range64(frames)) {
+            f0[i] = 200.0
+        }
+        var inscope noise_u : array<float>
+        noise_u |> resize(cfg.n_harm)
+        var inscope noise_n : array<float>
+        noise_n |> resize(frames * cfg.upsample * cfg.n_harm)
+        var inscope cr = SineSourceCarry()
+        sine_carry_reset(cr, cfg.n_harm, 2l)
+        var inscope out : array<float>
+        var tripped = false
+        try {
+            sine_source(cfg, f0, frames, noise_u, 0l, 5l, cr, noise_n, 0l, out)
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "a five-frame window on a carry reset for two panics")
+    }
+    t |> run("the harmonic source in frame windows equals the whole run, and so does its mix under both row splits") @(t : T?) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            sine_window_arm(t, false)
+            sine_window_arm(t, true)
+        }
+    }
+}

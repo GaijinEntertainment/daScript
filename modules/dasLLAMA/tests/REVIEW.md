@@ -157,9 +157,9 @@ of BOTH sides is a defect: for a token or id compare the decoded text (`log_gen_
 value.** A red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
-**A size, depth, or row count that a cell's name or a comment inside the cell claims about what
-the cell exercises is asserted in that cell.** A cap, a resize, or a counter showing the path ran is not evidence that the number was
-reached.
+**A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
+claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
+showing the path ran is not evidence that the number was reached.
 
 **A freeform token-parity cell whose two sides can round differently - different lanes,
 backends, batch shapes or kernel forms - is a defect: use the forced-feed logits-tolerance

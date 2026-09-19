@@ -176,15 +176,16 @@ def reset_pocket_q8() {
 // ===== the codec's window: the latent frames a stream step covers =====
 
 let POCKET_CODEC_WINDOW_DEFAULT = 16l
-var private g_pocket_codec_window = POCKET_CODEC_WINDOW_DEFAULT
+var private g_pocket_codec_window = TtsStreamWindow(frames = POCKET_CODEC_WINDOW_DEFAULT)
 
 //! Set how many latent frames the codec's encoder and decoder run per stream step; 0 runs a
-//! whole chunk or clip in one step. The activations scale with the window, the output does not.
+//! whole chunk or clip in one step, a negative count is refused, and every set prints one info
+//! line. The activations scale with the window, the output does not.
 def set_pocket_codec_window(frames : int64) {
-    g_pocket_codec_window = frames
+    stream_window_set(g_pocket_codec_window, frames, "set_pocket_codec_window")
 }
 
-def pocket_codec_window() : int64 => g_pocket_codec_window
+def pocket_codec_window() : int64 => g_pocket_codec_window.frames
 
 //! Would the next load serve its GEMMs as q8 - the pin when set, the policy otherwise.
 def pocket_serves_q8() : bool => pocket_serve_q8_()
@@ -217,7 +218,7 @@ def finalize(var m : PocketModel) {
     delete m.tok
 }
 
-//! The activation carrier one synthesis reuses (sec.2.31's discipline): every stage buffer a
+//! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31's discipline): every stage buffer a
 //! `@scratch` field grown once, the waveform the output.
 struct PocketScratch {
     @scratch @exact_size rows : array<float>     // the transformer's residual rows
@@ -852,10 +853,7 @@ def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : arr
 }
 
 //! the window in frames a stream runs: the knob, else the whole run
-def private codec_window(frames : int64) : int64 {
-    let w = g_pocket_codec_window
-    return w <= 0l ? frames : min(w, frames)
-}
+def private codec_window(frames : int64) : int64 => stream_window_for(g_pocket_codec_window, frames)
 
 //! The clip's latent frames [frames][latent_dim] through the codec encoder - the voice prompt's
 //! source. `pcm` is 24 kHz mono; its tail pads to a whole frame with zeros as the reference does.

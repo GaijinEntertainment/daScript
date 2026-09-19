@@ -134,7 +134,7 @@ def private seam_check(t : T?; m : StyleTts2Model; tag : string; dump : table<st
     var tr = new StyleTts2Trace()
     var inscope sc = St2Scratch()
     var inscope har : array<float>
-    let n = styletts2_source(m.decoder, m.source, f0, f2, noise, har, sc)
+    let n = styletts2_source(m.decoder, m.source, f0, f2, noise, 0ul, har, sc)
     stage_diff(t, "{tag} SOURCE", "har", har, dump, true)
     var inscope har_ref <- dump_f(dump, "har")
     var inscope spec : array<float>

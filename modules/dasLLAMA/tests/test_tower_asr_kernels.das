@@ -950,7 +950,7 @@ def private resize_onnx_case(scale : float; poison : bool) : KCase {
     var env : array<double>
     let want_t = rl_onnx_ref(x, scale, want, env)
     var y : array<float>
-    let got_t = resize_linear(x, RS_C, RS_T, scale, y)
+    let got_t = resize_linear(false, x, RS_C, RS_T, scale, y)
     let nm = "resize_linear (ONNX half-pixel) scale={scale}"
     if (got_t != want_t) {
         return KCase(name = nm, bad = 1000000)
@@ -968,7 +968,7 @@ def private resize_torch_case(scale : float; poison : bool) : KCase {
     var env : array<double>
     let want_t = rl_torch_ref(x, scale, want, env)
     var y : array<float>
-    let got_t = resize_linear_torch(x, RS_C, RS_T, scale, y)
+    let got_t = resize_linear(true, x, RS_C, RS_T, scale, y)
     let nm = "resize_linear_torch (align_corners false) scale={scale}"
     if (got_t != want_t) {
         return KCase(name = nm, bad = 1000000)
