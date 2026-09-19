@@ -40,17 +40,24 @@ the route that answers with that key first.**
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
 
-**A `served` or `served_note` value `openai_server.das` writes uses plain words only - never one
-of the engine's own nouns for its parts: `pass`, `region`, `mirror`, `resident driver`, `tier`,
-`rails`.**
+**Every word `openai_server.das` writes itself into a `served` or `served_note` value - all of it
+but the engine text it quotes - is a plain word: never one of the engine's own nouns for its parts
+(`pass`, `region`, `mirror`, `resident driver`, `tier`, `rails`).**
 
-**A `served_note` that carries the engine's own decline text leads with a sentence of its own
-that stands without it, and a `gpu_cpu_passes` reason the control page prints carries its
-machine name only in the tooltip.**
+**A `served_note` that carries the engine's decline text leads with a sentence of
+`openai_server.das`'s own that stands without it.**
 
-**A diff that adds or changes a `served` value in `openai_server.das` names in it where the
-weights sit and, on a GPU slot, where the streams' caches sit; a `served_note` value names what
-holds the slot back, or is empty when nothing does.**
+**A `gpu_cpu_passes` reason the control page prints shows the engine's plain words for it, with
+the machine name only in the `title` tooltip; a reason the engine sent no words for prints its
+machine name.**
+
+**A diff that adds or changes a `served` value in `openai_server.das` says how the model is
+served now, and a value that says the whole model is on the card also says where the streams'
+caches sit.**
+
+**A diff that adds or changes a `served_note` value in `openai_server.das` names what about the
+slot itself holds it back, and is empty when nothing about the slot does.** A slot waiting for
+the card says that in its `served` value.
 
 **A diff in this folder that calls `create_device_session`, or turns a scheduler's device mode
 on (`set_device_kv`), shows at that call site that the slot's live device-home sessions - a

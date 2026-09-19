@@ -189,7 +189,7 @@ def private load_config(folder : string) : LoadedConfig {
 }
 
 //! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
-//! (`bin/Release/daslang(.exe)`) or beside the watchdog itself (a source tree keeps both in `bin/`);
+//! (`daslang(.exe)`, `bin/Release/daslang(.exe)`, `bin/daslang(.exe)`, `build/daslang`) or beside the watchdog itself;
 //! exactly one program - a `*.exe` file, or on a Unix layout an executable file with no extension,
 //! the watchdog's own executable aside - means that program. A `main.das` with no daslang in reach
 //! is refused, never traded for a program. Ambiguity is an error, never a guess.

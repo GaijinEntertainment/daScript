@@ -1237,9 +1237,6 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   (the hyphenated directory is unreachable by path require).
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
-- `utils/dasllama-server/test_slot_served.das` - requires the server and its program root
-  (`openai_server`, `main`) by bare same-dir name: the served strings, the device-mode
-  predicate and the vulkan want over hand-built slots, model-free.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

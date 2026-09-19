@@ -191,7 +191,7 @@ driver's route or the serving lane for the rest of the process - even when the c
 knob at its DEFAULT value.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
-driver setter it touched back at its default; `reset_<family>_q8` is the restore.** Why a hook
+driver setter it touched back where it found it; `reset_<family>_q8` is the restore.** Why a hook
 left set changes what the next cell measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
