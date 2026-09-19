@@ -72,9 +72,13 @@ def tts_set_chunk_chars(var m : TtsModel; chars : int) {
     //! refused): the peak memory a say holds is the largest chunk's, so a memory-tight platform lowers it and
     //! the same text speaks in more, shorter pieces, each its own synthesis. Pocket's chunks take no cap.
     if (chars < 1) {
-        panic("dasLLAMA tts: a chunk cap of {chars} codepoints - the chunk cap takes at least one")
+        panic("dasLLAMA tts: tts_set_chunk_chars({chars}) - the chunk cap takes at least one codepoint")
     }
     m.chunk_chars = chars
+    if (m.kind == TtsKind.pocket) {
+        to_log(LOG_INFO, "dasLLAMA tts: tts_set_chunk_chars({chars}): a Pocket model chunks by its tokenizer's budget - the cap does not reach it\n")
+        return
+    }
     let which = chars == TTS_CHUNK_CHARS ? "the default" : "off the default {TTS_CHUNK_CHARS}"
     to_log(LOG_INFO, "dasLLAMA tts: tts_set_chunk_chars: a synthesis speaks {chars} codepoints a chunk - {which}\n")
 }
