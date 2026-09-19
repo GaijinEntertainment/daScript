@@ -16,6 +16,8 @@ options _dasllama_internal = true
 // served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows; the last column
 // is the N-column dispatch's wall over N one-column dispatches - under 1 the weight pass is shared, at 1 it is not.
 // `n2off` holds the q8 rows to the one-row-a-subgroup form (the two-row twin serves past `g_q8_n2_min_n` otherwise).
+// `cold` dispatches ONE plane copy at a time, the copies in turn - the served launch size in the DRAM regime, the
+// token command's own; `single` replays one copy L2-warm and `cold` yields to it.
 
 require strings
 require math
@@ -34,6 +36,7 @@ let private STREAM_MB = 128   //! the least a dispatch streams: four times the 3
 let private YBIT = 32u   //! the y buffer's hazard bit in the binding order below
 
 var private g_single_copy = false
+var private g_cold = false
 
 //! one probe's synthetic planes and activation rows, uploaded; the dispatch geometry rides beside them
 struct private ProbePlanes {
@@ -44,7 +47,9 @@ struct private ProbePlanes {
     y_bytes : int64
     rg_bytes : int64
     copies : int
-    wgs : int64
+    blocks : int     //! weight blocks a plane copy (the region table's stride)
+    wgs : int64      //! the dispatch grid over every copy's rows, and over one copy's
+    wgs1 : int64
     pc : GemvArgs
 }
 
@@ -100,23 +105,43 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_count, bloc
 }
 
 //! DISPATCHES dependent dispatches of `fmt`'s class (`ncols` 0 = the one-column class) over the planes, timed
-//! after a warm-up submit; MB = the weight bytes a dispatch reads
+//! after a warm-up submit; MB = the weight bytes a dispatch reads. Under `cold` every dispatch is one plane copy
+//! at the served launch size, the copies taken in turn so none is L2-warm from the dispatch before
 def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; rgd : uint64>) : tuple<mb : double; us : double> {
     var raw = alloc_cmd()
+    var sets : array<VkDescriptorSet>
     unsafe {
-        let bufs = fixed_array(b.wqd, b.wsd, b.rgd, b.xqd, b.xsd, b.yd)
         let sizes = fixed_array(p.wq_bytes, p.ws_bytes, p.rg_bytes, p.xq_bytes, p.xs_bytes, p.y_bytes)
         let gbits = fixed_array(1u, 2u, 4u, 8u, 16u, YBIT)
-        var s_cls = ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sizes, gbits) : gemv_cls_set(int(fmt), bufs, sizes, gbits)
+        if (g_cold) {   //! a region table a copy, each its own set, so a dispatch names one copy
+            sets |> reserve(p.copies)
+            for (i in range(p.copies)) {
+                var pair <- [uint(i * p.blocks), 0u]
+                let rgd = make_device_buf(8l)
+                upload_region_at(rgd, 0l, addr<uint8 const?>(pair[0]), 8l)
+                let bufs = fixed_array(b.wqd, b.wsd, rgd, b.xqd, b.xsd, b.yd)
+                let sz = fixed_array(p.wq_bytes, p.ws_bytes, 8l, p.xq_bytes, p.xs_bytes, p.y_bytes)
+                sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sz, gbits) : gemv_cls_set(int(fmt), bufs, sz, gbits))
+            }
+        } else {
+            let bufs = fixed_array(b.wqd, b.wsd, b.rgd, b.xqd, b.xsd, b.yd)
+            sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs, sizes, gbits) : gemv_cls_set(int(fmt), bufs, sizes, gbits))
+        }
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = p.pc
-        for (_i in range(DISPATCHES)) {
+        if (g_cold) {
+            pc.nreg = 1u
+            pc.ystride = pc.d
+        }
+        let wgs = g_cold ? p.wgs1 : p.wgs
+        for (i in range(DISPATCHES)) {
+            var s_cls = sets[i % length(sets)]
             if (ncols > 0) {
-                gemv_cls_enc_n(int(fmt), raw, h, s_cls, pc, p.wgs)
+                gemv_cls_enc_n(int(fmt), raw, h, s_cls, pc, wgs)
             } else {
-                gemv_cls_enc(int(fmt), raw, h, s_cls, pc, p.wgs)
+                gemv_cls_enc(int(fmt), raw, h, s_cls, pc, wgs)
             }
             vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
         }
@@ -128,7 +153,8 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
         submit_wait(raw)
     }
     let us = double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
-    return (mb = double(p.wq_bytes + p.ws_bytes) / 1048576.0lf, us = us)
+    let mb = double(p.wq_bytes + p.ws_bytes) / 1048576.0lf
+    return (mb = g_cold ? mb / double(p.copies) : mb, us = us)
 }
 
 //! the plane copies a dispatch streams: STREAM_MB or more, or one copy under `single`
@@ -143,9 +169,10 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int
     let ssb_words = int(kq_dev_ssb(fmt) / 4l)
     let plane_bytes = nwsb * (qsb_words + ssb_words) * 4   //! under 2^31 for every served shape (the 27B's largest plane is 89 MB)
     let xrows = max(ncols, 1)
-    var p = ProbePlanes(copies = probe_copies(plane_bytes))
+    var p = ProbePlanes(copies = probe_copies(plane_bytes), blocks = nwsb)
     p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
     p.wgs = gemv_wgs(int64(d) * int64(p.copies), lanes_per_row)
+    p.wgs1 = gemv_wgs(int64(d), lanes_per_row)
     p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = lanes_per_row,
         ncols = uint(ncols), ystride = uint(d * p.copies))
     let b = probe_fill(uint(int(fmt)), nwsb * qsb_words * p.copies, nwsb * ssb_words * p.copies, nsb * 64 * xrows, nsb * xrows, nwsb, p)
@@ -158,9 +185,10 @@ def private probe_q8(n, d : int; ncols : int = 0) : tuple<mb : double; us : doub
     let nb = n / 32
     let nblk = d * nb
     let xrows = max(ncols, 1)
-    var p = ProbePlanes(copies = probe_copies(nblk * 34))
+    var p = ProbePlanes(copies = probe_copies(nblk * 34), blocks = nblk)
     p.y_bytes = int64(d) * 4l * int64(p.copies) * int64(xrows)
     p.wgs = gemv_wgs(int64(d) * int64(p.copies), 0u)
+    p.wgs1 = gemv_wgs(int64(d), 0u)
     p.pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(p.copies), ybase = 0u, lanes_per_row = 0u,
         ncols = uint(ncols), ystride = uint(d * p.copies))
     let b = probe_fill(99991u, nblk * 8 * p.copies, (nblk * p.copies + 1) / 2, nb * 8 * xrows, nb * xrows, nblk, p)
@@ -207,6 +235,7 @@ def main : int {
         d = to_int(shape_args[length(shape_args) - 1])
     }
     g_single_copy = find_index(args, "single") >= 0
+    g_cold = find_index(args, "cold") >= 0 && !g_single_copy
     if (!ensure_q8_batch_cls()) {
         print("vk_gemv_probe: no Vulkan device\n")
         return 1

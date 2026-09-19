@@ -2175,9 +2175,25 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64) {
     g_rdq_overflow = one_overflow
 }
 
+var private @scratch g_rd_logits_n : array<float>   //! the N-row command's logits plane, read off the mapped memory in one pass
+
+//! the rows' logits from the mapped plane to their pointers: one read of the plane, then a row a copy - four reads
+//! straight off the mapping cost the pod eight times the one (785 us a step against 92)
+[hot_path]
+def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
+    let vocab = g_rd.vocab
+    g_rd_logits_n |> resize(vocab * nrows)
+    unsafe {
+        memcpy(addr<void?>(g_rd_logits_n[0]), g_rd.logits_host.mapped, vocab * 4l * nrows)
+        for (i in range64(nrows)) {
+            memcpy(addr<void?>(*lrows[i]), addr<void?>(g_rd_logits_n[i * vocab]), vocab * 4l)
+        }
+    }
+}
+
 //! the N-row submit: `nrows` rows of x and cos/sin, each row's position, its cached count and its mirror region,
 //! one command - the unsplit twin while every row sits under RD_UNSPLIT_POS, as the one-row command picks - and
-//! each row's logits landed at its own pointer straight from the mapped plane
+//! each row's logits landed at its own pointer
 [hot_path]   // per batched decode step
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
@@ -2213,17 +2229,13 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
-        let lbytes = g_rd.vocab * 4l
-        let lmapped = reinterpret<uint8?>(g_rd.logits_host.mapped)
         if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
             submit_nowait(cmd)
             let t2 = ref_time_ticks()
             wait_fence()
             let t3 = ref_time_ticks()
-            for (i in range64(nrows)) {
-                memcpy(addr<void?>(*lrows[i]), lmapped + i * lbytes, lbytes)
-            }
+            rd_land_logits_n(lrows, nrows)
             let t4 = ref_time_ticks()
             g_rdq_host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
             g_rdq_host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
@@ -2231,9 +2243,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
         } else {
             submit_wait(cmd)
-            for (i in range64(nrows)) {
-                memcpy(addr<void?>(*lrows[i]), lmapped + i * lbytes, lbytes)
-            }
+            rd_land_logits_n(lrows, nrows)
         }
     }
     g_rd.tokens_served += nrows
