@@ -1644,3 +1644,21 @@ module) is independent and can land any time - it is pure structure.
     while `seq_cap` is one region's context, so the two contexts are not the same unit and the
     reader cannot act on the line. The work: the message in one unit - the context a region gets
     at the region count that would fit, or the region count that fits at the asked context.
+
+81. **A dense model the resident plan cannot home whole falls to the per-op rails, which read
+    as the CPU chain.** On the RTX 5060 Ti (16 GB, the desktop holding 1 to 2 GB) the 12B
+    Q4_K_M declines at 15.6 GB asked over four regions and serves 7.6 tok/s flat, 15 summed over
+    four streams, against llama.cpp's paged 44 and 106; the 12B Q8_0 (12.1 GB of weights) 4.5
+    and 14 against 21 and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows). Two rungs. The
+    first: the plan sizes its mirror from the room, not from the load - the four-stream run holds
+    640 positions a stream, under 1 GB of K/V, so a plan that shrinks the mirror to the served
+    context before declining homes the Q4_K_M with room to spare and the Q8_0 on a cleared card,
+    at the pod's kind of rate; the decline stays for the weights alone not fitting. The second,
+    for the weights alone not fitting (the Q8_0 on a 12 GB card, the 31B on this one): a
+    streamed-weights arm - the layers' planes through a device ring the step refills ahead of
+    the decode, in layer order, the way the MoE block streams its expert groups
+    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) -
+    which beats the driver's blind paging because the order is known and the reads are one pass
+    a token; the rate then reads as PCIe's bandwidth over the bytes past the resident set, and a
+    row a step sees no benefit from four streams' worth of streaming unless the ring serves all
+    four rows a layer. Both rungs are measured against llama.cpp's paged rows on the same card.
