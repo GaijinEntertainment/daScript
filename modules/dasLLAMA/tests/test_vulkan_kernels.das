@@ -991,6 +991,123 @@ def test_vkd_ar_class(t0 : T?) {
     }
 }
 
+//! the classifier epilogue's rows form: `rows` logits rows through one dispatch against the one-row dispatch a row at a time
+def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows : int64; cap : float; a_row_at_a_time : bool) : array<float> {
+    let row_bytes = vocab * 4l
+    let bytes = row_bytes * rows
+    let sbytes = max(long_length(supp), 1l) * 4l
+    let sd = make_device_buf(sbytes)
+    var host = make_host_buf(bytes, true, [cached = true])
+    var yc : array<float>
+    yc |> resize(vocab * rows)
+    let begin = VkCommandBufferBeginInfo()
+    unsafe {
+        if (!empty(supp)) {
+            upload_region_at(sd, 0l, addr<uint8 const?>(supp[0]), sbytes)
+        }
+        if (a_row_at_a_time) {
+            for (r in range64(rows)) {   //! each row its own plane and set, the one-row command's dispatch
+                let yd = make_device_buf(row_bytes)
+                upload_region_at(yd, 0l, addr<uint8 const?>(y[r * vocab]), row_bytes)
+                var s = set_cls_epi(fixed_array(yd, sd), fixed_array(row_bytes, sbytes), fixed_array(1u, 0u))
+                var raw = alloc_cmd()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = 1u)
+                enc_cls_epi(raw, h, s, pc, (vocab + 255l) / 256l)
+                vhz_dep(raw, h, 1u, 0u, true)
+                cmd_copy_whole(raw, yd, host.buf, row_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(yc[r * vocab]), host.mapped, row_bytes)
+            }
+        } else {
+            let yd = make_device_buf(bytes)
+            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
+            var s = set_cls_epi(fixed_array(yd, sd), fixed_array(bytes, sbytes), fixed_array(1u, 0u))
+            var raw = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(rows))
+            enc_cls_epi(raw, h, s, pc, (vocab * rows + 255l) / 256l)
+            vhz_dep(raw, h, 1u, 0u, true)
+            cmd_copy_whole(raw, yd, host.buf, bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            memcpy(addr<void?>(yc[0]), host.mapped, bytes)
+        }
+    }
+    return <- yc
+}
+
+[test]
+def test_vkd_cls_epi_rows(t0 : T?) {
+    t0 |> run("cls_epi over four logits rows == the one-row dispatch a row at a time, and the CPU softcap with the pins") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_epi()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let vocab = 1000l   //! off the 256-lane grid, so the last workgroup's guard is exercised on every row
+            let rows = 4l
+            let cap = 30.0
+            var supp <- [3u, 777u, 999u]
+            var y : array<float>
+            y |> resize(vocab * rows)
+            for (i in range64(vocab * rows)) {
+                y[i] = float((i * 37l) % 211l) * 0.7 - 60.0   //! reaches past the cap on both sides
+            }
+            var want : array<float>   // the CPU form: the cap in the exp form the kernel takes, then the pins
+            want |> resize(vocab * rows)
+            for (i in range64(vocab * rows)) {
+                var v = softcap_exp(y[i], cap)
+                let id = uint(i % vocab)
+                for (s in supp) {
+                    if (s == id) {
+                        v = -1.0e30
+                    }
+                }
+                want[i] = v
+            }
+            var four <- cls_epi_rows_run(y, supp, vocab, rows, cap, false)
+            var one <- cls_epi_rows_run(y, supp, vocab, rows, cap, true)
+            var bad_rows = 0
+            var over = 0
+            var over_poison = 0
+            var pinned = 0
+            let bar = 1e-4
+            for (i in range64(vocab * rows)) {
+                if (four[i] != one[i]) {
+                    bad_rows++
+                }
+                if (want[i] <= -1.0e29) {
+                    if (four[i] <= -1.0e29) {
+                        pinned++
+                    }
+                } else {
+                    if (abs(four[i] - want[i]) > bar) {
+                        over++
+                    }
+                    if (abs(four[i] - (want[i] + 0.01)) > bar) {
+                        over_poison++
+                    }
+                }
+            }
+            t |> success(bad_rows == 0, "the four-row dispatch is the one-row dispatch a row at a time, bit for bit ({bad_rows} of {vocab * rows} diverge)")
+            t |> success(over == 0, "every capped logit within {bar} of the CPU softcap ({over} over)")
+            t |> success(over_poison > 0, "the bar is live: an added 0.01 lands outside it ({over_poison} over)")
+            t |> equal(pinned, int(rows) * length(supp), "every suppressed id pinned on every row")
+            delete four
+            delete one
+            delete want
+            delete y
+            delete supp
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_cls_ar_row0(t0 : T?) {
     t0 |> run("cls_ar with a row base lands on the rows from row0 and leaves the rows below untouched") <| @(t : T?) {

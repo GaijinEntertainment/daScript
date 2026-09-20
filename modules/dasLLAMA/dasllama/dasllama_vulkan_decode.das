@@ -1036,10 +1036,10 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
 //! the classifier epilogue has work: a final softcap or suppressed ids
 def rd_cls_epi_on : bool => g_rd.cls_cap > 0.0 || g_rd.nsupp > 0l
 
-//! the epilogue over the logits row the classifier GEMV just wrote (the prefill's tail encodes the same)
-def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz) {
-    var pce = ClsEpiArgs(vocab = uint(g_rd.vocab), cap = g_rd.cls_cap, nsupp = uint(g_rd.nsupp))
-    enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab + 255l) / 256l)
+//! the epilogue over the `nrows` logits rows the classifier GEMV just wrote (the prefill's tail encodes one row the same)
+def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
+    var pce = ClsEpiArgs(vocab = uint(g_rd.vocab), cap = g_rd.cls_cap, nsupp = uint(g_rd.nsupp), rows = uint(nrows))
+    enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab * nrows + 255l) / 256l)
 }
 
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
@@ -2064,11 +2064,11 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def vk_rdec_token_n_rows : int64 {
-    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.q_gated || rd_cls_epi_on()
+    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.q_gated
             || !gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
     for (L in g_rd.layers) {
-        if (L.moe || L.recurrent || L.ple || L.kv_shared
-                || !(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
+        if (L.moe || L.recurrent || L.ple
+                || !(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo)
                     && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
@@ -2084,7 +2084,7 @@ def private rd_ensure_n_rail : bool {
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
     for (L in g_rd.layers) {
         break if (!ok)
-        ok = (gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
+        ok = (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)
             && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)
             && (!L.gu_on || ensure_q8_gemv_gu_n_cls()))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
     }
@@ -2157,7 +2157,8 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u, ncols = nr, ystride = kvrow)
         rd_gemv_n(L.fq, raw, h, L.s_q, pcq, qd)
         rd_ts(raw, "a:q")
-        if (L.kv_merged) {
+        if (L.kv_shared) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
+        } elif (L.kv_merged) {
             var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd), ncols = nr, ystride = kvrow)
             rd_gemv_n(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
         } else {
@@ -2176,8 +2177,8 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:wo")
         return
     }
+    let nkh = L.kv_shared ? 0l : kvd / int64(hs)   //! the k-head groups also store the mirror row: none on a shared-KV layer
     if (fuse_qkr && (g_rd_nrow_bisect & 4) == 0) {
-        let nkh = kvd / int64(hs)
         let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
         let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = uint(L.rot / 2l),
@@ -2194,7 +2195,6 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:qknrope")
     } elif ((g_rd_nrow_bisect & 4) == 0) {
         if (g_rd.qk_norm) {
-            let nkh = kvd / int64(hs)
             let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
             let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
             var pcn = QkRmsArgs(hs = hs, nh = uint(g_rd.n_heads), nkvh = uint(nkh),
@@ -2204,7 +2204,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
             enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
             rd_ts(raw, "a:qkn")
         }
-        let npairs = qd / 2l + kvd / 2l
+        let npairs = qd / 2l + (L.kv_shared ? 0l : kvd / 2l)   //! the k pairs also store the mirror row: none on a shared-KV layer
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = hs / 2u,
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(npairs),
             layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
@@ -2373,6 +2373,10 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
         var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(g_rd.vocab))
         rd_gemv_n(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
         rd_ts(raw, "t:cls")
+        if (rd_cls_epi_on()) {
+            rd_enc_cls_epi(raw, h, nrows)
+            rd_ts(raw, "t:epi")
+        }
         if (!g_rd.log_xfer) {
             vhz_dep(raw, h, VHZ_LOG, 0u, true)
             cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
