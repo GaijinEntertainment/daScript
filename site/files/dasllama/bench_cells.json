@@ -12646,20 +12646,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":9074.3052485156186
+            "tok_s":9094.5998731660075
           },
           "tg128":{
-            "tok_s":161.29051694478639
+            "tok_s":159.88990703706887
+          },
+          "tg128@4":{
+            "tok_s":453.39641588874036
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "files":[
           {
@@ -12674,16 +12677,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":7413.405377
+            "tok_s":7555.9522370000004
           },
           "tg128":{
-            "tok_s":137.04832500000001
+            "tok_s":136.49394799999999
+          },
+          "tg128@4":{
+            "tok_s":477.48000488281252
           }
         },
         "source":"official",
@@ -12811,24 +12817,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":37.649999999999999
+            "ms":37.587000000000003
           },
           "img:pp":{
-            "tok_s":5796.2398751579103
+            "tok_s":5752.212389380531
           },
           "img:tg":{
-            "tok_s":155.08524518977265
+            "tok_s":153.81933406482972
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "files":[
           {
@@ -12969,31 +12975,31 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":229.541,
+            "ms":230.518,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":618.63599999999997,
+            "ms":622.53300000000002,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4241.6840000000002,
+            "ms":4264.2269999999999,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":5431.3490000000002,
+            "ms":5497.7939999999999,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "files":[
           {
@@ -13028,19 +13034,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":7665.6000000000004
+            "ms":7656.1999999999998
           },
           "asr:jfk3.wav":{
-            "ms":22981.5
+            "ms":23028.700000000001
           },
           "asr:gb1.wav":{
-            "ms":142898.70000000001
+            "ms":142822.60000000001
           }
         },
         "workload":"audio-chat",
@@ -13074,19 +13080,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":291.60000000000002
+            "ms":288
           },
           "asr:jfk3.wav":{
-            "ms":721.39999999999998
+            "ms":725.70000000000005
           },
           "asr:gb1.wav":{
-            "ms":4274.3000000000002
+            "ms":4275.3000000000002
           }
         },
         "workload":"audio-chat",
@@ -13120,7 +13126,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
@@ -13129,10 +13135,10 @@
             "ms":52
           },
           "img:pp":{
-            "tok_s":2362.5557206537892
+            "tok_s":2334.8017621145377
           },
           "img:tg":{
-            "tok_s":122.55840674071236
+            "tok_s":122.04424103737605
           }
         },
         "workload":"image-chat",
@@ -13196,31 +13202,31 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1197.835,
+            "ms":1170.1659999999999,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3596.4560000000001,
+            "ms":3537.7660000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":28601.455000000002,
+            "ms":28185.688999999998,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":40530.589,
+            "ms":40888.631999999998,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "files":[
           {
@@ -13255,31 +13261,31 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1171.615,
+            "ms":1130.3130000000001,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":3506.8780000000002,
+            "ms":3498.1759999999999,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":27479.187999999998,
+            "ms":27403.396000000001,
             "audio_s":198.734375
           },
           "asr:hp0.wav":{
-            "ms":39693.042000000001,
+            "ms":40180.684999999998,
             "audio_s":273.28724999999997
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "files":[
           {

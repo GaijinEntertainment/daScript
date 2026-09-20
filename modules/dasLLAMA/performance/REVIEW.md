@@ -81,6 +81,11 @@ the ruler's `--settle` default (the ruler's `--help` states it), names the reaso
 and labels the file's rows `direction-grade` everywhere the change cites them - PR body, ledger
 rows, architecture or profile docs.**
 
+**A diff that writes a `das` row to `records/<box>.json` names on the row the codegen form of the
+exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three
+(`skills/internal/build_and_debug.md`), and a rate that does not name its form cannot be compared
+with one that was built another way.
+
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
 validator ignores run keys it does not know, so an unvalidated field ships silently.

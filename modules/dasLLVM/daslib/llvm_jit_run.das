@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x4b6988f29b301142ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x51c224d7df251167ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -260,6 +260,24 @@ def private dispose_split_part(var p : JitSplitPart; dispose_state : bool) {
     }
 }
 
+//! what a split codegen knows of the artifact it feeds: the exe's entry and whether its partitions leave as bitcode
+struct private SplitTarget {
+    gen_exe : bool
+    exe_main : string
+    exe_strict : bool
+    register_all_modules : bool
+    lto : bool
+}
+
+//! the link set - the partition objects or bitcode files and the response file - is the link's alone
+def private remove_split_link_files(objs : array<string>; output_path : string) {
+    var err : string
+    for (o in objs) {
+        remove(o, err)
+    }
+    remove(split_link_rsp_path(output_path), err)
+}
+
 // nolint:STYLE014
 // --jit-split-modules driver, three phases. A (serial das): partition `funcs` by owning das-module
 // (program order), codegen each partition into its OWN (context, module, engine) emitter state -
@@ -268,12 +286,13 @@ def private dispose_split_part(var p : JitSplitPart; dispose_state : bool) {
 // one LLVMContext per job is LLVM's threading contract; the SAME LLVMRunPasses/EmitToFile calls as
 // the monolith path, entry points resolved through dasbind - libDaScript never links LLVM). C
 // (serial das): post-optimize verify per partition, then dispose everything but the ambient state.
-[macro_function]
+[macro_function, arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<FunctionPtr>;  // nolint:STYLE037,STYLE038 - the split orchestration is one linear pipeline (the cache probe adds its branches); the phases share the re-pointed g_* state
                               var uids : UidNodes?; jit_flags : LlvmJitFlags;
                               opt_level, size_level, split_threads : int; use_host_cpu : bool;
                               debug_info, dump_ir, obj_cache : bool; target_triple : string;
-                              output_path : string; log_jit_time : bool) : tuple<objs : array<string>; t_irgen : int; t_optemit : int> {
+                              output_path : string; log_jit_time : bool;
+                              target : SplitTarget) : tuple<objs : array<string>; t_irgen : int; t_optemit : int; link_whole_lib : bool; main_ok : bool> {
     var phase_tm = ref_time_ticks()   // t_irgen covers partitioning + per-partition declare/irgen/ctors
     // partition by owning das-module, first-appearance (= program module) order - deterministic
     var order : array<string>
@@ -286,7 +305,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         buckets[mname] |> push(unsafe(reinterpret<Function?>(fn)))   // nolint:PERF006 - per-module counts unknown up front, one-shot build
     }
     let thrTag = split_threads < 0 ? "auto" : "{split_threads}"
-    to_log(LOG_INFO, "LLVM JIT: split codegen - {length(order)} das-module partitions, {thrTag} threads -> one DLL\n")
+    to_log(LOG_INFO, "LLVM JIT: split codegen (--jit-split-modules) - {length(order)} das-module partitions, {thrTag} threads -> one {target.gen_exe ? "exe" : "DLL"}\n")
     // the dir must exist before the FIRST emit (a missing dir crashes LLVMTargetMachineEmitToFile)
     mkdir_rec(dir_name(output_path))
     jit_par_emit_begin()
@@ -302,6 +321,9 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     objs |> reserve(length(order))
     var cached = 0
     var first_miss = true
+    var link_whole_lib = false
+    var main_ok = true
+    let codegen_level = target.gen_exe ? 3u : uint(opt_level)   //! an exe pins codegen level 3 like the one-unit form (a shipped artifact); the DLL split follows the dev rail's level
     for (pname, pi in order, count()) {
         let ptag = empty(pname) ? "main" : pname
         for (fun in buckets[pname]) {
@@ -357,23 +379,66 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             apply_fast_math_to_module(g_mod)
         }
         g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
-            tm = create_default_target_machine(opt_level |> uint, use_host_cpu),
+            tm = create_default_target_machine(codegen_level, use_host_cpu),
             pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
             obj = obj, tag = ptag))
     }
+    if (target.gen_exe) {
+        let ptag = "exe_main"
+        if (!first_miss) {
+            init_jit_state(opt_level |> uint, target_triple, use_host_cpu, "llvm_jit_{ptag}")
+            add_debug_module_flags(debug_info, target_triple)
+        }
+        first_miss = false
+        let attrs = new Attributes(g_ctx)
+        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
+        ast_gc_guard() {
+            for (fun in funcs) {   // every pair declared: the entry looks its functions up by name, and the link resolves each to its partition
+                fake_visitor->add_llvm_functions(fun)
+            }
+        }
+        unsafe {
+            delete fake_visitor
+        }
+        for (glob in keys(g_split_glob_names)) {
+            let decl = LLVMAddGlobal(g_mod, g_prim_t.LLVMVoidPtrType(), glob)
+            LLVMSetLinkage(decl, LLVMLinkage.LLVMExternalLinkage)
+        }
+        let res = inject_main(ctx, g_ctx, prog, target.exe_main, g_mod, g_prim_t, uids, target.exe_strict, target.register_all_modules)
+        link_whole_lib = res.link_whole_lib
+        main_ok = res.fn != null
+        di_finalize()
+        if (main_ok) {
+            let no_funcs : array<FunctionPtr>
+            verify_module_or_panic(no_funcs)
+            generate_global_ctors_dtors(g_prim_t, false)
+            if (g_jit_fast_math) {
+                apply_fast_math_to_module(g_mod)
+            }
+            let obj = artifact_path("{output_path}.p{length(order)}_{ptag}", JitArtifact.object)
+            objs |> push(obj)
+            g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
+                tm = create_default_target_machine(codegen_level, use_host_cpu),
+                pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
+                obj = obj, tag = ptag))
+        }
+    }
     if (obj_cache) {
         to_log(LOG_INFO, "LLVM JIT: obj cache - {cached}/{length(order)} partitions cached\n")
-    } else {
+    } elif (!target.gen_exe) {   // an exe has no cache to be off
         // the off-state changes what the run compiles (every partition re-emits) - announce it
         to_log(LOG_INFO, "LLVM JIT: obj cache off - all {length(order)} partitions re-emit\n")
     }
-    for (p in g_split_parts) {
-        jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, p.obj)
+    let lto_run = main_ok && (target.lto || (g_env_jit.jit_probe_lto && !target.gen_exe))   //! the probe is the DLL rail's: an exe's link takes its LTO flags from --jit-lto alone
+    if (main_ok) {
+        for (p in g_split_parts) {
+            jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, lto_run ? "" : p.obj)   // an LTO partition leaves as bitcode: the pool optimizes it and emits no object
+        }
     }
     let tIr = get_time_usec(phase_tm)
     phase_tm = ref_time_ticks()
     // phase B - per-job walls logged by the pool under log_compile_time; all partitions cached -> zero jobs, skip the pool (and the LLVM symbol resolution) outright
-    if (!empty(g_split_parts)) {
+    if (main_ok && !empty(g_split_parts)) {
         let llvm_lib = __dasbind_get_library("LLVM.dll")
         if (llvm_lib == null) {
             reset_jit_globals_after_failure()
@@ -405,20 +470,27 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             dump_module_ir(p.mod)
         }
     }
-    // DAS_JIT_PROBE_LTO: bitcode partitions + lld-LTO link - the cross-module-inlining dev probe (env folds into the cache keys; ARCHITECTURE.md §3)
-    if (g_env_jit.jit_probe_lto) {
+    // --jit-lto (a split exe) and DAS_JIT_PROBE_LTO (the DLL dev probe; the env folds into the cache keys; ARCHITECTURE.md §3): bitcode partitions + an LTO link
+    if (lto_run) {
         // enforce the documented precondition outright - probe behavior must not depend on prior cache state
         if (obj_cache || cached != 0) {
             reset_jit_globals_after_failure()
-            panic("LLVM JIT: DAS_JIT_PROBE_LTO needs every partition live - rerun with --jit-obj-cache=0")
+            panic("LLVM JIT: {target.lto ? "--jit-lto" : "DAS_JIT_PROBE_LTO"} needs every partition live - rerun with --jit-obj-cache=0")
         }
         assert(length(g_split_parts) == length(objs))   // objs[i] <-> g_split_parts[i] holds only with nothing cached
-        to_log(LOG_WARNING, "LLVM JIT: DAS_JIT_PROBE_LTO - linking {length(g_split_parts)} bitcode partitions (LTO probe artifact)\n")
-        let triple_owned = empty(target_triple)
-        let lto_triple = triple_owned ? LLVMGetDefaultTargetTriple() : target_triple
+        if (target.lto) {
+            to_log(LOG_INFO, "LLVM JIT: --jit-lto - {length(g_split_parts)} bitcode partitions, the link runs LTO\n")
+        } else {
+            to_log(LOG_WARNING, "LLVM JIT: DAS_JIT_PROBE_LTO - linking {length(g_split_parts)} bitcode partitions (LTO probe artifact)\n")
+        }
+        let host_triple = host_jit_triple()   //! the daslang host's own triple where it differs from LLVM's default (mingw), the source create_default_target_machine reads
+        let triple_owned = empty(target_triple) && empty(host_triple)
+        let lto_triple = triple_owned ? LLVMGetDefaultTargetTriple() : (empty(target_triple) ? host_triple : target_triple)
+        let machine = default_target_cpu_features(use_host_cpu)
         for (p, i in g_split_parts, count()) {
             LLVMSetTarget(p.mod, lto_triple)   // lld's LTO backend reads the MODULE triple (normal emission gets it from the TargetMachine)
-            let bc = "{p.obj}.bc"
+            stamp_target_attrs(p.mod, machine.cpu, machine.features)
+            let bc = split_part_bitcode_path(p.obj)
             if (LLVMWriteBitcodeToFile(p.mod, bc) != 0) {
                 reset_jit_globals_after_failure()
                 panic("LLVM JIT: LTO probe - can't write bitcode {bc}")
@@ -435,7 +507,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     g_split_parts |> clear()
     // captured AFTER phase C: verifies, dump, and teardown land inside "optimize" - no untimed gap
     let tOptEmit = get_time_usec(phase_tm)
-    return <- (objs <- objs, t_irgen = tIr, t_optemit = tOptEmit)
+    return <- (objs <- objs, t_irgen = tIr, t_optemit = tOptEmit, link_whole_lib = link_whole_lib, main_ok = main_ok)
 }
 
 //! Run the full JIT backend for an already-compiled & simulated program: take the plan, pass its
@@ -464,6 +536,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     assume split_modules = plan.split_modules
     assume jit_split = plan.jit_split
     assume obj_cache = plan.obj_cache
+    assume jit_lto = plan.jit_lto
+    assume register_all_modules = plan.register_all_modules
     assume opt_level = plan.opt_level
     assume size_level = plan.size_level
     assume emit_prologue = plan.emit_prologue
@@ -492,6 +566,12 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     defer() { g_emit_aot_object_globals = false; }
     g_jit_split_active = jit_split
     defer() { g_jit_split_active = false; }
+    g_jit_split_exe = jit_split && gen_exe
+    g_split_glob_names |> clear()   // collection starts with the flag: a slot minted before the partitions would otherwise miss the entry's declare loop
+    defer() {
+        g_jit_split_exe = false
+        g_split_glob_names |> clear()
+    }
     // --jit-threads: set the codegen global before any IR is built so both the data-layout machine
     // and write_wasm's emission machine pick up the threaded feature set.
     g_target_wasm_threads = plan.wasm_threads
@@ -586,7 +666,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         var split_parts = 0
         if (recompile_prog && jit_split) {
             let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
-                split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, target_triple, output_path, log_jit_time)
+                split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, target_triple, output_path, log_jit_time,
+                SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict, register_all_modules = register_all_modules, lto = jit_lto))
             t_irgen = sres.t_irgen
             // the pool interleaves passes and emission, so "optimize" carries the combined
             // optimize + emit-obj + post-opt-verify + partition-teardown wall, and "emit+link"
@@ -594,7 +675,20 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             t_opt = sres.t_optemit
             split_parts = length(sres.objs)
             phase_tm = ref_time_ticks()
-            if (!link_dll_from_objects(sres.objs, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time)) {
+            if (gen_exe) {
+                if (!sres.main_ok) {
+                    reset_codegen_accumulators()
+                    finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
+                    return true
+                }
+                LINK_WHOLE_LIB = sres.link_whole_lib
+                if (link_from_objects(sres.objs, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, jit_lto, 3u)) {   // under LTO the linker is the codegen, at the level every exe pins
+                    remove_split_link_files(sres.objs, output_path)
+                } else {
+                    remove_split_link_files(sres.objs, output_path)   // the partition set is the link's alone: a failed link leaves nothing beside the user's -output
+                    emit_failed = true
+                }
+            } elif (!link_from_objects(sres.objs, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time)) {
                 // self-heal: drop the whole link set before the panic - a truncated .o from a
                 // killed emit would otherwise probe-hit (and re-fail this link) forever
                 for (o in sres.objs) {
@@ -604,11 +698,13 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 reset_jit_globals_after_failure()
                 panic("LLVM JIT: split link failed for {output_path} - cached partition objects dropped, the next run re-emits them")
             }
-            // partition objects are named by partition key, not the dll hash - the GC keep-set
-            // preserves exactly the current link set. The LTO probe's artifact set is one-off:
-            // skip its GC so a probe run cannot evict the normal cache generation.
-            let lto_probe = g_env_jit.jit_probe_lto
-            reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
+            if (!gen_exe) {
+                // partition objects are named by partition key, not the dll hash - the GC keep-set
+                // preserves exactly the current link set. The LTO probe's artifact set is one-off:
+                // skip its GC so a probe run cannot evict the normal cache generation.
+                let lto_probe = g_env_jit.jit_probe_lto
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
+            }
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
             if (gen_lib) {

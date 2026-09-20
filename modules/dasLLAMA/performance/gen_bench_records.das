@@ -163,6 +163,10 @@ def private rig_build_line() : string {
     return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
 }
 
+//! the codegen form the rig build line produces (no `--jit-split-modules` / `--jit-lto`): every das
+//! row names it, so a rate built one way is never compared with one built another
+let RIG_CODEGEN_FORM = "exe one unit"
+
 var private g_jit_bench = false
 
 //! The child's argv head: the released exe takes its rest after a bare `--`, while the `--jit` dev
@@ -346,6 +350,9 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             r.hardware = hw
             if (!empty(parity) && r.engine == "das") {
                 r.parity = parity   // the model's pregate verdict — cells only run after it passed
+            }
+            if (r.engine == "das" && !g_jit_bench) {
+                r.versions = RIG_CODEGEN_FORM
             }
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
             unstamped ||= das_run_unstamped(r)

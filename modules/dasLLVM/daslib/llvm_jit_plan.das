@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x88ul   // 0x88: Module carries registersAtCompile after moduleFlags
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x89ul   // 0x89: a constant make-array literal is constant data and one memcpy
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -721,6 +721,7 @@ struct public JitPlan {
     split_modules : int
     jit_split : bool
     obj_cache : bool
+    jit_lto : bool
     opt_level : int
     size_level : int
     emit_prologue : bool
@@ -750,6 +751,30 @@ def private jit_selects(fun : FunctionPtr; rqj : bool; aot_host : bool; jit_all 
     if (rqj) return true
     if (!aot_host) return jit_all
     return !is_aot_function(get_function_by_mangled_name_hash(hash(get_mangled_name(fun)), *ctx))
+}
+
+[arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
+def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; prog : Program?; announce : bool) {
+    let split_option = prog._options |> find_arg("jit_split_modules")
+    plan.split_requested = (cli_opts.split_modules |> is_some()) || !(split_option is nothing)
+    plan.split_modules = cli_opts.split_modules |> unwrap_or(split_option ?as tInt ?? -1)
+    //! an exe splits on its build command alone (the script pin serves the DLL path, where it is inert for an exe as before), and for the host only: the slots' comdats are the host's object format
+    let exe_split = plan.gen_exe && !plan.gen_lib && !plan.gen_wasm && (cli_opts.split_modules |> is_some()) && empty(plan.target_triple)
+    plan.jit_split = plan.split_modules != 0 && (plan.use_dll || exe_split)
+    if (announce && (cli_opts.split_modules |> is_some()) && plan.split_modules != 0 && !plan.jit_split) {
+        to_log(LOG_WARNING, "LLVM JIT: --jit-split-modules applies to the JIT DLL path and to a host-target -exe only - ignored for this artifact mode\n")
+    }
+    // --jit-obj-cache (on by default under the DLL split; a pinned jit_output_path disables it, no GC runs there)
+    let obj_cache_default = (prog._options |> find_arg("jit_obj_cache")) ?as tBool ?? true
+    plan.obj_cache = plan.jit_split && plan.use_dll && (string(prog.policies.jit_output_path) |> empty()) && (cli_opts.obj_cache |> unwrap_or(obj_cache_default ? 1 : 0)) != 0
+    if (announce && (cli_opts.obj_cache |> is_some()) && !(plan.jit_split && plan.use_dll)) {
+        to_log(LOG_WARNING, "LLVM JIT: --jit-obj-cache applies under --jit-split-modules dll mode only - ignored for this run\n")
+    }
+    let lto_requested = cli_opts.lto |> unwrap_or(false)
+    plan.jit_lto = lto_requested && plan.jit_split && exe_split
+    if (announce && lto_requested && !plan.jit_lto) {
+        to_log(LOG_WARNING, "LLVM JIT: --jit-lto applies to a split -exe for the host only (-exe with --jit-split-modules, no --jit-target) - ignored for this run\n")
+    }
 }
 
 //! the plan for `prog`; `announce` prints the one-time lines (the baseline class, the exe host
@@ -791,24 +816,6 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     // mode (no in-memory engine work, no instrument).
     plan.emit_aot_object = prog.policies.jit_emit_object
     plan.use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !plan.gen_exe && !plan.compile_only && !plan.emit_aot_object
-    // --jit-split-modules (or `options jit_split_modules`): -1 = per-das-module partitions, auto
-    // threads (default - the obj cache serves every program sharing a module); 0 = the monolith
-    // with full cross-module inlining, which -exe always emits (split is DLL-path only)
-    let split_option = prog._options |> find_arg("jit_split_modules")
-    plan.split_requested = (cli_opts.split_modules |> is_some()) || !(split_option is nothing)
-    plan.split_modules = cli_opts.split_modules |> unwrap_or(split_option ?as tInt ?? -1)
-    plan.jit_split = plan.split_modules != 0 && plan.use_dll
-    if (announce && plan.split_requested && plan.split_modules != 0 && !plan.use_dll) {
-        to_log(LOG_WARNING, "LLVM JIT: --jit-split-modules applies to the JIT DLL path only - ignored for this artifact mode\n")
-    }
-    // --jit-obj-cache (default ON under split): link cached partition objects for the unchanged
-    // module prefix. CLI wins over the script option. A pinned jit_output_path disables it:
-    // no GC runs there, so key-named objects would accumulate without bound in a user-owned dir.
-    let obj_cache_default = (prog._options |> find_arg("jit_obj_cache")) ?as tBool ?? true
-    plan.obj_cache = plan.jit_split && (string(prog.policies.jit_output_path) |> empty()) && (cli_opts.obj_cache |> unwrap_or(obj_cache_default ? 1 : 0)) != 0
-    if (announce && (cli_opts.obj_cache |> is_some()) && !plan.jit_split) {
-        to_log(LOG_WARNING, "LLVM JIT: --jit-obj-cache applies under --jit-split-modules dll mode only - ignored for this run\n")
-    }
     plan.opt_level = cli_opts.opt_level |> unwrap_or(prog.policies.jit_opt_level)
     plan.size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
     // This policy must be set before compilation so stack-frame sizes include the prologue.
@@ -849,6 +856,13 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     // Extra args appended verbatim to the host linker cmd. CLI > script option.
     plan.linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
     plan.register_all_modules = cli_opts.register_all_modules |> unwrap_or(false)
+    resolve_split_options(plan, cli_opts, prog, announce)
+    if (plan.jit_lto && empty(plan.path_to_linker) && get_platform_name() != "windows") {
+        plan.path_to_linker = "clang++"   //! a POSIX LTO link needs a clang driver over lld or a plugin-capable ld; `c++` on a GNU box drives neither
+        if (announce) {
+            to_log(LOG_INFO, "LLVM JIT: --jit-lto links through clang++ (--jit-path-to-linker names another driver)\n")
+        }
+    }
 
     // Set global options
     LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT

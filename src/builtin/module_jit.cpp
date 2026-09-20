@@ -512,6 +512,10 @@ namespace das {
                 job.passesSec = double(get_time_usec(t0)) / 1000000.0;
                 auto t1 = ref_time_ticks();
                 char * emitErr = nullptr;
+                if ( job.objPath.empty() ) {
+                    job.emitSec = 0.0;
+                    continue;
+                }
                 if ( emitToFile(job.tm, job.mod, job.objPath.c_str(), fileType, &emitErr) != 0 ) {
                     job.error = string("emit failed for ") + job.objPath + ": " + (emitErr ? emitErr : "(no message)");
                     if ( emitErr && disposeMsg ) disposeMsg(emitErr);
