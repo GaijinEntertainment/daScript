@@ -238,6 +238,7 @@ def test_put_records(t : T?) {
             tt |> equal(das_rows[0].Threads, 8)
             tt |> equal(das_rows[0].Pp512, 100.0lf)
             tt |> equal(das_rows[0].Tg128, 25.0lf)
+            tt |> equal(das_rows[0].Tg128b4, 60.0lf, "the insert path fills the batched cell like the migration does")
             tt |> equal(das_rows[0].Cpu, "Test CPU 9000")
             // the reference row carries its own cells: the board pairs from this table alone
             for (r in rows) {

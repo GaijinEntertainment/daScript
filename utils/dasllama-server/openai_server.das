@@ -955,7 +955,8 @@ def private ibench_ref_cmd(gguf : string; threads : int; backend : string; npl :
     if (npl <= 0l) {
         return flat
     }
-    return "{flat} ; llama-batched-bench -m \"{gguf}\" -ngl {ngl} -t {threads} -c 4096 -b 2048 -ub 512 -npp {BENCH_PP_TOKENS} -ntg {BENCH_TG_TOKENS} -npl {npl} -fa on"
+    let batched <- llama_batched_bench_args("llama-batched-bench", "\"{gguf}\"", ngl, threads, BENCH_PP_TOKENS, BENCH_TG_TOKENS, npl)
+    return "{flat} ; {join(batched, " ")}"
 }
 
 //! what served the rows, read from the session after they ran: `metal` when the slot maps the

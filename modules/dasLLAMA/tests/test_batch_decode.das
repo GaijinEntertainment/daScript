@@ -13,11 +13,14 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_env
+require _model_tier   // model_available: the stocked-carrier gate (shards, the large tier)
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
 // token-for-token greedy, per-step logits, and the final KV caches. Needs llama2.c's
 // stories15M.bin (gitignored); skips cleanly when absent, same contract as test_forward.
 // The reference pins the fused decode chain OFF (the std path is what the batch worker mirrors).
+// The batched bench row's refusal cell needs SmolLM2-135M-Instruct-Q8_0.gguf under models_dir()
+// (a tokenizer for the scheduler's streams) and the JIT; it skips without either.
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
@@ -401,10 +404,7 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
         let env = g_env_harness.models_dir
         let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
         let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
-            return
-        }
+        if (!model_available(t, path)) return
         var tr <- load_model_(path, QuantMode.q8)   //! the engine load: the scheduler's streams detokenize through the model's own tokenizer
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()

@@ -1897,19 +1897,27 @@ def private land_sameslab_rows(lgp : uint8?) {
     }
 }
 
-//! A plain step's row on a NextN-headed (or carry-armed) model: its post-norm hidden lands in the
-//! session's `mtp_h` so the stream's next speculative round starts warm; a same-slab verify lands
-//! its rows into `mtp_hrows` instead.
+//! The speculative carry: a session's post-norm hidden (`bytes` of it from `src`) becomes
+//! `mtp_h` and the watermark `mtp_h_pos1` moves to `pos1` - the prefill's last row, the single-row
+//! step's row and a plain batched step's row all land it here.
+def stash_mtp_carry(var s : Session; src : void?; bytes : uint64; pos1 : int64) {
+    if (uint64(long_length(s.mtp_h)) * 4ul < bytes) {
+        s.mtp_h |> reserve_resize(int64(bytes / 4ul))   // nolint:PERF026,LINT019 — once per session on a NextN-headed model; the hot-path walk fires from the drivers' compiles
+    }
+    unsafe {
+        memcpy(addr < void? >(s.mtp_h[0]), src, bytes)
+    }
+    s.mtp_h_pos1 = pos1
+}
+
+//! A plain step's row on a NextN-headed (or carry-armed) model lands its carry; a same-slab verify
+//! lands its rows into `mtp_hrows` instead.
 def private land_row_carry(var s : Session; i, pos : int64) {
     return if (g_lp_bxf == null || g_lp_sameslab)
     let hb = g_lp_bxf_bytes / g_lp_nrows
-    if (long_length(s.mtp_h) * 4l < hb) {
-        s.mtp_h |> reserve_resize(hb / 4l)   // nolint:PERF026,LINT019 — once per session on a NextN-headed model; the hot-path walk fires from the drivers' compiles
-    }
     unsafe {
-        memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(g_lp_bxf)) + i * hb), hb)
+        stash_mtp_carry(s, reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(g_lp_bxf)) + i * hb), uint64(hb), pos + 1l)
     }
-    s.mtp_h_pos1 = pos + 1l
 }
 
 def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error/stats/release/readback share the step's locals

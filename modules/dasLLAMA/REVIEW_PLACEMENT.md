@@ -1,8 +1,7 @@
 # dasLLAMA Placement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
-`ARCHITECTURE_MEDIA.md`.
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions its sec.1 routing block names.
 Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
@@ -12,9 +11,10 @@ it.**
 `ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
 code lands in which file is the checklist's own.
 
-**A function lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's sec.1 -
-names its kind, or that charter line changes in the same diff.** `ARCHITECTURE.md`'s sec.1 routing
-block names the companion that holds each file's charter line.
+**A function under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md`
+companion's sec.1 - names its kind, or that charter line changes in the same diff.**
+`ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line;
+a file outside `dasllama/` carries no charter line and answers to its own folder's checklist.
 
 **The grid rule of a class whose family ships more than one arm lands in
 `dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a family ships (cm2,

@@ -1776,7 +1776,8 @@ def main() : int {
                 set_mtp_spec(prev_spec)
                 t.config.seq_len = flat_len
                 if (empty(refused)) {
-                    say_row(fmt, "tg{ngen}@{npl}{dtag}", " summed over {npl} streams{cfg.npl_mtp ? ", self-speculative" : ""}", tps, results)
+                    //! the self-speculative row counts accepted drafts, so it records under its own key - never the plain row's
+                    say_row(fmt, "tg{ngen}@{npl}{cfg.npl_mtp ? "-mtp" : ""}{dtag}", " summed over {npl} streams{cfg.npl_mtp ? ", self-speculative" : ""}", tps, results)
                 } else {
                     say(fmt, "REFUSED tg{ngen}@{npl}{dtag} - {refused}\n")
                     g_refused_rows++

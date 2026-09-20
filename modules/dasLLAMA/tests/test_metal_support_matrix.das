@@ -7,7 +7,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
 require dasllama/dasllama_math   // set_wscale_f16 — the wscale matrix axis
-require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
+require _metal_blob_twin   // blob_twin - the blob-flavor carrier
 require dasllama/dasllama_parity   // nolint:STYLE030,LINT019 — cached_ids/cached_vals, used only inside the Apple static_if half
 require ?das_metal dasllama/dasllama_metal_decode  // stats/declines/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // prefill stats/declines rails
@@ -236,13 +236,6 @@ def private check_cell(t : T?; cell : string; want : string; served : int64;
 // the blob twin of a planar fixture: an OWNED engine load transformed to the GPU form — the
 // drivers are blob-only. ENGAGE cells run the twin; DECLINE cells keep the planar model (its
 // CPU fallback serves quietly, and the capability reasons out-rank `planar` in the gates).
-def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
-    var tg <- load_model_(path, QuantMode.q8)
-    t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
-    tg.config.seq_len = min(tg.config.seq_len, seq_cap)
-    return <- tg
-}
-
 // generate()'s exact output shape (prompt echo minus BOS, continuation to `steps`, BOS stop)
 // with the prefill on trp and the decode steps on trd — the decode-isolated GPU pass (the
 // planar model CPU-prefills, the blob twin GPU-decodes; whole-GPU passes just call generate
@@ -794,6 +787,11 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
             }
             to_log(LOG_INFO, "{tag} batched step: single-row next '{eyeball_str(piece_(tr, greedy_top(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, greedy_top(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 2.0, "{tag}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
+            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar, so a step that bound one row's slice to the other would red
+            for (i in range64(vocab)) {
+                xmaxd = max(xmaxd, abs(sa.logits[i] - sb2.logits[i]))
+            }
+            t |> success(xmaxd > 2.0, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
@@ -998,6 +996,11 @@ def private qwen2moe_row(t : T?; path : string) {
             }
             to_log(LOG_INFO, "qwen2moe batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 8.0, "qwen2moe: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
+            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
+            for (i in range64(vocab)) {
+                xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
+            }
+            t |> success(xmaxd > 8.0, "qwen2moe: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
@@ -1164,6 +1167,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             }
             to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 8.0, "{tag}: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
+            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
+            for (i in range64(vocab)) {
+                xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
+            }
+            t |> success(xmaxd > 8.0, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)

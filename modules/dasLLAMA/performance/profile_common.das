@@ -2341,9 +2341,7 @@ def llama_batched_bench_tg(raw : string; npl : int64) : double {
 //! the S_TG cells folded to a mean and a sample standard deviation. `why` names the failure - a run that printed
 //! no row - and the row then reads 0
 def llama_batched_ref_row(bin, mpath : string; ngl, threads : int; plen, ngen, npl : int64; reps : int) : tuple<row : BenchTest; cmd : string; why : string> {
-    let ctx = max(4096l, ((npl * (plen + ngen) + 255l) / 256l) * 256l)   //! the reference's context spans every sequence; 4096 is the published protocol's floor
-    let args <- [bin, "-m", mpath, "-ngl", "{ngl}", "-t", "{threads}", "-c", "{ctx}", "-b", "2048", "-ub", "512",
-                 "-npp", "{plen}", "-ntg", "{ngen}", "-npl", "{npl}", "-fa", "on"]
+    let args <- llama_batched_bench_args(bin, mpath, ngl, threads, plen, ngen, npl)
     let cmd = argv_line(args)
     var rates : array<double>
     rates |> reserve(reps)

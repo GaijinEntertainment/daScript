@@ -37,6 +37,15 @@ struct public BenchRow {
     sd : double
 }
 
+//! the batched reference row's command line, the one shape every driver spells: `llama-batched-bench`
+//! at `npl` parallel sequences of `plen` prompt and `ngen` generated tokens, its context spanning every
+//! sequence above the published protocol's 4096 floor, the flash-attention path on
+def public llama_batched_bench_args(bin, mpath : string; ngl, threads : int; plen, ngen, npl : int64) : array<string> {
+    let ctx = max(4096l, ((npl * (plen + ngen) + 255l) / 256l) * 256l)
+    return <- [bin, "-m", mpath, "-ngl", "{ngl}", "-t", "{threads}", "-c", "{ctx}", "-b", "2048", "-ub", "512",
+               "-npp", "{plen}", "-ntg", "{ngen}", "-npl", "{npl}", "-fa", "on"]
+}
+
 //! mean and sample standard deviation of the per-rep rates (tok/s, MB/s - whatever the row measures),
 //! under the row's tag; an empty rep list reads 0, and a driver that reached it measured nothing
 def public bench_row(tag : string; tps : array<double>) : BenchRow {

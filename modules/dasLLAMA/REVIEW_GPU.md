@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GPU_MTP.md`,
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work: `followup_metal.md` for Metal,
 `followup_vulkan.md` for Vulkan.
 
@@ -211,11 +211,12 @@ path is a defect - it ships the device path in the same change.** A call that ru
 gives the user who selected the GPU a fraction of its speed.
 
 **A diff that lands a model family, a backend arm or a session shape whose batched decode step
-dispatches its rows one at a time - one command per row, rather than all the step's rows in one
-dispatch - for any model it serves is a defect: it ships the batched dispatch for that model in
-the same change, or the arm declines that model by name and `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`
-sec.2.2ao gains the kinds of layer the batched command does not serve.** A batched dispatch reads
-each weight plane once for all the step's rows; the per-row step reads it once per row.
+reads a weight plane once per row rather than once for all the step's rows, for any model it
+serves, is a defect: it ships that plane's batched read - one read serving every row of the
+step - in the same change, or the arm declines that model by name and that backend's
+architecture doc - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao for Vulkan,
+`ARCHITECTURE_GPU_MTP.md` sec.2.37a for Metal - gains the kinds of layer the batched step does
+not serve.** The weight stream is what the batch amortizes.
 
 **A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
 on (`set_device_kv`), shows at that call site that the live device-home sessions - a device-home
@@ -254,10 +255,11 @@ decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's authoritative
 cache.
 
-**A resident override that serves a recurrent (deltanet) model zeroes the deltanet state on a
-call at position zero, and declines every call at a nonzero position other than the session's
-next deltanet position (`Session.dn_pos`).** The override runs the whole forward itself, so the
-engine's own forward-only guard never runs.
+**A GPU path that runs a recurrent (deltanet) forward itself zeroes the deltanet state on a
+call at position zero, and declines every call at a nonzero position other than the next
+position the state it advances expects - `Session.dn_pos` for the host state, `DnMirror.pos`
+for a device mirror.** It runs the whole forward itself, so the engine's own forward-only guard
+never runs.
 
 **A module-level variable in a GPU driver file whose value depends on the installed model
 gets a model-swap discharge in the same change that adds it** - the vulkan tier files

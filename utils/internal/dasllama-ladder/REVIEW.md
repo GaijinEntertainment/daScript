@@ -87,14 +87,17 @@ re-plant promote instead of duplicate.
 **Never change a submission's stored `Doc` after its insert - a document leaves only by
 deleting its submission.**
 
-**Never change what a `[sql_migration]` on `master` does to a store that has not run it yet -
-its body, and every function its body reaches, directly or through another call; a schema or
-backfill change adds a new, higher version in the same stream.**
+**Never change what a `[sql_migration]` on `master` does to a store that has not run it yet - a
+schema or backfill change adds a new, higher version in the same stream.**
+
+**A diff that edits code a migration already on `master` reaches - its body, and every function
+that body reaches, directly or through another call - adds or updates `test_ladder_store.das`'s
+`test_migration` test cases to cover the edit, in the same change.**
 
 **A sidecar row whose `Sha` is not the sha256 of its stored `Doc` is a defect.**
 
-**A `runs` row whose `Pp512`, `Tg128` or `Cpu` differ from what `run_cells` reads from the
-`RunIdx`-th run of the `ModelIdx`-th model in its submission's `Doc` is a defect.**
+**A `runs` row whose cell columns - every column `run_cells` fills - differ from what `run_cells`
+reads from the `RunIdx`-th run of the `ModelIdx`-th model in its submission's `Doc` is a defect.**
 
 **A diff that adds an operator-edited file the box runs from also adds it to `.das_package`'s
 `release()`, in the same change.**

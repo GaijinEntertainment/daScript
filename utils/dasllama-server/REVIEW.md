@@ -8,7 +8,7 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
 **A diff that changes a flag's user-visible text updates every copy of that text in the same
-change - the `@clarg_doc` in `main.das`, every `README.md` place that documents the flag (its
+change - the flag's `@clarg_doc` in the tool that declares it, every `README.md` place that documents the flag (its
 table row, and the section documenting the key where it has one), its row in
 `doc/source/reference/utils/dasllama_server.rst` (repo root) - adding a copy where one is
 missing** - a copy left behind sends the user to a flag that no longer does what it says.
@@ -39,8 +39,9 @@ the route that answers with that key first, or, for a key no machine available f
 produce, hand-compose the fixture and name it as hand-composed, with why, in its row of
 `tests/fixtures/README.md`.**
 
-**A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
-the same change.** The row is where a consumer learns the key exists.
+**A diff that adds a key to what a route answers, or changes the condition under which the route
+answers one, updates that route's `README.md` row in the same change.** The row is where a
+consumer learns the key exists and when to expect it.
 
 **A `served` or `served_note` value `openai_server.das` writes itself - all of it but the engine
 text it quotes - uses no name the engine has for its own parts - `pass`, `region`, `mirror`,
@@ -60,11 +61,13 @@ caches sit.**
 slot itself holds it back, and is empty when nothing about the slot does.** A slot waiting for
 the GPU says that in its `served` value.
 
-**A diff in this folder that opens a stream in device mode - a `create_device_session` call, or
-a `set_device_kv` that turns a scheduler's device mode on - keeps that site behind a check that
-the slot's live device-home sessions - a scheduler in device mode counts as `max_streams` of
-them - stay within the K/V regions its load armed (`ModelSlot.gpu_regions`).** The driver panics
-on the session that finds no region.
+**A diff in this folder that starts device-home streams - directly (`create_device_session`, a
+`set_device_kv` that turns a scheduler's device mode on) or through a call that homes streams
+itself (`bench_tg_batched_rep`, which homes its streams on the device whenever a whole-model
+driver armed regions for the slot) - keeps the slot's live device-home session count, the ones
+this site starts included, behind a check against the K/V regions the slot's load armed
+(`ModelSlot.gpu_regions`); a scheduler in device mode counts as `max_streams` of them.** The
+driver panics on the session that finds no region.
 
 **A diff in this folder that calls `moe_gpu_drop_model` turns off every device mode this folder
 armed before the dropped slot's next step, in the same change.** The regions go with the model,

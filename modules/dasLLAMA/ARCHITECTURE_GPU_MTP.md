@@ -166,6 +166,11 @@ landing copies each row's post-norm hidden into that stream's `mtp_h` with the w
 (`land_row_carry`), so a stream that decoded plain - the bench row's plain arm, a server slot
 with speculation off - reaches its next speculative round warm instead of cold-forwarding; the
 same-slab verify lands its rows into `mtp_hrows` instead and the walk sets the carry per group.
+The tick's one per-stream weight read is the ruled exception `REVIEW_GPU.md` sends here: each
+stream's drafts run its own NextN chain - the draft layer and the
+classifier plane read once per stream, not once for the tick - because the draft chain is
+sequential per stream (draft i+1 embeds draft i's argmax) and the rows form of that chain is
+`followup_metal.md` item 21; the verify, where the trunk's weights are, is one pass.
 
 ### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
 

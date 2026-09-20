@@ -373,7 +373,7 @@ def mm_tile_widths_64_ok(t : Model) : bool {
     let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
     let h1 = ffn_second_hidden(t)
     return ((c.dim % 64l) == 0l && (!has_dense_ffn(t) || (layer_hidden(t, 0l) % 64l) == 0l) &&
-        h1 >= 0l && (h1 % 64l) == 0l &&
+        h1 >= 0l && (h1 % 64l) == 0l && (!has_ple(c) || (c.n_embd_per_layer % 64l) == 0l) &&
         ((c.n_heads * c.head_size) % 64l) == 0l && ((c.n_kv_heads * c.head_size) % 64l) == 0l &&
         ((c.n_heads * hs_sw) % 64l) == 0l && ((kvh_sw * hs_sw) % 64l) == 0l)
 }
@@ -425,7 +425,8 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
         return MetalDecodeDecline.layers
     }
     // sliding masking lives on the CHUNKED path only — window >= 128 (the single-form depth ceiling's clamp max) guarantees the single form never sees a masked row; decline tighter
-    if (((c.dim % 32l) != 0l || (has_dense_ffn(t) && (hidden % 32l) != 0l) || (h1 > 0l && (h1 % 32l) != 0l)) ||
+    if (((c.dim % 32l) != 0l || (has_dense_ffn(t) && (hidden % 32l) != 0l) || (h1 > 0l && (h1 % 32l) != 0l) ||
+                (has_ple(c) && (c.n_embd_per_layer % 32l) != 0l)) ||   //! the PLE sites' own K and N: the GEMM forms step 32-wide tiles
             (c.sliding_window > 0l && c.sliding_window < 128l)) {
         return MetalDecodeDecline.shape
     }

@@ -1,9 +1,9 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
-`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
-work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 A race times two candidates for one computation in one process, either of which the run could
 adopt; a knockout skips a stage to measure that stage's cost; an overhead measurement times one
@@ -47,6 +47,10 @@ deletes, in the same change, every arm that mirrors that kernel's binding order 
 ordered setter list and every retained-reference arm of that kernel.** An arm left dispatching stale
 geometry measures the wrong kernel silently.
 
+**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
+arm that carries that body as a hand-written twin, and every retained-reference arm of that
+kernel.** An arm timing a body the shipped kernel no longer runs measures the wrong kernel silently.
+
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
 
@@ -65,6 +69,12 @@ dispatches.**
 **A timing arm with a decided ranking times its kernel on every input the ranking branches on -
 a batch width, a row count, a lane split, a tile's own width - at a value on each side of the
 branch.** A ranking timed at one value alone is applied at values it was never ranked at.
+
+**A diff that widens the gate admitting shapes to a kernel whose ranking is decided - a head
+width, a batch width, a row count, a lane split or a tile width the gate now admits - times the
+ranked arms at a value the gate now admits and did not before - at each end when the new
+admission spans a range - in the same change.** The widened gate otherwise applies the ranking
+at values it was never ranked at.
 
 **A timing arm for a prefill tile over a variable region, with a decided ranking, times its
 kernel at one region whose token count is a whole multiple of that tile's token column - the

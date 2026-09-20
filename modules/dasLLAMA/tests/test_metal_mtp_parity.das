@@ -534,12 +534,14 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     vff_pair(tr, trg, prompt, 12l, nr, st, served, false)
     if (expect_decline != "") {
         var after = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
+        var by_key = ""   // nolint:LINT003,LINT019 — the whole decline table, so a red names the key that did fire
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let declines_after <- metal_batch_decode_declines()
             after = declines_after?[expect_decline] ?? 0l
+            by_key = "{declines_after}"
         }
         t |> success(served == 0l && after > before,
-            "{tag}: the metal batch rail declines this graph as {expect_decline} ({before} -> {after}, served {served})")
+            "{tag}: the metal batch rail declines this graph as {expect_decline} ({before} -> {after}, served {served}; declines {by_key})")
     } elif (served == 0l) {
         if (must_serve) {
             t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it must serve")
@@ -846,12 +848,13 @@ def test_metal_verify_gemma12(t : T?) {
 }
 
 // the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), HEAD-LESS so the batch rail's GPU
-// logits gate admits it: the rail has no arm for either, so it must decline the GRAPH - served, it
-// ran plain attention over every layer (maxd 22, every argmax flipped) behind the rope_rows decline
+// logits gate admits it: the batch driver serves a hybrid's rows against one DnMirror per row, and a
+// same-slab verify is one session at k+1 positions - the second row finds no mirror at its position,
+// so the rail must decline dn_state by name (served, it would run the recurrent state twice per step)
 [test]
 def test_metal_verify_qwen38_27b(t : T?) {
-    t |> run("batch-rail same-slab verify declines the hybrid graph - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, false, "graph")
+    t |> run("batch-rail same-slab verify declines a recurrent session's rows as dn_state - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, false, "dn_state")
     }
 }
 

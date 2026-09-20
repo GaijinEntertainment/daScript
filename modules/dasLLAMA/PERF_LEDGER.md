@@ -1927,15 +1927,20 @@ named; the local RTX 5060 Ti carries decode-vector.
 
 ### From the Metal batched-decode arc (2026-09-20)
 
-Instruments: `daslang -jit benchmarks/lcpp_bench.das --npl 4 --ngl 99 -r 5` on the M5 Max (the
-four-stream row host-cached through the scheduler and the Metal batch driver, kv f16, the box's
-fresh rig sidecar pinned through `DAS_TUNE_MANIFEST`, the box idle - the iOS Simulator and Parsec
-off, a 90 s settle between cells); the reference `llama-batched-bench` beside the pinned
-`llama-bench` at `-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on`, five runs folded. The
-`tg128@4` row is the summed served rate over the scheduler step whole, the reference times its
-decode call alone, so every ratio reads conservative for ours.
+Instruments: `daslang -jit benchmarks/lcpp_bench.das --npl 4 --ngl 99 -r 5 --ref <llama-bench>`
+on the M5 Max (the four-stream row host-cached through the scheduler and the Metal batch driver,
+kv f16, `DAS_TUNE_POLICY` unset - the tuned tier - with the box's fresh rig sidecar pinned through
+`DAS_TUNE_MANIFEST=performance/m5.tune.json`, the box idle - the iOS Simulator and Parsec off, a
+90 s settle between cells); the flat reference rows are the pinned `llama-bench` under
+`lcpp_bench`'s `--ref` spawn (`-m <gguf> -ngl 99 -t 18 -p 512 -n 128 -r 5 -o json`) and the batched
+reference row is `llama-batched-bench` beside it at `-ngl 99 -t 18 -c 4096 -b 2048 -ub 512
+-npp 512 -ntg 128 -npl 4 -fa on`, five runs folded. The `tg128@4` row is the summed served rate
+over the scheduler step whole, the reference times its decode call alone, so every ratio reads
+conservative for ours; every row here is a `-jit` script reading against a reference in another
+process, so every bullet is [direction-grade - two processes] unless it says one process.
 
-- **The scoreboard (ours / llama.cpp, tg128@4 summed; then flat tg128 ours / theirs), all Q8_0:**
+- **The scoreboard (ours / llama.cpp, tg128@4 summed; then flat tg128 ours / theirs), all Q8_0
+  [direction-grade - two processes]:**
   Llama-3.2-1B 944 ± 2 / 1031 ± 55 (0.92), flat 323 / 317; Llama-3.2-3B 430 ± 18 / 430 ± 30 (1.00),
   flat 139 / 134; Llama-3.1-8B 208 ± 2 / 199 ± 10 (1.04), flat 67 / 64; gemma-4-E2B 441 ± 15 /
   465 ± 19 (0.95), flat 160 / 136 - the E2B row measured with `-p 0`: behind five pp512 reps
@@ -1953,7 +1958,7 @@ decode call alone, so every ratio reads conservative for ours.
   arm's tree against 401.9 ± 1.0 on the tree before it - the row index the five kernels gained
   costs the single row nothing. Per-row dispatch stands at ~360 small dispatches a four-row step
   on this 24-layer hybrid and still reads 2.4x the flat row; the state arena that folds them into
-  one dispatch a stage is `followup_metal.md` item 16 [direction-grade - two processes].
+  one dispatch a stage is `followup_metal.md` item 22 [direction-grade - two processes].
 - **The 1B's four-row step, attributed (the knockout rail `set_metal_decode_skip` under the board's
   own rep, one process, heat drifting 937 -> 865 across the ladder):** full 4267 us a step; the
   weight sites out 1952 (~2.3 ms of weights, 1.24 GB at ~540 GB/s - the memory roof); attention out
@@ -1962,12 +1967,19 @@ decode call alone, so every ratio reads conservative for ours.
   34, setup 22 us a step. The worker spin window (30 ms against 500 us) moves nothing on this box:
   942.8 against 942.0 [direction-grade - one process].
 - **The split single-pass attention serves a head of 64 (the 1B's) on the f16/f32 mirrors, where the
-  batch took the chunked per-(row, head) pair:** a lane owns one quad of the head, the lanes past a
+  batch took the chunked per-(row, head) pair [direction-grade - two commits, two processes for the
+  board numbers; the forms raced interleaved in ONE process below]:** a lane owns one quad of the head, the lanes past a
   narrow head re-read a valid quad with a zero query and never store, the combine merges four subgroups
   at 128 threads whatever the head. Llama-3.2-1B Q8 tg128@4 942 -> 1024 ± 10 against llama.cpp's
   1026 (0.92 -> 1.00); the flat tg128 unchanged at 324; the head-128 kernel cells bit-exact before
   and after; the batch parity arm's f16 and f32 rows within their bars on the new form. The q8_0 and
-  tq4 mirrors keep the chunked pair at head 64 (the quant twin's lane mapping is its own).
+  tq4 mirrors keep the chunked pair at head 64 (the quant twin's lane mapping is its own). The
+  two forms raced interleaved in one process at the served shape (`set_metal_attn_d` flipped
+  between reps of the four-stream row on the 1B, five pairs, the first pair the warm-up): the
+  split form 815-951 against the chunked pair 699-858 tok/s summed, the split form ahead in every
+  pair after the first (rep 1: 950.7 against 857.7; rep 3: 920.8 against 699.1); the reps drift
+  past a 3% cv in the un-settled process, so the ranking is settled and the margin is not
+  [direction-grade - one process, cv past 3%].
 - **The NextN carriers' batched rows, plain and self-speculative (three reps, `-p 0`):** Qwen3.5-0.8B-MTP
   Q8_0 plain tg128@4 977 ± 4 against llama.cpp's 803 ± 4 (1.22), flat 402 / 303; Qwen3.6-27B-MTP
   Q4_K_M plain 56.3 ± 0.3 against 45.9 ± 2.1 (1.23), flat 27.6 / 25.3 - the batched step lands a
@@ -1983,7 +1995,7 @@ decode call alone, so every ratio reads conservative for ours.
 - **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
   and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].
-- **A loaded box voids the batched row first:** with an iOS Simulator rendering (two WebContent
+- **A loaded box voids the batched row first [direction-grade - two processes, a loaded box]:** with an iOS Simulator rendering (two WebContent
   processes at 98% and 48%, SimMetalHost on the GPU, load 12) the 1B batched row read 466 ± 277 and
   the reference's own flat tg128 fell from 317 to 200 - the GPU queue is shared with the simulator's
   Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The

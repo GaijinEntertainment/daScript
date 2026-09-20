@@ -167,6 +167,7 @@ struct Scheduler {
     last_ttft_us : int64                    // most recently reaped stream's ttft
     mtp_drafted : int64                     // self-spec telemetry across streams (drafts attempted / accepted)
     mtp_accepted : int64
+    mtp_joined_max : int64                  // the most streams one joint verify carried in a tick (0 = every tick stepped its streams alone)
 }
 
 //! Create a scheduler over `model`: `max_streams` concurrent sessions, `max_queue` waiting
@@ -207,20 +208,14 @@ def set_device_kv(var sch : Scheduler; on : bool) : bool {
 def n_active(sch : Scheduler) : int64 => long_length(sch.streams)
 
 //! the streams' own speculative telemetry summed, read around a joint tick for the scheduler's totals
-def private mtp_drafted_total(sch : Scheduler) : int64 {
-    var n = 0l
+def private mtp_totals(sch : Scheduler) : tuple<drafted : int64; accepted : int64> {
+    var d = 0l
+    var a = 0l
     for (st in sch.streams) {
-        n += st.session.mtp_drafted
+        d += st.session.mtp_drafted
+        a += st.session.mtp_accepted
     }
-    return n
-}
-
-def private mtp_accepted_total(sch : Scheduler) : int64 {
-    var n = 0l
-    for (st in sch.streams) {
-        n += st.session.mtp_accepted
-    }
-    return n
+    return (drafted = d, accepted = a)
 }
 
 //! Queued (not yet admitted) request count.
@@ -498,10 +493,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     }
     if (sch.mtp && !empty(sch.batch_rows)) {
         let ts_step = prof_ticks()
-        let d0 = mtp_drafted_total(sch)
-        let a0 = mtp_accepted_total(sch)
+        let before = mtp_totals(sch)
         let joined = mtp_spec_eval_batch(m, sch.batch_rows, sch.batch_toks, sch.mtp_acc)
         note_batch_step(joined == long_length(sch.batch_rows))   //! the census: one device step when every stream's rows rode the joint verify
+        sch.mtp_joined_max = max(sch.mtp_joined_max, joined)
         prof_add("sched_eval_batch", ts_step)
         for (i, acc in sch.batch_idx, sch.mtp_acc) {
             if (acc >= 0l) {
@@ -516,8 +511,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             }
             sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
         }
-        sch.mtp_drafted += mtp_drafted_total(sch) - d0
-        sch.mtp_accepted += mtp_accepted_total(sch) - a0
+        let after = mtp_totals(sch)
+        sch.mtp_drafted += after.drafted - before.drafted
+        sch.mtp_accepted += after.accepted - before.accepted
         sch.decode_steps ++
         sch.sum_batch += long_length(sch.batch_rows)
     } elif (!empty(sch.batch_rows)) {

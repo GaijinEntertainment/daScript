@@ -1789,7 +1789,7 @@ def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
 //! one stream's k chained drafts from the committed token; false when a draft declined (the stream is cold)
 def private mtp_round_drafts(t : Model; var s : Session; pos, k : int64) : bool {
     let c = t.config
-    s.mtp_xb_save |> resize(c.dim)
+    s.mtp_xb_save |> overwrite_resize(c.dim)
     unsafe {
         memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
     }
@@ -1820,7 +1820,7 @@ def private mtp_round_plain(t : Model; var s : Session; tok, pos : int64) {
 //! The speculative ROUNDS on the metal decode path, every stream at once: each stream's k drafts, ONE
 //! verify over every stream's k+1 rows, each stream's accept walk and commit. `acc[i]` is stream i's
 //! a (0..k, its drafts in `mtp_vbatch[1..a]`; a refused stream plain-steps and reads 0); returns the streams the verify carried
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
 def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE037,STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
     let c = t.config
     let k = clamp(k_req, 1l, 8l)
@@ -2131,15 +2131,9 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
                 memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
             }
-            if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
-                if (long_length(s.mtp_h) < c.dim) {
-                    s.mtp_h |> reserve_resize(c.dim)   // nolint:PERF026 — once per session on a head-less model
-                }
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(g_mtp_carry_pre && c.n_layer_nextn <= 0l ? r.bx : r.bxf), r.bytes_x)
-            }
         }
         if (r.gpu_logits && (c.n_layer_nextn > 0l || g_mtp_carry_hidden)) {
-            s.mtp_h_pos1 = r.pos + 1l
+            stash_mtp_carry(s, metal_buffer_contents(g_mtp_carry_pre && c.n_layer_nextn <= 0l ? r.bx : r.bxf), r.bytes_x, r.pos + 1l)
         }
         if (r.gpu_logits) {
             decode_override_logits_done()
@@ -2727,7 +2721,7 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
             kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qkvd, nsgs = uint(r.d_nsgs))
         enc_attn_d(enc, r.kdt, r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads)
         var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads), hs = uint(head_size))
-        enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, cka, n_heads, r.nrows, head_size)
+        enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, cka, n_heads, r.nrows)
     } elif (r.chunked) {
         // each row derives wstart from its own cnt; the comb skips that row's below-window chunks
         var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
@@ -3536,6 +3530,12 @@ var private g_env_mtp_debug = ""
 //! what a forced-feed parity cell needs; "cold" logs the failing engagement gate; "" restores).
 def public set_metal_mtp_debug(mode : string) {
     g_env_mtp_debug = mode
+}
+
+//! Test and race lever over `DASLLAMA_METAL_ATTN_D`: the batched step's split single-pass attention
+//! against the chunked per-(row, head) pair, flipped inside one process.
+def public set_metal_attn_d(on : bool) {
+    g_env_attn_d = on
 }
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global

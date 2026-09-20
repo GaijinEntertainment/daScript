@@ -3028,8 +3028,8 @@ def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl,
 }
 
 // Fused single-pass batched attention: beats the upstream vector form at every depth 512-16K. One
-// simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
-// accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
+// simdgroup per (row, head, 32-slice-group), scores in-register, V lane-private; a lane owns one quad
+// of the head (hs 128 fills the simdgroup, hs 64 idles the lanes past it); grid is HEAD-FASTEST for SLC locality.
 [ |> template_struct_instance]
 class template MetalSqAttnDKvT {
     @ssbo @binding = 0 @role = "read" kc : array<KT>
@@ -3106,7 +3106,7 @@ class MetalSqAttnDF32 : MetalSqAttnDKvT {
 
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
-[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64")]
 class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>

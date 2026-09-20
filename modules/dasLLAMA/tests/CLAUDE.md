@@ -103,8 +103,8 @@ seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the 
 and the stream stays deterministic; on a verify tag it rides the assistant round inside the
 `mtp-count-<tag>` attach). The same
 file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
-g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - the hybrid graph the rail
-declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
+g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - one recurrent session's
+rows the rail declines as `dn_state`, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
 at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -
 the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
@@ -157,10 +157,11 @@ fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
 CPU differs from any float implementation by ~2.5 logits/step by construction;
-fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-row FALLBACK
-shape - metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
-batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch arm, and a
-blob twin's CPU batch fallback would trip the blob-only panic).
+fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
+and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
+twin's batched step against the CPU batched stack on the planar model - the two arms the
+batched driver gained, deltanet rows against per-session mirrors and the shared expert's rows
+site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - runs with no model stocked; also the layout fingerprint; the split-scale
@@ -381,7 +382,9 @@ store lister admitting `records/{box}.json` alone) and the record rig's shared s
 `-w` workload scope; the stored-row->rig-leg map, `backend`/`flavor` => `metal` | plain cpu |
 `accel`, else refused; the tune-stamp gate; the oracle compare's ok/warn/fail bands; the
 upstream image-reference parser `parse_mtmd_image` - encode summing, the MTMD_TIMING split,
-its refusal arms); plus the committed-records sweeps: image-chat receipts match their
+its refusal arms; the batched reference parser `llama_batched_bench_tg` - the `S_TG` cell of
+the row at `npl` alone, 0 on a missing row, a missing table or a cell that is not a number -
+and `llama_batched_bench_sibling` reading "" beside a missing reference); plus the committed-records sweeps: image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
 resolves to its committed generation archive.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree

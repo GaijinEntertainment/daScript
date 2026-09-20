@@ -6,30 +6,25 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade - engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_layout   // convert_model_to_metal_blob - the blob-flavor transform
+require _metal_blob_twin   // blob_twin - the blob-flavor carrier every Metal serving cell loads
 require dasllama/dasllama_batch   // batch_step_census - how the scheduler's steps were served
 require dasllama/dasllama_bench   // bench_tg_batched_rep - the batched row
 require dasllama/dasllama_scheduler   // the joint speculative tick's invariance cell drives the scheduler itself
-require _scheduler_rig   // make_req, drain, toks_of
+require _scheduler_rig   // toks_of
+require _ids   // same_ids
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_stats - the batched driver's own count
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the das_metal halves
-require math
 require _model_tier
 
 // The batched bench row on the Metal batched driver: `bench_tg_batched_rep` homes its streams on the
 // host where no whole-model driver homes them, and every timed step goes through ONE batched
-// dispatch - the llama carrier serves at a rate, and a blob-only carrier the batched driver
-// declines (gemma-4-E2B: the per-layer embedding has no batch arm) steps its rows one at a time
-// without a panic and the row refuses by name. Skips off the JIT, without dasMetal, or without the
-// carrier under models_dir().
-
-def private blob_carrier(t : T?; path : string; seq_cap : int64) : Model {
-    var tg <- load_model_(path, QuantMode.q8)
-    t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
-    tg.config.seq_len = min(tg.config.seq_len, seq_cap)
-    return <- tg
-}
+// dispatch - the llama carrier, the E-series (PLE rows form), the shared-expert MoE (rows site),
+// the deltanet hybrid (recurrent rows against per-session mirrors) and the NextN carrier (GPU
+// logits, the carry landed per row) each serve at a rate; the self-speculative streams tick through
+// one joint verify, token-exact against each stream alone. Skips off the JIT, without dasMetal,
+// without the carrier under models_dir(), and on the large-tier shexp carrier unless
+// DASLLAMA_PARITY_FULL=1; the refusal contract lives in test_batch_decode.das.
 
 [test]
 def test_metal_batched_row_llama(t : T?) {
@@ -42,8 +37,9 @@ def test_metal_batched_row_llama(t : T?) {
             }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 t |> equal(gpu_device_sessions(), 0l, "no whole-model driver homes a stream: the row's streams are host-cached")
@@ -57,6 +53,7 @@ def test_metal_batched_row_llama(t : T?) {
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "no step ran on the CPU batched stack")
                 t |> success(metal_batch_decode_stats().steps - steps0 >= 8l, "the Metal batched driver counts the steps as its own")
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
@@ -75,8 +72,9 @@ def test_metal_batched_row_eseries(t : T?) {
             }
             let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let census0 = batch_step_census()
@@ -87,6 +85,7 @@ def test_metal_batched_row_eseries(t : T?) {
                 t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the blob-only model never reached the CPU batched stack")
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
@@ -105,8 +104,9 @@ def test_metal_batched_row_shexp(t : T?) {
             }
             let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let census0 = batch_step_census()
@@ -117,6 +117,7 @@ def test_metal_batched_row_shexp(t : T?) {
                 t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the blob-only model never reached the CPU batched stack")
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
@@ -135,8 +136,9 @@ def test_metal_batched_row_nextn_plain(t : T?) {
             }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let prev_spec = get_mtp_spec()
@@ -172,6 +174,7 @@ def test_metal_batched_row_nextn_plain(t : T?) {
                 delete events
                 delete sch
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
@@ -190,8 +193,9 @@ def test_metal_batched_row_mtp(t : T?) {
             }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let prev_spec = get_mtp_spec()
@@ -205,28 +209,12 @@ def test_metal_batched_row_mtp(t : T?) {
                 t |> success(census1.device - census0.device >= 8l, "the timed ticks each rode one joint verify ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "no tick reached the CPU batched stack")
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
         }
     }
-}
-
-//! the tokens one stream emitted, in order
-def private stream_toks(events : array<SchedEvent>; id : int64) : array<int64> {
-    return <- [for (e in events); e.token; where e.stream == id && e.kind == SchedEventKind.piece]
-}
-
-def private same_ids(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
 }
 
 [test]
@@ -240,14 +228,15 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
             }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 512l)
+            var tr <- blob_twin(t, path, 512l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
-                                 <- encode(tr, "The capital of France is Paris, and the capital of Germany is", true, false),
+                                 <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
                                  <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false)]
                 var none : array<int64>
                 let greedy = SamplingParams()
@@ -258,7 +247,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                     var events0 : array<SchedEvent>
                     t |> success(submit(tr, sch0, make_req(pi + 1l, prompts[pi], greedy, 20l, none)), "solo stream {pi + 1l} queued")
                     drain(tr, sch0, events0)
-                    refs |> emplace(stream_toks(events0, pi + 1l))
+                    refs |> emplace(toks_of(events0, pi + 1l))
                     delete sch0
                     delete events0
                 }
@@ -272,9 +261,10 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 drain(tr, sch, events)
                 let census1 = batch_step_census()
                 set_mtp_spec(prev_spec)
+                t |> equal(sch.mtp_joined_max, 3l, "one joint verify carried all three streams (the widest tick carried {sch.mtp_joined_max})")
                 for (pi in range64(3l)) {
-                    var got <- stream_toks(events, 10l + pi)
-                    to_log(LOG_INFO, "joint {pi}: {got} | solo: {refs[pi]}\n")
+                    var got <- toks_of(events, 10l + pi)
+                    log_gen_texts(tr, "joint stream {pi} (solo, joint)", refs[pi], got)
                     t |> success(same_ids(got, refs[pi]), "joint stream {pi} tokens == its solo stream")
                     delete got
                 }
@@ -286,6 +276,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 delete refs
                 delete prompts
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")
@@ -304,8 +295,9 @@ def test_metal_batched_row_deltanet(t : T?) {
             }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
             if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
-            var tr <- blob_carrier(t, path, 256l)
+            var tr <- blob_twin(t, path, 256l)
             with_job_que() {
                 setup_dasllama_jobque_()
                 let census0 = batch_step_census()
@@ -316,6 +308,7 @@ def test_metal_batched_row_deltanet(t : T?) {
                 t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the hybrid never reached the CPU batched stack")
             }
+            set_metal_mode(prior_mode)
             delete tr
         } else {
             t |> skip("dasMetal not built")

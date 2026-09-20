@@ -4,6 +4,9 @@
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_general.md`, `followup_vulkan.md`,
 `followup_metal.md`.
 
+These rules bind checked-in text under `modules/dasLLAMA/` and the commit message or PR body of
+a diff to it.
+
 The reference build is the third-party engine this module measures itself against, whatever
 copy a box holds - a prebuilt release or the checkout `benchmarks/setup_lcpp_ref.das` pins. A
 sentence does reference-build work when it reports a search through that build, a patch to it,

@@ -388,7 +388,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         return
     }
     if (stack_done) {
-        g_batch_steps_device++
+        note_batch_step(true)
     } else {
         g_batch_steps_cpu_stack++
         blob_only_panic(t, "batch-decode stack")

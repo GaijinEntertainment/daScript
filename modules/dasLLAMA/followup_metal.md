@@ -616,19 +616,6 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 16. The batched recurrent step scans its rows one dispatch at a time
-
-`recurrent_batch` (`dasllama/dasllama_metal_decode.das`) runs the deltanet projections as rows
-GEMVs - one weight pass - and then the conv, the history update, the l2 norm, the scan and the
-gate once PER ROW, five dispatches a row a recurrent layer, because each session's state lives in
-its own `DnMirror` buffer and one dispatch binds one. At four rows on a 24-layer hybrid that is
-~360 small dispatches a step beside the weight pass; the 0.8B reads it as dispatch latency, the
-35B hybrids amortize it. The work: a shared state arena so every session's state slice sits in
-one buffer, a per-row table like the KV route table (`brt`) naming each row's slice, and the
-five kernels taking the row from that table - one dispatch a stage over every row. The CPU
-batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
-is armed); the same rows shape applies there.
-
 ## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
 
 `ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
@@ -686,3 +673,16 @@ draft layer (the same `rows_tier` shapes the verify uses), one classifier pass o
 argmax per row - landing per group into the same `MtpVerifyGroup` slots the per-stream draft
 fills today. The single-stream round keeps its chain; the multi-draft chain (depth above one)
 becomes k rows-form steps, each seeded by the previous step's per-row argmax.
+
+## 22. The batched recurrent step scans its rows one dispatch at a time
+
+`recurrent_batch` (`dasllama/dasllama_metal_decode.das`) runs the deltanet projections as rows
+GEMVs - one weight pass - and then the conv, the history update, the l2 norm, the scan and the
+gate once PER ROW, five dispatches a row a recurrent layer, because each session's state lives in
+its own `DnMirror` buffer and one dispatch binds one. At four rows on a 24-layer hybrid that is
+~360 small dispatches a step beside the weight pass; the 0.8B reads it as dispatch latency, the
+35B hybrids amortize it. The work: a shared state arena so every session's state slice sits in
+one buffer, a per-row table like the KV route table (`brt`) naming each row's slice, and the
+five kernels taking the row from that table - one dispatch a stage over every row. The CPU
+batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
+is armed); the same rows shape applies there.

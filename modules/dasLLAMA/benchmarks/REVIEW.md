@@ -50,7 +50,8 @@ run of the file, chosen by its own flag or argument; a file with no mode flag is
 the line a reader takes the mode's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
-instead.** A served turn is a whole prefill-plus-decode run; a board cell is a timed cell of
+instead.** A served turn is one whole request the engine serves - a prefill-plus-decode run, or a
+transcription or synthesis end to end; a board cell is a timed cell of
 the published results board - one `../performance/gen_bench_records.das` spawns, or a manual
 `lcpp_bench.das` cell with its own `../PROFILE.md` section. A second instrument's numbers
 cannot be compared to any row the board already carries.
@@ -75,14 +76,15 @@ and corpus - or withdraws the affected rows and names the withdrawal and its rea
 body.** What a cell times changes when a change inside its timed body, to its input corpus, or
 to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
 deciding which reference binary or environment the run measures) moves the measured quantity; a
-change outside the timed body - a flag, a require, the submit path - does not. The new rows or
+change that alters nothing the timed body loads, runs, or counts does not. The new rows or
 the withdrawal land in `../performance/records/<box>.json`, the file the affected rows live in.
 
-**A diff that changes a GPU kernel emitter - a `[vk_dispatch]` or `[metal_kernel]` body, a
-`*_msl` source global, or the code that emits either - and ships no before/after rows for a board
+**A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
+`[metal_kernel]` body or a `*_msl` source global - and ships no before/after rows for a board
 cell or instrument that times the changed kernel names, in the PR body, the compare showing the
-emitted kernel code byte-identical before and after** - the `*_msl` source globals, the AIR
-(Metal's compiled shader IR) they build into, the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes.
+emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it builds
+into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters answer to
+`../REVIEW_GPU.md`).
 
 **A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
 a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
@@ -93,9 +95,9 @@ reported success leaves a sidecar or a record untouched, and its caller cannot t
 **A diff that adds an A/B arm, or changes how such an arm reports or exits, makes that instrument
 exit non-zero when the lever does not change what the run executes - or, when the instrument
 runs that check before the arm, print a warning naming the inert lever.** An A/B arm is one of
-two timed runs of an instrument that differ only in one flag or environment switch - the lever -
-set to a different value in each; off/on or graded. A lever that silently no-ops prints a 1.00x
-row nobody can tell from a real tie.
+two timed runs an instrument makes in ONE process that differ only in one flag or environment
+switch - the lever - set to a different value in each; off/on or graded. A lever that silently
+no-ops prints a 1.00x row nobody can tell from a real tie.
 
 **A diff that adds or changes an A/B arm of an instrument over a prompt corpus makes that arm
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the

@@ -93,7 +93,11 @@ that a question answered for one backend has an obvious address in the other. Th
   pick its state, and the mirrors advance when the step lands (`g_lp_dn_uids`); a step whose
   rows have no resident or CPU-synced state declines `dn_state`. The CPU batched stack has no
   hybrid form, so `eval_batch_` hands a hybrid's rows to an armed device driver first and steps
-  them per row only when none is armed or the driver declines.
+  them per row only when none is armed or the driver declines. The batch's split single-pass
+  attention (`MetalSqAttnDKvT` and its combine) takes the head width at run time from one
+  compiled variant - a lane owns one quad of the head, a head of 128 fills the simdgroup and a
+  head of 64 idles the lanes past it (zero query, no store) - serving both on the f16/f32 mirrors
+  with no per-head stamp; the block codecs keep the chunked per-(row, head) pair at head 64.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
@@ -205,6 +209,10 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
   registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
   the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
   Vulkan serves the CPU round (`ARCHITECTURE_GPU_MTP.md`).
+- **The joint speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
+  has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
+  stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md`
+  sec.2.37a); on Vulkan and the CPU the tick steps each stream through its own round.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants, and
   NonWritable derived per binding from the access classification - `ARCHITECTURE_GPU_VULKAN.md`
@@ -235,7 +243,8 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
   resident driver's mirror (`create_device_session`, the scheduler's device mode, park and
   adopt: `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n) has no Metal twin, and
   `gpu_device_sessions` answers 0 there: Metal's whole-forward driver reads the host cache in
-  unified memory, so it has no mirror to split. The Metal serving gap is `followup_metal.md` sec.16.
+  unified memory, so it has no mirror to split, and the batched row homes its streams on the host
+  (`ARCHITECTURE_MEASUREMENT.md` sec.2.5).
 - **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
   it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
   ids, skips the CPU embed loop, and the resident driver gathers the rows on device through
