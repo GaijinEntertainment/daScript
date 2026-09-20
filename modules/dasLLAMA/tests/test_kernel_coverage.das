@@ -777,7 +777,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // Q8_0 tinyllama; the q8 n2/n4/n8 stamps ride its 2-, 4- and 8-row steps); their coverage is test_vkd_gemv_ncol
     // in test_vulkan_kernels.das
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
-    "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv"]
+    "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv",
+    // the fused gate-up GEMV's N form serves only the N-row token command, which the zoo's one-region load never engages
+    // (the batched rows need a region a row); its coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
+    "q8_gemv_gu_n_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {

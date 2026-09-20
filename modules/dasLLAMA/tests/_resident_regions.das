@@ -118,6 +118,37 @@ def private regions_ready(t : T?; file : string) : bool {
     return true
 }
 
+//! two sessions over `pa` and `pb`, a region each, prefilled then stepped one row at a time, interleaved, against each alone
+def private interleaved_single_steps_body(t : T?; tr : Model; pa, pb : array<int64>) {
+    var fa <- feed_a()
+    var fb <- feed_b()
+    var ra <- logits_alone(tr, pa, fa)
+    var rb <- logits_alone(tr, pb, fb)
+    t |> success(logits_maxdiff(ra[0], rb[0]) > 0.0, "the two prompts read different logits, so a crossed region cannot pass")
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    forward_prefill(tr, sa, pa, long_length(pa), 0l)
+    hold_equal(t, sa.logits, ra[0], "session A's prefill")
+    forward_prefill(tr, sb, pb, long_length(pb), 0l)
+    hold_equal(t, sb.logits, rb[0], "session B's prefill, A's rows live beside it")
+    t |> success(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
+    for (st in range64(STEPS)) {
+        forward(tr, sa, fa[st], long_length(pa) + st)
+        hold_equal(t, sa.logits, ra[st + 1l], "session A step {st}")
+        forward(tr, sb, fb[st], long_length(pb) + st)
+        hold_equal(t, sb.logits, rb[st + 1l], "session B step {st}")
+    }
+    var passes <- gpu_cpu_passes_()
+    t |> equal(length(passes), 0, "the device served every call: {passes}")
+    delete passes
+    delete sa
+    delete sb
+    delete ra
+    delete rb
+    delete fa
+    delete fb
+}
+
 def cell_regions_interleaved_single_steps(t : T?; file : string) {
     t |> run("two sessions, a region each: single steps interleaved read what each session reads alone") @(t : T?) {
         if (!regions_ready(t, file)) return
@@ -126,35 +157,32 @@ def cell_regions_interleaved_single_steps(t : T?; file : string) {
             setup_dasllama_jobque_()
             var pa <- prompt_a()
             var pb <- prompt_b()
-            var fa <- feed_a()
-            var fb <- feed_b()
-            var ra <- logits_alone(tr, pa, fa)
-            var rb <- logits_alone(tr, pb, fb)
-            t |> success(logits_maxdiff(ra[0], rb[0]) > 0.0, "the two prompts read different logits, so a crossed region cannot pass")
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var sb <- create_session(tr, mirror_kv_dtype())
-            forward_prefill(tr, sa, pa, long_length(pa), 0l)
-            hold_equal(t, sa.logits, ra[0], "session A's prefill")
-            forward_prefill(tr, sb, pb, long_length(pb), 0l)
-            hold_equal(t, sb.logits, rb[0], "session B's prefill, A's rows live beside it")
-            t |> success(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
-            for (st in range64(STEPS)) {
-                forward(tr, sa, fa[st], long_length(pa) + st)
-                hold_equal(t, sa.logits, ra[st + 1l], "session A step {st}")
-                forward(tr, sb, fb[st], long_length(pb) + st)
-                hold_equal(t, sb.logits, rb[st + 1l], "session B step {st}")
-            }
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
-            delete sa
-            delete sb
-            delete ra
-            delete rb
+            interleaved_single_steps_body(t, tr, pa, pb)
             delete pa
             delete pb
-            delete fa
-            delete fb
+        }
+        delete tr
+    }
+}
+
+let private WIDE_ROWS = 3072l   //! the token command's RD_WIDE_POS, asserted equal by the wide cell: its prompts run past it
+
+//! the same past the wide position: both prompts run longer than RD_WIDE_POS, so the one-row steps take the token command's
+//! wide twin - recorded on the first such step, its stamp names apart from the split form's
+def cell_regions_wide_single_steps(t : T?; file : string) {
+    t |> run("two sessions past the wide position: the wide twin reads what each session reads alone") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- ramp_ids(WIDE_ROWS + 8l, 0l, 1000l, 37l, 5000l)
+            var pb <- ramp_ids(WIDE_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                t |> success(long_length(pa) > RD_WIDE_POS && long_length(pb) > RD_WIDE_POS, "both prompts run past the wide position ({RD_WIDE_POS})")
+            }
+            interleaved_single_steps_body(t, tr, pa, pb)
+            delete pa
+            delete pb
         }
         delete tr
     }
@@ -342,6 +370,71 @@ def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = Lo
             batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
+        }
+        delete tr
+    }
+}
+
+//! a batched step before any one-row step, a one-row step on each row, a batched step again - every row under the unsplit
+//! position, so the batched steps take the unsplit twin whether or not a one-row record came first
+def cell_regions_batched_first(t : T?; file : string) {
+    t |> run("a batched step first, one-row steps, a batched step again: the rows read what each session reads alone throughout") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var fa <- feed_a()
+            var fb <- feed_b()
+            var sa <- create_session(tr, mirror_kv_dtype())
+            var sb <- create_session(tr, mirror_kv_dtype())
+            eval(tr, sa, pa)
+            eval(tr, sb, pb)
+            var ws <- create_batch_workspace(tr)
+            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var got_a : array<array<float>>
+            var got_b : array<array<float>>
+            for (st in range64(STEPS)) {
+                if (st == 1l) {
+                    var one_a <- [fa[st]]
+                    var one_b <- [fb[st]]
+                    eval(tr, sa, one_a)
+                    eval(tr, sb, one_b)
+                    delete one_a
+                    delete one_b
+                } else {
+                    var toks <- [fa[st], fb[st]]
+                    eval_batch(tr, ws, sess, toks)
+                    delete toks
+                }
+                got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+                got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
+            }
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+            var ra <- logits_alone(tr, pa, fa)
+            var rb <- logits_alone(tr, pb, fb)
+            for (st in range64(STEPS)) {
+                hold_equal(t, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
+                hold_equal(t, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
+            }
+            sess |> clear()
+            unsafe {
+                delete ws
+                delete sess
+            }
+            delete sa
+            delete sb
+            delete got_a
+            delete got_b
+            delete ra
+            delete rb
+            delete pa
+            delete pb
+            delete fa
+            delete fb
         }
         delete tr
     }

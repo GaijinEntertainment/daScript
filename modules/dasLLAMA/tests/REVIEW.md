@@ -47,12 +47,12 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
-bar a cell the census entry names asserts, a cell's skip condition added, changed or dropped -
-corrects, in the same change, the `CLAUDE.md` census entry of every `[test]` file that runs the
-cell, wherever the cell is defined, numbers and skip clauses included.** A `{a,b}` shorthand
-naming several files, or a suite roster, carries nothing to correct; a file with no census entry
-owes none.
+**A diff that adds a `[test]` file to this folder, or adds, removes or moves a cell a file runs,
+or changes a cell's suite, corrects or adds in the same change the `CLAUDE.md` census entry of
+every `[test]` file that runs the cell, wherever the cell is defined, cell counts included; a
+diff that changes an axis, a bar or a skip clause a census entry names corrects that entry
+likewise.** A file's census entry is the clause naming that file, whether or not it shares a
+paragraph; a `{a,b}` shorthand naming several files, or a suite roster, carries nothing to correct.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
@@ -161,7 +161,8 @@ difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
-showing the path ran is not evidence that the number was reached.
+showing the path ran is not evidence that the number was reached; a device's own geometry (its
+subgroup width, its SM count) is the box's, not a claim about coverage.
 
 **A freeform token-parity cell whose two sides can round differently - different lanes,
 backends, batch shapes or kernel forms - is a defect: use the forced-feed logits-tolerance

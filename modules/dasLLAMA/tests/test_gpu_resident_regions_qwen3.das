@@ -6,15 +6,26 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require _resident_regions
 
-// Qwen3-0.6B Q8_0: the batched-step cells of the rig on a q/k-norm carrier, so the N-row token command's per-head
-// q/k rms over the rows' projection rows serves two rows against the sessions alone, bit for bit - at one window,
-// and past the unsplit position so the split attention form records. Skips off the JIT, without DASLLAMA_GPU=1 on
-// a device the driver serves, or without the file under models_dir().
+// Qwen3-0.6B Q8_0: the rig's step cells on a q/k-norm carrier - the interleaved single steps, the batched steps at one
+// window and past the unsplit position (the N-row token command's q/k norm in the form the one-row command takes,
+// bit for bit against the sessions alone), a batched step before any one-row step, and the single steps past the wide
+// position where the wide twin records. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or
+// without the file under models_dir().
 let private REGIONS_FILE = "Qwen3-0.6B-Q8_0.gguf"
 
 [test]
 def test_regions_interleaved_single_steps_qwen3(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)
+}
+
+[test]
+def test_regions_wide_single_steps_qwen3(t : T?) {
+    cell_regions_wide_single_steps(t, REGIONS_FILE)
+}
+
+[test]
+def test_regions_batched_first_qwen3(t : T?) {
+    cell_regions_batched_first(t, REGIONS_FILE)
 }
 
 [test]

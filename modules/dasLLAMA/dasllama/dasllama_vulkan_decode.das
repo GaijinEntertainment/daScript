@@ -12,7 +12,6 @@ require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated s
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
 require dasllama/dasllama_common
 require dasllama/dasllama_par   // maybe_parallel_for: the N-row logits land a row a lane
-require jobque   // is_job_que_available: the landing's lanes exist
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -183,16 +182,14 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     for (_i in range64(nb + 1l)) {
         r.xlog_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
     }
+    r.unsplit_on = r.attn_nsplit > 1l   //! the twins' availability is the device's, decided where their buffers are allocated: never a record's side effect
     r.wide_on = r.attn_nsplit > RD_SPLIT_PIECES
     r.tok_n_recorded |> resize(nb + 1l)
-    r.tok_n_wide_recorded |> resize(nb + 1l)
     r.cmd_n |> reserve(nb + 1l)
     r.cmd_n_unsplit |> reserve(nb + 1l)
-    r.cmd_n_wide |> reserve(nb + 1l)
     for (_i in range64(nb + 1l)) {
         r.cmd_n |> push(alloc_cmd())
-        r.cmd_n_unsplit |> push(r.attn_nsplit > 1l ? alloc_cmd() : VkCommandBuffer())
-        r.cmd_n_wide |> push(r.wide_on ? alloc_cmd() : VkCommandBuffer())
+        r.cmd_n_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
     }
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
@@ -203,7 +200,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.cmd_wide |> resize(regions)
     for (ri in range64(regions)) {
         r.cmd |> push(alloc_cmd())
-        if (r.attn_nsplit > 1l) {
+        if (r.unsplit_on) {
             r.cmd_unsplit[ri] = alloc_cmd()
         }
         if (r.wide_on) {
@@ -271,7 +268,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(hid * 4l * nb, hid * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
-    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & 4l) == 0l
+    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
@@ -1055,6 +1052,26 @@ def private rd_record_token {
     g_rd.tok_wide_recorded[g_rd.region] = false
 }
 
+//! the split form's pieces on this device: the ladder's count, never past the partials plane's (`attn_nsplit`)
+def private rd_split_pieces : int64 => min(RD_SPLIT_PIECES, g_rd.attn_nsplit)
+def private rd_wide_pieces : int64 => min(RD_SPLIT_WIDE_PIECES, g_rd.attn_nsplit)
+
+//! the ladder's pieces for an attended span: one under RD_UNSPLIT_POS, the split form's to RD_WIDE_POS, the wide form's past it
+def private rd_pieces_for_span(span : int64) : int64 {
+    if (span < RD_UNSPLIT_POS) return 1l
+    return span < RD_WIDE_POS ? RD_SPLIT_PIECES : RD_SPLIT_WIDE_PIECES
+}
+
+//! a layer's pieces under the command's count: a sliding-window layer attends at most its window, so its count is the
+//! window's span's, never past the command's - the one-row and N-row forms apply it alike, so their rows still sum in one order
+def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 => L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
+
+//! the attention form a one-row step at `pos` takes
+def private rd_form_at(pos : int64) : RdForm {
+    if (g_rd.unsplit_on && pos < RD_UNSPLIT_POS) return RdForm.unsplit
+    return (g_rd.wide_on && pos >= RD_WIDE_POS) ? RdForm.wide : RdForm.split
+}
+
 //! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (sec.2.2al)
 [cold_path]
 def private rd_record_wide_twin {
@@ -1116,7 +1133,6 @@ def private rd_fill_gemv_regions_all {
 //! the unsplit twin on a split device: the same chain at one split into `cmd_unsplit`, its stamp names and overflow flag kept apart
 [cold_path]   // beside rd_record_token, and the rerecord probe's per-token leg
 def private rd_record_unsplit_twin {
-    g_rd.unsplit_on = g_rd.attn_nsplit > 1l
     if (!g_rd.unsplit_on) return
     rd_encode_token(g_rd.cmd_unsplit[g_rd.region], 1l)
     delete g_rdq_names_unsplit
@@ -1210,7 +1226,7 @@ def private rd_ensure_fused_sets {
     for (l in range64(nl)) {
         var L & = unsafe(g_rd.layers[l])
         L.s_addr_ffn_rq = set_ar_rq_stamp(L.rq_ffn_stamp, g_rd.xb2_dev, VHZ_XB2, g_rd.xq_dev, g_rd.xs_dev)
-        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & 17l) == 0l && ensure_q8_gemv_ar_cls()
+        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
             L.s_wo_ar = set_q8_gemv_ar_cls(fixed_array(po.wq, po.ws, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
@@ -1230,7 +1246,7 @@ def private rd_ensure_fused_sets {
         if (!L.moe) {
             L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
             //! a PLE layer joins whatever its next stamp is: its step quantizes the row as it is, for the gate's feed
-            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & 34l) == 0l && ensure_q8_gemv_ar_cls()
+            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
                 L.s_down_ar = set_q8_gemv_ar_cls(fixed_array(p2.wq, p2.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
@@ -1240,7 +1256,47 @@ def private rd_ensure_fused_sets {
         }
     }
     g_rd.fused_sets_made = true
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: fused add+rms+requant on every decode site (DASLLAMA_VK_FUSE=0 pins the split dispatches)\n")
+    rd_announce_fuse_bisect()
+}
+
+//! the fused sites' announce: every site fused, or the bits DASLLAMA_VK_FUSE_BISECT keeps split, each named as taken or inert here
+def private rd_announce_fuse_bisect {
+    let bx = vk_fuse_bisect_bits()
+    if (bx == 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: fused add+rms+requant on every decode site (DASLLAMA_VK_FUSE=0 pins the split dispatches, DASLLAMA_VK_FUSE_BISECT one form at a time)\n")
+        return
+    }
+    var wo_elig = false
+    var down_elig = false
+    var gu_elig = false
+    for (L in g_rd.layers) {
+        wo_elig = wo_elig || (!L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq)
+        down_elig = down_elig || (has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq))
+        gu_elig = gu_elig || (L.f1 == int(KqFmt.q8) && L.f3 == int(KqFmt.q8) && !kq_sb(L.f2))
+    }
+    let names <- [
+        (bit = FUSE_BX_WO_AR, name = "the wo epilogue", live = wo_elig),
+        (bit = FUSE_BX_DOWN_AR, name = "the down epilogue", live = down_elig),
+        (bit = FUSE_BX_GU, name = "the fused gate-up", live = gu_elig),
+        (bit = FUSE_BX_PROLOGUE_RQ, name = "the prologue requant stamp", live = true),
+        (bit = FUSE_BX_POST_ATT_RQ, name = "the post-attention requant stamp", live = true),
+        (bit = FUSE_BX_POST_FFN_RQ, name = "the post-FFN requant stamp", live = true),
+        (bit = FUSE_BX_QKN_ROPE, name = "the fused qk-norm+rope", live = g_rd.qk_norm && !g_rd.q_gated)]
+    var taken : array<string>
+    var inert : array<string>
+    for (e in names) {
+        continue if ((bx & e.bit) == 0l)
+        if (e.live) {
+            taken |> push("{e.name} ({e.bit})")
+        } else {
+            inert |> push("{e.name} ({e.bit})")
+        }
+    }
+    let inert_part = empty(inert) ? "" : "; inert on this model: {join(inert, ", ")}"
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_FUSE_BISECT={bx} keeps on the split dispatches: {join(taken, ", ")}{inert_part}\n")
+    if (!empty(inert)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_VK_FUSE_BISECT names a form this model never fuses - that arm's A/B is a tie by construction\n")
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
@@ -1413,7 +1469,7 @@ def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
     for (L in g_rd.layers) {
         need = need || (!L.recurrent && (L.rot != L.hs || L.vfk || L.vnorm))
     }
-    return (fuse = fuse, fuse_qkr = g_rd.qk_norm && ((fuse && (vk_fuse_bisect_bits() & 64l) == 0l) || g_rd.q_gated || need))
+    return (fuse = fuse, fuse_qkr = g_rd.qk_norm && ((fuse && (vk_fuse_bisect_bits() & FUSE_BX_QKN_ROPE) == 0l) || g_rd.q_gated || need))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1638,7 +1694,12 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
         let rqwg_dim = (dim / 4l + 255l) / 256l
         let rqwg_dim_k = (dim / 8l + 255l) / 256l
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
-        if (fuse && (vk_fuse_bisect_bits() & 8l) == 0l) {
+        //! each fused site's own flag: the bisect keeps one site split, and the requant that site's split form owes follows it
+        let bx = vk_fuse_bisect_bits()
+        let pro_fused = fuse && (bx & FUSE_BX_PROLOGUE_RQ) == 0l
+        let att_fused = fuse && (bx & FUSE_BX_POST_ATT_RQ) == 0l
+        let next_fused = fuse && (bx & FUSE_BX_POST_FFN_RQ) == 0l
+        if (pro_fused) {
             enc_ar_rq_stamp(g_rd.rq_pro_stamp, raw, h, g_rd.s_prologue_rq, pc_pro)   // rms_att[0](x) -> xq/xs (and xb where layer 0's head reads it)
         } else {
             enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, 1l)   // xb = rms_att[0](x)
@@ -1649,7 +1710,8 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
             let hpfx = rd_head_pfx(L)
             let tpfx = rd_tail_pfx(L)
             let after_moe_combine = l > 0l && g_rd.layers[l - 1l].moe && !g_rd.layers[l - 1l].comb_rq   //! a combine that quantized the feed leaves nothing to requant
-            if (!fuse || after_moe_combine) {
+            let feed_quantized = l == 0l ? pro_fused : next_fused
+            if (!feed_quantized || after_moe_combine) {
                 if (kq_sb(L.recurrent ? L.fqkv : L.fq)) {
                     enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
                 } else {
@@ -1660,12 +1722,12 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, nsplit)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit))
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            if (fuse && (vk_fuse_bisect_bits() & 16l) == 0l) {
+            if (att_fused) {
                 if (!L.wo_ar) {   //! else the wo GEMV's epilogue took the step
                     enc_ar_rq_stamp(L.rq_ffn_stamp, raw, h, L.s_addr_ffn_rq, pc8)
                     rd_ts(raw, "{tpfx}arrq_f")
@@ -1717,7 +1779,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
                 }
                 rd_ts(raw, "m:ar2")
-            } elif (fuse && (vk_fuse_bisect_bits() & 32l) == 0l) {
+            } elif (next_fused) {
                 if (!L.down_ar || L.ple) {   //! a PLE layer's down epilogue took the FFN step; this is the branch's
                     enc_ar_rq_stamp(L.rq_next_stamp, raw, h, L.s_addr_next_rq, pc14)
                     rd_ts(raw, "{tpfx}arrq_n")
@@ -1727,7 +1789,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
                 rd_ts(raw, "{tpfx}ar2")
             }
         }
-        if (!fuse || (g_rd.layers[g_rd.n_layers - 1l].moe && !g_rd.layers[g_rd.n_layers - 1l].comb_rq)) {   //! the fused next site (or the quantizing combine) did the final norm and its requant
+        if (!next_fused || (g_rd.layers[g_rd.n_layers - 1l].moe && !g_rd.layers[g_rd.n_layers - 1l].comb_rq)) {   //! the fused next site (or the quantizing combine) did the final norm and its requant
             if (kq_sb(g_rd.cls_fmt_marker)) {
                 enc_cls_q8k_rq(raw, h, g_rd.s_quant_final, pc_rq_dim_k, rqwg_dim_k)
             } else {
@@ -1903,18 +1965,24 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded[g_rd.region]) {
         rd_record_token()
-    } elif (vk_rdec_rerecord_on()) {   // probe arm: pay the full re-encode every token, both forms
+    } elif (vk_rdec_rerecord_on()) {   // probe arm: pay the full re-encode every token, the split form and its twins
         rd_record_unsplit_twin()
         rd_encode_token(g_rd.cmd[g_rd.region], rd_split_pieces())
+        g_rd.tok_wide_recorded[g_rd.region] = false
     }
-    let band = rd_form_at(pos)
-    if (band == RdForm.wide && !g_rd.tok_wide_recorded[g_rd.region]) {
+    let form = rd_form_at(pos)
+    if (form == RdForm.wide && !g_rd.tok_wide_recorded[g_rd.region]) {
         rd_record_wide_twin()
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
-    let unsplit = band == RdForm.unsplit
-    var cmd = band == RdForm.unsplit ? g_rd.cmd_unsplit[g_rd.region] : (band == RdForm.wide ? g_rd.cmd_wide[g_rd.region] : g_rd.cmd[g_rd.region])
+    let unsplit = form == RdForm.unsplit
+    var cmd = g_rd.cmd[g_rd.region]
+    if (unsplit) {
+        cmd = g_rd.cmd_unsplit[g_rd.region]
+    } elif (form == RdForm.wide) {
+        cmd = g_rd.cmd_wide[g_rd.region]
+    }
     if (unsplit) {
         g_rd.unsplit_served++
     }
@@ -1972,18 +2040,18 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
     }
-    if (prof) {   //! the ledger reads the submitted form's stamps; a run crossing a band edge, or arriving from the N-row form, restarts its averages, since the forms' roles differ
-        if (g_rdq_count > 0l && (band != g_rdq_form_band || g_rdq_form_n)) {
-            rdq_form_switch(band, pos)
+    if (prof) {   // the ledger reads the submitted form's stamps: a run crossing a form edge, or arriving from the N-row command, restarts its averages
+        if (g_rdq_count > 0l && (form != g_rdq_attn_form || g_rdq_form_n)) {
+            rdq_form_switch(form, pos)
             g_rdq_idle_us = 0.0lf
         }
         g_rdq_form_n = false
-        g_rdq_form_band = band
-        if (band == RdForm.unsplit && g_rdq_n_unsplit > 2u) {
+        g_rdq_attn_form = form
+        if (form == RdForm.unsplit && g_rdq_n_unsplit > 2u) {
             rdq_sample(g_rdq_names_unsplit, g_rdq_n_unsplit, g_rdq_overflow_unsplit)
-        } elif (band == RdForm.wide && g_rdq_n_wide > 2u) {
+        } elif (form == RdForm.wide && g_rdq_n_wide > 2u) {
             rdq_sample(g_rdq_names_wide, g_rdq_n_wide, g_rdq_overflow_wide)
-        } elif (band == RdForm.split && g_rdq_n > 2u) {
+        } elif (form == RdForm.split && g_rdq_n > 2u) {
             rdq_sample(g_rdq_stamp_names, g_rdq_n, g_rdq_overflow)
         }
     }
@@ -2015,7 +2083,8 @@ def private rd_ensure_n_rail : bool {
     for (L in g_rd.layers) {
         break if (!ok)
         ok = (gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
-            && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb))
+            && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)
+            && (!L.gu_on || ensure_q8_gemv_gu_n_cls()))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an N-column GEMV class or the N-row fused add+rms+requant class declined on this device - the batched step runs a row at a time\n")
@@ -2046,7 +2115,7 @@ def private rd_ensure_n_sets {
         if (!kq_sb(fn)) {
             L.s_addr_next_rq_b = set_ar_rq_rows(g_rd.ffnout_dev, VHZ_FFO)
         }
-        if (L.gu_on && ensure_q8_gemv_gu_n_cls()) {
+        if (L.gu_on) {   // the rail ensured the class before any row count recorded
             let dim = g_rd.dim
             let p1 = arena_planes(L.f1, L.b1)
             let p3 = arena_planes(L.f3, L.b3)
@@ -2070,7 +2139,7 @@ def private rd_gemv_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ 
 //! the attention head over `nrows` rows: the projections as N-column GEMVs into the rows of the projection plane, the
 //! rope and store at each row's own position and region, the attention over each row's own history
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
-def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows, nsplit : int64) {
+def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows, nsplit : int64; fuse_qkr : bool) {
     let dim = g_rd.dim
     let qd = L.qd
     let kvd = L.kvd
@@ -2105,13 +2174,6 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:wo")
         return
     }
-    let npairs = qd / 2l + kvd / 2l
-    var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = hs / 2u,
-        neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(npairs),
-        layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
-        rows = nr, kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
-    let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
-    let fuse_qkr = g_rd.qk_norm && rd_fuse_gates().fuse_qkr
     if (fuse_qkr && (g_rd_nrow_bisect & 4) == 0) {
         let nkh = kvd / int64(hs)
         let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
@@ -2140,6 +2202,12 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
             enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
             rd_ts(raw, "a:qkn")
         }
+        let npairs = qd / 2l + kvd / 2l
+        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = hs / 2u,
+            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(npairs),
+            layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
+            rows = nr, kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
+        let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (g_rd.kv16) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
         } else {
@@ -2216,12 +2284,14 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     rd_ts(raw, "a:down")
 }
 
-//! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and split form
+//! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and attention form
+//! (the split form or its unsplit twin: the rows take no wide form, sec.2.2al)
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
     let nr = uint(nrows)
+    let fuse_qkr = rd_fuse_gates().fuse_qkr   //! the rows take the q/k-norm form the one-row command takes; the two forms round apart
     var one_names <- g_rdq_stamp_names
     let one_overflow = g_rdq_overflow
     unsafe {
@@ -2263,7 +2333,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
                 }
                 rd_ts(raw, "a:rq_x")
             }
-            rd_encode_attn_head_n(raw, h, L, l, nrows, nsplit)
+            rd_encode_attn_head_n(raw, h, L, l, nrows, rd_layer_pieces(L, nsplit), fuse_qkr)
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
@@ -2314,11 +2384,6 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
         g_rdq_names_n <- g_rdq_stamp_names
         g_rdq_n_n = g_pfq_n
         g_rdq_overflow_n = g_rdq_overflow
-    } elif (form == RdForm.wide) {
-        delete g_rdq_names_n_wide
-        g_rdq_names_n_wide <- g_rdq_stamp_names
-        g_rdq_n_n_wide = g_pfq_n
-        g_rdq_overflow_n_wide = g_rdq_overflow
     } else {
         delete g_rdq_names_n_unsplit
         g_rdq_names_n_unsplit <- g_rdq_stamp_names
@@ -2335,12 +2400,12 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     let row_bytes = g_rd.vocab * 4l
     var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
-    var rows = unsafe(addr<float ??>(lrows[0]))  //! the row pointers as a raw pointer: the lanes' lambda captures no array
-    let jobs = is_job_que_available() ? int(nrows) : 1
+    var rowptrs = unsafe(addr<float ??>(lrows[0]))   // the row pointers as a raw pointer: the lanes' lambda captures no array
+    let jobs = min(int(nrows), get_dispatch_lanes())
     maybe_parallel_for(0, int(nrows), jobs) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
-                memcpy(reinterpret<void?>(rows[i]), reinterpret<void?>(src + int64(i) * row_bytes), row_bytes)
+                memcpy(reinterpret<void?>(rowptrs[i]), reinterpret<void?>(src + int64(i) * row_bytes), row_bytes)
             }
         }
     }
@@ -2351,6 +2416,7 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
+    verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
     let nsplit = rd_split_pieces()
     if (!g_rd.tok_n_recorded[nrows]) {
         rd_fill_gemv_regions_all()
@@ -2360,18 +2426,15 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, RdForm.unsplit)
         }
         g_rd.tok_n_recorded[nrows] = true
-        g_rd.tok_n_wide_recorded[nrows] = false
     }
     var maxpos = 0l
     for (i in range64(nrows)) {
         maxpos = max(maxpos, poss[i])
     }
-    let band = rd_form_at(maxpos)
-    if (band == RdForm.wide && !g_rd.tok_n_wide_recorded[nrows]) {
-        rd_encode_token_n(g_rd.cmd_n_wide[nrows], nrows, rd_wide_pieces(), RdForm.wide)
-        g_rd.tok_n_wide_recorded[nrows] = true
-    }
-    let unsplit = band == RdForm.unsplit
+    //! the rows' form is the batch's furthest row's: the unsplit twin while every row sits under RD_UNSPLIT_POS, the split
+    //! form past it at every span (the ruler reads the wide form slower at four rows, sec.2.2al)
+    let unsplit = g_rd.unsplit_on && maxpos < RD_UNSPLIT_POS
+    let form = unsplit ? RdForm.unsplit : RdForm.split
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     unsafe {
@@ -2384,8 +2447,8 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             tm[i].parity = 0u
             tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
         }
-        var cmd = band == RdForm.unsplit ? g_rd.cmd_n_unsplit[nrows] : (band == RdForm.wide ? g_rd.cmd_n_wide[nrows] : g_rd.cmd_n[nrows])
-        if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
+        var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
+        if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
             rd_submit_land(cmd, nrows)
             let t2 = ref_time_ticks()
@@ -2407,23 +2470,21 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
     if (unsplit) {
         g_rd.unsplit_served += nrows
     }
-    if (prof) {   //! the ledger reads the N-row form's stamps apart from the one-row form's: a switch between them restarts the averages
+    if (prof) {   // the ledger reads the N-row command's stamps apart from the one-row command's: a switch between them restarts the averages
         g_rdq_wall_us += double(get_time_usec(ts0))
         if (g_rdq_count % 32l == 31l) {
             let n = double(g_rdq_count + 1l)
             to_log(LOG_INFO, "vk_rdec host wall/step over {g_rdq_count + 1l} of {nrows} rows: {int(g_rdq_wall_us / n)} us (memcpys {int(g_rdq_host_us[0] / n)} + submit {int(g_rdq_host_us[1] / n)} + fence {int(g_rdq_host_us[2] / n)} + logits copy {int(g_rdq_host_us[3] / n)})\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
         }
-        if (g_rdq_count > 0l && (!g_rdq_form_n || band != g_rdq_form_band)) {
-            rdq_form_switch(band, maxpos)
+        if (g_rdq_count > 0l && (!g_rdq_form_n || form != g_rdq_attn_form)) {
+            rdq_form_switch(form, maxpos)
             g_rdq_idle_us = 0.0lf
         }
         g_rdq_form_n = true
-        g_rdq_form_band = band
-        if (band == RdForm.unsplit && g_rdq_n_n_unsplit > 2u) {
+        g_rdq_attn_form = form
+        if (unsplit && g_rdq_n_n_unsplit > 2u) {
             rdq_sample(g_rdq_names_n_unsplit, g_rdq_n_n_unsplit, g_rdq_overflow_n_unsplit)
-        } elif (band == RdForm.wide && g_rdq_n_n_wide > 2u) {
-            rdq_sample(g_rdq_names_n_wide, g_rdq_n_n_wide, g_rdq_overflow_n_wide)
-        } elif (band == RdForm.split && g_rdq_n_n > 2u) {
+        } elif (!unsplit && g_rdq_n_n > 2u) {
             rdq_sample(g_rdq_names_n, g_rdq_n_n, g_rdq_overflow_n)
         }
     }

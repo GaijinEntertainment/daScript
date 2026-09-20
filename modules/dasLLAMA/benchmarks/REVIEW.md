@@ -17,7 +17,9 @@ performance tree - stamps its rows with the tune manifest (`DAS_TUNE_MANIFEST`) 
 profile (`../performance/defaults/<class>.tune-defaults.json`) the run compiled
 against.** An instrument is a file that times a run itself and reports a wall-clock time or rate
 as its result, printed or returned to a caller that prints it; a file that reads a child process's
-clock is not one. Without the gate or the stamp the instrument measures fallback kernels silently.
+clock is not one, and a serving path's profiler-gated report (a run whose result is the served
+output, the numbers a side report) is not one. Without the gate or the stamp the instrument
+measures fallback kernels silently.
 
 **A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
 across rounds.** A race times two candidates for one computation in one process, either of which
@@ -90,9 +92,10 @@ that reports none - wrong flags, failed load, a device that declines.** A result
 carrying a time, a rate, or a per-kernel occupancy count. A run that matched nothing and
 reported success leaves a sidecar or a record untouched, and its caller cannot tell.
 
-**A diff that adds an A/B arm, or changes how such an arm reports or exits, makes that instrument
-exit non-zero when the lever does not change what the run executes - or, when the instrument
-runs that check before the arm, print a warning naming the inert lever.** An A/B arm is one of
+**A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads (wherever
+the lever lives - an engine file the bench requires included), or changes how such an arm reports
+or exits, makes that instrument exit non-zero when the lever does not change what the run
+executes - or, when the check runs before the arm, print a warning naming the inert lever.** An A/B arm is one of
 two timed runs of an instrument that differ only in one flag or environment switch - the lever -
 set to a different value in each; off/on or graded. A lever that silently no-ops prints a 1.00x
 row nobody can tell from a real tie.

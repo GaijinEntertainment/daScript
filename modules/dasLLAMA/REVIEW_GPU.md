@@ -43,8 +43,9 @@ readiness, whether this window's rope tables are staged, is asked by `prefill_de
 `decode_decline` instead.**
 
 **A bounds or tail guard that branches per iteration in a kernel's main loop, where the guard's
-answer is the same for every thread of the dispatch and the host knows it as it picks the
-pipeline, is a defect - stamp the guard instead.**
+answer is the same for every thread of the dispatch and the host fixes the value before it
+records the dispatch, is a defect - stamp the guard, or clamp the index so the guarded work runs
+on a live value and its result is never stored.**
 Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global or its SPIR-V dump.
@@ -136,7 +137,8 @@ win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
 constant's authoritative site, in the same change.** The site per kind: the generated `*_msl`
-global or SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>`) for an in-body tile; the `grid=` spec (a
+global for a Metal in-body tile, the `@workgroup` declaration or `local_size_x` for a Vulkan
+one; the `grid=` spec (a
 CEIL divide), or the `wgs` decode plus its host helper, for a grid; the `tg=` /
 `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
@@ -148,10 +150,10 @@ number for these classes, so nothing else ties the two.
 handle alone is not a key - carry the span and the form, the element type and layout the upload
 produces, in the key too.**
 
-**A diff that gives a `dasllama/` file code outside the role its `ARCHITECTURE_GPU.md` sec.1.5
-entry names - a kernel class, a driver arm, a backend capability, a dispatch-support macro -
-extends that entry in the same change, or moves the code to the file whose entry holds that
-role.** A driver arm is host code that ensures, binds, or encodes a dispatch; a backend
+**A diff that gives a `dasllama/` file code its `ARCHITECTURE_GPU.md` sec.1.5 entry does not
+name, or code that entry's must-not-hold cell names - a kernel class, a driver arm, a backend
+capability, a dispatch-support macro, a driver policy - extends that entry in the same change, or
+moves the code to the file whose entry holds that role.** A driver arm is host code that ensures, binds, or encodes a dispatch; a backend
 capability is a function a driver registers in a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares

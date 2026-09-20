@@ -9305,7 +9305,7 @@ class QkRms : RmsWgBase {
     [spirv_kernel(local_size_x = 256, name = "qk_rms_cls_spv")]
     def run {   // nolint:STYLE037 — one head-row's norm: the q, k and v group selects and the two-element wide arm, one pass
         let vgroups = (pa.vnorm != 0u && pa.vfk == 0u) ? pa.nkvh : 0u
-        let per = pa.nh + pa.nkvh + vgroups
+        let per = max(pa.nh + pa.nkvh + vgroups, 1u)
         let wid = gl_WorkGroupID.x
         let r = wid / per
         let hh = wid % per
@@ -9570,7 +9570,7 @@ struct QknRopeArgs {
     cosrow : uint   //! the N-row command: a row's stride in the cos/sin plane
 }
 
-// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; KT/CLAMP16 as in RopeKvStoreT.
+// qk_rms + rope_kv_store in ONE dispatch (qk_norm models); KT/CLAMP16 as in RopeKvStoreT.
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
 [ |> template_struct_instance]
 class template QknRopeKvT : RmsWgBase {
@@ -9608,9 +9608,9 @@ class template QknRopeKvT : RmsWgBase {
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
         let gwid = gl_WorkGroupID.x
-        let per = max(pa.rowwg, 1u)
-        let rowi = pa.rowwg == 0u ? 0u : gwid / per
-        let wid = pa.rowwg == 0u ? gwid : gwid % per
+        let rowwg = max(pa.rowwg, 1u)
+        let rowi = pa.rowwg == 0u ? 0u : gwid / rowwg
+        let wid = pa.rowwg == 0u ? gwid : gwid % rowwg
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x
@@ -9674,12 +9674,13 @@ class template QknRopeKvT : RmsWgBase {
                 w0 = v * inv
                 w1 = v1 * inv
             } else {
-                let vi = kvb + pa.qd + pa.kvd + h * pa.hs
+                let vb = pa.qd + pa.kvd + h * pa.hs   //! the V head's offset in the projection row and in the layer's bias block: the row stride joins the first alone
+                let vi = kvb + vb
                 if (tid < pa.hs) {
-                    w0 = kvsrc[vi + tid] + (pa.hasb != 0u ? bias[pa.boff + vi + tid] : 0.0)
+                    w0 = kvsrc[vi + tid] + (pa.hasb != 0u ? bias[pa.boff + vb + tid] : 0.0)
                 }
                 if (two) {
-                    w1 = kvsrc[vi + t1] + (pa.hasb != 0u ? bias[pa.boff + vi + t1] : 0.0)
+                    w1 = kvsrc[vi + t1] + (pa.hasb != 0u ? bias[pa.boff + vb + t1] : 0.0)
                 }
                 if (pa.vnorm != 0u) {
                     let vinv = wg_rms_inv(tid < pa.hs ? w0 * w0 + w1 * w1 : 0.0, pa.hs, pa.eps, 1u)
@@ -9825,7 +9826,7 @@ class template Q8GemvNT {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
             }
-            let clast = pa.ncols - 1u   //! a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
+            let clast = pa.ncols - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
             var bi0 = 0u
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
@@ -10084,17 +10085,17 @@ struct GuArgs {
     d : uint      //! the output rows (the FFN width), a 32-multiple
     gblk : uint   //! the gate plane's block base in its slab
     ublk : uint   //! the up plane's block base in its slab
-    act : uint   // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
+    act : uint    //! the activation code: ACT_SILU / ACT_GELU / ACT_OAI
 }
 
 //! the dense FFN's gate and up GEMVs, the activation and its Q8_0 requant in one dispatch: a workgroup owns 32
 //! output rows (one requant block), its subgroups dot both q8 planes, and one subgroup activates and quantizes the block
 [vk_dispatch(name = "q8_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGu {
-    @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
-    @ssbo @binding = 1 gsh : array<float16>   // gate per-block f16 scales
-    @ssbo @binding = 2 uq4 : array<uint4>     // up quant words, vec4 view
-    @ssbo @binding = 3 ush : array<float16>   // up per-block f16 scales
+    @ssbo @binding = 0 @role = "weight" gq4 : array<uint4>     // gate quant words, vec4 view
+    @ssbo @binding = 1 @role = "weight" gsh : array<float16>   // gate per-block f16 scales
+    @ssbo @binding = 2 @role = "weight" uq4 : array<uint4>     // up quant words, vec4 view
+    @ssbo @binding = 3 @role = "weight" ush : array<float16>   // up per-block f16 scales
     @ssbo @binding = 4 xqw : array<uint>      // the normed row's Q8_0 quant words
     @ssbo @binding = 5 axs : array<float>     // ... and its per-block scales
     @ssbo @binding = 6 outq : array<int8>     // the activated hidden row's Q8_0 quants (the down GEMV's feed)
@@ -10181,18 +10182,20 @@ struct GuNArgs {
     d : uint      //! the output rows (the FFN width), a 32-multiple
     gblk : uint   //! the gate plane's block base in its slab
     ublk : uint   //! the up plane's block base in its slab
-    act : uint    // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
-    ncols : uint  //! the rows the command steps at once, 1 to 8: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
+    act : uint    //! the activation code: ACT_SILU / ACT_GELU / ACT_OAI
+    ncols : uint  //! the rows the command steps at once, 1 to GU_N_COLS: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
 }
+
+let GU_N_COLS = 8u   //! the fused gate-up N form's column slots: its slabs hold this many, and a wider count is clamped to it
 
 //! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both
 //! planes against each column's row off one weight word, and a subgroup a column activates and quantizes its block
 [vk_dispatch(name = "q8_gemv_gu_n_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGuN {
-    @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
-    @ssbo @binding = 1 gsh : array<float16>   // gate per-block f16 scales
-    @ssbo @binding = 2 uq4 : array<uint4>     // up quant words, vec4 view
-    @ssbo @binding = 3 ush : array<float16>   // up per-block f16 scales
+    @ssbo @binding = 0 @role = "weight" gq4 : array<uint4>     // gate quant words, vec4 view
+    @ssbo @binding = 1 @role = "weight" gsh : array<float16>   // gate per-block f16 scales
+    @ssbo @binding = 2 @role = "weight" uq4 : array<uint4>     // up quant words, vec4 view
+    @ssbo @binding = 3 @role = "weight" ush : array<float16>   // up per-block f16 scales
     @ssbo @binding = 4 xqw : array<uint>      // the normed rows' Q8_0 quant words, a row a column
     @ssbo @binding = 5 axs : array<float>     // ... and their per-block scales
     @ssbo @binding = 6 outq : array<int8>     // the activated hidden rows' Q8_0 quants (the down GEMV's feed), d apart
@@ -10215,6 +10218,8 @@ class Q8GemvGuN {
             accg[c] = 0.0
             accu[c] = 0.0
         }
+        let ncols = min(pa.ncols, GU_N_COLS)
+        let clast = ncols - 1u   // a column past the live ones dots the last live column's row again: its loads issue beside the live ones and its sums are never stored
         var bi0 = 0u
         while (bi0 < nb) {
             let b = bi0 + lane / 2u
@@ -10224,34 +10229,33 @@ class Q8GemvGuN {
                 let gs = float(gsh[gb0 + b])
                 let us = float(ush[ub0 + b])
                 for [unroll] (c in range(8)) {
-                    if (uint(c) < pa.ncols) {
-                        let xbase = (uint(c) * nb + bi0) * 8u + lane * 4u
-                        let x0 = xqw[xbase]
-                        let x1 = xqw[xbase + 1u]
-                        let x2 = xqw[xbase + 2u]
-                        let x3 = xqw[xbase + 3u]
-                        var gd = sdot4(gv.x, x0)
-                        gd += sdot4(gv.y, x1)
-                        gd += sdot4(gv.z, x2)
-                        gd += sdot4(gv.w, x3)
-                        var ud = sdot4(uv.x, x0)
-                        ud += sdot4(uv.y, x1)
-                        ud += sdot4(uv.z, x2)
-                        ud += sdot4(uv.w, x3)
-                        gd += subgroupShuffleXor(gd, 1u)
-                        ud += subgroupShuffleXor(ud, 1u)
-                        if (lane % 2u == 0u) {
-                            let xs = axs[uint(c) * nb + b]
-                            accg[c] += float(gd) * gs * xs
-                            accu[c] += float(ud) * us * xs
-                        }
+                    let cc = min(uint(c), clast)
+                    let xbase = (cc * nb + bi0) * 8u + lane * 4u
+                    let x0 = xqw[xbase]
+                    let x1 = xqw[xbase + 1u]
+                    let x2 = xqw[xbase + 2u]
+                    let x3 = xqw[xbase + 3u]
+                    var gd = sdot4(gv.x, x0)
+                    gd += sdot4(gv.y, x1)
+                    gd += sdot4(gv.z, x2)
+                    gd += sdot4(gv.w, x3)
+                    var ud = sdot4(uv.x, x0)
+                    ud += sdot4(uv.y, x1)
+                    ud += sdot4(uv.z, x2)
+                    ud += sdot4(uv.w, x3)
+                    gd += subgroupShuffleXor(gd, 1u)
+                    ud += subgroupShuffleXor(ud, 1u)
+                    if (lane % 2u == 0u) {
+                        let xs = axs[cc * nb + b]
+                        accg[c] += float(gd) * gs * xs
+                        accu[c] += float(ud) * us * xs
                     }
                 }
             }
             bi0 += bpp
         }
         for [unroll] (c in range(8)) {
-            if (uint(c) < pa.ncols) {
+            if (uint(c) < ncols) {
                 let g = subgroupAdd(accg[c])
                 let u = subgroupAdd(accu[c])
                 if (subgroupElect()) {
@@ -10273,8 +10277,9 @@ class Q8GemvGuN {
             k++
         }
         barrier()
+        let ncols = min(pa.ncols, GU_N_COLS)
         var c = gl_SubgroupID
-        while (c < pa.ncols) {
+        while (c < ncols) {
             let lane = gl_SubgroupInvocationID
             let li = min(lane, 31u)
             let a = lane < 32u ? act_mul_sel(wg_g[c * 32u + li], wg_u[c * 32u + li], pa.act) : 0.0

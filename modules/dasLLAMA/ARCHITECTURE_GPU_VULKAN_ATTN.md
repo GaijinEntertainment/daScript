@@ -41,15 +41,22 @@ cuts the attended span into `nsplit` 32-aligned pieces, each running the online 
 piece into an unnormalized piece a head (max, denominator, accumulators; an empty piece weighs
 nothing). The piece count is the span's, never the row count's or the SM count's: one piece under
 `RD_UNSPLIT_POS` (512), `RD_SPLIT_PIECES` (four) to `RD_WIDE_POS` (3072), `RD_SPLIT_WIDE_PIECES`
-(eight) past it, each capped by the partials plane's `attn_nsplit` (`da_nsplit`: enough (head,
-split) workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`). The ruler read the rule:
-at 640 positions one piece costs a Qwen2.5-0.5B layer 14.5 us on the RTX PRO 4500 and every added
-piece costs more (16 pieces 33 us), at 2048 four pieces are the floor (20.6 us, 16 pieces 33) and
-at 4096 four to eight (27 us, 16 pieces 34), one row or four the same at four pieces or fewer -
-where the old rule, covering the card twice whatever the span, recorded sixteen pieces for a
-one-row step and eleven for a four-row step and paid double. One count for every row count also
-keeps the one-row and N-row forms summing in one order, so a batched row is the row alone bit for
-bit on any SM count. The
+(eight) past it for the one-row command alone, each capped by the partials plane's `attn_nsplit`
+(`da_nsplit`: enough (head, split) workgroups to cover the SM count twice, at most
+`DA_NSPLIT_MAX`); a sliding-window layer attends at most its window, so its count is its
+window's span's under the command's (`rd_layer_pieces`). The ruler (`harness/vk_attn_probe.das`
+under `-jit` on the pod, `PERF_LEDGER.md`'s 2026-09-20 section) read the rule at the Qwen2.5-0.5B
+geometry on the RTX PRO 4500, us a layer: one piece 10.4 at 384 positions and 14.5 at 640 against
+four pieces' 16.5 at both, four pieces 16.5 at 1024 against one piece's 18.6 and 18.6 at 1536
+against 26.7 (the edge sits between 640 and 1024; the qwen3 0.6B geometry's four pieces win from
+640 at one row), four pieces 20.6 at 2048 and 27 at 4096 against sixteen's 33 and 34; past 4096
+eight pieces pay for one row alone - 33 against four's 41 at 8192, 47 against 72 at 16384 - and
+lose at four rows (51 against 44, 81 against 74), so the N-row command stays at four pieces at
+every span past 512. The old rule, covering the card twice whatever the span, recorded sixteen
+pieces for a one-row step and eleven for a four-row step and paid double. One count for every
+row count also keeps the one-row and N-row forms summing in one order, so a batched row is the
+row alone bit for bit on any SM count while every row of the batch sits in one band; the batch's
+furthest row picks the form, and a row batched across a band edge takes the batch's. The
 pieces land in the partials plane; past them sit the arrival counters (`partu`, a word a (row, kv
 head, slab) at `cntoff`), each atomically bumped after a device-scope release. The piece that reads
 its group's count last aligns each head's pieces by their maxes, normalizes, gates and stores the

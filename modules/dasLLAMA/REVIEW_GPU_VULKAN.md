@@ -206,11 +206,18 @@ submits any command that writes the buffer that copy reads.** The host's wait is
 between the copy's read and that write.
 
 **A kernel body in `dasllama/dasllama_vulkan_classes.das` that divides or takes a modulo by a
-push-constant field clamps the divisor to at least one - never guards the division with a `?:`
-select on that field.** Some drivers evaluate both arms of a select, and an integer division by
-zero is undefined in SPIR-V, so the selected arm can carry the undefined result.
+value computed from push-constant fields clamps that divisor to at least one before it divides -
+a `?:` select on the field is not a guard.** Some drivers evaluate both arms of a select, and an
+integer division by zero is undefined in SPIR-V, so the selected arm can carry the undefined
+result.
 
-**A path in `dasllama/dasllama_vulkan_decode.das` that records or re-records a token command's
-split form clears that region's or row count's wide-twin recorded flag (`RDec.tok_wide_recorded`,
-`RDec.tok_n_wide_recorded`) in the same path.** The wide twin dispatches the same descriptor sets,
+**A path under `dasllama/` that re-records the one-row token command's split form - the chain
+recorded with the attention at `RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it
+dispatches, clears that region's wide-twin recorded flag (`RDec.tok_wide_recorded`) in the same
+path.** The wide twin (the same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets,
 so a twin left marked recorded runs sets the new record replaced.
+
+**A twin's availability flag (`RDec.unsplit_on`, `RDec.wide_on`) is written where the twin's
+command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A record path that
+decides availability leaves a command that recorded before it holding an unrecorded buffer the
+form select later submits.

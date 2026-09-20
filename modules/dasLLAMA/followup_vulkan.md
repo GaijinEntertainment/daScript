@@ -1434,12 +1434,6 @@ module) is independent and can land any time - it is pure structure.
     them: the `k6x` and `cm2x` bisect arms mirror the tile before `wg_m0` and the k6 scale cache -
     resync or retire them - and the `lastwg` baseline (the split GEMV + `cls_ar`) checks against no
     CPU reference in its run.
-55. **The decode attention's key split gates on occupancy alone.** `da_nsplit` picks the splits
-    from the head count against the SM count and never from the attended span, so a session at
-    position one pays a sixteen-way split and its combine dispatch; the one measurement on record is
-    gemma-3-1b at 128 tokens (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al). A span-keyed fallback to one
-    split, with its threshold measured at the shortest and the longest span the path serves, is the
-    lever - item 51's hop-count territory.
 56. **The gemma arc's new kernel branches are gated by whole-model cells alone.** The flash tile's
     `window` (the shifted first step and the sliding mask), the decode attention's `cstart` window,
     the batched attention tile's in-window mask, the top-k kernels' `dsoff` down-scale row, and the
@@ -1558,8 +1552,8 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer, a q/k norm, a gated q
-    and a classifier epilogue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched
+    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer, a gated q and a
+    classifier epilogue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched
     step of such a model pays a weight pass a row. The work: each kind's N-row form, the
     recurrent and MoE ones behind their own state and schedule questions.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
@@ -1601,7 +1595,8 @@ module) is independent and can land any time - it is pure structure.
     its one-row twin in turn, then the exact bar restored in that file.
 76. **The batched step's rows sample one after another on the calling thread.** The scheduler's
     `sample_advance` loop runs each row's `sample` in turn after `eval_batch` (about 40 us a row
-    of a 152k vocab at greedy), while the job queue's lanes sit idle; a `sample_rows` that handed
+    of a 152k vocab at greedy - the pod, `lcpp_bench --npl 4` under `-jit`, the step's host stamps
+    with `DASLLAMA_GPU_PROF=1`), while the job queue's lanes sit idle; a `sample_rows` that handed
     the rows to the lanes through `maybe_parallel_for` threw "unhandled exception" with an empty
     das call stack on the first batched step of every scheduler path, where the same lever over
     the logits landing (`rd_land_logits_n`) runs clean - a forked context refuses something the

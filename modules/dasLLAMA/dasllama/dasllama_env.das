@@ -389,10 +389,10 @@ struct public VulkanEnv {
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
 
-    @clarg_doc = "`benchmarks/lcpp_bench.das --npl N` only: drops a class of dispatch from the recorded N-row token command so a profile prices it - bits 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no rope, 8 = no activation requant; the logits are garbage under any bit."
+    @clarg_doc = "`benchmarks/lcpp_bench.das --npl N` only: drops a class of dispatch from the recorded N-row token command so a profile prices it - bits 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no q/k norm and no rope, 8 = no activation requant; the logits are garbage under any bit."
     vk_nrow_bisect : int64 = 0l
 
-    @clarg_doc = "Keeps a fused form of the one-row token command on its split dispatches (a same-build A/B; the logits stay right) - bits 1 = the wo GEMV's residual epilogue, 2 = the down GEMV's, 4 = the fused gate-up twin, 8 = the prologue's add+rms+requant stamp, 16 = the post-attention one (the wo epilogue too), 32 = the post-FFN one (the down epilogue too), 64 = the fused qk-norm+rope"
+    @clarg_doc = "Keeps a fused form of the token command on its split dispatches (a same-build A/B; the logits stay right; the N-row command shares the gate-up and the fused q/k norm through the layer flags read at load) - bits 1 = the wo GEMV's residual epilogue, 2 = the down GEMV's, 4 = the fused gate-up twin, 8 = the prologue's add+rms+requant stamp, 16 = the post-attention one (the wo epilogue too), 32 = the post-FFN one (the down epilogue too), 64 = the fused qk-norm+rope; the load log names each bit as taken or inert on the model"
     vk_fuse_bisect : int64 = 0l
 
     @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."

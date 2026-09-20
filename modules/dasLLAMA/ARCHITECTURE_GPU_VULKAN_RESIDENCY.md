@@ -246,20 +246,24 @@ row-parallel kernels take the rows' planes whole; the rope, the mirror store and
 run at each row's own position, cached count and mirror region, which ride the shared `TokMeta`
 block a row (`mirbase` an element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into
 the attention, `rowwg` 0 naming a one-row dispatch). The attention's key split is the span's,
-the same ladder the one-row command takes (`rd_split_pieces` / `rd_wide_pieces`,
-`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does alone. A command
-is recorded once per row count and form - the split form and the unsplit twin on first use of
-the row count, the wide twin on the first step at `RD_WIDE_POS` - and keeps its own stamp
-names; the one-row command's list is borrowed for the record and put back. The command's N-column leaves are built
-on the first batched step; a stamp that declines on the device logs once, and the command answers
-0 rows from then on, so the row-at-a-time loop serves.
+the ladder the one-row command takes below its wide form (`rd_split_pieces` and the layer's
+window cap, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does
+alone while every row sits in one band - the batch's furthest row picks the form, the unsplit
+twin under `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight
+pieces slower than four at four rows, so the rows take no wide twin). A command is recorded
+once per row count and form - the split form and the unsplit twin on first use of the row count,
+the twin's availability decided at prepare with its buffers, never by a one-row record - and
+keeps its own stamp names; the one-row command's list is borrowed for the record and put back.
+The command's N-column leaves and its fused gate-up form are built on the first batched step; a
+stamp that declines on the device logs once, and the command answers 0 rows from then on, so the
+row-at-a-time loop serves.
 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
 `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
 the lanes idle while the device owns the step) and copies in order without one: a lane copies
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
-pod, ten percent of the step).
+pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026-09-20 section).
 
 **The engine reaches the command through the driver seam, and falls back a row at a time.**
 `install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside

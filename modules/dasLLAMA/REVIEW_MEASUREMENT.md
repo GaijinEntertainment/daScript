@@ -14,7 +14,8 @@ to this list for naming the box and flags it was read on.
 
 The naming a figure rule asks for is attached to the figure by a sentence, a table heading or a
 provenance line that unambiguously covers it, or by a citation of a passage or board row whose
-provenance covers it - a provenance line covers the paragraphs it sits under, or the ones it names
+provenance covers it; a tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) is
+never inherited - it sits on the figure or on the bullet stating it - a provenance line covers the paragraphs it sits under, or the ones it names
 as its scope.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
@@ -70,8 +71,10 @@ A `--for-debug-purposes` reading is the `-jit` script's own output.
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
-whose losing arm was never committed.** That timing settles its adoption decision in the PR that
-lands the kernel. The winner enters the ledger only through a re-measured board cell.
+recorded to justify adopting code the change does not land.** That timing settles its adoption
+decision in the PR that lands the kernel. The winner enters the ledger only through a re-measured
+board cell. A negative result whose winner is the committed path is an entry, not a selection
+timing: it records what was tried and why the tree stays as it is.
 
 **A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
 mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
