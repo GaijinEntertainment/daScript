@@ -9611,8 +9611,9 @@ class template QknRopeKvT : RmsWgBase {
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
         let gwid = gl_WorkGroupID.x
-        let rr = pa.per == 0u ? 0u : gwid / pa.per   // this workgroup's row of the N-row command
-        let wid = pa.per == 0u ? gwid : gwid % pa.per
+        let per = max(pa.per, 1u)   //! a select evaluates both arms on some drivers, and an integer division by zero is undefined in SPIR-V: the divisor is never zero
+        let rr = pa.per == 0u ? 0u : gwid / per   // this workgroup's row of the N-row command
+        let wid = pa.per == 0u ? gwid : gwid % per
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x

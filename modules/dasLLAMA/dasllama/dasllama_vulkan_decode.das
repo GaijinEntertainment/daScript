@@ -260,7 +260,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(hid * 4l * nb, hid * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
-    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on()
+    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & 4l) == 0l
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
@@ -1180,7 +1180,7 @@ def private rd_ensure_fused_sets {
     for (l in range64(nl)) {
         var L & = unsafe(g_rd.layers[l])
         L.s_addr_ffn_rq = set_ar_rq_stamp(L.rq_ffn_stamp, g_rd.xb2_dev, VHZ_XB2, g_rd.xq_dev, g_rd.xs_dev)
-        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && ensure_q8_gemv_ar_cls()
+        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & 17l) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
             L.s_wo_ar = set_q8_gemv_ar_cls(fixed_array(po.wq, po.ws, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
@@ -1200,7 +1200,7 @@ def private rd_ensure_fused_sets {
         if (!L.moe) {
             L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
             //! a PLE layer joins whatever its next stamp is: its step quantizes the row as it is, for the gate's feed
-            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && ensure_q8_gemv_ar_cls()
+            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & 34l) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
                 L.s_down_ar = set_q8_gemv_ar_cls(fixed_array(p2.wq, p2.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
@@ -1383,7 +1383,7 @@ def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
     for (L in g_rd.layers) {
         need = need || (!L.recurrent && (L.rot != L.hs || L.vfk || L.vnorm))
     }
-    return (fuse = fuse, fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || need))
+    return (fuse = fuse, fuse_qkr = g_rd.qk_norm && ((fuse && (vk_fuse_bisect_bits() & 64l) == 0l) || g_rd.q_gated || need))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1608,7 +1608,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
         let rqwg_dim = (dim / 4l + 255l) / 256l
         let rqwg_dim_k = (dim / 8l + 255l) / 256l
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
-        if (fuse) {
+        if (fuse && (vk_fuse_bisect_bits() & 8l) == 0l) {
             enc_ar_rq_stamp(g_rd.rq_pro_stamp, raw, h, g_rd.s_prologue_rq, pc_pro)   // rms_att[0](x) -> xq/xs (and xb where layer 0's head reads it)
         } else {
             enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, 1l)   // xb = rms_att[0](x)
@@ -1635,7 +1635,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            if (fuse) {
+            if (fuse && (vk_fuse_bisect_bits() & 16l) == 0l) {
                 if (!L.wo_ar) {   //! else the wo GEMV's epilogue took the step
                     enc_ar_rq_stamp(L.rq_ffn_stamp, raw, h, L.s_addr_ffn_rq, pc8)
                     rd_ts(raw, "{tpfx}arrq_f")
@@ -1687,7 +1687,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
                 }
                 rd_ts(raw, "m:ar2")
-            } elif (fuse) {
+            } elif (fuse && (vk_fuse_bisect_bits() & 32l) == 0l) {
                 if (!L.down_ar || L.ple) {   //! a PLE layer's down epilogue took the FFN step; this is the branch's
                     enc_ar_rq_stamp(L.rq_next_stamp, raw, h, L.s_addr_next_rq, pc14)
                     rd_ts(raw, "{tpfx}arrq_n")

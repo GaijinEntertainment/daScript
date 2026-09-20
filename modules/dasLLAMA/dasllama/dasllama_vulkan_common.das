@@ -3250,6 +3250,9 @@ def vk_fa_on : bool {
 
 var g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail dispatches (same-build A/B)
 
+//! DASLLAMA_VK_FUSE_BISECT: the one-row command's fused forms kept on their split dispatches, by bit (ENVIRONMENT.md)
+def vk_fuse_bisect_bits : int64 => g_env_vulkan.vk_fuse_bisect
+
 def vk_fuse_on : bool {
     if (g_vk_fuse < 0) {
         g_vk_fuse = g_env_vulkan.vk_fuse ? 1 : 0
