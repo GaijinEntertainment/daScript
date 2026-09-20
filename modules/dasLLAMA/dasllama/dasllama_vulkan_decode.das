@@ -181,22 +181,31 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     for (_i in range64(nb + 1l)) {
         r.xlog_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
     }
+    r.wide_on = r.attn_nsplit > RD_SPLIT_PIECES
     r.tok_n_recorded |> resize(nb + 1l)
+    r.tok_n_wide_recorded |> resize(nb + 1l)
     r.cmd_n |> reserve(nb + 1l)
     r.cmd_n_unsplit |> reserve(nb + 1l)
-    for (_i in range64(nb + 1l)) {   //! the N-row commands and their unsplit twins, one a row count, recorded on first use
+    r.cmd_n_wide |> reserve(nb + 1l)
+    for (_i in range64(nb + 1l)) {   //! the N-row commands and their unsplit and wide twins, one a row count, recorded on first use
         r.cmd_n |> push(alloc_cmd())
         r.cmd_n_unsplit |> push(r.attn_nsplit > 1l ? alloc_cmd() : VkCommandBuffer())
+        r.cmd_n_wide |> push(r.wide_on ? alloc_cmd() : VkCommandBuffer())
     }
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.tok_recorded |> resize(regions)
     r.cmd |> reserve(regions)
     r.cmd_unsplit |> resize(regions)
+    r.tok_wide_recorded |> resize(regions)
+    r.cmd_wide |> resize(regions)
     for (ri in range64(regions)) {
         r.cmd |> push(alloc_cmd())
         if (r.attn_nsplit > 1l) {
             r.cmd_unsplit[ri] = alloc_cmd()
+        }
+        if (r.wide_on) {
+            r.cmd_wide[ri] = alloc_cmd()
         }
     }
     return true
@@ -1040,7 +1049,27 @@ def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz) {
 def private rd_record_token {
     rd_fill_gemv_regions_all()
     rd_record_unsplit_twin()
-    rd_encode_token(g_rd.cmd[g_rd.region], g_rd.attn_nsplit)
+    rd_encode_token(g_rd.cmd[g_rd.region], rd_split_pieces())
+    g_rd.tok_wide_recorded[g_rd.region] = false   //! the wide twin re-records on its next use: the sets it references may have moved with the split form's
+}
+
+//! the wide twin on a device whose split count reaches past the split form: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`,
+//! recorded on the first step at RD_WIDE_POS, its stamp names and overflow flag kept apart; the split form's names survive the record
+[cold_path]
+def private rd_record_wide_twin {
+    var split_names <- g_rdq_stamp_names
+    let split_n = g_rdq_n
+    let split_overflow = g_rdq_overflow
+    rd_encode_token(g_rd.cmd_wide[g_rd.region], rd_wide_pieces())
+    delete g_rdq_names_wide
+    g_rdq_names_wide <- g_rdq_stamp_names
+    g_rdq_n_wide = g_rdq_n
+    g_rdq_overflow_wide = g_rdq_overflow
+    delete g_rdq_stamp_names
+    g_rdq_stamp_names <- split_names
+    g_rdq_n = split_n
+    g_rdq_overflow = split_overflow
+    g_rd.tok_wide_recorded[g_rd.region] = true
 }
 
 //! every GEMV's (rel_wblock, xblock) region table, filled for the planes each layer holds
@@ -1875,12 +1904,16 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         rd_record_token()
     } elif (vk_rdec_rerecord_on()) {   // probe arm: pay the full re-encode every token, both forms
         rd_record_unsplit_twin()
-        rd_encode_token(g_rd.cmd[g_rd.region], g_rd.attn_nsplit)
+        rd_encode_token(g_rd.cmd[g_rd.region], rd_split_pieces())
+    }
+    let band = rd_form_at(pos)
+    if (band == 2 && !g_rd.tok_wide_recorded[g_rd.region]) {
+        rd_record_wide_twin()
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
-    let unsplit = g_rd.unsplit_on && pos < RD_UNSPLIT_POS
-    var cmd = unsplit ? g_rd.cmd_unsplit[g_rd.region] : g_rd.cmd[g_rd.region]
+    let unsplit = band == 0
+    var cmd = band == 0 ? g_rd.cmd_unsplit[g_rd.region] : (band == 2 ? g_rd.cmd_wide[g_rd.region] : g_rd.cmd[g_rd.region])
     if (unsplit) {
         g_rd.unsplit_served++
     }
@@ -1938,16 +1971,18 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
     }
-    if (prof) {   //! the ledger reads the submitted form's stamps; a run crossing RD_UNSPLIT_POS, or arriving from the N-row form, restarts its averages, since the forms' roles differ
-        if (g_rdq_count > 0l && (unsplit != g_rdq_form_unsplit || g_rdq_form_n)) {
-            rdq_form_switch(unsplit, pos)
+    if (prof) {   //! the ledger reads the submitted form's stamps; a run crossing a band edge, or arriving from the N-row form, restarts its averages, since the forms' roles differ
+        if (g_rdq_count > 0l && (band != g_rdq_form_band || g_rdq_form_n)) {
+            rdq_form_switch(band, pos)
             g_rdq_idle_us = 0.0lf
         }
         g_rdq_form_n = false
-        g_rdq_form_unsplit = unsplit
-        if (unsplit && g_rdq_n_unsplit > 2u) {
+        g_rdq_form_band = band
+        if (band == 0 && g_rdq_n_unsplit > 2u) {
             rdq_sample(g_rdq_names_unsplit, g_rdq_n_unsplit, g_rdq_overflow_unsplit)
-        } elif (!unsplit && g_rdq_n > 2u) {
+        } elif (band == 2 && g_rdq_n_wide > 2u) {
+            rdq_sample(g_rdq_names_wide, g_rdq_n_wide, g_rdq_overflow_wide)
+        } elif (band == 1 && g_rdq_n > 2u) {
             rdq_sample(g_rdq_stamp_names, g_rdq_n, g_rdq_overflow)
         }
     }
@@ -2165,7 +2200,8 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
 
 //! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and split form
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
-def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; twin : bool) {
+//! `form`: 0 = the unsplit twin, 1 = the split form, 2 = the wide twin - which stamp-name slot the record fills
+def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form : int) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
     let nr = uint(nrows)
@@ -2256,11 +2292,16 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; twin
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
-    if (!twin) {
+    if (form == 1) {
         delete g_rdq_names_n
         g_rdq_names_n <- g_rdq_stamp_names
         g_rdq_n_n = g_pfq_n
         g_rdq_overflow_n = g_rdq_overflow
+    } elif (form == 2) {
+        delete g_rdq_names_n_wide
+        g_rdq_names_n_wide <- g_rdq_stamp_names
+        g_rdq_n_n_wide = g_pfq_n
+        g_rdq_overflow_n_wide = g_rdq_overflow
     } else {
         delete g_rdq_names_n_unsplit
         g_rdq_names_n_unsplit <- g_rdq_stamp_names
@@ -2292,22 +2333,27 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
-    let nsplit = min(g_rd.attn_nsplit, da_nsplit(da_attn_row_wgs(g_rd.n_heads, g_rd.kv_mul, 1l) * nrows, int64(g_gpu.sm_count)))
-    let has_unsplit_twin = nsplit > 1l
+    let nsplit = rd_split_pieces()   //! the ladder's pieces: the same count the one-row command records at these positions, so the rows sum as the row alone does
     if (!g_rd.tok_n_recorded[nrows]) {
         rd_fill_gemv_regions_all()
         rd_ensure_n_sets()
-        rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, false)
-        if (has_unsplit_twin) {
-            rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, true)
+        rd_encode_token_n(g_rd.cmd_n[nrows], nrows, nsplit, 1)
+        if (g_rd.unsplit_on) {
+            rd_encode_token_n(g_rd.cmd_n_unsplit[nrows], nrows, 1l, 0)
         }
         g_rd.tok_n_recorded[nrows] = true
+        g_rd.tok_n_wide_recorded[nrows] = false
     }
     var maxpos = 0l
     for (i in range64(nrows)) {
         maxpos = max(maxpos, poss[i])
     }
-    let unsplit = has_unsplit_twin && maxpos < RD_UNSPLIT_POS
+    let band = rd_form_at(maxpos)
+    if (band == 2 && !g_rd.tok_n_wide_recorded[nrows]) {
+        rd_encode_token_n(g_rd.cmd_n_wide[nrows], nrows, rd_wide_pieces(), 2)
+        g_rd.tok_n_wide_recorded[nrows] = true
+    }
+    let unsplit = band == 0
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     unsafe {
@@ -2320,7 +2366,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             tm[i].parity = 0u
             tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
         }
-        var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
+        var cmd = band == 0 ? g_rd.cmd_n_unsplit[nrows] : (band == 2 ? g_rd.cmd_n_wide[nrows] : g_rd.cmd_n[nrows])
         if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
             rd_submit_land(cmd, nrows)
@@ -2349,15 +2395,17 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>
             let n = double(g_rdq_count + 1l)
             to_log(LOG_INFO, "vk_rdec host wall/step over {g_rdq_count + 1l} of {nrows} rows: {int(g_rdq_wall_us / n)} us (memcpys {int(g_rdq_host_us[0] / n)} + submit {int(g_rdq_host_us[1] / n)} + fence {int(g_rdq_host_us[2] / n)} + logits copy {int(g_rdq_host_us[3] / n)})\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
         }
-        if (g_rdq_count > 0l && (!g_rdq_form_n || unsplit != g_rdq_form_unsplit)) {
-            rdq_form_switch(unsplit, maxpos)
+        if (g_rdq_count > 0l && (!g_rdq_form_n || band != g_rdq_form_band)) {
+            rdq_form_switch(band, maxpos)
             g_rdq_idle_us = 0.0lf
         }
         g_rdq_form_n = true
-        g_rdq_form_unsplit = unsplit
-        if (unsplit && g_rdq_n_n_unsplit > 2u) {
+        g_rdq_form_band = band
+        if (band == 0 && g_rdq_n_n_unsplit > 2u) {
             rdq_sample(g_rdq_names_n_unsplit, g_rdq_n_n_unsplit, g_rdq_overflow_n_unsplit)
-        } elif (!unsplit && g_rdq_n_n > 2u) {
+        } elif (band == 2 && g_rdq_n_n_wide > 2u) {
+            rdq_sample(g_rdq_names_n_wide, g_rdq_n_n_wide, g_rdq_overflow_n_wide)
+        } elif (band == 1 && g_rdq_n_n > 2u) {
             rdq_sample(g_rdq_names_n, g_rdq_n_n, g_rdq_overflow_n)
         }
     }

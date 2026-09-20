@@ -236,12 +236,12 @@ because the pod's down GEMV read 750 us a step under the pair against 587 a row 
 row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
 run at each row's own position, cached count and mirror region, which ride the shared `TokMeta`
 block a row (`mirbase` an element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into
-the attention, `rowwg` 0 naming a one-row dispatch). The rows' heads already fill the card, so
-the attention's key split shrinks as the row count grows (`da_nsplit` over
-`da_attn_row_wgs x nrows`). A command is recorded once per row count and split form, on first
-use, and keeps its own stamp names; the one-row command's list is borrowed for the record and put
-back. A row count whose split form runs at one split still fills the split stamp slot: the
-recorder's list for that row count is the split form's. The command's N-column leaves are built
+the attention, `rowwg` 0 naming a one-row dispatch). The attention's key split is the span's,
+the same ladder the one-row command takes (`rd_split_pieces` / `rd_wide_pieces`,
+`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does alone. A command
+is recorded once per row count and form - the split form and the unsplit twin on first use of
+the row count, the wide twin on the first step at `RD_WIDE_POS` - and keeps its own stamp
+names; the one-row command's list is borrowed for the record and put back. The command's N-column leaves are built
 on the first batched step; a stamp that declines on the device logs once, and the command answers
 0 rows from then on, so the row-at-a-time loop serves.
 

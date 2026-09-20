@@ -2457,10 +2457,15 @@ struct RDec {
     unsplit_on : bool               //! ... recorded (a device at one split has no twin)
     unsplit_served : int64        //! the tokens the twin served
     tok_recorded : array<bool>    //! per region: cmd holds the whole-token chain, re-submittable as-is
+    cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
+    wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
+    tok_wide_recorded : array<bool>
     nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS
+    cmd_n_wide : array<VkCommandBuffer>   //! ... and their wide twins, submitted once a row sits at RD_WIDE_POS, recorded on first use
     tok_n_recorded : array<bool>
+    tok_n_wide_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2574,12 +2579,31 @@ def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
     }
+    for (rec in g_rd.tok_wide_recorded) {
+        rec = false
+    }
     for (rec in g_rd.tok_n_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.tok_n_wide_recorded) {
         rec = false
     }
 }
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
+let RD_WIDE_POS = 3072l   //! ... and its wide twin from this one; between them the split form
+let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head, and the wide form's - the attended span picks the form, never the row count or the SM count (sec.2.2al)
+let RD_SPLIT_WIDE_PIECES = 8l
+
+//! the split form's pieces on this device: the ladder's count, never past the partials plane's (`attn_nsplit`)
+def rd_split_pieces : int64 => min(RD_SPLIT_PIECES, g_rd.attn_nsplit)
+def rd_wide_pieces : int64 => min(RD_SPLIT_WIDE_PIECES, g_rd.attn_nsplit)
+
+//! the form a step at `pos` takes: 0 = the unsplit twin, 1 = the split form, 2 = the wide twin
+def rd_form_at(pos : int64) : int {
+    if (g_rd.unsplit_on && pos < RD_UNSPLIT_POS) return 0
+    return (g_rd.wide_on && pos >= RD_WIDE_POS) ? 2 : 1
+}
 
 //! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
 def vk_rdec_attn_nsplit : int64 => g_rd != null ? g_rd.attn_nsplit : 0l
@@ -2681,13 +2705,19 @@ var g_rdq_stamp_names : array<string>        //! the recorded token command's st
 var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
 var g_rdq_n_unsplit = 0u
 var g_rdq_overflow_unsplit = false
-var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
-var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
+var g_rdq_names_wide : array<string>        //! ... and the wide twin's
+var g_rdq_n_wide = 0u
+var g_rdq_overflow_wide = false
+var g_rdq_form_band = 1   //! the form the last sampled token took (0 unsplit, 1 split, 2 wide): a switch restarts the averages
+var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit and wide twins'
 var g_rdq_n_n = 0u
 var g_rdq_overflow_n = false
 var g_rdq_names_n_unsplit : array<string>
 var g_rdq_n_n_unsplit = 0u
 var g_rdq_overflow_n_unsplit = false
+var g_rdq_names_n_wide : array<string>
+var g_rdq_n_n_wide = 0u
+var g_rdq_overflow_n_wide = false
 var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a switch between the one-row and N-row forms restarts the averages
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
@@ -2698,8 +2728,9 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 //! the decode profiler's averages back to zero (the recorded stamp names stay): a switch between the token command's two forms
 //! the token command changed forms mid-run: say so and restart the ledger's averages, since the two forms' stamp roles differ
 [cold_path]
-def rdq_form_switch(unsplit : bool; pos : int64) {
-    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {unsplit ? "unsplit" : "split"} form from position {pos} - the averages restart\n")
+def rdq_form_switch(band : int; pos : int64) {
+    let form = band == 0 ? "unsplit" : (band == 2 ? "wide" : "split")
+    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
     rdq_reset_averages()
 }
 
@@ -2723,13 +2754,19 @@ def rdq_reset {
     g_rdq_names_unsplit |> clear()
     g_rdq_n_unsplit = 0u
     g_rdq_overflow_unsplit = false
-    g_rdq_form_unsplit = false
+    g_rdq_names_wide |> clear()
+    g_rdq_n_wide = 0u
+    g_rdq_overflow_wide = false
+    g_rdq_form_band = 1
     g_rdq_names_n |> clear()
     g_rdq_n_n = 0u
     g_rdq_overflow_n = false
     g_rdq_names_n_unsplit |> clear()
     g_rdq_n_n_unsplit = 0u
     g_rdq_overflow_n_unsplit = false
+    g_rdq_names_n_wide |> clear()
+    g_rdq_n_n_wide = 0u
+    g_rdq_overflow_n_wide = false
     g_rdq_form_n = false
 }
 
