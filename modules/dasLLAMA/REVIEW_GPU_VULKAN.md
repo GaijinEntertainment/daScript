@@ -175,6 +175,13 @@ summing the first reduce's partials would read the second's writes out of the sa
 ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
 prepare fails on the path that skipped the ensure.
 
+**A diff that changes a binding of one stamp of a `[vk_dispatch]` class template whose stamps share
+one set builder - `Q8GemvNT`'s stamps behind `gemv_cls_set_n`, `Q8GemvGuNT`'s behind
+`q8_gemv_gu_n_set`, both in `dasllama/dasllama_vulkan_classes.das` - changes every stamp of that
+template the same way, in the same change.** The builder asks one stamp's `set_<family>` and the
+encode picks another stamp by its column count, so a stamp whose bindings drift reads the set's
+buffers in the wrong slots with no refusal.
+
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
 `dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's

@@ -1306,8 +1306,6 @@ def private rd_attn_rqk(L : RLayer) : uint {
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
 }
 
-//! the layer's decode attention stamp over `awgs` workgroups: the sink twins on a model with sinks, the two-head slab on a
-//! group of one or two heads, else the four-head slab - each on the mirror codec's plane loads
 def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; var pca : DaAttnArgs; awgs : int64) {
     if (g_rd.has_sinks) {
         if (g_rd.kv16) {
@@ -2234,7 +2232,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         kbase = uint(L.mir_base), vbase = uint(L.mir_base), scale = g_rd.scale, qstride = hs, gated = 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
-    if ((g_rd_nrow_bisect & 1) == 0) {   // the bisect knob's bit 1: no attention
+    if ((g_rd_nrow_bisect & 1) == 0) {   // the bisect knob: no attention
         rd_enc_da_attn(raw, h, L, pca, da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit) * nrows)
     }
     rd_ts(raw, "a:attn")

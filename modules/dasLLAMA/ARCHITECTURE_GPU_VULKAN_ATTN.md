@@ -11,9 +11,12 @@ serve is `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j; the token command the decode pas
 
 **The decode attention dispatches a workgroup per (kv head, slab of its q heads, key split), and
 the group's last piece combines.** A workgroup reads its kv head's K and V rows once and scores
-them against the `DA_G` (four) query heads of the GQA group that share them - a slab; a group wider
-than four takes several slabs, a narrower one leaves dead heads whose q rows are zero and whose
-reductions and stores are skipped (`da_attn_row_wgs` counts a row's workgroups). The pass is a chain
+them against the slab's query heads of the GQA group that share them - `DA_G` (four), or two on a
+group of one or two heads (`da_slab_g2`: the `g2` stamps of `DaAttnT`, whose template constant `G`
+sizes every score and V loop, so gemma-2 and gemma-4 dense score no dead heads); a group wider than
+the slab takes several slabs, a narrower one leaves dead heads whose q rows are zero and whose
+reductions and stores are skipped (`da_attn_row_wgs` counts a row's workgroups, the same count on
+either slab). The pass is a chain
 of latencies, not a stream of bytes: a workgroup a head walking two keys a step behind a subgroup
 reduction each read Llama-3.2-1B's sixteen layers at 28 us a four-row step and 8.5 a one-row step on
 the RTX PRO 4500, the same whatever the split, so the pass (`DaAttnT`) spends its threads on

@@ -4090,7 +4090,7 @@ def da_attn_part_stride(hs : uint) : uint => hs + 2u
 
 let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four (the G2 stamps take a group of one or two heads in a slab of two, the same workgroup count)
 
-//! a group of one or two q heads takes the two-head slab stamps: the four-head slab's other lanes would score and accumulate dead heads
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
 def da_slab_g2(kv_mul : int64) : bool => kv_mul <= 2l
 
 //! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
@@ -4562,7 +4562,6 @@ class DaAttnF16 : DaAttnT {
     override KV16 = true
 }
 
-// the two-head slab twins: a group of one or two q heads (gemma-2, gemma-4 dense) scores and accumulates no dead heads
 [vk_dispatch(name = "da_attn_g2_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnG2 : DaAttnT {
     typedef KT = float
@@ -10208,9 +10207,7 @@ struct GuNArgs {
 
 let GU_N_COLS = 8u   //! the fused gate-up N form's widest stamp: its slabs hold this many columns, and a wider count is clamped to it
 
-//! the fused gate-up GEMV's N-column forms: a workgroup owns 32 output rows for every column, its subgroups dot both
-//! planes against `NC` columns' rows off one weight word (a column past the live ones dots the last live column again,
-//! its loads beside the live ones and its block never stored), and a subgroup a column activates and quantizes its block
+//! the fused gate-up GEMV's N-column forms: `NC` column slots a weight word, `pa.ncols` of them live and stored
 [ |> template_struct_instance]
 class template Q8GemvGuNT {
     @ssbo @binding = 0 @role = "weight" gq4 : array<uint4>     // gate quant words, vec4 view
@@ -10340,7 +10337,6 @@ def q8_gemv_gu_n_ensure(nb : int64 = 8l) : bool {
     return ok
 }
 
-//! the stamps share one layout
 def q8_gemv_gu_n_set(bufs : uint64 const[8]; sizes : int64 const[8]; gbits : uint const[8]) : VkDescriptorSet
     => set_q8_gemv_gu_n2_cls(bufs, sizes, gbits)
 

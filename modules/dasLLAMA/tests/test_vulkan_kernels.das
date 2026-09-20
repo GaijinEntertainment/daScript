@@ -1006,7 +1006,7 @@ def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows :
             upload_region_at(sd, 0l, addr<uint8 const?>(supp[0]), sbytes)
         }
         if (a_row_at_a_time) {
-            for (r in range64(rows)) {   //! each row its own plane and set, the one-row command's dispatch
+            for (r in range64(rows)) {
                 let yd = make_device_buf(row_bytes)
                 upload_region_at(yd, 0l, addr<uint8 const?>(y[r * vocab]), row_bytes)
                 var s = set_cls_epi(fixed_array(yd, sd), fixed_array(row_bytes, sbytes), fixed_array(1u, 0u))
@@ -3862,7 +3862,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             var h : VkHaz
             var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
                 scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
-            if (g2) {   //! the two-head slab stamp: the same workgroup count on a group of one or two heads
+            if (g2) {
                 enc_da_attn_g2_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
             } else {
                 enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))

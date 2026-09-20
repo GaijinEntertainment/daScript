@@ -221,8 +221,13 @@ once for the step instead of once a row.** The driver sizes every per-token plan
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
-MoE, per-layer-embedding or shared-KV layer, a gated q, a classifier epilogue, or a weight
-format with no N-column leaf. A q/k norm has one: the rows take whichever form the one-row
+MoE or per-layer-embedding layer, a gated q, or a weight format with no N-column leaf. A
+shared-KV layer takes the Q-only form the one-row command takes: its GEMV projects Q alone,
+the rope stores no k pairs and the attention reads the donor layer's mirror rows (`RLayer.mir_base`
+is the donor's), so the rows sit in the same mirror the one-row step reads. The classifier
+epilogue (the final softcap and the suppressed ids, `ClsEpilogue`) runs once over the rows'
+logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's own; the one-row command
+and the prefill's tail pass one row. A q/k norm has one: the rows take whichever form the one-row
 command takes - the fused norm + rope + store (`QknRopeKvT`, a head-row a workgroup with the row
 in the workgroup id, each row at its own token meta) where the one-row command fuses, the split
 pair (`qk_rms_cls`, the per-head rms over every row's projection row before the rope, the
@@ -237,9 +242,13 @@ their sets bind one row. Every GEMV goes out as an N-column dispatch
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
 because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
 Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
-requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuN`: a workgroup owns 32 output rows for
-every column, a subgroup a column quantizes the column's block, so the columns' rows quantize in
-parallel); the residual epilogues stay separate dispatches over the rows, because an epilogue
+requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuNT`, stamped at two, four and eight
+columns like the plain q8 leaf: a workgroup owns 32 output rows for every column, each column's
+half-block one 16-byte load beside the weight word, a column past the live ones re-dotting the
+last live column's row with its block never stored, and a subgroup a column quantizes the
+column's block, so the columns' rows quantize in parallel - the eight-column guarded unroll it
+replaced read a quarter slower than the split gate and up GEMVs at four rows on the 12B); the
+residual epilogues stay separate dispatches over the rows, because an epilogue
 run by the last workgroup would serialize the rows' steps where the separate dispatch runs them
 in parallel workgroups. The
 row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
