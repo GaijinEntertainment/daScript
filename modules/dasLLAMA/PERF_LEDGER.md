@@ -2110,6 +2110,14 @@ the recorder fills - no plane grows with them, so the ladder's footprint half is
   0.93 to 0.99 of CUDA on every carrier. CUDA's batched rows beat its own Vulkan rows by 1.06 to
   1.53 on the Q8 carriers (0.98 on phi's K-quant) on this card, so the Vulkan-reference ratios
   above overstate ours by that much against the card's best engine.
+- **Phi's prefill at half the reference is the attention, not the K-quant tiles (the prefill
+  profiler's role stamps, 512 tokens, us over 32 layers): q 7420, k 6858, v 4807, rope 3208,
+  attn 81557, wo 6825, gate 15453, up 14034, down 17669, 162 ms whole; the reference's per-kernel
+  log the same window: qkv 23.0 ms, gate-up 30.3, down 27.9, flash attention 2.65 (83 us a layer at
+  head 96).** The GEMM roles read on par or ahead (the k5 and k4 decode-in-load tiles 55 and 60
+  TFLOP/s on the ruler's l stamp); the flash tile admits heads of 64, 128, 256 and 512 alone, so
+  phi's head of 96 runs the chunked pair at thirty times the flash cost - `followup_vulkan.md`
+  item 78 [direction-grade - two processes].
 
 ### From the M4 Metal pass (2026-09-13)
 

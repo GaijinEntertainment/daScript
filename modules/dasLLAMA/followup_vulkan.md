@@ -1612,3 +1612,13 @@ module) is independent and can land any time - it is pure structure.
     eight columns (the one-row stamp re-sources, so the record owes the SPIR-V-dump compare
     against the tree before it) and one `RdqForm` table the reset, the sample ladders and the
     slot fill index - a dedup pass of its own, not a lever.
+78. **A head of 96 takes no flash tile, so phi's prefill attention runs the chunked pair at
+    thirty times the reference's.** `fa_hs_ok` (the cm2 arm) and `fa_khr_serves` admit heads of
+    64, 128, 256 and 512; Phi-3.5-mini's 32 heads of 96 fall to the chunked pair, which reads
+    81.5 ms of a 162 ms 512-token window on the 5060 Ti (2.55 ms a layer against the reference's
+    flash attention at 83 us), every GEMM role on par or ahead - so phi prefills at half the
+    reference (3120 against 4943 on Vulkan, 6503 on CUDA) while its decode rows sit at parity.
+    The work: a head-96 stamp of the flash tile (cm2's flexible dimensions take three 32-wide
+    blocks; the KHR tile its own row map), the same stamp covering 80 / 112 / 160 / 192 / 224
+    where a carrier needs one, gated by the kernel cells at those heads; the decode attention's
+    head-96 form is the same question on `DaAttnT`, which declines the non-power-of-two heads.
