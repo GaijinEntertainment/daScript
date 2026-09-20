@@ -154,9 +154,9 @@ def init_byte2uni() {
 let private BPE_HEAP_MIN_SYMS = 32
 
 //! One candidate merge on the heap: `pri` is the priority in "highest first" form - the BPE rank
-//! negated (lowest rank first) or the SPM piece score (highest first), a double so both are exact.
+//! negated (lowest rank first; a merge index, exact in a float below 2^24) or the SPM piece score.
 struct private Bigram {
-    pri : double
+    pri : float
     li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
     ri : int
     l_id : int64
@@ -209,10 +209,10 @@ def private bigram_try_push(pair_merge : table<int64; int64>; scores : array<flo
     let pm = pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
     return if (pm < 0l)
     if (empty(scores)) {
-        h |> bigram_push(Bigram(pri = -double(pm >> 32l), li = li, ri = ri,
+        h |> bigram_push(Bigram(pri = -float(pm >> 32l), li = li, ri = ri,
             l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
     } else {
-        h |> bigram_push(Bigram(pri = double(scores[pm]), li = li, ri = ri,
+        h |> bigram_push(Bigram(pri = scores[pm], li = li, ri = ri,
             l_id = syms[li], r_id = syms[ri], mid = pm))
     }
 }
