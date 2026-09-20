@@ -148,18 +148,14 @@ def build_rope_tabs(@scratch var cos_tab : array<float>; @scratch var sin_tab : 
 def build_rope_tabs_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                          theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                          positions : array<int64>; nrows, head_size : int64) {
-    unsafe {
-        rope_tabs_fill(cos_tab, sin_tab, RopeRows(pp = addr<int64 const?>(positions[0])), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
-    }
+    rope_tabs_fill(cos_tab, sin_tab, RopeRows(pp = unsafe(addr<int64 const?>(positions[0]))), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
 }
 
 //! The interleaved-M-RoPE table (qwen3vl image spans); all-equal rows collapse bit-exactly.
 def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                            theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                            positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
-    unsafe {
-        rope_tabs_fill(cos_tab, sin_tab, RopeImrope(pp = addr<int4 const?>(positions4[0]), sections = sections), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
-    }
+    rope_tabs_fill(cos_tab, sin_tab, RopeImrope(pp = unsafe(addr<int4 const?>(positions4[0])), sections = sections), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
 }
 
 //! The contiguous-section MROPE table (the qwen2vl decoder).
@@ -199,9 +195,7 @@ def mrope_span_positions(@scratch var out : array<int4>; base, npos, span_lo, sp
 //! bare cos(pos * freq) / sin(pos * freq).
 def build_rope_tabs_vision(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                            theta : float; positions2 : array<int2>; nrows, head_size : int64) {
-    unsafe {
-        rope_tabs_fill(cos_tab, sin_tab, RopeGrid(pp = addr<int2 const?>(positions2[0]), sect = head_size / 4l), theta, 1.0, 1.0, null, nrows, head_size)
-    }
+    rope_tabs_fill(cos_tab, sin_tab, RopeGrid(pp = unsafe(addr<int2 const?>(positions2[0])), sect = head_size / 4l), theta, 1.0, 1.0, null, nrows, head_size)
 }
 
 //! One position's PACKED row — cos[half] then sin[half] in ONE array at `base` (the layout the

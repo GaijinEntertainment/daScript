@@ -2274,9 +2274,9 @@ out-of-tree race script over the engine's own calls (`gemm_f32` / `gemm_f32_jo` 
 operands; `eval_` over the loaded model for the prefill row), so their readings are ratios of
 the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
 
-- **`gemm_f32` (row blocks outer) against `gemm_f32_jo` (column blocks outer), C += A·B at
-  the deltanet chunk and ASR attention shapes, jo / ij:** M5 64×128×64 0.99, 64×64×128 1.00,
-  128×128×128 0.96, 128×64×1000 0.96, 128×128×3000 0.94, 256×64×4000 0.99, 1024×64×1024
+- **`gemm_f32` (row blocks outer) against `gemm_f32_jo` (column blocks outer), C += A*B at
+  the deltanet chunk and ASR attention shapes, jo / ij:** M5 64x128x64 0.99, 64x64x128 1.00,
+  128x128x128 0.96, 128x64x1000 0.96, 128x128x3000 0.94, 256x64x4000 0.99, 1024x64x1024
   **1.17**; zen4 the same seven 1.01, 1.01, 1.00, 1.01, 0.97, **0.92**, 1.00. Both forms stay:
   jo wins where B is wide and streamed once (the ASR scores, its callers today), ij wins the
   M5's tall square; neither is a default for the other's shapes.

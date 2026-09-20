@@ -126,7 +126,7 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`). Kernels themselves
   live in a tier file; a kernel body here is a placement defect.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
-  out-ranked by any platform tier - and the ONE body of every Q8·Q8 and mx4 kernel shape: each
+  out-ranked by any platform tier - and the ONE body of every Q8*Q8 and mx4 kernel shape: each
   shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
   it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
   bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
