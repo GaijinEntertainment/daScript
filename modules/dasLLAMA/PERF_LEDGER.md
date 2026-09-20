@@ -1925,6 +1925,35 @@ named; the local RTX 5060 Ti carries decode-vector.
   the planes are megabytes against a weight pass shared across the rows, so the row cap is the
   command's, not memory's.
 
+### From the Metal batched-decode arc (2026-09-20)
+
+Instruments: `daslang -jit benchmarks/lcpp_bench.das --npl 4 --ngl 99 -r 5` on the M5 Max (the
+four-stream row host-cached through the scheduler and the Metal batch driver, kv f16, the box's
+fresh rig sidecar pinned through `DAS_TUNE_MANIFEST`, the box idle - the iOS Simulator and Parsec
+off, a 90 s settle between cells); the reference `llama-batched-bench` beside the pinned
+`llama-bench` at `-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on`, five runs folded. The
+`tg128@4` row is the summed served rate over the scheduler step whole, the reference times its
+decode call alone, so every ratio reads conservative for ours.
+
+- **The scoreboard (ours / llama.cpp, tg128@4 summed; then flat tg128 ours / theirs), all Q8_0:**
+  Llama-3.2-1B 944 ± 2 / 1031 ± 55 (0.92), flat 323 / 317; Llama-3.2-3B 430 ± 18 / 430 ± 30 (1.00),
+  flat 139 / 134; Llama-3.1-8B 208 ± 2 / 199 ± 10 (1.04), flat 67 / 64; gemma-4-E2B 389 ± 23 /
+  464 ± 16 (0.84), flat 152 / 128. The 3B and E2B rows read a cv past 3% and stand as
+  direction-grade until a re-run; the reference's E2B batched row moved between 234 and 464
+  across the day's runs, so that ratio's denominator is unsettled [direction-grade - two processes].
+- **The E-series batch arm (gemma-4-E2B Q8):** per-row steps read ~90 tok/s summed at four streams
+  (each stream a weight pass a token); the batched step with the PLE rows form, the Q-only shared-KV
+  rows and the two-width panels reads 389 - the same step's flat row unchanged at 152 [direction-grade].
+- **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
+  (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
+  and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].
+- **A loaded box voids the batched row first:** with an iOS Simulator rendering (two WebContent
+  processes at 98% and 48%, SimMetalHost on the GPU, load 12) the 1B batched row read 466 ± 277 and
+  the reference's own flat tg128 fell from 317 to 200 - the GPU queue is shared with the simulator's
+  Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The
+  amortized weight stream leaves dispatch latency and CPU work as what is left per step, so four rows
+  feel the load where one row hides it.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes
