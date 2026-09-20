@@ -9,12 +9,13 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmup sanity check and the row statistic - shared with dasllama-server's in-process bench
+require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, a region a batched-row stream
+require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
-require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
+require dasllama/dasllama_image   // load_model_cached — the .dlim rail the rows load on
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
 require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see Lever.real)
-require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe (narrower than the full facade; it requires the transformer umbrella itself)
-require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
+require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/asr_prof_ms)
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
@@ -83,6 +84,9 @@ struct Args {
 
     @clarg_doc = "GPU layers, llama-bench spelling: 0 = CPU, anything else = Metal, required (default: 0)"
     ngl : int = 0
+
+    @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many device-home streams through the scheduler's device mode, the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
+    npl : int = 0
 
     @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier for the das run — the 'cpu + AMX' board row (records flavor 'accel'; CPU only, fails where das_accelerate is not built)"
     accel : bool
@@ -203,31 +207,12 @@ struct Args {
 // the das side is no longer held to stricter FP than the reference it is measured against.
 // The reference tools are NOT run here; gen_bench_records measures them adjacent, as for the LLM legs.
 
-// Decode any file miniaudio understands to 16 kHz mono f32.
-def private load_audio_16k_mono(path : string) : array<float> {
-    var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))
-    if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
+//! the engine's decoder answers a failure with an empty array; the bench refuses to time silence
+def private load_audio_or_panic(path : string) : array<float> {
+    var out <- load_audio_16k_mono(path)
+    if (empty(out)) {
         panic("cannot open audio file '{path}'")
     }
-    var out : array<float>
-    let chunk = 65536
-    var buf : array<float>
-    buf |> resize(chunk)
-    while (true) {
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(buf[0])), uint64(chunk)))
-        break if (got <= 0)
-        out |> reserve(length(out) + got)
-        for (i in range(got)) {
-            out |> push(buf[i])
-        }
-        break if (got < chunk)
-    }
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
-    delete buf
     return <- out
 }
 
@@ -279,7 +264,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     var m <- (empty(spec.das_mmproj)
         ? load_asr_model(model_path)
         : load_asr_model(model_path, "{spec.root}{spec.das_mmproj}"))
-    var warm <- load_audio_16k_mono("{asr_corpus_dir()}{spec.buckets[0]}")
+    var warm <- load_audio_or_panic("{asr_corpus_dir()}{spec.buckets[0]}")
     var warm_text = ""
     var warm_enc = 0.0lf
     measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
@@ -300,7 +285,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     }
     run.files |> reserve(length(run.files) + length(spec.buckets))
     for (wav in spec.buckets) {
-        var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
+        var samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
         var enc_ms = 0.0lf
@@ -352,7 +337,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             var lib_audio = 0.0lf
             run.files |> reserve(length(run.files) + length(lib))
             for (wav in lib) {
-                var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
+                var samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
                 var ltext = ""
                 var lenc = 0.0lf
@@ -1215,6 +1200,18 @@ def private say(fmt : OutFmt; text : string) {
     }
 }
 
+//! one measured row: its mean ± sd line, the reps under the verbose knob, the row into `results`; the reps are consumed
+def private say_row(fmt : OutFmt; name, suffix : string; var tps : array<double>; var results : array<BenchRow>) : BenchRow {
+    let st = bench_row(name, tps)
+    say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s{suffix} ({length(tps)} reps)\n")
+    if (g_env_bench.bench_verbose) {
+        say(fmt, "  reps: {tps}\n")
+    }
+    results |> push(st)
+    delete tps
+    return st
+}
+
 // --prof census: the runtime state that picks each MoE prefill arm — a fallback path names
 // itself here instead of hiding inside a slow row
 def private dispatch_census(t : Model; fmt : OutFmt) {
@@ -1266,6 +1263,7 @@ def private tests_of(rows : array<BenchRow>) : table<string; BenchTest> {
 // true when this process is a -jit script run (--for-debug-purposes): every emitted record's
 // flavor is stamped debug-jit so no board or oracle can mistake it for measurement
 var private g_debug_run = false
+var private g_refused_rows = 0   //! rows the run asked for that reported nothing: main exits non-zero once the records have landed
 
 def private exchange_compiled_in() : bool {
     static_if (typeinfo module_exists(dasllama_exchange)) {
@@ -1363,6 +1361,18 @@ def main() : int {
     if (cfg.submit && !exchange_compiled_in()) {
         print("error: --submit refused - this build carries no sidecar exchange client (no tune framework)\n")
         return 1
+    }
+    if (cfg.submit && cfg.npl > 1) {
+        print("error: --npl reshapes the model (N mirror regions): its flat rows are not the board's, so --submit is refused with --npl\n")
+        return 1
+    }
+    if (cfg.npl == 1) {
+        say(fmt, "warning: --npl 1 runs no batched row (the row needs two streams or more)\n")
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (cfg.npl <= 1 && g_env_vulkan.vk_nrow_bisect != 0l) {
+            say(fmt, "warning: DASLLAMA_VK_NROW_BISECT={g_env_vulkan.vk_nrow_bisect} bisects the N-row token command, which only --npl 2 or more records - the knob is inert here\n")
+        }
     }
     // the standing per-box methodology, enforced here rather than left to the environment
     // (gen_profile's pattern): cap the future que's workers (computing main is the last lane) and
@@ -1471,7 +1481,18 @@ def main() : int {
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
+        if (cfg.npl > 1) {
+            set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                g_rd_nrow_bisect = int(g_env_vulkan.vk_nrow_bisect)   //! a probe's bisect of the N-row command; 0 = the served command
+                if (g_rd_nrow_bisect != 0) {
+                    to_log(LOG_WARNING, "lcpp_bench: DASLLAMA_VK_NROW_BISECT={g_rd_nrow_bisect} - the N-row token command drops dispatches, tg{ngen}@{cfg.npl} is a timing probe, its logits garbage\n")
+                }
+            }
+        }
         var t <- load_model_cached(mpath, cfg.quant)
+        var sched_ctx = 0l   //! the batched row's context: the flat rows' session narrows `seq_len` to its own rows, the scheduler's streams need theirs back
+        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or llama-bench's -p default when the pp row is off
         // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
         var inscope toks : array<array<int64>>
         if (real_row) {
@@ -1491,7 +1512,9 @@ def main() : int {
             }
             t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
         } else {
-            t.config.seq_len = min(t.config.seq_len, max(plen, ngen) + 8l)   // cap the KV allocation
+            let rows_ctx = cfg.npl > 1 ? bplen + ngen + int64(cfg.npl) : max(plen, ngen)
+            t.config.seq_len = min(t.config.seq_len, rows_ctx + 8l)   // cap the KV allocation
+            sched_ctx = t.config.seq_len
         }
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
@@ -1686,13 +1709,7 @@ def main() : int {
                     panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} - see the REFUSED line")
                 }
                 var tps <- [for (rep in range(reps)); bench_pp_rep(t, s, plen, int64(rep))]
-                let st = bench_row("pp{plen}{dtag}", tps)
-                say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
-                if (g_env_bench.bench_verbose) {
-                    say(fmt, "  reps: {tps}\n")
-                }
-                results |> push(st)
-                delete tps
+                let st = say_row(fmt, "pp{plen}{dtag}", "", tps, results)
                 if (cfg.prof) {
                     // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
                     forward_profile_reset()
@@ -1710,13 +1727,41 @@ def main() : int {
                     panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} - see the REFUSED line")
                 }
                 var tps <- [for (rep in range(reps)); bench_tg_rep(t, s, ngen, int64(rep))]
-                let st = bench_row("tg{ngen}{dtag}", tps)
-                say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
-                if (g_env_bench.bench_verbose) {
-                    say(fmt, "  reps: {tps}\n")
+                say_row(fmt, "tg{ngen}{dtag}", "", tps, results)
+            }
+            if (ngen > 0l && cfg.npl > 1) {
+                let npl = int64(cfg.npl)
+                let flat_len = t.config.seq_len   //! the flat session's rows; the streams take the wider context the load was capped at
+                t.config.seq_len = sched_ctx
+                var tps : array<double>
+                tps |> reserve(reps)
+                var refused = ""
+                for (rep in range(reps)) {
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep))
+                    if (!empty(br.why)) {
+                        refused = br.why
+                        break
+                    }
+                    tps |> push(br.tps)
                 }
-                results |> push(st)
-                delete tps
+                if (cfg.prof && empty(refused)) {   //! one untimed rep under the buckets: the step's host phases beside the device's
+                    forward_profile_reset()
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps))
+                    if (empty(br.why)) {
+                        say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
+                        forward_profile_report()
+                    } else {
+                        say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} REFUSED - {br.why} ---\n")
+                    }
+                }
+                t.config.seq_len = flat_len
+                if (empty(refused)) {
+                    say_row(fmt, "tg{ngen}@{npl}{dtag}", " summed over {npl} streams", tps, results)
+                } else {
+                    say(fmt, "REFUSED tg{ngen}@{npl}{dtag} - {refused}\n")
+                    g_refused_rows++
+                    delete tps
+                }
             }
         }
         delete s
@@ -1837,10 +1882,10 @@ def main() : int {
         let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
         let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
         print(render_md_table(headers, aligns, mdRows))
-        return 0
+        return g_refused_rows > 0 ? 1 : 0
     }
     if (fmt != OutFmt.json) {
-        return 0
+        return g_refused_rows > 0 ? 1 : 0
     }
     let text = sprint_json(jsonModels, true)
     if (!empty(cfg.json_path)) {
@@ -1869,5 +1914,5 @@ def main() : int {
             say(fmt, "records submitted to {url}\n")
         }
     }
-    return 0
+    return g_refused_rows > 0 ? 1 : 0
 }

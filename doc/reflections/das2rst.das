@@ -338,7 +338,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_user_image_rows|add_assistant|render_turn|render_turn_image|render_turn_audio|render_assistant|render_close|respond|set_thinking)$%%),
         group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids)$%%),
-        group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
+        group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_jobque_spin_gpu_us|get_jobque_spin_gpu_us|get_jobque_spin_in_force|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
         group_by_regex("Operations: GPU tier and model slots", mod, %regex~(gpu_tier_status|set_gpu_tier_want|moe_gpu_tier_arm|moe_gpu_weight_budget|gpu_model_marks_init|gpu_slot_capture|gpu_slot_rearm|moe_gpu_model_marks_save|moe_gpu_model_marks_restore|moe_gpu_hydrate_session|moe_gpu_drop_model|set_resident_prefill_allowed)$%%),
         group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_device_prefill_continues|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|gpu_resident_decline|gpu_cpu_passes)$%%)
     )
@@ -1944,7 +1944,7 @@ def document_module_gltf_processed(_root : string) {
     var mod = find_module("gltf_processed")
     var groups <- array<DocGroup>(
         group_by_regex("Processing types", mod, %regex~.*(ProcessingProfile|ProcessedPrimitive|ProcessedMesh|ProcessedAsset|ProcessedCatalogEntry|ProcessedCatalog|ProcessedManifest)$%%),
-        group_by_regex("Validation and persistence", mod, %regex~.*(processed_valid|save_processed|load_processed|load_and_process_gltf)$%%),
+        group_by_regex("Validation and persistence", mod, %regex~.*(processed_valid|save_processed|load_processed|load_and_process_gltf|prepare_processed_catalog)$%%),
         group_by_regex("Geometry processing", mod, %regex~.*(processed_stride|processed_vertex_bytes|processed_indices|process_primitive|process_gltf|unpack_processed_geometry)$%%)
     )
     document("Backend-neutral glTF geometry and texture preprocessing, validation, and persistence", mod, "gltf_processed.rst", groups)

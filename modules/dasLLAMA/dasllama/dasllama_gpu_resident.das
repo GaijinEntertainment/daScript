@@ -566,8 +566,10 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         moe = ((nk + TILE_READ_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
             + RDEC_PF_ROWS * (c.n_expert + 1l) * 4l + nk * 12l)
     }
+    let nb = max(g_rdec_regions_want, 1l)   //! the N-row command's planes hold a row a region: the logits and the attention pieces scale with it
+    let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
-        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + c.vocab_size * 4l + RDEC_MISC_BYTES + moe
+        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe
 }
 
 //! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse
@@ -705,6 +707,12 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 // ===== the resident whole-stack decode driver (dense models that fully fit) =====
 
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
+//! the one writer of the flag: the pool's spin window follows the driver's arm and drop
+def private rdec_set_active(on : bool) {
+    if (g_rdec_active == on) return
+    g_rdec_active = on
+    set_dispatch_gpu_served(on)
+}
 var private g_rdec_emb_gpu = false
 var private g_rdec_cap = 0l             // a mirror region's context, as the driver armed (<= model ctx when VRAM-capped)
 var private g_rdec_gen_seq = 0l
@@ -787,6 +795,7 @@ def private rdec_has_device_only_rows(s : Session) : bool {
     return !s.device_kv && rdec_owns(s, s.rdec_region) && g_rdec_regions[s.rdec_region].cnt > 0l && !s.rdec_host_current
 }
 let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mirror at
+let private RDEC_ATTN_SPLIT_CAP = 16l   //! the key splits the plan budgets the attention partials for: the most the driver ever picks, whatever the card's SM count
 
 var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positions (0 = none): the test rigs pin 32768, a server keeps the model's context
 
@@ -988,7 +997,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
     if (t.wq_offs[l] < 0l || (!kvsh && t.wk_offs[l] < 0l)) return "layer {l} lacks a q/k plane"
     if (!kvsh && t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
     let hs = layer_head_size(c, l)
-    if (hs % 32l != 0l || hs > 512l) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 512)"
+    if (hs % 32l != 0l || (hs > 256l && hs != 512l)) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 256, and 512)"
     return ""
 }
 
@@ -1119,7 +1128,7 @@ def private log_resident_image(planes : array<tuple<n : int64; rows : int64; f :
 //! every decline logs its reason through `rdec_decline`.
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentPlan) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
-    g_rdec_active = false
+    rdec_set_active(false)
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
     g_rdec_pass_said |> clear()
@@ -1518,7 +1527,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     rdec_upload_norms(norms, c.attn_out_bias)
     delete norms
-    g_rdec_active = true
+    rdec_set_active(true)
     g_rdec_decline_reason = ""
     g_rdec_memory_decline = false
     g_rdec_regions |> clear()
@@ -1651,6 +1660,13 @@ def private resident_prefill_ple_rows(t : Model; tokens : array<int64>; npos : i
 }
 
 var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the armed driver (`resident_cos_elems`)
+// the N-row command's gathered rows: the residuals, the rope rows, each row's position, count and region, and where its logits land
+var private @scratch @exact_size g_rdec_x_n : array<float>
+var private @scratch @exact_size g_rdec_cos_n : array<float>
+var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
+var private @scratch g_rdec_poss : array<int64>
+var private @scratch g_rdec_cnts : array<int64>
+var private @scratch g_rdec_regs : array<int64>
 
 // per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
 var private @scratch g_rdec_x : array<float>
@@ -2041,6 +2057,73 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
     copy_floats(ws.scr.ple_inp, i * all, g_rdec_ple_rows, 0l, all)
 }
 
+//! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    let c = t.config
+    let dim = c.dim
+    g_rdec_x_n |> grow_resize(dim * nrows)
+    g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
+    g_rdec_lrows |> resize(nrows)
+    g_rdec_poss |> resize(nrows)
+    g_rdec_cnts |> resize(nrows)
+    g_rdec_regs |> resize(nrows)
+    let ts_prep = prof_ticks()
+    for (i in range64(nrows)) {
+        var s & = unsafe(*sessions[i])
+        let pos = ws.positions[i]
+        let r = rdec_bind_region(s)
+        if (r < 0l) {
+            return false
+        }
+        for (j in range64(i)) {
+            if (g_rdec_regs[j] == r) {   //! two rows one region: the row-at-a-time loop resyncs between them
+                return false
+            }
+        }
+        if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
+                panic("dasLLAMA resident batch decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
+            }
+            rdec_take_mirror(t, s, r, pos)
+        }
+        copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
+        rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
+        g_rdec_poss[i] = pos
+        g_rdec_cnts[i] = pos + 1l
+        g_rdec_regs[i] = r
+        g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
+    }
+    prof_add("nrow_prep", ts_prep)
+    let ts_gpu = prof_ticks()
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
+    prof_add("nrow_gpu", ts_gpu)
+    let ts_land = prof_ticks()
+    for (i in range64(nrows)) {
+        var s & = unsafe(*sessions[i])
+        let pos = g_rdec_poss[i]
+        let r = g_rdec_regs[i]
+        if (!s.device_kv) {
+            rdec_select_region(r)   //! the readback reads the selected region: this row's, bound above
+            for (l in range64(c.n_layers)) {
+                continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
+                let kvd = layer_kv_dim(c, l)
+                let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
+                let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
+                unsafe {
+                    rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
+                        kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
+                }
+            }
+        }
+        g_rdec_regions[r].cnt = pos + 1l
+        s.rdec_host_current = !s.device_kv
+    }
+    prof_add("nrow_land", ts_land)
+    batch_decode_override_logits_done()
+    return true
+}
+
 def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim
@@ -2050,6 +2133,9 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     }
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
+    }
+    if (nrows > 1l && rdec_token_n_rows() >= nrows && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
+        return true
     }
     g_rdec_x |> resize(dim)
     g_rdec_cossin |> resize(g_rdec_cos_elems)
@@ -2062,6 +2148,9 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
+                panic("dasLLAMA resident row-at-a-time decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
+            }
             rdec_take_mirror(t, s, r, pos)
         }
         if (c.recr_mask != 0ul) {
@@ -2150,7 +2239,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     st.rdec_kvdt = g_rdec_kvdt
     st.rdec_emb_gpu = g_rdec_emb_gpu
     st.rdec_ple_proj = rdec_ple_proj_on()
-    g_rdec_active = false
+    rdec_set_active(false)
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
     rdec_ple_proj_set(false)
@@ -2159,7 +2248,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     moe_gpu_marks_restore(st.marks)
-    g_rdec_active = st.rdec_active
+    rdec_set_active(st.rdec_active)
     delete g_rdec_regions
     g_rdec_regions <- st.rdec_regions
     g_rdec_cap = st.rdec_cap
@@ -2272,7 +2361,7 @@ def moe_gpu_drop_model_() {
         return
     }
     moe_gpu_dn_invalidate()
-    g_rdec_active = false
+    rdec_set_active(false)
     reset_gpu_cpu_passes()
     g_rdec_regions |> clear()
     g_rdec_cap = 0l
@@ -2418,7 +2507,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     var plan : ResidentPlan
     if (resident_try) {
-        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
+        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
         seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {

@@ -28,6 +28,11 @@ def test_regions_batched_steps(t : T?) {
 }
 
 [test]
+def test_regions_batched_steps_split(t : T?) {
+    cell_regions_batched_steps_split(t, REGIONS_FILE)
+}
+
+[test]
 def test_device_home_sessions(t : T?) {
     cell_device_home_sessions(t, REGIONS_FILE)
 }

@@ -4825,6 +4825,19 @@ namespace das {
                   expr->at, CompilationError::invalid_continue);
         return Visitor::visit(expr);
     }
+    struct MarkNamedVariablesUsed : Visitor {
+        Function * func = nullptr;
+        vector<VariablePtr> * local = nullptr;
+        virtual void preVisit(ExprVar * expr) override {
+            Visitor::preVisit(expr);
+            for (auto & arg : func->arguments) {
+                if (arg->name == expr->name) arg->marked_used = true;
+            }
+            for (auto & var : *local) {
+                if (var->name == expr->name) var->marked_used = true;
+            }
+        }
+    };
     bool InferTypes::canVisitIfSubexpr(ExprIfThenElse *expr) {
         if (expr->isStatic) {
             // static_if prevents normal resolve flow
@@ -4882,6 +4895,15 @@ namespace das {
             if (auto constCond = getConstExpr(expr->cond)) {
                 reportAstChanged();
                 auto condR = static_cast<ExprConstBool*>(constCond)->getValue();
+                if (expr->isStatic && func) {
+                    auto & dropped = condR ? expr->if_false : expr->if_true;
+                    if (dropped) {
+                        MarkNamedVariablesUsed mark;
+                        mark.func = func;
+                        mark.local = &local;
+                        dropped->visit(mark);
+                    }
+                }
                 if (condR) {
                     return expr->if_true;
                 } else {

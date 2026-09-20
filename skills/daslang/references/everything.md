@@ -3174,11 +3174,14 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `dlim_clean` - Garbage-collect `STALE` and `OTHER` images beside `gguf_path` (`FOREIGN`, another flavor's, are always left alone): `apply = false` only reports, `true` removes; `keep_other` spares `OTHER`.
 - `dlim_inventory` - List the prepared images (`.dlim`) minted beside `gguf_path` — per image: file, bytes, image version, identity, and a verdict (`CURRENT` loads; `STALE vN` is an older image version; `OTHER` a different bake configuration or box; `FOREIGN` a different flavor).
 - `get_dispatch_worker_limit` - The dispatch worker cap in force (0 = no limit) — `set_dispatch_worker_limit`'s read half.
-- `get_jobque_spin_us` - The spin window in force — `set_jobque_spin_us`'s read half.
+- `get_jobque_spin_gpu_us` - The GPU-served spin window — `set_jobque_spin_gpu_us`'s read half.
+- `get_jobque_spin_in_force` - The spin window the pool runs right now: the GPU window while the whole-model driver serves the loaded model, the CPU window otherwise.
+- `get_jobque_spin_us` - The CPU spin window — `set_jobque_spin_us`'s read half.
 - `get_single_thread` - Whether every kernel runs on the calling thread — `set_single_thread`'s read half.
 - `kernel_backend_available` - True when kernel backend `name` is registered AND its availability witness passes on this box — the detection probe behind defaults-first backend selection (the vulkan witness enumerates devices once and caches its verdict).
 - `select_matmul_backend_for_load` - Select the best matmul backend for the NEXT model load (honors a pin).
 - `set_dispatch_worker_limit` - Cap the kernel-dispatch worker count (0 = no limit, all job-que workers).
+- `set_jobque_spin_gpu_us` - The workers' spin-before-park window while the whole-model GPU driver serves the loaded model (default 500 us; a worker still spinning at the step's submit starves the driver).
 - `set_jobque_spin_us` - The workers' spin-before-park window in microseconds (0 = park at once).
 - `set_single_thread` - Run every kernel on the calling thread: no dispatch to the job queue at all, whatever queue exists.
 
@@ -3195,7 +3198,22 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `moe_gpu_tier_arm` - Arm the recorded tier want so a GPU backend can install its hooks — call between `set_gpu_tier_want` and `load_model`.
 - `moe_gpu_weight_budget` - The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
 - `set_gpu_tier_want` - Record the GPU tier request the NEXT `moe_gpu_tier_arm`/`load_model` honors — the programmatic form of the core `DASLLAMA_GPU_*` knobs (an env var present overrides its field; the classifier/dense-arm knobs are env-only).
-- `set_resident_prefill_allowed` - Allow or pin out the resident-decode prefill arm.
+- `set_resident_prefill_allowed` - Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has K/V regions would strand device-only rows.
+
+### Operations: serving from the device
+
+- `create_device_session` - Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
+- `gpu_cpu_passes` - Calls the armed GPU path handed back to the CPU rails since the model armed, one row per reason that fired: its name, the same in words a status page prints, the count.
+- `gpu_device_kv_adopt` - Hand the first `npos` rows a kept `claim` holds to the fresh device-home `session`, whose `n_past` becomes `npos`.
+- `gpu_device_kv_park` - A FINISHED device-home session lets go of its K/V region and answers the claim its rows stay under (0 = none) - call it before every such session's `delete`.
+- `gpu_device_prefill_continues` - A device-home session of `model` prefills from a position past zero - a prompt in chunks, a turn over the turns before it.
+- `gpu_device_prefill_window` - The positions the device prefills in one window - the shortest chunk worth handing a device-home session.
+- `gpu_device_session_ctx` - The positions one device-home session holds - the armed driver's per-region context.
+- `gpu_device_session_dtype` - The K/V codec a device-home session must carry: the armed driver's.
+- `gpu_device_sessions` - How many DEVICE-HOME sessions (`create_device_session`) the installed model serves at once: the armed driver's region count, 0 when the model is not served whole from the device.
+- `gpu_resident_decline` - Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with the remedy where one exists), or why it was never attempted.
+- `set_gpu_ctx_max` - Cap the whole-model GPU driver's K/V context at `n` positions per region for the models loaded next (0 lifts it): a server's `ctx`.
+- `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.
 
 ## dasllama_tts
 

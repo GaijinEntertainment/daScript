@@ -89,7 +89,9 @@ between them.
 at 20 MB with five backups, and echoed to stdout, except under `--stdio`, where stdout is the
 client's. `health_heartbeat` and `watchdog_stopped`
 carry `heap_bytes` and `string_heap_bytes`, the supervisor's own live heaps: the host collects
-them between ticks, and a number that only grows across heartbeats is a leak. `child_started`
+them between ticks and once more before the supervisor's stop record reads them (the host installs
+that collect; the in-process tests run the supervisor without it), so the stop record carries the
+live set, and a number that only grows across heartbeats is a leak. `child_started`
 carries `pid` from the supervisor and `command` from the front, whose pipe reports no pid;
 `child_exited` carries `code`, with `uptime_seconds` from the supervisor and `answered` from
 the front, whether the child answered a request before it died; `child_noise` and

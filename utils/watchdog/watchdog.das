@@ -1300,6 +1300,7 @@ class public Supervisor {
     stopping : bool = false
     finished : bool = false
     result : int = 0
+    collect_before_stop : function<void>   //! the host's collect, run before the stop record reads the heaps; the in-process tests install none
     failures : int = 0
     recovery_pending : bool = false
     restart_at : float = 0.0
@@ -1583,6 +1584,9 @@ class public Supervisor {
                 delete tray
             }
             tray = null
+        }
+        if (collect_before_stop != null) {   //! the stop record reads the live set, not the lines the last tick's collect left behind
+            invoke(collect_before_stop)
         }
         log->emit("watchdog_stopped", JV(heap_gauges()))
         finished = true

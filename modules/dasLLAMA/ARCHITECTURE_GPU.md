@@ -95,11 +95,13 @@ that a question answered for one backend has an obvious address in the other. Th
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
   and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`
   at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH` and `MetalKqMulMmQ40T` / `TH`, and the four
-  `MetalMoeMulMmQ40*` expert stamps)
-  bind the strip plane unread, so both formats share one set layout and one host bind path; and the
-  split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the mul_mm scaffold's `xf` and `y`
-  bindings unread - they write only the f16 panel at binding 7 - so a format's dequant pass and its
-  mul_mm twins keep one set layout and one host bind path.
+  `MetalMoeMulMmQ40*` expert stamps) bind the strip plane unread, so both formats share one set layout
+  and one host bind path; the split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the
+  mul_mm scaffold's `xf` and `y` bindings unread - they write only the f16 panel at binding 7 - so a
+  format's dequant pass and its mul_mm twins keep one set layout and one host bind path; and the Vulkan
+  `kq_gemv_cls` family binds `gridb` (the grid formats' codebook plane, `kq_grid_dev`) at binding 6 on
+  every stamp, one set layout for the family - the grid stamps (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s) read
+  it, every other stamp (k2, k3, k4, k5, k6, q40, iq4xs, iq4nl) and the N leaves bind it unread.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots, route/mark/want/status
   state, engine-facing forwarders. Vulkan implements it (per-op offload plus resident plumbing, and the decode-era
   seats it alone fills: the cm2 expert chain `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
@@ -109,24 +111,24 @@ that a question answered for one backend has an obvious address in the other. Th
   per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its attention-sink seat
   `install_moe_gpu_resident_sinks` (the per-head sink plane, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am), its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
-  MoE layer, and the routed block on a layer another seat built), its mirror-region seat
-  `install_moe_gpu_resident_regions` (`rdec_select_region` names the region every mirror address and the next token
-  command resolve against; a tier without it serves one region), all behind the route lever `set_gpu_resident_route` /
-  `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the
-  weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple` - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the device). The
-  installs are one-way: a test that arms the tier installs the seats and never restores them,
-  because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
-  deliberately does not, because UMA makes residency moot there and Metal
-  integrates as a whole-forward driver through common's override registries (the ASR-decoder
-  driver is the one exception: whisper is not a `Model`, so its hooks are family registries in
-  `dasllama_whisper`, same decline contract).
-- **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline
-  into the flavor image, upload a model's stacks to the tier, and drive decode/prefill entirely on
-  device. It is device-AGNOSTIC - it holds no device call and requires no GPU module, reaching the
-  hardware only through the `dasllama_gpu_tier` SPI and entering the engine only through common's
-  override registries. `"vulkan"` is the tier string it registers under, not a dependency, which is
-  why it compiles on every box. It requires common back for `Model`/`Session`, so like the Metal
-  drivers it is required from the transformer umbrella, never from common.
+  MoE layer, and the routed block on a layer another seat built), its mirror-region seat `install_moe_gpu_resident_regions`
+  (`rdec_select_region` names the region every mirror address and the next token command resolve against; a tier
+  without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
+  the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps
+  them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the
+  OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the weight-bytes seat
+  `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple`
+  - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the
+  device). The installs are one-way (a test that arms the tier never restores them): no uninstall exists and none is
+  needed, a seat serves whatever model loads next. Metal deliberately does not - UMA makes residency moot there, and
+  Metal integrates as a whole-forward driver through common's override registries (the ASR-decoder driver is the one
+  exception: whisper is not a `Model`, so its hooks are family registries in `dasllama_whisper`, same decline contract).
+- **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline into the flavor
+  image, upload a model's stacks to the tier, and drive decode/prefill entirely on device. It is device-AGNOSTIC - it
+  holds no device call and requires no GPU module, reaching the hardware only through the `dasllama_gpu_tier` SPI and
+  entering the engine only through common's override registries. `"vulkan"` is the tier string it registers under, not
+  a dependency, which is why it compiles on every box. It requires common back for `Model`/`Session`, so like the
+  Metal drivers it is required from the transformer umbrella, never from common.
 - **A dry bake runs the whole resident arm with no device.** `vulkan_bake_role` puts the tier in
   bake mode, and each `rdec_*` device seam answers for itself so the arm walk reaches the end: a
   seam that only records a layout (`vk_rdec_set_emb`) answers true, a seam that would allocate
@@ -135,9 +137,12 @@ that a question answered for one backend has an obvious address in the other. Th
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
-  `mk_grid_dim`, `param_type`). One owner by design - the two lenses' grammars drifted apart
-  when each carried a private copy (metal folded only the literal "1" where vulkan folded any
-  integer). Backend-specific lowering stays in that backend's lens.
+  `mk_grid_dim`, `param_type`). One owner by design: a private copy per lens drifts (metal folding
+  only the literal "1" where vulkan folds any integer). Backend-specific lowering stays in that backend's lens.
+- **The authoritative site of each constant kind.** Tile constant in a kernel body: the literal in the generated `*_msl` global or the
+  SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>` writes every class kernel's words). Grid constant: the class's `[metal_dispatch]` / `[vk_dispatch]`
+  `grid=` spec (`"n/c"` is a CEIL-divide); a `grid = "wgs"` class carries no number there - its grid is the kernel body's workgroup-index
+  decode with the host helper that computes `wgs`. Threadgroup constant: Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. Uniform: the single writer that fills its buffer.
 
 **PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
 question was surveyed and closed against; the tune-time race arms' transient queue is
@@ -152,15 +157,13 @@ end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
 each module races its OWN families (`metal_tensor_race_decode` in kernels, `metal_tensor_race`
 in prefill) and the tuner calls those public entries.
 
-**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`,
-`MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
-both paths.
+**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
+decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
 Sections 2.28-2.39a - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
 contract, the verify, drafter and batch-driver mechanics, and the decode layer encoder - are `ARCHITECTURE_GPU_MTP.md`.
 
-**The allowed asymmetries between the backends - this list is closed; a new one lands with its
-entry here:**
+**The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
 - **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier
   exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
@@ -178,11 +181,10 @@ entry here:**
   collecting the set over a CPU-only window, `ARCHITECTURE_RUNTIME.md` sec.2.12) - a
   driver-cost shield, not a placement mechanism; memory is still memory.
 - **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
-  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`,
-  which runs the registered reload preps (`register_reload_prep`; the decode driver registers
-  `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
-  story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
-  ownership model.
+  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`, which runs the
+  registered reload preps (`register_reload_prep`; the decode driver registers `discard_pre`), quiesces, and
+  releases the address-keyed region caches. Vulkan's reload story is the unmap notify
+  (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
 - **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
   registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
   the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
@@ -226,9 +228,8 @@ entry here:**
   backfills the stash on the CPU in `forward_prefill_body`. The arms mirror `embed_row`'s
   ladder: a tied q8 table gathers from the resident cls plane, a raw f32 table uploads whole
   to a device plane under a size cap the residency plan counts first, and the kq ladder keeps
-  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids
-  ride a 4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds
-  host-side.
+  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids ride a
+  4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds host-side.
 - **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
   installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
   layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot
@@ -267,9 +268,8 @@ the production dialect against them - the bisect seat when the flash regresses.
   single pass), so it buys 20-25% per column; the Metal-4 tensor op at an m = 8 tile is nearly
   free per column but the dequant stage is the cost - 3.4x a single pass for eight columns where
   the twin does four at 2.7x. Neither moves 3-4 rows; the tensor form beats the eight-column twin
-  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in
-  `benchmarks/matmul/bench_metal_gemv_kernels.das` (the `_depths` ruler records say no depth
-  reaches those rows).
+  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in `benchmarks/matmul/bench_metal_gemv_kernels.das`
+  (the `_depths` ruler records say no depth reaches those rows).
 
 **Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
 every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
@@ -283,15 +283,14 @@ float stamp would need, not a live float operand - and the verify-width lab temp
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.
 
-The positive laws these races established - half operands, stage-only-to-transform,
-consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the
-`modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
-and why they lose.
+The positive laws these races established - half operands, stage-only-to-transform, consecutive staging
+runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the `modules/dasMetal/REVIEW.das` descriptor
+gate; this section keeps only the refuted shapes and why they lose.
 
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
 `ARCHITECTURE_GPU_VULKAN_ATTN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
+`ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o and 2.2an-2.2ao in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 
 Sections 2.2w-2.2x, the tower attention routes and the tower driver's encode chains, are

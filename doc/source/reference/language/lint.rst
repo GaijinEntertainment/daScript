@@ -554,7 +554,10 @@ placeholder.
 
 Arguments of **class methods** are exempt: their signature is dictated by the
 base class or interface, so an unused parameter there is structural rather
-than a mistake. LINT012 fires on free functions only.
+than a mistake. LINT012 fires on free functions only. An argument that a
+discarded ``static_if`` arm names counts as used: the module-gated shape
+(``static_if (typeinfo builtin_module_exists(x)) { ... } else { skip }``)
+stays clean on a box that lacks the module.
 
 .. das-doc: fragment
 .. code-block:: das

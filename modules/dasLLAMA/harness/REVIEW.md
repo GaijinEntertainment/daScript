@@ -15,16 +15,18 @@ tune-sidecar service: sidecar lookup, download, or submit - is a defect; it call
 through `dasllama/dasllama_exchange` (the module `../dasllama/dasllama_exchange.das` declares)
 instead.**
 
-**A diff that declares or changes a `[vk_dispatch]` binding in this folder keeps that binding's
-read in a body the binding's own file declares; never set `@role = "alias"` or `"weight"` on a
-binding whose only read sits in another file - move the read into the binding's own file
-instead.** The lens - the pass that collects a binding's accesses
-from its declaring file alone - reports such a binding as never accessed, and `@role` silences
-the report.
+**Never set `@role = "alias"` or `"weight"` on a `[vk_dispatch]` binding in this folder whose
+only read sits in another file - move the read into the binding's own file instead.** The lens -
+the pass that collects a binding's accesses from its declaring file alone - reports such a
+binding as never accessed, and `@role` silences the report.
 
-**A diff that adds a timed row to a file in this folder that prints timed rows, or changes which
-kernel an existing row times, ships that row's alternate - a row of the same run, at the same
-shape, that the new number is read against - or records the reference-engine row it is read
-against, with the command that produced it: in `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`
-sec.2.5a for a row of `vk_gemm_probe.das` or `vk_gemv_probe.das`, in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5
-for every other row.** A number with no alternate beside it ranks nothing.
+**A diff that adds a measured number - a time, a rate, or a figure computed from one - that a
+file in this folder prints, or changes what an existing one measures, ships that number's
+alternate in the same change - another row of the same run at the same shape, or the reference
+exe's row for the same shape with the command that produced it.** A number with no alternate
+beside it ranks nothing.
+
+**A reference-engine row a diff records for an instrument in this folder lands in
+`../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a when the row belongs to
+`vk_gemm_probe.das` or `vk_gemv_probe.das`, in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5
+otherwise.**

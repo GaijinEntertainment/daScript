@@ -131,6 +131,11 @@ condition guards. On the device an out-of-range load faults only when the oversh
 memory, so whether it faults follows the allocation layout, not the kernel's inputs. A local fixed
 array stays eager: its index is register arithmetic, not a device address.
 
+Both emitters - this one and dasMetal's - lower a `?:`, `&&` or `||` operand so only the taken
+side runs, so a kernel's short-circuit form needs no rewrite to keep a guarded read in range. The
+device declares no robust buffer access, so an out-of-range read returns undefined data, not
+zero.
+
 ### 3.8 SSBO decorations ride the variable {#ssbo-variable-decorations}
 
 `@readonly`, `@maybe_readonly` and `@coherent` decorate the `OpVariable`, never the block member:

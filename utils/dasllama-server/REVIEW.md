@@ -35,49 +35,50 @@ records that route, in the same change.** The fixtures are the recorded response
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under
 `tests/fixtures/` (beside this file) carries that key, is a defect - capture the fixture for
-the route that answers with that key first.**
+the route that answers with that key first, or, for a key no machine available for capture can
+produce, hand-compose the fixture and name it as hand-composed, with why, in its row of
+`tests/fixtures/README.md`.**
 
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
 
-**Every word `openai_server.das` writes itself into a `served` or `served_note` value - all of it
-but the engine text it quotes - is a plain word: never one of the engine's own nouns for its parts
-(`pass`, `region`, `mirror`, `resident driver`, `tier`, `rails`).**
+**A `served` or `served_note` value `openai_server.das` writes itself - all of it but the engine
+text it quotes - uses no name the engine has for its own parts - `pass`, `region`, `mirror`,
+`resident driver`, `tier`, `rails` - and no name of the same kind.**
 
 **A `served_note` that carries the engine's decline text leads with a sentence of
 `openai_server.das`'s own that stands without it.**
 
-**A `gpu_cpu_passes` reason the control page prints shows the engine's plain words for it, with
-the machine name only in the `title` tooltip; a reason the engine sent no words for prints its
-machine name.**
+**A `gpu_cpu_passes` entry the control page prints shows the engine's `words` for it, with
+`reason` only in the `title` tooltip; an entry whose `words` are empty prints its `reason`.**
 
 **A diff that adds or changes a `served` value in `openai_server.das` says how the model is
-served now, and a value that says the whole model is on the card also says where the streams'
+served now, and a value that says the whole model is on the GPU also says where the streams'
 caches sit.**
 
 **A diff that adds or changes a `served_note` value in `openai_server.das` names what about the
 slot itself holds it back, and is empty when nothing about the slot does.** A slot waiting for
-the card says that in its `served` value.
+the GPU says that in its `served` value.
 
-**A diff in this folder that calls `create_device_session`, or turns a scheduler's device mode
-on (`set_device_kv`), shows at that call site that the slot's live device-home sessions - a
-scheduler in device mode counts as `max_streams` of them - stay within the K/V regions its load
-armed (`ModelSlot.gpu_regions`).** The driver panics on the session that finds no region.
+**A diff in this folder that opens a stream in device mode - a `create_device_session` call, or
+a `set_device_kv` that turns a scheduler's device mode on - keeps that site behind a check that
+the slot's live device-home sessions - a scheduler in device mode counts as `max_streams` of
+them - stay within the K/V regions its load armed (`ModelSlot.gpu_regions`).** The driver panics
+on the session that finds no region.
 
 **A diff in this folder that calls `moe_gpu_drop_model` turns off every device mode this folder
 armed before the dropped slot's next step, in the same change.** The regions go with the model,
 and a scheduler left in device mode admits a session that has none.
 
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
-`require ?<guard>` or a `require [<group>]` line (today `dasllama_exchange` and `llvm_tune`) -
-outside a `static_if (typeinfo module_exists(...))` arm on that module, or on a module whose own
-`require` brings it in, is a defect** - the unguarded reference fails the compile of a build
-without dasLLVM.
+`require ?<guard>` or a `require [<group>]` line - outside a
+`static_if (typeinfo module_exists(...))` arm on that module, or on a module whose own `require`
+brings it in, is a defect** - the unguarded reference fails the compile of a build without
+dasLLVM.
 
-**A function signature in this folder never names a type from one of those modules - those
-types stay inside the guarded arm, and plain types cross the boundary.** A signature cannot sit
-inside a `static_if` arm, so no guard fixes it.
+**A function signature in this folder never names a type from a module this folder requires
+conditionally - those types stay inside the guarded arm, and plain types cross the boundary.** A
+signature cannot sit inside a `static_if` arm, so no guard fixes it.
 
 **A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
-there.
+to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**

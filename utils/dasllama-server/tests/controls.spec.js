@@ -103,6 +103,18 @@ test('an in-process result shows the served row, the comparison line, and no rat
     await expect(page.locator('#bench-record-row')).toBeHidden();   // no record: nothing to submit from a self-measure
 });
 
+test('an in-process result on a slot whose device homes streams shows the batched column', async ({ page }) => {
+    // hand-composed (fixtures/README.md): the capture box homes no device streams
+    const b = fx('bench_done_batched');
+    expect(b.result.npl).toBe(4);
+    await openControl(page, { bench: b });
+    await expect(page.locator('#bench-table')).toBeVisible();
+    await expect(page.locator('#bench-body tr')).toHaveCount(1);
+    await expect(page.locator('#bench-body')).toContainText(b.result.ours_tgb.toFixed(1) + ' @' + b.result.npl);
+    await expect(page.locator('#bench-body')).toContainText(b.result.ours_tg.toFixed(1));
+    await expect(page.locator('#bench-log')).toContainText(b.log[b.log.length - 1]);
+});
+
 test('the idle panel names the mode the server would run', async ({ page }) => {
     const b = fx('bench_idle');   // captured in the in-process mode
     await openControl(page, { bench: b });

@@ -4,14 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**Routed from this folder's `REVIEW.md` and `../REVIEW_GPU.md`: a diff either routes here applies
-this list together with the routing checklist's.**
-
-**A diff that changes a kernel's dispatch geometry - a grid divisor, or the workgroup size
-(Vulkan's `[spirv_kernel(local_size_x=)]`, Metal's `tg=` threads per threadgroup) - updates
-every gate that dispatches that kernel, in the same change; a gate is a cell or probe that
-dispatches or binds a kernel by hand rather than through the generated builders.** A moved
-divisor leaves the gate dispatching the wrong shape with no error.
+**A diff that changes a kernel's dispatch grid - the count its dispatch needs, or its workgroup
+size - updates every gate that dispatches that kernel, in the same change; a gate is a cell or
+probe that dispatches or binds a kernel by hand rather than through the generated builders.** A
+gate left on the old count dispatches the wrong shape with no error.
 
 **A diff that gives a `[metal_dispatch]` kernel `@workgroup` state, or takes it away, updates
 the threadgroup-memory length in every gate that hand-dispatches that kernel, in the same
@@ -20,17 +16,18 @@ change.** A gate that sets none for a kernel with `@workgroup` state reads garba
 **A diff that changes the size of a `[metal_dispatch]` stamp's `@workgroup` array - a stamp
 being one leaf class of a kernel, whose overridden constants set that size - updates, in the
 same change, every gate that hand-dispatches a different stamp while reading this stamp's
-`*_tgmem` global for its threadgroup-memory length.** A gate reading the `*_tgmem` global of the
-stamp it dispatches follows the new size on its own.
+`*_tgmem` global for its threadgroup-memory length.**
 
-**A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
-updates every hand-bind of that kernel the change made stale, in the same change.** A stale hand
-bind reads the wrong buffer and passes on garbage that happens to compare.
+**A diff that changes a kernel's kargs - the kernel-argument struct, any buffer binding, or the
+layout of a struct a bound buffer holds - updates every hand-bind of that kernel the change made
+stale, in the same change.** A stale hand bind reads the wrong buffer and passes on garbage that
+happens to compare.
 
 **A kernel-unit cell - a model-less cell that dispatches one or more kernel classes and asserts on
 their output - missing a compare against a CPU oracle is a defect; where the cell compares two
 kernel forms against each other, the oracle compare targets one of those two forms.** A cell is a
-`t |> run` block, or a helper that asserts on `t`. Two forms can be bit-equal and both wrong.
+`t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same computation written in
+plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
 **A kernel whose branch selection changes - a branch added, or an existing branch's predicate
 widened or narrowed, so that a different set of kargs values, or of sentinel values in a bound
@@ -40,15 +37,15 @@ the kernel computes what it did before, so a cell that dispatches only those val
 whether the change is right or wrong.
 
 **Before every dispatch whose output a kernel-unit cell reads - directly, or through a later
-dispatch in the same cell - the cell fills with a sentinel each of that dispatch's output
-buffers that the dispatch does not also read as input.** An unprefilled output can pass by
-staying stale - the previous dispatch's values, or garbage that happens to sit inside the
-tolerance bar.
+dispatch in the same cell - the cell fills with a sentinel every range of that dispatch's output
+buffers the dispatch writes without reading.** An unprefilled output can pass by staying stale -
+the previous dispatch's values, or garbage that happens to sit inside the tolerance bar.
 
-**A bit-identity assert on a result either side computes with floating-point arithmetic compares
-two GPU dispatches, never a dispatch against a CPU oracle - unless the cell fixes the operation
-order on both sides, so the oracle's result is the kernel's by construction.** An exact compare
-of indices or schedule words against a CPU twin is not that assert.
+**A bit-identity assert on a result either side computes with floating-point arithmetic, in an
+operation order the cell does not fix on both sides, compares two GPU dispatches, never a
+dispatch against a CPU oracle.** With the order fixed on both sides the oracle's result is the
+kernel's by construction; an exact compare of indices or schedule words against a CPU twin is not
+that assert.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose CPU oracle does not
 differ from that input by construction, pairs its compare with an assert that the output
@@ -67,9 +64,10 @@ step - operands, accumulator, or the stored result - bounds that step's error by
 error, in the cell or at the shared bar helper the cell calls.** A bar with no derivation admits
 whatever result it was set to pass.
 
-**A diff that changes a kernel's narrow step restates, in every kernel-unit cell of that kernel
-and in the same change, what holds that cell's compare: the construction that bounds the new
-step's error, or how its bar follows from that error, whether or not the bar moves.**
+**A diff that changes where a kernel computes at a narrower precision than its oracle - the
+operands, the accumulator, or the stored result - restates, in every kernel-unit cell of that
+kernel and in the same change, what holds that cell's compare: the construction that bounds the
+new step's error, or how its bar follows from that error, whether or not the bar moves.**
 
 **A kernel-unit cell for a kernel that attends inside a restricted horizon - a window, a
 sliding span, a block-diagonal range - writes its CPU oracle to attend strictly inside that

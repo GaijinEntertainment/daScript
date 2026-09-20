@@ -1,32 +1,36 @@
 # dasLLAMA Placement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`.
+Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
 
-**A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
-charters own the per-file list; a rule naming what KIND of code lands in which file is the
-checklist's own.
+**A per-file inventory restated in this checklist is a defect of the checklist.** The
+`ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
+code lands in which file is the checklist's own.
 
-**A function lands in the file whose sec.1 charter line names its kind - or that charter line
-changes in the same diff.** `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds
-each file's charter line.
+**A function lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's sec.1 -
+names its kind, or that charter line changes in the same diff.** `ARCHITECTURE.md`'s sec.1 routing
+block names the companion that holds each file's charter line.
 
-**A host-side chain that selects a stamp of a Vulkan kernel class family - an ensure/set/encode
-pick on any axis (arm, format or shape) - lands in `dasllama/dasllama_vulkan_classes.das`, and so
-does the grid rule of a class whose family ships more than one arm.** A stamp is one class stamped
-from a kernel class template; an arm is one of the coopmat forms a family ships (cm2, KHR).
+**The grid rule of a class whose family ships more than one arm lands in
+`dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a family ships (cm2,
+KHR).
+
+**A host-side ensure/set/encode ladder that picks which stamp to use from the call's own arguments -
+arm, format or shape - lands in `dasllama/dasllama_vulkan_classes.das`; a choice the driver makes
+from the state it armed at bring-up stays in the driver.** A stamp is one class stamped from a
+kernel class template.
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
 `dasllama/dasllama_vulkan_classes.das`).**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
-a CPU row core reads in `dasllama/dasllama_repack.das`, a transform into the layout a GPU plane
-or gather reads in `dasllama/dasllama_layout.das`.**
+the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
+GPU plane or gather reads in `dasllama/dasllama_layout.das`.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
 that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`.** A dot over an
@@ -45,16 +49,17 @@ pipeline where it is stamped.
 of - lands in that tier's `dasllama/dasllama_math_<tier>.das`, never in
 `dasllama/dasllama_math.das`.**
 
-**A quirk of one family - one model architecture's file, or one backend driver's - lands in that
-file, never in another family's file.**
+**A quirk of one family - a special case only one model architecture's file, or one backend
+driver's, needs - lands in that file, never in another family's file.**
 
-**A piece two files in one folder both use - logic or a named constant - lands in a file both
-already require (a new file of its own when they require none in common) - never a second copy:
-two spellings that can drift apart on the first edit to one.** A restatement the language or the test contract forces - an
-enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a copy.
+**Logic or a named constant that two files in one folder both use lands in a file both already
+require - a new file of its own when they require none in common - never as a second copy.** Two
+spellings drift apart on the first edit to one. A restatement the language or the test contract
+forces - an enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a
+copy.
 
-**A piece two folders outside each other - neither one containing the other - both need lands
-in the folder that owns the concern, and the other requires it - never a copy in each.**
+**A piece that two folders both need, neither containing the other, lands in the folder that owns
+the concern, and the other folder requires it - never a copy in each.**
 
 **A family gaining support for a media kind adds that kind's span markers to that family's chat
 template, never to another family's; a diff claiming that support while the family's chat template
@@ -84,13 +89,10 @@ the forward loops and the model state stay in the other `dasllama/` files; HTTP,
 that turns a step's output into the wire text a client reads, in `utils/dasllama-server` (repo
 root).
 
-**An `[init]`-only side-effect require in an engine file (`dasllama/`) whose registration no
-`dasllama/dasllama_common.das` code needs to have run lives in `dasllama/dasllama_transformer.das`**
-- the require umbrella breaks the cycle a module requiring the engine back would close.
-
-**An `[init]`-only side-effect require whose registration `dasllama/dasllama_common.das` code needs
-to have run lives in `dasllama/dasllama_common.das` when the registered module does not require the
-engine back, and in `dasllama/dasllama_transformer.das` when it does.**
+**An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
+`dasllama/dasllama_common.das` when `dasllama_common.das`'s own code needs the registration to have
+run and the registered module does not require the engine back, and in
+`dasllama/dasllama_transformer.das` otherwise.** The require umbrella breaks the cycle a module requiring the engine back would close.
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**

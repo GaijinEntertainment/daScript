@@ -1265,16 +1265,45 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
     g_rdec_note_weight_bytes = f
 }
 
-def private moe_gpu_no_binding_cap : int64 => 0l
+//! the N-row token command: `nrows` rows of x and cos/sin, each row's position, cached count and mirror region, each row's
+//! logits landed at its own `lrows` pointer (a session's logits row)
+typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) : void>
+
+[unused_argument(x, cossin, poss, cnts, regs, nrows, lrows)]
+def private rdec_unset_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
+    panic("dasLLAMA: resident N-row token hit without an installed GPU driver")
+}
+def private rdec_no_token_n_rows : int64 => 0l
+var private g_rdec_token_n = @@rdec_unset_token_n
+var private g_rdec_token_n_rows = @@rdec_no_token_n_rows
+
+//! Install the N-row token command beside the resident driver: `rows` answers how many rows it steps at once on the armed model (0 = none)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : function<() : int64>) {
+    g_rdec_token_n = token_n
+    g_rdec_token_n_rows = rows
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+def public rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
+    invoke(g_rdec_token_n, x, cossin, poss, cnts, regs, nrows, lrows)
+}
+
+//! the rows the armed driver's N-row command steps at once; 0 where the model or the driver has none
+def public rdec_token_n_rows() : int64 => invoke(g_rdec_token_n_rows)
+
+[unused_argument(regions)]
+def private moe_gpu_no_binding_cap(regions : int64) : int64 => 0l
 var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
 
-//! The tier's largest legal single-SSBO binding range in bytes (0 = no tier / unknown). The
-//! resident KV mirror binds one range per side, so the ctx negotiation must cap against it.
-def public set_moe_gpu_binding_cap(f : function<() : int64>) {
+//! The tier's largest legal single-SSBO binding range in bytes for planes shared by `regions` K/V mirror
+//! regions (0 = no tier / unknown). The resident KV mirror binds one range per side, every region
+//! carrying its own slack past its planes, so the ctx negotiation must cap against it.
+def public set_moe_gpu_binding_cap(f : function<(regions : int64) : int64>) {
     g_moe_gpu_binding_cap = f
 }
 
-def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
+def public moe_gpu_binding_cap(regions : int64) : int64 => invoke(g_moe_gpu_binding_cap, regions)
 
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
@@ -1940,6 +1969,12 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_binding_cap == null) {
         g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
+    }
+    if (g_rdec_token_n == null) {
+        g_rdec_token_n = @@rdec_unset_token_n
+    }
+    if (g_rdec_token_n_rows == null) {
+        g_rdec_token_n_rows = @@rdec_no_token_n_rows
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes

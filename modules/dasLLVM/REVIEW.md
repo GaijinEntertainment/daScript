@@ -8,9 +8,9 @@
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
 there.
 
-- **A change under `modules/dasLLVM/` runs the module-owned suite** (command and build gate:
-  `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
-  covers it.
+- **A change to any file under this module but a `.md` runs the module-owned suite** (command
+  and build gate: `tests/README.md` here). The suite is outside the core `tests/` sweep, so no
+  other lane covers it.
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns runs the

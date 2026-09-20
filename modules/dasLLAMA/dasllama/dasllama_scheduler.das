@@ -494,14 +494,18 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.batch_idx |> push(i)
     }
     if (!empty(sch.batch_rows)) {
+        let ts_step = prof_ticks()
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
+        prof_add("sched_eval_batch", ts_step)
         sch.decode_steps ++
         sch.sum_batch += long_length(sch.batch_rows)
+        let ts_sample = prof_ticks()
         for (bi in range64(long_length(sch.batch_idx))) {
             if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
                 sch.gen_tokens ++
             }
         }
+        prof_add("sched_sample", ts_sample)
     }
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()

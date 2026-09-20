@@ -58,6 +58,7 @@ var private fileTimings : array<FileTiming>
 var private failedFiles : array<FailedFile>
 var private timingOutliers : int = 0
 var private maxFileTime : float = 0.0
+var private g_stderr_seq : int = 0   //! with the spawn tick, names each isolated child's stderr file
 var private jsonFilePath : string
 var private jsonTestFile : string
 
@@ -194,12 +195,15 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
     // stack — to stderr. Redirect stderr to a temp file (overrides both paths,
     // and avoids the timeout>0 interleave) and, on abnormal exit, fold it into
     // the crashed file's log so the stack is surfaced under the failing test.
-    let tfRes = create_temp_file_result("dastest_stderr_", ".txt")
-    let errPath = (tfRes is value) ? (tfRes as value) : ""
+    //! the path is minted, never pre-created: a file created and closed here draws a scanner's open on
+    //! Windows, and the shell's `2>` then fails with a sharing violation - the child reads as crashed
+    let tdRes = temp_directory_result()
+    g_stderr_seq++
+    let errPath = (tdRes is value) ? path_join(tdRes as value, "dastest_stderr_{ref_time_ticks()}_{g_stderr_seq}.txt") : ""
     if (empty(errPath)) {
         // The point of this is to NOT silently lose crash diagnostics, so make
-        // the temp-file failure visible rather than quietly dropping stderr.
-        br.err |> push("dastest: could not create a temp file for subprocess stderr capture ({tfRes as error}); stderr (crash stacks, etc.) will not be surfaced")
+        // the temp-dir failure visible rather than quietly dropping stderr.
+        br.err |> push("dastest: no temp directory for subprocess stderr capture ({tdRes as error}); stderr (crash stacks, etc.) will not be surfaced")
     }
     let runCmd = empty(errPath) ? cmd : "{cmd} 2>\"{errPath}\""
     unsafe {

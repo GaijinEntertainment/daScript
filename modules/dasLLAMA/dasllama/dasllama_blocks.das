@@ -685,7 +685,7 @@ def private span_model_ok(t : Model) : bool {
     let c = t.config
     if (!g_env_gpu.gpu_dec_span || !moe_gpu_span_ok() || t.quant != QuantMode.q8 || c.n_expert == 0l
             || c.n_expert_used > 64l || c.n_expert > 256l || c.moe_gate != MoeGate.softmax || c.moe_router_bias || c.moe_exp_probs
-            || c.n_layers * c.n_expert * c.dim * 4l > moe_gpu_binding_cap() || !t.blocks.std_chain
+            || c.n_layers * c.n_expert * c.dim * 4l > moe_gpu_binding_cap(1l) || !t.blocks.std_chain
             || (c.n_ff_shexp > 0l && c.moe_dense_shexp) || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
         return false
     }

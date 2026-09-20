@@ -365,11 +365,11 @@ partner (the output bias row past the norm row) against the seam and the CPU ora
 `test_vkd_act_family` runs the unbiased act kernels under the clamped swiglu beside silu and adds
 the biased twins (`q8_actrq_b_cls`, `actf16_b_cls`) over a six-expert bias plane, `test_vkd_fa_cm2`
 / `test_vkd_fa_khr` and `test_vkd_da_attn` add the sink arms (the h64 flash stamps whole and under
-a 40-key window; the token command's f32 and f16 sink twins unsplit and split with the sink
-combine), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
+a 40-key window; the token command's f32 and f16 sink twins unsplit and split, the last piece's
+combine seeding the sink), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
 the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
-the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+unsplit and split - the pass stores the row either way, its last piece combining), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
@@ -513,14 +513,26 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
-`test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das` and
-`test_gpu_resident_regions_hybrid.das` (`_resident_regions.das` carries the cells; one model a file) - stocked suite, `-jit` only; the resident driver's mirror
+`test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
+llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
+NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
+forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
+the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
+GPU-served window in force while the driver is armed, the CPU window back after the drop; the 1B
+also runs the batched bench row (`bench_tg_batched_rep`): a row asking more streams than the
+device homes refuses by name and reads 0, and a row it homes serves at a rate with every stream
+parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
+other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
+`test_gpu_resident_regions_hybrid.das` and `test_gpu_resident_regions_llama_k.das` (`_resident_regions.das` carries the cells; one model a file; the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
 itself, so no CPU reference chain runs. The bit-for-bit cells: a session stepped between another
 session's single steps, and a batched step over both, each read what the session reads alone,
 the two prompts differing in content and length so a crossed region cannot land there, the
 claims unchanged through the batched steps (no history came up from the host again); the same
+batched steps past the unsplit position (both prompts longer than `RD_UNSPLIT_POS`, so the N-row
+command's split attention form serves, its arrival counters a row apart); the same
 with device-home sessions, which allocate no host cache, prefill on the device under the
 server's prefill pin (`set_resident_prefill_allowed(false)`) and come through a hydrate
 untouched; the pin - with both regions held by

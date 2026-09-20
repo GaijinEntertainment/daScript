@@ -243,8 +243,9 @@ def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes :
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
 // the largest legal single-SSBO binding range (maxStorageBufferRange) — the KV mirror's ceiling
-//! the range a KV mirror side may bind, less the slack every side carries past its planes (at the f32 codec's element size)
-def private vk_binding_cap : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l : 0l
+//! the range a KV mirror side may bind, less the slack each of its `regions` carries past its planes (at the f32 codec's
+//! element size) - the bound `vk_rdec_prepare` holds the mirror to
+def private vk_binding_cap(regions : int64) : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l * regions : 0l
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     if (!arena_rows_ok(n, fmt)) {
@@ -363,6 +364,7 @@ def dasllama_math_vulkan_register() {
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,
         @@vk_rdec_sync_kv, @@vk_rdec_read_kv, @@vk_rdec_read_kv_bulk)
     install_moe_gpu_resident_regions(@@vk_rdec_select_region)
+    install_moe_gpu_resident_batch(@@vk_rdec_token_n, @@vk_rdec_token_n_rows)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)
     set_moe_gpu_dn_state_hooks(@@vk_dn_step_flush, @@vk_dn_step_invalidate, @@vk_dn_step_release)

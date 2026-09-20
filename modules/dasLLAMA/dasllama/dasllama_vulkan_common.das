@@ -654,6 +654,7 @@ struct GpuState {
                                       // the process-lifetime pair (staging, profiler readback) — the
                                       // whole-model drop sweeps this
     model_cmds : array<VkCommandBuffer>   // every alloc_cmd result — freed together at model drop
+    model_xcmds : array<VkCommandBuffer>   //! every alloc_xfer_cmd result - the transfer pool's model-owned commands, freed with the model too
     // FFN mid-chain state (lazy — first FFN dispatch creates it)
     hq_dev : uint64          // device requantized-hidden quants (the down GEMM's activation image)
     hs_dev : uint64          // ... its scales
@@ -704,6 +705,8 @@ struct GpuState {
     xfer_sem : VkSemaphore
     xfer_value : uint64           // last signaled timeline value
     pend_wait : uint64            // value the NEXT compute submit must wait for (0 = none)
+    cmp_sem : VkSemaphore         //! the compute -> transfer timeline: a token command's signal, which its logits copy on the transfer queue waits for
+    cmp_value : uint64            //! its last signaled value
     // deltanet chain state (lazy — first DN dispatch creates it)
     dn_meta : HostBuf             // dn kernel params staging
     dn_meta_dev : uint64
@@ -1188,7 +1191,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the SM count the dense tile pick and split-k read ({sm} here); without it the l tile serves every dense GEMM and nothing splits k"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
-            rides = "the transfer queue that overlaps streamed weight copies with compute; without it the copies ride the compute queue"),
+            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident token command's logits behind a compute-timeline wait; without it the copies ride the compute queue and the token command copies its own logits under its fence"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -1327,6 +1330,7 @@ def vk_moe_init : bool {
             vk_check(vkAllocateCommandBuffers(dev_raw(), xai, addr(g_gpu.xfer_cmd)), null)
             sci.pNext = addr<void?>(tci)
             vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
+            vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
     }
@@ -1837,6 +1841,10 @@ def vk_drop_model_state {
         vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), unsafe(addr(g_gpu.model_cmds[0])))
         g_gpu.model_cmds |> clear()
     }
+    if (!empty(g_gpu.model_xcmds)) {
+        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.xfer_pool), uint(length(g_gpu.model_xcmds)), unsafe(addr(g_gpu.model_xcmds[0])))
+        g_gpu.model_xcmds |> clear()
+    }
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
     // (chunks are kept, not destroyed: the next model refills from chunk 0)
     let rdpf : VkDescriptorPoolResetFlags
@@ -2255,7 +2263,6 @@ struct RLayer {
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
     s_rope : VkDescriptorSet        // rope + KV store class set
     s_attn : VkDescriptorSet        // decode attention class set
-    s_attn_comb : VkDescriptorSet   //! the split attention's combine (a head's partials into its row)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
@@ -2272,6 +2279,7 @@ struct RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
+    s_addr_ffn_rq_b, s_addr_next_rq_b : VkDescriptorSet   //! the N-row command's fused sites over the rows' planes, where the feed is Q8_0
     rq_ffn_stamp : RqStamp          //! the FFN site's: the triple's or the experts' feed form, the row stored for a router
     rq_next_stamp : RqStamp         //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
     // host-visible per-dispatch buffers: the class GEMV region pairs
@@ -2360,6 +2368,13 @@ struct RLayer {
 //! the layer's dense FFN triple is placed: its own FFN, or an MoE layer's shared expert (an MoE layer without one has none)
 def has_dense_triple(L : RLayer) : bool => L.b1 >= 0l
 
+//! the N-row token command's kernel classes on this device: built once before a step commits to the command, or one declined
+enum NRail {
+    unasked
+    built
+    declined
+}
+
 struct RDec {
     ready : bool
     tokens_served : int64
@@ -2380,7 +2395,8 @@ struct RDec {
     xq_dev, xs_dev : uint64       // quantized activation (shared across the layer's GEMVs)
     q_dev, kv_dev : uint64        // roped q; the k/v projection buffer rope reads (k@qd, v@qd+kvd)
     attn_dev : uint64             // attention output
-    attn_part_dev : uint64        //! the split decode attention's partials [heads x DA_NSPLIT_MAX x (head_size + 2)]
+    attn_part_dev : uint64        //! the split decode attention's pieces [rows x heads x attn_nsplit x (head_size + 2)], then its arrival counters
+    attn_cnt_off : int64          //! the counters' word offset in that plane
     ar_cnt_dev : uint64           //! the epilogue GEMVs' arrival counter (one word: the dispatches are sequential), zero between dispatches
     attn_nsplit : int64           //! key splits a head the token command dispatches (1 = the unsplit pass; `da_nsplit`)
     aq_dev, as_dev : uint64       // quantized attn (wo input)
@@ -2416,6 +2432,9 @@ struct RDec {
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
     x_host, logits_host : HostBuf
+    log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
+    xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands by row count (index 0 unused; the one-row command lands at 1), recorded on first use
+    xlog_recorded : array<bool>
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
@@ -2426,6 +2445,9 @@ struct RDec {
     cls_epi_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
+    s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
+    n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
+    n_rail : NRail = NRail.unasked   //! the N-row command's kernel classes on this device; declined = the command answers 0 rows
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
@@ -2435,6 +2457,10 @@ struct RDec {
     unsplit_on : bool               //! ... recorded (a device at one split has no twin)
     unsplit_served : int64        //! the tokens the twin served
     tok_recorded : array<bool>    //! per region: cmd holds the whole-token chain, re-submittable as-is
+    nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
+    cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
+    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS
+    tok_n_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2548,6 +2574,9 @@ def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
     }
+    for (rec in g_rd.tok_n_recorded) {
+        rec = false
+    }
 }
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
@@ -2653,6 +2682,13 @@ var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its s
 var g_rdq_n_unsplit = 0u
 var g_rdq_overflow_unsplit = false
 var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
+var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
+var g_rdq_n_n = 0u
+var g_rdq_overflow_n = false
+var g_rdq_names_n_unsplit : array<string>
+var g_rdq_n_n_unsplit = 0u
+var g_rdq_overflow_n_unsplit = false
+var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a switch between the one-row and N-row forms restarts the averages
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
@@ -2688,6 +2724,13 @@ def rdq_reset {
     g_rdq_n_unsplit = 0u
     g_rdq_overflow_unsplit = false
     g_rdq_form_unsplit = false
+    g_rdq_names_n |> clear()
+    g_rdq_n_n = 0u
+    g_rdq_overflow_n = false
+    g_rdq_names_n_unsplit |> clear()
+    g_rdq_n_n_unsplit = 0u
+    g_rdq_overflow_n_unsplit = false
+    g_rdq_form_n = false
 }
 
 let PFQ_CAP = 2048u
@@ -3260,11 +3303,9 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
     }
 }
 
-// One-shot command buffers (the KV readback rails) are freed by their caller — registering them
-// in model_cmds would grow it per hydration until the next model drop.
-def alloc_transient_cmd : VkCommandBuffer {
+def private alloc_cmd_in(pool : CommandPool) : VkCommandBuffer {
     var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(g_gpu.pool)
+    ai.commandPool = boost_value_to_vk(pool)
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw : VkCommandBuffer
@@ -3272,18 +3313,35 @@ def alloc_transient_cmd : VkCommandBuffer {
     return raw
 }
 
+//! a one-shot command (the KV readback rails) its caller frees through `free_transient_cmd`: registering it in model_cmds would grow that list per hydration until the next model drop
+def alloc_transient_cmd : VkCommandBuffer => alloc_cmd_in(g_gpu.pool)
+
 def free_transient_cmd(var raw : VkCommandBuffer) {
     vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
 }
 
+//! a persistent command on the compute pool, model-owned: freed by the model drop
 def alloc_cmd : VkCommandBuffer {
-    var raw = alloc_transient_cmd()
-    g_gpu.model_cmds |> push(raw)   // all persistent cmds are model-owned; freed by the model drop
+    var raw = alloc_cmd_in(g_gpu.pool)
+    g_gpu.model_cmds |> push(raw)
     return raw
 }
 
+//! a persistent command on the transfer queue's pool
+def alloc_xfer_cmd : VkCommandBuffer {
+    var raw = alloc_cmd_in(g_gpu.xfer_pool)
+    g_gpu.model_xcmds |> push(raw)   // model-owned: freed by the model drop, as alloc_cmd's are
+    return raw
+}
+
+def upload_zeros(dev : uint64; off, bytes : int64) {
+    var zeros : array<uint8>
+    zeros |> resize(bytes)
+    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), bytes)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
+def private submit_core(var raw : VkCommandBuffer; fence : VkFence; signal : bool = false) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
     // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
@@ -3293,6 +3351,8 @@ def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
     var wstage : VkPipelineStageFlags
     wstage.transfer = true
     wstage.compute_shader = true
+    var csem = g_gpu.cmp_sem
+    var sval = g_gpu.cmp_value + 1ul
     unsafe {
         submit.pCommandBuffers = addr(raw)
         if (wval > 0ul) {
@@ -3304,7 +3364,68 @@ def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
             submit.pWaitDstStageMask = addr<uint?>(wstage)
             g_gpu.pend_wait = 0ul
         }
+        if (signal) {   //! the compute timeline: the transfer queue's copy of this command's output waits for it
+            tss.signalSemaphoreValueCount = 1u
+            tss.pSignalSemaphoreValues = addr(sval)
+            submit.pNext = addr<void?>(tss)
+            submit.signalSemaphoreCount = 1u
+            submit.pSignalSemaphores = addr(csem)
+            g_gpu.cmp_value = sval
+        }
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
+    }
+}
+
+//! a compute submit with no fence that signals the compute timeline; returns the value to wait for
+def submit_signal(var raw : VkCommandBuffer) : uint64 {
+    var nofence : VkFence
+    submit_core(raw, nofence, true)
+    return g_gpu.cmp_value
+}
+
+let XFER_NO_WAIT = 0ul   //! `xfer_submit_after`'s compute-timeline value for a submit that waits on nothing
+
+//! a transfer-queue submit that waits for the compute timeline at `cmp_val` and signals the transfer timeline; returns the value to wait for
+def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
+    g_gpu.xfer_value++
+    var sig = g_gpu.xfer_value
+    var wval = cmp_val
+    var tss = VkTimelineSemaphoreSubmitInfo()
+    var wsem = g_gpu.cmp_sem
+    var ssem = g_gpu.xfer_sem
+    var wstage : VkPipelineStageFlags
+    wstage.transfer = true
+    var submit = VkSubmitInfo()
+    submit.commandBufferCount = 1u
+    submit.signalSemaphoreCount = 1u
+    let nofence : VkFence
+    unsafe {
+        if (cmp_val != XFER_NO_WAIT) {
+            submit.waitSemaphoreCount = 1u
+            tss.waitSemaphoreValueCount = 1u
+            tss.pWaitSemaphoreValues = addr(wval)
+            submit.pWaitSemaphores = addr(wsem)
+            submit.pWaitDstStageMask = addr<uint?>(wstage)
+        }
+        tss.signalSemaphoreValueCount = 1u
+        tss.pSignalSemaphoreValues = addr(sig)
+        submit.pNext = addr<void?>(tss)
+        submit.pCommandBuffers = addr(xraw)
+        submit.pSignalSemaphores = addr(ssem)
+        vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
+    }
+    return sig
+}
+
+//! spin until the transfer timeline reaches `v`: a blocking wait pays the OS wake-up latency a step
+def xfer_spin_wait(v : uint64) {
+    let sem = g_gpu.xfer_sem
+    var cur = 0ul
+    while (true) {
+        vk_check(vkGetSemaphoreCounterValue(dev_raw(), sem, cur), null)
+        if (cur >= v) {
+            break
+        }
     }
 }
 

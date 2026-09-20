@@ -103,6 +103,8 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
         tm.pos = uint(pos)   // mirror row = layerbase(0) + pos * kvd
+        tm.cnt = 0u
+        tm.mirbase = 0u
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
@@ -147,20 +149,21 @@ def private ensure_da_state {
 //! the device K/V mirror (the same planes vk_rope_kv_store wrote), GQA per kv_mul, into out[0..qd).
 def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim, head_size, kv_mul : int64; scale : float) {
     verify(vk_moe_init())
-    assert(head_size <= 256l && qd <= RKS_MAX_QD, "dasLLAMA vulkan: decode-attn geometry over scratch")
+    verify(head_size <= 256l && head_size % 32l == 0l && qd <= RKS_MAX_QD, "dasLLAMA vulkan: decode-attn geometry over scratch (a 32-multiple head up to 256)")
     ensure_da_state()
     let n_heads = int(qd / head_size)
     unsafe {
         upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
         tm.cnt = uint(cnt)
+        tm.mirbase = 0u   //! the seam's mirror starts at 0: the attention adds the row's base to its push
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
             kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-        enc_da_attn_cls(raw, h, g_gpu.da_set, pc, int64(n_heads))
+        enc_da_attn_cls(raw, h, g_gpu.da_set, pc, da_attn_row_wgs(int64(n_heads), kv_mul, 1l))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)

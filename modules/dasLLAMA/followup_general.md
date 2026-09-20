@@ -1751,3 +1751,9 @@
     reproduced with `daslang_jit_dump_ir` on the two programs, the differing inlining or
     alignment named, and either a pin (the generator kernels `[no_inline]`-bounded, or aligned)
     or a `PERF_LEDGER.md` refutation.
+155. **The server's batched bench row runs whole inside one tick.** The in-process bench steps
+    one pp prefill or one tg token a tick so the supervisor's health probe is answered between
+    them, but its `tg128@N` phase calls `bench_tg_batched_rep` once a rep: `N` prefills and 128
+    batched steps with no tick between, seconds of unanswered HTTP on a large model. The work:
+    the phase holding the scheduler across ticks - admit on one tick, then one `scheduler_step` a
+    tick until the timed steps are done - with the rate read over the timed ticks alone.

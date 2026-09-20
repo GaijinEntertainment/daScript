@@ -1,19 +1,19 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT.md`,
-`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
-work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
-A race times two implementations of one computation on one queue; a knockout skips a stage to
-measure that stage's cost; an overhead measurement times one chain with and without an interposed
-stage - a timestamp, a barrier, a flush - to measure that stage, and is not a race. An arm is one
-timed implementation in a race, a knockout, or an overhead measurement - never one of the kernel
-variants the shipped code picks between at run time. A retained-reference arm is one ledgered as
-a retained reference in `ARCHITECTURE_GPU.md` sec.2.2b (Metal) or
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan). An arm's ranking is decided when a
-checked-in document, box profile or sidecar records it. An A/B lab is a timing script that picks
-between spellings of one compute.
+A race times two candidates for one computation in one process, either of which the run could
+adopt; a knockout skips a stage to measure that stage's cost; an overhead measurement times one
+chain with and without an interposed stage - a timestamp, a barrier, a flush - to measure that
+stage, and is not a race. A timing arm - arm below - is one timed run of a race, a knockout, or
+an overhead measurement: code that dispatches a kernel to measure it rather than to serve a call.
+An arm's chain is the dispatches it times. An arm's ranking is decided when a checked-in
+document, box profile or sidecar records the arm's figure or names the arm as the shipped form. A
+retained-reference arm is one ledgered as a retained reference in `ARCHITECTURE_GPU.md` sec.2.2b
+(Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan).
 
 **A hand-binding arm that binds a field at a position the class does not declare for that field
 is a defect.** A hand-binding arm restates a SHIPPED class's binding numbers instead of naming its
@@ -21,11 +21,12 @@ fields - a Metal `kn_buffer(enc, n)` call, or a probe class declaring the slots 
 mirrors. A mis-bound arm dispatches, reads the wrong buffer, and its timing selects the wrong
 kernel silently.
 
-**An ordered argument list into a generated setter (`set_...(bufs, sizes, gbits)`, the
-`[vk_dispatch]` lens's set builder) carries one entry per distinct `@binding` number the class
-and its base declare, in ascending order - fields sharing a binding share one entry, a number
-nothing declares gets none.** The setter checks only how many arguments it got, never which field
-each position carries; such a list restates no binding number, so it is not a hand-binding arm.
+**An ordered argument list into a generated setter (the `set_*(bufs, sizes, gbits)` function a
+`[vk_dispatch]` class's family generates) carries one entry per distinct `@binding` number the
+class and its base declare, in ascending order - fields sharing a binding share one entry, a
+number nothing declares gets none.** The setter checks only how many arguments it got, never
+which field each position carries; such a list restates no binding number, so it is not a
+hand-binding arm.
 
 **A hand-binding arm whose own function holds neither a `pipeline_from_source` over a literal
 global nor a literal `kn_tgmem` constant - one outside `dasllama/`, one whose source arrives as
@@ -53,9 +54,9 @@ family it races, or - for a knockout - the file that owns the stage whose cost i
 file.
 
 **A race whose ranking turns on weight-stream bandwidth sizes its operands past the device's
-last-level cache - never a slab small enough to sit in it - or streams a ring of copies
-(`run_cold_shape`, `harness/vk_gemm_probe.das`).** A cache-resident slab ranks the kernels by an
-effect production never sees, and the race then picks the slower kernel.
+last-level cache or streams a ring of copies (`run_cold_shape`, `harness/vk_gemm_probe.das`).** A
+cache-resident slab ranks the kernels by an effect production never sees, and the race then picks
+the slower kernel.
 
 **A race whose ranking turns on dispatch latency times its kernel at the shape production
 dispatches.**
@@ -69,21 +70,21 @@ kernel at one region whose token count is a whole multiple of that tile's token 
 token extent one tile covers - and at one where it is not.** A token count that is not a whole
 multiple is what makes the tile take its partial-tile store path.
 
-**An `ARCHITECTURE_GPU.md` sec.2.2b entry for a kernel ranked only at power-of-two batch widths
-names those widths.**
+**An `ARCHITECTURE_GPU.md` sec.2.2b or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a entry
+for a kernel ranked only at power-of-two batch widths names those widths.**
 
-**A kernel A/B race arm with a decided ranking whose dispatches production runs independently of
-each other binds a different output buffer for consecutive dispatches of its chain, never one
-shared output.** One shared output serializes the chain on its write-after-write hazard while
-production overlaps consecutive dispatches, so the race ranks the arms on a shape production never
-runs.
+**When production runs a kernel's dispatches independently of each other, each consecutive
+dispatch in a race arm with a decided ranking binds its own output buffer.** One shared output
+serializes the chain on its write-after-write hazard while production overlaps consecutive
+dispatches, so the race ranks the arms on a shape production never runs.
 
 **A race arm that holds one output across its chain - reading a dependent chain's cost, or one
 dispatch's latency - is ledgered as that form in `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`
 sec.2.21 (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan).**
 
 **Every arm of a kernel A/B race with a decided ranking handles the hazard between its
-dispatches the same way.** An arm serialized by a barrier races an arm that overlaps.
+dispatches the same way.** A barrier on one arm and overlap on the other price two different
+chains, so the ranking is not a comparison.
 
 **Weakening the burn phase of `race_pair_ms` (`dasllama/dasllama_metal_common.das`) - the GPU
 work it runs on both arms before the first timed round - is a defect.**
@@ -95,11 +96,13 @@ clock's ramp-up to the arm that ran it.
 **A timed encoder in a race arm with a decided ranking issues its dispatches back to back.** An
 encoder that leaves gaps between its dispatches times an idle clock.
 
-**A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
-variant's class and any `*_variants.das` code that exists only for it and that neither dispatches
-the shipped kernel class's generated source nor is a retained-reference arm.** An arm kept after
-its ranking is decided stops being maintained and duplicates the kernel it was ported into.
+**A diff that ports an A/B lab's winning variant into a kernel - an A/B lab is a timing script
+that picks between spellings of one compute - deletes, in the same change, that variant's class
+and any `*_variants.das` code that exists only for it and is not a live arm.** A live arm is one
+that is undecided, dispatches the shipped kernel class's generated source, is a
+retained-reference arm, or is a kernel variant the shipped code picks between at run time. An arm
+kept after its ranking is decided stops being maintained and duplicates the kernel it was ported
+into.
 
-**The diff that leaves an A/B lab with no undecided arm, no arm dispatching the shipped kernel
-class's generated source and no retained-reference arm deletes the lab's driver and its remaining
+**The diff that leaves an A/B lab with no live arm deletes the lab's driver and its remaining
 arms in the same change.**

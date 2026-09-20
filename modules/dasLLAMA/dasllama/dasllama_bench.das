@@ -6,6 +6,9 @@ module dasllama_bench shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common   // Model, Session, Config, make_run_state, forward_prefill, forward, piece_
+require dasllama/dasllama   // gpu_device_sessions: the device homes the batched row's streams
+require dasllama/dasllama_scheduler   // the batched row runs the served shape: device-home streams through the scheduler
+require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: a step the driver handed to the CPU refuses the batched row
 require math
 
 // The llama-bench protocol, one rep at a time: an untimed full-size warmup, then timed reps of
@@ -135,4 +138,83 @@ def public bench_tg_rep(t : Model; var s : Session; ngen, seed : int64) : double
         forward(t, s, bench_synth_id(i, seed), i)
     }
     return double(ngen) * 1.0e9lf / double(get_time_nsec(t0))
+}
+
+//! the calls the GPU driver handed to the CPU chain so far, every reason summed
+def public cpu_pass_total() : int64 {
+    var n = 0l
+    for (p in gpu_cpu_passes_()) {
+        n += p.count
+    }
+    return n
+}
+
+//! every one of the row's `npl` streams admitted and past its prefill
+def private all_streams_decoding(sch : Scheduler; npl : int64) : bool {
+    if (long_length(sch.streams) != npl) return false
+    for (st in sch.streams) {
+        if (st.state != StreamState.decoding) return false
+    }
+    return true
+}
+
+//! one timed batched tg rep in the served shape - what the batched reference exe's parallel row reads at that PL:
+//! `npl` device-home streams through the scheduler's device mode over distinct `plen`-token prompts, prefilled
+//! untimed, then `ngen` batched steps timed, the rate `npl x ngen` over their wall. `why` names a refusal and the
+//! rate then reads 0: the device homes fewer streams than `npl` (the region count is asked before the load), the
+//! streams never all reached decode within `npl x 8` steps, a stream that ended inside the timed steps, or a step
+//! the driver handed to the CPU chain. Every path past `submit` parks the streams' regions for the next rep, a
+//! refusal included
+[cold_path, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tuple<tps : double; why : string> {
+    let homes = gpu_device_sessions()
+    if (homes < npl) {
+        return (tps = 0.0lf, why = "the device homes {homes} stream(s), the row asks {npl}")
+    }
+    let passes0 = cpu_pass_total()
+    var sch <- create_scheduler(t, npl, npl, plen)   //! a prompt is one prefill quantum
+    verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
+    var events : array<SchedEvent>
+    for (i in range64(npl)) {
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = ngen + npl + 8l)
+        verify(submit(t, sch, req), "bench_tg_batched_rep: the queue holds the row's streams")
+    }
+    var why = ""
+    var steps = 0l
+    while (!all_streams_decoding(sch, npl)) {
+        if (steps >= npl * 8l) {
+            why = "the streams never all reached decode after {steps} steps"
+            break
+        }
+        scheduler_step(t, sch, events)
+        delete events
+        steps++
+    }
+    var ns = 0l
+    if (empty(why)) {
+        scheduler_step(t, sch, events)   //! the untimed warm step: the batched command's first record
+        delete events
+        let t0 = ref_time_ticks()
+        for (_i in range64(ngen)) {
+            scheduler_step(t, sch, events)
+            delete events
+        }
+        ns = get_time_nsec(t0)
+    }
+    let alive = n_active(sch)
+    let ids <- [for (st in sch.streams); st.id]
+    for (id in ids) {   //! evicted, then reaped by one more step: the streams park their regions for the next rep
+        evict(sch, id, events)
+    }
+    scheduler_step(t, sch, events)
+    delete events
+    delete sch
+    if (empty(why) && alive != npl) {
+        why = "{npl - alive} of the {npl} streams ended inside the timed steps"
+    }
+    let passed = cpu_pass_total() - passes0
+    if (empty(why) && passed > 0l) {
+        why = "{passed} call(s) passed to the CPU chain inside the row"
+    }
+    return (tps = empty(why) ? double(npl * ngen) * 1.0e9lf / double(ns) : 0.0lf, why = why)
 }

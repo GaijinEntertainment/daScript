@@ -72,9 +72,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   actionable line a reader rewrites, not the push site.
 - **A generic-body exemption exists exactly where the remedy is not instantiation-safe.**
   PERF020's fix (delete the cast) is wrong for the sibling instantiations of the same
-  source line, so it bails on `fromGeneric`; PERF019/PERF021 rewrites (fuse under one
-  cast, hoist over the ternary) stay valid for every instantiation, so they fire
-  everywhere.
+  source line, so it bails on `fromGeneric`; PERF019/PERF021 rewrites (fuse under one cast,
+  hoist over the ternary) stay valid for every instantiation, so they fire everywhere.
 
 ## 2. lint_config
 
@@ -107,6 +106,9 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   a callee demands - the leaf is flagged first and each fix re-exposes the next caller.
   A returned `var` argument keeps its `var` (a non-copyable result cannot move from
   const); a used `_name` parameter is never LINT004'd (interface and keyword-clash names).
+  A variable a DISCARDED `static_if` arm names is marked used by the fold (`InferTypes::visit(ExprIfThenElse)`
+  walks the dropped arm first), so the module-gated shape - the module arm uses every argument, the `else`
+  skips - reads clean on a box without the module; `lint012_static_if_arm.das` pins it.
 - **LINT023 reads the store/use stream in order.** A use disqualifies a candidate only
   once a store has been seen, so a read that precedes every store leaves the write dead -
   the shape that hides a cleared-but-not-returned handle. `lint023_deferred_depth` covers
@@ -151,9 +153,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   call still counts for the outer argument list. A mention that is the outer call's own
   by-reference argument - the variable, or a chain of plain fields rooted at it, since a field
   behind a pointer is a value a write can repoint - is not a read: the callee sees the final
-  state whatever the order. The rule fires once per writing argument, on the outer call. It
-  ships default-off in the SDK beside LINT029 (`seed_default_disabled`); `.lint_config` turns
-  it on here.
+  state whatever the order. The rule fires once per writing argument, on the outer call. It ships
+  default-off in the SDK beside LINT029 (`seed_default_disabled`); `.lint_config` turns it on here.
 - **LINT031 follows the write target to its root instead of reading the compiler's marks.**
   The compiler marks a parameter written on `addr` and on a reassigned local pointer copy
   alike (the `access_ref` the JIT's readonly guard trusts, over-approximate by design), so
