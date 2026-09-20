@@ -75,14 +75,14 @@ def template axpy_template(var d : float ?; s : float const ?; scale : float; n 
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 
-//! Dot of an f32 row against a bfloat16 (bf16-in-uint16) row. The widen is an exact high-half
-//! bit shift, so dots are bit-identical to pre-expanding the weight to fp32 at half the bandwidth
-//! (some reference AVX2 bf16 dots also truncate the ACTIVATION to bf16; ours stays f32).
+//! Dot of an f32 row against a bfloat16 (bf16-in-uint16) row: the widen is the exact high-half
+//! shift, bit-identical to pre-expanding the weight to fp32 at half the bandwidth. The shift stays
+//! spelled out - a bf16_to_f32 call inside the tuned loop blocked its vectorization (PLE ran 5x slower).
 [hint(unsafe_range_check, noalias = a, noalias = b)]
 def template dot_bf16_template(a : float const ?; b : uint16 const ?; n : int64) : float {
     var acc = 0.0
     for [tune = 1] (j in range64(n)) {
-        acc = mad(unsafe(a[j]), bf16_to_f32(uint(unsafe(b[j]))), acc)
+        acc = mad(unsafe(a[j]), unsafe(reinterpret<float>(uint(unsafe(b[j])) << 16u)), acc)
     }
     return acc
 }

@@ -272,7 +272,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
         maybe_parallel_for(0, int(d), int(min(d, 32l))) $(rb, re) {
             unsafe {
                 for (i in range64(int64(rb) * n, int64(re) * n)) {
-                    sp[i] = bf16_to_f32(uint(wp[i]))
+                    sp[i] = reinterpret<float>(uint(wp[i]) << 16u)
                 }
             }
         }
