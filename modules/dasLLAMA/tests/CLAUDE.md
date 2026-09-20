@@ -921,7 +921,8 @@ arms over constructed carriers - the text-only (none) shape, the loader's refusa
 (missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag
 reaching it; qwen25v exact-only); model-gated: the gemma4uv arm on the 12B mmproj - the sniffed
 family tag, the 48 px align, the 3840 projection width.
-`test_ple_check.das` - model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
+`test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
+npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells - short plane trips per format arm, full plane passes, non-PLE exempt.
 `test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a

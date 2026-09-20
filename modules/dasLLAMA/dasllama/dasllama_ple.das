@@ -144,29 +144,6 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
 }
 
-// gemma4 MoE router input: weightless RMSNorm(attn_out) × (1/√dim) × ffn_gate_inp_s, into s.xb2.
-// Distinct from the plain-matmul routers: the RMS is over attn_out (not the shared-expert pre-norm),
-// weightless, then scaled by 1/√n_embd and a learned per-channel scale before the ffn_gate_inp matmul.
-def private gemma4_router_tmp(t : Model; var s : Session; l : int64) {
-    let dim = t.config.dim
-    // sum of squares in DOUBLE: float drift here flips the discrete top-8 expert pick
-    var ss = 0.0lf
-    for (i in range64(dim)) {
-        ss += double(s.moe_ao[i] * s.moe_ao[i])
-    }
-    let scale = 1.0 / sqrt(float(ss / double(dim)) + t.config.norm_eps)
-    let inv_d = 1.0 / sqrt(float(dim))
-    unsafe {
-        let scp = addr < float const? >(t.fblob[t.moe_router_scale_off + l * dim])
-        var op = addr(s.xb2[0])
-        let ip = addr < float const? >(s.moe_ao[0])
-        let si = scale * inv_d
-        for (i in range64(dim)) {
-            op[i] = ip[i] * si * scp[i]
-        }
-    }
-}
-
 // gemma4 MoE layer (26B-A4B): two parallel branches of the residual stream in s.moe_ao, SUMMED.
 // routed = post_ffw_norm_2(Σ_j w_j · GeGLU_e_j(pre_ffw_norm_2(attn_out))); dense = a full dense
 // shared expert, always on. Leaves post_ffw_norm(routed + dense) in s.moe_acc.
@@ -181,7 +158,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     prof_add("norm", ts_norm0)
     trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
     let ts_route = prof_ticks()
-    gemma4_router_tmp(t, s, l)
+    gemma4_router(t, s.xb2, s.moe_ao, l, dim, 1l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
     for (j in range64(k)) {   // each expert's down output is scaled by ffn_down_exps_s — fold it into w_j
@@ -272,10 +249,10 @@ def ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-// gemma4 MoE router input, batched: twin of gemma4_router_tmp over npos positions. Sum-of-squares
-// accumulates in DOUBLE — top-8 select is near-tie-brittle, float SoS would flip experts.
-// Bit-identical per row to the decode single-token path.
-def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
+//! gemma4 MoE router input over npos rows (decode: npos = 1): rin[p] = weightless RMSNorm(src[p]) ×
+//! (1/√dim) × ffn_gate_inp_s, ahead of the ffn_gate_inp matmul. The sum of squares accumulates in
+//! DOUBLE (float drift flips the near-tie top-8 pick); the row's scale × 1/√dim folds once per row.
+def gemma4_router(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
     let eps = t.config.norm_eps
     let inv_d = 1.0 / sqrt(float(dim))
     unsafe {
@@ -291,9 +268,9 @@ def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<f
                         let v = ip[off + i]
                         ss += double(v * v)
                     }
-                    let scale = 1.0 / sqrt(float(ss / double(dim)) + eps)
+                    let si = (1.0 / sqrt(float(ss / double(dim)) + eps)) * inv_d
                     for (i in range64(dim)) {
-                        op[off + i] = ip[off + i] * scale * inv_d * scp[i]
+                        op[off + i] = ip[off + i] * si * scp[i]
                     }
                 }
             }
@@ -352,7 +329,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     // 1. route every position: double-RMS router input, one batched GEMM, per-row select + down-scale fold
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
-    gemma4_router_batch(t, s.xb2_b, s.x_b, l, dim, npos)
+    gemma4_router(t, s.xb2_b, s.x_b, l, dim, npos)
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
         moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
