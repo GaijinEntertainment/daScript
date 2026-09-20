@@ -39,12 +39,14 @@ from the kernel's arguments.** The per-step chunk a `tmm2d_*` call takes is a sh
 specialization path - one compiled variant per constant shape - or records the kernel as having
 none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
-**Never check a claim about emitted shape against the das source - check it in the emitted
-words or text, the SPIR-V words one emitter builds and the MSL text the other writes; a diff that
-claims an emitted shape - a stamp's tile, unroll width, grid or threadgroup size - lands that
-check in the same change.** Emitted shape is the structure of the emitted kernel - its signature,
-its parameter attributes, its statement forms - and its stamped shape values (tile, grid,
-threadgroup sizes).
+**A claim about emitted shape checked against the das source is a defect - the check reads the
+emitted artifact: the SPIR-V words `dasSpirv` builds, or the MSL text `dasMetal` writes.** Emitted
+shape is the structure of the emitted kernel - its signature, its parameter attributes, its
+statement forms - and its emitted shape values (tile, unroll width, grid, threadgroup size).
+
+**A diff whose text - a commit message, a PR body, an architecture line - claims an emitted shape
+value states in the PR body what it read in the emitted artifact: the SPIR-V words or the MSL
+text, and the count or value read there.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md` sec.5) naming that capability - covered by the row
@@ -60,8 +62,9 @@ declaration by name.** A declaration in that module is available to both emitter
 
 **A global-rooted-array read a diff adds, makes happen at an index it did not reach before, or
 makes happen on a dispatch it did not happen on before, is in range on every dispatch it happens
-on, or the `ARCHITECTURE*.md` at the root of the module the kernel ships in names slack past
-that range and the read stays inside the slack.** A global-rooted array is a module global, a
+on, or the `ARCHITECTURE*.md` at the root of the module the kernel ships in names slack - an
+allocation past the in-range end a read may land in - past that range and the read stays inside
+it.** A global-rooted array is a module global, a
 `@workgroup` array, or a `self.<member>` resource, read in a `[spirv_kernel]`,
 `[compute_shader]` or `[metal_kernel]` body or in any `def` that body calls; a diff makes that
 read happen on a dispatch it did not happen on before when it drops the condition that kept the
@@ -69,7 +72,7 @@ read inside the region this dispatch's own bound defines - a read in both arms o
 clamp landing outside that region, a bare read - or loads a fixed-size block whose only guard is
 on its store.
 
-**A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
-a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff
-that removes the gate, or widens the constant the gate switches on so the read reaches variants
-it did not reach, is a defect.**
+**A diff that removes a compile-time gate (`static_if`, `@template_gate`) keeping a
+global-rooted-array read out of a compiled `[spirv_kernel]`, `[compute_shader]` or
+`[metal_kernel]` variant, or widens the constant the gate switches on so the read reaches
+variants it did not reach, is a defect.**

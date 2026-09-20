@@ -16,6 +16,11 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 profiler accumulator are not; pipelines are device-lifetime state that survives the drop and
 rebuilds lazily.
 
+**A diff that adds a host-side ensure/set/enc pick ladder for a new family of class stamps -
+the stamps of one `[vk_dispatch]` class template, picked by a shape argument - to
+`dasllama/dasllama_vulkan_classes.das` adds that family's stamp glob to the kernel-home row's
+stamp list in `ARCHITECTURE_GPU.md` sec.1.5, in the same change.**
+
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
 `vk_max_storage_range()` - check the size at the site that computes it, not at the site that
 binds it.** The bind site cannot shrink a buffer that was sized wrong.
@@ -217,9 +222,8 @@ between the copy's read and that write.
 divisor that is not a literal or a template constant - a push-constant field, bare or computed
 from - clamps it to at least one (`max(1u, ...)`) before it divides, unless an enclosing `if` the
 zero case cannot enter guards the division; a `?:` select on the field is not a guard.** Some
-drivers evaluate both arms of a select, and an
-integer division by zero is undefined in SPIR-V, so the selected arm can carry the undefined
-result.
+drivers evaluate both arms of a select, and an integer division by zero is undefined in SPIR-V,
+so the selected arm can carry the undefined result.
 
 **A path under `dasllama/` that re-records the one-row token command's split form - the chain
 recorded with the attention at `RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it

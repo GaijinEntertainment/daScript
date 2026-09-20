@@ -6,23 +6,26 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 
 **A diff that changes a kernel's dispatch grid - the count its dispatch needs, or its workgroup
 size - updates every gate that dispatches that kernel, in the same change; a gate is any call
-site outside the engine's own encode path - a cell, a probe, a harness - that supplies a kernel's
-dispatch count or fills its kargs struct itself.** A gate left on the old count dispatches the
-wrong shape with no error.
+site that supplies a kernel's dispatch count or fills its kargs (kernel-argument) struct itself,
+other than the serving call in `../dasllama/` the kernel exists for - a cell, a probe, a
+harness.** A gate left on the old count dispatches the wrong shape with no error.
 
 **A diff that gives a `[metal_dispatch]` kernel `@workgroup` state, or takes it away, updates
-the threadgroup-memory length in every gate that hand-dispatches that kernel, in the same
-change.** A gate that sets none for a kernel with `@workgroup` state reads garbage silently.
+the threadgroup-memory length in every gate that dispatches that kernel, in the same change.** A
+gate that sets none for a kernel with `@workgroup` state reads garbage silently.
 
 **A diff that changes the size of a `[metal_dispatch]` stamp's `@workgroup` array - a stamp
 being one leaf class of a kernel, whose overridden constants set that size - updates, in the
-same change, every gate that hand-dispatches a different stamp while reading this stamp's
-`*_tgmem` global for its threadgroup-memory length.**
+same change, every gate that dispatches a different stamp while reading this stamp's `*_tgmem`
+global for its threadgroup-memory length.**
 
-**A diff that changes a kernel's kargs - the kernel-argument struct, any buffer binding, or the
-layout of a struct a bound buffer holds - updates every hand-bind of that kernel the change made
-stale, in the same change.** A stale hand bind reads the wrong buffer and passes on garbage that
-happens to compare.
+**A diff that changes a kernel's kargs - the struct, any buffer binding, or the layout of a
+struct a bound buffer holds - updates every gate of that kernel the change made stale, in the
+same change.** A stale gate reads the wrong buffer and passes on garbage that happens to compare.
+
+**A kernel-unit cell that compares logits over synthetic rows and does not log the measured max
+difference with the row and the id it sits at is a defect.** A red, or a suspicious green, must
+say how far and where, not only how many.
 
 **A kernel-unit cell - a model-less cell that dispatches one or more kernel classes and asserts on
 their output - missing a compare against a CPU oracle in the cell itself is a defect; where the
@@ -31,15 +34,14 @@ forms, in that cell or in a cell of the same file that dispatches that form at t
 A cell is a `t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same
 computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
-**A `[vk_dispatch]` or `[metal_dispatch]` class - each stamp of a template its own class - whose
-branch selection changes - a branch added, or an existing branch's predicate widened or narrowed,
-so that a different set of kargs values, or of sentinel values in a bound buffer, reaches a
-path - has a kernel-unit cell that dispatches that class at a value the change moved onto or off
-that path: an existing cell that already does discharges it and the change says which; otherwise
-the cell ships in the same change.** One stamp's cell discharges a sibling stamp only where the
-constants the two differ on touch no path the change moved. At every value the change left where it was
-the kernel computes what it did before, so a cell that dispatches only those values passes
-whether the change is right or wrong.
+**A diff that changes a `[vk_dispatch]` or `[metal_dispatch]` class's branch selection - a
+branch added, or a predicate widened or narrowed, so that a different set of kargs values, or of
+sentinel values in a bound buffer, reaches a path - ships a kernel-unit cell that dispatches that
+class at a value the change moved onto or off that path, or names the existing cell that already
+does.** Each stamp of a template is its own class; a sibling stamp's cell counts only where the
+template constants the two stamps differ on appear nowhere in the moved path. At every value the
+change left where it was the kernel computes what it did before, so a cell that dispatches only
+those values passes whether the change is right or wrong.
 
 **Before every dispatch whose output a kernel-unit cell reads - directly, or through a later
 dispatch in the same cell - the cell fills with a sentinel every range of that dispatch's output

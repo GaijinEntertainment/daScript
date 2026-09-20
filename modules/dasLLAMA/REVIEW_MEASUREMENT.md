@@ -4,21 +4,20 @@
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Metal tier,
 `followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
 
-A figure is any number a run produced - a rate, a wall, a count, a byte size, a ratio or a
-percentage of two of them, or an error or agreement reading (a cosine, a max-abs error) a test's
-tolerance is set from. A figure rule below
-binds a figure this change writes or changes - in the repo, in a commit message, or in its PR
-body. It does not bind a figure a changed line carries unchanged. A figure on a page a `site*/`
-or `utils/` folder checklist owns (repo root) answers to that checklist instead of this one; a
-reading a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for its bar, and
-to this list for naming the box and flags it was read on.
+A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
+percentage of two such numbers, which counts as produced by the runs its sides came from - or an
+error or agreement reading (a cosine, a max-abs error) a test's tolerance is set from. A figure
+rule below binds a figure this change writes or changes - in the repo, in a commit message, or in
+its PR body. It does not bind a figure a changed line carries unchanged. A figure on a page a
+`site*/` or `utils/` folder checklist owns (repo root) answers to that checklist instead of this
+one; a reading a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for the
+tolerance value itself, and to this list for naming the box and flags it was read on.
 
 The naming a figure rule asks for is attached to the figure by a sentence, a table heading or a
 provenance line that unambiguously covers it, or by a citation of a passage or board row whose
 provenance covers it. A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`)
-covers exactly the figures its sentence, its bullet, or its provenance line names as its scope -
-a provenance line's scope is the paragraphs it sits under, or the ones it names - and nothing
-outside that scope.
+covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
+of the paragraphs that line sits under or names.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -50,15 +49,17 @@ the pair.**
 
 **A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced
 tags it `external`; a figure one of them produced carries no such tag, whatever binary the run
-timed - a ratio with either side produced by a cell, script or exe of this repository included.**
+timed.**
 
 **A `PERF_LEDGER.md` ratio against a third-party engine names that engine's exe and the command
 line it ran under.**
 
 **A difference, ratio, or percentage of two measured figures - a wall or a rate - written into
-`PERF_LEDGER.md` carries the raw figure of every side the `-jit` script did not produce.**
+`PERF_LEDGER.md` carries the raw figure of every side no cell, script, or exe of this repository
+produced.**
 
-**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
+**A ratio the `-jit` script produced, written into `PERF_LEDGER.md`, names the arm it is
+measured against.**
 
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
@@ -70,9 +71,9 @@ decode, a batched decode row, or the turn end to end) and backend - cites that r
 reading `debug-jit`.**
 A `--for-debug-purposes` reading is the `-jit` script's own output.
 
-**A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure its
-source and the report, a figure a third-party exe produced on the author's box that exe, its build
-and its command line.**
+**A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure
+names its source and the report; a figure a third-party exe produced names that exe, its build,
+and the command line it ran under.**
 
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**

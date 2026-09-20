@@ -12,21 +12,20 @@ copy a box holds - a prebuilt release or the checkout `benchmarks/setup_lcpp_ref
 sentence does reference-build work when it reports a search through that build, a patch to it,
 a run of it, a regeneration from it, or a measurement against it - planned or performed; naming
 one of its symbols is not by itself such work. A library the build ships is part of it, and
-running that library to mint our own artifact is reference-build work.
+running that library to produce our own artifact is reference-build work. A sentence does this
+work even when it also states what our own code or our own run does.
 
-**A diff that names the reference build - its organization, project, binary, source header, symbol,
-constant, or a label its output prints - outside a sentence doing reference-build work is a defect: write "the reference
-build", or for its binary the qualified "the flat reference exe" / "the batched reference exe"
-(the roster is `benchmarks/setup_lcpp_ref.das`), instead.** "The reference bodies" of a `[tune]`
+**A diff that names the reference build - its organization, project, binary, source header,
+symbol, constant, or a label its output prints - outside a sentence doing reference-build work
+is a defect: write "the reference build", or for its binary the qualified "the flat reference
+exe" / "the batched reference exe" (the roster is `benchmarks/setup_lcpp_ref.das`), instead.** "The reference bodies" of a `[tune]`
 kernel are this module's own term, not a reference-build name. A name this module's own code, files or
 artifacts carry is its own name, not attribution; attributing our code's shape to the reference
 build ("in the reference build's form") names it too.
 
 **A diff that describes what the reference build itself does, outside a sentence doing
 reference-build work, describes it in our own terms - what the mechanism does, never which of its
-files or symbols does it.** A sentence about our own code's shape does no reference-build work,
-so a reference-build name inside it is a defect under the naming rule above; a sentence that
-reports a run of the reference build or a measurement against it does, and may name it.
+files or symbols does it.**
 
 **A sentence stating a number read from a part of the reference build rather than from a whole
 run of it - a time, a rate, or a constant that appears only in the reference build's own code -

@@ -2159,7 +2159,14 @@ two commits in two processes [direction-grade - two commits].
   the lever-3 tip's), the row 185.1 -> 186.15 +/- 0.16
   against 186.19 (1.00); gemma-2 704 -> 710. The pass is bound by its K/V reads and chunk barriers
   (the four-row attention at 57% of the mirror's byte roof), not by the dead heads' FMAs -
-  `followup_vulkan.md` item 73 carries the reading.
+  `followup_vulkan.md` item 73 carries the reading. The two slabs raced in one process on the RTX
+  5060 Ti (`harness/vk_attn_probe.das` with its slab arm, four rows at 640 positions, device
+  timestamps a layer, the arms alternated four-head / two-head / four-head / two-head): the 12B's
+  sliding shape (head 256, 16 heads, two a kv head) 40.9 / 40.9 -> 27.5 / 27.5 us a layer at one
+  split and 35.8 / 36.0 -> 26.6 / 26.6 at two; the gemma-2 shape (head 256, 8 heads, two a kv
+  head) 39.0 -> 26.6 at one split and 22.5 -> 18.4 at four, its best split - the two-head slab
+  a quarter to a third faster a layer where the pod's step read 6%, the smaller card's pass
+  nearer its FMA bound.
 - **The board at the arc's tip, tg128@4 (ours cm2 / ours KHR / llama.cpp, three reps ours; then flat
   tg128 ours / theirs - the reference's flat figure is the same `llama-batched-bench` run's
   `S_TG` at `-npl 1`, ours the `-npl 4` run's flat row):** gemma-2-2b Q8_0 704 / 709 / 618 (1.14 / 1.15), flat 216 / 201; gemma-3-1b
@@ -2169,6 +2176,18 @@ two commits in two processes [direction-grade - two commits].
   gemma-4-31B Q4_K_M 103 / 103 / 90 (1.14), flat 36.6 / 32.9. The KHR arm reads the cm2 arm's rows:
   the decode kernels are one set on both. The reference's pp512 column on gemma-2-2b and gemma-3-1b
   reads 87 to 4395 tok/s across its runs (`external`) and is no prefill reference on those two.
+- **The RTX 5060 Ti (driver 616.56, cm2 with decode-vector, the desktop holding 1.3 GB of the
+  16 GB, `DAS_JOBQUE_THREADS=16`), tg128@4 ours / llama.cpp Vulkan / llama.cpp CUDA (the same
+  b10660 checkout built with CUDA 13.4, every reference figure `external` from `llama-batched-bench`
+  under the section's command line the same hour; then flat tg128 ours / theirs Vulkan / CUDA):**
+  gemma-2-2b Q8_0 405 / 353 / 409 (1.15 against Vulkan, 0.99 against CUDA), flat 122 / 110 /
+  120; gemma-3-1b Q8_0 726 / 529 / 812 (1.37 / 0.89), flat 240 / 182 / 238; gemma-3-4b Q8_0 291 /
+  254 / 290 (1.15 / 1.00), flat 84 / 77 / 84. The gemma-4-12B files fit no four-region plan on
+  this card - the resident driver declines the Q4_K_M at 15.6 GB of 13.0 asked (item 80 carries
+  the message's unit) and the Q8_0 outright, and the reference pages: its Vulkan rows read 105
+  (Q4_K_M) and 5 (Q8_0) at four streams, its CUDA rows 141 and 108 - so the 12B's board is the
+  pod's above. Ours reads at or above CUDA's four-stream rate on the two carriers CUDA does not
+  win outright, and 0.89 of it on the 1B.
 - **Our gemma-2-2b pp512 on the pod reads 6468 to 19388 across runs (three-rep cv up to 38%)
   while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
   hold within 2% on pp512.

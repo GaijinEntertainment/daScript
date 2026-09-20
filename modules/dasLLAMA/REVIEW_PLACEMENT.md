@@ -11,25 +11,33 @@ it.**
 `ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
 code lands in which file is the checklist's own.
 
-**A function, a module global, a named constant or a `require` under `dasllama/` lands in the
-file whose charter line - in an `ARCHITECTURE_*.md` companion's sec.1 - names its concern and
-whose must-not-hold cell does not, or that charter line changes in the same diff.** A charter
-line's parenthetical examples illustrate its concern and never narrow it: a family the list does
-not name lands where its concern does, and the list gains it when the same diff adds the family.
-`ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line;
-a file outside `dasllama/` carries no charter line and answers to its own folder's checklist; a
-function landing in a file whose charter line forbids its kind is a defect wherever else the kind
-goes unnamed.
+**A function, a module global (`let` or `var`, private or not), a named constant or a `require`
+under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's
+sec.1 - names its concern and whose must-not-hold cell does not, or that charter line changes in
+the same diff.** `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each
+file's charter line.
 
-**The grid rule of a class whose family ships more than one arm lands in
-`dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a family ships (cm2,
-KHR).
+**A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
+adding a family, format or arm the parenthetical does not name lands it in the file whose
+concern is named, and adds it to that parenthetical in the same change.**
+
+**A file outside `dasllama/` carries no charter line and answers to its own folder's
+checklist.**
+
+**A function landing in a file whose charter line forbids its kind is a defect wherever else the
+kind goes unnamed.**
+
+**The grid rule - the expression that computes a dispatch's workgroup counts - of a class whose
+family ships more than one arm lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one
+of the coopmat forms a family ships (cm2, KHR).
 
 **A host-side ensure/set/encode ladder that picks a stamp from its push-constant and shape
 arguments alone lands in `dasllama/dasllama_vulkan_classes.das`; a pick that reads the driver's
-state - `g_rd`, an `RLayer` field, an armed codec - stays in the driver.** A stamp is one class
-stamped from a kernel class template; the shape predicate itself (`da_slab_is_g2`) is the classes
-file's, the pick over the driver's layer is the driver's.
+state - `g_rd` or an `RLayer` field - stays in the backend driver file its charter line names,
+`dasllama/dasllama_vulkan_decode.das` for a decode-time ladder and
+`dasllama/dasllama_vulkan_prefill.das` for a batch one.** A stamp is one class stamped from a
+kernel class template; a predicate over shape values alone is the classes file's, whoever calls
+it.
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
@@ -99,7 +107,8 @@ root).
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_common.das` when `dasllama_common.das`'s own code needs the registration to have
 run and the registered module does not require the engine back, and in
-`dasllama/dasllama_transformer.das` otherwise.** The require umbrella breaks the cycle a module requiring the engine back would close.
+`dasllama/dasllama_transformer.das` otherwise.** The require umbrella breaks the cycle a module
+requiring the engine back would close.
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**

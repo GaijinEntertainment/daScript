@@ -1574,10 +1574,12 @@ module) is independent and can land any time - it is pure structure.
     and a one-head group half a slab; the workgroup arrays stay sized for four heads on every
     stamp, so the two-head stamp buys no occupancy. The two-head stamps read the 12B's four-row
     attention 1835 -> 1729 us a step (6%; `PERF_LEDGER.md`, the gemma section of 2026-09-20, the
-    pod under `DASLLAMA_GPU_PROF=1`): the pass is bound by its K/V reads and the chunk barriers,
-    not the dead FMAs. The work: a one-head stamp, and the arrays sized by `G`, priced through
-    `harness/vk_attn_probe.das`'s slab arm on a `kv_mul = 1` carrier before either is added -
-    the two-head reading says the win is small.
+    pod under `DASLLAMA_GPU_PROF=1`), where the probe's race on the RTX 5060 Ti reads the
+    two-head slab a quarter to a third faster a layer at the gemma shapes (the same section): the
+    pass is bound by its K/V reads and the chunk barriers at the step, and the dead FMAs cost
+    more on the smaller card. The work: a one-head stamp, and the arrays sized by `G`, priced
+    through `harness/vk_attn_probe.das`'s slab arm on a `kv_mul = 1` carrier before either is
+    added.
 74. **A host-cached session that loses its mirror region before hydration loses its rows.** The
     driver steals a region by LRU (`rdec_bind_region`) with no handle on the region's owner, and a
     host-cached session's prompt rows sit on the device alone until a hydration brings them down
@@ -1635,3 +1637,10 @@ module) is independent and can land any time - it is pure structure.
     role stamps over three runs on that file, the slow run's stamp named, then the cause (a tile
     class rebuilt per run, a pipeline cache miss, or a clock state the softcap tile's occupancy
     trips).
+80. **The resident plan's memory decline names a context it would fit at that is larger than the
+    one it declined.** On the RTX 5060 Ti the 12B Q4_K_M at four regions declines with "needs
+    15596 MB of 12953 MB at ctx 6238 - would fit at ctx 16896": `cap_fit` in
+    `dasllama_gpu_resident.das` divides the K/V room by one position's rows over every region,
+    while `seq_cap` is one region's context, so the two contexts are not the same unit and the
+    reader cannot act on the line. The work: the message in one unit - the context a region gets
+    at the region count that would fit, or the region count that fits at the asked context.

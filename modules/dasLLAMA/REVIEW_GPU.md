@@ -13,9 +13,9 @@ than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` t
 
 **A diff changing a property of a kernel class that a timing arm or a gate restates rather than
 reads - a binding number, the kargs (kernel-argument struct) layout, the layout of a struct a
-bound buffer holds, threadgroup memory, a staging shape, the grid or threadgroup geometry -
-applies the `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that hand-dispatch or
-hand-bind the class.**
+bound buffer holds, threadgroup memory, a staging shape, the grid or threadgroup geometry - or a
+kernel class's branch selection or the precision it computes a step at, applies the `tests/`
+subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that dispatch or bind the class.**
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
@@ -136,18 +136,18 @@ from a measurement at the smallest and at the largest value the gated quantity t
 path, both measurements in the PR body.** The small-work regression hides behind the big-work
 win.
 
-**A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
-constant's authoritative site - the single site the generated kernel reads it from - in the same
-change.** The site per kind: the generated `*_msl` global for a Metal in-body tile, the
-`@workgroup` declaration or `local_size_x` for a Vulkan one; a `@template_constant`'s default and
-each stamp's `override` for a slab or column width a template stamps; the `grid=` spec (a
-CEIL divide), or the `wgs` decode plus its host helper, for a grid; the `tg=` /
-`local_size_x` spec for a threadgroup; the single writer for a uniform.
+**A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at every
+authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
+global for a Metal in-body tile, the `@workgroup` declaration or `local_size_x` for a Vulkan one;
+a `@template_constant`'s default and each stamp's `override` for a constant a template stamps;
+the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for a grid; the
+`tg=` / `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
 **A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
-host computes that class's `wgs`, changes both in the same change, or derives both from one
-expression the change shows agreeing for every shape the encoder picks that form on.** The
-`grid=` spec carries no number for these classes, so nothing else ties the two.
+host computes that class's `wgs`, changes both in the same change, or - where the body's decode
+and the host's count both read one shared function - shows in the same change that for every
+shape the encoder dispatches that class on, the stamp it picks is the one that function's value
+names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **A cache key covers every input the cached result depends on: a host address, an offset, or a
 handle alone is not a key - carry the span and the form, the element type and layout the upload
@@ -156,11 +156,9 @@ produces, in the key too.**
 **A diff that gives a `dasllama/` file code of a kind its `ARCHITECTURE_GPU.md` sec.1.5 role
 row does not hold - a kernel class, a driver arm, a backend capability, a dispatch-support macro,
 a driver policy - or of a kind the row's must-not-hold cell names, extends that row in the same
-change, or moves the code to the file whose row holds the kind; a diff that adds a host-side
-ensure/set/enc pick ladder for a new class-stamp family to `dasllama/dasllama_vulkan_classes.das`
-adds that family to the kernel-home row's list in the same change.** A driver arm is host code
-that ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers
-in a hook or capability registry.
+change, or moves the code to the file whose row holds the kind.** A driver arm is host code that
+ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
+a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -195,23 +193,8 @@ AIR (Metal's compiled shader IR) they build into, the SPIR-V words `DASLLAMA_VK_
 and the host's stamp and dispatch selection unchanged on every input.** Only both compares
 together show the change cannot alter what the path computes or selects.
 
-**Parity evidence counts only when it comes from `harness/parity.das`,
-`benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an
-in-suite parity instrument run through `tests/run.das` that feeds both sides the same fixed
-tokens and compares the logits against a fixed tolerance.**
-
-**Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
-Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
-the changed path armed (`resident driver armed` for the whole-model driver, `GPU MoE tier: ...
-resident` for the per-op tier).** A log showing neither arming line measured the CPU.
-
-**Vulkan parity evidence counts only when the run armed the mirror codec - the K/V mirror's
-element type, f16 or f32 - that the changed path reads.** `DASLLAMA_VK_KV32=1` arms f32; f16
-is the default and needs no flag.
-
-**Vulkan parity evidence whose log carries a `resident override passed a call` line for the
-changed path does not count.** That line is the Vulkan driver naming a call it handed back to
-the CPU path.
+**A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - applies
+`REVIEW_GPU_PARITY.md` (beside this file) for what counts as evidence, together with this list.**
 
 **A diff that adds a call site handing a whole served GPU decode or prefill call to the CPU
 path is a defect - it ships the device path in the same change.** A call that runs on the CPU
