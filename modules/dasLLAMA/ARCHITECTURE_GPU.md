@@ -85,7 +85,14 @@ that a question answered for one backend has an obvious address in the other. Th
   the rope-store grid stops at the Q pairs, so nothing is written into the source slab the layer's
   attention reads through the aliased row prefix. A MoE's shared expert rides the batch the same
   way it rides the verify rows: the gate dot as a one-row router GEMV over the rows, the gate|up
-  pair and the down as rows forms over the expert panel once the routed W2 has consumed it.
+  pair and the down as rows forms over the expert panel once the routed W2 has consumed it. A
+  deltanet hybrid's recurrent layer runs its projections as rows GEMVs and then the conv, history,
+  norm, scan and gate a row at a time against that session's own `DnMirror` (`recurrent_batch`):
+  the `DnArgs.row` field picks the row's slice of the batch planes, the mirror's live-region bases
+  pick its state, and the mirrors advance when the step lands (`g_lp_dn_uids`); a step whose
+  rows have no resident or CPU-synced state declines `dn_state`. The CPU batched stack has no
+  hybrid form, so `eval_batch_` hands a hybrid's rows to an armed device driver first and steps
+  them per row only when none is armed or the driver declines.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.

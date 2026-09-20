@@ -2824,6 +2824,7 @@ struct DnArgs {
     qscale : float
     mid : uint
     split : uint
+    row : uint   // the first row of the [npos x ...] planes this dispatch reads and writes - a batched step dispatches each session's row against its own state
 }
 
 // The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
@@ -2863,7 +2864,7 @@ def dn_args(c : Config; npos : int64; mid : bool) : DnArgs {
     return DnArgs(cd = uint(dn_conv_dim(c)), dconv = uint(c.ssm_d_conv), npos = uint(npos),
         kd = uint(dn_key_dim(c)), ds = uint(c.ssm_d_state), nvh = uint(c.ssm_dt_rank),
         nkh = uint(c.ssm_n_group), di = uint(c.ssm_d_inner), eps = c.norm_eps,
-        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u)
+        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u, row = 0u)
 }
 
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
@@ -10325,11 +10326,11 @@ class MetalDnConv {
         var k = 0u
         while (k < dconv) {
             let sp = int(p + k) - int(taps)
-            let xv = sp >= 0 ? x[uint(sp) * cd + ch] : hist[ch * taps + (p + k)]
+            let xv = sp >= 0 ? x[(ka.row + uint(sp)) * cd + ch] : hist[ch * taps + (p + k)]
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[p * cd + ch] = acc / (1.0 + exp(-acc))
+        y[(ka.row + p) * cd + ch] = acc / (1.0 + exp(-acc))
     }
 }
 
@@ -10358,14 +10359,14 @@ class MetalDnConvHist {
         var k = 0u
         while (k < taps) {
             let src = int(npos + k) - int(taps)
-            nh[k] = src >= 0 ? x[uint(src) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+            nh[k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
             k++
         }
         if (mid != 0u) {                    // every hist read precedes the in-place write below
             k = 0u
             while (k < taps) {
                 let src = int(npos - 1u + k) - int(taps)
-                histm[ch * taps + k] = src >= 0 ? x[uint(src) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+                histm[ch * taps + k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
                 k++
             }
         }
@@ -10403,7 +10404,7 @@ class MetalDnL2Norm {
             return
         }
         let lane = gl_SubgroupInvocationID
-        let base = p * cd + blk * ds + lane * 4u
+        let base = (ka.row + p) * cd + blk * ds + lane * 4u
         var v : float[4]
         var ss = 0.0
         for [unroll_full] (c in range(4)) {
@@ -10462,10 +10463,10 @@ class MetalDnScan {
         }
         var p = 0u
         while (p < npos) {
-            let gr = graw[p * nvh + h] + dt_h
+            let gr = graw[(ka.row + p) * nvh + h] + dt_h
             let dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            let beta = 1.0 / (1.0 + exp(-braw[p * nvh + h]))
-            let cb = p * cd
+            let beta = 1.0 / (1.0 + exp(-braw[(ka.row + p) * nvh + h]))
+            let cb = (ka.row + p) * cd
             var kv4 : float[4]
             var sk = 0.0
             for [unroll_full] (c in range(4)) {
@@ -10482,7 +10483,7 @@ class MetalDnScan {
             }
             yy = simd_sum(yy)
             if (lane == 0u) {
-                o[p * di + h * ds + j] = yy
+                o[(ka.row + p) * di + h * ds + j] = yy
             }
             if (mid != 0u && p + 2u == npos) {
                 for [unroll_full] (c in range(4)) {
@@ -10521,7 +10522,7 @@ class MetalDnGate {
             return
         }
         let lane = gl_SubgroupInvocationID
-        let base = p * di + h * ds + lane * 4u
+        let base = (ka.row + p) * di + h * ds + lane * 4u
         var v : float[4]
         var ss = 0.0
         for [unroll_full] (c in range(4)) {

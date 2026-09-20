@@ -6,6 +6,8 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
+require dasllama/dasllama_load   // load_model_: the engine load the batched row's scheduler streams need
 require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
@@ -383,6 +385,45 @@ def test_batch_decode_step_census(t : T?) {
             delete sa
             delete sb
         }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}
+
+[test]
+def test_batch_decode_row_refuses_per_row(t : T?) {
+    t |> run("the batched bench row refuses by name when a timed step ran its rows one at a time (needs SmolLM2-135M)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        // the scheduler's streams need a vocabulary (the stop-token walk), which the llama2.c checkpoint lacks
+        let env = g_env_harness.models_dir
+        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var tr <- load_model_(path, QuantMode.q8)   //! the engine load: the scheduler's streams detokenize through the model's own tokenizer
+        tr.config.seq_len = min(tr.config.seq_len, 64l)
+        let prev_fused = get_fused_decode()
+        let prev_rope = get_rope_table_mode()
+        set_fused_decode(false)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let served = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
+            t |> equal(served.why, "", "the CPU batched stack serves the row: {served.why}")
+            t |> success(served.tps > 0.0lf, "... at a rate")
+            set_rope_table_mode(false)   //! the classic rope path has no per-row positions: every step runs a row at a time
+            let census0 = batch_step_census()
+            let refused = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
+            t |> equal(refused.why, "4 of the 4 timed steps ran their rows one at a time", "the row names the per-row steps")
+            t |> equal(refused.tps, 0.0lf, "... and reads 0")
+            let census1 = batch_step_census()
+            t |> success(census1.per_row - census0.per_row >= 4l, "the census counted the per-row steps ({census1.per_row - census0.per_row})")
+        }
+        set_rope_table_mode(prev_rope)
         set_fused_decode(prev_fused)
         delete tr
     }

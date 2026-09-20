@@ -331,9 +331,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         }
     }
     // per-row fallback keeps every configuration correct: B == 1 keeps the fused decode chain, q4_0
-    // has no batched kernels, non-std arches have no batch attention worker, and the classic rope
-    // path can't express per-row positions
-    if (nrows == 1l || t.quant == QuantMode.q4_0 || !t.blocks.attn_is_std || !g_use_rope_table) {
+    // has no batched kernels, non-std arches have no CPU batch attention worker (an armed device
+    // driver may have one, so their rows reach it first), the classic rope path has no per-row positions
+    if (nrows == 1l || t.quant == QuantMode.q4_0 || (!t.blocks.attn_is_std && !batch_decode_override_armed()) || !g_use_rope_table) {
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
     }
@@ -373,7 +373,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (batch_decode_override_armed()) {
         stack_done = batch_decode_override_invoke(t, ws, sessions, nrows)
     }
-    if (!stack_done && t.metal_blob) {   //! the device driver declined a blob-only model's step: the single-row driver serves what the batched one has no form for
+    if (!stack_done && (t.metal_blob || !t.blocks.attn_is_std)) {   //! the device driver declined a blob-only or non-standard-graph step: the single-row forward serves what the batched stacks have no form for
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
     }

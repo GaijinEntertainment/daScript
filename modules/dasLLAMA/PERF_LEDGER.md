@@ -1944,6 +1944,13 @@ decode call alone, so every ratio reads conservative for ours.
 - **The E-series batch arm (gemma-4-E2B Q8):** per-row steps read ~90 tok/s summed at four streams
   (each stream a weight pass a token); the batched step with the PLE rows form, the Q-only shared-KV
   rows and the two-width panels reads 389 - the same step's flat row unchanged at 152 [direction-grade].
+- **The deltanet batch arm (Qwen3.5-0.8B Q8, the recurrent rows form - projections as rows GEMVs,
+  the conv, history, norm, scan and gate one dispatch a row against that session's mirror):**
+  tg128@4 982.6 ± 21.3 against llama.cpp's 795.7 ± 7.2 (1.23); the flat tg128 402.1 ± 1.1 on the
+  arm's tree against 401.9 ± 1.0 on the tree before it - the row index the five kernels gained
+  costs the single row nothing. Per-row dispatch stands at ~360 small dispatches a four-row step
+  on this 24-layer hybrid and still reads 2.4x the flat row; the state arena that folds them into
+  one dispatch a stage is `followup_metal.md` item 16 [direction-grade - two processes].
 - **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
   and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].

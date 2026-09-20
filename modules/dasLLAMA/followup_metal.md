@@ -616,16 +616,18 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 16. The deltanet hybrids have no batched decode arm and step per row under the server
+## 16. The batched recurrent step scans its rows one dispatch at a time
 
-`batch_decode_decline` (`dasllama/dasllama_metal_decode.das`) declines `graph` for a
-non-standard attention block - the deltanet hybrids, Qwen3.5 / 3.6 / 3.8 / Coder-Next - and
-the CPU batched stack declines them the same way (`eval_batch_`'s per-row branch). Each such
-step falls to the per-row single decode: every stream reads the weights once per token, so N
-streams cost N weight passes where one batched step costs one, and the batched bench row
-refuses the model by name. `REVIEW_GPU.md` rules a missing batched arm a defect. The work: the
-deltanet step and gated Q batched over rows (the recurrent state is per session, the GEMMs are
-not), on the CPU stack and on the Metal batch driver.
+`recurrent_batch` (`dasllama/dasllama_metal_decode.das`) runs the deltanet projections as rows
+GEMVs - one weight pass - and then the conv, the history update, the l2 norm, the scan and the
+gate once PER ROW, five dispatches a row a recurrent layer, because each session's state lives in
+its own `DnMirror` buffer and one dispatch binds one. At four rows on a 24-layer hybrid that is
+~360 small dispatches a step beside the weight pass; the 0.8B reads it as dispatch latency, the
+35B hybrids amortize it. The work: a shared state arena so every session's state slice sits in
+one buffer, a per-row table like the KV route table (`brt`) naming each row's slice, and the
+five kernels taking the row from that table - one dispatch a stage over every row. The CPU
+batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
+is armed); the same rows shape applies there.
 
 ## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
 

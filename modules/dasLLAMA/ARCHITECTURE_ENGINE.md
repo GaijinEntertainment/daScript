@@ -60,10 +60,11 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
   A step is served one of three ways, and `batch_step_census` counts each since load: the armed
   device driver claimed the whole stack, the CPU batched stack ran it, or the rows stepped one at
-  a time through the single-row forward - one row, a q4_0 model, a non-standard graph, or a
-  blob-only model whose device driver declined the step (the CPU stack cannot run a blob-only
-  model, so the decline falls to the single-row driver, which serves what the batched one has no
-  form for: a MoE's shared expert, `followup_metal.md` item 16).
+  a time through the single-row forward - one row, a q4_0 model, a non-standard graph with no
+  device driver armed, or a step the device driver declined on a blob-only or non-standard-graph
+  model (the CPU stack has no form for either, so the decline falls to the single-row forward).
+  A non-standard graph (the deltanet hybrids) reaches an armed device driver before the per-row
+  branch: the CPU stack has no hybrid form, the Metal batch driver does.
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the

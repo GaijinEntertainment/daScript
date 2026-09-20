@@ -732,11 +732,10 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
 
 [unused_argument(t, path, family, tag, expect_needs, cont_tol)]   // off-Apple the gated body is empty
 def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; cont_tol : float) {
-    // qwen3.5/3.6 hybrid (Wave D): 3-in-4 Gated-DeltaNet layers + gated attention. Prefill +
-    // decode ENGAGE on the blob twin; batch has NO metal arm by design — eval_batch CPU-declines
-    // hybrids (attn_is_std false) into per-row forward, which rides the metal DECODE override.
-    // The batch cell therefore asserts the FALLBACK shape: metal batch steps stay 0 while the
-    // single-decode counter serves both rows.
+    // qwen3.5/3.6 hybrid (Wave D): 3-in-4 Gated-DeltaNet layers + gated attention. Prefill,
+    // decode and the batched step ENGAGE on the blob twin; the batched step (the recurrent
+    // rows form, each row's scan against its own state) is compared row for row against two
+    // single-row GPU steps on twin sessions - the CPU batched stack has no hybrid form.
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
@@ -764,15 +763,20 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
             set_metal_prefill_min_npos(1l)
             eval_(trg, sa, pa)
             eval_(trg, sb, pb)
-            var cura = greedy_top(sa.logits, vocab)
+            let cura = greedy_top(sa.logits, vocab)
             let curb = greedy_top(sb.logits, vocab)
-            for (_i in range(2)) {
-                var one <- [cura]
-                eval_(trg, sa, one)
-                delete one
-                cura = greedy_top(sa.logits, vocab)
-            }
-            let de1 = metal_decode_stats().decodes
+            // the control: twin sessions through the single-row GPU step, one token each
+            var sa2 = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sb2 = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            eval_(trg, sa2, pa)
+            eval_(trg, sb2, pb)
+            var onea <- [cura]
+            var oneb <- [curb]
+            eval_(trg, sa2, onea)
+            eval_(trg, sb2, oneb)
+            delete onea
+            delete oneb
+            // the batched step over the two rows
             var ws <- create_batch_workspace_(trg)
             var sess : array<Session?>
             unsafe {
@@ -780,9 +784,16 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                 sess |> push(addr(sb))
             }
             var cur <- [cura, curb]
+            let ba1 = metal_batch_decode_stats().steps
             eval_batch_(trg, ws, sess, cur)
-            t |> success(metal_decode_stats().decodes - de1 >= 2l,
-                "{tag} batch: per-row fallback serves each row on the GPU decode path")
+            t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
+            var bmaxd = 0.0
+            for (i in range64(vocab)) {
+                bmaxd = max(bmaxd, abs(sa.logits[i] - sa2.logits[i]))
+                bmaxd = max(bmaxd, abs(sb.logits[i] - sb2.logits[i]))
+            }
+            to_log(LOG_INFO, "{tag} batched step: single-row next '{eyeball_str(piece_(tr, greedy_top(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, greedy_top(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb.logits, vocab)))}' (maxd {bmaxd})\n")
+            t |> success(bmaxd <= 2.0, "{tag}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
@@ -794,10 +805,12 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
             delete cur
             delete sa
             delete sb
+            delete sa2
+            delete sb2
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "{tag} prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "{tag} decode: ENGAGES on the GPU")
-        t |> equal(metal_batch_decode_stats().steps - ba0, 0l)
+        t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
         var cpu_ids : array<int64>
         var gpu_ids : array<int64>

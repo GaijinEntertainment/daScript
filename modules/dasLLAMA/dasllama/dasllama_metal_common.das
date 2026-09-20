@@ -1849,6 +1849,8 @@ var g_lp_xb_bytes = 0l
 var g_lp_err = false            // sticky per-step dispatch-error signal for sync callers
 var @scratch g_lp_sessions : array<Session?>
 var @scratch g_lp_positions : array<int64>
+var @scratch g_lp_dn_uids : array<uint64>   // the pending step's recurrent rows: each session's DnMirror advances when the step lands
+var @scratch g_lp_dn_pos : array<int64>
 var @scratch g_lp_koffs : array<uint64>
 var @scratch g_lp_voffs : array<uint64>
 var @scratch g_lp_caps : array<int64>
@@ -1962,6 +1964,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
             }
         }
         g_us_breadback += int64(get_time_usec(ts_rb))
+        for (u, p in g_lp_dn_uids, g_lp_dn_pos) {   // the GPU state now holds each recurrent row's update
+            dn_mirror_advance(u, p)
+        }
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
@@ -1994,6 +1999,8 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
     g_lp_xb = null
     g_lp_xb_dst = null
     g_lp_sessions |> clear()   // borrowed handles — clear, never delete
+    g_lp_dn_uids |> clear()
+    g_lp_dn_pos |> clear()
     g_lp_active = false
 }
 

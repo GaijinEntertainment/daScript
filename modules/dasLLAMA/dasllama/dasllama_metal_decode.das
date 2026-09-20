@@ -2414,6 +2414,10 @@ var private @scratch g_b_rte : array<uint>
 var private @scratch g_b_koffs : array<uint64>
 var private @scratch g_b_voffs : array<uint64>
 var private @scratch g_b_caps : array<int64>
+// the step being built: each recurrent row's DnMirror buffer (mirror-owned) and its live region's bases
+var private @scratch g_b_dn_bufs : array<MetalBuffer?>
+var private @scratch g_b_dn_sbases : array<uint64>
+var private @scratch g_b_dn_cbases : array<uint64>
 
 // the model half is decode_shape_decline; per batch: uniform f16/f32 KV, every row within the
 // attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
@@ -2440,10 +2444,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             }
         }
     }
-    // no batch arm for hybrid graphs (deltanet layers, gated Q - the round path serves them); a MoE's shared expert rides the rows form
-    if (!t.blocks.attn_is_std) {
-        return MetalDecodeDecline.graph
-    }
+    // the deltanet hybrids ride the recurrent rows form where the single row does (decode_shape_decline's graph clause); a MoE's shared expert rides the rows form
     let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true)   //! MoE, the E-series' shared-KV layers (Q-only rows) and its two FFN widths all have batch forms
     if (shape != MetalDecodeDecline.none) {
         return shape
@@ -2613,10 +2614,60 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     }
 }
 
-//! the batch declines recurrent models at its step gate, so no layer reaches this
-[unused_argument(e, t, enc, l, dnli)]
+//! the batch rows' recurrent layer: the projections as rows GEMVs (one weight pass), then the
+//! conv, scan and gate a row at a time against that session's own state - the row index in the
+//! kargs picks the row's slice of the batch planes, the mirror bases pick its state
 def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
-    panic("batch decode: a recurrent layer reached the layer encoder - the step gate declines recurrent models")
+    let c = t.config
+    let dim = c.dim
+    var r & = unsafe(*e.r)
+    let cd = dn_conv_dim(c)
+    let di = c.ssm_d_inner
+    let nvh = c.ssm_dt_rank
+    unsafe {
+        if (g_skip != "gemv") {
+            let bdnq = blob_of(g_dev, t, t.dnqkv_offs[l])
+            enc_gemv_rows(enc, r.nrows, bdnq.buf, bdnq.boff, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, dim, cd, cd)
+            let bdng = blob_of(g_dev, t, t.dngate_offs[l])
+            enc_gemv_rows(enc, r.nrows, bdng.buf, bdng.boff, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, dim, di, di)
+            if (t.dn_ba_f32) {
+                var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
+                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
+                var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
+                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
+            } else {
+                let bdnb = blob_of(g_dev, t, t.dnbeta_offs[l])
+                enc_gemv_rows(enc, r.nrows, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
+                let bdna = blob_of(g_dev, t, t.dnalpha_offs[l])
+                enc_gemv_rows(enc, r.nrows, bdna.buf, bdna.boff, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
+            }
+        }
+        if (g_skip != "attn") {
+            let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
+            let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
+            var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
+            var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
+            var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
+            var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
+            for (i in range64(r.nrows)) {
+                var dka = dn_args(c, 1l, false)
+                dka.row = uint(i)
+                var st = g_b_dn_bufs[i]
+                let soff = g_b_dn_sbases[i] + sslice
+                let hoff = g_b_dn_cbases[i] + hslice
+                enc_dn_conv(enc, r.bdn_qkv, st, hoff, bw_cv, r.bdn_cv, dka, cd, 1l)
+                enc_dn_conv_hist(enc, r.bdn_qkv, st, hoff, st, hoff, dka, cd)
+                enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 1l)
+                enc_dn_scan(enc, r.bdn_cv, st, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o, st, soff, dka, c.ssm_d_state, nvh)
+                enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
+            }
+        }
+        if (g_skip != "gemv") {
+            let bdno = blob_of(g_dev, t, t.dnout_offs[l])
+            enc_gemv_rows(enc, r.nrows, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, di, dim, dim)
+        }
+    }
+    dnli++
 }
 
 //! the batch step's layer encoder: B rows through the route table on the batch kernel family
@@ -2677,6 +2728,30 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         }
         if (!ready) {
             finish_pending_step()
+        }
+    }
+    // the recurrent rows' state: each session's DnMirror at its own position - a cold mirror syncs
+    // from the CPU prefix under the previous step's completion, a session with neither declines the step
+    let dn = t.config.recr_mask != 0ul
+    g_b_dn_bufs |> clear()
+    g_b_dn_sbases |> clear()
+    g_b_dn_cbases |> clear()
+    if (dn) {
+        finish_pending_step()
+        g_b_dn_bufs |> reserve(nrows)
+        g_b_dn_sbases |> reserve(nrows)
+        g_b_dn_cbases |> reserve(nrows)
+        for (i in range64(nrows)) {
+            var sp = sessions[i]
+            var dm = dn_mirror_prepare(*sp, ws.positions[i], dn_mirror_regions(t))
+            if (!dm.ok) {
+                g_lp_err = false
+                batch_decline(MetalDecodeDecline.dn_state)
+                return false
+            }
+            g_b_dn_bufs |> push(dm.buf)
+            g_b_dn_sbases |> push(dm.state_off)
+            g_b_dn_cbases |> push(dm.conv_off)
         }
     }
     let ts_all = ref_time_ticks()
@@ -2884,6 +2959,27 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var bmg4rt = g4moe ? pool_acquire(g_pool, g_dev, bytes_mg4x) : null
     var bmgh = g4moe ? pool_acquire(g_pool, g_dev, bytes_mgh) : null
     var bmgh2 = g4moe ? pool_acquire(g_pool, g_dev, bytes_mgh) : null
+    // the recurrent rows' planes (nrows deep) and the gated-attention pair; the mirrors are the sessions'
+    let cd = dn ? dn_conv_dim(c) : 0l
+    let di = dn ? c.ssm_d_inner : 0l
+    let nvh = dn ? c.ssm_dt_rank : 0l
+    let bytes_dn_cd = uint64(nrows * cd * 4l)
+    let bytes_dn_di = uint64(nrows * di * 4l)
+    let bytes_dn_h = uint64(nrows * nvh * 4l)
+    var bdn_qkv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
+    var bdn_cv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
+    var bdn_z = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
+    var bdn_o = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
+    var bdn_b = dn ? pool_acquire(g_pool, g_dev, bytes_dn_h) : null
+    var bdn_g = dn ? pool_acquire(g_pool, g_dev, bytes_dn_h) : null
+    var u_cd = dn ? uniform_u32(uint(cd)) : null
+    var u_nvh = dn ? uniform_u32(uint(nvh)) : null
+    var u_di = dn ? uniform_u32(uint(di)) : null
+    let bytes_qg = uint64(nrows * qd * 4l)
+    var bdn_qg = c.q_gated ? pool_acquire(g_pool, g_dev, 2ul * bytes_qg) : null
+    var bdn_gate = c.q_gated ? pool_acquire(g_pool, g_dev, bytes_qg) : null
+    var u_dn_qd2 = c.q_gated ? uniform_u32(uint(2l * qd)) : null
+    var u_total_qd = c.q_gated ? uniform_u32(uint(nrows * qd)) : null
     let bytes_log = uint64(mp * c.vocab_size * 4l)
     var bxf = gpu_logits ? pool_acquire(g_pool, g_dev, bytes_x) : null
     var blog = gpu_logits ? pool_acquire(g_pool, g_dev, bytes_log) : null
@@ -3023,6 +3119,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
         ple = plef, bple = bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple,
+        dn = dn, bdn_qkv = bdn_qkv, bdn_cv = bdn_cv, bdn_z = bdn_z, bdn_o = bdn_o, bdn_b = bdn_b, bdn_g = bdn_g,
+        u_cd = u_cd, u_nvh = u_nvh, u_di = u_di,
+        bdn_qg = bdn_qg, bdn_gate = bdn_gate, u_dn_qd2 = u_dn_qd2, u_total_qd = u_total_qd,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
         bcos = bcos, bsin = bsin, bcos_swa = bcos_swa, bsin_swa = bsin_swa, brt = brt,
         bmoe_lg = bmlg, bmoe_sel = bmsel, bmoe_dn = bmdn, bmoe_rt = bmg4rt, bmg4x = bmg4x, bmgh = bmgh, bmghb = bmgh2,
@@ -3215,6 +3314,29 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_lp_upooled |> push((buf = bple, size = bytes_ple))
         g_lp_upooled |> push((buf = u_ple, size = 4ul))
         g_lp_upooled |> push((buf = u_ple_tot, size = 4ul))
+    }
+    if (dn) {
+        g_lp_pooled |> push((buf = bdn_qkv, size = bytes_dn_cd))
+        g_lp_pooled |> push((buf = bdn_cv, size = bytes_dn_cd))
+        g_lp_pooled |> push((buf = bdn_z, size = bytes_dn_di))
+        g_lp_pooled |> push((buf = bdn_o, size = bytes_dn_di))
+        g_lp_pooled |> push((buf = bdn_b, size = bytes_dn_h))
+        g_lp_pooled |> push((buf = bdn_g, size = bytes_dn_h))
+        g_lp_upooled |> push((buf = u_cd, size = 4ul))
+        g_lp_upooled |> push((buf = u_nvh, size = 4ul))
+        g_lp_upooled |> push((buf = u_di, size = 4ul))
+        g_lp_dn_uids |> reserve(nrows)
+        g_lp_dn_pos |> reserve(nrows)
+        for (i in range64(nrows)) {
+            g_lp_dn_uids |> push(sessions[i].uid)
+            g_lp_dn_pos |> push(ws.positions[i])
+        }
+    }
+    if (c.q_gated) {
+        g_lp_pooled |> push((buf = bdn_qg, size = 2ul * bytes_qg))
+        g_lp_pooled |> push((buf = bdn_gate, size = bytes_qg))
+        g_lp_upooled |> push((buf = u_dn_qd2, size = 4ul))
+        g_lp_upooled |> push((buf = u_total_qd, size = 4ul))
     }
     g_lp_blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
     g_lp_sameslab = same
