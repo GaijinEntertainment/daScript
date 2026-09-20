@@ -2710,23 +2710,21 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
 //! Bytes per stored element (scalar codecs only; block codecs size via kv_row_bytes directly).
 def kv_elem_bytes(dt : KVDtype) : int64 => dt == KVDtype.f16 ? 2l : 4l
 
-//! Byte stride of one position row of width kv_dim under codec dt — THE layout seam.
-//! q8_0: kv_dim/32 blocks of {f16 d; int8 qs[32]} = 34 bytes each; tq4: kv_dim/32 blocks of
-//! {f16 d; uint8 qs[16]} = 18 bytes each (kv_dim % 32 == 0 by create).
-def kv_row_bytes(dt : KVDtype; kv_dim : int64) : int64 {
-    if (dt == KVDtype.q8_0) return kv_dim / 32l * 34l
-    if (dt == KVDtype.tq4) return kv_dim / 32l * 18l
-    return kv_dim * kv_elem_bytes(dt)
-}
+//! A block codec stores whole 32-element blocks and addresses in bytes; the scalar codecs address in elements.
+def kv_block_codec(dt : KVDtype) : bool => dt == KVDtype.q8_0 || dt == KVDtype.tq4
 
-//! Head-slot offset in the side's own addressing units: elements for scalar codecs, bytes for the
-//! block codecs (whole blocks). The _d dispatch wrappers prescale with this so the codec-generic
-//! workers' `(rowbase + j) * kdim + khoff` walks stay unit-correct.
+//! Head-slot offset in the side's own units (elements for scalar codecs, bytes for block codecs) — THE
+//! layout seam: q8_0 32-blocks of {f16 d; int8 qs[32]} = 34 B, tq4 32-blocks of {f16 d; uint8 qs[16]} =
+//! 18 B (elems % 32 == 0 by create). The _d wrappers prescale with it so the workers' walks stay unit-correct.
 def kv_side_off(dt : KVDtype; elems : int64) : int64 {
     if (dt == KVDtype.q8_0) return elems / 32l * 34l
     if (dt == KVDtype.tq4) return elems / 32l * 18l
     return elems
 }
+
+//! Byte stride of one position row of width kv_dim under codec dt: the side offset of the whole
+//! row, in bytes for a block codec already, scaled by the element size for a scalar one.
+def kv_row_bytes(dt : KVDtype; kv_dim : int64) : int64 => kv_side_off(dt, kv_dim) * (kv_block_codec(dt) ? 1l : kv_elem_bytes(dt))
 
 //! Layer l's slab base (BYTES) in the key cache; the byte analog of kv_cache_off, reading the
 //! LIVE seq_len so post-load seq_len caps keep working.

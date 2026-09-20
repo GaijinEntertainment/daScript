@@ -8,6 +8,7 @@ require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_gguf
 require dasllama/dasllama_unicode
+require daslib/utf8_utils   // utf8_encode - the encode walk's per-codepoint bytes, appended in place
 require dasllama/dasllama_pretok
 require strings
 
@@ -152,8 +153,10 @@ def init_byte2uni() {
 // past this many symbols the heap merge wins; below it the rescan's constant is smaller
 let private BPE_HEAP_MIN_SYMS = 32
 
-struct private BpeBigram {
-    rank : int64
+//! One candidate merge on the heap: `pri` is the priority in "highest first" form - the BPE rank
+//! negated (lowest rank first) or the SPM piece score (highest first), a double so both are exact.
+struct private Bigram {
+    pri : double
     li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
     ri : int
     l_id : int64
@@ -161,17 +164,16 @@ struct private BpeBigram {
     mid : int64
 }
 
-// min-heap priority: lowest rank, then leftmost — exactly the rescan's selection order.
-// The sg_* heap in dasllama_spm is a deliberate twin: different key struct and comparator,
-// and the two backends share no module to host a generic heap.
-def private bg_before(a, b : BpeBigram) : bool => a.rank < b.rank || (a.rank == b.rank && a.li < b.li)
+// max-heap priority: highest pri, then leftmost — exactly the sequential rescan's selection order
+def private bigram_before(a, b : Bigram) : bool => a.pri > b.pri || (a.pri == b.pri && a.li < b.li)
 
-def private bg_push(var h : array<BpeBigram>; bg : BpeBigram) {
+// hand-rolled sift so the comparator inlines: a block-comparator sort pays an invoke per compare on this per-merge path
+def private bigram_push(var h : array<Bigram>; bg : Bigram) {
     h |> push(bg)
     var i = length(h) - 1
     while (i > 0) {
         let p = (i - 1) / 2
-        break if (!bg_before(h[i], h[p]))
+        break if (!bigram_before(h[i], h[p]))
         let t = h[i]
         h[i] = h[p]
         h[p] = t
@@ -179,7 +181,7 @@ def private bg_push(var h : array<BpeBigram>; bg : BpeBigram) {
     }
 }
 
-def private bg_pop(var h : array<BpeBigram>) : BpeBigram {
+def private bigram_pop(var h : array<Bigram>) : Bigram {
     let top = h[0]
     let last = length(h) - 1
     h[0] = h[last]
@@ -189,10 +191,10 @@ def private bg_pop(var h : array<BpeBigram>) : BpeBigram {
         var c = i * 2 + 1
         break if (c >= length(h))
         let r = c + 1
-        if (r < length(h) && bg_before(h[r], h[c])) {
+        if (r < length(h) && bigram_before(h[r], h[c])) {
             c = r
         }
-        break if (!bg_before(h[c], h[i]))
+        break if (!bigram_before(h[c], h[i]))
         let t = h[i]
         h[i] = h[c]
         h[c] = t
@@ -201,17 +203,26 @@ def private bg_pop(var h : array<BpeBigram>) : BpeBigram {
     return top
 }
 
-def private bg_try_push(tk : BpeTokenizer; var h : array<BpeBigram>; syms : array<int64>; li, ri : int) {
-    let pm = tk.pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
+// the pair probe: BPE (no scores) packs rank << 32 | merged id, lowest rank first; SPM's value
+// is the merged piece's id and its priority is that piece's score, highest first
+def private bigram_try_push(pair_merge : table<int64; int64>; scores : array<float>; var h : array<Bigram>; syms : array<int64>; li, ri : int) {
+    let pm = pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
     return if (pm < 0l)
-    h |> bg_push(BpeBigram(rank = pm >> 32l, li = li, ri = ri,
-        l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
+    if (empty(scores)) {
+        h |> bigram_push(Bigram(pri = -double(pm >> 32l), li = li, ri = ri,
+            l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
+    } else {
+        h |> bigram_push(Bigram(pri = double(scores[pm]), li = li, ri = ri,
+            l_id = syms[li], r_id = syms[ri], mid = pm))
+    }
 }
 
-// Heap merge for long runs: O(n log n) where the rescan is O(n^2). Stale heap entries (an
-// endpoint merged since push) are skipped by the adjacency+id guard; ids match the rescan exactly.
-def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
+//! Heap merge over a whole symbol run for BOTH backends (BPE passes an empty `scores`, SPM its piece
+//! scores): O(n log n) where the rescan is O(n^2); stale entries (an endpoint merged since push) skip on
+//! the adjacency+id guard, so the ids match the rescan exactly; -2 dead slots compact out (SPM's -1 survives).
+def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; var syms : array<int64>) {
     let n = length(syms)
+    return if (n < 2)
     var nxt : array<int>
     var prv : array<int>
     nxt |> resize(n)
@@ -220,13 +231,13 @@ def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
         nxt[i] = i + 1 < n ? i + 1 : -1
         prv[i] = i - 1
     }
-    var h : array<BpeBigram>
+    var h : array<Bigram>
     h |> reserve(n)
     for (i in range(n - 1)) {
-        bg_try_push(tk, h, syms, i, i + 1)
+        bigram_try_push(pair_merge, scores, h, syms, i, i + 1)
     }
     while (!empty(h)) {
-        let bg = bg_pop(h)
+        let bg = bigram_pop(h)
         continue if (nxt[bg.li] != bg.ri || syms[bg.li] != bg.l_id || syms[bg.ri] != bg.r_id)
         syms[bg.li] = bg.mid
         syms[bg.ri] = -2l   // dead slot — compacted out below
@@ -235,10 +246,10 @@ def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
             prv[nxt[bg.ri]] = bg.li
         }
         if (prv[bg.li] >= 0) {
-            bg_try_push(tk, h, syms, prv[bg.li], bg.li)
+            bigram_try_push(pair_merge, scores, h, syms, prv[bg.li], bg.li)
         }
         if (nxt[bg.li] >= 0) {
-            bg_try_push(tk, h, syms, bg.li, nxt[bg.li])
+            bigram_try_push(pair_merge, scores, h, syms, bg.li, nxt[bg.li])
         }
     }
     var w = 0
@@ -252,6 +263,11 @@ def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
     delete nxt
     delete prv
     delete h
+}
+
+def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
+    let no_scores : array<float>
+    bigram_merge_heap(tk.pair_merge, no_scores, syms)
 }
 
 // Greedily merge the lowest-rank adjacent pair (leftmost on ties), over symbol IDS — one packed
@@ -386,17 +402,20 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
         offs <- pretok_split(cpts, tk.pre != "qwen2")   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     }
     var pos = 0
+    var cpb : array<uint8>   // one codepoint's UTF-8 bytes, reused across the walk (no string per codepoint)
+    cpb |> reserve(4)
     for (off in offs) {
         var syms : array<int64>
+        syms |> reserve(off)
         var has_unk = false
         for (i in range(pos, pos + off)) {
-            peek_data(cpt_to_utf8(cpts[i])) $(d : array<uint8> const#) {
-                for (k in range(length(d))) {
-                    let bid = tk.byte_id[int(d[k])]
-                    syms |> push(bid)
-                    if (bid < 0l) {
-                        has_unk = true
-                    }
+            cpb |> clear()
+            cpb |> utf8_encode(uint(cpts[i]))
+            for (b in cpb) {
+                let bid = tk.byte_id[int(b)]
+                syms |> push(bid)
+                if (bid < 0l) {
+                    has_unk = true
                 }
             }
         }
