@@ -414,7 +414,7 @@ Vulkan on MoltenVK, not Metal.
 Every correctness-loop run (probe tests, parity, `run.das` spot checks) is the fast stack by
 default - `daslang.exe -jit <app>.das ...` installs the AST module cache and the split-module JIT
 unasked. A bench that must see one-unit codegen passes `--jit-split-modules=0` after the `--`
-separator; a records row measures a released `-exe`, which always is one unit; `-no-module-cache`
+separator; a records row measures a released `-exe` and names its codegen form; `-no-module-cache`
 opts out of the cache. The flags: `skills/internal/build_and_debug.md`. `run.das` takes the model
 as the LAST argv token ending in `.gguf`: a flag placed after the path silently falls back to the
 default model, so the run benches a different file.

@@ -775,7 +775,11 @@ reading `add_bos == false` where that fixture is stocked.
 `test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the rail where globals restore as DATA, so a function-typed global with no
-boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
+boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green - then
+builds it again split with LTO (`--jit-split-modules=-1 --jit-lto`; each build's output must
+announce its own form and never the other's, so a dropped or a leaked flag cannot pass; on a POSIX
+box the arm needs `clang++` on PATH and skips without it) and reads the same `EXE_SMOKE_OK` marker.
+~5 min for the two builds.
 `test_gen_records_args.das` - model-free: the measurement orchestrator's pure seams - the
 pybench args builder's per-tool arms (onnx carries the `--out` recovery file and never a device;
 nemo forwards `--device`), the `asr_gpu_pair_tool` roster, the `records_run_verdict` ZERO-cells

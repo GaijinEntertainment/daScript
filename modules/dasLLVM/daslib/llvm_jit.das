@@ -250,6 +250,9 @@ class public LlvmJitVisitor : AstVisitor {
     // element make-local cmres writes go, mirroring interp's abiCMRES redirect in SimNode_MakeArrayHeap.
     // LIFO matches visitor recursion, so nested `[[..],[..]]` just push/pop (no per-expr bookkeeping).
     heapMkaData : array<LLVMOpaqueValue?>
+    constMka : ExprMakeArray?   //! the literal being lowered to constant data (its elements are all constants, so none nests another)
+    constMkaVals : array<LLVMOpaqueValue?>
+    constMkaSeq : int
     v2v : table<Variable?; LLVMOpaqueValue?>
     g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
     di_globals : table<Variable?; bool>         //! the globals this function already describes, cleared with g2v
@@ -738,6 +741,8 @@ class public LlvmJitVisitor : AstVisitor {
             // at all when gen_exe enabled.
             // But it requires some refactoring.
             set_private_linkage(wfunc)
+        } elif (g_jit_split_exe) {
+            LLVMSetLinkage(wfunc, LLVMLinkage.LLVMExternalLinkage)   //! the entry partition calls it across the link; an exe exports nothing
         } else {
             set_public_linkage(wfunc)
         }
@@ -1510,30 +1515,35 @@ class public LlvmJitVisitor : AstVisitor {
         return null
     }
 
+    //! the extern's LLVM signature: the cmres slot first, the ABI form of every argument, then the context and line-info pair
+    def extern_fn_type(func : Function?) : LLVMOpaqueType? {
+        var arg_types : array<LLVMOpaqueType?>
+        var res_type = type_to_llvm_type(func.result)
+        if (func.result.flags.ref) {
+            res_type = LLVMPointerType(res_type, 0u)
+        }
+        if (isCMRES(func)) {
+            arg_types |> push(LLVMPointerType(res_type, 0u))
+            res_type = types.t_void
+        }
+        for (arg in func.arguments) {
+            arg_types |> push(type_to_llvm_abi_type(arg._type))
+        }
+        if (func.moreFlags.jitContextAndLineInfo) {
+            arg_types |> push(types.LLVMVoidPtrType())  // context
+            arg_types |> push(types.LLVMVoidPtrType())  // line info arg
+        }
+        return LLVMFunctionType(res_type, arg_types)
+    }
+
     def register_extern_function(expr : ExprCallFunc?) : tuple<LLVMOpaqueValue?, LLVMOpaqueType?> {
         let mangled_name = uid.get_dll_fn_name_ptr(expr.func)
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
+        if (!(g_fn_types |> key_exists(mangled_name.publ()))) {
+            g_fn_types[mangled_name.publ()] = extern_fn_type(expr.func)   //! a slot the entry partition declared ahead of this module's first call carries no signature yet
+        }
         if (ofunc == null) {
-            var arg_types : array<LLVMOpaqueType?>
-            var res_type = type_to_llvm_type(expr.func.result)
-            if (expr.func.result.flags.ref) {
-                res_type = LLVMPointerType(res_type, 0u)
-            }
-            let cmres = isCMRES(expr.func)
-            if (cmres) {
-                arg_types |> push(LLVMPointerType(res_type, 0u))
-                res_type = types.t_void
-            }
-            for (arg in expr.func.arguments) {
-                arg_types |> push(type_to_llvm_abi_type(arg._type))
-            }
-            if (expr.func.moreFlags.jitContextAndLineInfo) {
-                arg_types |> push(types.LLVMVoidPtrType())  // context
-                arg_types |> push(types.LLVMVoidPtrType())  // line info arg
-            }
-            let fn_type = LLVMFunctionType(res_type, arg_types)
-            g_fn_types[mangled_name.publ()] = fn_type
-
+            let fn_type = g_fn_types[mangled_name.publ()]
             let fn_ptr_type = LLVMPointerType(fn_type, 0u)
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (is_dasbind_late(expr.func)) {
@@ -1637,6 +1647,7 @@ class public LlvmJitVisitor : AstVisitor {
     // All later loads will be replaced to the first one, assuming `val` is const.
     // We use it to optimize load of global pointers, since this pointers essentially
     // immutable in runtime
+    [arch(at="../ARCHITECTURE_EXE.md#split-exe-slots")]
     def load_local_const(val : LLVMOpaqueValue?; type_ : LLVMOpaqueType?) {
         let load_inst = LLVMBuildLoad2(g_builder, type_, val, "")
         // nolint:STYLE014
@@ -1647,7 +1658,7 @@ class public LlvmJitVisitor : AstVisitor {
         // make those immediates point to garbage. Skip the annotation so the
         // load actually happens at runtime against the global, which is
         // populated correctly when the standalone exe runs.
-        if (mode == LlvmJitMode.JIT) {
+        if (mode == LlvmJitMode.JIT && !g_jit_split_exe) {
             let msg = "invariant.load"
             LLVMSetMetadata(
                 load_inst,
@@ -1664,12 +1675,16 @@ class public LlvmJitVisitor : AstVisitor {
         return load_local_const(mb_global, nonnull_type)
     }
 
+    [arch(at="../ARCHITECTURE_EXE.md#split-exe-slots")]
     def save_address_global(name : DllName; address : void?; typ : LLVMOpaqueType? = null) {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
         var global_addr = LLVMGetNamedGlobal(g_mod, name.glob())
         if (global_addr == null) {
             global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.glob())
-            if (mode != LlvmJitMode.JIT) {
+            if (g_jit_split_exe) {
+                set_shared_export_linkage(global_addr, name.glob())
+                LLVMSetInitializer(global_addr, LLVMConstPointerNull(nonnull_type))
+            } elif (mode != LlvmJitMode.JIT) {
                 // nolint:STYLE014
                 // The JIT-process address is meaningless in the host (different ASLR slide),
                 // and baking it as a const initializer lets LLVM constant-fold loads to that
@@ -4689,7 +4704,79 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprMakeArray
+    def is_const_data_elem(t : TypeDeclPtr) : bool {
+        //! a numeric or vector element a constant-data literal can carry (a three-wide vector's padding and a
+        //! string's runtime pointer keep those out)
+        if (t == null || t.isRef) return false
+        let b = t.baseType
+        var scalar_size = 0
+        if (b == Type.tInt8 || b == Type.tUInt8) {
+            scalar_size = 1
+        } elif (b == Type.tInt16 || b == Type.tUInt16) {
+            scalar_size = 2
+        } elif (b == Type.tInt || b == Type.tUInt || b == Type.tFloat) {
+            scalar_size = 4
+        } elif (b == Type.tInt64 || b == Type.tUInt64 || b == Type.tDouble || b == Type.tInt2 || b == Type.tUInt2 || b == Type.tFloat2) {
+            scalar_size = 8
+        } elif (b == Type.tInt4 || b == Type.tUInt4 || b == Type.tFloat4) {
+            scalar_size = 16
+        }
+        return scalar_size != 0   // a fixed-array element (int[2]) has its own base type, so no arm above admits it
+    }
+
+    [arch(at="../ARCHITECTURE.md#const-data-literal")]
+    def is_const_data_literal(expr : ExprMakeArray?) : bool {
+        if (length(expr.values) < MIN_CONST_DATA_ELEMS || !is_const_data_elem(expr.recordType)) return false
+        for (v in expr.values) {
+            if (!(v |> is_expr_const()) || v is ExprConstString) return false
+        }
+        return true
+    }
+
+    //! every value is a constant of the element type: an emitter's failure sentinel is a constant too, of another type
+    def all_values_constant(vals : array<LLVMOpaqueValue?>; elemT : LLVMOpaqueType?) : bool {
+        for (v in vals) {
+            if (LLVMIsConstant(v) == 0 || LLVMTypeOf(v) != elemT) return false
+        }
+        return true
+    }
+
+    [arch(at="../ARCHITECTURE.md#const-data-literal")]
+    def emit_const_data_literal(expr : ExprMakeArray?) {
+        //! a value the builder did not fold to a constant of the element type sends the whole literal to a per-element store loop over the collected values
+        let stride = expr.recordType.sizeOf
+        let n = length(constMkaVals)
+        verify(n == length(expr.values), "const-data literal: the collected value count differs from the literal's element count")
+        var dst = getE(expr)
+        if (expr.makeArrayOnHeap) { dst = heapMkaData |> back() }
+        let elemT = type_to_llvm_type(expr.recordType)
+        if (all_values_constant(constMkaVals, elemT)) {
+            let arrT = LLVMArrayType(elemT, uint(n))
+            constMkaSeq++
+            var data = LLVMAddGlobal(g_mod, arrT, "mka_const_{constMkaSeq}")
+            LLVMSetInitializer(data, LLVMConstArray(elemT, array_data_ptr(constMkaVals), uint(n)))
+            LLVMSetGlobalConstant(data, 1)
+            LLVMSetLinkage(data, LLVMLinkage.LLVMPrivateLinkage)
+            LLVMSetUnnamedAddress(data, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr)
+            let data_align = 16u
+            LLVMSetAlignment(data, data_align)
+            LLVMBuildMemCpy(g_builder, dst, uint(expr.recordType.alignOf), data, data_align, types.ConstI64(uint64(n) * uint64(stride)))
+        } else {
+            for (v, i in constMkaVals, count()) {
+                var slot = LLVMBuildGEP2(g_builder, types.t_int8, dst, types.ConstI32(uint64(i * stride)), "[{i}]")
+                slot = LLVMBuildPointerCast(g_builder, slot, get_type_pointer(expr.recordType), "")
+                LLVMBuildStoreAligned(g_builder, v, slot, uint(expr.recordType.alignOf))   // the element's own alignment, as the store path claims it
+            }
+        }
+        constMkaVals |> clear()
+        constMka = null
+    }
+
     def override preVisitExprMakeArray(expr : ExprMakeArray?) : void {
+        if (is_const_data_literal(expr)) {
+            constMka = expr
+            constMkaVals |> clear()
+        }
         var mks_ptr : LLVMOpaqueValue?
         // makeArrayOnHeap: the Array struct lives in the make-array's own stack slot (interp's
         // SimNode_MakeArrayHeap returns stackTop, not the function cmres). The cmres flag set in
@@ -4739,6 +4826,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; var init : ExpressionPtr; last : bool) : void {
+        if (expr == constMka) return
         let stride = expr.recordType.sizeOf
         let offset =  index * stride
         // heap literals fill arr.data (top of heapMkaData), not the Array struct held in getE(expr)
@@ -4761,6 +4849,10 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : ExpressionPtr {
+        if (expr == constMka) {
+            constMkaVals |> push(getE(init))
+            return init
+        }
         let stride = expr.recordType.sizeOf
         let offset =  index * stride
         var v_ptr = getE(expr)
@@ -4782,6 +4874,9 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMakeArray(expr : ExprMakeArray?) : ExpressionPtr {
+        if (expr == constMka) {
+            emit_const_data_literal(expr)
+        }
         if (expr.makeArrayOnHeap) {
             heapMkaData |> pop() // children done; parent heap literal (if any) resumes on top
         }
@@ -7698,7 +7793,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
-    if (mode != LlvmJitMode.EXE) {
+    if (mode != LlvmJitMode.EXE && !g_jit_split_exe) {
         // No need in public symbols when generating executable
         let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
         set_public_linkage(globalVar)

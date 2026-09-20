@@ -21,12 +21,16 @@ struct public JitCliOptions {
     size_level : Option<int>
 
     @clarg_name = "jit-split-modules"
-    @clarg_doc = "JIT (dll mode): partition codegen per das-module - one .o per module, linked into the ONE cached DLL. -1 = split + auto threads (JobQue count; the default); 1 = split with serial emit; N>1 = split + N optimize/emit threads; 0 = monolithic emission, one context with full cross-module inlining, which split partitions lose (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin: options jit_split_modules = N"
+    @clarg_doc = "JIT (dll mode, and a host-target -exe on request - an exe's default stays one unit): partition codegen per das-module - one .o per module, linked into the ONE cached DLL (an exe links them once, no cache, the entry in a partition of its own). -1 = split + auto threads (JobQue count; the default); 1 = split with serial emit; N>1 = split + N optimize/emit threads; 0 = monolithic emission, one context with full cross-module inlining, which split partitions lose (thread count never changes the artifact - split DLLs cache under one distinct key). Script-level pin for the DLL path: options jit_split_modules = N; an exe splits only when its build command asks"
     split_modules : Option<int>
 
     @clarg_name = "jit-obj-cache"
     @clarg_doc = "JIT (dll mode, with --jit-split-modules): reuse cached per-module partition objects, keyed by a chained module-prefix hash - a changed das-module re-emits itself and every module after it in program order; unchanged prefix modules link their cached .o. Require order is therefore the cache layout: place hot-edit modules as late in the require chain as their dependencies allow. 1 = on (default under split; off under a pinned jit_output_path, where no GC runs); 0 = always re-emit with positional object names. Script-level pin: options jit_obj_cache = false"
     obj_cache : Option<int>
+
+    @clarg_name = "jit-lto"
+    @clarg_doc = "JIT (-exe with --jit-split-modules, host target only): the partitions emit bitcode and the link runs LTO, so the split build keeps the one-unit form's cross-module inlining; the target cpu and features ride each function, so the LTO backend emits what the target machine would. The link is regular LTO (one merged module, its optimization serial) at level 3, the codegen level every exe pins: lld-link takes /opt:lldlto=3, a POSIX build links through clang++ with -flto -O3 (a GNU driver handles no bitcode, and a clang older than the LLVM daslang bundles reads none of its bitcode; --jit-path-to-linker names another clang). A build flag only, no script-level pin: an exe's form is its build command's"
+    lto : Option<bool>
 
     @clarg_short = "g"
     @clarg_name = "jit-debug"

@@ -230,9 +230,13 @@ enum public JIT_SEQUENCE {
 // set_glob_address (GetProcAddress on Windows) finds the slot on cache-hit reload — else #2802
 // stale-addr. NEVER SetGlobalConstant on these — DLLExport + non-constant is what stops LLVM
 // folding the baked codegen-time address into call sites (fold = ASLR death on cached DLLs).
+[arch(at="../ARCHITECTURE_EXE.md#split-exe-slots")]
 def public set_shared_export_linkage(val : LLVMOpaqueValue?; name : string) {
     if (g_jit_split_active) {
-        LLVMSetLinkage(val, LLVMLinkage.LLVMLinkOnceODRLinkage)
+        LLVMSetLinkage(val, g_jit_split_exe ? LLVMLinkage.LLVMWeakODRLinkage : LLVMLinkage.LLVMLinkOnceODRLinkage)
+        if (g_jit_split_exe) {
+            g_split_glob_names |> insert(name)
+        }
         // Mach-O has NO comdat support - LLVM's checkMachOComdat is a fatal error at emission;
         // linkonce_odr alone dedups there (weak defs). Split is host-only, so host truth suffices.
         if (get_platform_name() != "darwin") {
@@ -243,15 +247,18 @@ def public set_shared_export_linkage(val : LLVMOpaqueValue?; name : string) {
     } else {
         LLVMSetLinkage(val, LLVMLinkage.LLVMDLLExportLinkage)
     }
-    LLVMSetDLLStorageClass(val, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
+    if (!g_jit_split_exe) {   //! a split exe's entry stores into the slot by name at codegen; nothing looks it up through the export table
+        LLVMSetDLLStorageClass(val, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
+    }
 }
 
+[arch(at="../ARCHITECTURE_EXE.md#split-exe-slots")]
 def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : DllName; at_type : LLVMOpaqueType?; fn_ptr : void?) {
-    var tab_fun : LLVMOpaqueValue? = null
+    var tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name.glob())   //! the entry partition declares a collected slot ahead of its own first use; adding the name again would mint a twin the startup walk never fills
     if (!g_fn_types |> key_exists(fn_name.publ())) {
-        // create fn
         g_fn_types[fn_name.publ()] = at_type
-
+    }
+    if (tab_fun == null) {
         let at_ptr_type = LLVMPointerType(at_type, 0u)
         tab_fun = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), fn_name.glob())
         if (g_emit_aot_object_globals) {
@@ -260,11 +267,9 @@ def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : 
             LLVMSetInitializer(tab_fun, LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u)))
         } else {
             set_shared_export_linkage(tab_fun, fn_name.glob())
-            LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
+            LLVMSetInitializer(tab_fun, g_jit_split_exe ? LLVMConstPointerNull(LLVMPointerType(at_ptr_type, 0u))
+                                                        : types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
         }
-    } else {
-        // we already created it
-        tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name.glob())
     }
     return tab_fun
 }
@@ -573,6 +578,9 @@ var public g_emit_aot_object_globals = false
 // function impls to external-hidden (cross-partition calls) and shared-name globs to linkonce_odr.
 // run_jit sets/clears it around the run; false = today's monolithic emission, byte-identical.
 var public g_jit_split_active = false
+//! a split -exe's partitions are being emitted: every accessor slot is one shared null copy, its name collected in g_split_glob_names by set_shared_export_linkage
+var public g_jit_split_exe = false
+var public g_split_glob_names : table<string>
 
 // Get-or-add das_aot_get_func_by_mnh and build a call resolving `mnh` against `ctx_arg` to the host's
 // SimFunction* (void*). Shared by the aot-object register path and the globinit ctor.
@@ -969,26 +977,31 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     } else {
         triple_msg = host_triple
     }
-    var targetMachine : LLVMTargetMachineRef
-    if (use_host_cpu) {
-        let host = host_machine_cpu_features()
-        targetMachine = create_target_machine(triple_msg, host.cpu, host.features, opt_level)
-    } else {
-        let feats = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
-        let env_forced = g_target_is_x64 ? g_env_jit.jit_x64_force_features : (g_target_is_aarch64 ? g_env_jit.jit_arm64_force_features : "")
-        // the baseline class names the machine's cpu; the generic rail otherwise leaves it to LLVM's default
-        let baseline = jit_baseline_class()
-        let cpu = empty(baseline) ? "" : jit_cpu_class_row(baseline).cpu
-        if (!empty(env_forced)) {
-            to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {env_forced} to the machine {cpu}\n")
-        }
-        targetMachine = create_target_machine(triple_msg, cpu, feats, opt_level)
-    }
+    let machine = default_target_cpu_features(use_host_cpu)
+    let targetMachine = create_target_machine(triple_msg, machine.cpu, machine.features, opt_level)
 
     if (triple_owned_by_llvm) {
         LLVMDisposeMessage(triple_msg)
     }
     return targetMachine
+}
+
+//! The cpu name and feature string the default target machine is built from: the host's under `use_host_cpu`,
+//! else the baseline class's cpu (LLVM's default with no class) with the forced features - what a function's
+//! target attributes carry where no machine is on hand (the in-memory engine, an LTO link's backend)
+def public default_target_cpu_features(use_host_cpu : bool) : tuple<cpu : string; features : string> {
+    if (use_host_cpu) {
+        return host_machine_cpu_features()
+    }
+    let feats = g_target_is_x64 ? x64_forced_plus_features() : (g_target_is_aarch64 ? arm64_forced_plus_features() : "")
+    let env_forced = g_target_is_x64 ? g_env_jit.jit_x64_force_features : (g_target_is_aarch64 ? g_env_jit.jit_arm64_force_features : "")
+    // the baseline class names the machine's cpu; the generic rail otherwise leaves it to LLVM's default
+    let baseline = jit_baseline_class()
+    let cpu = empty(baseline) ? "" : jit_cpu_class_row(baseline).cpu
+    if (!empty(env_forced)) {
+        to_log(LOG_INFO, "LLVM JIT: {g_target_is_x64 ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"} appends {env_forced} to the machine {cpu}\n")
+    }
+    return (cpu = cpu, features = feats)
 }
 
 //! The host machine's cpu name and feature string as the host-cpu target machine is built from
@@ -1019,11 +1032,22 @@ def public host_machine_cpu_features() : tuple<cpu : string; features : string> 
 //! the host's as attributes instead, which the subtarget lookup honors per function.
 def public stamp_host_target_attrs(m : LLVMOpaqueModule?) {
     let host = host_machine_cpu_features()
+    stamp_target_attrs(m, host.cpu, host.features)
+}
+
+//! every defined function of `m` carries `cpu` and `features` as its target attributes; an empty string stamps nothing
+[arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
+def public stamp_target_attrs(m : LLVMOpaqueModule?; cpu, features : string) {
     var fn = LLVMGetFirstFunction(m)
     while (fn != null) {
-        if (LLVMIsDeclaration(fn) == 0) {
-            LLVMAddTargetDependentFunctionAttr(fn, "target-cpu", host.cpu)
-            LLVMAddTargetDependentFunctionAttr(fn, "target-features", host.features)
+        //! a function that already names its cpu (a fat-mode clone lowered for its class) keeps it: the stamp is the module default, never an override
+        if (LLVMIsDeclaration(fn) == 0 && LLVMGetStringAttributeAtIndex(fn, 0xFFFFFFFFu, "target-cpu", 10u) == null) {
+            if (!empty(cpu)) {
+                LLVMAddTargetDependentFunctionAttr(fn, "target-cpu", cpu)
+            }
+            if (!empty(features)) {
+                LLVMAddTargetDependentFunctionAttr(fn, "target-features", features)
+            }
         }
         fn = LLVMGetNextFunction(fn)
     }
@@ -1064,22 +1088,31 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
     return ok
 }
 
+[arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
+//! the LTO link's flags at the run's opt level: regular LTO (one merged module, its optimization serial - the bitcode carries no summary, so a ThinLTO job count would be inert)
+def public lto_linker_args(opt_level : uint) : string {
+    let msvc_lld = get_platform_name() == "windows" && empty(host_jit_triple())
+    let level = int(opt_level)   // a uint interpolates as hex
+    return msvc_lld ? "/opt:lldlto={level}" : "-flto -O{level}"
+}
+
 // nolint:STYLE014
-// Split link: one DLL from N partition objects. create_shared_library takes one object path;
+// Split link: one DLL or exe from N partition objects. create_shared_library takes one object path;
 // the rest ride a @response file (lld-link and the POSIX compiler drivers both accept @file),
 // which sidesteps the Windows ~8K command-line ceiling a large module count would hit via the
-// verbatim extra-args slot. Returns false on any failure - the CALLER resets the jit globals
-// and panics (this module cannot reach reset_jit_globals_after_failure).
-def public link_dll_from_objects(objs : array<string>; out_path : string; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool; log_time : bool) : bool {
+// verbatim extra-args slot. Under `lto` the objects are bitcode and the link gets the LTO arguments.
+// Returns false on any failure - the CALLER resets the jit globals and panics (this module cannot
+// reach reset_jit_globals_after_failure).
+def public link_from_objects(objs : array<string>; out_path : string; kind : JitArtifact; path_to_dascript_lib, path_to_linker, linker_string : string; link_whole_lib : bool; debug_info : bool; log_time : bool; lto : bool = false; opt_level : uint = 3u) : bool {
     assert(!empty(objs))
     // every partition object must exist - create_shared_library checks only its first argument
     for (obj in objs) {
         if (!stat(obj).is_valid) {
-            to_log(LOG_ERROR, "link_dll_from_objects: partition object missing: {obj}\n")
+            to_log(LOG_ERROR, "link_from_objects: partition object missing: {obj}\n")
             return false
         }
     }
-    let rsp = "{out_path}.objs.rsp"   // shares the DLL's hash prefix, so jit_gc_stale_dlls tracks it
+    let rsp = split_link_rsp_path(out_path)
     let rsp_content = join([for (i in range(1, length(objs))); "\"{objs[i]}\""], "\n")
     var rsp_ok = false
     fopen(rsp, "wb") $(f) {
@@ -1089,16 +1122,27 @@ def public link_dll_from_objects(objs : array<string>; out_path : string; path_t
         }
     }
     if (!rsp_ok) {
-        to_log(LOG_ERROR, "link_dll_from_objects: can't write response file {rsp}\n")
+        to_log(LOG_ERROR, "link_from_objects: can't write response file {rsp}\n")
         return false
     }
     let phase_tm = ref_time_ticks()
-    let ok = create_shared_library(objs[0], artifact_path(out_path, JitArtifact.jit_dll), "{path_to_dascript_lib}", "{path_to_linker}", "\"@{rsp}\" {linker_string}", true, link_whole_lib, debug_info)
+    let extra = lto ? "\"@{rsp}\" {lto_linker_args(opt_level)} {linker_string}" : "\"@{rsp}\" {linker_string}"
+    let ok = create_shared_library(objs[0], artifact_path(out_path, kind), "{path_to_dascript_lib}", "{path_to_linker}", extra, kind != JitArtifact.exe, link_whole_lib, debug_info)
     if (log_time) {
-        to_log(LOG_INFO, "LLVM JIT time: link {jit_sec(get_time_usec(phase_tm))} ({length(objs)} objects)\n")
+        to_log(LOG_INFO, "LLVM JIT time: link {jit_sec(get_time_usec(phase_tm))} ({length(objs)} {lto ? "bitcode partitions, LTO" : "objects"})\n")
     }
     return ok
 }
+
+//! the split link's response file: it shares the artifact's prefix, so the DLL GC tracks it and an exe build removes it with its objects
+def public split_link_rsp_path(out_path : string) : string => "{out_path}.objs.rsp"
+
+//! a partition's bitcode sits beside its object under the LTO arms; the object's path is the bitcode's without this suffix
+def public split_part_bitcode_path(obj : string) : string => "{obj}{SPLIT_BITCODE_SUFFIX}"
+
+let public SPLIT_BITCODE_SUFFIX = ".bc"
+
+let public MIN_CONST_DATA_ELEMS = 4   //! below it a store per element is cheaper than a constant array and a memcpy
 
 // @out_path - folder + file name, without extension. @path_to_dascript_lib - required on Windows,
 // no effect on Linux. @path_to_linker - linker override; Windows-MSVC defaults to lld-link (link.exe

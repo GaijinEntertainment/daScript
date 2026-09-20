@@ -719,3 +719,10 @@ def run_and_capture(args : array<string>; var output : string&; timeout_sec : fl
     output = captured
     return exit_code
 }
+
+def executable_on_path(name : string) : bool {
+    //! True when the shell finds ``name`` as a command - ``where`` on Windows, ``command -v`` elsewhere - so a program on PATH answers, and so does a shell builtin; the exit code decides.
+    //! ``name`` travels as an argument, never as shell text, so no character in it runs anything.
+    let probe <- get_running_platform_name() == "windows" ? ["where", name] : ["sh", "-c", "command -v \"$1\"", "sh", name]
+    return unsafe(popen_argv(probe, 30.0, $(_f) {})) == 0
+}

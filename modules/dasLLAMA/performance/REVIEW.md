@@ -75,6 +75,11 @@ rows, architecture or profile docs.**
 times that row with the released `lcpp_bench` exe.** That exe is
 `../benchmarks/lcpp_bench.das` built by `daspkg release`.
 
+**A diff that writes a `das` row to `records/<box>.json` names on the row the codegen form of the
+exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three
+(`skills/internal/build_and_debug.md`), and a rate that does not name its form cannot be compared
+with one that was built another way.
+
 **A diff that writes a `llama.cpp` row - a run row whose `engine` is `llama.cpp` - to
 `records/<box>.json` times that row with the reference exe the ref pin builds.**
 
