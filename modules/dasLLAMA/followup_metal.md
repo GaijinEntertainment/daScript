@@ -616,18 +616,16 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 16. Three model classes have no batched decode arm and step per row under the server
+## 16. The deltanet hybrids have no batched decode arm and step per row under the server
 
 `batch_decode_decline` (`dasllama/dasllama_metal_decode.das`) declines `graph` for a
-non-standard attention block - the deltanet hybrids, Qwen3.5 / 3.6 / 3.8 / Coder-Next - and for
-a MoE with a shared expert - Qwen1.5-MoE, Qwen3.5-35B-A3B, Qwen3.6-35B-A3B, GLM-4.5-Air - and
-`feature` for the per-layer-embedding E-series (gemma-4 E2B, E4B). Each such step falls to the
-per-row single decode: every stream reads the weights once per token, so N streams cost N
-weight passes where one batched step costs one. `REVIEW_GPU.md` rules a missing batched arm a
-defect. The work, one arm per class: the deltanet step and gated Q batched over rows (the
-recurrent state is per session, the GEMMs are not), the shared expert's triple as one batched
-site beside the routed experts (the CPU batch stack already runs it), and the PLE side input
-gathered per row into the batch step (item 13 is its CPU half).
+non-standard attention block - the deltanet hybrids, Qwen3.5 / 3.6 / 3.8 / Coder-Next - and
+the CPU batched stack declines them the same way (`eval_batch_`'s per-row branch). Each such
+step falls to the per-row single decode: every stream reads the weights once per token, so N
+streams cost N weight passes where one batched step costs one, and the batched bench row
+refuses the model by name. `REVIEW_GPU.md` rules a missing batched arm a defect. The work: the
+deltanet step and gated Q batched over rows (the recurrent state is per session, the GEMMs are
+not), on the CPU stack and on the Metal batch driver.
 
 ## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
 

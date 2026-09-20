@@ -914,9 +914,9 @@ def private tensor_twin_row(t : T?; path, tag : string; optional : bool = false)
 [unused_argument(t, path)]   // off-Apple the gated body is empty
 def private qwen2moe_row(t : T?; path : string) {
     // qwen2moe (Qwen1.5-MoE-A2.7B): std attention + softmax-no-renorm select (gmode 2) + the
-    // sigmoid-gated shared expert. Decode + prefill ENGAGE; batch DECLINES by design (shexp
-    // has no batch arm) — the decline cell runs on the PLANAR model: the blob twin's CPU
-    // batch fallback would trip the blob-only panic (std attention runs the CPU batch stack).
+    // sigmoid-gated shared expert. Decode, prefill and the batched step ENGAGE on the blob
+    // twin; the batched step (the shared expert as a rows site beside the routed experts) is
+    // compared row for row against the CPU batched stack on the PLANAR model.
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "fam-qwen2moe") || !model_available(t, path)) {
             return
@@ -951,7 +951,8 @@ def private qwen2moe_row(t : T?; path : string) {
                 delete one
                 cura = greedy_top(sa.logits, vocab)
             }
-            // batch decline cell on the PLANAR model: the gate records `graph`, CPU serves
+            // the batch cell: the CPU batched stack on the PLANAR model is the control (the driver
+            // declines the planar model by name), the blob twin's step must read within the bar of it
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             var sd = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             eval_(tr, sc, pa)
@@ -964,26 +965,50 @@ def private qwen2moe_row(t : T?; path : string) {
             }
             var cur <- [greedy_top(sc.logits, vocab), greedy_top(sd.logits, vocab)]
             eval_batch_(tr, ws, sess, cur)
+            var sg = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sh = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            eval_(trg, sg, pa)
+            eval_(trg, sh, pb)
+            var wsg <- create_batch_workspace_(trg)
+            var sessg : array<Session?>
+            unsafe {
+                sessg |> push(addr(sg))
+                sessg |> push(addr(sh))
+            }
+            let ba1 = metal_batch_decode_stats().steps
+            eval_batch_(trg, wsg, sessg, cur)
+            t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "qwen2moe batch: the driver served the step")
+            var bmaxd = 0.0
+            for (i in range64(vocab)) {
+                bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
+                bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
+            }
+            to_log(LOG_INFO, "qwen2moe batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
+            t |> success(bmaxd <= 8.0, "qwen2moe: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+            sessg |> clear()
             unsafe {
                 delete ws
                 delete sess
+                delete wsg
+                delete sessg
             }
             delete cur
             delete sa
             delete sb
             delete sc
             delete sd
+            delete sg
+            delete sh
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "qwen2moe prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "qwen2moe decode: ENGAGES on the GPU")
         var bad <- metal_batch_decode_declines()
-        t |> equal(metal_batch_decode_stats().steps - ba0, 0l)
-        t |> success((bad?["graph"] ?? 0l) - (bad0?["graph"] ?? 0l) > 0l,
-            "qwen2moe batch: declines with reason 'graph' (no shexp batch arm)")
+        t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "qwen2moe batch: ENGAGES on the GPU")
+        t |> equal((bad?["graph"] ?? 0l) - (bad0?["graph"] ?? 0l), 0l, "qwen2moe batch: no graph decline (the shared expert rides the rows form)")
         delete bad0
         delete bad
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
@@ -1020,9 +1045,9 @@ def private qwen2moe_row(t : T?; path : string) {
 [unused_argument(t, path, tag, hetero_hidden, tokexact)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
-    // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode +
-    // prefill ENGAGE on the blob twin; batch has NO ple arm — the decline cell runs on the
-    // PLANAR model (the blob twin's CPU batch fallback would trip the blob-only panic).
+    // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
+    // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
+    // for row against the CPU batched stack on the PLANAR model.
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e") || !model_available(t, path)) {
             return
@@ -1071,7 +1096,9 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 delete one
                 cura = greedy_top(sa.logits, vocab)
             }
-            // batch decline cell on the PLANAR model: the gate records need_ple, CPU serves
+            // the batch cell: the CPU batched stack on the PLANAR model is the control, the
+            // blob twin's batched step through the driver (PLE rows, Q-only shared-KV layers,
+            // the two FFN widths) must read within the single-stream bar of it
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             var sd = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             eval_(tr, sc, pa)
@@ -1093,7 +1120,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             delete picks
             delete sc
             sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            eval_(tr, sc, pa)
+            eval_(tr, sc, pa)   // the control: the planar model declines the driver by name and runs the CPU batched stack
             eval_(tr, sd, pb)
             var ws <- create_batch_workspace_(tr)
             var sess : array<Session?>
@@ -1103,25 +1130,50 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             }
             var cur <- [greedy_top(sc.logits, vocab), greedy_top(sd.logits, vocab)]
             eval_batch_(tr, ws, sess, cur)
+            // the driver: the same two rows on the blob twin, one batched step
+            var sg = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sh = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            eval_(trg, sg, pa)
+            eval_(trg, sh, pb)
+            var wsg <- create_batch_workspace_(trg)
+            var sessg : array<Session?>
+            unsafe {
+                sessg |> push(addr(sg))
+                sessg |> push(addr(sh))
+            }
+            let ba1 = metal_batch_decode_stats().steps
+            eval_batch_(trg, wsg, sessg, cur)
+            t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
+            var bmaxd = 0.0
+            for (i in range64(vocab)) {
+                bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
+                bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
+            }
+            to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
+            t |> success(bmaxd <= 8.0, "{tag}: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+            sessg |> clear()
             unsafe {
                 delete ws
                 delete sess
+                delete wsg
+                delete sessg
             }
             delete cur
             delete sa
             delete sc
             delete sd
+            delete sg
+            delete sh
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "{tag} prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "{tag} decode: ENGAGES on the GPU")
         var bad <- metal_batch_decode_declines()
-        t |> equal(metal_batch_decode_stats().steps - ba0, 0l)
-        t |> success((bad?["need_ple"] ?? 0l) - (bad0?["need_ple"] ?? 0l) > 0l,
-            "{tag} batch: declines with need_ple (no PLE batch arm)")
+        t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
+        t |> equal((bad?["need_ple"] ?? 0l) - (bad0?["need_ple"] ?? 0l), 0l, "{tag} batch: no need_ple decline (the PLE rows form serves)")
         delete bad0
         delete bad
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)

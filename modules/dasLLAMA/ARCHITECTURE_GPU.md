@@ -76,9 +76,16 @@ that a question answered for one backend has an obvious address in the other. Th
   (Vulkan alone); the hub skips the CPU pre-step only for the direction whose gate answers yes,
   so the Metal decode keeps reading the CPU-built side input.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
-  and on the Vulkan whole-model driver**: the Metal decode and prefill drivers bind the width per
-  layer (dense trunks, no MTP; batch keeps the layer-0 hoist behind its uniformity decline), and
-  the Vulkan driver's per-layer geometry (`RLayer.hid`) carries it beside the PLE branch.
+  and on the Vulkan whole-model driver**: the Metal decode, batch and prefill drivers bind the
+  width per layer (dense trunks, no MTP; the batch sizes its panels to the wider width and carries
+  the second width's row-total twin), and the Vulkan driver's per-layer geometry (`RLayer.hid`)
+  carries it beside the PLE branch. The Metal batch serves the rest of the E-series shape the same
+  way the single row does: the PLE branch as a rows form over a layer-major side plane (the CPU
+  pre-step's position-major rows transposed at the poke), and a shared-KV layer as Q-only rows -
+  the rope-store grid stops at the Q pairs, so nothing is written into the source slab the layer's
+  attention reads through the aliased row prefix. A MoE's shared expert rides the batch the same
+  way it rides the verify rows: the gate dot as a one-row router GEMV over the rows, the gate|up
+  pair and the down as rows forms over the expert panel once the routed W2 has consumed it.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.

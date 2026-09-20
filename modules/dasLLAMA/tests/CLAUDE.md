@@ -524,11 +524,12 @@ device homes refuses by name and reads 0, and a row it homes serves at a rate wi
 parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
-stream the row runs host-cached through the Metal batched driver (Llama-3.2-1B Q8 - a rate,
-every timed step counted a device step by `batch_step_census`), and a blob-only carrier the
-batched driver declines (gemma-4-E2B Q8, the per-layer embedding) steps its rows one at a time
-without a panic and the row refuses naming the per-row steps. Stocked suite; skips off the JIT,
-without dasMetal, or without the carrier.
+stream the row runs host-cached through the Metal batched driver (Llama-3.2-1B Q8, the
+E-series gemma-4-E2B Q8 and the shared-expert Qwen1.5-MoE-A2.7B Q8, large-tier - a rate,
+every timed step counted a device step by `batch_step_census`), and a hybrid carrier with no
+batched form (Qwen3.5-0.8B Q8, the deltanet layers) steps its rows one at a time and the row
+refuses naming the per-row steps. Stocked suite; skips off the JIT, without dasMetal, or
+without the carrier.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
 `test_gpu_resident_regions_hybrid.das` and `test_gpu_resident_regions_llama_k.das` (`_resident_regions.das` carries the cells; one model a file; the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through

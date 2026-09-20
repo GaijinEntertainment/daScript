@@ -63,7 +63,7 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   a time through the single-row forward - one row, a q4_0 model, a non-standard graph, or a
   blob-only model whose device driver declined the step (the CPU stack cannot run a blob-only
   model, so the decline falls to the single-row driver, which serves what the batched one has no
-  form for: the E-series' per-layer embedding, `followup_metal.md` item 16).
+  form for: a MoE's shared expert, `followup_metal.md` item 16).
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the

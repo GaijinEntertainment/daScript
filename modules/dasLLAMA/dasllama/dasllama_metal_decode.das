@@ -169,6 +169,7 @@ struct private StepRes {
     nchmax : int64        // the batch's chunk count over the deepest row
     u_total_dim : MetalBuffer?
     u_total_h : MetalBuffer?
+    u_total_h2 : MetalBuffer?  // the second FFN width's row-total (the batch on a MatFormer E-series; null = uniform model)
     u_total_qd : MetalBuffer?
     u_dim : MetalBuffer?
     u_qd : MetalBuffer?
@@ -269,8 +270,9 @@ struct private StepRes {
     // gemma-4 E-series per-layer embeddings — ple steps only; the CPU pre-step's side input
     // (s.ple_inp, [layers x ple]) pokes into bple each step alongside the embed row
     ple : bool
-    bple : MetalBuffer?        // the token's per-layer side input rows (poked, GPU-read-only)
+    bple : MetalBuffer?        // the token's per-layer side input rows (poked, GPU-read-only); the batch's rows layer-major, [layers x nrows x ple]
     u_ple : MetalBuffer?       // n_embd_per_layer
+    u_ple_tot : MetalBuffer?   // nrows x n_embd_per_layer - the batch's row-total for the side multiply
     bytes_ple : uint64
     // deltanet (Wave D) — recurrent-layer scratch + the gated-attention twins; dn steps only
     dn : bool
@@ -789,8 +791,9 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
 [ |> template_struct_instance]
 struct template LayerEncT {
     r : StepRes?                          // the step's state - the stamp's driver owns it
-    @template_constant SINGLE : bool = false   // the single row alone serves the fused QKV form and PLE
+    @template_constant SINGLE : bool = false   // the single row alone serves the fused QKV form
     @template_call site = @@site_single
+    @template_call ple = @@ple_single
     @template_call total = @@total_single
     @template_call add_rms = @@add_rms_single
     @template_call rms = @@rms_single
@@ -974,10 +977,8 @@ struct template LayerEncT {
                     rms(self, enc, r.bxb, 0ul, bw_pf, r.bxb)
                 }
             }
-            static_if (SINGLE) {
-                if (r.ple) {
-                    encode_ple(t, enc, l)
-                }
+            if (r.ple) {
+                ple(self, t, enc, l)
             }
             if (g_skip != "ew") {
                 // gemma4 layer_out_scale: (x + branch) * s folds into the residual add (a 4-byte view into the weights blob)
@@ -1138,27 +1139,54 @@ struct template LayerEncT {
         }
     }
 
-    //! PLE between FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
-    def encode_ple(t : Model; enc : MetalComputeEncoder?; l : int64) {
-        let c = t.config
-        let dim = c.dim
-        let ple = c.n_embd_per_layer
-        if (g_skip != "ew") {
-            enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
-        }
-        if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
-        }
-        if (g_skip != "ew") {
-            enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
-        }
-        if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
-        }
-        if (g_skip != "ew") {
-            var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
-            enc_rms(enc, r.bxb, 0ul, bw_pp, r.bxb, r.u_dim, r.u_eps)
-        }
+}
+
+//! the single row's PLE between the FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
+def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
+    let r & = unsafe(*e.r)
+    let c = t.config
+    let dim = c.dim
+    let ple = c.n_embd_per_layer
+    if (g_skip != "ew") {
+        enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
+    }
+    if (g_skip != "gemv") {
+        enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
+    }
+    if (g_skip != "ew") {
+        enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
+    }
+    if (g_skip != "gemv") {
+        enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
+    }
+    if (g_skip != "ew") {
+        var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
+        enc_rms(enc, r.bxb, 0ul, bw_pp, r.bxb, r.u_dim, r.u_eps)
+    }
+}
+
+//! the rows' PLE, the same chain over every row: the gate and the projection as row sites, the side
+//! multiply over the layer's block of the layer-major side plane, the post norm a row at a time
+def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
+    let r & = unsafe(*e.r)
+    let c = t.config
+    let dim = c.dim
+    let ple = c.n_embd_per_layer
+    if (g_skip != "ew") {
+        add_rows(e, enc, r.bx, 0ul, r.bxb, 0ul, dim, null)
+    }
+    if (g_skip != "gemv") {
+        site_batch(e, t, enc, SiteKind.other, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, ple, r.bx, r.bh12, r.u_dim, r.u_ple, r.u_ple, 0l)
+    }
+    if (g_skip != "ew") {
+        enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * r.nrows * ple * 4l), r.u_ple_tot, r.nrows * ple)
+    }
+    if (g_skip != "gemv") {
+        site_batch(e, t, enc, SiteKind.other, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, dim, r.bh12, r.bxb, r.u_ple, r.u_dim, r.u_dim, 0l)
+    }
+    if (g_skip != "ew") {
+        var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
+        rms_rows(e, enc, r.bxb, 0ul, bw_pp, r.bxb)
     }
 }
 
@@ -1370,12 +1398,12 @@ def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, b
 
 def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
     let r & = unsafe(*e.r)
-    if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe) {
+    if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe && !(u != null && u == r.u_hidden2)) {
         panic("row chain: a row-total is asked for a uniform with no nrows-scaled twin")
     }
-    let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : r.u_moe_tot))
+    let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : (u == r.u_hidden2 ? r.u_total_h2 : r.u_moe_tot)))
     if (bt == null) {
-        let slot = u == r.u_dim ? "u_dim" : (u == r.u_hidden ? "u_hidden" : (u == r.u_qd ? "u_qd" : "u_moe_knfe"))
+        let slot = u == r.u_dim ? "u_dim" : (u == r.u_hidden ? "u_hidden" : (u == r.u_qd ? "u_qd" : (u == r.u_hidden2 ? "u_hidden2" : "u_moe_knfe")))
         panic("row chain: the row-total twin of {slot} was not built for this step (the step gate declines the models that would ask)")
     }
     return (b = bt, n = n * r.nrows)
@@ -2412,11 +2440,11 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             }
         }
     }
-    // no batch arm for hybrid graphs (deltanet layers, gated Q - the round path serves them) nor shexp MoE
-    if (!t.blocks.attn_is_std || (!t.blocks.ffn_is_dense && t.config.n_ff_shexp > 0l)) {
+    // no batch arm for hybrid graphs (deltanet layers, gated Q - the round path serves them); a MoE's shared expert rides the rows form
+    if (!t.blocks.attn_is_std) {
         return MetalDecodeDecline.graph
     }
-    let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true)
+    let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true)   //! MoE, the E-series' shared-KV layers (Q-only rows) and its two FFN widths all have batch forms
     if (shape != MetalDecodeDecline.none) {
         return shape
     }
@@ -2522,25 +2550,27 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     let kvm_l = het ? r.k_kvm_sw : r.k_kvm
     // 0 = full rope; a partial carrier (qwen35: rope 64 of head 256) rotates rot/2 pairs, the rest identity
     let rot_l = r.k_rot != 0u ? r.k_rot : uint(head_size)
+    // a shared-KV layer (E-series) dispatches its Q rows only: no K rope, no row store into the source slab it reads
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd), head_size = uint(head_size),
             nheads = uint(n_heads), kv_mul = kvm_l, qstride = qkvd,
             neox = r.k_neox, has_bias = r.k_hasb)
         enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka,
-            n_heads + 2l * (kv_dim / head_size), r.nrows, head_size)
+            kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, head_size)
     } elif (blockc) {
         var qka = RopeStoreBQ8Args(lay = lay_l, nblk = uint(kv_dim / 32l), qd = uint(qd),
             head_size = uint(head_size), npairs_q = uint(qd / 2l), qstride = qkvd,
             neox = r.k_neox, has_bias = r.k_hasb)
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka,
-            qd / 2l + 2l * (kv_dim / 32l), r.nrows)
+            kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows)
     } else {
+        let npairs = kvsh ? qd / 2l : (qd + kv_dim) / 2l
         var rka = RopeStoreBArgs(lay = lay_l, kv_dim = uint(kv_dim), qd = uint(qd),
             head_size = uint(head_size), npairs_q = uint(qd / 2l),
-            npairs = uint((qd + kv_dim) / 2l), qstride = qkvd,
+            npairs = uint(npairs), qstride = qkvd,
             neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
         enc_rope_store_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, bbias, rka,
-            (qd + kv_dim) / 2l, r.nrows)
+            npairs, r.nrows)
     }
 }
 
@@ -2602,6 +2632,7 @@ struct private BatchLayerEnc : LayerEncT {
     override recurrent = @@recurrent_batch
     override w13_fused = @@w13_fused_batch
     override panels = @@panels_batch
+    override ple = @@ple_rows
 }
 
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
@@ -2656,6 +2687,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let qd = n_heads * head_size
     let kv_dim = c.n_kv_heads * head_size
     let hidden = layer_hidden(t, 0l)
+    let hid2 = ffn_second_hidden(t)   //! the MatFormer E-series' second FFN width (0 = uniform); the step gate declines a third
+    let hid_mx = max(hidden, hid2)
     let qkvd = qd + 2l * kv_dim
     let half = head_size / 2l
     // the two-class attention geometry (gemma4): config fields = the GLOBAL class, _sw twins =
@@ -2760,7 +2793,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     // -n 32: B=8 145.2 vs GemmB 153.3) — mm's 32x64 tile grids only d/64 threadgroups vs GemmB's
     // 32x32 = 2x occupancy. Kept as the A/B rail for bigger-M futures (B > 16 pads to 64).
     let use_mm = (use_gemm && g_env_batch_mm &&
-        (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l &&
+        (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l && (hid2 % 64l) == 0l &&
         (qd_sw % 64l) == 0l && (kvd_sw % 64l) == 0l)
     let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
     // per-site GEMM policy (see g_bsk): each split-K site gates on its OWN K's nkb % S == 0 (the
@@ -2769,7 +2802,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let sk_ok = use_gemm && !use_mm && g_bsk && mp == 32l
     let qkv_sk = (sk_ok && (dim / 32l) % 2l == 0l) ? 2l : 0l
     let wo_sk = (sk_ok && (qd / 32l) % 4l == 0l && (!hetero || (qd_sw / 32l) % 4l == 0l)) ? 4l : 0l
-    let w2_sk = (sk_ok && (hidden / 32l) % 8l == 0l) ? 8l : 0l
+    let w2_sk = (sk_ok && (hidden / 32l) % 8l == 0l && (hid2 / 32l) % 8l == 0l) ? 8l : 0l
     let cls64 = use_gemm && !use_mm && g_bsk && (c.vocab_size % 64l) == 0l
     // the mul_mv rail owns the whole fixed-B path (w13 = two mv dispatches + the ew2 swiglu, so
     // the x-staged w13sw fusion stands down with it). Hetero rides it too: the QKV arm carries
@@ -2777,7 +2810,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let mv = g_bmv && !use_gemm && !use_mm
     let mv_kdim = mv && (dim % MV_K_ALIGN) == 0l
     let mv_wo = mv && (qd % MV_K_ALIGN) == 0l && (!hetero || (qd_sw % MV_K_ALIGN) == 0l)
-    let mv_w2 = mv && (hidden % MV_K_ALIGN) == 0l
+    let mv_w2 = mv && (hidden % MV_K_ALIGN) == 0l && (hid2 % MV_K_ALIGN) == 0l
     let geglu = c.ffn_act != FfnAct.silu    // gemma: gelu gate — the swiglu-fused w13 form stands down
     // fold w1+w3+swiglu into one fused GEMV on the fixed-B path; a knockout run (g_skip) keeps the
     // stages separable so its per-stage attribution stays valid
@@ -2811,7 +2844,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let bytes_x = uint64(mp * dim * 4l)
     let bytes_xb = uint64(mp * max(dim, qd_mx) * 4l)   // dim-wide norm outs AND the qd-wide attention out
     let bytes_qkv = uint64(mp * qkvd_mx * 4l)
-    let bytes_h = uint64(max(mp * hidden, nrows * knfe) * 4l)
+    let nsh = moe ? c.n_ff_shexp : 0l
+    let bytes_h = uint64(max(max(mp * hid_mx, nrows * knfe), nrows * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
     let bytes_tab = uint64(nrows * half * 4l)
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
@@ -2865,10 +2899,12 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_kvd = uniform_u32(uint(kv_dim))
     var u_qkvd = uniform_u32(uint(qkvd))
     var u_hidden = uniform_u32(uint(hidden))
+    var u_hidden2 = hid2 > 0l ? uniform_u32(uint(hid2)) : null
     var u_hs = uniform_u32(uint(head_size))
     var u_eps = uniform_f32(c.norm_eps)
     var u_softcap = uniform_f32(c.attn_logit_softcap)
     var u_zero32 = uniform_u32(0u)
+    var u_one32 = uniform_u32(1u)   //! the shared expert's gate dot is a 1-row router GEMV
     // the SLIDING-class uniform twins (hetero models — uniform models leave these null and
     // every layer binds the base set)
     var u_qd_sw = hetero ? uniform_u32(uint(qd_sw)) : null
@@ -2897,8 +2933,17 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_s16 = uniform_u32(s16 ? 1u : 0u)
     var u_total_dim = uniform_u32(uint(nrows * dim))
     var u_total_h = uniform_u32(uint(nrows * hidden))
+    var u_total_h2 = hid2 > 0l ? uniform_u32(uint(nrows * hid2)) : null
+    // the E-series' per-layer side input: the CPU pre-step's rows (position-major) poked layer-major, the layer's block one contiguous multiply
+    let plef = has_ple(c)
+    let ple_n = plef ? c.n_embd_per_layer : 0l
+    let bytes_ple = uint64(c.n_layers * nrows * ple_n * 4l)
+    var bple = plef ? pool_acquire_untracked(g_upool, g_dev, bytes_ple) : null
+    var u_ple = plef ? uniform_u32(uint(ple_n)) : null
+    var u_ple_tot = plef ? uniform_u32(uint(nrows * ple_n)) : null
     // MoE per-step uniforms (the expert twins' stride set; see enc_moe_gemv)
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
+    var u_moe_nsh = nsh > 0l ? uniform_u32(uint(nsh)) : null
     var u_moe_k = moe ? uniform_u32(uint(c.n_expert_used)) : null
     var u_moe_nfe = moe ? uniform_u32(uint(c.n_ff_exp)) : null
     let k_moe_nfe = uint(c.n_ff_exp)
@@ -2934,6 +2979,17 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), bytes_tab_sw)
         }
         memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), bytes_rt)
+        if (plef) {
+            let ple_all = c.n_layers * ple_n
+            var dst = reinterpret<float?>(metal_buffer_contents(bple))
+            let src = addr < float const? >(ws.scr.ple_inp[0])
+            for (l in range64(c.n_layers)) {
+                for (p in range64(nrows)) {
+                    memcpy(reinterpret<void?>(dst + (l * nrows + p) * ple_n),
+                        reinterpret<void const?>(src + p * ple_all + l * ple_n), ple_n * 4l)
+                }
+            }
+        }
     }
     g_us_bsetup += int64(get_time_usec(ts_all))
     let ts_enc = ref_time_ticks()
@@ -2965,14 +3021,16 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
+        u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
+        ple = plef, bple = bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
         bcos = bcos, bsin = bsin, bcos_swa = bcos_swa, bsin_swa = bsin_swa, brt = brt,
         bmoe_lg = bmlg, bmoe_sel = bmsel, bmoe_dn = bmdn, bmoe_rt = bmg4rt, bmg4x = bmg4x, bmgh = bmgh, bmghb = bmgh2,
         bt = bt, mv_kdim = mv_kdim, mv_wo = mv_wo, mv_w2 = mv_w2, wo_sk = wo_sk, w2_sk = w2_sk, cls64 = cls64, fuse13 = fuse13,
         u_dim = u_dim, u_qd = u_qd, u_kvd = u_kvd, u_qkvd = u_qkvd, u_hidden = u_hidden, u_hs = u_hs, u_eps = u_eps,
-        u_zero32 = u_zero32, u_total_dim = u_total_dim, u_total_h = u_total_h,
+        u_zero32 = u_zero32, u_one32 = u_one32, u_total_dim = u_total_dim, u_total_h = u_total_h,
         u_hs_sw = u_hs_sw, u_kvd_sw = u_kvd_sw, u_qd_sw = u_qd_sw, u_qkvd_sw = u_qkvd_sw,
-        u_moe_ne = u_moe_ne, u_moe_k = u_moe_k, u_moe_nfe = u_moe_nfe, u_moe_knfe = u_moe_knfe, u_moe_ss = u_moe_ss,
+        u_moe_ne = u_moe_ne, u_moe_k = u_moe_k, u_moe_nfe = u_moe_nfe, u_moe_knfe = u_moe_knfe, u_moe_ss = u_moe_ss, u_moe_nsh = u_moe_nsh,
         u_moe_kdim = u_moe_kdim, u_moe_tot = u_moe_tot, u_moe_eblk = u_moe_eblk, u_moe_esb = u_moe_esb,
         u_moe_xs_dn = u_moe_xs_dn, u_moe_invd = u_moe_invd, u_moe_gmode = u_moe_gmode,
         k_dim = k_dim, k_qd = uint(qd), k_kvd = uint(kv_dim), k_qkvd = uint(qkvd), k_hs = uint(head_size), k_nh = uint(n_heads),
@@ -3145,6 +3203,19 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_upooled |> push((buf = u_s16, size = 4ul))
     g_lp_upooled |> push((buf = u_total_dim, size = 4ul))
     g_lp_upooled |> push((buf = u_total_h, size = 4ul))
+    g_lp_upooled |> push((buf = u_one32, size = 4ul))
+    if (u_moe_nsh != null) {
+        g_lp_upooled |> push((buf = u_moe_nsh, size = 4ul))
+    }
+    if (u_hidden2 != null) {
+        g_lp_upooled |> push((buf = u_hidden2, size = 4ul))
+        g_lp_upooled |> push((buf = u_total_h2, size = 4ul))
+    }
+    if (plef) {
+        g_lp_upooled |> push((buf = bple, size = bytes_ple))
+        g_lp_upooled |> push((buf = u_ple, size = 4ul))
+        g_lp_upooled |> push((buf = u_ple_tot, size = 4ul))
+    }
     g_lp_blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
     g_lp_sameslab = same
     g_lp_bxf = same && gpu_logits ? (g_mtp_carry_pre ? bx : bxf) : null

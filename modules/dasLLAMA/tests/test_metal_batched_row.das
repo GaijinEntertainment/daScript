@@ -63,8 +63,8 @@ def test_metal_batched_row_llama(t : T?) {
 }
 
 [test]
-def test_metal_batched_row_declined_carrier(t : T?) {
-    t |> run("a blob-only carrier the batched driver declines steps a row at a time and the row refuses by name (gemma-4-E2B Q8)") <| @(t : T?) {
+def test_metal_batched_row_eseries(t : T?) {
+    t |> run("the batched row serves an E-series carrier through the batched driver's PLE rows form (gemma-4-E2B Q8)") <| @(t : T?) {
         if (!family_on(t, "gemma")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!jit_enabled()) {
@@ -78,7 +78,67 @@ def test_metal_batched_row_declined_carrier(t : T?) {
             with_job_que() {
                 setup_dasllama_jobque_()
                 let census0 = batch_step_census()
-                let refused = bench_tg_batched_rep(tr, 2l, 16l, 4l, 1l)   //! the panic this guards against would end the test here
+                let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
+                t |> equal(served.why, "", "the row is served: {served.why}")
+                t |> success(served.tps > 0.0lf, "... at a rate ({served.tps:.1f} tok/s summed over 4 streams)")
+                let census1 = batch_step_census()
+                t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
+                t |> equal(census1.cpu_stack, census0.cpu_stack, "the blob-only model never reached the CPU batched stack")
+            }
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
+def test_metal_batched_row_shexp(t : T?) {
+    t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen2moe")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
+            if (!model_available(t, path)) return
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_carrier(t, path, 256l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                let census0 = batch_step_census()
+                let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
+                t |> equal(served.why, "", "the row is served: {served.why}")
+                t |> success(served.tps > 0.0lf, "... at a rate ({served.tps:.1f} tok/s summed over 4 streams)")
+                let census1 = batch_step_census()
+                t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
+                t |> equal(census1.cpu_stack, census0.cpu_stack, "the blob-only model never reached the CPU batched stack")
+            }
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
+def test_metal_batched_row_declined_carrier(t : T?) {
+    t |> run("a hybrid carrier with no batched form steps a row at a time and the row refuses by name (Qwen3.5-0.8B Q8, the deltanet layers)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            if (!model_available(t, path)) return
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_carrier(t, path, 256l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                let census0 = batch_step_census()
+                let refused = bench_tg_batched_rep(tr, 2l, 16l, 4l, 1l)
                 t |> equal(refused.why, "4 of the 4 timed steps ran their rows one at a time", "the row names the per-row steps")
                 t |> equal(refused.tps, 0.0lf, "... and reads 0")
                 let census1 = batch_step_census()

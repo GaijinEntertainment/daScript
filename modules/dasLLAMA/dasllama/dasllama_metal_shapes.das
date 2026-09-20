@@ -358,8 +358,8 @@ let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm |
     MetalNeed.sinks | MetalNeed.out_bias | MetalNeed.partial_rope | MetalNeed.q_gated |
     MetalNeed.ple)
 // q_gated/partial_rope only occur on hybrid models (attn_is_std false), which batch graph-declines;
-// ple (E-series) has no batch arm either — batched steps decline `feature` and fall back per-row
-let BATCH_NEEDS_OK = DECODE_NEEDS_OK & ~MetalNeed.ple   // clear ple explicitly (XOR would re-add it if DECODE ever drops it)
+// the batch serves every feature the single row does - the E-series PLE branch rides the rows form
+let BATCH_NEEDS_OK = DECODE_NEEDS_OK
 
 //! a routed model with no dense lead and no dense shared branch dispatches none, so its file's dense width gates nothing
 def has_dense_ffn(t : Model) : bool => t.blocks.ffn_is_dense || t.config.n_layer_dense_lead > 0l || t.config.moe_dense_shexp
