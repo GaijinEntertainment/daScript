@@ -1235,8 +1235,9 @@ namespace das {
             // report at, so it reports here and dies here.
             invoke_job_lambda(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
-            g_jobQueTotalThreads --;
+            forkContext.reset();
             shutdownThreadLocalDebugAgent();
+            g_jobQueTotalThreads --;    // src/builtin/ARCHITECTURE.md#thread-leaves-count-last
         }).detach();
     }
 
@@ -1263,7 +1264,7 @@ namespace das {
             }
             forkContext.reset();
             shutdownThreadLocalDebugAgent();
-            g_jobQueTotalThreads --;
+            g_jobQueTotalThreads --;    // src/builtin/ARCHITECTURE.md#thread-leaves-count-last
             debuggerThreadFinished(generation);
         }).detach();
     }
