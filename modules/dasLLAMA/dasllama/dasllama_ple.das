@@ -452,32 +452,15 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {   // fused_kq: native-plane region-list chain, one batched GEMM per projection
-            if (kq_sb(f1)) {
-                mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            } else {
-                mm_b_q51_groupn(s.moe_ghb, t, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
-            if (kq_sb(f3)) {
-                mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            } else {
-                mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
+            mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, false, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+            mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, false, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
             prof_add("mm_gemm", ts_g1)
             let ts_act = prof_ticks()
             gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
             prof_add("act", ts_act)
-            // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51 the Q8_0 form
-            if (kq_sb(f2)) {
-                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
-            } else {
-                requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
-            }
+            requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
             let ts_g3 = prof_ticks()
-            if (kq_sb(f2)) {
-                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
-            } else {
-                mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            }
+            mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, false, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             prof_add("mm_moe_dn", ts_g3)   // down separately from gate/up — the q51-vs-kq lane split is the diagnostic
         }
         if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
@@ -514,34 +497,13 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
         let base = e * dim * nfe
-        if (kq_sb(f1)) {
-            mm_b_kq_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f1 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
-        if (kq_sb(f3)) {
-            mm_b_kq_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f3 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
+        mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+        mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
         let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
-        if (kq_sb(f2)) {
-            // kq v2: Q8_K-form rows + the per-16 sums the fold consumes
-            requant_rows_q8k_bs(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-            mm_b_kq_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } elif (f2 == KqFmt.q51) {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q51_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } else {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        }
+        requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
+        mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
         let ts_park = prof_ticks()
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)

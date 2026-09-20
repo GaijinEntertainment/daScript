@@ -947,7 +947,9 @@ def private qwen2moe_row(t : T?; path : string) {
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
             let pa <- encode(trg, counting_prompt(1, 40), true, false)
-            let pb <- encode(trg, counting_prompt(5, 44), true, false)
+            // row B counts through another decade: two rows whose next token is the same digit read
+            // within the bar of each other, and the cross-row control below would red by design
+            let pb <- encode(trg, counting_prompt(23, 78), true, false)
             t |> success(select_prefill_override("metal"), "qwen2moe: prefill override registered")
             t |> success(select_decode_override("metal"), "qwen2moe: decode override registered")
             set_metal_prefill_min_npos(1l)

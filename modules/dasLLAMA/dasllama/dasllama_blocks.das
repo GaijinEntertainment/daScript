@@ -1766,43 +1766,17 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {
-            if (fused_kq) {   // native-plane: one batched region-list GEMM per projection (never biased)
-                if (kq_sb(f1)) {
-                    mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-                } else {
-                    mm_b_q51_groupn(s.moe_ghb, t, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                }
-                if (kq_sb(f3)) {
-                    mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-                } else {
-                    mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                }
-            } elif (c.moe_exps_bias) {   // gpt-oss: gate/up biases fold into the stores, before the act
-                matmul_mx4q8_batch_groupn(s.moe_ghb, t.mxq, t.mxs, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, t.fblob, s.moe_boffs1, dim, nfe)
-                matmul_mx4q8_batch_groupn(s.moe_ghb2, t.mxq, t.mxs, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, t.fblob, s.moe_boffs3, dim, nfe)
-            } else {
-                matmul_mx4q8_batch_groupn(s.moe_ghb, t.mxq, t.mxs, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                matmul_mx4q8_batch_groupn(s.moe_ghb2, t.mxq, t.mxs, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
+            // one batched region-list GEMM per projection; gpt-oss folds the gate/up biases into the stores before the act
+            mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+            mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
             prof_add("mm_gemm", ts_g1)
             let ts_act = prof_ticks()
             gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
             prof_add("act", ts_act)
-            if (fused_kq && kq_sb(f2)) {   // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51/q8 the Q8_0 form
-                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
-            } else {
-                requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
-            }
+            requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
             let ts_g3 = prof_ticks()
-            if (fused_kq && kq_sb(f2)) {
-                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
-            } elif (fused_kq) {
-                mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            } elif (c.moe_exps_bias) {   // ... and the down biases, added before the routed weight scales them
-                matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, t.fblob, s.moe_boffs2, nfe, dim)
-            } else {
-                matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            }
+            // ... and the down biases, added before the routed weight scales them
+            mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, c.moe_exps_bias, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             prof_add("mm_gemm", ts_g3)
         }
         // threaded bucket scatter: serial was an ~8ms ALL-LANE hole here (~67MB traffic at pp512/30B)
@@ -1841,26 +1815,10 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         prof_add("moe_gather", ts_gather)
         let eg = l * ne + e
         let base = e * dim * nfe
-        if (kq_layer) {   // native kq batch tiles off the repacked planes, per-kind fmt (down may differ)
-            if (kq_sb(f1)) {
-                mm_b_kq_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-            } elif (f1 == KqFmt.q51) {
-                mm_b_q51_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            } else {
-                mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            }
-            if (kq_sb(f3)) {
-                mm_b_kq_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-            } elif (f3 == KqFmt.q51) {
-                mm_b_q51_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            } else {
-                mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            }
-        } elif (t.experts_mx4 && g_active_mx4_native_batch) {
-            // native mx4 batch GEMMs straight off the nibble/E8M0 planes — no expansion
-            mm_b_mx4_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            mm_b_mx4_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } elif (t.experts_mx4) {   // exact Q8 expansion of this expert, then the proven batch GEMMs
+        if (!t.experts_mx4 || g_active_mx4_native_batch) {   // the stack's native batch tiles, per-kind fmt (down may differ)
+            mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+            mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+        } else {   // exact Q8 expansion of this mx4 expert, then the proven batch GEMMs
             let ts_ex = prof_ticks()
             expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex)
@@ -1873,9 +1831,6 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             let ts_g2 = prof_ticks()
             matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
             prof_add("mm_gemm", ts_g2)
-        } else {
-            mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
         }
         if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
             for (r in range64(cnt)) {
@@ -1886,26 +1841,16 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
-        if (kq_sb(f2)) {   // kq v2: Q8_K-form rows + the per-16 sums the fold consumes; q51/q8 the Q8_0 form
-            requant_rows_q8k_bs(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
+        requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
+        if (!t.experts_mx4 || g_active_mx4_native_batch) {
+            mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
         } else {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-        }
-        if (kq_sb(f2)) {
-            mm_b_kq_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } elif (f2 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } elif (t.experts_mx4 && g_active_mx4_native_batch) {
-            mm_b_mx4_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } elif (t.experts_mx4) {
             let ts_ex3 = prof_ticks()
             expand_mx4_region_q8(t, t.we2_offs[l] + base, nfe, dim, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex3)
             let ts_g3 = prof_ticks()
             matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
             prof_add("mm_gemm", ts_g3)
-        } else {
-            mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
         }
         if (c.moe_exps_bias) {  // ... and its down bias, added before the routed weight scales it
             for (r in range64(cnt)) {

@@ -3597,6 +3597,70 @@ def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff :
     }
 }
 
+// The expert-stack routers: the stack's format tag picks the kernel and the activation image it
+// reads - kq stacks the Q8_K form (kxq/kxs/kxbs), q51 and q8 the Q8_0 form (xq/xs), the mx4
+// expert stacks (t.experts_mx4 - a stack property, never a per-tensor tag) their nibble planes.
+
+//! Region-list GEMV router (the MoE decode dispatch, every routed expert in one fork/join); `biased`
+//! folds each region's fblob bias at `boffs` into the store where the kernel carries a bias form
+//! (q8, mx4) - a kq or q51 stack is never biased, the load guards that.
+def mm_at_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : array<int64>; biased : bool; nregions : int64;
+                   xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
+    if (kq_sb(fmt)) {
+        mm_at_kq_groupn(y, t, fmt, offs, nregions, kxq, kxs, kxbs, n, d)
+    } elif (fmt == KqFmt.q51) {
+        mm_at_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (t.experts_mx4) {
+        if (biased) {
+            mm_at_mx4_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
+        } else {
+            mm_at_mx4_groupn(y, t, offs, nregions, xq, xs, n, d)
+        }
+    } elif (biased) {
+        mm_at_q8_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
+    } else {
+        mm_at_q8_groupn(y, t, offs, nregions, xq, xs, n, d)
+    }
+}
+
+//! Batched region-list GEMM router (the grouped MoE prefill's fused chain) over one gathered
+//! activation image in the layer's form (xbs rides only under a kq stack); an mx4 stack folds
+//! its bias like the GEMV router; a q8 stack has no batched region-list kernel.
+def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : array<int64>; biased : bool; nregions : int64;
+                  xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
+    if (kq_sb(fmt)) {
+        mm_b_kq_groupn(y, t, fmt, offs, nregions, xq, xs, xbs, n, d)
+    } elif (fmt == KqFmt.q51) {
+        mm_b_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (t.experts_mx4) {
+        if (biased) {
+            matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
+        } else {
+            matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, n, d)
+        }
+    } else {
+        panic("mm_b_f_groupn: a q8 expert stack has no batched region-list GEMM")
+    }
+}
+
+//! Batched pre-quantized GEMM router (one expert bucket of the grouped MoE prefill) over one
+//! gathered image in the layer's form; an mx4 stack needs the native batch kernel - without it
+//! the caller expands the region to Q8 first.
+def mm_b_f_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
+    if (kq_sb(fmt)) {
+        mm_b_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d, npos)
+    } elif (fmt == KqFmt.q51) {
+        mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (t.experts_mx4) {
+        if (!g_active_mx4_native_batch) {
+            panic("mm_b_f_pre: the active backend has no native mx4 batch kernel - expand the region to Q8 at the site")
+        }
+        mm_b_mx4_pre(y, t, woff, xq, xs, n, d, npos)
+    } else {
+        mm_b_q8_pre(y, t, woff, xq, xs, n, d, npos)
+    }
+}
+
 // Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 // xq/xs are the run-state activation-quant scratch (used only by the Q8 path).
 def mm(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
@@ -3628,6 +3692,16 @@ def requant_rows_q8_sized(x : array<float>; n, npos : int64; @scratch var xq : a
     requant_rows_q8(x, n, npos, xq, xs)
 }
 
+
+//! The requant a stack's format reads: a kq stack the Q8_K form with its per-16 sums, q51 and q8
+//! the Q8_0 form (xbsb untouched).
+def requant_rows_f(fmt : KqFmt; x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
+    if (kq_sb(fmt)) {
+        requant_rows_q8k_bs(x, n, npos, xqb, xsb, xbsb)
+    } else {
+        requant_rows_q8(x, n, npos, xqb, xsb)
+    }
+}
 
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.
