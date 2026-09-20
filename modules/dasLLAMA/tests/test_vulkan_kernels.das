@@ -6536,6 +6536,239 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
     }
 }
 
+//! the one-row fused gate-up rows against the CPU chain, a column at a time: the q8 GEMM oracle with that column's row,
+//! the activation, then the Q8_0 block-scale and dequant bars of the sibling one-row cell; `bytes` holds the rows at
+//! `col_bytes` apart, the quants first and the scales after them
+def private q8_gemv_gu_oracle_cols(t; tag : string; bytes : uint8?; col_bytes : int64; gqh, gsh, uqh, ush, xqh : array<uint>; xsh : array<float>; n, hid, ncols : int; act : uint) {
+    let nb = n / 32
+    let nblk_out = hid / 32
+    let oq_bytes = int64(hid)
+    let one_rec <- [0u, 0u, 1u, 0u]
+    var obad = 0
+    var obads = 0
+    for (c in range(ncols)) {
+        var xq_c : array<uint>
+        var xs_c : array<float>
+        xq_c |> resize(nb * 8)
+        xs_c |> resize(nb)
+        for (i in range(nb * 8)) {
+            xq_c[i] = xqh[c * nb * 8 + i]
+        }
+        for (i in range(nb)) {
+            xs_c[i] = xsh[c * nb + i]
+        }
+        var g_ref : array<float>
+        var u_ref : array<float>
+        g_ref |> resize(hid)
+        u_ref |> resize(hid)
+        q8_gemm_oracle(gqh, gsh, xq_c, xs_c, one_rec, 1, n, hid, g_ref)
+        q8_gemm_oracle(uqh, ush, xq_c, xs_c, one_rec, 1, n, hid, u_ref)
+        let one = col_bytes * int64(c)
+        unsafe {
+            var os_c = reinterpret<float?>(bytes + one + oq_bytes)
+            var oq_c = reinterpret<int8?>(bytes + one)
+            for (blk in range(nblk_out)) {
+                var m = 0.0
+                for (e in range(32)) {
+                    m = max(m, abs(act_mul_ref(g_ref[blk * 32 + e], u_ref[blk * 32 + e], act)))
+                }
+                let d_ref = m / 127.0
+                if (abs(os_c[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+                    obads++
+                }
+                for (e in range(32)) {
+                    let a_ref = act_mul_ref(g_ref[blk * 32 + e], u_ref[blk * 32 + e], act)
+                    let deq = float(oq_c[blk * 32 + e]) * os_c[blk]
+                    if (abs(deq - a_ref) > d_ref + 2e-3 * abs(a_ref)) {
+                        obad++
+                    }
+                }
+            }
+        }
+        delete g_ref
+        delete u_ref
+        delete xq_c
+        delete xs_c
+    }
+    t |> success(obads == 0, "one-row fused gate-up {tag}: every column's block scales match the CPU oracle ({obads} of {nblk_out * ncols} off)")
+    t |> success(obad == 0, "one-row fused gate-up {tag}: every column's dequantized hidden row sits within a quant step of the CPU oracle ({obad} of {hid * ncols} off)")
+}
+
+//! the fused gate-up GEMV's N-column form over `ncols` rows against the one-row kernel run a column at a time, bit for
+//! bit, the one-row rows against the CPU chain, the slots past the live columns untouched
+def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
+    let nb = n / 32
+    let nblk_out = hid / 32
+    let totblk = hid * nb
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let oq_bytes = int64(hid)
+    let os_bytes = int64(nblk_out) * 4l
+    let ncol_max = 8
+    var gqh : array<uint>
+    var gsh : array<uint>
+    var uqh : array<uint>
+    var ush : array<uint>
+    var xqh : array<uint>
+    var xsh : array<float>
+    gqh |> resize(totblk * 8)
+    uqh |> resize(totblk * 8)
+    gsh |> resize(totblk / 2 + 1)
+    ush |> resize(totblk / 2 + 1)
+    xqh |> resize(nb * 8 * ncols)
+    xsh |> resize(nb * ncols)
+    for (i in range(totblk * 8)) {
+        gqh[i] = hash_word(uint(i) + 71u)
+        uqh[i] = hash_word(uint(i) * 3u + 5u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        gsh[i] = ws_word(uint(i) + 3u)
+        ush[i] = ws_word(uint(i) * 7u + 11u)
+    }
+    for (i in range(nb * 8 * ncols)) {
+        xqh[i] = hash_word(uint(i) * 17u + 9u)
+    }
+    for (i in range(nb * ncols)) {
+        xsh[i] = 0.25 + float(i % 5) * 0.125
+    }
+    let gqd = make_device_buf(wq_bytes)
+    let gsd = make_device_buf(ws_bytes)
+    let uqd = make_device_buf(wq_bytes)
+    let usd = make_device_buf(ws_bytes)
+    let col_bytes = oq_bytes + os_bytes
+    let nbase = col_bytes * int64(ncols)   // the one-row runs' rows, then the N-row run's eight column slots
+    var host = make_host_buf(nbase + col_bytes * int64(ncol_max), true, [cached = true])
+    let tag = "n {n} hid {hid} act {act} x {ncols}"
+    unsafe {
+        upload_region_at(gqd, 0l, addr<uint8 const?>(gqh[0]), wq_bytes)
+        upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
+        upload_region_at(uqd, 0l, addr<uint8 const?>(uqh[0]), wq_bytes)
+        upload_region_at(usd, 0l, addr<uint8 const?>(ush[0]), ws_bytes)
+        for (c in range(ncols)) {
+            let xqd = make_device_buf(xq_bytes)
+            let xsd = make_device_buf(xs_bytes)
+            let oqd = make_device_buf(oq_bytes)
+            let osd = make_device_buf(os_bytes)
+            upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[c * nb * 8]), xq_bytes)
+            upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[c * nb]), xs_bytes)
+            nan_sentinel_upload(oqd, oq_bytes)
+            nan_sentinel_upload(osd, os_bytes)
+            var s_one = set_q8_gemv_gu_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
+                fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, oq_bytes, os_bytes),
+                fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+            var raw1 = alloc_cmd()
+            let begin1 = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw1, begin1), null)
+            var h1 : VkHaz
+            var pc1 = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act)
+            enc_q8_gemv_gu_cls(raw1, h1, s_one, pc1, int64(nblk_out))
+            vhz_dep(raw1, h1, 64u, 0u, true)
+            let cb = col_bytes * int64(c)
+            cmd_copy_range(raw1, oqd, 0l, host.buf, cb, oq_bytes)
+            cmd_copy_range(raw1, osd, 0l, host.buf, cb + oq_bytes, os_bytes)
+            vk_check(vkEndCommandBuffer(raw1), null)
+            submit_wait(raw1)
+        }
+        let xqd_n = make_device_buf(xq_bytes * int64(ncols))
+        let xsd_n = make_device_buf(xs_bytes * int64(ncols))
+        let oqd_n = make_device_buf(oq_bytes * int64(ncol_max))
+        let osd_n = make_device_buf(os_bytes * int64(ncol_max))
+        upload_region_at(xqd_n, 0l, addr<uint8 const?>(xqh[0]), xq_bytes * int64(ncols))
+        upload_region_at(xsd_n, 0l, addr<uint8 const?>(xsh[0]), xs_bytes * int64(ncols))
+        nan_sentinel_upload(oqd_n, oq_bytes * int64(ncol_max))
+        nan_sentinel_upload(osd_n, os_bytes * int64(ncol_max))
+        var s_n = set_q8_gemv_gu_n_cls(fixed_array(gqd, gsd, uqd, usd, xqd_n, xsd_n, oqd_n, osd_n),
+            fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes * int64(ncols), xs_bytes * int64(ncols), oq_bytes * int64(ncol_max), os_bytes * int64(ncol_max)),
+            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act, ncols = uint(ncols))
+        enc_q8_gemv_gu_n_cls(raw2, h2, s_n, pc, int64(nblk_out))
+        vhz_dep(raw2, h2, 64u, 0u, true)
+        let nsbase = nbase + oq_bytes * int64(ncol_max)   // the N-row run's scale slots past its quant slots
+        cmd_copy_range(raw2, oqd_n, 0l, host.buf, nbase, oq_bytes * int64(ncol_max))
+        cmd_copy_range(raw2, osd_n, 0l, host.buf, nsbase, os_bytes * int64(ncol_max))
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        var bytes = reinterpret<uint8?>(host.mapped)
+        var bad_q = 0
+        var bad_s = 0
+        for (c in range(ncols)) {
+            let one = col_bytes * int64(c)
+            for (i in range(hid)) {
+                if (bytes[one + int64(i)] != bytes[nbase + int64(c * hid + i)]) {
+                    bad_q++
+                }
+            }
+            for (i in range(nblk_out)) {
+                for (k in range(4)) {
+                    if (bytes[one + oq_bytes + int64(i) * 4l + int64(k)] != bytes[nsbase + int64(c * nblk_out + i) * 4l + int64(k)]) {
+                        bad_s++
+                        break
+                    }
+                }
+            }
+        }
+        t |> success(bad_q == 0, "N-row fused gate-up {tag}: the quant bytes over {ncols} columns are the one-row kernel's bit for bit ({bad_q} off)")
+        t |> success(bad_s == 0, "N-row fused gate-up {tag}: the block scales over {ncols} columns are the one-row kernel's ({bad_s} off)")
+        var stale = 0
+        for (j in range64(int64(ncols) * oq_bytes, int64(ncol_max) * oq_bytes)) {   //! the slots past the live columns keep the sentinel, byte by byte
+            if (uint(bytes[nbase + j]) != ((NAN_SENTINEL_BITS >> (8u * uint(j % 4l))) & 0xffu)) {
+                stale++
+            }
+        }
+        for (j in range64(int64(ncols) * os_bytes, int64(ncol_max) * os_bytes)) {
+            if (uint(bytes[nsbase + j]) != ((NAN_SENTINEL_BITS >> (8u * uint(j % 4l))) & 0xffu)) {
+                stale++
+            }
+        }
+        t |> success(stale == 0, "N-row fused gate-up {tag}: the slots past the live columns keep the sentinel ({stale} bytes written)")
+        let poison_at = nbase + int64((ncols - 1) * hid + hid / 2)   //! the control: one quant byte of the last live column flipped reds exactly one
+        let kept = bytes[poison_at]
+        bytes[poison_at] = uint8(uint(kept) ^ 0x55u)
+        var pbad = 0
+        for (c in range(ncols)) {
+            let one = col_bytes * int64(c)
+            for (i in range(hid)) {
+                if (bytes[one + int64(i)] != bytes[nbase + int64(c * hid + i)]) {
+                    pbad++
+                }
+            }
+        }
+        t |> equal(pbad, 1, "N-row fused gate-up {tag}: the bit-exact bar reds one poisoned quant byte")
+        bytes[poison_at] = kept
+        q8_gemv_gu_oracle_cols(t, tag, bytes, col_bytes, gqh, gsh, uqh, ush, xqh, xsh, n, hid, ncols, act)
+    }
+    delete gqh
+    delete gsh
+    delete uqh
+    delete ush
+    delete xqh
+    delete xsh
+}
+
+[test]
+def test_vkd_q8_gemv_gu_n(t0 : T?) {
+    t0 |> run("fused q8 gate-up GEMV's N-column form == the one-row kernel a column at a time, bit for bit; the one-row rows == the CPU chain") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_q8_gemv_gu_cls() && ensure_q8_gemv_gu_n_cls())) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            q8_gemv_gu_n_run(t, 512, 1152, 4, ACT_SILU)
+            q8_gemv_gu_n_run(t, 256, 512, 3, ACT_GELU)   //! an odd count: a subgroup idles in the quantize
+            q8_gemv_gu_n_run(t, 512, 1024, 8, ACT_SILU)   //! every subgroup a column at 32 lanes, two rounds at 64
+            q8_gemv_gu_n_run(t, 256, 512, 5, ACT_SILU)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_q8_gemv_pleact(t0 : T?) {
     t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
@@ -6758,7 +6991,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             upload_region_at(rgd, 0l, unsafe(addr<uint8 const?>(pair[0])), 8l)
             var s_n = gemv_cls_set_n(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, yd), fixed_array(wq_bytes, ws_bytes, 8l, xq_bytes, xs_bytes, y_bytes), gbits)
             delete pair
-            for (ncols in fixed_array(1, 2, 4, 8)) {
+            for (ncols in fixed_array(1, 2, 3, 4, 5, 6, 7, 8)) {   //! every count: the odd ones leave dead columns on the wider stamps
                 unsafe {
                     nan_sentinel_upload(yd, y_bytes)
                     var raw = alloc_cmd()
@@ -7215,6 +7448,8 @@ def test_vkd_rope_b_pair(t0 : T?) {
                     var tokb = make_host_buf(16l, true)
                     var tmq = reinterpret<TokMeta?>(tokb.mapped)
                     tmq.pos = 0u   // mirror row = layerbase alone
+                    tmq.cnt = 0u
+                    tmq.mirbase = 0u
                     var sc = set_qkn_rope_cls(fixed_array(qd2, kvdv, km2, vm2, csd, wnd, tokb.buf, bd),
                         fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, 16l, b_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
@@ -7290,6 +7525,137 @@ def test_vkd_rope_b_pair(t0 : T?) {
                     }
                 }
                 t |> success(bad == 0, "qkn_rope_kv matches the CPU oracle ({bad} off)")
+                //! the N-row form: two rows stacked, each at its own token meta, against the one-row kernel run on that row alone
+                {
+                    let kvrow = qd + 2 * kvd
+                    let mn = krow + 2 * kvd   // row 0 at position 0 and row 1 at position 1: two mirror rows past layerbase
+                    var q2h : array<float>
+                    var kv2h : array<float>
+                    var cs2h : array<float>
+                    q2h |> resize(2 * qd)
+                    kv2h |> resize(2 * kvrow)
+                    cs2h |> resize(2 * hs)
+                    for (i in range(qd)) {
+                        q2h[i] = q0h[i]
+                        q2h[qd + i] = q0h[qd - 1 - i] * 0.7 - 0.2
+                    }
+                    for (i in range(kvrow)) {
+                        kv2h[i] = kvh[i]
+                        kv2h[kvrow + i] = kvh[kvrow - 1 - i] * 0.6 + 0.1
+                    }
+                    for (i in range(hs)) {
+                        cs2h[i] = csh[i]
+                        cs2h[hs + i] = csh[hs - 1 - i] * 0.9
+                    }
+                    let mn_bytes = int64(mn) * 4l
+                    let q1d = make_device_buf(q_bytes)
+                    let kv1d = make_device_buf(kv_bytes)
+                    let cs1d = make_device_buf(cs_bytes)
+                    let km1 = make_device_buf(mn_bytes)
+                    let vm1 = make_device_buf(mn_bytes)
+                    let q2d = make_device_buf(2l * q_bytes)
+                    let kv2d = make_device_buf(2l * kv_bytes)
+                    let cs2d = make_device_buf(2l * cs_bytes)
+                    let kmn = make_device_buf(mn_bytes)
+                    let vmn = make_device_buf(mn_bytes)
+                    var host2 = make_host_buf(3l * q_bytes + 4l * mn_bytes, true, [cached = true])
+                    unsafe {
+                        upload_region_at(q1d, 0l, addr<uint8 const?>(q2h[qd]), q_bytes)
+                        upload_region_at(kv1d, 0l, addr<uint8 const?>(kv2h[kvrow]), kv_bytes)
+                        upload_region_at(cs1d, 0l, addr<uint8 const?>(cs2h[hs]), cs_bytes)
+                        upload_region_at(q2d, 0l, addr<uint8 const?>(q2h[0]), 2l * q_bytes)
+                        upload_region_at(kv2d, 0l, addr<uint8 const?>(kv2h[0]), 2l * kv_bytes)
+                        upload_region_at(cs2d, 0l, addr<uint8 const?>(cs2h[0]), 2l * cs_bytes)
+                        nan_sentinel_upload(km1, mn_bytes)
+                        nan_sentinel_upload(vm1, mn_bytes)
+                        nan_sentinel_upload(kmn, mn_bytes)
+                        nan_sentinel_upload(vmn, mn_bytes)
+                        var tok1 = make_host_buf(16l, true)
+                        var tm1 = reinterpret<TokMeta?>(tok1.mapped)
+                        tm1.pos = 1u
+                        tm1.cnt = 0u
+                        tm1.parity = 0u
+                        tm1.mirbase = 0u
+                        var tok2 = make_host_buf(32l, true)
+                        var tm2 = reinterpret<TokMeta?>(tok2.mapped)
+                        for (r in range(2)) {
+                            tm2[r].pos = uint(r)
+                            tm2[r].cnt = 0u
+                            tm2[r].parity = 0u
+                            tm2[r].mirbase = 0u
+                        }
+                        var s1 = set_qkn_rope_cls(fixed_array(q1d, kv1d, km1, vm1, cs1d, wnd, tok1.buf, bd),
+                            fixed_array(q_bytes, kv_bytes, mn_bytes, mn_bytes, cs_bytes, wn_bytes, 16l, b_bytes),
+                            fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
+                        var s2 = set_qkn_rope_cls(fixed_array(q2d, kv2d, kmn, vmn, cs2d, wnd, tok2.buf, bd),
+                            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 32l, b_bytes),
+                            fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
+                        var rawn = alloc_cmd()
+                        let beginn = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(rawn, beginn), null)
+                        var hn : VkHaz
+                        var pc1 = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                            half = uint(half), neox = uint(neox), nh = uint(nh),
+                            layerbase = uint(krow), qwoff = 0u,
+                            kwoff = uint(hs), eps = eps, boff = uint(bpad), hasb = 1u)
+                        enc_qkn_rope_cls(rawn, hn, s1, pc1, int64(wgs))
+                        var pc2 = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                            half = uint(half), neox = uint(neox), nh = uint(nh),
+                            layerbase = uint(krow), qwoff = 0u,
+                            kwoff = uint(hs), eps = eps, boff = uint(bpad), hasb = 1u,
+                            rowwg = uint(wgs), kvrow = uint(kvrow), qrow = uint(qd), cosrow = uint(hs))
+                        enc_qkn_rope_cls(rawn, hn, s2, pc2, int64(wgs) * 2l)
+                        vhz_dep(rawn, hn, 8u, 0u, true)
+                        cmd_copy_whole(rawn, q1d, host2.buf, q_bytes)
+                        cmd_copy_range(rawn, km1, 0l, host2.buf, q_bytes, mn_bytes)
+                        cmd_copy_range(rawn, vm1, 0l, host2.buf, q_bytes + mn_bytes, mn_bytes)
+                        cmd_copy_range(rawn, q2d, 0l, host2.buf, q_bytes + 2l * mn_bytes, 2l * q_bytes)
+                        cmd_copy_range(rawn, kmn, 0l, host2.buf, 3l * q_bytes + 2l * mn_bytes, mn_bytes)
+                        cmd_copy_range(rawn, vmn, 0l, host2.buf, 3l * q_bytes + 3l * mn_bytes, mn_bytes)
+                        vk_check(vkEndCommandBuffer(rawn), null)
+                        submit_wait(rawn)
+                        let f = reinterpret<float?>(host2.mapped)
+                        let km1o = qd
+                        let vm1o = qd + mn
+                        let q2o = qd + 2 * mn
+                        let kmno = 3 * qd + 2 * mn
+                        let vmno = 3 * qd + 3 * mn
+                        var badn = 0
+                        for (i in range(qd)) {   // row 0's q against the one-row run above, row 1's against its own
+                            if (float_bits_to_uint(f[q2o + i]) != float_bits_to_uint(q_cls[i])) {
+                                badn++
+                            }
+                            if (float_bits_to_uint(f[q2o + qd + i]) != float_bits_to_uint(f[i])) {
+                                badn++
+                            }
+                        }
+                        for (i in range(kvd)) {   // row 0's mirror rows against the one-row run's, row 1's (one row past) against its own
+                            if (float_bits_to_uint(f[kmno + krow + i]) != float_bits_to_uint(m_cls[krow + i])) {
+                                badn++
+                            }
+                            if (float_bits_to_uint(f[vmno + vrow + i]) != float_bits_to_uint(m_cls[mirn2 + vrow + i])) {
+                                badn++
+                            }
+                            if (float_bits_to_uint(f[kmno + krow + kvd + i]) != float_bits_to_uint(f[km1o + krow + kvd + i])) {
+                                badn++
+                            }
+                            if (float_bits_to_uint(f[vmno + vrow + kvd + i]) != float_bits_to_uint(f[vm1o + vrow + kvd + i])) {
+                                badn++
+                            }
+                        }
+                        t |> success(badn == 0, "qkn_rope_kv over two rows: each row's q and mirror rows are the one-row kernel's bit for bit ({badn} off)")
+                        var stalen = 0
+                        for (i in range(krow)) {   // nothing lands under layerbase on either mirror
+                            if (float_bits_to_uint(f[kmno + i]) != NAN_SENTINEL_BITS || float_bits_to_uint(f[vmno + i]) != NAN_SENTINEL_BITS) {
+                                stalen++
+                            }
+                        }
+                        t |> success(stalen == 0, "qkn_rope_kv over two rows: the mirror rows under layerbase keep the sentinel ({stalen} written)")
+                    }
+                    delete q2h
+                    delete kv2h
+                    delete cs2h
+                }
                 delete q0h
                 delete kvh
                 delete csh
@@ -8869,6 +9235,8 @@ def test_vkd_kv16_writers(t0 : T?) {
                     var tokb = make_host_buf(16l, true)
                     var tmq = reinterpret<TokMeta?>(tokb.mapped)
                     tmq.pos = 0u
+                    tmq.cnt = 0u
+                    tmq.mirbase = 0u
                     var sc = set_qkn_rope_f16_cls(fixed_array(qd2, kvdv, km2, vm2, csd, wnd, tokb.buf, csd),
                         fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, 16l, cs_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))

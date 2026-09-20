@@ -24,15 +24,17 @@ stale, in the same change.** A stale hand bind reads the wrong buffer and passes
 happens to compare.
 
 **A kernel-unit cell - a model-less cell that dispatches one or more kernel classes and asserts on
-their output - missing a compare against a CPU oracle is a defect; where the cell compares two
-kernel forms against each other, the oracle compare targets one of those two forms.** A cell is a
-`t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same computation written in
-plain code and run on the CPU. Two forms can be bit-equal and both wrong.
+their output - missing a compare against a CPU oracle in the cell itself is a defect; where the
+cell compares two kernel forms against each other, the oracle compare targets one of those two
+forms, in that cell or in a cell of the same file that dispatches that form at the same shapes.**
+A cell is a `t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same
+computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
 **A kernel whose branch selection changes - a branch added, or an existing branch's predicate
 widened or narrowed, so that a different set of kargs values, or of sentinel values in a bound
-buffer, reaches a path - ships a kernel-unit cell that dispatches it at a value the change
-moved onto or off that path, in the same change.** At every value the change left where it was
+buffer, reaches a path - has a kernel-unit cell that dispatches it at a value the change moved
+onto or off that path: an existing cell that already does discharges it and the change says
+which; otherwise the cell ships in the same change.** At every value the change left where it was
 the kernel computes what it did before, so a cell that dispatches only those values passes
 whether the change is right or wrong.
 
@@ -41,8 +43,8 @@ dispatch in the same cell - the cell fills with a sentinel every range of that d
 buffers the dispatch writes without reading.** An unprefilled output can pass by staying stale -
 the previous dispatch's values, or garbage that happens to sit inside the tolerance bar.
 
-**A bit-identity assert on a result either side computes with floating-point arithmetic, in an
-operation order the cell does not fix on both sides, compares two GPU dispatches, never a
+**A bit-identity assert whose result each side computes with floating-point arithmetic, in an
+operation order the cell does not fix on both sides, compares two GPU dispatches - never a
 dispatch against a CPU oracle.** With the order fixed on both sides the oracle's result is the
 kernel's by construction; an exact compare of indices or schedule words against a CPU twin is not
 that assert.

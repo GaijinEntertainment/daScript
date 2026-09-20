@@ -16,8 +16,9 @@ running that library to mint our own artifact is reference-build work.
 
 **A diff that names the reference build - its organization, project, binary, header, symbol or
 constant - outside a sentence doing reference-build work is a defect: write "the reference
-build", or for its binary "the reference exe", qualified when the module runs more than one
-reference exe ("the batched reference exe"), instead.** A name this module's own code, files or
+build", or for its binary the qualified "the flat reference exe" / "the batched reference exe"
+(the roster is `benchmarks/setup_lcpp_ref.das`), instead.** "The reference bodies" of a `[tune]`
+kernel are this module's own term, not a reference-build name. A name this module's own code, files or
 artifacts carry is its own name, not attribution; attributing our code's shape to the reference
 build ("in the reference build's form") names it too.
 
@@ -38,5 +39,6 @@ build; the reading it sits beside gets its own sentence.**
 
 **A sentence stating a reference-build run we will make carries that run's names, knobs and
 commands.** Such a sentence does reference-build work, not a proposal; a sentence that promises a
-measurement we have not made - a table row, a ratio, or a comparison against the reference - states
-such a run.
+measurement whose number can only be had by running the reference build - a row of its table, a
+ratio against it - states such a run; a promise priced on this module's own instruments alone is
+not one.

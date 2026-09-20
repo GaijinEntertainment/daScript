@@ -11,10 +11,13 @@ it.**
 `ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
 code lands in which file is the checklist's own.
 
-**A function under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md`
-companion's sec.1 - names its kind, or that charter line changes in the same diff.**
+**A function, a module global, a named constant or a `require` under `dasllama/` lands in the
+file whose charter line - in an `ARCHITECTURE_*.md` companion's sec.1 - names its concern and
+whose must-not-hold cell does not, or that charter line changes in the same diff.**
 `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line;
-a file outside `dasllama/` carries no charter line and answers to its own folder's checklist.
+a file outside `dasllama/` carries no charter line and answers to its own folder's checklist; a
+function landing in a file whose charter line forbids its kind is a defect wherever else the kind
+goes unnamed.
 
 **The grid rule of a class whose family ships more than one arm lands in
 `dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a family ships (cm2,

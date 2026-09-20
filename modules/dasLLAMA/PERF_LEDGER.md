@@ -2001,6 +2001,123 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The
   amortized weight stream leaves dispatch latency and CPU work as what is left per step, so four rows
   feel the load where one row hides it.
+### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
+
+Instruments as the section above: `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod (RTX
+PRO 4500, driver 580.173, cm2 without decode-vector, and KHR) and the local RTX 5060 Ti (driver
+616.56, cm2 with decode-vector), `DASLLAMA_ALLOW_UNTUNED=1` and no `DAS_TUNE_POLICY` override on
+either box (an untuned sidecar serves the reference bodies), `DAS_JOBQUE_THREADS=16`, llama.cpp
+b10660's `llama-batched-bench` under the section above's command line the same hour on the same
+box (every llama.cpp figure below `external`, from that exe's own table), `DASLLAMA_GPU_PROF=1`
+for the stamps, the attention ruler `harness/vk_attn_probe.das` for the key split. Every ratio is
+`tg128@4` summed over four device-home streams through the scheduler's device mode against the
+reference's `S_TG` at `-npl 4`, conservative as before (the served step samples and detokenizes
+inside the clock); every lever's before -> after pair is two commits in two processes
+[direction-grade - two commits], every ratio against llama.cpp two processes [direction-grade -
+two processes]. The wide twin's command buffers (one a region, one a row count) are pool handles
+the recorder fills - no plane grows with them, so the ladder's footprint half is nil.
+
+- **The baseline (master before the arc, the pod):** qwen2 0.5B 1205 against 1385 (0.87 - batched,
+  a gap); qwen3 0.6B 425 against 1193 and 4B 129 against 473 (0.36 and 0.27 - not batched: the N-row
+  command answered zero rows for a q/k-norm model, so the scheduler stepped the four streams a row
+  at a time, four weight passes a step, below one stream's rate).
+- **The q/k-norm form of the N-row command:** the per-head rms kernel was already row-indexed, and
+  the fused norm+rope+store kernel gained the row in its workgroup id; 0.6B 425 -> 1044, 4B 129 ->
+  427 (0.87 and 0.90). The fused kernel and the split pair round apart (the compiler contracts
+  each kernel on its own - the earlier "bit-identical" claim was false), so the rows take the
+  form the one-row command takes and read bit for bit. On the 5060 Ti's Windows driver the
+  one-row form then read twelve logits off the CPU chain: the new row arithmetic divided by a
+  push field that is zero in the one-row form behind a select, and that driver evaluates both
+  arms - an integer division by zero is undefined in SPIR-V. The divisor is clamped;
+  `DASLLAMA_VK_FUSE_BISECT` names such a kernel in seven runs against the CPU chain.
+- **The key split follows the attended span, not the SM count (the ruler, us a layer, qwen2 0.5B
+  geometry, the pod):** at 640 positions one piece 14.5 and sixteen 33; at 2048 four 20.6 and
+  sixteen 33; at 4096 four to eight 27 and sixteen 34; one row or four the same at four pieces or
+  fewer. The old rule recorded sixteen for one row and eleven for four; the ladder (one under 512,
+  four to 3072, eight past it) cut the 0.5B's four-row attention 793 -> 446 us a step, and the
+  qwen3 0.6B's 767 stays bandwidth-bound (eight kv heads of 128, the rows' K/V bytes eight times
+  the 0.5B's, linear in rows). It also puts the one-row and N-row forms in one summation order,
+  so the qwen3 regions cells read bit for bit on the 36-SM card where the rules had them nine and
+  sixteen pieces apart. Pod: 0.5B 1356, 0.6B 1111, 4B 449 (0.98, 0.92, 0.95).
+- **A residual epilogue fused into the GEMV's last workgroup does not batch (Decision: rejected,
+  the tree keeps the separate residual dispatch):**
+  the N-column form of `Q8GemvAr`, bit-exact in its kernel cell and the regions cells, read the
+  0.5B 1076 -> 988 and the 0.6B 822 -> 784 on the 5060 Ti: the last workgroup runs the rows'
+  residual steps one after another where the separate `cls_ar_rq_b` dispatch runs them in
+  parallel workgroups. The fused gate-up's N form (`Q8GemvGuN`, a subgroup a column quantizes)
+  batches and is bit-exact, and bought nothing measurable on either card (pod 0.5B 1331, 0.6B
+  1103, 4B 454); kept for the dispatch it saves.
+- **The rows' logits a row a job-queue lane (`rd_land_logits_n`):** the one-lane form passed
+  2.4 MB of a 152k-vocab plane twice, 322 us of a 3037 us step on the pod; the lanes read the
+  plane once. 5060 Ti: 0.5B 1068 -> 1172, 0.6B 833 -> 895. A parallel sample of the rows threw in
+  a forked context and stays `followup_vulkan.md` item 76.
+- **The Q8_0 N-column GEMV's column loads issue together (`Q8GemvNT`):** the qwen2 1.5B's
+  four-row step on the pod read 4313 us against the one-row step's 2963, and the stamps put the
+  gap in the N-column GEMVs - the down GEMV 1144 against the one-row form's 694 (n 8960, d
+  1536), the qkv 340 against 229, the wo 289 against the fused 289 plus a 168 requant - where
+  the fused gate-up at n 1536 sat 14 percent over its one-row twin. Each column's activation
+  load sat behind its own `c < ncols` branch, so the four loads issued one after another, an L2
+  latency each, per weight word. Unguarded (a column past the live ones dots the last live
+  column's row again, its sum never stored), the step reads 3775: down 744, qkv 286, wo 230.
+  Pod, cm2 / KHR: 1.5B 871 -> 980 / 982, 0.5B 1443 -> 1615 / 1604, 0.6B 1154 -> 1261 / 1251, 4B
+  459 -> 482 / 481; the 5060 Ti 0.5B 1172 -> 1246, 1.5B 615 -> 621 (its decode-vector rail hid
+  most of the serialisation). Bit for bit in the kernel cell and the regions cells.
+- **The ruler on both sides of the ladder's edges (us a layer, the pod, one row / four rows):** the 0.5B
+  geometry at 384 one piece 10.4 / 10.4 against four 16.5 / 16.5, at 640 14.5 / 14.5 against 16.5 /
+  16.5, at 1024 18.6 / 18.6 against 16.5 / 16.5, at 1536 26.7 / 26.7 against 18.6 / 20.6 - the
+  one-to-four edge sits between 640 and 1024 for this geometry; the qwen3 0.6B geometry (head 128,
+  two heads a kv head) at 384 one piece 14.5 / 14.5 against four 12.4 / 18.6, at 640 20.6 / 20.6
+  against 14.4 / 20.8, at 1024 28.8 / 28.8 against 14.5 / 24.6 - its edge sits at 512 for one row
+  and near 640 for four. `RD_UNSPLIT_POS` stays 512: the wrong side of either edge costs two
+  microseconds a layer. The wide edge: at 8192 eight pieces read 32.9 against four's 41.1 for one
+  row of the 0.5B geometry (37.3 against 59.2 for the 0.6B's) and 51.3 against 44.3 for four rows
+  (189 against 181); at 16384 47.3 against 71.6 for one row, 81.1 against 73.8 for four. Decision:
+  taken - the one-row command keeps its wide twin from 3072, the N-row command takes the split
+  form at every span past 512 and its wide twin, its recorded flag and its stamp slots go.
+- **The fused gate-up N form keeps its column guard (Decision: rejected - the unguarded form):**
+  the same clamp that freed the plain N-column GEMV's loads made `Q8GemvGuN` slower - the 1.5B's
+  four-row gate-up 1212 -> 1252 us a step on the pod, the step 3775 -> 3847, tg128@4 980 -> 965,
+  the 4B 482 -> 477 and the llama 1B 1343 -> 1325 - because its unroll is eight columns wide
+  whatever the count where the plain GEMV picks a stamp by count: a dead column's two dots against
+  both planes cost more than its branch. The stamp by column count is `followup_vulkan.md` item
+  77's fold. The ladder caps a sliding-window layer's count at its window's span: a windowed
+  carrier (gemma-3's 512, gemma-4's 1024) attends at most its window, so its local layers take
+  one piece at every position where the position alone read four or eight; no windowed carrier
+  sits on this arc's board, so the count is the ruler's reading, not a measured step.
+- **The boards at the arc's tip, tg128@4 against llama.cpp the same hour** - the pod, cm2 / KHR:
+  qwen2 0.5B 1611 / 1602 against 1373 (1.17 / 1.17), qwen2 1.5B 980 / 981 against 920 (1.07 /
+  1.07 - the flat row 335 against 314), qwen3 0.6B 1267 / 1251 against 1199 (1.06 / 1.04), qwen3
+  4B 483 / 481 against 476 (1.01 / 1.01), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25,
+  the K-quant leaves the lever does not reach); the llama family at the same tip 1B 1347 / 1345
+  against 1220 (1.10 / 1.10), 3B 613 / 612 against 606 (1.01 / 1.01), 8B 380 / 378 against 361
+  (1.05 / 1.05). The
+  5060 Ti, cm2 with decode-vector: 0.5B 1211 against 922 (1.31), 1.5B 624 against 578 (1.08),
+  0.6B 915 against 740 (1.24), 4B 273 against 263 (1.04, under `DASLLAMA_GPU_VRAM_MB=9000`: the
+  16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
+  Q4_K_M 348 against 317 (1.10 - an earlier reference row of 183 on this box was the outlier: the
+  reference re-run the same hour as the CUDA rows below read 924 / 577 / 743 / 266 / 317 for the
+  five, the first four within a percent of the rows above); the desktop box reads three percent
+  apart run to run on the 0.5B (1246 the run before). The flat rows did not move.
+- **llama.cpp's CUDA build beside the Vulkan reference on the 5060 Ti (every figure `external`;
+  the same b10660 checkout built with CUDA 13.4 for sm_120, `llama-bench -ngl 99 -fa 1 -r 3` for
+  pp512 / tg128 and `llama-batched-bench` under the section's command line for tg128@4; ours the
+  rows above, not re-run) [direction-grade - two processes]:** pp512 / tg128 / tg128@4 - Llama-3.2-1B
+  Q8_0 21185 / 262 / 857, Llama-3.2-3B Q8_0 8628 / 108 / 371, Llama-3.1-8B Q4_K_M 3630 / 82 / 245,
+  Qwen2.5-0.5B Q8_0 34230 / 488 / 1412, Qwen2.5-1.5B Q8_0 14831 / 202 / 652, Qwen3-0.6B Q8_0
+  26458 / 403 / 1034, Qwen3-4B Q8_0 6361 / 86 / 294, Phi-3.5-mini Q4_K_M 6503 / 144 / 312. Against
+  ours at four streams: 0.5B 0.86, 1.5B 0.96, 0.6B 0.89, 4B 0.93, phi 1.12; the llama family's
+  local rows are the section above's (1B 724, 3B 351, 8B 250: 0.84, 0.95, 1.02); flat, ours reads
+  0.93 to 0.99 of CUDA on every carrier. CUDA's batched rows beat its own Vulkan rows by 1.06 to
+  1.53 on the Q8 carriers (0.98 on phi's K-quant) on this card, so the Vulkan-reference ratios
+  above overstate ours by that much against the card's best engine.
+- **Phi's prefill at half the reference is the attention, not the K-quant tiles (the prefill
+  profiler's role stamps, 512 tokens, us over 32 layers): q 7420, k 6858, v 4807, rope 3208,
+  attn 81557, wo 6825, gate 15453, up 14034, down 17669, 162 ms whole; the reference's per-kernel
+  log the same window: qkv 23.0 ms, gate-up 30.3, down 27.9, flash attention 2.65 (83 us a layer at
+  head 96).** The GEMM roles read on par or ahead (the k5 and k4 decode-in-load tiles 55 and 60
+  TFLOP/s on the ruler's l stamp); the flash tile admits heads of 64, 128, 256 and 512 alone, so
+  phi's head of 96 runs the chunked pair at thirty times the flash cost - `followup_vulkan.md`
+  item 78 [direction-grade - two processes].
 
 ### From the M4 Metal pass (2026-09-13)
 

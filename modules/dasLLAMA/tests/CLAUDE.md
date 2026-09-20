@@ -358,6 +358,8 @@ one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate a
 bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
 its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
+`test_vkd_q8_gemv_gu_n` (its N-column form against the one-row kernel run a column at a time,
+bit for bit at two, four and eight rows over silu and gelu),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
 the biased add partner beside the plain step) and
 `test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
@@ -522,9 +524,10 @@ NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - th
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
 the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
 GPU-served window in force while the driver is armed, the CPU window back after the drop; the 1B
-also runs the batched bench row (`bench_tg_batched_rep`): a row asking more streams than the
-device homes refuses by name and reads 0, and a row it homes serves at a rate with every stream
-parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
+also runs the batched bench row (`bench_tg_batched_rep`) with the driver homing two streams: a
+row asking more streams than the device homes refuses by name and reads 0, and a row it homes
+serves at a rate with every stream parked after it and no call passed to the CPU chain (a
+one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
@@ -538,7 +541,7 @@ off the JIT, without dasMetal, or without the carrier. The row's refusal contrac
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
-`test_gpu_resident_regions_hybrid.das` and `test_gpu_resident_regions_llama_k.das` (`_resident_regions.das` carries the cells; one model a file; the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
+`test_gpu_resident_regions_hybrid.das`, `test_gpu_resident_regions_llama_k.das` and `test_gpu_resident_regions_qwen3.das` (`_resident_regions.das` carries the cells; one model a file; the qwen3 file is Qwen3-0.6B Q8_0, six cells on a q/k-norm carrier: the interleaved single steps, the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope + store or the split pair - bit for bit and served by the N-row command (`vk_rdec_token_n_rows` at two or more, asserted by every batched cell), the batched-first cell (a batched step before any one-row step, a one-row step, a batched step again: the unsplit twin's availability is the device's, never the one-row record's), the wide single steps (both prompts past RD_WIDE_POS, so the one-row command's wide twin records and serves, bit for bit against the session alone), and the fuse bisect (`DASLLAMA_VK_FUSE_BISECT` a bit at a time, one model load a bit: the one-row steps within the split bar of the fused run with the one-token-off control, and under the fused q/k norm's bit the batched rows bit for bit on the split pair); the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
 itself, so no CPU reference chain runs. The bit-for-bit cells: a session stepped between another
@@ -757,7 +760,11 @@ fixture passes, a flipped id fails, an evidence-less spec is refused, the text-f
 encodes through the tokenizer (E2B), the kq-native arm engages and restores the mode
 (Qwen3-4B Q4_K_M); plus the timed run's fixture gate (`fixture_gate_check` - the opening
 tokens of the same evidence on the served model, once per model before the rows): the table's
-fixture passes, an opening that matches nothing refuses, a row with no evidence stands aside.
+fixture passes, an opening that matches nothing refuses, a row with no evidence stands aside;
+plus the last layer's FFN slice on the resident Vulkan driver (Llama-3.2-1B Q8_0): a 512-token
+prefill sliced against the whole window, logits bit for bit, with split-k pinned off for both
+arms - the wave model splits the whole arm's GEMMs on a box with SMs to spare where a sliced
+region never splits, and the two k orders round apart.
 Requires the bench by relative path (like `test_tok_seed`), so it pays the
 bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line

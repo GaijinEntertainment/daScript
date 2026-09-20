@@ -114,19 +114,22 @@ def test_gpu_resident_llama_1b(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
 }
 
-//! the batched bench row on the 1B: a refusal names the streams the device homes against the row's ask and
-//! reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
+//! the batched bench row on the 1B, the driver homing two streams: a refusal names the streams the device homes against
+//! the row's ask and reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
+//! (a one-stream row is no batch: the step census counts it a row at a time and the row refuses by name)
 [test]
 def test_gpu_resident_llama_batched_row(t : T?) {
     t |> run("bench_tg_batched_rep: the refusal past the homed streams, then one served rep") @(t : T?) {
         let path = llama_model_path(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
         if (empty(path)) return
+        set_gpu_resident_regions_(2l)
         var tr <- load_model_(path, QuantMode.q8)
+        set_gpu_resident_regions_(1l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
         with_job_que() {
             setup_dasllama_jobque_()
             let homes = gpu_device_sessions()
-            t |> success(homes >= 1l, "the armed driver homes a stream ({homes})")
+            t |> success(homes >= 2l, "the armed driver homes two streams ({homes})")
             let over_home = homes + 1l
             let refused = bench_tg_batched_rep(tr, over_home, 32l, 4l, 1l)
             t |> equal(refused.tps, 0.0lf, "a row asking more streams than the device homes reads 0")

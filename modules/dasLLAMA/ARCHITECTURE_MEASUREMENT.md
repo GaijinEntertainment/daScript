@@ -127,7 +127,9 @@ of ours in this paragraph is the pod's (Linux, RTX PRO 4500, `daslang -jit`, the
 its cm2 mode, kv f16), each probe at its defaults - the attention ruler at 4 rows, 640 positions,
 head 64, 32 heads and 4 heads a kv head, the copy ruler at its four sizes.
 `harness/vk_attn_probe.das [rows] [cnt] [hs] [heads] [kv_mul]` times the token command's attention
-pass a layer on the device clock across the key-split ladder; a row's alternates are the other
+pass a layer on the device clock across the key-split ladder - a held-output chain: sixteen
+dispatches into one output buffer, each behind the last, so a figure is a dependent chain's cost
+a layer, never one dispatch's latency; a row's alternates are the other
 splits of the same run, and the reference-engine row is llama.cpp's `FLASH_ATTN_EXT` line from
 `GGML_VK_PERF_LOGGER=1 llama-batched-bench -m <gguf> -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -ngl 99 -fa on`
 (b10660 on the RTX PRO 4500 at Llama-3.2-1B's shape, four rows: 15.7 us a layer, its split-k

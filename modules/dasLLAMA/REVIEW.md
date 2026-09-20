@@ -107,12 +107,12 @@ token-exact fixtures.
 **A diff that changes WHICH kernel form a predicate in `dasllama/` picks - both forms produce the
 right answer - or the VALUE of a constant there that timing two candidates chose, rests on timing
 that ran both candidates interleaved in one process under one instrument, and puts that race's
-rows, each naming its arm, in the PR body.** A reading taken across two processes or two commits
-says which way the wall clock moved, not which implementation to adopt.
+rows, each naming its arm, in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading
+across two processes or two commits says which way the clock moved, not which form to adopt.
 
-**A change to an allocation that trades footprint against wall-clock, either way, wherever the
-allocation sits, ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`
-with the decision it settles.**
+**A change to an allocation whose size scales with a model dimension, a row count or a region
+count, added, grown or removed to move wall-clock, wherever it sits, ships the measured pair -
+peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is

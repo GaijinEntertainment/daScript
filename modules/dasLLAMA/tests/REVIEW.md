@@ -46,13 +46,12 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds, removes or moves a cell, or changes its suite or its skip condition, corrects
-in the same change the `CLAUDE.md` census entry of every `[test]` file that runs the cell,
-wherever the cell is defined, numbers and skip clauses included.** A `{a,b}` shorthand naming
-several files, or a suite roster, carries nothing to correct; a file with no census entry owes none.
+**A diff that adds a `[test]` file here, or adds, removes or moves a cell, or changes its suite
+or skip condition, corrects or adds, in the same change, the `CLAUDE.md` entry of every `[test]`
+file running the cell, counts and skip clauses included.** A file's entry is the clause naming
+it; a `{a,b}` shorthand or a suite roster owes nothing.
 
-**A diff that changes an axis or a bar a `CLAUDE.md` census entry names corrects that entry in
-the same change.**
+**A diff that changes an axis or a bar a `CLAUDE.md` census entry names corrects it in the same change.**
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
@@ -162,7 +161,8 @@ not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
-showing the path ran is not evidence that the number was reached.
+showing the path ran is not evidence the number was reached; a device's geometry (subgroup width,
+SM count) is no coverage claim.
 
 **A freeform token-parity cell whose two sides can round differently - different lanes,
 backends, batch shapes or kernel forms - is a defect: use the forced-feed logits-tolerance

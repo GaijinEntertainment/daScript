@@ -36,23 +36,39 @@ row's word count (`hs / 8`) is a power of two - 32, 64, 128, 256, 512; at 96, 16
 pass keeps every key group's partial in the slab, the finish sums them, and the threads past the
 last whole key group hold no keys.
 
-**The split ladder keeps a low-head model off a few SMs, and the last piece to land finishes.**
-Few workgroups a row leaves such a model's attention on a few SMs (one kv head of eighty-two), so
-the pass cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit` over the row's slab
-count: enough workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count
-is unknown or the slabs alone cover it), each running the online softmax over its piece into an
-unnormalized piece a head (max, denominator, accumulators; an empty piece weighs nothing). The
+**The split ladder follows the attended span, and the last piece to land finishes.** The pass
+cuts the attended span into `nsplit` 32-aligned pieces, each running the online softmax over its
+piece into an unnormalized piece a head (max, denominator, accumulators; an empty piece weighs
+nothing). The piece count is the span's, never the row count's or the SM count's: one piece under
+`RD_UNSPLIT_POS` (512), `RD_SPLIT_PIECES` (four) to `RD_WIDE_POS` (3072), `RD_SPLIT_WIDE_PIECES`
+(eight) past it for the one-row command alone, each capped by the partials plane's `attn_nsplit`
+(`da_nsplit`: enough (head, split) workgroups to cover the SM count twice, at most
+`DA_NSPLIT_MAX`); a sliding-window layer attends at most its window, so its count is its
+window's span's under the command's (`rd_layer_pieces`). The ruler (`harness/vk_attn_probe.das`
+under `-jit` on the pod, `PERF_LEDGER.md`'s 2026-09-20 section) read the rule at the Qwen2.5-0.5B
+geometry on the RTX PRO 4500, us a layer: one piece 10.4 at 384 positions and 14.5 at 640 against
+four pieces' 16.5 at both, four pieces 16.5 at 1024 against one piece's 18.6 and 18.6 at 1536
+against 26.7 (the edge sits between 640 and 1024; the qwen3 0.6B geometry's four pieces win from
+640 at one row), four pieces 20.6 at 2048 and 27 at 4096 against sixteen's 33 and 34; past 4096
+eight pieces pay for one row alone - 33 against four's 41 at 8192, 47 against 72 at 16384 - and
+lose at four rows (51 against 44, 81 against 74), so the N-row command stays at four pieces at
+every span past 512. The old rule, covering the card twice whatever the span, recorded sixteen
+pieces for a one-row step and eleven for a four-row step and paid double. One count for every
+row count also keeps the one-row and N-row forms summing in one order, so a batched row is the
+row alone bit for bit on any SM count while every row of the batch sits in one band; the batch's
+furthest row picks the form, and a row batched across a band edge takes the batch's. The
 pieces land in the partials plane; past them sit the arrival counters (`partu`, a word a (row, kv
 head, slab) at `cntoff`), each atomically bumped after a device-scope release. The piece that reads
 its group's count last aligns each head's pieces by their maxes, normalizes, gates and stores the
 row, and rearms the counter to zero (unsplit, the pass stores it), so no combine dispatch follows
 and the split costs no second launch. The store quantizes the row for the `wo` plane (`rqk`: Q8_0
 blocks by the 32-lane group's amax, Q8_K superblocks by the workgroup's on a head of 256 or 512), so
-no requant dispatch follows either. A split device records the token command twice - the split
-chain and an unsplit twin over the same sets, so the once-per-epoch record costs double there and
-the profiler keeps each form's stamp names and restarts its averages when a run crosses between
-them - and submits the twin while the position is under `RD_UNSPLIT_POS` (512): there a head's
-whole row is at most two of the pass's 256-key chunks.
+no requant dispatch follows either. A split device records the token command as a ladder of
+forms over the same sets - the split chain and an unsplit twin at the epoch's record, the wide
+twin on the first step at `RD_WIDE_POS` (a device whose `attn_nsplit` stays within the split
+form's pieces has no wide twin) - and the profiler keeps each form's stamp names and restarts
+its averages when a run crosses a band edge. Under `RD_UNSPLIT_POS` a head's whole row is at
+most two of the pass's 256-key chunks, so the unsplit twin serves there.
 
 **The flash tiles stay unsplit.** The flash tile's cm2 arm (`FaT` at `KHR = false`) runs one
 workgroup a (head, 64-row q tile) unsplit, its KHR arm one a (head, 16-row q tile): a key split there

@@ -11,6 +11,7 @@ require dasllama/dasllama_load          // load_model_ — the slice cell loads 
 require dasllama/dasllama_math          // setup_dasllama_jobque_ — the slice cell's queue (engine-level, not re-exported)
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active — the slice cell needs the driver armed
 require ?vulkan dasllama/dasllama_vulkan_prefill   // g_pf_ffn_slice — the slice's A/B arm
+require ?vulkan dasllama/dasllama_vulkan_common    // g_cm2_splitk — both arms under one k order
 require daslib/jobque_boost             // with_job_que — a 512-token prefill dispatches its CPU stages as jobs
 require daslib/fio
 require _model_tier                    // models_dir + model_available (presence/size gate)
@@ -106,6 +107,9 @@ def test_parity_pregate_kq_native(t : T?) {
 
 // The last layer's FFN slice against the whole window: one 512-token prefill each way on the
 // resident Vulkan driver, logits exact - the frozen fixtures' 5-20-token prompts never reach it.
+// Split-k is pinned off for both arms: the wave model splits the whole arm's GEMMs on a box with
+// SMs to spare (82 on the RTX PRO 4500) where a sliced region never splits, and the two k orders
+// round apart - the claim is the slice's row arithmetic, not the pick's rounding.
 [test]
 def test_parity_last_layer_slice(t : T?) {
     t |> run("the last layer's 32-row FFN slice reproduces the whole window's logits bit for bit") @(t : T?) {
@@ -133,6 +137,8 @@ def test_parity_last_layer_slice(t : T?) {
             var got : array<float>
             var served_whole = false
             var served_slice = false
+            let splitk_before = g_cm2_splitk
+            g_cm2_splitk = 1l
             with_job_que() {
                 setup_dasllama_jobque_()
                 g_pf_ffn_slice = false
@@ -148,6 +154,7 @@ def test_parity_last_layer_slice(t : T?) {
                 got := s1.logits
                 delete s1
             }
+            g_cm2_splitk = splitk_before
             t |> success(served_whole && served_slice, "both arms were served by the resident driver, not the CPU rail")
             var bad = 0
             for (w, g in want, got) {

@@ -221,30 +221,49 @@ once for the step instead of once a row.** The driver sizes every per-token plan
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
-MoE, per-layer-embedding or shared-KV layer, a q/k norm, a gated q, a classifier epilogue, or a
-weight format with no N-column leaf. Every set over a per-row plane binds the plane's whole `nb`
+MoE, per-layer-embedding or shared-KV layer, a gated q, a classifier epilogue, or a weight
+format with no N-column leaf. A q/k norm has one: the rows take whichever form the one-row
+command takes - the fused norm + rope + store (`QknRopeKvT`, a head-row a workgroup with the row
+in the workgroup id, each row at its own token meta) where the one-row command fuses, the split
+pair (`qk_rms_cls`, the per-head rms over every row's projection row before the rope, the
+projection row's width as both strides) where it does not - so the rows' q and k are the one-row
+command's bit for bit. The fused kernel and the split pair round apart, because the compiler
+contracts each kernel on its own, so one command runs one form for every row. Every set over a per-row plane binds the plane's whole `nb`
 extent; the rule guards two shapes - an ungated q row sitting inside the projection row, and a q
 binding sized to one row, which leaves every row but the first reading past its binding. The MoE
 feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE layers, and
 their sets bind one row. Every GEMV goes out as an N-column dispatch
 (`GemvArgs.ncols` activation rows one weight pass apart by `ystride`); the q8 leaf takes its
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
-because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup. The
+because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
+Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
+requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuN`: a workgroup owns 32 output rows for
+every column, a subgroup a column quantizes the column's block, so the columns' rows quantize in
+parallel); the residual epilogues stay separate dispatches over the rows, because an epilogue
+run by the last workgroup would serialize the rows' steps where the separate dispatch runs them
+in parallel workgroups. The
 row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
 run at each row's own position, cached count and mirror region, which ride the shared `TokMeta`
 block a row (`mirbase` an element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into
-the attention, `rowwg` 0 naming a one-row dispatch). The rows' heads already fill the card, so
-the attention's key split shrinks as the row count grows (`da_nsplit` over
-`da_attn_row_wgs x nrows`). A command is recorded once per row count and split form, on first
-use, and keeps its own stamp names; the one-row command's list is borrowed for the record and put
-back. A row count whose split form runs at one split still fills the split stamp slot: the
-recorder's list for that row count is the split form's. The command's N-column leaves are built
-on the first batched step; a stamp that declines on the device logs once, and the command answers
-0 rows from then on, so the row-at-a-time loop serves.
+the attention, `rowwg` 0 naming a one-row dispatch). The attention's key split is the span's,
+the ladder the one-row command takes below its wide form (`rd_split_pieces` and the layer's
+window cap, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does
+alone while every row sits in one band - the batch's furthest row picks the form, the unsplit
+twin under `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight
+pieces slower than four at four rows, so the rows take no wide twin). A command is recorded
+once per row count and form - the split form and the unsplit twin on first use of the row count,
+the twin's availability decided at prepare with its buffers, never by a one-row record - and
+keeps its own stamp names; the one-row command's list is borrowed for the record and put back.
+The command's N-column leaves and its fused gate-up form are built on the first batched step; a
+stamp that declines on the device logs once, and the command answers 0 rows from then on, so the
+row-at-a-time loop serves.
 
-**The rows' logits come home in one read of the mapped plane.** `rd_land_logits_n` copies the
-whole plane into a scratch row, then a row a copy to each session's pointer: four reads straight
-off the mapping cost the pod eight times the one (785 us a step against 92).
+**The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
+`rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+the lanes idle while the device owns the step) and copies in order without one: a lane copies
+about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
+a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
+pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026-09-20 section).
 
 **The engine reaches the command through the driver seam, and falls back a row at a time.**
 `install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside

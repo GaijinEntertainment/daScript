@@ -19,7 +19,7 @@ def test_regions_interleaved_single_steps(t : T?) {
 
 [test]
 def test_regions_batched_steps(t : T?) {
-    cell_regions_batched_steps(t, REGIONS_FILE)
+    cell_regions_batched_steps(t, REGIONS_FILE, served = false)   // the N-row command declines a PLE carrier: the rows step one at a time
 }
 
 [test]

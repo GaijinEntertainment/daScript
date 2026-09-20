@@ -1188,7 +1188,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
         VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
-            rides = "the SM count the dense tile pick and split-k read ({sm} here); without it the l tile serves every dense GEMM and nothing splits k"),
+            rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
             rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident token command's logits behind a compute-timeline wait; without it the copies ride the compute queue and the token command copies its own logits under its fence"),
@@ -2265,6 +2265,7 @@ struct RLayer {
     s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
+    s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuN`), where `gu_on`
     wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
     s_wo_ar : VkDescriptorSet
     down_ar : bool                  //! the down GEMV carries the post-FFN residual step the same way
@@ -2457,9 +2458,12 @@ struct RDec {
     unsplit_on : bool               //! ... recorded (a device at one split has no twin)
     unsplit_served : int64        //! the tokens the twin served
     tok_recorded : array<bool>    //! per region: cmd holds the whole-token chain, re-submittable as-is
+    cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
+    wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
+    tok_wide_recorded : array<bool>
     nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
-    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS
+    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (sec.2.2al)
     tok_n_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
@@ -2574,12 +2578,25 @@ def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
     }
+    for (rec in g_rd.tok_wide_recorded) {
+        rec = false
+    }
     for (rec in g_rd.tok_n_recorded) {
         rec = false
     }
 }
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
+let RD_WIDE_POS = 3072l   //! ... and the one-row command its wide twin from this one; between them the split form
+let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head; the attended span picks the form (sec.2.2al)
+let RD_SPLIT_WIDE_PIECES = 8l   //! ... and the wide form's
+
+//! the token command's attention forms: the unsplit twin under RD_UNSPLIT_POS, the wide twin from RD_WIDE_POS, the split form between
+enum RdForm {
+    unsplit
+    split
+    wide
+}
 
 //! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
 def vk_rdec_attn_nsplit : int64 => g_rd != null ? g_rd.attn_nsplit : 0l
@@ -2681,7 +2698,10 @@ var g_rdq_stamp_names : array<string>        //! the recorded token command's st
 var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
 var g_rdq_n_unsplit = 0u
 var g_rdq_overflow_unsplit = false
-var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
+var g_rdq_names_wide : array<string>        //! ... and the wide twin's
+var g_rdq_n_wide = 0u
+var g_rdq_overflow_wide = false
+var g_rdq_attn_form = RdForm.split   //! the attention form the last sampled token took: a switch restarts the averages
 var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
 var g_rdq_n_n = 0u
 var g_rdq_overflow_n = false
@@ -2695,11 +2715,12 @@ var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submi
 var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
-//! the decode profiler's averages back to zero (the recorded stamp names stay): a switch between the token command's two forms
-//! the token command changed forms mid-run: say so and restart the ledger's averages, since the two forms' stamp roles differ
+//! the token command changed attention forms mid-run: say so and restart the ledger's averages (the recorded stamp names
+//! stay), since the forms' stamp roles differ
 [cold_path]
-def rdq_form_switch(unsplit : bool; pos : int64) {
-    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {unsplit ? "unsplit" : "split"} form from position {pos} - the averages restart\n")
+def rdq_form_switch(form : RdForm; pos : int64) {
+    let name = form == RdForm.unsplit ? "unsplit" : (form == RdForm.wide ? "wide" : "split")
+    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {name} form from position {pos} - the averages restart\n")
     rdq_reset_averages()
 }
 
@@ -2723,7 +2744,10 @@ def rdq_reset {
     g_rdq_names_unsplit |> clear()
     g_rdq_n_unsplit = 0u
     g_rdq_overflow_unsplit = false
-    g_rdq_form_unsplit = false
+    g_rdq_names_wide |> clear()
+    g_rdq_n_wide = 0u
+    g_rdq_overflow_wide = false
+    g_rdq_attn_form = RdForm.split
     g_rdq_names_n |> clear()
     g_rdq_n_n = 0u
     g_rdq_overflow_n = false
@@ -3249,6 +3273,25 @@ def vk_fa_on : bool {
 }
 
 var g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail dispatches (same-build A/B)
+
+var g_vk_fuse_bisect_pin = -1l   //! a cell's pin over the knob (-1 = the environment's value): the bisect cell loads the model once a bit
+
+//! DASLLAMA_VK_FUSE_BISECT: the token command's fused forms kept on their split dispatches, by bit (ENVIRONMENT.md); the N-row
+//! command shares the gate-up and the fused q/k norm through the layer flags
+def vk_fuse_bisect_bits : int64 => g_vk_fuse_bisect_pin >= 0l ? g_vk_fuse_bisect_pin : g_env_vulkan.vk_fuse_bisect
+
+//! pins the bisect bits a load reads in place of the environment's; -1 unpins
+def vk_fuse_bisect_pin(bits : int64) {
+    g_vk_fuse_bisect_pin = bits
+}
+
+let FUSE_BX_WO_AR = 1l         //! the wo GEMV's residual epilogue
+let FUSE_BX_DOWN_AR = 2l       //! the down GEMV's
+let FUSE_BX_GU = 4l            //! the fused gate-up
+let FUSE_BX_PROLOGUE_RQ = 8l   //! the prologue's add+rms+requant stamp
+let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, which would add the residual twice)
+let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
+let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
 
 def vk_fuse_on : bool {
     if (g_vk_fuse < 0) {
