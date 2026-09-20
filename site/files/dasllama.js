@@ -337,8 +337,10 @@
             noted: !!(m.note || das.comment || ref.comment),
             pp_das: tok(das, 'pp512'), pp_ref: tok(ref, 'pp512'),
             tg_das: tok(das, 'tg128'), tg_ref: tok(ref, 'tg128'),
+            tgb_das: tok(das, 'tg128@4'), tgb_ref: tok(ref, 'tg128@4'),
             pp_ratio: ratio(tok(das, 'pp512'), tok(ref, 'pp512')),
             tg_ratio: ratio(tok(das, 'tg128'), tok(ref, 'tg128')),
+            tgb_ratio: ratio(tok(das, 'tg128@4'), tok(ref, 'tg128@4')),
             das: das, ref: ref
           });
         });
@@ -509,7 +511,13 @@
         { key: 'tg_ref', label: 'lcpp', num: true, dim: true,
           get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
         { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
-          get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } }
+          get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } },
+        { key: 'tgb_das', label: 'tg128@4 das', num: true, grp: true, grpStart: true,
+          get: function (r) { return r.tgb_das; }, cell: function (r) { return tps(r.tgb_das); } },
+        { key: 'tgb_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r.tgb_ref; }, cell: function (r) { return tps(r.tgb_ref); } },
+        { key: 'tgb_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r.tgb_ratio; }, cell: function (r) { return ratioCell(r.tgb_ratio); } }
       ],
       filterDefs: [
         { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
