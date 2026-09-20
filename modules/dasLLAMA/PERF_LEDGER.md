@@ -1968,6 +1968,18 @@ decode call alone, so every ratio reads conservative for ours.
   1026 (0.92 -> 1.00); the flat tg128 unchanged at 324; the head-128 kernel cells bit-exact before
   and after; the batch parity arm's f16 and f32 rows within their bars on the new form. The q8_0 and
   tq4 mirrors keep the chunked pair at head 64 (the quant twin's lane mapping is its own).
+- **The NextN carriers' batched rows, plain and self-speculative (three reps, `-p 0`):** Qwen3.5-0.8B-MTP
+  Q8_0 plain tg128@4 977 ± 4 against llama.cpp's 803 ± 4 (1.22), flat 402 / 303; Qwen3.6-27B-MTP
+  Q4_K_M plain 56.3 ± 0.3 against 45.9 ± 2.1 (1.23), flat 27.6 / 25.3 - the batched step lands a
+  NextN model's logits on the GPU like any other's now (the gate that sent them to the CPU classifier
+  is gone) and carries each row's post-norm hidden as its stream's speculative carry. The
+  `--npl-mtp` arm - every stream drafting on its own chain, the four streams' eight verify rows in ONE
+  pass - reads 720 ± 11 on the 0.8B and 50.3 ± 3.6 (cv 7%) on the 27B: below the plain row on both,
+  on the bench's synthetic ids, where the drafts are accepted as often as noise and the round pays
+  four draft passes (each a NextN layer plus the 248k-row classifier) and a double-width verify for
+  them. The arm proves the joint verify at four streams; its served rate is the ruler's question
+  (sec.2.45 of the measurement doc) and the batched draft pass - the four drafts as rows of one
+  dispatch - is the lever the ledger row names [direction-grade - synthetic ids, two processes].
 - **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
   and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].

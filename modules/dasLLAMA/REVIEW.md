@@ -1,9 +1,9 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
-`ARCHITECTURE_MEASUREMENT.md` (routed checklists own the other companions). Planned work:
-`followup_general.md` (rig and instrument rows included), `followup_vulkan.md` (engine work on
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
+`ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_MEASUREMENT.md` (routed checklists own the other
+companions). Planned work: `followup_general.md` (rig and instrument rows included), `followup_vulkan.md` (engine work on
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
 

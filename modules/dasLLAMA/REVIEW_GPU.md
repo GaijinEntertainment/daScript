@@ -1,8 +1,9 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work:
-`followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
 `followup_metal.md` or `followup_vulkan.md`.
@@ -71,8 +72,8 @@ a gate that checks more than the site's own split forces never sees a shape the 
 fast path.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
-`ARCHITECTURE_GPU.md` sec.2.2b sanctions extends that section in the same change.** A class
-the section already covers as a property needs no new line.
+`ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b sanctions extends that section in the same change.**
+A class the section already covers as a property needs no new line.
 
 **Never threadgroup-stage a `matmul2d` operand whose staged form matches its stored form -
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change

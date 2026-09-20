@@ -24,9 +24,15 @@ the scheduler step whole - the sampling, the detokenization and the event list i
 the reference exe times its decode call alone, so a ratio taken between the two reads conservative
 for ours. The row's prefills and first tokens run before the clock starts, as the reference times
 PP apart, and each of its streams decodes to `plen + npl + ngen` positions - the context a driver
-sizes before it opens the row's session. The row's reference is `llama-batched-bench` beside the
+sizes before it opens the row's session, times `depth + 1` for the self-speculative arm, whose
+streams emit up to that many tokens a tick and end by length inside the timed steps on a plain
+cap. The row's reference is `llama-batched-bench` beside the
 `--ref` binary (`setup_lcpp_ref.das` builds both), `-r` runs of its `-npl N` row folded to one
-`tg128@N` test on the reference run. The rows' protocol lives in one place,
+`tg128@N` test on the reference run. The row's rate is the tokens the timed steps emitted over
+their wall, which is `npl x ngen` for plain decode; under `--npl-mtp` the streams tick through the
+self-speculative round (every stream's verify rows in one joint pass), the accepted drafts count,
+and the reference row stays plain decode - the comparison reads what a served speculative stream
+delivers against the reference's best. The rows' protocol lives in one place,
 `dasllama/dasllama_bench.das` (the synthetic ids, the warmups, the timed reps, the warmup logit
 check, the row statistic), and
 two drivers run it: `lcpp_bench` from its loop, and dasllama-server's in-process `/bench` one

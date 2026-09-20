@@ -525,10 +525,13 @@ parked after it and no call passed to the CPU chain. The forced-feed helpers it 
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
-E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier) and the deltanet
-hybrid Qwen3.5-0.8B Q8 - a rate, every timed step counted a device step by
-`batch_step_census`. Stocked suite; skips off the JIT, without dasMetal, or without the
-carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
+E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
+hybrid Qwen3.5-0.8B Q8 and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
+a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
+runs the joint-verify invariance cell: three speculative streams admitted together emit,
+token for token, what each emits alone on a one-stream speculative scheduler (the verify's
+rows forms are per row, so the joint pass and the solo pass round alike). Stocked suite; skips
+off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,

@@ -1200,7 +1200,7 @@ def private ibench_tg_token(m : Model; si : int) {
 //! one batched rep per tick: the streams' prefills and 128 batched steps, a second or so on a small model;
 //! a refused rep omits the batched row and the flat rows already measured stand as the result
 def private ibench_batched_rep(m : Model) {
-    let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep))
+    let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep), g_slots[g_ibench_slot].sched.mtp)   //! a slot serving self-speculative streams benches them as it serves them
     if (!empty(br.why)) {
         ibench_log("REFUSED (tg{BENCH_TG_TOKENS}@{g_ibench_npl}): {br.why} - the batched row is omitted")
         g_ibench_npl = 0l

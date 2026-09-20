@@ -26,6 +26,16 @@ def public batch_step_census() : tuple<device : int64; cpu_stack : int64; per_ro
     return (device = g_batch_steps_device, cpu_stack = g_batch_steps_cpu_stack, per_row = g_batch_steps_per_row)
 }
 
+//! a batched step served outside `eval_batch_` joins the census: the scheduler's joint speculative
+//! verify counts as a device step when every stream's rows rode it, as per-row otherwise
+def public note_batch_step(device : bool) {
+    if (device) {
+        g_batch_steps_device++
+    } else {
+        g_batch_steps_per_row++
+    }
+}
+
 //! every row through the single-row forward: the batched drivers have no form for this step
 def private batch_rows_one_at_a_time(t : Model; var sessions : array<Session?>; tokens : array<int64>; nrows : int64) {
     g_batch_steps_per_row++

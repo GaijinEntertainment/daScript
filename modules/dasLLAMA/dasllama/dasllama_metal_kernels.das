@@ -1108,7 +1108,7 @@ class template MetalArgmaxT {
     @workgroup redi : uint[32]
     @template_constant PER_ROW : bool = false
 
-    [arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
+    [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain")]
     def argmax_row {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
@@ -3766,7 +3766,7 @@ def enc_gemv_sg(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx
     enc_gemv_sg_c(enc, bw, boff, bw, bx, xoff, by, yoff, bn, bd, d)
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-layer-enc")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc")]
 def enc_q8_site_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, by, bn, bd : MetalBuffer?; d, n : int64; yoff : uint64 = 0ul) {
     if (n <= GEMV_SG_MAX_N) {
         enc_gemv_sg(enc, bw, boff, bx, by, bn, bd, d, yoff)
@@ -4002,7 +4002,7 @@ var private g_kq_k4_r2_crowned : bool
 
 //! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; an unpadded
 //! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight
-[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
                   bn, bd, bys : MetalBuffer?; nrows, mp : int64) {
@@ -4036,7 +4036,7 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
                         bx, by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n, ystride, nlive : int64) {
     var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = 2u)
@@ -4273,7 +4273,7 @@ def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; live : int64
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#verify-row-pad")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
     enc_rows_tiles(nrows, n, ys) $(four; _live; xo, yo) {

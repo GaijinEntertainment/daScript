@@ -410,7 +410,7 @@ buffer already queued, the blocking `waitUntilCompleted` returning about a step 
 that locks per process and that the M5 never enters; the bench process pays it on every
 unchained step too (IQ2_XXS 235.7 against 256.5 t/s). A spin on the command buffer's GPU end
 time removes it (5.66 ms per token, three runs alike; the M5 unchanged), shipped on by default
-as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP.md` 2.38): decode 0.94 -> 1.03 (0.5B),
+as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.94 -> 1.03 (0.5B),
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
@@ -672,3 +672,17 @@ lowers a fixed-array parameter to `thread T*` when every argument at every call 
 thread-local (the cheaper path, and a lens diagnostic at the call site for the mixed case), or
 the two shells merge into one template on a `B8` axis with the panel gated, so a format class
 becomes the ancestor of both its stamps. ~200 lines behind either.
+
+## 21. The joint speculative tick drafts one stream at a time
+
+`metal_mtp_spec_rounds` (`dasllama/dasllama_metal_decode.das`) verifies every stream's rows in
+one pass but drafts per stream: each warm stream runs its own NextN chain - the draft layer and
+the classifier over the whole vocabulary - as a command buffer of its own before the joint
+verify, so a four-stream tick pays four draft passes where the verify paid one. On Qwen3.6-27B
+the classifier plane alone is most of a draft, and the `--npl-mtp` bench row reads below the
+plain batched row on both NextN carriers (`PERF_LEDGER.md`, the Metal batched-decode arc). The
+work: the drafts as rows of one dispatch - the streams' carry hiddens as a rows form through the
+draft layer (the same `rows_tier` shapes the verify uses), one classifier pass over N rows, the
+argmax per row - landing per group into the same `MtpVerifyGroup` slots the per-stream draft
+fills today. The single-stream round keeps its chain; the multi-draft chain (depth above one)
+becomes k rows-form steps, each seeded by the previous step's per-row argmax.

@@ -104,8 +104,10 @@ modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace — both binaries (static rows derive from it)
   CMakeLists.txt              # ADD_MODULE_DAS_FROM_DESCRIPTOR + install rules
   ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
-  ARCHITECTURE_ENGINE.md      # companion: the engine, format, load, CPU-tier, support and serving charters
-  ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries, the refuted kernel shapes
+  ARCHITECTURE_ENGINE.md      # companion: the engine, arch-registration, support and serving charters
+  ARCHITECTURE_ENGINE_FORMATS.md # companion: the format, load-rail and CPU-kernel-tier charters
+  ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries
+  ARCHITECTURE_GPU_RACE_SHAPES.md # companion: the refuted kernel shapes and the sanctioned float-A stamps
   ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver's GEMM ladder
   ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, Q8 requant store, GEMV grid codebooks
   ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tiles - cm2 decode lanes, tile pick, class pipelines, expert chain, the KHR kq tile

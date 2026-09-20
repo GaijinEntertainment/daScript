@@ -22,8 +22,10 @@ section runs to, and the sections that companion holds.
 
 When placement charters disagree on one function, the sec.1 charter line decides.
 
-- `ARCHITECTURE_ENGINE.md` - sec.1.1-1.4, 1.6, 1.8, 1.9: the engine, format, load, CPU-tier,
-  arch-registration, support and serving charters.
+- `ARCHITECTURE_ENGINE.md` - sec.1.1, 1.6, 1.8, 1.9: the engine, arch-registration, support and
+  serving charters.
+- `ARCHITECTURE_ENGINE_FORMATS.md` - sec.1.2-1.4: the format, load-rail and CPU-kernel-tier
+  charters.
 - `ARCHITECTURE_GPU.md` - sec.1.5: the GPU backend role table and the backend asymmetries.
 - `ARCHITECTURE_MEDIA.md` - sec.1.7, 1.7b: the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - sec.1.7c: the text-to-speech charters - the front end, the block home,
@@ -42,7 +44,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1n: the prepared-image rail, the baked dev-W f16 plane,
   the baked tower twin-W plane, the layout stamp `REVIEW.das` keeps over the byte-placing code,
   the meta-field tripwire every struct serializer opens with, and the planar-vs-blob flavor rebake.
-- `ARCHITECTURE_GPU.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that measured out.
+- `ARCHITECTURE_GPU_RACE_SHAPES.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that
+  measured out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the tower attention routes, and the tower driver's
   encode chains.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - sec.2.2y-2.2z, 2.2an: the Metal kq split scale plane, the
@@ -75,9 +78,12 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - sec.2.2af, 2.2ag, 2.2ak: the resident driver's routed block in its
   two eras - the MoE block of the prefill window, and the whole-model driver's MoE token
   command - and the gemma-4 form both eras take.
-- `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39a: the Metal speculative round over the batch driver's
-  same-slab verify, the box knob that sets the depth a round drafts, the kernel
-  argument-alignment contract enforced at every dispatch, and the decode layer encoder.
+- `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.29, 2.33-2.37a, 2.39: the Metal speculative round over
+  the batch driver's same-slab verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_MTP_DECODE.md` - sec.2.30-2.32, 2.38, 2.39a: the kernel argument-alignment
+  contract enforced at every dispatch, the K-quant small-batch crown and the row-buffer pad a
+  multi-row verify dispatches under, the single-row driver's greedy chain, and the decode layer
+  encoder.
 - `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19, 2.44, 2.44a:
   kernel shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, the
   MoE region split, the job queue the engine dispatches on, and the mode that dispatches to none.

@@ -1,9 +1,10 @@
-# dasLLAMA Architecture - GPU backends and refuted kernel shapes
+# dasLLAMA Architecture - GPU backends
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's. This document carries
-sections 1.5 and 2.2b: the GPU backend role table with its closed asymmetry lists, and the
-tensor-GEMM and fused-attention shapes that measured out. The Metal tower's attention routes and
-its encode chains are `ARCHITECTURE_GPU_TOWER.md` sections 2.2w-2.2x.
+section 1.5: the GPU backend role table with its closed asymmetry lists.
+`ARCHITECTURE_GPU_RACE_SHAPES.md` beside it carries section 2.2b - the tensor-GEMM and
+fused-attention shapes that measured out. The Metal tower's attention routes and its encode
+chains are `ARCHITECTURE_GPU_TOWER.md` sections 2.2w-2.2x.
 
 ### 1.5 GPU backends {#gpu-backends}
 
@@ -174,8 +175,9 @@ in prefill) and the tuner calls those public entries.
 **Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
 decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
-Sections 2.28-2.39a - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
-contract, the verify, drafter and batch-driver mechanics, and the decode layer encoder - are `ARCHITECTURE_GPU_MTP.md`.
+Sections 2.28-2.29, 2.33-2.37a and 2.39 - the Metal speculative round, the depth a round drafts, and
+the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; sections 2.30-2.32,
+2.38 and 2.39a - the decode driver's kernel forms and layer encoder - are `ARCHITECTURE_GPU_MTP_DECODE.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
@@ -253,59 +255,14 @@ contract, the verify, drafter and batch-driver mechanics, and the decode layer e
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 
-### 2.2b Tensor-GEMM shapes that measured out (M5, interleaved-race evidence)
-
-The forms below were built, raced against the crowned tg-staged q8u GEMM at real model
-shapes, and LOST; the probe that holds the GEMM numbers is
-`benchmarks/matmul/bench_metal_nax_probe.das`, and the fused-attention numbers live in
-`benchmarks/attn/bench_metal_pf_fused_attn.das`. Re-attempting one without new structure is
-re-buying a measured loss.
-
-The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
-form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
-reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
-sync duty is `REVIEW_GPU_RACE.md`'s. The attention lab keeps the same class of retained references:
-its PORT/PORTH/PORTC arms and `benchmarks/attn/lcpp_flash_dk72.metal` are the oracle-exact
-external reference the shipped `MetalTowerFlash` was decided against, and the DIAL arm races
-the production dialect against them - the bisect seat when the flash regresses.
-
-- **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
-  1.7-2.0x slower for weight GEMMs, vectorized loads and deep n-blocking included. The
-  fragment architecture pays for attention's streaming operand reuse (one resident Q against
-  a K/V walk), not for a GEMM's operand traffic - cooperative tg staging wins there.
-- **Mixed-integer matmul2d operands (float x int8, and the i8 x i8 per-block-fold form):**
-  3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
-  fast path. W8A8 claims from other stacks do not transfer through MPP.
-- **Matrix forms for the K-quant small-batch GEMV (2-8 verify columns), against the
-  four-column twin:** the simdgroup 8x8 multiply-accumulate runs at plain FMA rate on this GPU
-  (its tile loop is 65% of the kernel; without it the dequant-to-half stage alone is 1.5x a
-  single pass), so it buys 20-25% per column; the Metal-4 tensor op at an m = 8 tile is nearly
-  free per column but the dequant stage is the cost - 3.4x a single pass for eight columns where
-  the twin does four at 2.7x. Neither moves 3-4 rows; the tensor form beats the eight-column twin
-  by 40% at 5-8 rows. Arms `k4_mm8*`, `k4_tmm*`, `k4_tmv8*` in `benchmarks/matmul/bench_metal_gemv_kernels.das`
-  (the `_depths` ruler records say no depth reaches those rows).
-
-**Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
-every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
-(below the convert row floor, panel does not fit, half-X pinned off) - the
-batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
-item, and the double-buffered `*Db` staging stamps (`MetalQ8MulMmTensorT`'s `BK = 128` stamps,
-`MetalKqMulMmK45DbT`, `MetalKqMulMmK6DbT`), which pin `XT = float16` today - there the flag is scaffolding a future
-float stamp would need, not a live float operand - and the verify-width lab template
-`MetalKqLabK4Tmv8T` in the GEMV lab, whose A operand is the decode driver's f32 x panel.
-- **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
-  the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
-  Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.
-
-The positive laws these races established - half operands, stage-only-to-transform, consecutive staging
-runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the `modules/dasMetal/REVIEW.das` descriptor
-gate; this section keeps only the refuted shapes and why they lose.
-
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
 `ARCHITECTURE_GPU_VULKAN_ATTN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
 `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o and 2.2an-2.2ao in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
+
+Section 2.2b, the tensor-GEMM and fused-attention shapes that measured out, is
+`ARCHITECTURE_GPU_RACE_SHAPES.md`.
 
 Sections 2.2w-2.2x, the tower attention routes and the tower driver's encode chains, are
 `ARCHITECTURE_GPU_TOWER.md`.

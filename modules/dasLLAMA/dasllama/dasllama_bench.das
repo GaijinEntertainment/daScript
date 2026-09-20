@@ -162,13 +162,14 @@ def private all_streams_decoding(sch : Scheduler; npl : int64) : bool {
 //! one timed batched tg rep in the served shape - what the batched reference exe's parallel row reads at that PL:
 //! `npl` streams through the scheduler over distinct `plen`-token prompts - device-home where a whole-model
 //! driver homes that many, host-cached otherwise - prefilled untimed, then `ngen` batched steps timed, the rate
-//! `npl x ngen` over their wall. `why` names a refusal and the rate then reads 0: a whole-model driver homes
+//! the tokens those steps emitted over their wall (`npl x ngen` for plain decode; a self-speculative stream, `mtp`,
+//! emits its accepted drafts too). `why` names a refusal and the rate then reads 0: a whole-model driver homes
 //! fewer streams than `npl` (the region count is asked before the load), the streams never all reached decode
 //! within `npl x 8` steps, a stream that ended inside the timed steps, a timed step that ran its rows one at a
 //! time, a timed step a device-served model ran on the CPU batched stack, or a call the driver handed to the CPU
 //! chain. Every path past `submit` parks the streams' regions for the next rep, a refusal included
 [cold_path, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tuple<tps : double; why : string> {
+def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false) : tuple<tps : double; why : string> {
     let homes = gpu_device_sessions()
     if (homes > 0l && homes < npl) {
         return (tps = 0.0lf, why = "the device homes {homes} stream(s), the row asks {npl}")
@@ -176,13 +177,14 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tupl
     let device_home = homes >= npl
     let device_served = device_home || batch_decode_override_armed()
     let passes0 = cpu_pass_total()
-    var sch <- create_scheduler(t, npl, npl, plen)   //! a prompt is one prefill quantum
+    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, KVDtype.f16, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify
     if (device_home) {
         verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
     }
     var events : array<SchedEvent>
     for (i in range64(npl)) {
-        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = ngen + npl + 8l)
+        //! a self-speculative stream may emit depth + 1 tokens a tick, so its budget covers the timed ticks that many times over
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = (ngen + npl + 8l) * (mtp ? get_mtp_depth() + 1l : 1l))
         verify(submit(t, sch, req), "bench_tg_batched_rep: the queue holds the row's streams")
     }
     var why = ""
@@ -197,18 +199,21 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tupl
         steps++
     }
     var ns = 0l
+    var served = 0l
     var per_row = 0l
     var cpu_stack = 0l
     if (empty(why)) {
         scheduler_step(t, sch, events)   //! the untimed warm step: the batched command's first record
         delete events
         let census0 = batch_step_census()
+        let gen0 = sch.gen_tokens
         let t0 = ref_time_ticks()
         for (_i in range64(ngen)) {
             scheduler_step(t, sch, events)
             delete events
         }
         ns = get_time_nsec(t0)
+        served = sch.gen_tokens - gen0   //! the tokens the timed ticks emitted: npl x ngen for plain decode, more where speculative ticks accepted drafts
         let census1 = batch_step_census()
         per_row = census1.per_row - census0.per_row
         cpu_stack = census1.cpu_stack - census0.cpu_stack
@@ -234,5 +239,5 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tupl
     if (empty(why) && passed > 0l) {
         why = "{passed} call(s) passed to the CPU chain inside the row"
     }
-    return (tps = empty(why) ? double(npl * ngen) * 1.0e9lf / double(ns) : 0.0lf, why = why)
+    return (tps = empty(why) ? double(served) * 1.0e9lf / double(ns) : 0.0lf, why = why)
 }

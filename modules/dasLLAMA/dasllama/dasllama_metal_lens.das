@@ -62,7 +62,7 @@ def public metal_requires_failed(msg : string) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-dispatch-requires")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-dispatch-requires")]
 def private mk_requires_check(at : LineInfo; fn_name, lhs : string; n : int) : ExpressionPtr {
     let parts <- split(lhs, ".")
     var v : Expression? = new ExprVar(at = at, name := strip(parts[0]))

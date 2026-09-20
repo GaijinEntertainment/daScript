@@ -1,7 +1,8 @@
 # dasLLAMA Placement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
+`ARCHITECTURE_MEDIA.md`.
 Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with

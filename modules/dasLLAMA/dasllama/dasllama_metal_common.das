@@ -1897,6 +1897,21 @@ def private land_sameslab_rows(lgp : uint8?) {
     }
 }
 
+//! A plain step's row on a NextN-headed (or carry-armed) model: its post-norm hidden lands in the
+//! session's `mtp_h` so the stream's next speculative round starts warm; a same-slab verify lands
+//! its rows into `mtp_hrows` instead.
+def private land_row_carry(var s : Session; i, pos : int64) {
+    return if (g_lp_bxf == null || g_lp_sameslab)
+    let hb = g_lp_bxf_bytes / g_lp_nrows
+    if (long_length(s.mtp_h) * 4l < hb) {
+        s.mtp_h |> reserve_resize(hb / 4l)   // nolint:PERF026,LINT019 — once per session on a NextN-headed model; the hot-path walk fires from the drivers' compiles
+    }
+    unsafe {
+        memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(g_lp_bxf)) + i * hb), hb)
+    }
+    s.mtp_h_pos1 = pos + 1l
+}
+
 def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error/stats/release/readback share the step's locals
     if (!g_lp_active) {
         return
@@ -1954,6 +1969,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                     memcpy(addr < void? >(sp.logits[0]),
                         reinterpret<void?>(lgp + i * g_lp_vocab * 4l), g_lp_vocab * 4l)
                 }
+                land_row_carry(*sp, i, pos)
                 if (key_exists(g_mirrors, sp.uid)) {   // never regress the optimistic commit-time mark
                     let wm0 = g_mirrors[sp.uid].watermark
                     g_mirrors[sp.uid].watermark = max(wm0, pos + 1l)
