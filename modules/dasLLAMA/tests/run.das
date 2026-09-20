@@ -375,7 +375,7 @@ def areas_for_path(path : string) : array<string> {
                 return <- ["tts"]
             } elif (name == "_vision_oracle.das") {
                 return <- ["vision"]
-            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das") {
+            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
                 return <- ["llm"]
             }
             return <- clone_to_move(AREAS)

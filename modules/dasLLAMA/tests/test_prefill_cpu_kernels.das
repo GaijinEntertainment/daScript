@@ -11,6 +11,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
+require _kq_dot   // dot_kq on the run-time format
 require daslib/f16_cvt
 require math
 

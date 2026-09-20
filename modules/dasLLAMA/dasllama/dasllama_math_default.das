@@ -833,16 +833,6 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
     return 0.0
 }
 
-//! The runtime pick of the tag family: one row's dot for a format decided at run time (the
-//! test gates and the one-row callers); the stamp binds the tag, the kernels never pay it.
-def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; fmt : KqFmt) : float {
-    var r = 0.0
-    kq_fmt_stamp(fmt) $(F) {
-        r = dot_kq(kqrow, ksrow, xqp, xsp, xbsp, n, F)
-    }
-    return r
-}
-
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
 //! dot of row i, the row strides off the descriptor. Generic in the tag so a caller's partition
 //! instantiates its own copy; the gen tier's row tails and the fused chains thread it.

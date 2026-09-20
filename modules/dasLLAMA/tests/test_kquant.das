@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_gemm_schema   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
 require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane gather oracle
 require _model_tier
+require _kq_dot   // dot_kq on the run-time format — the reference the kernel gates hold to
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
 require dasllama/dasllama_convert

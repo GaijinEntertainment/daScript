@@ -132,7 +132,10 @@ by hand:
 - `dot_kq(kqrow, ksrow, xqp, xsp, xbsp, n; _f : KqTag_<fmt>)` - the portable disk-order row
   dot (exact integer inner sums, one float fold per superblock); the rows walk (`kq_rows_kernel`),
   the `kq_gemv_kernel` and `matmul_kq_groupn` arms and the gen tier's row tails come from the
-  stamp, and the enum overload `dot_kq(..., fmt : KqFmt)` is the runtime pick the tests drive. A
+  stamp. The enum overload `dot_kq(..., fmt : KqFmt)` the gates drive lives in the test fixture
+  `tests/_kq_dot.das`, never in `dasllama_math_default`: a stamp there adds sixteen call sites
+  to the dots in their own JIT partition and the inliner codegens the portable k4/k5 GEMV 10%
+  slower on x64. A
   kernel that can run on a forked worker takes its table as a per-call local or a pointer
   argument, never a module global: the fused chains invoke the rows cores inside job contexts,
   where a `let` global reads zero, so a codebook format's rows come out zero on every worker row
