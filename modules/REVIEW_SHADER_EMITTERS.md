@@ -60,17 +60,11 @@ emitter compiles, where that emitter does not handle it, ships, in the same chan
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
 
-**A global-rooted-array read a diff adds, makes happen at an index it did not reach before, or
-makes happen on a dispatch it did not happen on before, is in range on every dispatch it happens
-on, or the `ARCHITECTURE*.md` at the root of the module the kernel ships in names slack - an
-allocation past the in-range end a read may land in - past that range and the read stays inside
-it.** A global-rooted array is a module global, a
-`@workgroup` array, or a `self.<member>` resource, read in a `[spirv_kernel]`,
-`[compute_shader]` or `[metal_kernel]` body or in any `def` that body calls; a diff makes that
-read happen on a dispatch it did not happen on before when it drops the condition that kept the
-read inside the region this dispatch's own bound defines - a read in both arms of an `if`, a
-clamp landing outside that region, a bare read - or loads a fixed-size block whose only guard is
-on its store.
+**A global-rooted-array read - a module global, a `@workgroup` array or a `self.<member>`
+resource read in a kernel body - that a diff adds, makes happen at an index it did not reach
+before, or makes happen on a dispatch it did not happen on before, is in range on every dispatch
+it happens on, or lands inside slack the kernel's module names.** What makes a read new, what
+in range means and what slack is: `dasSpirv/ARCHITECTURE.md` sec.3.9, for both emitters.
 
 **A diff that removes a compile-time gate (`static_if`, `@template_gate`) keeping a
 global-rooted-array read out of a compiled `[spirv_kernel]`, `[compute_shader]` or

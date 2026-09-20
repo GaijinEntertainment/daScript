@@ -17,6 +17,19 @@ bound buffer holds, threadgroup memory, a staging shape, the grid or threadgroup
 kernel class's branch selection or the precision it computes a step at, applies the `tests/`
 subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that dispatch or bind the class.**
 
+**A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
+layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
+into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
+deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
+by an ordered setter list and every retained-reference arm of that kernel.** An arm left
+dispatching stale geometry measures the wrong kernel silently.
+
+**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
+timing arm that carries that body as a hand-written twin, and every retained-reference arm of
+that kernel; a diff that routes a shape to a sibling stamp resyncs, in the same change, the arms
+that dispatch the old stamp at that shape.** An arm timing a body the shipped kernel no longer
+runs at that shape measures the wrong kernel silently.
+
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
 from (`dasllama/dasllama_metal_lens.das`), the Metal ASR decoder

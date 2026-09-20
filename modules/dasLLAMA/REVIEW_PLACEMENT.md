@@ -124,7 +124,3 @@ never fires for a consumer of the `dasllama/dasllama.das` facade.
 **Platform-specific code - a device call, a `require` of a backend module, or a read of a
 backend's own state other than its `g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only
 in that platform's backend file.**
-
-**A diff that adds to `dasllama/dasllama_common.das` a module global (`let` or `var`, private or
-not) whose concern the file's charter line in `ARCHITECTURE_ENGINE.md` sec.1 does not name is a
-defect - give the concern its own file, or extend the charter line in the same change.**

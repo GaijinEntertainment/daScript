@@ -7,20 +7,25 @@ for Metal, `followup_vulkan.md` for Vulkan.
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
+Two kernel classes are twins when one body serves both: their compiled bodies differ only on an
+axis one value fixes - a template constant, a typedef, which base shell's method they inherit, or
+a run-time count of live entries inside a fixed extent (a column count, a row count). A base
+shell is the dispatch-less base class whose methods the emitter splices flat into each deriving
+class.
+
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
-twin ignores that field.** Two kernel classes are twins when one body serves both - their
-compiled bodies differ only on an axis one value fixes: a template constant, a typedef, which
-base shell's method they inherit, or a run-time count of live entries inside a fixed extent (a
-column count, a row count); a base shell is the dispatch-less base class whose methods the
-emitter splices flat into each deriving class.
+twin ignores that field.**
 
-**A kernel class whose body differs from a sibling's only on such an axis - a copy-pasted twin, a
-hand instance where a `static_if` on a `@template_constant` serves, a class forked out of a shared
-template, or a new class whose body reproduces an existing class's with a run-time count as its
-one axis - is a defect: twins stamp one `class template` or derive from one base shell.** Body
-divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
-emission.
+**A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
+stamp one `class template` or derive from one base shell.** Body divergence is carried by a
+`@template_constant`, or by an overridden method spliced flat at emission.
+
+**Two kernel classes a cell or a regions file holds bit for bit against each other spell every
+multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
+per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
+ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
+definition and leaves the driver nothing to choose.
 
 **A stamp - one instance of a class template, or one class deriving from a base shell - sets
 only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a

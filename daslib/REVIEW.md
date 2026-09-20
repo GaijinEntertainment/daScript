@@ -8,7 +8,9 @@ diff that changes compile-time AST-building code - a class deriving an `Ast*Anno
 `Ast*Macro`, or `AstVisitor`, a `[macro_function]`, or any function that calls `qmacro*`,
 `apply_template`, `macro_error`, or `macro_sticky_error` - applies `REVIEW_MACROS.md` too. A
 diff touching `daspkg.das` - the functions a `.das_package` manifest body calls - applies
-`utils/daspkg/REVIEW.md` (repo root) too; the folder walk never opens it for a `daslib/` diff.
+`utils/daspkg/REVIEW.md` (repo root) too; the folder walk never opens it for a `daslib/` diff. A
+diff touching `shader_lingua_franca.das` - the declarations both shader emitters compile -
+applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too, for the same reason.
 
 **A diff that changes the body of `perf_warning` (`perf_lint.das`), `style_warning`
 (`style_lint.das`), or `lint_error` (`lint.das`) runs the suppression check before the body

@@ -67,8 +67,9 @@ execute) the prose carrying the lesson passes that test, and a comment that adds
 to its line still goes.
 
 **A `//!` has two homes. Where one attaches - the file's header block, anywhere inside a `def`
-body, anywhere in a `struct` / `class` body outside its methods (it lands on the struct), or
-trailing on a struct field - it is a doc and lands in the generated reference. Above a
+body, anywhere in a `struct` / `class` body outside its methods (it lands on the struct),
+trailing on a struct field, or trailing on a global's declaration line (it lands on that
+variable's entry) - it is a doc and lands in the generated reference. Above a
 top-level `def` or a global it attaches to nothing and is the SITE CONTRACT spelling: one line
 (a private one caps at three under STYLE015) stating a constraint the site needs and the code
 cannot say - a bar's derivation, a guard's reason, a layout a caller relies on - which the

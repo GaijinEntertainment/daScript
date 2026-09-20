@@ -143,10 +143,10 @@ Three behavioral layers + enforcement gates:
 
 ## 5. Cross-backend parity - the kernel-model asymmetry ledger
 
-`modules/REVIEW_SHADER_EMITTERS.md` requires a diff that adds a kernel-model capability to one
-emitter to add it to the other or record the asymmetry here - one ledger for both backends. The
-primary correctness oracle is the CPU-reference run of the same das body - cheaper and stricter
-than a second GPU. Cross-GPU parity of one source is secondary. Current entries:
+This ledger holds every kernel-model capability one emitter has and the other lacks, for both
+backends; `modules/REVIEW_SHADER_EMITTERS.md` routes a diff here. The primary correctness oracle
+is the CPU-reference run of the same das body - cheaper and stricter than a second GPU.
+Cross-GPU parity of one source is secondary. Current entries:
 
 - **`family=` surface sharing is Vulkan-only.** Both emitters accept N kernel methods per class
   with `kernel=` picking per instance (the sibling fixtures are

@@ -1,13 +1,17 @@
 # Modules Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: none at this root - each module's own `ARCHITECTURE*.md`.
 
-**A diff to a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation whose name
-ends `_shader` and comes from `dasSpirv`, `dasVulkan` or `dasMetal`; to any `def` such a
-function reaches directly or through another; or to a class whose own or inherited method carries
-`[metal_kernel]` or `[spirv_kernel]`, or to a class such a class inherits from, member
-declarations included, or to a struct a `@push_constant` member of either class names - applies
-`REVIEW_SHADER_EMITTERS.md` (beside this file) together with its own folder's checklist.**
+**A diff touching any of the following applies `REVIEW_SHADER_EMITTERS.md` (beside this file)
+together with its own folder's checklist:**
+- a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation whose name ends
+  `_shader` and comes from `dasSpirv`, `dasVulkan` or `dasMetal`;
+- any `def` such a function reaches, directly or through another;
+- a class whose own or inherited method carries `[metal_kernel]` or `[spirv_kernel]`, member
+  declarations included;
+- a class such a class inherits from, member declarations included;
+- a struct a `@push_constant` member of either class names.
 
 **In its own `initDependencies`, a C++ module calls `Module::require("<name>")` for every in-tree
 module its CMake target links, and calls `initDependencies()` on each module that call returns -
