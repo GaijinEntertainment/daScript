@@ -940,7 +940,11 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the doc.yml gates in CI order; splitting hides the sequence
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
-    let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das"])
+    let r1 = (empty(ctx.build_dir)
+        ? run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das",
+            "--", "--digest", unique_temp_path("everything", ".md")])
+        : run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
+            "--target", "check_docs_generated"]))
     if (r1.rc != 0 && find(r1.out, "missing prerequisite") >= 0) {
         docs_skip_all("daslang lacks HV/PUGIXML — rebuild with -DDAS_HV_DISABLED=OFF -DDAS_PUGIXML_DISABLED=OFF", results)
         return
@@ -953,6 +957,19 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
             ? "documentation compile entered llvm_tune — keep -documentation/is_building_documentation wired"
             : "handmade-doc validation panic — fix and re-run; CI stops at the FIRST panic, more may follow")),
         output = r1.out))
+
+    // gate 1a: the shipped digest matches what the generator just wrote
+    if (!empty(ctx.build_dir)) {
+        t0 = ref_time_ticks()
+        let built = fread(path_join(ctx.build_dir, "doc/everything.md"))
+        let tracked = fread("skills/daslang/references/everything.md")
+        let digest_ok = !empty(built) && built == tracked
+        results |> emplace(GateResult(name = "docs/digest", status = digest_ok ? GateStatus.Pass : GateStatus.Fail,
+            seconds = seconds_since(t0),
+            detail = digest_ok ? "" : (empty(built)
+                ? "{ctx.build_dir}/doc/everything.md missing — check_docs_generated wrote no digest"
+                : "the shipped digest is stale — cmake --build {ctx.build_dir} --target regen_docs_digest")))
+    }
 
     // gate 1b: imgui2rst — dasImgui's stdlib pages (doc.yml runs it right after
     // das2rst; without them sphinx -W fails on the generated imgui toctree refs)
