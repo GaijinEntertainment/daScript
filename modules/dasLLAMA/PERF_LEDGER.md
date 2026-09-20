@@ -2285,11 +2285,18 @@ the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
   blocked / classic:** M5 **1.052**, zen4 0.996. The blocked
   form's K/V reuse across an 8-query block buys nothing the score-row reuse of the classic form
   does not, so the blocked arm goes and the tests' bit-exact mode is classic.
-- **The tokenizer folds (`lcpp_bench --tok`, prose, 1 KB to 64 KB), MB/s before -> after on
-  the M5:** Qwen3-0.6B BPE 12.1 -> 16.6 at every size (the encode walk appends each codepoint's
-  bytes into one reused buffer instead of building a string per codepoint); gemma-3-1b SPM
-  24.0 -> 22.8 at 1 KB and 5.85 -> 5.76 at 64 KB with the shared merge heap's priority a
-  double, cv under 1% both readings, the ladder's shape unchanged; the float priority the arc
-  ships (the BPE rank is exact in a float below 2^24) read 22.4 -> 22.7 and 5.74 -> 5.80 in its
-  own interleaved round against the double form - a separate process pair, so the two rounds'
-  absolute readings do not chain.
+- **The BPE encode walk (`lcpp_bench --tok`, every corpus, 1 KB to 1 MB), MB/s master -> arc,
+  best of two interleaved rounds:** the walk appends each codepoint's bytes into one reused
+  buffer instead of building a string per codepoint. M5, Qwen3-0.6B: prose 12.1 -> 16.6, code
+  11.5 -> 15.6, cjk 13.5 -> 16.9 (1.15 to 1.38 at every size); zen4, Qwen3-30B-A3B (the same
+  qwen2 pretokenizer): prose 7.9 -> 12.6, code 7.8 -> 12.0, cjk 10.9 -> 13.9, digits 5.5 -> 7.3,
+  longword 7.0 -> 9.7 (1.13 to 1.58). cv under 2% on every row but the 4 KB ones (8%).
+- **One merge heap for both tokenizer backends - DECLINED, measured:** SPM's own heap
+  (`spm_merge_heap`) and BPE's are the same forty lines, and the fold read gemma-3-1b SPM
+  encode on the M5 24.0 -> 22.8 at 1 KB (prose, cv under 1%), 16.1 -> 13.7 at 4 KB code, parity
+  from 64 KB up; on the zen4 gemma-4-E2B read 0.81 to 0.98 of master on every corpus and size
+  (prose 7.6 -> 6.6 at 4 KB, cjk 28.8 -> 23.3 at 1 MB). A float priority in place of a double
+  took back one to two points; stamping the merge as a generic per backend with the push/pop
+  helpers left in `dasllama_bpe.das` took the M5's 1 KB row to 0.98 and left 4 to 16 KB at 0.93
+  to 0.96. The SPM heap stays its own body, in the partition of the encode that runs it
+  (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2a); the BPE side keeps the unshared form.

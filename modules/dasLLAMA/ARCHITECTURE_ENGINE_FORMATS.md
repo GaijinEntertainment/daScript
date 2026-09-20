@@ -61,7 +61,7 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
-  share the merge heap of sec.1.2a and nothing else; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
+  share no state (their twin merge heaps are sec.1.2a's); a third merge algorithm gets a fourth file. Two sanctioned family-name tests
   live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
   gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
   metadata defaults are the third and last. A GGUF without `tokenizer.ggml.add_bos_token` takes
@@ -77,9 +77,9 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
   pinned by frozen ids in `test_parity.das` only.
 
-### 1.2a The bigram merge heap is one body for both tokenizer backends {#bpe-merge-heap}
+### 1.2a The two tokenizer backends carry twin merge heaps {#bpe-merge-heap}
 
-`bigram_merge_heap` (`dasllama_bpe.das`) merges a whole symbol run for BPE and for SPM alike: a max-heap over candidate pairs, O(n log n) where the sequential rescan it replaces is O(n^2). BPE passes an empty `scores` and the priority is the negated merge rank (lowest rank first); SPM passes its piece scores and the priority is the score. An entry whose endpoint merged since it was pushed fails the adjacency+id guard and is skipped, so the ids the heap produces are the rescan's exactly; `-2` dead slots compact out and SPM's `-1` survives.
+`bigram_merge_heap` (`dasllama_bpe.das`) and `spm_merge_heap` (`dasllama_spm.das`) each merge a whole symbol run through a max-heap over candidate pairs, O(n log n) where the sequential rescan is O(n^2): BPE's priority is the negated merge rank (lowest rank first), SPM's the piece score; an entry whose endpoint merged since it was pushed fails the adjacency+id guard and is skipped, so the ids are the rescan's exactly, `-2` dead slots compact out and SPM's `-1` survives. The two bodies stay twins on a measurement: served from `dasllama_bpe.das`'s JIT partition - as one function, and as a generic stamped per backend with its helpers left in that module - SPM encode read 5% to 19% slower than its own copy; each heap lives in the partition of the encode that runs it.
 
 ### 1.2b The RoPE table builders are one fill over a position source {#rope-one-fill}
 

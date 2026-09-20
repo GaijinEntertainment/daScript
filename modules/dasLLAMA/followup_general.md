@@ -1766,3 +1766,9 @@
     admit natively is an if-ladder over the enum where every other lookup walks `kq_desc`. Done
     looks like: a native-knob predicate column on the descriptor row and the one site reading it
     (the device gather's grouped-row branch is `followup_vulkan.md`'s row 82).
+162. **The kq batch gates hold kernels to a kernel.** `tests/test_prefill_cpu_kernels.das`'s
+    `kq_batch_gate` and `tests/test_tts_blocks.das`'s kq rows hold `matmul_kq` / `matmul_kq_batch`
+    to the per-row `dot_kq` of `tests/_kq_dot.das`, and `dot_kq`'s own plain-code oracle sits in
+    `tests/test_kquant.das` - a different file, where `tests/REVIEW_KERNEL_CELLS.md` wants it in
+    the cell or its file. Done looks like: an fp64 dequant-and-dot reference beside each gate, at
+    the gate's shapes, so a kernel and its router can no longer be bit-equal and both wrong.

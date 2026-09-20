@@ -31,10 +31,10 @@ say how far and where, not only how many.
 their output - missing a compare against a CPU oracle in the cell itself is a defect; where the
 cell compares two kernel forms against each other, the oracle compare targets one of those two
 forms, in that cell or in a cell of the same file that dispatches that form at the same shapes.**
-A kernel class is a `[metal_dispatch]` or `[vk_dispatch]` class - the CPU kernel leaves under
-`dasllama_math*` answer to `REVIEW.md`'s rules, not to this list. A cell is a `t |> run` block, or
-a helper that asserts on `t`; a CPU oracle is the same computation written in plain code and run
-on the CPU. Two forms can be bit-equal and both wrong.
+A kernel class is a `[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in
+`../dasllama/dasllama_math*.das`. A cell is a `t |> run` block, or a helper that asserts on `t`; a
+CPU oracle is the same computation written in plain code and run on the CPU. Two forms can be
+bit-equal and both wrong.
 
 **A diff that changes a `[vk_dispatch]` or `[metal_dispatch]` class's branch selection - a
 branch added, or a predicate widened or narrowed, so that a different set of kargs values, or of
@@ -45,24 +45,26 @@ template constants the two stamps differ on appear nowhere in the moved path. At
 change left where it was the kernel computes what it did before, so a cell that dispatches only
 those values passes whether the change is right or wrong.
 
-**Before every dispatch whose output a kernel-unit cell reads - directly, or through a later
-dispatch in the same cell - the cell fills with a sentinel every range of that dispatch's output
-buffers the dispatch writes without reading.** An unprefilled output can pass by staying stale -
-the previous dispatch's values, or garbage that happens to sit inside the tolerance bar.
+**Before every kernel run - a dispatch or a CPU kernel call - whose output a kernel-unit cell
+reads, directly or through a later run in the same cell, the cell fills with a sentinel every
+range of that run's output buffers the run writes without reading.** An unprefilled output can
+pass by staying stale - the previous run's values, or garbage that happens to sit inside the
+tolerance bar.
 
 **A bit-identity assert whose result each side computes with floating-point arithmetic, in an
-operation order the cell does not fix on both sides, compares two GPU dispatches - never a
-dispatch against a CPU oracle.** With the order fixed on both sides the oracle's result is the
-kernel's by construction; an exact compare of indices or schedule words against a CPU twin is not
-that assert.
+operation order the cell does not fix on both sides and on operands that do not make every
+intermediate exactly representable, compares two kernel forms - never a kernel against a CPU
+oracle.** With the order fixed on both sides, or the operands exact by construction, the
+oracle's result is the kernel's by construction; an exact compare of indices or schedule words
+against a CPU twin is not that assert.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose CPU oracle does not
 differ from that input by construction, pairs its compare with an assert that the output
 differs from the input at a known index.** An in-place kernel that never ran leaves the input,
 which can wrongly satisfy a tolerant compare.
 
-**A kernel-unit cell that dispatches a `[metal_dispatch]` or `[vk_dispatch]` class no cell
-dispatched before ships a control for that class, in the same change.** A control is an extra
+**A kernel-unit cell that dispatches a kernel class no cell dispatched before ships a control
+for that class, in the same change.** A control is an extra
 assert in the same cell proving the compare can fail - a poisoned input or a poisoned expectation
 that must land outside the bar, a mechanism unhooked whose result must miss, or a second
 independent lane the result must agree with; the cell's own reference is never its control.

@@ -53,15 +53,13 @@ binding numbers as literals), wherever the diff puts it - applies `REVIEW_GPU.md
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever
 the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
-**A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
-a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
-flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
-applies `REVIEW_IMAGE.md`.**
+**A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
+`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor (the
+backend-and-layout variant an image is baked for, one part of its identity) - applies `REVIEW_IMAGE.md`.**
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`, `dasllama_audio_embedder.das`,
-`dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das` (all under `dasllama/`), or to
-an ASR family file - one `dasllama/dasllama_<family>.das` holding a single speech-recognition
-family - applies `REVIEW_AUDIO.md`.**
+`dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das` (all under `dasllama/`), or to an
+ASR family file - one `dasllama/dasllama_<family>.das` holding one speech-recognition family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
@@ -85,7 +83,9 @@ file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_t
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
 global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 
-**A diff that resolves a weight format id or reads a per-format byte count applies `REVIEW_KQ_FORMATS.md`.**
+**A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a generated
+kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
+count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
 **A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
 outside `tests/` (beside this file) is a defect - move it into `tests/`.**
@@ -146,11 +146,11 @@ flow, eviction, a generated name; not a reported wall-clock time or a best-of re
 reported wall-clock times - is marked `// clock: control`** - unmarked, it cannot be told
 apart from the ad-hoc profiling an engine file may not carry.
 
-**A change to `encode`/`bpe_encode`, or to a function either calls at encode time, in
-`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
-ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) at two or more
-input sizes, for a model using the affected tokenizer; a time growing faster than linearly
-with input size is a defect.**
+**A change to `encode`/`bpe_encode`, or to a function they call at encode time (not one that only
+supplies a metadata default at load), in `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`
+/ `dasllama/dasllama_pretok.das`, ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) at
+two or more input sizes on a model using that tokenizer; a time growing faster than linearly with
+input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
@@ -277,10 +277,10 @@ profile re-runs the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
-**A buffer in `dasllama/` whose element count scales with a model dimension - any count the
-model file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the
-same count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_resize`,
-`ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a
-`@scratch` carrier, or the pair spelled out - whatever the size looks like at today's shapes.**
-PERF032 holds the pair on an annotated buffer; a bare grow past the heap's unreserved-size cap
-(64 MB) panics the load on the first big model, not at the call site.
+**A buffer in `dasllama/` whose element count scales with a model dimension - any count the model
+file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the SAME
+count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_resize`,
+`ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
+pair spelled out - however small the count looks.** PERF032 flags a `resize` with no `reserve` or
+`ensure_capacity` earlier in the function and never compares the counts; a bare grow past the
+heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.

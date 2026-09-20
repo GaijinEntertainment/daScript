@@ -154,7 +154,7 @@ def init_byte2uni() {
 let private BPE_HEAP_MIN_SYMS = 32
 
 //! One candidate merge on the heap: `pri` is the priority in "highest first" form - the BPE rank
-//! negated (lowest rank first; a merge index, exact in a float below 2^24) or the SPM piece score.
+//! negated (lowest rank first; a merge index, exact in a float below 2^24).
 struct private Bigram {
     pri : float
     li : int      // original left position — doubles as the leftmost tie-break (order is stable under merges)
@@ -204,21 +204,16 @@ def private bigram_pop(var h : array<Bigram>) : Bigram {
 }
 
 //! Pair probe: BPE packs rank << 32 | merged id (lowest rank first); SPM's value is the merged id, its priority that piece's score.
-def private bigram_try_push(pair_merge : table<int64; int64>; scores : array<float>; var h : array<Bigram>; syms : array<int64>; li, ri : int) {
+def private bigram_try_push(pair_merge : table<int64; int64>; var h : array<Bigram>; syms : array<int64>; li, ri : int) {
     let pm = pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
     return if (pm < 0l)
-    if (empty(scores)) {
-        h |> bigram_push(Bigram(pri = -float(pm >> 32l), li = li, ri = ri,
-            l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
-    } else {
-        h |> bigram_push(Bigram(pri = scores[pm], li = li, ri = ri,
-            l_id = syms[li], r_id = syms[ri], mid = pm))
-    }
+    h |> bigram_push(Bigram(pri = -float(pm >> 32l), li = li, ri = ri,
+        l_id = syms[li], r_id = syms[ri], mid = pm & ((1l << 32l) - 1l)))
 }
 
-//! Heap merge over a whole symbol run for BOTH backends: BPE passes an empty `scores`, SPM its piece scores.
+//! Heap merge over a whole symbol run; dasllama_spm's `spm_merge_heap` is its measured twin.
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap")]
-def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; var syms : array<int64>) {
+def private bigram_merge_heap(pair_merge : table<int64; int64>; var syms : array<int64>) {
     let n = length(syms)
     return if (n < 2)
     var nxt : array<int>
@@ -232,7 +227,7 @@ def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; v
     var h : array<Bigram>
     h |> reserve(n)
     for (i in range(n - 1)) {
-        bigram_try_push(pair_merge, scores, h, syms, i, i + 1)
+        bigram_try_push(pair_merge, h, syms, i, i + 1)
     }
     while (!empty(h)) {
         let bg = bigram_pop(h)
@@ -244,10 +239,10 @@ def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; v
             prv[nxt[bg.ri]] = bg.li
         }
         if (prv[bg.li] >= 0) {
-            bigram_try_push(pair_merge, scores, h, syms, prv[bg.li], bg.li)
+            bigram_try_push(pair_merge, h, syms, prv[bg.li], bg.li)
         }
         if (nxt[bg.li] >= 0) {
-            bigram_try_push(pair_merge, scores, h, syms, bg.li, nxt[bg.li])
+            bigram_try_push(pair_merge, h, syms, bg.li, nxt[bg.li])
         }
     }
     var w = 0
@@ -264,8 +259,7 @@ def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; v
 }
 
 def private bpe_merge_ids_heap(tk : BpeTokenizer; var syms : array<int64>) {
-    let no_scores : array<float>
-    bigram_merge_heap(tk.pair_merge, no_scores, syms)
+    bigram_merge_heap(tk.pair_merge, syms)
 }
 
 // Greedily merge the lowest-rank adjacent pair (leftmost on ties), over symbol IDS — one packed
