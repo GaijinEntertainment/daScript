@@ -858,7 +858,7 @@ def private q51_grp_gate(t : T?) {
         for (mr in fixed_array(4l, 8l)) {
             var gq := kq
             var gs := ks
-            repack_q51_grp(addr(gq[0]), addr(gs[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q51, addr(gq[0]), addr(gs[0]), n, d, mr)
             let grpRows = (d / mr) * mr
             for (r in range64(d)) {
                 if (r < grpRows) {
@@ -915,7 +915,7 @@ def private q51_gather_gate(t : T?) {
         g.q51q := kq
         g.q51s := ks
         unsafe {
-            repack_q51_grp(addr(g.q51q[0]), addr(g.q51s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q51, addr(g.q51q[0]), addr(g.q51s[0]), n, d, mr)
         }
         var wqGrp : array<uint8>
         var wsGrp : array<uint8>
@@ -1404,31 +1404,31 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
             }
         }
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 5) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 44) {
-            repack_iq4xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq4xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 3) {
-            repack_k3_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
-            repack_iq3s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
-            repack_iq3xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 2) {
-            repack_k2_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k2, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 24) {
-            repack_iq2xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 25) {
-            repack_iq2xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 23) {
-            repack_iq2s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
         var dotbad = 0
         var deqbad = 0
@@ -1541,31 +1541,31 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     }
     unsafe {
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 5) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 44) {
-            repack_iq4xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq4xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 3) {
-            repack_k3_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
-            repack_iq3s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
-            repack_iq3xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 2) {
-            repack_k2_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k2, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 24) {
-            repack_iq2xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 25) {
-            repack_iq2xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 23) {
-            repack_iq2s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
     // ntok-row activation image, bs-quantized per row
@@ -1890,31 +1890,31 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     unsafe {
         for (r in range64(nreg)) {
             if (fmt == 4) {
-                repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 5) {
-                repack_k5_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k5, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 40) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 44) {
-                repack_iq4xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 3) {
-                repack_k3_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
-                repack_iq3s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
-                repack_iq3xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 2) {
-                repack_k2_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k2, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 24) {
-                repack_iq2xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 25) {
-                repack_iq2xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 23) {
-                repack_iq2s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } else {
-                repack_k6_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k6, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             }
         }
         for (r in range64(nreg)) {   // grp references: one direct rows-core call per region, both bindings
@@ -2079,31 +2079,31 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     unsafe {
         for (r in range64(nreg)) {   // per-region grp repack — the per-expert-slice shape
             if (fmt == 4) {
-                repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 5) {
-                repack_k5_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k5, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 40) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 44) {
-                repack_iq4xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 3) {
-                repack_k3_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
-                repack_iq3s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
-                repack_iq3xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 2) {
-                repack_k2_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k2, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 24) {
-                repack_iq2xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 25) {
-                repack_iq2xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 23) {
-                repack_iq2s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } else {
-                repack_k6_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k6, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             }
         }
     }
@@ -2915,9 +2915,9 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
     moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, false, mr, wqDisk, wsDisk)
     unsafe {
         if (fmt == 3) {
-            repack_k3_grp(addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         }
     }
     var wqGrp : array<uint8>
@@ -3003,9 +3003,9 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s) {
         unsafe {
             if (fmt == KqFmt.iq4xs) {
-                repack_iq4xs_grp(addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             } else {
-                repack_iq3s_grp(addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             }
         }
         var wqGrp : array<uint8>

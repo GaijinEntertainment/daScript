@@ -75,19 +75,11 @@ let Q51_SPB = 4l
 
 // the kernel/IR id space's format, or a panic naming the id - the ONE stride source for every
 // fmt-branched kq walker/kernel/repack must refuse an unknown id, never walk another format's stride
-def private kq_fmt_of_kernel_id(fmt : int; what : string) : KqFmt {
-    var f = KqFmt.q8
-    if (!kq_fmt_of_id(fmt, f)) {
-        panic("{what}: unknown kq format id {fmt}")
-    }
-    return f
-}
-
 //! Quant-plane bytes per stride unit for a kernel/IR format id (`kq_schema_id`'s space).
-def kq_qsb(fmt : int) : int64 => kq_qsb(kq_fmt_of_kernel_id(fmt, "kq_qsb"))
+def kq_qsb(fmt : int) : int64 => kq_qsb(kq_fmt_of_id(fmt, "kq_qsb"))
 
 //! Scale-plane bytes per stride unit for a kernel/IR format id (see kq_qsb).
-def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_kernel_id(fmt, "kq_ssb"))
+def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 
 //! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
 //! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).

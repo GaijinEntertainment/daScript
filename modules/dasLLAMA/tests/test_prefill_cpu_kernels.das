@@ -167,11 +167,11 @@ def private grp_row_dot(fmt : int; kqg : uint8 const?; ksg : uint8 const?; r, mr
 def private repack_grp(fmt : int; var kq : array<uint8>; var ks : array<uint8>; n, d, mr : int64) {
     unsafe {
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
 }

@@ -129,15 +129,20 @@ by hand:
   garbage. The probe that catches it is any kernel gate run under
   `with_job_que() { setup_dasllama_jobque() ... }` with enough rows to fork.
 - `dequant_<fmt>_row_grp` - the grp<mr> row dequant (own helper; `dequant_kq_row_grp` dispatches).
-- `repack_<fmt>_grp` (`dasllama_repack.das`) - disk-order -> grp<mr> planes; tail rows (d % mr)
-  stay disk-order untouched. A format with both d and dmin takes a field-major grp scale header
-  (`[16 sc x mr][mr x f16 d][mr x f16 dmin]`, `repack_k2_grp`'s shape) so `load_f16_vec_at`
+- `repack_grp(_f : KqTag_<fmt>; kq, ks, n, d, mr)` (`dasllama_repack.das`) - disk-order ->
+  grp<mr> planes, the format's overload behind the shared `repack_kq_grp(fmt, ...)` router;
+  tail rows (d % mr) stay disk-order untouched. Two primitives build every overload: the quant
+  plane as `colw`-byte columns (`repack_columns` - the column-form formats are one line,
+  `repack_column_form`) and the scale row field-major (`repack_fields` over a `RepackField`
+  list: the k4 row, the k6 row, or the format's own order); only a nibble re-pairing (k4/k5,
+  k6, k3) writes its quant half by hand. A format with both d and dmin takes a field-major grp
+  scale header (`[16 sc x mr][mr x f16 d][mr x f16 dmin]`, k2's field list) so `load_f16_vec_at`
   serves d and dmin as vectors; the repack and both grp readers move in one bit-exact step.
 - `dasllama_math_gen.das`: `<fmt>q8_layout_gen` (the layout companion), `<fmt>_grp_row_dot`
   (the scalar grp reference = the stubs' body and the repack oracle), `<fmt>q8_gemv_gen` +
   `<fmt>q8_tile_gen` with the `[tune_perm]` grid copied from q40's and
-  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, `kq_layout_of`, `repack_kq_gen` /
-  `repack_kq_bake`, `kq_kernel_gen` (two ladders), `kq_batch_cell_gen` (`packed` + tile +
+  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, `kq_layout_of` (`repack_kq_gen` /
+  `repack_kq_bake` route through `repack_kq_grp` and need no arm), `kq_kernel_gen` (two ladders), `kq_batch_cell_gen` (`packed` + tile +
   tail ladders - a packed format with no arm here dereferences a null scale plane inside the k6
   tile under the JIT, a panel format with no arm silently decodes as k6), `kq_batch_kernel_gen`
   tail, `kq_batch_groupn_gen` tail, `kq_groupn_gen` (two ladders), both

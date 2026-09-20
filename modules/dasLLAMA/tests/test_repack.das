@@ -276,7 +276,7 @@ def test_repack_mx4(t : T?) {
         var np := n0
         var ep := e0
         unsafe {
-            repack_mx4_grp(addr(np[0]), addr(ep[0]), n, d, 1l)
+            repack_kq_grp(KqFmt.mx4, addr(np[0]), addr(ep[0]), n, d, 1l)
         }
         var same = true
         for (a, b in np, n0) {
@@ -303,7 +303,7 @@ def test_repack_mx4(t : T?) {
         var np := n0
         var ep := e0
         unsafe {
-            repack_mx4_grp(addr(np[0]), addr(ep[0]), n, d, mr)
+            repack_kq_grp(KqFmt.mx4, addr(np[0]), addr(ep[0]), n, d, mr)
         }
         let ng = d / mr
         var ok = true
@@ -344,7 +344,7 @@ def test_repack_q51(t : T?) {
         var q := q0
         var s := s0
         unsafe {
-            repack_q51_grp(addr(q[0]), addr(s[0]), n, d, 1l)
+            repack_kq_grp(KqFmt.q51, addr(q[0]), addr(s[0]), n, d, 1l)
         }
         var same = true
         for (a, b in q, q0) {
@@ -370,7 +370,7 @@ def test_repack_q51(t : T?) {
         var q := q0
         var s := s0
         unsafe {
-            repack_q51_grp(addr(q[0]), addr(s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q51, addr(q[0]), addr(s[0]), n, d, mr)
         }
         let ng = d / mr
         var ok = true
@@ -461,13 +461,13 @@ def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
     var ks := ks0
     unsafe {
         if (fmt == 4l) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 5l) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 6l) {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
     let nsb = n / 256l
@@ -533,9 +533,9 @@ def private check_unpack(t : T?; fmt : int64; n, d, mr : int64) {
     var ks := ks0
     unsafe {
         if (fmt == 5l) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
     let nsb = n / 256l

@@ -230,6 +230,15 @@ def kq_fmt_where(var out : KqFmt&; blk : block<(f : KqFmt) : bool>) : bool {
 //! The format a kernel/IR id names; false for an id no format carries.
 def kq_fmt_of_id(id : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).schema_id == id
 
+//! The format of a kernel/IR id, or a panic naming the asking site (`what`) on an id no row carries.
+def kq_fmt_of_id(id : int; what : string) : KqFmt {
+    var f = KqFmt.q8
+    if (!kq_fmt_of_id(id, f)) {
+        panic("{what}: unknown kq format id {id}")
+    }
+    return f
+}
+
 //! The ggml type a kq format's plane converts from.
 def kq_ggml_type(f : KqFmt) : int => kq_desc(f).ggml_type
 

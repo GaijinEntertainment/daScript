@@ -382,7 +382,7 @@ def build_mx4_fixture(n, d : int64) : Mx4Fixture {
     var lut : int8[16]
     mxfp4_fill_lut(lut)
     unsafe {
-        repack_mx4_grp(addr(n4[0]), addr(e4[0]), n, d, 4l)
+        repack_kq_grp(KqFmt.mx4, addr(n4[0]), addr(e4[0]), n, d, 4l)
         let lutp = addr(lut[0])
         let np = addr(n4[0])
         let ep = addr(e4[0])
@@ -625,33 +625,7 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
 }
 
 def repack_kq_grp_fmt(fmt : int64; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
-    if (fmt == 4l) {
-        repack_k4_grp(kq, ks, n, d, mr)
-    } elif (fmt == 5l) {
-        repack_k5_grp(kq, ks, n, d, mr)
-    } elif (fmt == 40l) {
-        repack_q40_grp(kq, ks, n, d, mr)
-    } elif (fmt == 44l) {
-        repack_iq4xs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 3l) {
-        repack_k3_grp(kq, ks, n, d, mr)
-    } elif (fmt == 33l) {
-        repack_iq3s_grp(kq, ks, n, d, mr)
-    } elif (fmt == 34l) {
-        repack_iq3xxs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 45l) {
-        repack_q40_grp(kq, ks, n, d, mr)
-    } elif (fmt == 2l) {
-        repack_k2_grp(kq, ks, n, d, mr)
-    } elif (fmt == 23l) {
-        repack_iq2s_grp(kq, ks, n, d, mr)
-    } elif (fmt == 24l) {
-        repack_iq2xs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 25l) {
-        repack_iq2xxs_grp(kq, ks, n, d, mr)
-    } else {
-        repack_k6_grp(kq, ks, n, d, mr)
-    }
+    repack_kq_grp(kq_fmt_of_id(int(fmt), "repack_kq_grp_fmt"), kq, ks, n, d, mr)
 }
 
 def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
@@ -662,10 +636,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
     fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
     blkb |> resize(fmt == 2l ? 84l : (fmt == 23l ? 82l : (fmt == 24l ? 74l : (fmt == 25l ? 66l : (fmt == 4l || fmt == 40l || fmt == 45l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l || fmt == 33l ? 110l : (fmt == 34l ? 98l : 210l)))))))))
-    var kf : KqFmt
-    if (!kq_fmt_of_id(int(fmt), kf)) {
-        panic("build_kq_fixture: no kq format carries kernel id {fmt}")
-    }
+    let kf = kq_fmt_of_id(int(fmt), "build_kq_fixture")
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
@@ -1222,8 +1193,8 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         var hq := hfx.qq
         var hs := hfx.qs
         unsafe {
-            repack_q51_grp(addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
-            repack_q51_grp(addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
+            repack_kq_grp(KqFmt.q51, addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
+            repack_kq_grp(KqFmt.q51, addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
         }
         var maxdiff = 0.0
         run_q51_gemv(v._1, sfx, sq, ss, mr, y)
@@ -1639,7 +1610,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
             var nv := mfx.wn
             var ev := mfx.we
             unsafe {
-                repack_mx4_grp(addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
+                repack_kq_grp(KqFmt.mx4, addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
             }
             var ym : array<float>
             ym |> resize(mfx.d)

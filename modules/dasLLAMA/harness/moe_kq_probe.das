@@ -85,7 +85,7 @@ def private build_pool(nregions, d : int64; var kq : array<uint8>; var ks : arra
     }
     unsafe {
         for (r in range64(nregions)) {
-            repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), N, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), N, d, mr)
         }
     }
 }

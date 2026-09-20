@@ -1238,11 +1238,11 @@ def private repack_q8q8_bake(var wp : int8?; var sp : float?; n, d : int64) {
 // the backend mx4 repack slot: same layout companion as the Q8 repack — planes and weights
 // interleave at the ONE stamped mr. Stamped only; bake twin below (see repack_q8q8_gen).
 def private repack_mx4_gen(var np : uint8?; var ep : uint8?; n, d : int64) {
-    repack_mx4_grp(np, ep, n, d, int64(q8q8_layout_gen()))
+    repack_kq_grp(KqFmt.mx4, np, ep, n, d, int64(q8q8_layout_gen()))
 }
 
 def private repack_mx4_bake(var np : uint8?; var ep : uint8?; n, d : int64) {
-    repack_mx4_grp(np, ep, n, d, active_q8_layout_mr())
+    repack_kq_grp(KqFmt.mx4, np, ep, n, d, active_q8_layout_mr())
 }
 
 // ===== the q51 family (tile + GEMV; q51 does NOT ride the Q8 mr — its layout companion
@@ -1259,11 +1259,11 @@ def q51q8_layout_gen() : int {
 // the backend q51 repack slot: stamped only; the bake twin below is what set_bake_q51_repack
 // registers (see repack_q8q8_gen — lanes cannot read math's globals)
 def private repack_q51_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
-    repack_q51_grp(qp, sp, n, d, int64(q51q8_layout_gen()))
+    repack_kq_grp(KqFmt.q51, qp, sp, n, d, int64(q51q8_layout_gen()))
 }
 
 def private repack_q51_bake(var qp : uint8?; var sp : uint8?; n, d : int64) {
-    repack_q51_grp(qp, sp, n, d, active_q51_layout_mr())
+    repack_kq_grp(KqFmt.q51, qp, sp, n, d, active_q51_layout_mr())
 }
 
 //! One row's dot off the grp<mr> q51 planes, scalar — the q51 stub's reference body and the
@@ -1451,63 +1451,11 @@ def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr 
 // the backend kq repack slot: per-format stamped companions only; bake twin below (see
 // repack_q8q8_gen — lanes cannot read math's globals)
 def private repack_kq_gen(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {
-    if (fmt == 4) {
-        repack_k4_grp(kq, ks, n, d, kq_layout_of(4))
-    } elif (fmt == 5) {
-        repack_k5_grp(kq, ks, n, d, kq_layout_of(5))
-    } elif (fmt == 40) {
-        repack_q40_grp(kq, ks, n, d, kq_layout_of(40))
-    } elif (fmt == 44) {
-        repack_iq4xs_grp(kq, ks, n, d, kq_layout_of(44))
-    } elif (fmt == 3) {
-        repack_k3_grp(kq, ks, n, d, kq_layout_of(3))
-    } elif (fmt == 33) {
-        repack_iq3s_grp(kq, ks, n, d, kq_layout_of(33))
-    } elif (fmt == 34) {
-        repack_iq3xxs_grp(kq, ks, n, d, kq_layout_of(34))
-    } elif (fmt == 45) {
-        repack_q40_grp(kq, ks, n, d, kq_layout_of(45))   // byte-identical plane shapes
-    } elif (fmt == 2) {
-        repack_k2_grp(kq, ks, n, d, kq_layout_of(2))
-    } elif (fmt == 23) {
-        repack_iq2s_grp(kq, ks, n, d, kq_layout_of(23))
-    } elif (fmt == 24) {
-        repack_iq2xs_grp(kq, ks, n, d, kq_layout_of(24))
-    } elif (fmt == 25) {
-        repack_iq2xxs_grp(kq, ks, n, d, kq_layout_of(25))
-    } else {
-        repack_k6_grp(kq, ks, n, d, kq_layout_of(6))
-    }
+    repack_kq_grp(kq_fmt_of_id(fmt, "repack_kq_gen"), kq, ks, n, d, kq_layout_of(fmt))
 }
 
 def private repack_kq_bake(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {
-    if (fmt == 4) {
-        repack_k4_grp(kq, ks, n, d, active_kq_layout_mr(4))
-    } elif (fmt == 5) {
-        repack_k5_grp(kq, ks, n, d, active_kq_layout_mr(5))
-    } elif (fmt == 40) {
-        repack_q40_grp(kq, ks, n, d, active_kq_layout_mr(40))
-    } elif (fmt == 44) {
-        repack_iq4xs_grp(kq, ks, n, d, active_kq_layout_mr(44))
-    } elif (fmt == 3) {
-        repack_k3_grp(kq, ks, n, d, active_kq_layout_mr(3))
-    } elif (fmt == 33) {
-        repack_iq3s_grp(kq, ks, n, d, active_kq_layout_mr(33))
-    } elif (fmt == 34) {
-        repack_iq3xxs_grp(kq, ks, n, d, active_kq_layout_mr(34))
-    } elif (fmt == 45) {
-        repack_q40_grp(kq, ks, n, d, active_kq_layout_mr(45))   // byte-identical plane shapes
-    } elif (fmt == 2) {
-        repack_k2_grp(kq, ks, n, d, active_kq_layout_mr(2))
-    } elif (fmt == 23) {
-        repack_iq2s_grp(kq, ks, n, d, active_kq_layout_mr(23))
-    } elif (fmt == 24) {
-        repack_iq2xs_grp(kq, ks, n, d, active_kq_layout_mr(24))
-    } elif (fmt == 25) {
-        repack_iq2xxs_grp(kq, ks, n, d, active_kq_layout_mr(25))
-    } else {
-        repack_k6_grp(kq, ks, n, d, active_kq_layout_mr(6))
-    }
+    repack_kq_grp(kq_fmt_of_id(fmt, "repack_kq_bake"), kq, ks, n, d, active_kq_layout_mr(fmt))
 }
 
 //! Generic grp<mr> single-token dot for mr != 4 slots and tails: scalar, correct anywhere, same
