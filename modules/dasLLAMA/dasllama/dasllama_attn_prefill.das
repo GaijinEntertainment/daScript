@@ -288,9 +288,9 @@ def private attn_head_classic(var attp_h : float?; var xbp : float?; qp : float 
 }
 
 // Prefill codec dispatch (same contract as attn_head_decode_d): one wrapper per prefill worker,
-// the 3x3 K×V matrix spelled once. Prefill is compute-bound, so dequant-in-dot is fine — no
-// query quantize needed.
-def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, vdt : KVDtype; var xbp : float?; // nolint:STYLE038 — 16-way K x V codec dispatch ladder; each arm is one typed call, nothing to factor
+// the K x V matrix stamped by kv_codec_side. Prefill is compute-bound, so dequant-in-dot is
+// fine - no query quantize needed.
+def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, vdt : KVDtype; var xbp : float?;
                               var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
                               nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd, kv_dim, kvhoff, qoff : int64;
                               scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float;
@@ -299,83 +299,17 @@ def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, v
     let khoff = kv_side_off(kdt, kvhoff)
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, kcl, vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, kcl, reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, kcl, reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, kcl, reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), vcl, xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } else {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl), xbp,
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_codec_side(vdt, vcl) <| $(vcp) {
+            attn_head_flash(qp, kcp, vcp, xbp,
                 qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd,
                 kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
         }
     }
 }
 
-def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : float const?; // nolint:STYLE038 — 16-way K x V codec dispatch ladder; each arm is one typed call, nothing to factor
-                                qq : int8 const ?; qsp : float const?;
+def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : float const?;
+                                qq : int8 const?; qsp : float const?;
                                 kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
                                 nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
                                 scale : float; is_sliding : bool; sliding_window : int64;
@@ -384,83 +318,17 @@ def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : floa
     let khoff = kv_side_off(kdt, kvhoff)
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), vcl,
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl),
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } else {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl),
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_codec_side(vdt, vcl) <| $(vcp) {
+            attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcp, vcp,
                 runs, nrun, npos, start_pos, uniform_lo, uniform_end, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
                 scale, is_sliding, sliding_window, attn_softcap, sinksp)
         }
     }
 }
 
-def private attn_head_classic_d(var attp_h : float?; var xbp : float?; qp : float const?; // nolint:STYLE038 — 16-way K x V codec dispatch ladder; each arm is one typed call, nothing to factor
-                                qq : int8 const ?; qsp : float const?;
+def private attn_head_classic_d(var attp_h : float?; var xbp : float?; qp : float const?;
+                                qq : int8 const?; qsp : float const?;
                                 kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
                                 nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
                                 scale : float; is_sliding : bool; sliding_window : int64;
@@ -469,75 +337,9 @@ def private attn_head_classic_d(var attp_h : float?; var xbp : float?; qp : floa
     let khoff = kv_side_off(kdt, kvhoff)
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), vcl,
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl),
-                runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } else {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl),
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_codec_side(vdt, vcl) <| $(vcp) {
+            attn_head_classic(attp_h, xbp, qp, qq, qsp, kcp, vcp,
                 runs, nrun, npos, start_pos, uniform_lo, uniform_end, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
                 scale, is_sliding, sliding_window, attn_softcap, sinksp)
         }

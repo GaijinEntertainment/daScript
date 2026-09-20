@@ -130,6 +130,7 @@ modules/dasLLAMA/
   dasllama/                   # the module — require dasllama/<name>
     dasllama_env.das          #   the [EnvConfig] knob declarations, loaded once into the g_env_* globals every read site uses (ENVIRONMENT.md is generated from it)
     dasllama_math.das         #   numeric primitives + matmul/dot kernels + Q8·Q8 kernel-backend registry + dispatch shaping
+    dasllama_kv_dtype.das     #   the KV codec tag (KVDtype), the tq4 pointer newtype and the kv_codec_side stamp (the K x V pointer matrix, spelled once)
     dasllama_kv_codec.das     #   the KV-cache codec — per cache format (f16/q8_0/tq4) the WHOLE family: store/read/dot/axpy (+ tq4 FWHT rotation)
     dasllama_kqformat.das     #   format identity — the KqFmt enum, per-format strides/geometry/stream codes, the one enum->kernel-id bridge
     dasllama_rope.das         #   RoPE angle/table generation (theta schedule, rope_freqs, every materialized layout)

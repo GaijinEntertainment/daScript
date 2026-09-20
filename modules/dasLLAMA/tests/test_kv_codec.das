@@ -12,6 +12,7 @@ require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
+require strings   // the stamp cell strips a parameter's own const from a typename
 require dasllama/dasllama_env
 
 // KV-cache codec layout invariants — synthetic Configs only (no model files, never skips):
@@ -1010,5 +1011,47 @@ def test_kv_capacity_tripwire(t : T?) {
             delete toks
         }
         delete tr
+    }
+}
+
+// the bound pointer's static type, or a mismatch marker when the stamp bound another address
+def private codec_side_type(dt : KVDtype; p : uint8 const?) : string {
+    var r = ""
+    kv_codec_side(dt, p) <| $(tp) {
+        r = unsafe(reinterpret<uint8 const?>(tp)) == p ? typeinfo typename(tp) : "address mismatch"
+    }
+    return r
+}
+
+def private codec_pair_types(kdt, vdt : KVDtype; kp, vp : uint8 const?) : string {
+    var r = ""
+    kv_codec_side(kdt, kp) <| $(kcp) {
+        kv_codec_side(vdt, vp) <| $(vcp) {
+            let same = unsafe(reinterpret<uint8 const?>(kcp)) == kp && unsafe(reinterpret<uint8 const?>(vcp)) == vp
+            r = same ? "{typeinfo typename(kcp)}|{typeinfo typename(vcp)}" : "address mismatch"
+        }
+    }
+    return r
+}
+
+[test]
+def test_kv_codec_side_stamp(t : T?) {
+    t |> run("kv_codec_side binds each codec's cache-pointer type; nested once per side it is the K x V matrix") @(t : T?) {
+        var bytes : array<uint8>
+        bytes |> resize(64)
+        let p = unsafe(addr<uint8 const?>(bytes[0]))
+        let names <- { KVDtype.q8_0 => typeinfo typename(type<uint8 const?>),
+                       KVDtype.tq4 => typeinfo typename(type<TQ4B const?>),
+                       KVDtype.f16 => typeinfo typename(type<uint16 const?>),
+                       KVDtype.f32 => typeinfo typename(type<float const?>) }
+        for (dt in [KVDtype.f32, KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+            let kname = names?[dt] ?? ""
+            t |> equal(kname, codec_side_type(dt, p) |> replace(" const? const", " const?"), "{dt}")
+            for (vdt in [KVDtype.f32, KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+                let pair = codec_pair_types(dt, vdt, p, p) |> replace(" const? const", " const?")
+                t |> equal("{kname}|{names?[vdt] ?? ""}", pair, "{dt} x {vdt}")
+            }
+        }
+        delete bytes
     }
 }

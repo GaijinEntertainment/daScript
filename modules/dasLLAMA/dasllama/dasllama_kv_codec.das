@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_kv_codec shared public
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_kv_dtype public  // KVDtype, the TQ4B dispatch tag and the kv_codec_side stamp - re-exported with the codec
 require math
 require daslib/f16_cvt  // per-element f16 scale reads/writes inside the hot loops
 require dasllama/dasllama_math  // dot/axpy/copy_floats — the f32 arms of the dispatch below
@@ -17,7 +18,8 @@ require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_
 // byte geometry, so a layout change can never span modules. These run per token per layer
 // (store) and per token per cached position (dot/axpy) — [tuned] hot kernels, not load-time
 // converters. Codec dispatch (KVDtype -> family) lives at dasllama_common's kv_store_row /
-// kv_load_row / kv_dot / kv_axpy seam. The f16 family's row converts are the generic pair in
+// kv_load_row / kv_dot / kv_axpy seam; the attention workers' K x V pointer matrix is the
+// kv_codec_side stamp of dasllama_kv_dtype. The f16 family's row converts are the generic pair in
 // dasllama_convert (cvt_f32_to_f16 / cvt_f16_to_f32 — dual-use: weight/scale planes at load,
 // activation prep, and this codec).
 
@@ -333,11 +335,6 @@ def template quantize_tq4kv_row_template(var dst : uint8 ?; src : float const ?;
 def quantize_tq4kv_row(var dst : uint8?; src : float const?; n : int64) {}
 
 // ===== per-dtype dispatch over the codec kernels above =====
-
-// tq4 cache-pointer dispatch tag: the read seam overloads on the cache pointer's element type, and
-// q8_0 already owns `uint8 const?` — a distinct newtype over uint8 gives tq4 its own overload
-// identity at zero runtime cost (byte-strided arithmetic, ABI identical to uint8).
-typedef distinct TQ4B = uint8
 
 // Read-side glue: overload per cache element type, resolved inside the monomorphized workers.
 def private kv_dot(a : float const?; b : float const?; n : int64) : float => dot(a, b, n)

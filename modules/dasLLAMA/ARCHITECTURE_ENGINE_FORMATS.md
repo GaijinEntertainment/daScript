@@ -32,6 +32,13 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   rotation and sign vector live with their family. Codec DISPATCH (`KVDtype`) stays at common's
   `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy` seam; the f16 row converts are the generic pair
   in `dasllama_convert` because they are dual-use beyond the cache.
+- **`dasllama_kv_dtype.das`** - the codec tag (`KVDtype`), the tq4 pointer newtype (`TQ4B`) and
+  the `kv_codec_side` stamp: a call macro that clones its block once per codec with the byte
+  pointer read as that codec's element type behind a runtime ladder. Every attention wrapper
+  that hands a worker a typed cache pointer (`attn_head_decode_d`, the three prefill `_d`
+  wrappers, the slice pair, the flash-decode witness) nests one stamp per side, so the K x V
+  matrix is written nowhere and a new codec is one arm in the macro. A leaf module - only
+  daslib requires - so its macro context stays cheap.
 - **`dasllama_rope.das`** - RoPE angle and TABLE GENERATION: the theta schedule, `rope_freqs`,
   fscale/mscale, every materialized layout - pure functions over plain parameters. Model-facing
   wrappers stay in common. APPLICATION kernels stay with their backends: the CPU `rope_scaled_*`

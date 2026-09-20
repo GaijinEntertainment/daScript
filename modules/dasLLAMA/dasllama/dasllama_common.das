@@ -85,16 +85,6 @@ enum DnPrefillMode {
     chunked
 }
 
-//! KV-cache storage codec, chosen per session at create time; K and V carry independent
-//! dtypes. f16 = half the KV bytes, near-lossless; f32 = bit-exact reference;
-//! q8_0 = block codec (34B/32 elements, needs kv_dim/head_size % 32); tq4 = rotated 4-bit (18B/32, needs head_size a power of two).
-enum KVDtype {
-    f32
-    f16
-    q8_0
-    tq4
-}
-
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
     dim : int64
@@ -3063,8 +3053,8 @@ def private kv_slice_av(var flop : float?; attp : float const?; vcp : auto const
 }
 
 // ===== codec dispatch wrappers =====
-// Byte-base cache pointers + session dtypes in, ONE monomorphized worker call out. The scalar
-// K×V matrix is spelled here once; a new codec = new arms here with zero call-site changes.
+// Byte-base cache pointers + session dtypes in, ONE monomorphized worker call out - the K x V
+// matrix is kv_codec_side's stamp; a new codec = one arm there, zero call-site changes.
 
 def attn_head_decode_d(var arow : float?; var xbp : float?; qp : float const?;
                        qq : int8 const?; qsp : float const?;
@@ -3076,60 +3066,9 @@ def attn_head_decode_d(var arow : float?; var xbp : float?; qp : float const?;
     let khoff = kv_side_off(kdt, kvhoff)
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, kcl, vcl,
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } else {
-                attn_head_decode(arow, xbp, qp, qq, qsp, kcl, reinterpret<float const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl,
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } else {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl,
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            } else {
-                attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), vcl,
-                runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl),
-                runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
-        } else {
-            attn_head_decode(arow, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl),
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_codec_side(vdt, vcl) <| $(vcp) {
+            attn_head_decode(arow, xbp, qp, qq, qsp, kcp, vcp,
                 runs, nrun, qoff, kdim, khoff, vdim, vhoff, kstart, cnt, head_size, hh, scale, attn_softcap, sinksp)
         }
     }
@@ -3142,20 +3081,9 @@ def kv_slice_scores_d(var attp : float?; qp : float const?; qq : int8 const?; qs
                       scale : float) {
     let kdim = kv_side_off(kdt, kv_dim)
     let khoff = kv_side_off(kdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            kv_slice_scores(attp, qp, qq, qsp, kcl, runs, nrun, kstart, j0, j1, kdim, khoff,
-                head_size, qh0, kv_mul, seq_len, scale)
-        } elif (kdt == KVDtype.tq4) {
-            kv_slice_scores(attp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), runs, nrun, kstart, j0, j1, kdim, khoff,
-                head_size, qh0, kv_mul, seq_len, scale)
-        } elif (kdt == KVDtype.f16) {
-            kv_slice_scores(attp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), runs, nrun, kstart, j0, j1, kdim, khoff,
-                head_size, qh0, kv_mul, seq_len, scale)
-        } else {
-            kv_slice_scores(attp, qp, qq, qsp, reinterpret<float const?>(kcl), runs, nrun, kstart, j0, j1, kdim, khoff,
-                head_size, qh0, kv_mul, seq_len, scale)
-        }
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_slice_scores(attp, qp, qq, qsp, kcp, runs, nrun, kstart, j0, j1, kdim, khoff,
+            head_size, qh0, kv_mul, seq_len, scale)
     }
 }
 
@@ -3164,20 +3092,9 @@ def kv_slice_av_d(var flop : float?; attp : float const?; vcl : uint8 const?; vd
                   nrun, kstart, j0, j1, kv_dim, kvhoff, head_size, qh0, kv_mul, seq_len, nsl, sl : int64) {
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (vdt == KVDtype.q8_0) {
-            kv_slice_av(flop, attp, vcl, runs, nrun, kstart, j0, j1, vdim, vhoff,
-                head_size, qh0, kv_mul, seq_len, nsl, sl)
-        } elif (vdt == KVDtype.tq4) {
-            kv_slice_av(flop, attp, reinterpret<TQ4B const?>(vcl), runs, nrun, kstart, j0, j1, vdim, vhoff,
-                head_size, qh0, kv_mul, seq_len, nsl, sl)
-        } elif (vdt == KVDtype.f16) {
-            kv_slice_av(flop, attp, reinterpret<uint16 const?>(vcl), runs, nrun, kstart, j0, j1, vdim, vhoff,
-                head_size, qh0, kv_mul, seq_len, nsl, sl)
-        } else {
-            kv_slice_av(flop, attp, reinterpret<float const?>(vcl), runs, nrun, kstart, j0, j1, vdim, vhoff,
-                head_size, qh0, kv_mul, seq_len, nsl, sl)
-        }
+    kv_codec_side(vdt, vcl) <| $(vcp) {
+        kv_slice_av(flop, attp, vcp, runs, nrun, kstart, j0, j1, vdim, vhoff,
+            head_size, qh0, kv_mul, seq_len, nsl, sl)
     }
 }
 
@@ -3273,7 +3190,7 @@ def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : floa
     delete vout
 }
 
-// The witness' codec dispatch — the K×V matrix spelled once, like the worker wrappers.
+// The witness' codec dispatch - the same K x V stamp as the worker wrappers.
 [cold_path]   // reference-check path, armed by g_flash_decode_check
 def flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?;
                          kcl, vcl : uint8 const?; kdt, vdt : KVDtype; xbv : float const?;
@@ -3283,60 +3200,9 @@ def flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?
                          vsignsp : float const?) {
     let kdim = kv_side_off(kdt, kv_dim)
     let vdim = kv_side_off(vdt, kv_dim)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                flash_decode_check_g(qp, qq, qsp, kcl, vcl, xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.tq4) {
-                flash_decode_check_g(qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.f16) {
-                flash_decode_check_g(qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } else {
-                flash_decode_check_g(qp, qq, qsp, kcl, reinterpret<float const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl, xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.tq4) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.f16) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } else {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl, xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.tq4) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } elif (vdt == KVDtype.f16) {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            } else {
-                flash_decode_check_g(qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl), xbv, runs,
-                    nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            flash_decode_check_g(qp, qq, qsp, reinterpret<float const?>(kcl), vcl, xbv, runs,
-                nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-        } elif (vdt == KVDtype.tq4) {
-            flash_decode_check_g(qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl), xbv, runs,
-                nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-        } elif (vdt == KVDtype.f16) {
-            flash_decode_check_g(qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl), xbv, runs,
-                nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
-        } else {
-            flash_decode_check_g(qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl), xbv, runs,
+    kv_codec_side(kdt, kcl) <| $(kcp) {
+        kv_codec_side(vdt, vcl) <| $(vcp) {
+            flash_decode_check_g(qp, qq, qsp, kcp, vcp, xbv, runs,
                 nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl, scale, attn_softcap, sinksp, vsignsp)
         }
     }
