@@ -524,9 +524,10 @@ NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - th
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
 the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the
 GPU-served window in force while the driver is armed, the CPU window back after the drop; the 1B
-also runs the batched bench row (`bench_tg_batched_rep`): a row asking more streams than the
-device homes refuses by name and reads 0, and a row it homes serves at a rate with every stream
-parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
+also runs the batched bench row (`bench_tg_batched_rep`) with the driver homing two streams: a
+row asking more streams than the device homes refuses by name and reads 0, and a row it homes
+serves at a rate with every stream parked after it and no call passed to the CPU chain (a
+one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
