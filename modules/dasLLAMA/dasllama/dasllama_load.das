@@ -1307,7 +1307,13 @@ def private log_load_report(t : Model) {
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
+// a weight's plane tag off its disk type: the superblock i-quants and Q2_K/Q3_K as gguf's own
+// map says, the K-quant trio, then the three native-knob gates
 def private kq_fmt_of(gt : int) : KqFmt {
+    let native = gguf_kq_fmt_of_type(gt)
+    if (native != KqFmt.q8) {
+        return native
+    }
     if (gt == GGML_TYPE_Q4_K) {
         return KqFmt.k4
     }
@@ -1316,33 +1322,6 @@ def private kq_fmt_of(gt : int) : KqFmt {
     }
     if (gt == GGML_TYPE_Q6_K) {
         return KqFmt.k6
-    }
-    if (gt == GGML_TYPE_IQ4_XS) {
-        return KqFmt.iq4xs
-    }
-    if (gt == GGML_TYPE_Q3_K) {
-        return KqFmt.k3
-    }
-    if (gt == GGML_TYPE_IQ3_S) {
-        return KqFmt.iq3s
-    }
-    if (gt == GGML_TYPE_IQ3_XXS) {
-        return KqFmt.iq3xxs
-    }
-    if (gt == GGML_TYPE_IQ4_NL) {
-        return KqFmt.iq4nl
-    }
-    if (gt == GGML_TYPE_Q2_K) {
-        return KqFmt.k2
-    }
-    if (gt == GGML_TYPE_IQ2_S) {
-        return KqFmt.iq2s
-    }
-    if (gt == GGML_TYPE_IQ2_XS) {
-        return KqFmt.iq2xs
-    }
-    if (gt == GGML_TYPE_IQ2_XXS) {
-        return KqFmt.iq2xxs
     }
     if (gt == GGML_TYPE_Q4_0 && get_kq_q40_native()) {
         return KqFmt.q40

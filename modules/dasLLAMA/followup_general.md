@@ -1465,21 +1465,16 @@
     on the K-quant path (the f32 dequant `read_linear` hands `linear_take_kq`, released per tensor
     but sized by the largest). The instrument is the resident set sampled per half second with the
     `--limit` one and two forms, and the das leak profiler on the run.
-131. **The format recipe's plane fields and hand ladders.** `Model` holds a plane pair per kq
-    format (`k4q/k4s ... iq4xsq/iq4xss`) and every consumer selects the pair with an
-    `if (fmt == KqFmt.k4) ... elif` chain: 12 ladders in `dasllama_load.das`, 13 in
-    `dasllama_common.das`, 3 in `dasllama_layout.das`, 8 in `dasllama_math_gen.das`, 3 in
-    `dasllama_math_default.das`, 4 in `dasllama_math.das`, one each in `ple`, `gpu_resident`,
-    `blocks`, `config`, `image`; the planes grew one format at a time and each arm carries a
-    different literal stride. Unquirked: one `KqPlanes` (quant, scale, mr) indexed by `KqFmt` on
-    `Model`, `kq_plane_q/s` the only accessors, every ladder one table lookup, a new format the
-    enum member plus its strides. The image's per-format `kq_repack_mr<id>` field and its
-    hand-grown `IMAGE_META_FIELDS` count, the repack-interleave freeze ladder in
-    `dasllama_load.das` (a format missing from it keeps `mr` 4 while its planes sit at the
-    companion's, and every `kq_active_mr` consumer reads the wrong interleave with no diagnostic
-    - caught only end to end), and `moe_gpu_gather_stack_kq`'s two per-format ladders (the
-    grouped and the tail-row branch need a verbatim arm each for a format already in the device
-    form) all collapse into that table.
+131. **DONE (2026-09-20): the format recipe's plane fields and hand ladders.** `Model.kq[int(KqFmt)]`
+    (`KqPlanes`: quant plane, scale plane, frozen interleave) replaced the per-format plane pairs
+    and `kq_repack_mr<id>` fields; `dasllama_kqformat.das`'s `kq_desc` row carries every
+    per-format number, and the load's cursors and sizing, the streamed fill, the kq matmul
+    dispatch, `embed_row`, the repack walkers, the device gather, the PLE tripwire, the embed
+    trim, the image walk and the bake identity index the table through it. What stays per format
+    by hand: `transcode_kq_tensor`'s bulk-transcode call, `kq_fmt_of`'s native-knob gates, the
+    grouped-row branch of `moe_gpu_gather_stack_kq`, and the kernel-side int-id ladders
+    (`kq_rows_fn`, `kq_gemv_kernel`, the `dasllama_math_gen.das` family selects) - the last are
+    item 133's.
 132. **The format recipe's test ladders.** `tests/test_kquant.das` builds fixtures, transcodes,
     dequants, dots, repacks and calls the stubs through the same `fmt == 4/5/6/40` chains in five
     gates (28 arms for one format) and raises `_cyclomatic_complexity` / `_function_length` per
@@ -1491,13 +1486,14 @@
     nested ternaries (`kq_gemv_gate`, `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL
     sources, entries, fastmath and tgmem names per format, an `else` that means k6): one
     per-format record per kernel family, indexed by format.
-133. **The format recipe's three int id spaces and the hand-formatted bake identity.**
-    `int(KqFmt)` (device stack tags, image plane ids, `vk_kq_schema_id`'s input), the kernel/IR
-    id (`kq_schema_id`), and the stream/repack region code (`kq_stream_code`: 0/2 for q8/q51,
-    else the kernel id, so k2 streams under 20 and translates back at every dispatch boundary);
-    `dlim_identity` formats `DlimCpuConfig.kq_mr<id>` into the identity string by hand, so a
-    field added without the string keys two interleaves identically. Unquirked: one id, or one
-    table that derives the other two and formats the identity.
+133. **DONE (2026-09-20): the format recipe's three int id spaces and the hand-formatted bake
+    identity.** The three spaces stay - `int(KqFmt)` (device stack tags, image plane ids), the
+    kernel/IR id and the stream/repack region code - but ONE table derives them: `kq_desc`'s row
+    carries the kernel id and the stream code, every id-to-format lookup is `kq_fmt_where` over
+    the enum (`kq_fmt_of_id`, `kq_fmt_of_stream_code`, `kq_fmt_of_name`), the int-id stride twins
+    resolve through it, and the bake identity formats `DlimCpuConfig.kq_mr[int(KqFmt)]` in enum
+    order, so a format without an interleave reads 0 rather than keying another's. The stream
+    code stays a per-row constant because kernel id 2 is q51's stream tag (k2 streams under 20).
 134. **The tune sidecar's identity lacks the generator hash.** A sidecar minted while a family's
     generator stubs declined records `"<fmt>q8_tile_gen" : "reference"`; staleness keys on the
     binary's mtime and the emitter is `.das`, so landing the emitter arm invalidates nothing and

@@ -129,15 +129,7 @@ def kq_desc(f : KqFmt) : KqDesc {
 def kq_sb(f : KqFmt) : bool => kq_desc(f).elems == 256l
 
 //! Parses an enum member's spelling (`k4`, `iq2xxs`, ...) into `out`; false for any other string.
-def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
-    for (f in type<KqFmt>) {
-        if ("{f}" == name) {
-            out = f
-            return true
-        }
-    }
-    return false
-}
+def kq_fmt_of_name(name : string; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => "{f}" == name
 
 //! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51, mx4), off the kq lattice.
 def kq_block32(f : KqFmt) : bool => !kq_sb(f)
@@ -162,16 +154,20 @@ def kq_schema_id(f : KqFmt) : int {
     return id
 }
 
-//! The format a kernel/IR id names; false for an id no format carries.
-def kq_fmt_of_id(id : int; var out : KqFmt&) : bool {
+//! The first format the predicate admits, into `out`; false when none does - the one walk every
+//! key-to-format lookup (name, kernel id, stream code) runs.
+def kq_fmt_where(var out : KqFmt&; blk : block<(f : KqFmt) : bool>) : bool {
     for (f in type<KqFmt>) {
-        if (kq_desc(f).schema_id == id) {
+        if (invoke(blk, f)) {
             out = f
             return true
         }
     }
     return false
 }
+
+//! The format a kernel/IR id names; false for an id no format carries.
+def kq_fmt_of_id(id : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).schema_id == id
 
 //! The ggml type a kq format's plane converts from.
 def kq_ggml_type(f : KqFmt) : int => kq_desc(f).ggml_type
@@ -896,13 +892,5 @@ let MX4_STREAM_TAG = 39
 def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 
 //! the stream code's format; false for a code no format carries
-def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool {
-    for (f in type<KqFmt>) {
-        if (kq_stream_code(f) == code) {
-            out = f
-            return true
-        }
-    }
-    return false
-}
+def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).stream_code == code
 
