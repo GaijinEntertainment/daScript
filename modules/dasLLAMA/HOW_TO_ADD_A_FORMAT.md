@@ -77,9 +77,9 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 - `KqTag_<fmt>` (`dasllama_kqformat.das`) - the format's empty tag struct beside the others; it
   is the overload key every per-format family resolves on, and `kq_fmt_stamp(fmt) <| $(F)`
   binds it, so a member without an overload fails the compile at the stamp. The tag is the
-  LAST parameter of every family: the leaf's data pointers and `n` keep the x64 register
+  LAST parameter of every family: the leaf's data pointers and `n` keep the six x64 register
   argument slots (a tag in slot 0 pushes `n` onto the stack and reshuffles the dot's register
-  allocation - 10-15% on the portable k4/k5 GEMV on zen4).
+  allocation).
 - `kq_transcode_p(src, kq, ks; _f : KqTag_<fmt>)` - the ONE codec of the format: one stride
   unit (the superblock; q51's 32-block) from its disk bytes at `src` into the quant plane at
   `kq` and the scale plane at `ks`, pointer form. The array form the tests drive is the shared
@@ -134,8 +134,8 @@ by hand:
   the `kq_gemv_kernel` and `matmul_kq_groupn` arms and the gen tier's row tails come from the
   stamp. The enum overload `dot_kq(..., fmt : KqFmt)` the gates drive lives in the test fixture
   `tests/_kq_dot.das`, never in `dasllama_math_default`: a stamp there adds sixteen call sites
-  to the dots in their own JIT partition and the inliner codegens the portable k4/k5 GEMV 10%
-  slower on x64. A
+  to the dots in their own JIT partition, and the inliner's decisions over the leaves follow
+  their call-site count. A
   kernel that can run on a forked worker takes its table as a per-call local or a pointer
   argument, never a module global: the fused chains invoke the rows cores inside job contexts,
   where a `let` global reads zero, so a codebook format's rows come out zero on every worker row
