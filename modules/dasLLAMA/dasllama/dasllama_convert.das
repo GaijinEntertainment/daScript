@@ -834,12 +834,13 @@ def transcode_iq4nl_superblock(bytes : array<uint8> | #; bo : int64; var kq : ar
 //! Reference dequant of one iq4nl-plane superblock: w = d * IQ4NL_LUT[nibble], the q40 k/k+16
 //! pairing, per-32-block f16 d - ggml's dequantize_row_iq4_nl float order.
 def dequant_iq4nl_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let lut = iq4nl_lut()
     for (blk in range64(8l)) {
         let d = f16_to_f32(rd_u16(ks, kso + blk * 2l))
         for (l in range64(16l)) {
             let b = int(kq[kqo + blk * 16l + l])
-            dst[doff + blk * 32l + l] = d * float(int(IQ4NL_LUT[b & 15]))
-            dst[doff + blk * 32l + 16l + l] = d * float(int(IQ4NL_LUT[b >> 4]))
+            dst[doff + blk * 32l + l] = d * float(int(lut[b & 15]))
+            dst[doff + blk * 32l + 16l + l] = d * float(int(lut[b >> 4]))
         }
     }
 }

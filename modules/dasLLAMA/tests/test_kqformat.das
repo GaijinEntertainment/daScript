@@ -11,6 +11,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
+require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
@@ -208,6 +209,17 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.iq2xxs), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
+    }
+    t |> run("kq_bytes_per_weight is the stride table's arithmetic on every superblock format") @(t : T?) {
+        // the MoE split estimate prices an expert stack by this number; a hand-copied row drifts
+        // from the table it restates (the k6 row read 212 where K6_QSB + K6_SSB is 210)
+        for (f in type<KqFmt>) {
+            if (kq_sb(f)) {
+                let want = float(kq_qsb(f) + kq_ssb(f)) / float(kq_elems(f))
+                t |> equal(kq_bytes_per_weight(f), want, "bytes per weight of {f}")
+            }
+        }
+        t |> equal(kq_bytes_per_weight(KqFmt.q8), 34.0 / 32.0, "q8: 32 quants + an f16 scale per block")
     }
     t |> run("stream/repack region codes are pinned") @(t : T?) {
         t |> equal(kq_stream_code(KqFmt.q8), 0)

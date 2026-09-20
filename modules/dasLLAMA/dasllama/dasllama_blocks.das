@@ -1411,43 +1411,9 @@ let private SPLIT_BUS_BPS = 13.5e9
 let private SPLIT_GPU_ROW_S = 1.2e-6
 let private SPLIT_CPU_ROW_S = 10.0e-6
 
-//! bytes per weight of a repacked plane: the superblock quant payload + its 20-byte scale row
-def private kq_bytes_per_weight(f : KqFmt) : float {
-    if (f == KqFmt.q40) {
-        return 144.0 / 256.0   // 4-bit quants plus an f16 scale per 32
-    }
-    if (f == KqFmt.k4 || f == KqFmt.iq4xs) {
-        return 148.0 / 256.0
-    }
-    if (f == KqFmt.k5) {
-        return 180.0 / 256.0
-    }
-    if (f == KqFmt.k6) {
-        return 212.0 / 256.0
-    }
-    if (f == KqFmt.k3) {
-        return 114.0 / 256.0   // 96B quants + the 18B scale row per 256
-    }
-    if (f == KqFmt.iq3s) {
-        return 124.0 / 256.0   // 104B quants + the 20B scale row per 256
-    }
-    if (f == KqFmt.iq3xxs) {
-        return 116.0 / 256.0   // 96B quants + the 20B scale row per 256
-    }
-    if (f == KqFmt.iq4nl) {
-        return 144.0 / 256.0   // 128B quants + the 16B scale row per 256 (q40's shapes)
-    }
-    if (f == KqFmt.k2) {
-        return 84.0 / 256.0   // 64B quants + the 20B scale row per 256
-    }
-    if (f == KqFmt.iq2s) {
-        return 92.0 / 256.0   // 72B quants + the 20B scale row per 256
-    }
-    if (f == KqFmt.iq2xs || f == KqFmt.iq2xxs) {
-        return 84.0 / 256.0   // 64B quants + the 20B scale row per 256
-    }
-    return 34.0 / 32.0   // q8: 32 quants + an f16 scale per block
-}
+//! bytes per weight of a repacked plane: the superblock quant payload + its scale row, off the
+//! stride table; q8 is 32 quants + an f16 scale per block
+def kq_bytes_per_weight(f : KqFmt) : float => kq_sb(f) ? float(kq_qsb(f) + kq_ssb(f)) / float(kq_elems(f)) : 34.0 / 32.0
 
 //! Runtime routing gate over the device-side routed combine (overrides the
 //! ``DASLLAMA_GPU_COMBINE`` env probe) — the in-process A/B lever: both arms share one

@@ -18,6 +18,7 @@ require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack or
 require dasllama/dasllama_repack     // repack_k4/k5/k6/q40_grp + repack_q51_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for load_gguf
+require daslib/jobque_boost   // team_parallel_for - the lane-context arm of the iq4nl dequant
 require math
 
 // K-quant (Q4_K / Q6_K) superblock dequant gates. The synthetic arms hand-pack one superblock
@@ -2699,6 +2700,56 @@ def test_iq4nl_planes(t : T?) {
         delete kq
         delete ks
         delete dst
+    }
+    t |> run("iq4nl plane dequant reads its codebook on a team lane: lane values == main-thread values") @(t : T?) {
+        // embed_rows runs embed_row -> dequant_iq4nl_plane_superblock under maybe_parallel_for; the
+        // codebook is read as the per-call local every worker-run kernel takes (kqformat.das), and
+        // this cell holds the lane's rows to the main thread's
+        let blkb <- build_iq4nl_block()
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(128)
+        ks |> resize(16)
+        transcode_iq4nl_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        var main_dst : array<float>
+        main_dst |> resize(256)
+        dequant_iq4nl_plane_superblock(kq, 0l, ks, 0l, main_dst, 0l)
+        var lane_dst : array<float>
+        lane_dst |> resize(256)
+        var ran = 0
+        with_job_que() {
+            set_jobque_fork_pool(true, true)
+            set_jobque_team_mode(true)
+            unsafe {
+                let kqp = addr(kq)
+                let ksp = addr(ks)
+                var dp = addr(lane_dst)
+                var rp = addr(ran)
+                team_parallel_for(0, 1, 1) <| @(rb, re : int) {
+                    feint("{rb} {re}")
+                    dequant_iq4nl_plane_superblock(*kqp, 0l, *ksp, 0l, *dp, 0l)
+                    unsafe(rp[0]) = 1
+                }
+            }
+            set_jobque_team_mode(false)
+        }
+        t |> equal(ran, 1, "the lane body ran")
+        var nonzero = 0
+        var diff = 0
+        for (a, b in main_dst, lane_dst) {
+            if (a != 0.0) {
+                nonzero++
+            }
+            if (a != b) {
+                diff++
+            }
+        }
+        t |> success(nonzero > 200, "the fixture's expected weights are not zero ({nonzero} nonzero of 256)")
+        t |> equal(diff, 0, "elements the lane dequanted differently from the main thread")
+        delete kq
+        delete ks
+        delete main_dst
+        delete lane_dst
     }
 }
 
