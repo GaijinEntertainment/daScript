@@ -34,11 +34,8 @@ def rd_f32(b : array<uint8> | #; o : int64) : float {
     return unsafe(reinterpret<float>(rd_u32(b, o)))
 }
 
-// E8M0 block scale -> fp32 * 0.5 = 2^(e-128) (the half matches the doubled MXFP4_KVALUES).
-// e < 2 lands in fp32 denormal territory -> precomputed bit patterns.
-def e8m0_to_f32_half(e : uint) : float {
-    let bits = e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u)
-    return unsafe(reinterpret<float>(bits))
+def rd_i32(b : array<uint8> | #; o : int64) : int {
+    return int(rd_u32(b, o))
 }
 
 // ===== K-quant superblock dequant (256-weight superblocks, on-disk Q4_K / Q6_K) =====
@@ -49,17 +46,8 @@ def private rd_i8(b : array<uint8> | #; o : int64) : int {
     return u < 128 ? u : u - 256
 }
 
-// 6-bit sub-scale/min unpack for Q4_K/Q5_K superblocks. The 12 scale
-// bytes hold 8 scales + 8 mins: j<4 live in the low 6 bits of bytes j / j+4; j>=4 split as
-// low-4 in byte j+4 (scale = low nibble, min = high) + top-2 of bytes j-4 / j.
-def private q4k_scale_min(b : array<uint8> | #; so, j : int64) : int2 {
-    if (j < 4l) {
-        return int2(int(b[so + j]) & 63, int(b[so + j + 4l]) & 63)
-    }
-    let sc = (int(b[so + j + 4l]) & 15) | ((int(b[so + j - 4l]) >> 6) << 4)
-    let mn = (int(b[so + j + 4l]) >> 4) | ((int(b[so + j]) >> 6) << 4)
-    return int2(sc, mn)
-}
+// the 6-bit sub-scale/min pair j of the 12-byte scale block at b[so..]: k4_sc_mn on the array carrier
+def private q4k_scale_min(b : array<uint8> | #; so, j : int64) : int2 => k4_sc_mn(unsafe(addr<uint8 const?>(b[so])), j)
 
 //! Dequantize one Q4_K superblock (144B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
 //! q the RAW nibble (min term absorbs offset); 32 quant bytes carry weights 0..31 low nibble, 32..63
@@ -161,17 +149,6 @@ def private rd_i8_p(p : uint8 const?; o : int64) : int {
     }
 }
 
-def private q4k_scale_min_p(p : uint8 const?; so, j : int64) : int2 {
-    unsafe {
-        if (j < 4l) {
-            return int2(int(p[so + j]) & 63, int(p[so + j + 4l]) & 63)
-        }
-        let sc = (int(p[so + j + 4l]) & 15) | ((int(p[so + j - 4l]) >> 6) << 4)
-        let mn = (int(p[so + j + 4l]) >> 4) | ((int(p[so + j]) >> 6) << 4)
-        return int2(sc, mn)
-    }
-}
-
 def dequant_q4k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; doff : int64) {
     unsafe {
         let d = f16_to_f32(rd_u16_p(sp, bo))
@@ -180,8 +157,8 @@ def dequant_q4k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
         var qo = bo + 16l
         var dsto = doff
         for (js in range64(4l)) {
-            let s0 = q4k_scale_min_p(sp, so, 2l * js)
-            let s1 = q4k_scale_min_p(sp, so, 2l * js + 1l)
+            let s0 = k4_sc_mn(sp + so, 2l * js)
+            let s1 = k4_sc_mn(sp + so, 2l * js + 1l)
             let d1 = d * float(s0.x)
             let m1 = dmin * float(s0.y)
             let d2 = d * float(s1.x)
@@ -206,8 +183,8 @@ def dequant_q5k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
         var qo = bo + 48l
         var dsto = doff
         for (js in range64(4l)) {
-            let s0 = q4k_scale_min_p(sp, so, 2l * js)
-            let s1 = q4k_scale_min_p(sp, so, 2l * js + 1l)
+            let s0 = k4_sc_mn(sp + so, 2l * js)
+            let s1 = k4_sc_mn(sp + so, 2l * js + 1l)
             let d1 = d * float(s0.x)
             let m1 = dmin * float(s0.y)
             let d2 = d * float(s1.x)
@@ -490,7 +467,7 @@ def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : in
         let df = f16_to_f32(d)
         let dmf = f16_to_f32(dmin)
         for (j in range64(8l)) {
-            let sm = q4k_scale_min_p(ks, kso + 4l, j)
+            let sm = k4_sc_mn(ks + kso + 4l, j)
             let dj = df * float(sm.x)
             if (dj == 0.0) {
                 continue

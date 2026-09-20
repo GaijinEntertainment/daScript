@@ -278,8 +278,8 @@ or `var`).** A team lane never runs global initializers, so the global reads zer
 
 **A buffer in `dasllama/` whose element count scales with a model dimension - any count the
 model file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the
-same count - a `dasllama/dasllama_common.das` sizing helper (`reserve_resize`, `grow_resize`,
-`ensure_length`, `overwrite_resize`, `zeroed_resize`), the builtin `scratch_resize` on a
+same count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_resize`,
+`ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a
 `@scratch` carrier, or the pair spelled out - whatever the size looks like at today's shapes.**
 PERF032 holds the pair on an annotated buffer; a bare grow past the heap's unreserved-size cap
 (64 MB) panics the load on the first big model, not at the call site.

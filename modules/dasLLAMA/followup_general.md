@@ -454,7 +454,7 @@
     declaration-site annotation landed on variables, fields and by-ref parameters (locals gained
     `@` metadata grammar for it); it changes nothing at runtime - PERF032 holds every
     `resize`/`resize_no_init` on an annotated array to a `reserve`/`ensure_capacity` earlier in
-    the same function, helpers like `reserve_resize`/`grow_resize`/`zeroed_resize` staying
+    the same function, helpers like `reserve_resize`/`grow_resize` staying
     transparent. Annotated: the deltanet state pair, `moe_gout`/`moe_eout`, every T-scaled
     `EncoderState` buffer, `VisionImage.rgb`, the k6 scale-split staging local, the ASR requant
     helper parameters, and `embq`/`embs`. The runtime exact-growth mode was judged not doable

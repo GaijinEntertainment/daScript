@@ -53,27 +53,28 @@ def test_softmax(t : T?) {
     }
 }
 
-// The greedy pick's two halves: hargmax locates the FIRST maximum (its 4-wide scan must not
-// skip past it), hlse sums exp(x - mx) the same way. Both take the empty row as a no-op, which
-// is what the vectorized forms' addr(x[0]) would fault on.
+def private argmax_of(x : array<float>) : int64 => parallel_argmax(x, long_length(x))
+
+// The greedy pick's two halves: parallel_argmax locates the FIRST maximum, hlse sums exp(x - mx)
+// the same way. Both take the empty row as a no-op, which is what the vectorized forms'
+// addr(x[0]) would fault on.
 [test]
-def test_hargmax_hlse(t : T?) {
-    t |> run("hargmax on empty / single / ordinary rows") @(t : T?) {
+def test_argmax_hlse(t : T?) {
+    t |> run("argmax on empty / single / ordinary rows") @(t : T?) {
         var e : array<float>
-        t |> equal(hargmax(e), 0l, "empty row answers 0, no index fault")
+        t |> equal(argmax_of(e), 0l, "empty row answers 0, no index fault")
         var one <- [ -7.5 ]
-        t |> equal(hargmax(one), 0l, "the single element is the max")
-        // 13 entries: past the 4-wide scan's third group, so the tail walk carries the answer
+        t |> equal(argmax_of(one), 0l, "the single element is the max")
         var many <- [ 0.1, -2.0, 0.3, 0.25, -1.0, 0.9, 0.2, 0.15, -0.5, 0.05, 4.25, 0.0, 1.5 ]
-        t |> equal(hargmax(many), 10l, "the max at index 10 (inside the tail of the 4-wide scan)")
+        t |> equal(argmax_of(many), 10l, "the max at index 10")
         var first <- [ 3.0, 0.0, 1.0, 2.0, 0.5 ]
-        t |> equal(hargmax(first), 0l, "a max in lane 0 of the first group")
+        t |> equal(argmax_of(first), 0l, "a max at index 0")
     }
-    t |> run("hargmax on ties takes the FIRST") @(t : T?) {
+    t |> run("argmax on ties takes the FIRST") @(t : T?) {
         var tied <- [ 1.0, 5.0, 2.0, 5.0, 5.0, 0.0 ]
-        t |> equal(hargmax(tied), 1l, "three equal maxima, the lowest index wins")
+        t |> equal(argmax_of(tied), 1l, "three equal maxima, the lowest index wins")
         var tied_group <- [ 5.0, 5.0, 5.0, 5.0 ]
-        t |> equal(hargmax(tied_group), 0l, "a whole group at the max still answers lane 0")
+        t |> equal(argmax_of(tied_group), 0l, "a whole row at the max still answers index 0")
     }
     t |> run("hlse sums exp(x - mx)") @(t : T?) {
         var e : array<float>

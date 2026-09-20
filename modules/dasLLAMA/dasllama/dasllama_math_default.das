@@ -462,19 +462,6 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
 // Plane layouts per 256-weight superblock: k4 128B nibbles+32B f16(s,o); k5 adds 32B qh; k6
 // [128B ql][64B qh]+[16 sub-scales][f16 d]. Dot: s*(Σq·a) − o*(Σa); disk-order — backend-independent.
 
-//! 6-bit sub-scale/min j off a 12-byte packed Q4_K/Q5_K scale block at sp (the packed
-//! halfword decode, pointer form) — shared by the kq v2 dots, repack and dequants.
-def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
-    unsafe {
-        if (j < 4l) {
-            return int2(int(sp[j]) & 63, int(sp[j + 4l]) & 63)
-        }
-        let sc = (int(sp[j + 4l]) & 15) | ((int(sp[j - 4l]) >> 6) << 4)
-        let mn = (int(sp[j + 4l]) >> 4) | ((int(sp[j]) >> 6) << 4)
-        return int2(sc, mn)
-    }
-}
-
 // kq v2 (all three formats): Q8_K-form activations — xsp is the PER-SUPERBLOCK scale plane
 // (n/256 per token); integer sub-scale / bsums-x-mins sums fold to ONE float per superblock.
 // Int sums are exact, so this is bit-exact vs the grp walk regardless of sub-block order.

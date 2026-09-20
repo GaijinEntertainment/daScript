@@ -1477,25 +1477,25 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
     let grows = fused ? nk : npos
     // a long media prefill (omni ASR, ~2.6k rows x k experts) sizes these into the tens of MB (sizing mirrors ple.das)
-    s.moe_rlog |> zeroed_resize(npos * ne)
-    s.moe_idx_b |> zeroed_resize(nk)
-    s.moe_w_b |> zeroed_resize(nk)
-    s.moe_cnt |> zeroed_resize(ne)
-    s.moe_bkt |> zeroed_resize(nk)
-    s.moe_gxq |> zeroed_resize(grows * dim)
-    s.moe_gxs |> zeroed_resize(grows * nb)
-    s.moe_ghb |> zeroed_resize(grows * nfx)
-    s.moe_ghb2 |> zeroed_resize(grows * nfx)
-    s.moe_hq |> zeroed_resize(grows * nfx)
-    s.moe_hs |> zeroed_resize(grows * nfx / 32l)
-    s.moe_gout |> zeroed_resize(grows * dim)
-    s.moe_eout |> zeroed_resize(nk * dim)
+    s.moe_rlog |> grow_resize(npos * ne)
+    s.moe_idx_b |> grow_resize(nk)
+    s.moe_w_b |> grow_resize(nk)
+    s.moe_cnt |> grow_resize(ne)
+    s.moe_bkt |> grow_resize(nk)
+    s.moe_gxq |> grow_resize(grows * dim)
+    s.moe_gxs |> grow_resize(grows * nb)
+    s.moe_ghb |> grow_resize(grows * nfx)
+    s.moe_ghb2 |> grow_resize(grows * nfx)
+    s.moe_hq |> grow_resize(grows * nfx)
+    s.moe_hs |> grow_resize(grows * nfx / 32l)
+    s.moe_gout |> grow_resize(grows * dim)
+    s.moe_eout |> grow_resize(nk * dim)
     if (nsh > 0l && c.moe_shexp_gated) {
-        s.moe_gl_b |> zeroed_resize(npos)
+        s.moe_gl_b |> grow_resize(npos)
     }
     if (kq_layer) {
-        s.moe_gxbs |> zeroed_resize(grows * dim / 16l)
-        s.moe_hbs |> zeroed_resize(grows * nfx / 16l)
+        s.moe_gxbs |> grow_resize(grows * dim / 16l)
+        s.moe_hbs |> grow_resize(grows * nfx / 16l)
     }
 
     // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
@@ -1584,7 +1584,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let ts_shg = prof_ticks()
         let she = dim * nsh
         let q8 = int(KqFmt.q8)
-        s.moe_shout |> zeroed_resize(npos * dim)
+        s.moe_shout |> grow_resize(npos * dim)
         s.moe_offs1 |> clear()
         s.moe_offs1 |> push(t.wsh1_off + l * she)   // nolint:STYLE012 — one region into reused scratch
         s.moe_offs1 |> push(0l)
@@ -1749,7 +1749,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 }
                 prof_add("mm_gemm", ts_c)
                 let ts_join = prof_ticks()
-                s.moe_gpu_out |> zeroed_resize(npos * dim)
+                s.moe_gpu_out |> grow_resize(npos * dim)
                 matmul_moe_gpu_ffn_combined_xf_join(s.moe_gpu_out)
                 prof_add("split_wait", ts_join)   // GPU residue after the CPU tail - 0 = fully hidden
             } elif (gpu_xf) {

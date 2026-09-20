@@ -2779,7 +2779,7 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
         var seed = 11
         for (gtype in gtypes) {
             let fmt = gguf_kq_fmt_of_type(gtype)
-            let sbb = gguf_kq_disk_sbb(gtype)
+            let sbb = ggml_type_bytes(gtype, 256l)
             var bytes : array<uint8>
             bytes |> reserve(sbb * 3l)
             var x = uint(seed) * 2654435761u

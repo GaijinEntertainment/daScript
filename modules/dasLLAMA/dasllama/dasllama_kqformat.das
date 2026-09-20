@@ -141,14 +141,26 @@ let IQ2XXS_SSB = 20l   // IQ2_XXS scale plane: the iq3xxs row shape - f16 d EIGH
 // IQ4_NL reuses Q40_QSB/Q40_SSB outright: the disk bytes are q40's (f16 d + 16 nibble bytes
 // per 32-block, the k/k+16 pairing) — only the nibble SEMANTICS differ (IQ4NL_LUT, no -8).
 
-//! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (upstream's kvalues_iq4nl).
-//! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
-//! forked worker reads a module global as zeros - kernels take `iq4nl_lut()` as a local instead.
-let IQ4NL_LUT = fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
-
-//! The same codebook as a per-call local (16 bytes on the caller's frame) - the form every
-//! worker-run kernel reads.
+//! The IQ4_NL / IQ4_XS nibble codebook (upstream's kvalues_iq4nl): weight = scale x lut[nibble], as
+//! a per-call local (16 bytes on the caller's frame) - the form every worker-run kernel reads.
 def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
+
+//! The codebook's main-context copy (tests, oracles, the emitter's constant bake): a kernel that
+//! can run on a forked worker reads a module global as zeros - kernels take `iq4nl_lut()`.
+let IQ4NL_LUT = iq4nl_lut()
+
+//! The 6-bit sub-scale/min pair j of a 12-byte packed Q4_K/Q5_K scale block at sp - the one
+//! decode the dots, repacks, dequants and the Q5_K encoder share.
+def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
+    unsafe {
+        if (j < 4l) {
+            return int2(int(sp[j]) & 63, int(sp[j + 4l]) & 63)
+        }
+        let sc = (int(sp[j + 4l]) & 15) | ((int(sp[j - 4l]) >> 6) << 4)
+        let mn = (int(sp[j + 4l]) >> 4) | ((int(sp[j]) >> 6) << 4)
+        return int2(sc, mn)
+    }
+}
 
 //! The IQ3_S grid (upstream's iq3s_grid): entry qs | (qh bit << 8) packs FOUR weight magnitudes as
 //! bytes; the per-element sign rides the block's own sign bytes. Per-call local (2 KB on the

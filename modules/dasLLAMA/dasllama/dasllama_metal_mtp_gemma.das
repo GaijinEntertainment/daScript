@@ -9,6 +9,7 @@ require math
 require das_metal
 require metal/das_metal_boost
 require dasllama/dasllama_common
+require dasllama/dasllama_math   // reserve_resize / grow_resize - the scratch sizing
 require dasllama/dasllama_batch
 require dasllama/dasllama_mtp_gemma
 require dasllama/dasllama_metal_common

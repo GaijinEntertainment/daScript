@@ -2,12 +2,13 @@ options gen2
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_common
+require dasllama/dasllama_math
 
 // The sizing helpers' own contract, fed directly: reserve_resize is exact at any element
-// width, grow_resize keeps a reused buffer amortized across shrink-then-grow, and
-// overwrite_resize is grow-only no-init — and all three stay panic-free past the
-// max_unreserved_size guard (64 MB default), which is the reason they exist.
+// width, grow_resize keeps a reused buffer amortized across shrink-then-grow with a zeroed
+// re-added tail, ensure_length never shrinks, and overwrite_resize is grow-only no-init — and
+// all four stay panic-free past the max_unreserved_size guard (64 MB default), which is the
+// reason they exist.
 
 [test]
 def test_reserve_resize(t : T?) {
@@ -40,6 +41,40 @@ def test_grow_resize(t : T?) {
         big |> grow_resize(70000000l)    // past max_unreserved_size: reserved, so no panic
         t |> equal(long_length(big), 70000000l)
     }
+    t |> run("the re-added tail reads zero, not stale") @(t : T?) {
+        var a : array<int64>
+        a |> grow_resize(100l)
+        for (i in range64(100l)) {
+            a[i] = i + 1l
+        }
+        a |> grow_resize(10l)          // shrink within capacity
+        let cap0 = long_capacity(a)
+        a |> grow_resize(100l)         // regrow: the re-added tail must read zero
+        t |> equal(long_capacity(a), cap0)
+        t |> equal(a[9], 10l, "kept elements survive")
+        t |> equal(a[10], 0l, "re-added tail is zeroed")
+        t |> equal(a[99], 0l, "re-added tail is zeroed to the end")
+    }
+}
+
+[test]
+def test_ensure_length(t : T?) {
+    t |> run("grow-only: never shrinks, the grown tail zeroed") @(t : T?) {
+        var a : array<int>
+        a |> ensure_length(100l)
+        t |> equal(length(a), 100)
+        a[99] = 7
+        a |> ensure_length(10l)          // smaller need: untouched
+        t |> equal(length(a), 100)
+        t |> equal(a[99], 7)
+        a |> ensure_length(200l)
+        t |> equal(length(a), 200)
+        t |> equal(a[99], 7, "kept elements survive")
+        t |> equal(a[150], 0, "grown tail is zeroed")
+        var big : array<uint8>
+        big |> ensure_length(70000000l)  // past max_unreserved_size: reserved, so no panic
+        t |> equal(long_length(big), 70000000l)
+    }
 }
 
 [test]
@@ -55,28 +90,5 @@ def test_overwrite_resize(t : T?) {
         overwrite_resize(s, 20000000l)     // 80 MB grow: exact reserve inside, no panic
         t |> equal(long_length(s), 20000000l)
         t |> equal(long_capacity(s), 20000000l)
-    }
-}
-
-[test]
-def test_zeroed_resize(t : T?) {
-    t |> run("zero-init scratch: amortized growth, re-added tail zeroed") @(t : T?) {
-        var a : array<int64>
-        a |> zeroed_resize(100l)
-        for (i in range64(100l)) {
-            a[i] = i + 1l
-        }
-        a |> zeroed_resize(10l)          // shrink within capacity
-        let cap0 = long_capacity(a)
-        a |> zeroed_resize(100l)         // regrow: the re-added tail must read zero, not stale
-        t |> equal(long_capacity(a), cap0)
-        t |> equal(a[9], 10l, "kept elements survive")
-        t |> equal(a[10], 0l, "re-added tail is zeroed")
-        t |> equal(a[99], 0l, "re-added tail is zeroed to the end")
-        a |> zeroed_resize(long_capacity(a) + 1l)   // grow: ensure_capacity doubles, never exact
-        t |> success(long_capacity(a) >= cap0 * 2l, "growth stays amortized (an exact reserve reallocates every chunk)")
-        var big : array<float>
-        big |> zeroed_resize(20000000l)  // 80 MB grow past max_unreserved_size: reserved, so no panic
-        t |> equal(long_length(big), 20000000l)
     }
 }

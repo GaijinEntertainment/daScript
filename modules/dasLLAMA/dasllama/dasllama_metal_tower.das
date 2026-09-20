@@ -9,6 +9,7 @@ require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_env
 require dasllama/dasllama_common
+require dasllama/dasllama_math   // ensure_length - the tower scratch sizing
 require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_gemma4v   // Gemma4vTower/Gemma4vState — the ViT block loop

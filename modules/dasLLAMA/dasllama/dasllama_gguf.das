@@ -15,6 +15,7 @@ require dasllama/dasllama_env       // g_env_engine.mtp_head — the split NextN
 require daslib/f16_cvt public  // f16_to_f32 / f32_to_f16 (re-export: whisper/vad/parakeet/audio callers)
 require dasllama/dasllama_convert public   // the pure codec layer (readers/dequants/transcodes/encoder) — split out 2026-07-29
 require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatch counters) — the transcode hot loops thread when a jobque is up
+require dasllama/dasllama_math      // e8m0_half — the MXFP4 scale decode
 
 // Generic GGUF (v2/v3) reader: parses the header, typed key-value metadata, and the
 // tensor-info table out of an mmap'd byte buffer, then exposes typed getters. Knows nothing
@@ -130,10 +131,6 @@ let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
 
 def private rd_u64(b : array<uint8> | #; o : int64) : uint64 {
     return uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
-}
-
-def rd_i32(b : array<uint8> | #; o : int64) : int {
-    return int(rd_u32(b, o))
 }
 
 def private rd_i64(b : array<uint8> | #; o : int64) : int64 {
@@ -726,8 +723,9 @@ def private transcode_jobs(blocks, disk_sb : int64) : int {
     return int(clamp(blocks * disk_sb / 1048576l, 1l, 64l))
 }
 
-// the tensor index (the caller resolves its view/base through with_tensor_view).
-def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; type_name : string; src_off, expect_n : int64) : int {
+// the tensor index (the caller resolves its view/base through with_tensor_view); `align` is the
+// block the slice must tile - 256 for the superblock formats, 32 for the per-32 ones
+def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; type_name : string; src_off, expect_n : int64; align : int64 = 256l) : int {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -735,8 +733,8 @@ def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; typ
     if (m.tensors[ti].ggml_type != want_type) {
         panic("gguf: tensor '{name}' is not {type_name} (type {m.tensors[ti].ggml_type})")
     }
-    if (src_off % 256l != 0l || expect_n % 256l != 0l) {
-        panic("gguf: tensor '{name}' {type_name} slice [{src_off}, +{expect_n}) is not superblock-aligned")
+    if (src_off % align != 0l || expect_n % align != 0l) {
+        panic("gguf: tensor '{name}' {type_name} slice [{src_off}, +{expect_n}) is not block-aligned ({align})")
     }
     if (src_off + expect_n > m.tensors[ti].n_elem) {
         panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
@@ -1264,20 +1262,6 @@ def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
     return KqFmt.q8
 }
 
-//! Disk bytes per 256-superblock of the i-quant / Q2_K / Q3_K GGML types the native tier reads
-//! (0 = not one of them). IQ4_NL is eight 18B blocks of 32.
-def gguf_kq_disk_sbb(gtype : int) : int64 {
-    if (gtype == GGML_TYPE_IQ4_XS) return 136l
-    if (gtype == GGML_TYPE_Q3_K || gtype == GGML_TYPE_IQ3_S) return 110l
-    if (gtype == GGML_TYPE_IQ3_XXS) return 98l
-    if (gtype == GGML_TYPE_IQ4_NL) return 144l
-    if (gtype == GGML_TYPE_Q2_K) return 84l
-    if (gtype == GGML_TYPE_IQ2_S) return 82l
-    if (gtype == GGML_TYPE_IQ2_XS) return 74l
-    if (gtype == GGML_TYPE_IQ2_XXS) return 66l
-    return 0l
-}
-
 //! One superblock's disk -> plane transcode, keyed by format - the array form the tests and the
 //! f32 fallback drive (the bulk loaders are the per-format `gguf_transcode_*`).
 def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
@@ -1358,7 +1342,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         unsafe {
             let src = temp_array(addr<uint16?>(bytes[base + src_off * 2l]), expect_n, type<uint16>)
             for (i in range64(expect_n)) {
-                dst[dst_off + i] = reinterpret<float>(uint(src[i]) << 16u)
+                dst[dst_off + i] = bf16_to_f32(uint(src[i]))
             }
         }
     } elif (gtype == GGML_TYPE_Q8_0) {
@@ -1459,12 +1443,12 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                 }
             }
         }
-    } elif (gguf_kq_disk_sbb(gtype) > 0l) {
+    } elif (gguf_kq_fmt_of_type(gtype) != KqFmt.q8) {
         // transcode one superblock into scratch planes + its plane dequant: the native load's own two steps, value for value
         if (src_off % 256l != 0l || expect_n % 256l != 0l) {
             panic("gguf: tensor '{name}' superblock slice [{src_off}, +{expect_n}) is not superblock-aligned")
         }
-        let sbb = gguf_kq_disk_sbb(gtype)
+        let sbb = ggml_type_bytes(gtype, 256l)
         let fmt = gguf_kq_fmt_of_type(gtype)
         var kq : array<uint8>
         var ks : array<uint8>
@@ -1485,7 +1469,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         let nb = expect_n / 32l
         var bo = base + (src_off / 32l) * 17l
         for (blk in range64(nb)) {
-            let d = e8m0_to_f32_half(uint(bytes[bo]))
+            let d = e8m0_half(uint(bytes[bo]))
             bo++
             for (k in range64(16l)) {
                 let b = int(bytes[bo + k])
@@ -1503,13 +1487,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
 //! Copy a BF16 tensor's raw halfwords into dst[dst_off..] — no fp32 expand (read kernels widen
 //! in-loop by the exact bit shift). Requires the tensor to be BF16 on disk (check gguf_tensor_type).
 def gguf_transcode_bf16(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<uint16>; dst_off, expect_n : int64) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("gguf: tensor '{name}' not found")
-    }
-    if (m.tensors[ti].ggml_type != GGML_TYPE_BF16) {
-        panic("gguf: tensor '{name}' is not BF16 (type {m.tensors[ti].ggml_type})")
-    }
+    let ti = kq_transcode_check(m, name, GGML_TYPE_BF16, "BF16", 0l, expect_n, 1l)
     if (expect_n != m.tensors[ti].n_elem) {
         panic("gguf: tensor '{name}' has {m.tensors[ti].n_elem} elems, expected {expect_n}")
     }
@@ -1534,21 +1512,9 @@ def gguf_tensor_type(m : GGUFMeta; name : string) : int {
 //! copy verbatim to qdst[qoff..]; per-block fp16 scale widens to fp32 in sdst[soff..] (soff = qoff/32).
 //! Requires the tensor to be Q8_0 on disk (check gguf_tensor_type first).
 def gguf_transcode_q8_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64; src_off : int64 = 0l) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("gguf: tensor '{name}' not found")
-    }
-    if (m.tensors[ti].ggml_type != GGML_TYPE_Q8_0) {
-        panic("gguf: tensor '{name}' is not Q8_0 (type {m.tensors[ti].ggml_type})")
-    }
     // src_off (32-aligned element offset) transcodes a sub-range — preserves the original Q8 blocks
     // when splitting a fused tensor (Phi3 attn_qkv / gate_up), so there's no lossy fp32 requantize
-    if (src_off + expect_n > m.tensors[ti].n_elem) {
-        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
-    }
-    if (src_off % 32l != 0l || expect_n % 32l != 0l) {
-        panic("gguf: tensor '{name}' Q8_0 slice [{src_off}, +{expect_n}) is not block-aligned")
-    }
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q8_0, "Q8_0", src_off, expect_n, 32l)
     let nb = expect_n / 32l
     if (nb <= 0l) {
         return
@@ -1587,19 +1553,7 @@ def gguf_transcode_q8_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
 //! Q5_0 block is 32 5-bit ints q in [0,32) times one fp16 scale, so int8 = q - 16 with the same
 //! scale is a bit-exact Q8 representation. qoff is the weight-element offset, soff = qoff / 32.
 def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<int8>; var sdst : array<float>; qoff, soff, expect_n : int64; src_off : int64 = 0l) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("gguf: tensor '{name}' not found")
-    }
-    if (m.tensors[ti].ggml_type != GGML_TYPE_Q5_0) {
-        panic("gguf: tensor '{name}' is not Q5_0 (type {m.tensors[ti].ggml_type})")
-    }
-    if (src_off + expect_n > m.tensors[ti].n_elem) {
-        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
-    }
-    if (src_off % 32l != 0l || expect_n % 32l != 0l) {
-        panic("gguf: tensor '{name}' Q5_0 slice [{src_off}, +{expect_n}) is not block-aligned")
-    }
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q5_0, "Q5_0", src_off, expect_n, 32l)
     let nb = expect_n / 32l
     if (nb <= 0l) {
         return
@@ -1638,16 +1592,7 @@ def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : 
 //! split-half nibble packing copies verbatim to qdst[qoff_bytes..] (= weight-offset/2); per-block
 //! fp16 scale widens to fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk.
 def gguf_transcode_q4_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64; src_off : int64 = 0l) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("gguf: tensor '{name}' not found")
-    }
-    if (m.tensors[ti].ggml_type != GGML_TYPE_Q4_0) {
-        panic("gguf: tensor '{name}' is not Q4_0 (type {m.tensors[ti].ggml_type})")
-    }
-    if (src_off + expect_n > m.tensors[ti].n_elem) {
-        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
-    }
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q4_0, "Q4_0", src_off, expect_n, 32l)
     let nb = expect_n / 32l
     with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
         var bo = tbase + (src_off / 32l) * 18l
@@ -1666,16 +1611,7 @@ def gguf_transcode_q4_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
 //! round-trip: 16 packed-nibble bytes/32-block verbatim to ndst[noff_bytes..] (=offset/2), 1 RAW
 //! E8M0 scale byte to edst[eoff..] (=offset/32). Exact vs the old dequant->requantize-to-Q8 path.
 def gguf_transcode_mx4(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var ndst : array<uint8>; var edst : array<uint8>; noff_bytes, eoff, expect_n : int64; src_off : int64 = 0l) {
-    let ti = gguf_find_tensor(m, name)
-    if (ti < 0) {
-        panic("gguf: tensor '{name}' not found")
-    }
-    if (m.tensors[ti].ggml_type != GGML_TYPE_MXFP4) {
-        panic("gguf: tensor '{name}' is not MXFP4 (type {m.tensors[ti].ggml_type})")
-    }
-    if (src_off + expect_n > m.tensors[ti].n_elem) {
-        panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
-    }
+    let ti = kq_transcode_check(m, name, GGML_TYPE_MXFP4, "MXFP4", src_off, expect_n, 32l)
     let nb = expect_n / 32l
     with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
         var bo = tbase + (src_off / 32l) * 17l
