@@ -40,9 +40,11 @@ specialization path - one compiled variant per constant shape - or records the k
 none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
 **Never check a claim about emitted shape against the das source - check it in the emitted
-words or text, the SPIR-V words one emitter builds and the MSL text the other writes.** Emitted
-shape is the structure of the emitted kernel - its signature, its parameter attributes, its
-statement forms - and its stamped shape values (tile, grid, threadgroup sizes).
+words or text, the SPIR-V words one emitter builds and the MSL text the other writes; a diff that
+claims an emitted shape - a stamp's tile, unroll width, grid or threadgroup size - lands that
+check in the same change.** Emitted shape is the structure of the emitted kernel - its signature,
+its parameter attributes, its statement forms - and its stamped shape values (tile, grid,
+threadgroup sizes).
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md` sec.5) naming that capability - covered by the row

@@ -1134,7 +1134,7 @@ class ClsEpilogue {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.vocab * pa.rows) {
-            let id = gid % pa.vocab
+            let id = pa.nsupp > 0u ? gid % pa.vocab : 0u   // the row's id, wanted by the pins alone
             var v = y[gid]
             if (pa.cap > 0.0) {
                 v = softcap_exp(v, pa.cap)
@@ -4088,13 +4088,19 @@ struct DaAttnArgs {
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
 def da_attn_part_stride(hs : uint) : uint => hs + 2u
 
-let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four (the G2 stamps take a group of one or two heads in a slab of two, the same workgroup count)
+let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
-def da_slab_g2(kv_mul : int64) : bool => kv_mul <= 2l
+def da_slab_is_g2(kv_mul : int64) : bool => kv_mul <= 2l
+
+//! the slab's q heads at a group width: the kernel's `G` and the host's workgroup count derive from this one expression
+def da_slab_heads(kv_mul : int64) : int64 => da_slab_is_g2(kv_mul) ? 2l : int64(DA_G)
 
 //! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
-def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 => n_heads / kv_mul * ((kv_mul + int64(DA_G) - 1l) / int64(DA_G)) * nsplit
+def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 {
+    let g = da_slab_heads(kv_mul)
+    return n_heads / kv_mul * ((kv_mul + g - 1l) / g) * nsplit
+}
 
 let DA_RQ_Q8 = 0u    //! `DaAttnArgs.rqk`: the wo plane reads Q8_0 activations
 let DA_RQ_Q8K = 1u   //! ... Q8_K activations
@@ -4107,7 +4113,7 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
     @template_constant SINK : bool = false   //! the sink stamps (gpt-oss): the head's sink logit joins the softmax's max and denominator at the unsplit store; a split piece leaves it to the combine
-    @template_constant G : int = 4           //!< the slab's q heads, DA_G or two: every score and V loop unrolls over them
+    @template_constant G : int = 4           //!< the slab's q heads, DA_G or two (`da_slab_heads`): every score and V loop unrolls over them; the workgroup arrays hold four, so no stamp goes wider
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
     @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
@@ -4313,7 +4319,7 @@ class template DaAttnT {
         let my_kgroup = folded ? gl_SubgroupID * kgroups_per_subgroup + lane / vrow_words : tid / vrow_words   //! off the subgroup's own lanes where the fold serves
         let w = folded ? lane % vrow_words : tid % vrow_words
         var acc : float[32]                    // [head * 8 + dim]
-        for [unroll] (j in range(32)) {
+        for [unroll] (j in range(G * 8)) {
             acc[j] = 0.0
         }
         let cstart = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
@@ -4469,7 +4475,7 @@ class template DaAttnT {
         let stride = da_attn_part_stride(hs)
         var r = 1u
         while (r < kgroups_per_subgroup) {
-            for [unroll] (k in range(32)) {
+            for [unroll] (k in range(G * 8)) {
                 acc[k] += subgroupShuffleXor(acc[k], r * vrow_words)
             }
             r *= 2u
@@ -9845,7 +9851,7 @@ class template Q8GemvNT {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
             }
-            let clast = pa.ncols - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
+            let clast = max(pa.ncols, 1u) - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
             var bi0 = 0u
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
@@ -10205,7 +10211,7 @@ struct GuNArgs {
     ncols : uint  //! the rows the command steps at once, 1 to GU_N_COLS: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
 }
 
-let GU_N_COLS = 8u   //! the fused gate-up N form's widest stamp: its slabs hold this many columns, and a wider count is clamped to it
+let GU_N_COLS = 8u   //! the widest gate-up N stamp's columns - the width every stamp's slabs and accumulators carry; `q8_gemv_gu_n_ensure` holds the rail's row count to it
 
 //! the fused gate-up GEMV's N-column forms: `NC` column slots a weight word, `pa.ncols` of them live and stored
 [ |> template_struct_instance]
@@ -10237,7 +10243,7 @@ class template Q8GemvGuNT {
             accg[c] = 0.0
             accu[c] = 0.0
         }
-        let clast = pa.ncols - 1u
+        let clast = max(pa.ncols, 1u) - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its block is never stored
         var bi0 = 0u
         while (bi0 < nb) {
             let b = bi0 + lane / 2u
@@ -10327,6 +10333,7 @@ class Q8GemvGuN8 : Q8GemvGuNT {
 
 //! the fused gate-up N stamps for up to `nb` columns
 def q8_gemv_gu_n_ensure(nb : int64 = 8l) : bool {
+    verify(nb <= int64(GU_N_COLS), "vk decode: the N-row command's row count is past the widest gate-up stamp")
     var ok = ensure_q8_gemv_gu_n2_cls()
     if (nb > 2l) {
         ok = ok && ensure_q8_gemv_gu_n4_cls()
@@ -10337,6 +10344,7 @@ def q8_gemv_gu_n_ensure(nb : int64 = 8l) : bool {
     return ok
 }
 
+//! the gate-up N stamps share one layout, so the narrowest stamp's set binds them all
 def q8_gemv_gu_n_set(bufs : uint64 const[8]; sizes : int64 const[8]; gbits : uint const[8]) : VkDescriptorSet
     => set_q8_gemv_gu_n2_cls(bufs, sizes, gbits)
 
@@ -11143,10 +11151,10 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
     return false
 }
 
-//! the q8 stamps share one layout of their own; a kq leaf shares the family's
+//! the q8 stamps share one layout of their own, so the narrowest stamp's set - the one every row count builds - binds them all; a kq leaf shares the family's
 def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
-        return set_q8_gemv_n4_cls(bufs, sizes, gbits)
+        return set_q8_gemv_n2_cls(bufs, sizes, gbits)
     }
     return gemv_cls_set(fmt, bufs, sizes, gbits)
 }

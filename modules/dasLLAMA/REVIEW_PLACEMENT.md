@@ -13,7 +13,9 @@ code lands in which file is the checklist's own.
 
 **A function, a module global, a named constant or a `require` under `dasllama/` lands in the
 file whose charter line - in an `ARCHITECTURE_*.md` companion's sec.1 - names its concern and
-whose must-not-hold cell does not, or that charter line changes in the same diff.**
+whose must-not-hold cell does not, or that charter line changes in the same diff.** A charter
+line's parenthetical examples illustrate its concern and never narrow it: a family the list does
+not name lands where its concern does, and the list gains it when the same diff adds the family.
 `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line;
 a file outside `dasllama/` carries no charter line and answers to its own folder's checklist; a
 function landing in a file whose charter line forbids its kind is a defect wherever else the kind
@@ -23,10 +25,11 @@ goes unnamed.
 `dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a family ships (cm2,
 KHR).
 
-**A host-side ensure/set/encode ladder that picks which stamp to use from the call's own arguments -
-arm, format or shape - lands in `dasllama/dasllama_vulkan_classes.das`; a choice the driver makes
-from the state it armed at bring-up stays in the driver.** A stamp is one class stamped from a
-kernel class template.
+**A host-side ensure/set/encode ladder that picks a stamp from its push-constant and shape
+arguments alone lands in `dasllama/dasllama_vulkan_classes.das`; a pick that reads the driver's
+state - `g_rd`, an `RLayer` field, an armed codec - stays in the driver.** A stamp is one class
+stamped from a kernel class template; the shape predicate itself (`da_slab_is_g2`) is the classes
+file's, the pick over the driver's layer is the driver's.
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,

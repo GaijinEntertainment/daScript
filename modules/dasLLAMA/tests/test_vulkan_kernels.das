@@ -991,50 +991,40 @@ def test_vkd_ar_class(t0 : T?) {
     }
 }
 
-//! the classifier epilogue's rows form: `rows` logits rows through one dispatch against the one-row dispatch a row at a time
+//! the classifier epilogue's rows form: `rows` logits rows through one dispatch of `rows` (the whole plane), or a
+//! dispatch of one row `rows` times - the row-at-a-time form is the rows form at one row
 def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows : int64; cap : float; a_row_at_a_time : bool) : array<float> {
-    let row_bytes = vocab * 4l
-    let bytes = row_bytes * rows
-    let sbytes = max(long_length(supp), 1l) * 4l
-    let sd = make_device_buf(sbytes)
-    var host = make_host_buf(bytes, true, [cached = true])
     var yc : array<float>
-    yc |> resize(vocab * rows)
-    let begin = VkCommandBufferBeginInfo()
-    unsafe {
-        if (!empty(supp)) {
-            upload_region_at(sd, 0l, addr<uint8 const?>(supp[0]), sbytes)
-        }
-        if (a_row_at_a_time) {
-            for (r in range64(rows)) {
-                let yd = make_device_buf(row_bytes)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[r * vocab]), row_bytes)
-                var s = set_cls_epi(fixed_array(yd, sd), fixed_array(row_bytes, sbytes), fixed_array(1u, 0u))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let row_bytes = vocab * 4l
+        let sbytes = max(long_length(supp), 1l) * 4l
+        let sd = make_device_buf(sbytes)
+        var host = make_host_buf(row_bytes * rows, true, [cached = true])
+        yc |> resize(vocab * rows)
+        let begin = VkCommandBufferBeginInfo()
+        unsafe {
+            if (!empty(supp)) {
+                upload_region_at(sd, 0l, addr<uint8 const?>(supp[0]), sbytes)
+            }
+            let per = a_row_at_a_time ? 1l : rows   //! rows a dispatch
+            var r0 = 0l
+            while (r0 < rows) {
+                let bytes = row_bytes * per
+                let yd = make_device_buf(bytes)
+                upload_region_at(yd, 0l, addr<uint8 const?>(y[r0 * vocab]), bytes)
+                var s = set_cls_epi(fixed_array(yd, sd), fixed_array(bytes, sbytes), fixed_array(1u, 0u))
                 var raw = alloc_cmd()
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 var h : VkHaz
-                var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = 1u)
-                enc_cls_epi(raw, h, s, pc, (vocab + 255l) / 256l)
+                var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(per))
+                enc_cls_epi(raw, h, s, pc, (vocab * per + 255l) / 256l)
                 vhz_dep(raw, h, 1u, 0u, true)
-                cmd_copy_whole(raw, yd, host.buf, row_bytes)
+                cmd_copy_whole(raw, yd, host.buf, bytes)
                 vk_check(vkEndCommandBuffer(raw), null)
                 submit_wait(raw)
-                memcpy(addr<void?>(yc[r * vocab]), host.mapped, row_bytes)
+                memcpy(addr<void?>(yc[r0 * vocab]), host.mapped, bytes)
+                r0 += per
             }
-        } else {
-            let yd = make_device_buf(bytes)
-            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
-            var s = set_cls_epi(fixed_array(yd, sd), fixed_array(bytes, sbytes), fixed_array(1u, 0u))
-            var raw = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var h : VkHaz
-            var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(rows))
-            enc_cls_epi(raw, h, s, pc, (vocab * rows + 255l) / 256l)
-            vhz_dep(raw, h, 1u, 0u, true)
-            cmd_copy_whole(raw, yd, host.buf, bytes)
-            vk_check(vkEndCommandBuffer(raw), null)
-            submit_wait(raw)
-            memcpy(addr<void?>(yc[0]), host.mapped, bytes)
         }
     }
     return <- yc
@@ -1071,21 +1061,28 @@ def test_vkd_cls_epi_rows(t0 : T?) {
             }
             var four <- cls_epi_rows_run(y, supp, vocab, rows, cap, false)
             var one <- cls_epi_rows_run(y, supp, vocab, rows, cap, true)
-            var bad_rows = 0
+            var bad = 0
             var over = 0
             var over_poison = 0
             var pinned = 0
+            var maxdiff = 0.0
+            var worst = 0l
             let bar = 1e-4
             for (i in range64(vocab * rows)) {
                 if (four[i] != one[i]) {
-                    bad_rows++
+                    bad++
                 }
                 if (want[i] <= -1.0e29) {
                     if (four[i] <= -1.0e29) {
                         pinned++
                     }
                 } else {
-                    if (abs(four[i] - want[i]) > bar) {
+                    let d = abs(four[i] - want[i])
+                    if (d > maxdiff) {
+                        maxdiff = d
+                        worst = i
+                    }
+                    if (d > bar) {
                         over++
                     }
                     if (abs(four[i] - (want[i] + 0.01)) > bar) {
@@ -1093,8 +1090,8 @@ def test_vkd_cls_epi_rows(t0 : T?) {
                     }
                 }
             }
-            t |> success(bad_rows == 0, "the four-row dispatch is the one-row dispatch a row at a time, bit for bit ({bad_rows} of {vocab * rows} diverge)")
-            t |> success(over == 0, "every capped logit within {bar} of the CPU softcap ({over} over)")
+            t |> success(bad == 0, "the four-row dispatch is the one-row dispatch a row at a time, bit for bit ({bad} of {vocab * rows} diverge)")
+            t |> success(over == 0, "every capped logit within {bar} of the CPU softcap ({over} over; max difference {maxdiff} at row {worst / vocab} id {worst % vocab})")
             t |> success(over_poison > 0, "the bar is live: an added 0.01 lands outside it ({over_poison} over)")
             t |> equal(pinned, int(rows) * length(supp), "every suppressed id pinned on every row")
             delete four
@@ -3801,7 +3798,7 @@ def test_vkd_cm2l_split(t0 : T?) {
 //! stores - Q8_0 blocks of 32 (`DA_RQ_Q8`) or Q8_K superblocks of 256 (`DA_RQ_Q8K`, a head of 256 or 512) - against the
 //! CPU oracle's row quantized the same way: every scale within a hair, every quant within one step (the row itself
 //! carries the f32 noise the plain arms allow), on a sentinel fill; the row store itself is held to the oracle too
-def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk : uint; g2 : bool = false) {
+def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk : uint; slab2 : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let kvd = (nheads / kv_mul) * hs
         let qdim = nheads * hs
@@ -3839,7 +3836,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         y_cls |> resize(qdim)
         q_cls |> resize(qdim)
         s_cls |> resize(qdim / blk)
-        verify(ensure_da_attn_cls() && (!g2 || ensure_da_attn_g2_cls()), "the decode attention class rail must engage on a live device")
+        verify(ensure_da_attn_cls() && (!slab2 || ensure_da_attn_g2_cls()), "the decode attention class rail must engage on a live device")
         unsafe {
             upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
             upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
@@ -3862,7 +3859,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             var h : VkHaz
             var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
                 scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
-            if (g2) {
+            if (slab2) {
                 enc_da_attn_g2_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
             } else {
                 enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
@@ -3882,9 +3879,46 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         for (hh in range(nheads)) {
             attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
         }
-        let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}{g2 ? ", the two-head slab" : ""}"
+        let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}{slab2 ? ", the two-head slab" : ""}"
         let bad = mismatch_approx(y_cls, y_ref)
         t |> success(bad == 0, "folded-requant attention ({arm}): the row matches the CPU oracle ({bad} of {qdim} off)")
+        y_ref[hs / 2] += 0.5
+        t |> equal(mismatch_approx(y_cls, y_ref), 1, "folded-requant attention ({arm}): the row's bar reds one poisoned element")
+        y_ref[hs / 2] -= 0.5
+        if (slab2) {   //! the second lane: the four-head slab at the same shape, whose dead lanes contribute zero - the two round alike
+            var y_g4 : array<float>
+            y_g4 |> resize(qdim)
+            unsafe {
+                nan_sentinel_upload(yd, q_bytes)
+                var tokb4 = make_host_buf(16l, true)
+                var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
+                tmc4.cnt = uint(cnt)
+                tmc4.mirbase = 0u
+                var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb4.buf, partd, aqd, asd),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, int64(qdim), s_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
+                var raw4 = alloc_cmd()
+                let begin4 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw4, begin4), null)
+                var h4 : VkHaz
+                var pc4 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
+                    scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
+                enc_da_attn_cls(raw4, h4, sc4, pc4, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
+                vhz_dep(raw4, h4, 16u, 0u, true)
+                cmd_copy_range(raw4, yd, 0l, host.buf, 0l, q_bytes)
+                vk_check(vkEndCommandBuffer(raw4), null)
+                submit_wait(raw4)
+                memcpy(addr<void?>(y_g4[0]), host.mapped, q_bytes)
+            }
+            var apart = 0
+            for (i in range(qdim)) {
+                if (y_g4[i] != y_cls[i]) {
+                    apart++
+                }
+            }
+            t |> success(apart == 0, "folded-requant attention ({arm}): the two-head slab is the four-head slab bit for bit ({apart} of {qdim} apart)")
+            delete y_g4
+        }
         // the oracle's own quantization of its row: the block's amax over 127, the quants rounded against it
         var bad_s = 0
         var bad_q = 0
@@ -3931,10 +3965,12 @@ def test_vkd_da_attn_rqk(t0 : T?) {
             da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K)    //! ... the last piece's combine
             da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K)    //! the wide head: two superblocks, the last piece's combine
             da_attn_rqk_arm(t, 512, 2, 2, 70, 1, DA_RQ_Q8)     //! the wide head's Q8_0 blocks, the pass
-            //! the two-head slab stamp on the groups it serves: two heads a group (gemma-4's shape at 256 and 512), one head a group
+            //! the two-head slab stamp on the groups it serves: two heads a group (gemma-4's shape at 256 and 512), one head a
+            //! group (the dead lane through the pass's store and through the combine)
             da_attn_rqk_arm(t, 64, 4, 2, 300, 1, DA_RQ_Q8, true)
             da_attn_rqk_arm(t, 64, 4, 2, 300, 8, DA_RQ_Q8, true)
             da_attn_rqk_arm(t, 256, 2, 2, 70, 1, DA_RQ_Q8K, true)
+            da_attn_rqk_arm(t, 256, 2, 1, 70, 1, DA_RQ_Q8K, true)
             da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K, true)
             da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K, true)
         } else {
@@ -4219,7 +4255,7 @@ def test_vkd_da_attn(t0 : T?) {
 //! `nrows` rows through one dispatch, row r's q past r x qdim and its K/V in its own mirror region (`tok[r].mirbase`, the
 //! second region's content scaled by 1.5), each row against the oracle over its own region; the split arm submits the
 //! same command a second time, so the arrival counters the pass resets must have rearmed; every bar with its poison
-def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : int) {
+def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : int; slab2 : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let kvd = (nheads / kv_mul) * hs
         let qdim = nheads * hs
@@ -4281,7 +4317,11 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
             var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale,
                 nsplit = uint(nsplit), rqk = DA_RQ_NONE, cntoff = uint(cnt_off),
                 rowwg = nrows > 1 ? uint(rowwg) : 0u, qrow = nrows > 1 ? uint(qdim) : 0u)
-            enc_da_attn_cls(raw, h, sc, pc, rowwg * int64(nrows))
+            if (slab2) {
+                enc_da_attn_g2_cls(raw, h, sc, pc, rowwg * int64(nrows))
+            } else {
+                enc_da_attn_cls(raw, h, sc, pc, rowwg * int64(nrows))
+            }
             vhz_dep(raw, h, 16u, 0u, true)
             cmd_copy_whole(raw, yd, host.buf, q_bytes)
             vk_check(vkEndCommandBuffer(raw), null)
@@ -4295,7 +4335,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
                 attn_row_oracle(qh, r * qdim + hh * hs, kh, r * mir_elems, vh, r * mir_elems, kvd, hh, hs, kv_mul, cnt, scale, y_ref, r * qdim + hh * hs)
             }
         }
-        let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s)"
+        let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"
         for (r in range(nrows)) {
             let bad = mismatch_approx(y_cls, y_ref, r * qdim, qdim)
             t |> success(bad == 0, "decode attention ({arm}): row {r} matches its own oracle ({bad} of {qdim} off)")
@@ -4335,7 +4375,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
 def test_vkd_da_attn_shapes(t0 : T?) {
     t0 |> run("decode attention at the shapes the fixed cells leave out == the CPU oracle: ragged key groups, a full four-head slab, a short last slab, a 24-word head, two rows a dispatch") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_da_attn_cls()) {
+            if (!(ensure_da_attn_cls() && ensure_da_attn_g2_cls())) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -4347,6 +4387,8 @@ def test_vkd_da_attn_shapes(t0 : T?) {
             da_attn_shape_arm(t, 192, 2, 2, 70, 1, 1)    //! 24 words a V row, not a power of two: no fold
             da_attn_shape_arm(t, 64, 4, 2, 300, 1, 2)    //! two rows a dispatch, each over its own mirror region
             da_attn_shape_arm(t, 64, 4, 2, 300, 4, 2)
+            da_attn_shape_arm(t, 64, 4, 2, 300, 1, 2, true)   //! the two-head slab over the rows: the row index and the slab arithmetic together
+            da_attn_shape_arm(t, 64, 4, 2, 300, 4, 4, true)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -9464,7 +9506,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(ensure_da_attn_f16_cls() && ensure_da_attn_b_f16_cls())) {
+            if (!(ensure_da_attn_f16_cls() && ensure_da_attn_b_f16_cls() && ensure_da_attn_f16_g2_cls())) {
                 t |> skip("f16 attention classes declined on this device")
                 return
             }
@@ -9531,6 +9573,42 @@ def test_vkd_kv16_readers(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "da_attn_f16 at head {hs} matches the CPU oracle ({bad} of {nheads * hs} off)")
+                //! the two-head slab's f16 stamp (the one a two-head group serves on the f16 mirror) at the same shape: the oracle, and the four-head stamp bit for bit
+                var y_g2 : array<float>
+                y_g2 |> resize(nheads * hs)
+                unsafe {
+                    var tokb2 = make_host_buf(16l, true)
+                    var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
+                    tmc2.cnt = uint(cnt)
+                    tmc2.mirbase = 0u
+                    var sc2 = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb2.buf, yd2, yd2, yd2),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
+                        fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
+                    var raw3 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw3, begin), null)
+                    var h3 : VkHaz
+                    var pc3 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
+                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
+                    enc_da_attn_f16_g2_cls(raw3, h3, sc2, pc3, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
+                    vhz_dep(raw3, h3, 16u, 0u, true)
+                    cmd_copy_whole(raw3, yd2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw3), null)
+                    submit_wait(raw3)
+                    memcpy(addr<void?>(y_g2[0]), host.mapped, q_bytes)
+                }
+                let bad_g2 = mismatch_approx(y_g2, y_ref)
+                t |> success(bad_g2 == 0, "da_attn_f16_g2 at head {hs} matches the CPU oracle ({bad_g2} of {nheads * hs} off)")
+                var apart = 0
+                for (i in range(nheads * hs)) {
+                    if (y_g2[i] != y_cls[i]) {
+                        apart++
+                    }
+                }
+                t |> success(apart == 0, "da_attn_f16_g2 at head {hs} is da_attn_f16 bit for bit ({apart} of {nheads * hs} apart)")
+                y_ref[hs / 2] += 0.5
+                t |> equal(mismatch_approx(y_g2, y_ref), 1, "da_attn_f16_g2 at head {hs}: the bar reds one poisoned element")
+                y_ref[hs / 2] -= 0.5
+                delete y_g2
                 delete qh
                 delete kh
                 delete vh

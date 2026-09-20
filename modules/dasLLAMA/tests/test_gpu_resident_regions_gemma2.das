@@ -27,3 +27,10 @@ def test_regions_batched_steps_split_g2(t : T?) {
 def test_regions_batched_first_g2(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }
+
+//! the stamp pick observed: a group of two heads (gemma-2's 8 q heads over 4 kv heads) steps through the two-head slab
+//! stamp on the armed mirror codec - the logits compares above cannot tell the slabs apart, the census can
+[test]
+def test_regions_two_head_slab_served_g2(t : T?) {
+    cell_regions_stamp_served(t, REGIONS_FILE, "da_attn_f16_g2_cls_spv", "da_attn_g2_cls_spv")
+}

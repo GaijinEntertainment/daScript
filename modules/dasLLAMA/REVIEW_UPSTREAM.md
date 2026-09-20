@@ -14,8 +14,8 @@ a run of it, a regeneration from it, or a measurement against it - planned or pe
 one of its symbols is not by itself such work. A library the build ships is part of it, and
 running that library to mint our own artifact is reference-build work.
 
-**A diff that names the reference build - its organization, project, binary, header, symbol or
-constant - outside a sentence doing reference-build work is a defect: write "the reference
+**A diff that names the reference build - its organization, project, binary, source header, symbol,
+constant, or a label its output prints - outside a sentence doing reference-build work is a defect: write "the reference
 build", or for its binary the qualified "the flat reference exe" / "the batched reference exe"
 (the roster is `benchmarks/setup_lcpp_ref.das`), instead.** "The reference bodies" of a `[tune]`
 kernel are this module's own term, not a reference-build name. A name this module's own code, files or
@@ -24,8 +24,9 @@ build ("in the reference build's form") names it too.
 
 **A diff that describes what the reference build itself does, outside a sentence doing
 reference-build work, describes it in our own terms - what the mechanism does, never which of its
-files or symbols does it.** A sentence about our own code's shape is not such a description; a
-reference-build name inside such a sentence is a defect just the same.
+files or symbols does it.** A sentence about our own code's shape does no reference-build work,
+so a reference-build name inside it is a defect under the naming rule above; a sentence that
+reports a run of the reference build or a measurement against it does, and may name it.
 
 **A sentence stating a number read from a part of the reference build rather than from a whole
 run of it - a time, a rate, or a constant that appears only in the reference build's own code -

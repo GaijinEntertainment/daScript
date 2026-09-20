@@ -6,10 +6,12 @@ options _dasllama_internal = true
 //! a synthetic llama-shaped layer, timed per layer across the key-split ladder, so
 //! a kernel change reads as a number before a model runs it.
 //!
-//!   bin/daslang -jit modules/dasLLAMA/harness/vk_attn_probe.das -- [rows] [cnt] [hs] [nheads] [kv_mul]
+//!   bin/daslang -jit modules/dasLLAMA/harness/vk_attn_probe.das -- [rows] [cnt] [hs] [nheads] [kv_mul] [slab]
 //!
 //! Defaults: 4 rows, 640 positions, head 64, 32 heads, 4 heads a kv head (Llama-3.2-1B after
-//! pp512 and tg128). Each row attends its own mirror region. Every split of the ladder records
+//! pp512 and tg128), the slab the token command picks at that group width (`da_slab_heads`: two
+//! on a group of one or two heads, else four); `slab` 2 or 4 pins a stamp, so the two race in one
+//! process. Each row attends its own mirror region. Every split of the ladder records
 //! DISPATCHES layers chained through their outputs, and
 //! the device clock over SUBMITS submits after a warm-up is the layer's cost.
 
@@ -26,8 +28,8 @@ let private SUBMITS = 10
 
 def private hash_unit(i : uint) : float => float(hash_word(i) & 0xFFFFu) / 32768.0 - 1.0
 
-//! one split's layer cost in microseconds
-def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit : int) : double {
+//! one split's layer cost in microseconds on the `slab`-head stamp
+def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int) : double {
     let kvd = nheads / kv_mul * hs
     let qd = nheads * hs
     let q_bytes = int64(qd) * int64(rows) * 4l
@@ -83,7 +85,11 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit : int) : double {
         let wgs = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)) * int64(rows)
         pfq_ts(raw)
         for (_i in range(DISPATCHES)) {
-            enc_da_attn_f16_cls(raw, h, sc, pc, wgs)
+            if (slab == 2) {
+                enc_da_attn_f16_g2_cls(raw, h, sc, pc, wgs)
+            } else {
+                enc_da_attn_f16_cls(raw, h, sc, pc, wgs)
+            }
             vhz_dep(raw, h, 16u | 32u | 64u, 0u, true)   //! the next layer waits on this one's row
             pfq_ts(raw)
         }
@@ -102,16 +108,25 @@ def main : int {
     let hs = length(nums) > 2 ? nums[2] : 64
     let nheads = length(nums) > 3 ? nums[3] : 32
     let kv_mul = length(nums) > 4 ? nums[4] : 4
-    if (!vk_moe_init() || !ensure_da_attn_f16_cls()) {
+    let slab = length(nums) > 5 ? nums[5] : int(da_slab_heads(int64(kv_mul)))
+    if (slab != 2 && slab != 4) {
+        print("vk_attn_probe: the slab is 2 or 4 heads\n")
+        return 1
+    }
+    if (slab == 2 && kv_mul > 2) {
+        print("vk_attn_probe: the two-head slab serves a group of one or two heads\n")
+        return 1
+    }
+    if (!vk_moe_init() || !ensure_da_attn_f16_cls() || (slab == 2 && !ensure_da_attn_f16_g2_cls())) {
         print("vk_attn_probe: no Vulkan device, or the decode attention classes declined\n")
         return 1
     }
-    print("vk_attn_probe: decode attention (f16 mirror) at {rows} rows x {cnt} positions, head {hs}, {nheads} heads, {kv_mul} a kv head, {g_gpu.sm_count} SMs; {DISPATCHES} layers x {SUBMITS} submits after a warm-up\n")
+    print("vk_attn_probe: decode attention (f16 mirror, the {slab}-head slab) at {rows} rows x {cnt} positions, head {hs}, {nheads} heads, {kv_mul} a kv head, {g_gpu.sm_count} SMs; {DISPATCHES} layers x {SUBMITS} submits after a warm-up\n")
     print("| split | wgs/row |  us/layer |\n")
     print("| ----: | ------: | --------: |\n")
     for (nsplit in [1, 2, 3, 4, 6, 8, 12, 16]) {
         let wgs = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
-        let us = time_split(rows, cnt, hs, nheads, kv_mul, nsplit)
+        let us = time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab)
         print("| {nsplit:5d} | {wgs:7d} | {us:9.1f} |\n")
     }
     return 0

@@ -5,9 +5,10 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `../followup_metal.md`.
 
 **A diff that changes a kernel's dispatch grid - the count its dispatch needs, or its workgroup
-size - updates every gate that dispatches that kernel, in the same change; a gate is a cell or
-probe that dispatches or binds a kernel by hand rather than through the generated builders.** A
-gate left on the old count dispatches the wrong shape with no error.
+size - updates every gate that dispatches that kernel, in the same change; a gate is any call
+site outside the engine's own encode path - a cell, a probe, a harness - that supplies a kernel's
+dispatch count or fills its kargs struct itself.** A gate left on the old count dispatches the
+wrong shape with no error.
 
 **A diff that gives a `[metal_dispatch]` kernel `@workgroup` state, or takes it away, updates
 the threadgroup-memory length in every gate that hand-dispatches that kernel, in the same
@@ -30,11 +31,13 @@ forms, in that cell or in a cell of the same file that dispatches that form at t
 A cell is a `t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same
 computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
-**A kernel whose branch selection changes - a branch added, or an existing branch's predicate
-widened or narrowed, so that a different set of kargs values, or of sentinel values in a bound
-buffer, reaches a path - has a kernel-unit cell that dispatches it at a value the change moved
-onto or off that path: an existing cell that already does discharges it and the change says
-which; otherwise the cell ships in the same change.** At every value the change left where it was
+**A `[vk_dispatch]` or `[metal_dispatch]` class - each stamp of a template its own class - whose
+branch selection changes - a branch added, or an existing branch's predicate widened or narrowed,
+so that a different set of kargs values, or of sentinel values in a bound buffer, reaches a
+path - has a kernel-unit cell that dispatches that class at a value the change moved onto or off
+that path: an existing cell that already does discharges it and the change says which; otherwise
+the cell ships in the same change.** One stamp's cell discharges a sibling stamp only where the
+constants the two differ on touch no path the change moved. At every value the change left where it was
 the kernel computes what it did before, so a cell that dispatches only those values passes
 whether the change is right or wrong.
 

@@ -762,9 +762,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the two-head slab decode attention and its f16 twin (a GQA group of one or two heads: gemma-2-2b and the gemma-4
-    // dense files, no zoo row); their coverage is test_vkd_da_attn_rqk's two-head arms in test_vulkan_kernels.das
-    "da_attn_g2_cls_spv", "da_attn_f16_g2_cls_spv",
     // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
     "q51_gemv_sum_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
@@ -782,7 +779,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
-    // (the batched rows need a region a row); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
+    // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
+    // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
     "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty

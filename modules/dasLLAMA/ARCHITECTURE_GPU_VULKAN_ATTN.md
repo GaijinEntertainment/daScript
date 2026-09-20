@@ -12,11 +12,14 @@ serve is `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j; the token command the decode pas
 **The decode attention dispatches a workgroup per (kv head, slab of its q heads, key split), and
 the group's last piece combines.** A workgroup reads its kv head's K and V rows once and scores
 them against the slab's query heads of the GQA group that share them - `DA_G` (four), or two on a
-group of one or two heads (`da_slab_g2`: the `g2` stamps of `DaAttnT`, whose template constant `G`
-sizes every score and V loop, so gemma-2 and gemma-4 dense score no dead heads); a group wider than
-the slab takes several slabs, a narrower one leaves dead heads whose q rows are zero and whose
-reductions and stores are skipped (`da_attn_row_wgs` counts a row's workgroups, the same count on
-either slab). The pass is a chain
+group of one or two heads (`da_slab_is_g2`: the `g2` stamps of `DaAttnT`, whose template constant
+`G` sizes every score and V loop, so a group of one or two heads - gemma-2, gemma-4's sliding
+layers, any MHA carrier - scores no dead heads; `da_slab_heads` is the one expression the kernel's
+`G` and the host's workgroup count derive from); a group wider than the slab takes several slabs,
+a narrower one leaves dead heads whose q rows are zero and whose reductions and stores are skipped
+(`da_attn_row_wgs` counts a row's workgroups, the same count on either slab). The token command
+picks the slab a layer (`rd_enc_da_attn`); the per-op seam (`dasllama_vulkan_seams.das`) and the
+attention-tower chain dispatch the four-head slab whatever the group. The pass is a chain
 of latencies, not a stream of bytes: a workgroup a head walking two keys a step behind a subgroup
 reduction each read Llama-3.2-1B's sixteen layers at 28 us a four-row step and 8.5 a one-row step on
 the RTX PRO 4500, the same whatever the split, so the pass (`DaAttnT`) spends its threads on
@@ -26,7 +29,7 @@ independent work. The device figures in this section are read by `harness/vk_att
 
 **A pass is one chain: the scores, the softmax, the V accumulate, the fold and the slab finish.** A
 256-key chunk's scores take a thread a key: the K row's words load eight at a time (`KV16`, one
-round trip a 128 dims), the slab's four dots read the q rows from shared memory, and no subgroup
+round trip a 128 dims), the slab's dots - one a head - read the q rows from shared memory, and no subgroup
 reduction sits between the keys; the chunk's first V words load in the same round trip, since they
 wait on nothing the scores compute. The softmax's max and sum a head are one subgroup reduction
 each, the subgroups' values folded by every thread from shared memory (`sgp`, `ml`). The V

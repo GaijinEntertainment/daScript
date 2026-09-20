@@ -1552,10 +1552,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent, MoE or per-layer-embedding layer and a gated q
+    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer and a gated q
     (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched step of such a model pays
     a weight pass a row. The work: each kind's N-row form, the recurrent and MoE ones behind
-    their own state and schedule questions.
+    their own state and schedule questions; the shared-KV form rides with the per-layer
+    embeddings - every carrier that shares K/V (the E-series) carries them too, so it lands
+    with that section and its regions file, where a batched step can reach it.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
     `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
     and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
@@ -1568,11 +1570,14 @@ module) is independent and can land any time - it is pure structure.
     flag, and one shared forced-feed cell parameterized by the family's arm witnesses.
 73. **The decode attention slab runs four heads' arithmetic on a GQA group of three.** The score
     and V loops of `DaAttnT` unroll over the slab's `G` heads - four, or two on a group of one or
-    two heads (`da_slab_g2`, the `g2` stamps) - so a three-head group still pays a dead lane, and a
-    one-head group half a slab. The two-head stamps read the 12B's four-row attention 1835 -> 1729
-    us a step (6%): the pass is bound by its K/V reads and the chunk barriers, not the dead FMAs.
-    The work: a one-head stamp priced on a `kv_mul = 1` carrier through `harness/vk_attn_probe.das`
-    before it is added - the two-head reading says the win is small.
+    two heads (`da_slab_is_g2`, the `g2` stamps) - so a three-head group still pays a dead lane,
+    and a one-head group half a slab; the workgroup arrays stay sized for four heads on every
+    stamp, so the two-head stamp buys no occupancy. The two-head stamps read the 12B's four-row
+    attention 1835 -> 1729 us a step (6%; `PERF_LEDGER.md`, the gemma section of 2026-09-20, the
+    pod under `DASLLAMA_GPU_PROF=1`): the pass is bound by its K/V reads and the chunk barriers,
+    not the dead FMAs. The work: a one-head stamp, and the arrays sized by `G`, priced through
+    `harness/vk_attn_probe.das`'s slab arm on a `kv_mul = 1` carrier before either is added -
+    the two-head reading says the win is small.
 74. **A host-cached session that loses its mirror region before hydration loses its rows.** The
     driver steals a region by LRU (`rdec_bind_region`) with no handle on the region's owner, and a
     host-cached session's prompt rows sit on the device alone until a hydration brings them down

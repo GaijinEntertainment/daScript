@@ -2131,12 +2131,14 @@ two commits in two processes [direction-grade - two commits].
 
 - **The baseline (master after the qwen section, the pod, one rep each):** gemma-3-1b Q8_0 1056
   against 869 and gemma-3-4b Q8_0 499 against 445 - served by the N-row command already (no epilogue,
-  no shared K/V); gemma-2-2b Q8_0 195 against 616 (0.32) and gemma-4-12B Q8_0 53 against 186 (0.28) -
+  no epilogue); gemma-2-2b Q8_0 195 against 616 (0.32) and gemma-4-12B Q8_0 53 against 186 (0.28) -
   not batched: the command declined the classifier epilogue (the final softcap, gemma-4's suppressed
-  ids) and gemma-4's shared-KV layers, so the four streams stepped a row at a time, below one
-  stream's rate.
-- **The epilogue's rows form and the shared-KV layer's Q-only form:** gemma-2 195 -> 687 (1.11),
-  the 12B 53 -> 173 (0.93). The 12B's four-row step under the profiler, us: qkv 2440, qknrope 295,
+  ids), so the four streams stepped a row at a time, below one stream's rate. The 12B's global
+  layers take V from K, which the command served already; the file shares no K/V across layers
+  (`gemma4.attention.shared_kv_layers` 0 on the 12B and the 31B, 20 and 18 on the E2B and E4B,
+  which carry per-layer embeddings too).
+- **The epilogue's rows form:** gemma-2 195 -> 687 (1.11), the 12B 53 -> 173 (0.93). The 12B's
+  four-row step under the profiler, us: qkv 2440, qknrope 295,
   attn 1853, wo 1428, arrq_f 592, gu 10153, down 3976, arrq_n 594, cls 1252, epi 10, 22677 whole
   against the flat step's 20556 (gu 8404, attn 628, down_ar 5143, wo_ar 2133): the fused gate-up's
   N form and the attention carried the batch's whole overhead, the host between steps under half a
@@ -2146,19 +2148,21 @@ two commits in two processes [direction-grade - two commits].
 - **The fused gate-up's N form as the plain q8 leaf's shape (`Q8GemvGuNT`, stamped at two, four
   and eight columns, a column's half-block one 16-byte load beside the weight word, a column past
   the live ones re-dotting the last live column):** the 12B's gu 10153 -> 8553 a step, the row
-  171.5 -> 185.1 +/- 0.07 (0.99, three reps); gemma-2 688 -> 702; Qwen2.5-1.5B 980 -> 1019 (1.11, the
-  qwen section's 1.07). The eight-column guarded unroll it replaced loaded a column's block as four
+  171.5 -> 185.1 +/- 0.07 (0.99, three reps); gemma-2 688 -> 702; Qwen2.5-1.5B 980 -> 1019 against
+  the qwen section's 920 (1.11, that section's 1.07). The eight-column guarded unroll it replaced loaded a column's block as four
   words under a guard on every column - the clamp alone the qwen section priced kept that shape,
   which is why it read slower there; the stamp is a different kernel. Against the split pair the
   stamp still reads 0.45 ms behind at this shape: the remaining room, with the host's half
   millisecond.
 - **The two-head attention slab (`DaAttnT` at `G = 2` on a group of one or two heads, the same
-  workgroup count):** the 12B's four-row attn 1853 -> 1729 (6%), the row 185.1 -> 186.15 +/- 0.16
+  workgroup count):** the 12B's four-row attn 1835 -> 1729 (6%, the lever-2 tip's profile against
+  the lever-3 tip's), the row 185.1 -> 186.15 +/- 0.16
   against 186.19 (1.00); gemma-2 704 -> 710. The pass is bound by its K/V reads and chunk barriers
   (the four-row attention at 57% of the mirror's byte roof), not by the dead heads' FMAs -
   `followup_vulkan.md` item 73 carries the reading.
 - **The board at the arc's tip, tg128@4 (ours cm2 / ours KHR / llama.cpp, three reps ours; then flat
-  tg128 ours / theirs):** gemma-2-2b Q8_0 704 / 709 / 618 (1.14 / 1.15), flat 216 / 201; gemma-3-1b
+  tg128 ours / theirs - the reference's flat figure is the same `llama-batched-bench` run's
+  `S_TG` at `-npl 1`, ours the `-npl 4` run's flat row):** gemma-2-2b Q8_0 704 / 709 / 618 (1.14 / 1.15), flat 216 / 201; gemma-3-1b
   Q8_0 1084 / 1089 / 878 (1.23 / 1.24), flat 396 / 320; gemma-3-4b Q8_0 507 / 507 / 446 (1.14), flat
   149 / 136; gemma-4-12B Q8_0 185 / 185 / 186 (0.99 at the lever-2 tip; 186.15 / - / 186.19 at the
   arc's tip, 1.00), flat 55.1 / 54.3; gemma-4-12B Q4_K_M 233 / 233 / 184 (1.26), flat 81.9 / 78.1;

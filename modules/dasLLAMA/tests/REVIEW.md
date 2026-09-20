@@ -49,7 +49,7 @@ a run of skips is not the coverage the suite owes.
 **A diff that adds a `[test]` file here, or adds, removes or moves a cell, or changes its suite
 or skip condition, corrects or adds, in the same change, the `CLAUDE.md` entry of every `[test]`
 file running the cell, counts and skip clauses included.** A file's entry is the clause naming
-it; a `{a,b}` shorthand or a suite roster owes nothing.
+it by its `.das` file name; a `{a,b}` shorthand or a suite roster owes nothing.
 
 **A diff that changes an axis or a bar a `CLAUDE.md` census entry names corrects it in the same change.**
 
@@ -153,11 +153,12 @@ naming the `ggml-vocab-*.gguf` fixture.**
 **A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
 round-trip is a defect.**
 
-**A test that compares generated tokens, ids, or logits without logging a human-readable form
-of BOTH sides is a defect: for a token or id compare the decoded text (`log_gen_texts` in
-`_model_tier.das`, or one line per side), for a logits compare each side's argmax decoded piece
-and the measured max difference.** A red, or a suspicious green, must be readable in the log,
-not only as an id or float difference.
+**A test that compares generated tokens, ids, or logits through a model's vocabulary without
+logging a human-readable form of BOTH sides is a defect: for a token or id compare the decoded
+text (`log_gen_texts` in `_model_tier.das`, or one line per side), for a logits compare each
+side's argmax decoded piece and the measured max difference; a model-less logits compare - a
+kernel cell over synthetic rows - logs the measured max difference and where it sits.** A red, or
+a suspicious green, must be readable in the log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter

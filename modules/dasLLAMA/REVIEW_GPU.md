@@ -137,25 +137,30 @@ path, both measurements in the PR body.** The small-work regression hides behind
 win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
-constant's authoritative site, in the same change.** The site per kind: the generated `*_msl`
-global for a Metal in-body tile, the `@workgroup` declaration or `local_size_x` for a Vulkan
-one; the `grid=` spec (a
+constant's authoritative site - the single site the generated kernel reads it from - in the same
+change.** The site per kind: the generated `*_msl` global for a Metal in-body tile, the
+`@workgroup` declaration or `local_size_x` for a Vulkan one; a `@template_constant`'s default and
+each stamp's `override` for a slab or column width a template stamps; the `grid=` spec (a
 CEIL divide), or the `wgs` decode plus its host helper, for a grid; the `tg=` /
 `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
 **A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
-host computes that class's `wgs`, changes both in the same change.** The `grid=` spec carries no
-number for these classes, so nothing else ties the two.
+host computes that class's `wgs`, changes both in the same change, or derives both from one
+expression the change shows agreeing for every shape the encoder picks that form on.** The
+`grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **A cache key covers every input the cached result depends on: a host address, an offset, or a
 handle alone is not a key - carry the span and the form, the element type and layout the upload
 produces, in the key too.**
 
-**A diff that gives a `dasllama/` file code its `ARCHITECTURE_GPU.md` sec.1.5 entry does not
-name, or code that entry's must-not-hold cell names - a kernel class, a driver arm, a backend
-capability, a dispatch-support macro, a driver policy - extends that entry in the same change, or
-moves the code to the file whose entry holds that role.** A driver arm is host code that ensures, binds, or encodes a dispatch; a backend
-capability is a function a driver registers in a hook or capability registry.
+**A diff that gives a `dasllama/` file code of a kind its `ARCHITECTURE_GPU.md` sec.1.5 role
+row does not hold - a kernel class, a driver arm, a backend capability, a dispatch-support macro,
+a driver policy - or of a kind the row's must-not-hold cell names, extends that row in the same
+change, or moves the code to the file whose row holds the kind; a diff that adds a host-side
+ensure/set/enc pick ladder for a new class-stamp family to `dasllama/dasllama_vulkan_classes.das`
+adds that family to the kernel-home row's list in the same change.** A driver arm is host code
+that ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers
+in a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**

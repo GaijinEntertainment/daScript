@@ -354,7 +354,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
             && (kv16 ? ensure_da_attn_f16_cls() : ensure_da_attn_cls())
-            && (!da_slab_g2(L.kv_mul) || (kv16 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_g2_cls()))
+            && (g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || (kv16 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_g2_cls()))
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
@@ -1313,7 +1313,7 @@ def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
         } else {
             enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
         }
-    } elif (da_slab_g2(L.kv_mul)) {
+    } elif (da_slab_is_g2(L.kv_mul)) {
         if (g_rd.kv16) {
             enc_da_attn_f16_g2_cls(raw, h, L.s_attn, pca, awgs)
         } else {
@@ -1919,7 +1919,7 @@ def vk_rdec_note_weight_bytes(bytes : int64) {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]   // the first four tokens and every 256th
 def private rd_logits_guard(logits : array<float>) {
     for (v in logits) {
-        return if (v != 0.0)
+        return if (v != 0.0 && v > -1.0e29)   //! a suppressed id's pin is not a live logit
     }
     panic("dasLLAMA vulkan tier: the device returned an all-zero logits row - the card is over-committed (planes demoted past what the driver can page back) or lost; close other GPU applications, lower DASLLAMA_GPU_VRAM_MB, or restart")
 }
@@ -2071,15 +2071,28 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
 
+//! the N-row command answers 0 rows for `why`, said once per armed model: the batched step runs a row at a time from here on
+def private rd_n_decline(why : string) : int64 {
+    if (!g_rd.n_decline_said) {
+        g_rd.n_decline_said = true
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the N-row token command has no form for {why} - a batched step runs a row at a time\n")
+    }
+    return 0l
+}
+
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def vk_rdec_token_n_rows : int64 {
-    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.q_gated
-            || !gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
+    if (g_rd == null || !g_rd.ready) return 0l
+    if (g_rd.hybrid) return rd_n_decline("a recurrent layer")
+    if (g_rd.ple > 0l) return rd_n_decline("the per-layer embeddings")
+    if (g_rd.q_gated) return rd_n_decline("a gated q")
+    if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
-        if (L.moe || L.recurrent || L.ple
-                || !(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo)
-                    && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return 0l
+        if (L.moe) return rd_n_decline("a MoE layer")
+        if (L.kv_shared) return rd_n_decline("a shared-KV layer")
+        if (!(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
+                    && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return rd_n_decline("a weight format with no N-column GEMV leaf")
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
         g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
@@ -2094,7 +2107,7 @@ def private rd_ensure_n_rail : bool {
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
     for (L in g_rd.layers) {
         break if (!ok)
-        ok = (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)
+        ok = (gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
             && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb)))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
     }
@@ -2167,8 +2180,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u, ncols = nr, ystride = kvrow)
         rd_gemv_n(L.fq, raw, h, L.s_q, pcq, qd)
         rd_ts(raw, "a:q")
-        if (L.kv_shared) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
-        } elif (L.kv_merged) {
+        if (L.kv_merged) {
             var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd), ncols = nr, ystride = kvrow)
             rd_gemv_n(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
         } else {
@@ -2187,7 +2199,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:wo")
         return
     }
-    let nkh = L.kv_shared ? 0l : kvd / int64(hs)   //! the k-head groups also store the mirror row: none on a shared-KV layer
+    let nkh = kvd / int64(hs)
     if (fuse_qkr && (g_rd_nrow_bisect & 4) == 0) {
         let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
         let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
@@ -2214,7 +2226,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
             enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
             rd_ts(raw, "a:qkn")
         }
-        let npairs = qd / 2l + (L.kv_shared ? 0l : kvd / 2l)   //! the k pairs also store the mirror row: none on a shared-KV layer
+        let npairs = qd / 2l + kvd / 2l
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = hs / 2u,
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(npairs),
             layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
@@ -2228,12 +2240,13 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         rd_ts(raw, "a:rope")
     }
     let rqk = rd_attn_rqk(L)
+    let rowwgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)   //! a row's workgroups: the kernel's row index and the grid share it
     var pca = DaAttnArgs(kvd = uint(kvd), hs = hs, kv_mul = uint(L.kv_mul),
         kbase = uint(L.mir_base), vbase = uint(L.mir_base), scale = g_rd.scale, qstride = hs, gated = 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
-        rowwg = uint(da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
-    if ((g_rd_nrow_bisect & 1) == 0) {   // the bisect knob: no attention
-        rd_enc_da_attn(raw, h, L, pca, da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit) * nrows)
+        rowwg = uint(rowwgs), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
+    if ((g_rd_nrow_bisect & 1) == 0) {   // the bisect knob's attention bit clear: the attention runs
+        rd_enc_da_attn(raw, h, L, pca, rowwgs * nrows)
     }
     rd_ts(raw, "a:attn")
     if (rqk == DA_RQ_NONE) {

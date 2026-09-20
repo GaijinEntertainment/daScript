@@ -4,8 +4,9 @@
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Metal tier,
 `followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
 
-A figure is any number a run produced - a rate, a wall, a count, a byte size, or an error or
-agreement reading (a cosine, a max-abs error) a test's tolerance is set from. A figure rule below
+A figure is any number a run produced - a rate, a wall, a count, a byte size, a ratio or a
+percentage of two of them, or an error or agreement reading (a cosine, a max-abs error) a test's
+tolerance is set from. A figure rule below
 binds a figure this change writes or changes - in the repo, in a commit message, or in its PR
 body. It does not bind a figure a changed line carries unchanged. A figure on a page a `site*/`
 or `utils/` folder checklist owns (repo root) answers to that checklist instead of this one; a
@@ -14,9 +15,10 @@ to this list for naming the box and flags it was read on.
 
 The naming a figure rule asks for is attached to the figure by a sentence, a table heading or a
 provenance line that unambiguously covers it, or by a citation of a passage or board row whose
-provenance covers it; a tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) is
-never inherited - it sits on the figure or on the bullet stating it - a provenance line covers the paragraphs it sits under, or the ones it names
-as its scope.
+provenance covers it. A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`)
+covers exactly the figures its sentence, its bullet, or its provenance line names as its scope -
+a provenance line's scope is the paragraphs it sits under, or the ones it names - and nothing
+outside that scope.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -68,7 +70,9 @@ decode, a batched decode row, or the turn end to end) and backend - cites that r
 reading `debug-jit`.**
 A `--for-debug-purposes` reading is the `-jit` script's own output.
 
-**A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**
+**A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure its
+source and the report, a figure a third-party exe produced on the author's box that exe, its build
+and its command line.**
 
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**

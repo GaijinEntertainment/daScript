@@ -104,11 +104,13 @@ the declared "no hook".
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
 token-exact fixtures.
 
-**A diff that changes WHICH kernel form a predicate in `dasllama/` picks - both forms produce the
-right answer - or the VALUE of a constant there that timing two candidates chose, rests on timing
-that ran both candidates interleaved in one process under one instrument, and puts that race's
-rows, each naming its arm, in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading
-across two processes or two commits says which way the clock moved, not which form to adopt.
+**A diff that adds or changes a predicate in `dasllama/` picking between kernel forms that serve
+the same work at the same width - both forms produce the right answer - or the VALUE of a constant
+there that timing two candidates chose, rests on timing that ran both candidates interleaved in
+one process under one instrument, and puts that race's rows, each naming its arm, in the PR body
+or the change's dated `PERF_LEDGER.md` row.** A stamp picked because it is the narrowest that
+holds the work (a column count, a row count) is not such a pick. A reading across two processes
+or two commits says which way the clock moved, not which form to adopt.
 
 **A change to an allocation whose size scales with a model dimension, a row count or a region
 count, added, grown or removed to move wall-clock, wherever it sits, ships the measured pair -

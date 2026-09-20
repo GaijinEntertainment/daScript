@@ -55,16 +55,18 @@ each encode - is a defect; a per-encode field either omits `@role` or names the 
 performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - that a stocked model -
-one the `stocked` suite runs on a box with the models present - reaches, names in the PR body the
-census row of `modules/dasLLAMA/tests/test_kernel_coverage.das` that dispatches it and that row's
-nonzero count for the new census key from a serving-census run, adding the row or the census model
-when none does.**
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - that a census row of
+`modules/dasLLAMA/tests/test_kernel_coverage.das` dispatches - a zoo carrier whose shape picks the
+class, on the census's own arms - names in the PR body that row and its nonzero count for the new
+census key from a serving-census run; a diff that adds a class a stocked carrier serves and no
+census row dispatches adds the row or the census carrier in the same change.**
 
-**A diff that adds a GPU kernel class under `dasllama/` that no stocked model reaches names it in
-the blind-spot list of `modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend -
-`CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
-stocked model reaches it and the model-less test cell that dispatches it.**
+**A diff that adds a GPU kernel class under `dasllama/` that no census row dispatches - whether or
+not a stocked carrier above the census's tier does - names it in the blind-spot list of
+`modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend - `CENSUS_NEVER_DISPATCHED` for
+Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no census row reaches it, the
+stocked carrier that does where one does, and the model-less test cell that dispatches it.** The
+list is asserted: a row that dispatches a listed class reds the census.
 
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
