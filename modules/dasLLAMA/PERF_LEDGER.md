@@ -2009,15 +2009,17 @@ the recorder fills - no plane grows with them, so the ladder's footprint half is
   one piece at every position where the position alone read four or eight; no windowed carrier
   sits on this arc's board, so the count is the ruler's reading, not a measured step.
 - **The boards at the arc's tip, tg128@4 against llama.cpp the same hour** - the pod, cm2 / KHR:
-  qwen2 0.5B 1615 / 1604 against 1373 (1.18 / 1.17), qwen2 1.5B 980 / 982 against 920 (1.07 /
-  1.07 - the flat row 335 against 314), qwen3 0.6B 1261 / 1251 against 1199 (1.05 / 1.04), qwen3
-  4B 482 / 481 against 476 (1.01 / 1.01), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25,
-  the K-quant leaves the lever does not reach); the llama family at the same tip 1B 1343 / 1346 against 1220 (1.10 / 1.10), 3B 613 / 612
-  against 606 (1.01 / 1.01), 8B 380 / 378 against 361 (1.05 / 1.05). The
-  5060 Ti, cm2 with decode-vector: 0.5B 1246 against 922 (1.35), 1.5B 621 against 578 (1.07),
-  0.6B 922 against 740 (1.25), 4B 273 against 263 (1.04, under `DASLLAMA_GPU_VRAM_MB=9000`: the
+  qwen2 0.5B 1611 / 1602 against 1373 (1.17 / 1.17), qwen2 1.5B 980 / 981 against 920 (1.07 /
+  1.07 - the flat row 335 against 314), qwen3 0.6B 1267 / 1251 against 1199 (1.06 / 1.04), qwen3
+  4B 483 / 481 against 476 (1.01 / 1.01), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25,
+  the K-quant leaves the lever does not reach); the llama family at the same tip 1B 1347 / 1345
+  against 1220 (1.10 / 1.10), 3B 613 / 612 against 606 (1.01 / 1.01), 8B 380 / 378 against 361
+  (1.05 / 1.05). The
+  5060 Ti, cm2 with decode-vector: 0.5B 1211 against 922 (1.31), 1.5B 624 against 578 (1.08),
+  0.6B 915 against 740 (1.24), 4B 273 against 263 (1.04, under `DASLLAMA_GPU_VRAM_MB=9000`: the
   16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
-  Q4_K_M 347 against 183 (1.89). The flat rows did not move.
+  Q4_K_M 348 against 183 (1.90); the desktop box reads three percent apart run to run on the
+  0.5B (1246 the run before). The flat rows did not move.
 
 ### From the M4 Metal pass (2026-09-13)
 
