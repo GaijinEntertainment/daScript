@@ -145,15 +145,11 @@ def kq_block32(f : KqFmt) : bool => !kq_sb(f)
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
 def kq_block32(fmt : int) : bool => !kq_sb(fmt)
 
-//! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_sb(fmt : int) : bool {
-    for (f in type<KqFmt>) {
-        if (int(f) == fmt) {
-            return kq_sb(f)
-        }
-    }
-    return false
-}
+//! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
+let KQ_FMT_COUNT = int(KqFmt.mx4) + 1
+
+//! The same predicate over the int id space the GPU drivers carry per stack/plane (pure: it sits in asserts).
+def kq_sb(fmt : int) : bool => fmt >= 0 && fmt < KQ_FMT_COUNT && kq_sb(unsafe(reinterpret<KqFmt>(uint8(fmt))))
 
 //! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
 //! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),

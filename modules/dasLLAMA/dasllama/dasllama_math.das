@@ -1530,7 +1530,7 @@ def pin_backend_for_bake(cpu : DlimCpuConfig) : bool {
         to_log(LOG_WARNING, "dasLLAMA: cross-box bake for '{cpu.backend}' needs the generated repack family - none is active here\n")
         return false
     }
-    g_bake_cpu = cpu
+    g_bake_cpu := cpu
     g_bake_cpu_override = true
     return true
 }
@@ -1547,7 +1547,11 @@ def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_
 //! family split; the loader freezes these onto the Model at repack time.
 def active_kq_layout_mr(fmt : int) : int64 {
     if (g_bake_cpu_override) {
-        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : (fmt == 44 ? g_bake_cpu.kq_mr44 : (fmt == 3 ? g_bake_cpu.kq_mr3 : (fmt == 33 ? g_bake_cpu.kq_mr33 : (fmt == 34 ? g_bake_cpu.kq_mr34 : (fmt == 45 ? g_bake_cpu.kq_mr45 : (fmt == 2 ? g_bake_cpu.kq_mr2 : (fmt == 23 ? g_bake_cpu.kq_mr23 : (fmt == 24 ? g_bake_cpu.kq_mr24 : (fmt == 25 ? g_bake_cpu.kq_mr25 : g_bake_cpu.kq_mr6)))))))))))
+        var f = KqFmt.q8
+        if (!kq_fmt_of_id(fmt, f) || int(f) >= length(g_bake_cpu.kq_mr)) {
+            panic("active_kq_layout_mr: the bake configuration carries no interleave for kq format id {fmt}")
+        }
+        return g_bake_cpu.kq_mr[int(f)]
     }
     return int64(invoke(g_active_kq_layout, fmt))
 }

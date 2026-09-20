@@ -2258,17 +2258,7 @@ def test_quantize_bs(t : T?) {
 def private dequant_plane_prefix(tr : Model; fmt : KqFmt; eloff, n : int64; var dst : array<float>) {
     for (blk in range64(n / 256l)) {
         let sb = (eloff + blk * 256l) / 256l
-        if (fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(tr.k4q, sb * K4_QSB, tr.k4s, sb * K4_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(tr.k5q, sb * K5_QSB, tr.k5s, sb * K5_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.k6) {
-            dequant_k6_plane_superblock(tr.k6q, sb * K6_QSB, tr.k6s, sb * K6_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.q40) {
-            dequant_q40_plane_superblock(tr.q40q, sb * Q40_QSB, tr.q40s, sb * Q40_SSB, dst, blk * 256l)
-        } else {
-            panic("dequant_plane_prefix: not a kq format")
-        }
+        dequant_kq_plane_sb(fmt, tr.kq[int(fmt)].q, tr.kq[int(fmt)].s, sb, false, dst, blk * 256l)
     }
 }
 
@@ -2917,26 +2907,22 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
         }
     }
     var m = Model()
-    if (fmt == 3) {
-        m.k3q := kq
-        m.k3s := ks
-    } else {
-        m.k6q := kq
-        m.k6s := ks
-    }
+    let kf = fmt == 3 ? KqFmt.k3 : KqFmt.k6
+    m.kq[int(kf)].q := kq
+    m.kq[int(kf)].s := ks
     var wqDisk : array<uint8>
     var wsDisk : array<uint8>
-    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, false, mr, wqDisk, wsDisk)
+    moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, false, mr, wqDisk, wsDisk)
     unsafe {
         if (fmt == 3) {
-            repack_k3_grp(addr(m.k3q[0]), addr(m.k3s[0]), n, d, mr)
+            repack_k3_grp(addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(m.k6q[0]), addr(m.k6s[0]), n, d, mr)
+            repack_k6_grp(addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         }
     }
     var wqGrp : array<uint8>
     var wsGrp : array<uint8>
-    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+    moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, true, mr, wqGrp, wsGrp)
     var qdiff = 0
     for (a, b in wqDisk, wqGrp) {
         if (a != b) {
@@ -2988,19 +2974,8 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
         }
     }
     var m = Model()
-    if (fmt == KqFmt.iq4xs) {
-        m.iq4xsq := kq
-        m.iq4xss := ks
-    } elif (fmt == KqFmt.iq3s) {
-        m.iq3sq := kq
-        m.iq3ss := ks
-    } elif (fmt == KqFmt.iq3xxs) {
-        m.iq3xxsq := kq
-        m.iq3xxss := ks
-    } else {
-        m.iq2xxsq := kq
-        m.iq2xxss := ks
-    }
+    m.kq[int(fmt)].q := kq
+    m.kq[int(fmt)].s := ks
     var wqDisk : array<uint8>
     var wsDisk : array<uint8>
     moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, false, mr, wqDisk, wsDisk)
@@ -3028,9 +3003,9 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s) {
         unsafe {
             if (fmt == KqFmt.iq4xs) {
-                repack_iq4xs_grp(addr(m.iq4xsq[0]), addr(m.iq4xss[0]), n, d, mr)
+                repack_iq4xs_grp(addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             } else {
-                repack_iq3s_grp(addr(m.iq3sq[0]), addr(m.iq3ss[0]), n, d, mr)
+                repack_iq3s_grp(addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             }
         }
         var wqGrp : array<uint8>

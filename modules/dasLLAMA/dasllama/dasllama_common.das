@@ -32,6 +32,7 @@ require daslib/json_boost  // read_json / read_json_field for the box profile's 
 require math
 require daslib/random  // int4 RNG state + random_float for token sampling
 require daslib/strings_boost  // join() for the arch-registry diagnostic
+require daslib/enum_trait   // the plane table walks the KqFmt enum
 require daslib/apply  // the Model finalizer + the image save/load walk both iterate Model fields
 
 // dasLLAMA inference engine. A model is split into two regions by role: a small fp32 aux blob
@@ -884,6 +885,14 @@ struct ArchBlocks {
     ffn_is_dense : bool = true
 }
 
+//! One lattice format's planes on a Model: the quant plane, the scale plane, and the grp<mr>
+//! interleave the load repacked them to (read only under `kq_repacked`; 0 until the load freezes it).
+struct KqPlanes {
+    q : array<uint8>
+    s : array<uint8>
+    mr : int64
+}
+
 //! The whole model. `fblob` holds the fp32 embedding + norm weights; the big 2D weights live in
 //! exactly one of wblob (fp32) / qblob+qscales (Q8) / q4blob+q4scales (Q4) per `quant`. A Q8 load of
 //! a Q8_0 embedding (emb_q8) drops the fp32 table: rows read qblob; tied (cls_q8), the classifier reads it too.
@@ -970,67 +979,19 @@ struct Model {
     // expand bit-for-bit. ple_model_off indexes bf16blob when set, fblob otherwise.
     bf16blob : array<uint16>
     ple_model_bf16 : bool = false
-    // Native K-quant planes (valid when kquant_native): big weights whose disk type is
-    // Q4_K/Q5_K/Q6_K live in per-format plane pairs instead of qblob, packed per 256-weight
-    // superblock. The matching *_fmt tag says which plane a weight's element offset indexes.
-    k4q : array<uint8>
-    k4s : array<uint8>
-    k5q : array<uint8>
-    k5s : array<uint8>
-    k6q : array<uint8>
-    k6s : array<uint8>
-    // the q40 tier's plane pair (128B nibbles — the k4 pairing — + 16B of f16 d per superblock)
-    q40q : array<uint8>
-    q40s : array<uint8>
+    // Native K-quant planes (valid when kquant_native): one plane pair per lattice format, by int(KqFmt),
+    // packed per 256-weight superblock at the format's kq_qsb/kq_ssb strides; the matching *_fmt tag
+    // says which pair a weight indexes. The q8/q51/mx4 slots stay empty (qblob, q51q/q51s, mxq/mxs).
+    @safe_when_uninitialized kq : KqPlanes[KQ_FMT_COUNT]
     // the q51 tier's plane pair, per 32-BLOCK: 20B nibbles+qh / 4B f16 d+m (never repacked)
     q51q : array<uint8>
     q51s : array<uint8>
-    // the iq4xs tier's plane pair: 128B nibbles in the q40 tiling + a 20B decoded scale row per superblock
-    iq4xsq : array<uint8>
-    iq4xss : array<uint8>
-    // the k3 tier's plane pair: [64 qs][32 hmask] per superblock + the k6-shaped 18B scale row (16 x int8 (sc - 32), f16 d)
-    k3q : array<uint8>
-    k3s : array<uint8>
-    // the iq3s tier's plane pair: [64 qs][8 qh][32 signs] per superblock + the k4-shaped 20B scale row (f16 d, 8 x int8 (1 + 2s))
-    iq3sq : array<uint8>
-    iq3ss : array<uint8>
-    // the iq3xxs tier's plane pair: [64 qs][32 aux] per superblock + the iq3s-shaped 20B scale row (f16 d halved, 8 x uint8 (2ls + 1))
-    iq3xxsq : array<uint8>
-    iq3xxss : array<uint8>
-    // the iq4nl tier's plane pair: q40's shapes exactly (128B nibbles + 8 x f16 d per superblock), LUT decode
-    iq4nlq : array<uint8>
-    iq4nls : array<uint8>
-    // the k2 tier's plane pair: 64 qs bytes per superblock + the 20B scale row [f16 d][f16 dmin][16 sc/min bytes]
-    k2q : array<uint8>
-    k2s : array<uint8>
-    // the iq2s tier's plane pair: [32 idx][32 signs][8 qh] per superblock + the 20B row (f16 d/8, 16 x (1 + 2s))
-    iq2sq : array<uint8>
-    iq2ss : array<uint8>
-    // the iq2xs tier's plane pair: 32 u16 qs words per superblock + the 20B row (f16 d/8, 16 x (1 + 2s))
-    iq2xsq : array<uint8>
-    iq2xss : array<uint8>
-    // the iq2xxs tier's plane pair: 32 u16 qs words per superblock + the 20B row (f16 d/8, 16 x (1 + 2s))
-    iq2xxsq : array<uint8>
-    iq2xxss : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
     // read garbage — and embed_row gathers rows through the grp layout too.
     kq_repacked : bool = false
     mx4_repacked : bool = false   // the CPU repack pass ran (set by repack_q8_weights; mx4 stacks laneq when present — no GPU carry)
-    kq_repack_mr4 : int64 = 4l   // per-FORMAT repack interleaves (kq v2: the families tune separately)
-    kq_repack_mr5 : int64 = 4l
-    kq_repack_mr6 : int64 = 4l
-    kq_repack_mr40 : int64 = 4l
-    kq_repack_mr44 : int64 = 4l
-    kq_repack_mr3 : int64 = 4l
-    kq_repack_mr33 : int64 = 4l
-    kq_repack_mr34 : int64 = 4l
-    kq_repack_mr45 : int64 = 4l
-    kq_repack_mr2 : int64 = 4l
-    kq_repack_mr23 : int64 = 4l
-    kq_repack_mr24 : int64 = 4l
-    kq_repack_mr25 : int64 = 4l
     // per-layer weight format tags (KqFmt; empty = all q8). Filled by detect_kq_formats before
     // layout_offsets so the layout walks each tensor into its format's cursor.
     wq_fmt : array<KqFmt>
@@ -1222,16 +1183,29 @@ def image_backing_release(map : void?; bytes : uint64) {
     unsafe(fmap_close(map, bytes))
 }
 
+// an image-backed model's plane is a locked BORROWED view - forgotten, never freed
+def private release_plane(var a : array<auto(TT)>) {
+    if (lock_count(a) != 0) {
+        unsafe(_builtin_forget_temp_array(a))
+    } else {
+        delete a
+    }
+}
+
 // Model's finalizer (every `delete model` lowers to _::finalize and lands here): image-backed
 // models hold locked BORROWED views over the image — those must be forgotten (reset without
 // freeing) before the backing goes; everything owned deletes as usual.
 def finalize(var t : Model) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe(_builtin_forget_temp_array(field))
-            } else {
-                delete field
+            release_plane(field)
+        } static_elif (typeinfo is_dim(field)) {   // the per-format plane table
+            for (el in field) {
+                apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        release_plane(ifield)
+                    }
+                }
             }
         } static_elif (typeinfo is_struct(field)) {
             delete field
@@ -1248,19 +1222,26 @@ def finalize(var t : Model) {
 
 //! Resident weight bytes across every plane family (only the loaded quant's planes are
 //! non-empty; a mapped .dlim's borrowed views count their mapped extent).
+//! Bytes of the lattice planes: the quant planes and, separately, the scale planes.
+def kq_plane_bytes(t : Model) : tuple<q : int64; s : int64> {
+    var q = 0l
+    var s = 0l
+    for (p in t.kq) {
+        q += long_length(p.q)
+        s += long_length(p.s)
+    }
+    return (q = q, s = s)
+}
+
 def model_weights_bytes(t : Model) : int64 {
     // long_length throughout: big-model planes exceed INT_MAX elements (a 35B Q4_K plane is > 2 GB)
+    let kqb = kq_plane_bytes(t)
     return (long_length(t.fblob) * 4l + long_length(t.wblob) * 4l
         + long_length(t.qblob) + long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l
         + long_length(t.q4blob) + long_length(t.q4scales) * 4l
         + long_length(t.mxq) + long_length(t.mxs)
         + long_length(t.bf16blob) * 2l
-        + long_length(t.k4q) + long_length(t.k4s) + long_length(t.k5q) + long_length(t.k5s)
-        + long_length(t.k6q) + long_length(t.k6s) + long_length(t.q40q) + long_length(t.q40s)
-        + long_length(t.iq4xsq) + long_length(t.iq4xss) + long_length(t.k3q) + long_length(t.k3s)
-        + long_length(t.iq3sq) + long_length(t.iq3ss)
-        + long_length(t.iq3xxsq) + long_length(t.iq3xxss)
-        + long_length(t.iq4nlq) + long_length(t.iq4nls) + long_length(t.k2q) + long_length(t.k2s) + long_length(t.iq2sq) + long_length(t.iq2ss) + long_length(t.iq2xsq) + long_length(t.iq2xss) + long_length(t.iq2xxsq) + long_length(t.iq2xxss)
+        + kqb.q + kqb.s
         + long_length(t.q51q) + long_length(t.q51s)
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
@@ -1711,19 +1692,12 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.q8_mr = active_q8_layout_mr()
     c.q8_wbias = active_q8_wbias()
     c.q8_kgroup = active_q8_kgroup()
-    c.kq_mr4 = active_kq_layout_mr(4)
-    c.kq_mr5 = active_kq_layout_mr(5)
-    c.kq_mr6 = active_kq_layout_mr(6)
-    c.kq_mr40 = active_kq_layout_mr(40)
-    c.kq_mr44 = active_kq_layout_mr(44)
-    c.kq_mr3 = active_kq_layout_mr(3)
-    c.kq_mr33 = active_kq_layout_mr(33)
-    c.kq_mr34 = active_kq_layout_mr(34)
-    c.kq_mr45 = active_kq_layout_mr(45)
-    c.kq_mr2 = active_kq_layout_mr(2)
-    c.kq_mr23 = active_kq_layout_mr(23)
-    c.kq_mr24 = active_kq_layout_mr(24)
-    c.kq_mr25 = active_kq_layout_mr(25)
+    c.kq_mr |> resize(KQ_FMT_COUNT)
+    for (f in type<KqFmt>) {
+        if (kq_sb(f)) {
+            c.kq_mr[int(f)] = active_kq_layout_mr(kq_schema_id(f))
+        }
+    }
     c.q51_mr = active_q51_layout_mr()
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
@@ -1749,49 +1723,12 @@ def dlim_config_sources_register() {
 
 //! The Model's plane pair for a kq format - the dispatcher every plane-form consumer keys on.
 def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks : array<uint8> const?&) {
+    if (!kq_sb(fmt)) {
+        panic("kq_planes_of: '{fmt}' has no kq plane pair")
+    }
     unsafe {
-        if (fmt == KqFmt.k4) {
-            kq = addr(t.k4q)
-            ks = addr(t.k4s)
-        } elif (fmt == KqFmt.k5) {
-            kq = addr(t.k5q)
-            ks = addr(t.k5s)
-        } elif (fmt == KqFmt.k6) {
-            kq = addr(t.k6q)
-            ks = addr(t.k6s)
-        } elif (fmt == KqFmt.q40) {
-            kq = addr(t.q40q)
-            ks = addr(t.q40s)
-        } elif (fmt == KqFmt.iq4xs) {
-            kq = addr(t.iq4xsq)
-            ks = addr(t.iq4xss)
-        } elif (fmt == KqFmt.k3) {
-            kq = addr(t.k3q)
-            ks = addr(t.k3s)
-        } elif (fmt == KqFmt.iq3s) {
-            kq = addr(t.iq3sq)
-            ks = addr(t.iq3ss)
-        } elif (fmt == KqFmt.iq3xxs) {
-            kq = addr(t.iq3xxsq)
-            ks = addr(t.iq3xxss)
-        } elif (fmt == KqFmt.iq4nl) {
-            kq = addr(t.iq4nlq)
-            ks = addr(t.iq4nls)
-        } elif (fmt == KqFmt.k2) {
-            kq = addr(t.k2q)
-            ks = addr(t.k2s)
-        } elif (fmt == KqFmt.iq2s) {
-            kq = addr(t.iq2sq)
-            ks = addr(t.iq2ss)
-        } elif (fmt == KqFmt.iq2xs) {
-            kq = addr(t.iq2xsq)
-            ks = addr(t.iq2xss)
-        } elif (fmt == KqFmt.iq2xxs) {
-            kq = addr(t.iq2xxsq)
-            ks = addr(t.iq2xxss)
-        } else {
-            panic("kq_planes_of: '{fmt}' has no kq plane pair")
-        }
+        kq = addr(t.kq[int(fmt)].q)
+        ks = addr(t.kq[int(fmt)].s)
     }
 }
 
@@ -1859,11 +1796,26 @@ def wscale_convert_f16(var t : Model) {
 
 
 // the active grp<mr> interleave of a repacked kq plane (1 = disk order / not repacked)
-def kq_active_mr(t : Model; f : KqFmt) : int64 {
-    if (!t.kq_repacked) {
-        return 1l
+def kq_active_mr(t : Model; f : KqFmt) : int64 => t.kq_repacked ? t.kq[int(f)].mr : 1l
+
+//! A lattice plane's image section / streamed-plane name: the format's spelling plus the plane
+//! letter (`k4q`, `k4s`) - the one spelling the image walk, the stream rail and the blob transforms share.
+def kq_plane_name(f : KqFmt; plane : string) : string => "{f}{plane}"
+
+//! Freeze the active backend's interleave onto every lattice plane pair - the load's repack
+//! record, which every kq_active_mr consumer reads after.
+def kq_freeze_repack_mr(var t : Model) {
+    for (f in type<KqFmt>) {
+        if (kq_sb(f)) {
+            t.kq[int(f)].mr = active_kq_layout_mr(kq_schema_id(f))
+        }
     }
-    return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : (f == KqFmt.q40 ? t.kq_repack_mr40 : (f == KqFmt.iq4xs ? t.kq_repack_mr44 : (f == KqFmt.k3 ? t.kq_repack_mr3 : (f == KqFmt.iq3s ? t.kq_repack_mr33 : (f == KqFmt.iq3xxs ? t.kq_repack_mr34 : (f == KqFmt.iq4nl ? t.kq_repack_mr45 : (f == KqFmt.k2 ? t.kq_repack_mr2 : (f == KqFmt.iq2s ? t.kq_repack_mr23 : (f == KqFmt.iq2xs ? t.kq_repack_mr24 : t.kq_repack_mr25)))))))))))
+}
+
+//! The frozen interleaves as one log line: `k4 grp4, k5 grp4, ...`.
+def kq_repack_mr_report(t : Model) : string {
+    let parts <- [for (f in type<KqFmt>); "{f} grp{t.kq[int(f)].mr}"; where kq_sb(f)]
+    return join(parts, ", ")
 }
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision — straight into
@@ -1926,8 +1878,9 @@ def footprint(t : Model) : MemFootprint {
     let q4s = long_length(t.q4scales) * 4l
     let mx4 = long_length(t.mxq)                  // uint8 (two nibbles) -> 1 byte each
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
-    let kq = long_length(t.k4q) + long_length(t.k5q) + long_length(t.k6q) + long_length(t.q40q) + long_length(t.q51q) + long_length(t.iq4xsq) + long_length(t.k3q) + long_length(t.iq3sq) + long_length(t.iq3xxsq) + long_length(t.iq4nlq) + long_length(t.k2q) + long_length(t.iq2sq) + long_length(t.iq2xsq) + long_length(t.iq2xxsq)
-    let kqs = long_length(t.k4s) + long_length(t.k5s) + long_length(t.k6s) + long_length(t.q40s) + long_length(t.q51s) + long_length(t.iq4xss) + long_length(t.k3s) + long_length(t.iq3ss) + long_length(t.iq3xxss) + long_length(t.iq4nls) + long_length(t.k2s) + long_length(t.iq2ss) + long_length(t.iq2xss) + long_length(t.iq2xxss)
+    let kqb = kq_plane_bytes(t)
+    let kq = kqb.q + long_length(t.q51q)
+    let kqs = kqb.s + long_length(t.q51s)
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,
@@ -3637,69 +3590,24 @@ def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregio
 // KqFmt -> the kernel-layer format id (matmul_kq*/kq_rows_fn/kq_qsb take the int form). q8 maps
 // to 0, a poison id no kq kernel accepts — kq_rows_for calls this for EVERY tag, so it must stay
 // total even though q8 branches never read the result.
-def private kq_fi(fmt : KqFmt) : int => fmt == KqFmt.k4 ? 4 : (fmt == KqFmt.k5 ? 5 : (fmt == KqFmt.k6 ? 6 : (fmt == KqFmt.q40 ? 40 : (fmt == KqFmt.iq4xs ? 44 : (fmt == KqFmt.k3 ? 3 : (fmt == KqFmt.iq3s ? 33 : (fmt == KqFmt.iq3xxs ? 34 : (fmt == KqFmt.iq4nl ? 45 : (fmt == KqFmt.k2 ? 2 : (fmt == KqFmt.iq2s ? 23 : (fmt == KqFmt.iq2xs ? 24 : (fmt == KqFmt.iq2xxs ? 25 : 0))))))))))))
+def private kq_fi(fmt : KqFmt) : int => kq_sb(fmt) ? kq_schema_id(fmt) : 0
+
+// the plane-table slot a kq dispatch reads; a tag off the lattice has none
+def private kq_slot(what : string; fmt : KqFmt) : int {
+    if (!kq_sb(fmt)) {
+        panic("{what}: '{fmt}' has no kq plane pair")
+    }
+    return int(fmt)
+}
 
 // K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
 // kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
-def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64; yoff : int64 = 0l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64; yoff : int64 = 0l) {
+    let i = kq_slot("mm_at_kq_pre", fmt)
     if (t.kq_repacked) {
-        if (fmt == KqFmt.k4) {
-            matmul_kq_active(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.k5) {
-            matmul_kq_active(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.k6) {
-            matmul_kq_active(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.q40) {
-            matmul_kq_active(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq4xs) {
-            matmul_kq_active(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.k3) {
-            matmul_kq_active(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq3s) {
-            matmul_kq_active(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq3xxs) {
-            matmul_kq_active(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq4nl) {
-            matmul_kq_active(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.k2) {
-            matmul_kq_active(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq2s) {
-            matmul_kq_active(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq2xs) {
-            matmul_kq_active(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, yoff)
-        } elif (fmt == KqFmt.iq2xxs) {
-            matmul_kq_active(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, yoff)
-        } else {
-            panic("mm_at_kq_pre: '{fmt}' has no kq plane pair")   // a new KqFmt must claim its arm, never ride q40's
-        }
-    } elif (fmt == KqFmt.k4) {
-        matmul_kq(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.k5) {
-        matmul_kq(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.k6) {
-        matmul_kq(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.q40) {
-        matmul_kq(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq4xs) {
-        matmul_kq(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.k3) {
-        matmul_kq(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq3s) {
-        matmul_kq(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq3xxs) {
-        matmul_kq(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq4nl) {
-        matmul_kq(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.k2) {
-        matmul_kq(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq2s) {
-        matmul_kq(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq2xs) {
-        matmul_kq(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, yoff)
-    } elif (fmt == KqFmt.iq2xxs) {
-        matmul_kq(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, yoff)
+        matmul_kq_active(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, woff, xq, xs, xbs, n, d, yoff)
     } else {
-        panic("mm_at_kq_pre: '{fmt}' has no kq plane pair")
+        matmul_kq(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, woff, xq, xs, xbs, n, d, yoff)
     }
 }
 
@@ -3708,38 +3616,6 @@ def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq 
 def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
     mm_at_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d)
-}
-
-def private mm_b_kq_tile(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
-    if (fmt == KqFmt.k4) {
-        matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k5) {
-        matmul_kq_batch(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k6) {
-        matmul_kq_batch(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.q40) {
-        matmul_kq_batch(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq4xs) {
-        matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k3) {
-        matmul_kq_batch(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq3s) {
-        matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq3xxs) {
-        matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq4nl) {
-        matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k2) {
-        matmul_kq_batch(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2s) {
-        matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2xs) {
-        matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2xxs) {
-        matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, ntok)
-    } else {
-        panic("mm_b_kq_tile: '{fmt}' has no kq plane pair")
-    }
 }
 
 // Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
@@ -3752,9 +3628,7 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
             matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
             return
         }
-        let ts_gemm = prof_ticks()
-        mm_b_kq_tile(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
-        prof_add("mm_gemm", ts_gemm)
+        mm_b_kq_pre(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         return
     }
     unsafe {
@@ -3768,173 +3642,44 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
 // Region-list kq GEMV over the model's planes (the MoE expert dispatch's kq twin of
 // mm_at_q8_groupn; offs = (weight, activation) element-offset pairs within fmt's plane).
 // Repacked loads run the backend's kq_groupn; disk-order loads run the portable region walk.
-def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
+    let i = kq_slot("mm_at_kq_groupn", fmt)
     if (t.kq_repacked) {
-        if (fmt == KqFmt.k4) {
-            matmul_kq_groupn_active(4, y, t.k4q, t.k4s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.k5) {
-            matmul_kq_groupn_active(5, y, t.k5q, t.k5s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.k6) {
-            matmul_kq_groupn_active(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.q40) {
-            matmul_kq_groupn_active(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq4xs) {
-            matmul_kq_groupn_active(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.k3) {
-            matmul_kq_groupn_active(3, y, t.k3q, t.k3s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq3s) {
-            matmul_kq_groupn_active(33, y, t.iq3sq, t.iq3ss, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq3xxs) {
-            matmul_kq_groupn_active(34, y, t.iq3xxsq, t.iq3xxss, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq4nl) {
-            matmul_kq_groupn_active(45, y, t.iq4nlq, t.iq4nls, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.k2) {
-            matmul_kq_groupn_active(2, y, t.k2q, t.k2s, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq2s) {
-            matmul_kq_groupn_active(23, y, t.iq2sq, t.iq2ss, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq2xs) {
-            matmul_kq_groupn_active(24, y, t.iq2xsq, t.iq2xss, offs, nregions, xq, xs, xbs, n, d)
-        } elif (fmt == KqFmt.iq2xxs) {
-            matmul_kq_groupn_active(25, y, t.iq2xxsq, t.iq2xxss, offs, nregions, xq, xs, xbs, n, d)
-        } else {
-            panic("mm_at_kq_groupn: '{fmt}' has no kq plane pair")
-        }
-    } elif (fmt == KqFmt.k4) {
-        matmul_kq_groupn(4, y, t.k4q, t.k4s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k5) {
-        matmul_kq_groupn(5, y, t.k5q, t.k5s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k6) {
-        matmul_kq_groupn(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.q40) {
-        matmul_kq_groupn(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq4xs) {
-        matmul_kq_groupn(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k3) {
-        matmul_kq_groupn(3, y, t.k3q, t.k3s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq3s) {
-        matmul_kq_groupn(33, y, t.iq3sq, t.iq3ss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq3xxs) {
-        matmul_kq_groupn(34, y, t.iq3xxsq, t.iq3xxss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq4nl) {
-        matmul_kq_groupn(45, y, t.iq4nlq, t.iq4nls, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k2) {
-        matmul_kq_groupn(2, y, t.k2q, t.k2s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2s) {
-        matmul_kq_groupn(23, y, t.iq2sq, t.iq2ss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2xs) {
-        matmul_kq_groupn(24, y, t.iq2xsq, t.iq2xss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2xxs) {
-        matmul_kq_groupn(25, y, t.iq2xxsq, t.iq2xxss, offs, nregions, xq, xs, xbs, n, d)
+        matmul_kq_groupn_active(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, offs, nregions, xq, xs, xbs, n, d)
     } else {
-        panic("mm_at_kq_groupn: '{fmt}' has no kq plane pair")
+        matmul_kq_groupn(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, offs, nregions, xq, xs, xbs, n, d)
     }
 }
 
 // Fused batched region-list kq GEMM (the fused MoE prefill's kq twin of the mx4 batch groupn;
 // triple offs). Callers guard with kq_repacked && kernel_backend_has_kq_batch_groupn().
 def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
-    if (fmt == KqFmt.k4) {
-        matmul_kq_batch_groupn(4, y, t.k4q, t.k4s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k5) {
-        matmul_kq_batch_groupn(5, y, t.k5q, t.k5s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k6) {
-        matmul_kq_batch_groupn(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.q40) {
-        matmul_kq_batch_groupn(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq4xs) {
-        matmul_kq_batch_groupn(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k3) {
-        matmul_kq_batch_groupn(3, y, t.k3q, t.k3s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq3s) {
-        matmul_kq_batch_groupn(33, y, t.iq3sq, t.iq3ss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq3xxs) {
-        matmul_kq_batch_groupn(34, y, t.iq3xxsq, t.iq3xxss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq4nl) {
-        matmul_kq_batch_groupn(45, y, t.iq4nlq, t.iq4nls, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.k2) {
-        matmul_kq_batch_groupn(2, y, t.k2q, t.k2s, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2s) {
-        matmul_kq_batch_groupn(23, y, t.iq2sq, t.iq2ss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2xs) {
-        matmul_kq_batch_groupn(24, y, t.iq2xsq, t.iq2xss, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.iq2xxs) {
-        matmul_kq_batch_groupn(25, y, t.iq2xxsq, t.iq2xxss, offs, nregions, xq, xs, xbs, n, d)
-    } else {
-        panic("mm_b_kq_groupn: '{fmt}' has no kq plane pair")
-    }
+    let i = kq_slot("mm_b_kq_groupn", fmt)
+    matmul_kq_batch_groupn(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, offs, nregions, xq, xs, xbs, n, d)
 }
 
 // Batched kq GEMM off PRE-quantized activation rows (the grouped MoE prefill's kq twin of
 // mm_b_q8_pre). Callers guard with kq_repacked && kernel_backend_has_kq_batch() — the prefill
 // gate routes kq-expert layers to the per-position reference path otherwise.
 def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
+    let i = kq_slot("mm_b_kq_pre", fmt)
     let ts_gemm = prof_ticks()
-    if (fmt == KqFmt.k4) {
-        matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k5) {
-        matmul_kq_batch(5, y, t.k5q, t.k5s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k6) {
-        matmul_kq_batch(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.q40) {
-        matmul_kq_batch(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq4xs) {
-        matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k3) {
-        matmul_kq_batch(3, y, t.k3q, t.k3s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq3s) {
-        matmul_kq_batch(33, y, t.iq3sq, t.iq3ss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq3xxs) {
-        matmul_kq_batch(34, y, t.iq3xxsq, t.iq3xxss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq4nl) {
-        matmul_kq_batch(45, y, t.iq4nlq, t.iq4nls, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.k2) {
-        matmul_kq_batch(2, y, t.k2q, t.k2s, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2s) {
-        matmul_kq_batch(23, y, t.iq2sq, t.iq2ss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2xs) {
-        matmul_kq_batch(24, y, t.iq2xsq, t.iq2xss, woff, xq, xs, xbs, n, d, ntok)
-    } elif (fmt == KqFmt.iq2xxs) {
-        matmul_kq_batch(25, y, t.iq2xxsq, t.iq2xxss, woff, xq, xs, xbs, n, d, ntok)
-    } else {
-        panic("mm_b_kq_pre: '{fmt}' has no kq plane pair")
-    }
+    matmul_kq_batch(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, woff, xq, xs, xbs, n, d, ntok)
     prof_add("mm_gemm", ts_gemm)
 }
 
 def kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
-    let sb = woff / 256l
-    if (fmt == KqFmt.k4) return unsafe(addr<uint8 const?>(t.k4q[sb * K4_QSB]))
-    if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5q[sb * K5_QSB]))
-    if (fmt == KqFmt.k6) return unsafe(addr<uint8 const?>(t.k6q[sb * K6_QSB]))
-    if (fmt == KqFmt.q40) return unsafe(addr<uint8 const?>(t.q40q[sb * Q40_QSB]))
-    if (fmt == KqFmt.iq4xs) return unsafe(addr<uint8 const?>(t.iq4xsq[sb * IQ4XS_QSB]))
-    if (fmt == KqFmt.k3) return unsafe(addr<uint8 const?>(t.k3q[sb * K3_QSB]))
-    if (fmt == KqFmt.iq3s) return unsafe(addr<uint8 const?>(t.iq3sq[sb * IQ3S_QSB]))
-    if (fmt == KqFmt.iq3xxs) return unsafe(addr<uint8 const?>(t.iq3xxsq[sb * IQ3XXS_QSB]))
-    if (fmt == KqFmt.iq4nl) return unsafe(addr<uint8 const?>(t.iq4nlq[sb * Q40_QSB]))
-    if (fmt == KqFmt.k2) return unsafe(addr<uint8 const?>(t.k2q[sb * K2_QSB]))
-    if (fmt == KqFmt.iq2s) return unsafe(addr<uint8 const?>(t.iq2sq[sb * IQ2S_QSB]))
-    if (fmt == KqFmt.iq2xs) return unsafe(addr<uint8 const?>(t.iq2xsq[sb * IQ2XS_QSB]))
-    if (fmt == KqFmt.iq2xxs) return unsafe(addr<uint8 const?>(t.iq2xxsq[sb * IQ2XXS_QSB]))
-    return null
+    if (!kq_sb(fmt)) {
+        return null
+    }
+    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].q[(woff / 256l) * kq_qsb(fmt)]))
 }
 
 def kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
-    let sb = woff / 256l
-    if (fmt == KqFmt.k4) return unsafe(addr<uint8 const?>(t.k4s[sb * K4_SSB]))
-    if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5s[sb * K5_SSB]))
-    if (fmt == KqFmt.k6) return unsafe(addr<uint8 const?>(t.k6s[sb * K6_SSB]))
-    if (fmt == KqFmt.q40) return unsafe(addr<uint8 const?>(t.q40s[sb * Q40_SSB]))
-    if (fmt == KqFmt.iq4xs) return unsafe(addr<uint8 const?>(t.iq4xss[sb * IQ4XS_SSB]))
-    if (fmt == KqFmt.k3) return unsafe(addr<uint8 const?>(t.k3s[sb * K3_SSB]))
-    if (fmt == KqFmt.iq3s) return unsafe(addr<uint8 const?>(t.iq3ss[sb * IQ3S_SSB]))
-    if (fmt == KqFmt.iq3xxs) return unsafe(addr<uint8 const?>(t.iq3xxss[sb * IQ3XXS_SSB]))
-    if (fmt == KqFmt.iq4nl) return unsafe(addr<uint8 const?>(t.iq4nls[sb * Q40_SSB]))
-    if (fmt == KqFmt.k2) return unsafe(addr<uint8 const?>(t.k2s[sb * K2_SSB]))
-    if (fmt == KqFmt.iq2s) return unsafe(addr<uint8 const?>(t.iq2ss[sb * IQ2S_SSB]))
-    if (fmt == KqFmt.iq2xs) return unsafe(addr<uint8 const?>(t.iq2xss[sb * IQ2XS_SSB]))
-    if (fmt == KqFmt.iq2xxs) return unsafe(addr<uint8 const?>(t.iq2xxss[sb * IQ2XXS_SSB]))
-    return null
+    if (!kq_sb(fmt)) {
+        return null
+    }
+    return unsafe(addr<uint8 const?>(t.kq[int(fmt)].s[(woff / 256l) * kq_ssb(fmt)]))
 }
 
 def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn {
@@ -4267,7 +4012,7 @@ def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
 // Copy token `token`'s embedding row into dst — from fp32 fblob, or (emb_q8) dequanted from the
 // linear Q8 copy at emb_q8_off (embq when trimmed), or (cls_kq) from the K-quant plane at
 // wcls_off (embq/embs when trimmed). Rows are whole superblocks (the K-quant row invariant).
-def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037,STYLE038 — a KqFmt ladder x trimmed/repacked; arms differ only in the plane pair and its strides
+def embed_row(t : Model; token : int64; var dst : float?) {
     let dim = t.config.dim
     if (t.emb_q8) {
         if (t.planes_trimmed) {
@@ -4276,117 +4021,35 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
     } elif (cls_kq(t)) {
-        let mr = kq_active_mr(t, t.emb_fmt)   // 1 when not repacked — unread past the guard then
+        let fmt = t.emb_fmt
+        let i = kq_slot("embed_row", fmt)
+        let mr = kq_active_mr(t, fmt)   // 1 when not repacked — unread past the guard then
         if (t.kq_repacked && token < (t.config.vocab_size / mr) * mr) {
             // repacked plane: gather via the grp<mr> layout (tail rows below stay disk-order, verbatim)
             unsafe {
                 let nsb = dim / 256l
                 let g = token / mr
-                let fmt = int64(kq_fi(t.emb_fmt))
                 // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
                 let sb0t = t.planes_trimmed ? 0l : t.wcls_off / 256l
                 let sbg = (sb0t + g * mr * nsb)
+                let qo = sbg * kq_qsb(fmt)
+                let so = sbg * kq_ssb(fmt)
                 if (t.planes_trimmed) {
-                    if (t.emb_fmt == KqFmt.k4) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K4_QSB]), addr(t.embs[sbg * K4_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.k5) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K5_QSB]), addr(t.embs[sbg * K5_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.k6) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K6_QSB]), addr(t.embs[sbg * K6_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.q40) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * Q40_QSB]), addr(t.embs[sbg * Q40_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq4xs) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ4XS_QSB]), addr(t.embs[sbg * IQ4XS_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.k3) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K3_QSB]), addr(t.embs[sbg * K3_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq3s) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ3S_QSB]), addr(t.embs[sbg * IQ3S_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq3xxs) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ3XXS_QSB]), addr(t.embs[sbg * IQ3XXS_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq4nl) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * Q40_QSB]), addr(t.embs[sbg * Q40_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.k2) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * K2_QSB]), addr(t.embs[sbg * K2_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq2s) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ2S_QSB]), addr(t.embs[sbg * IQ2S_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq2xs) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ2XS_QSB]), addr(t.embs[sbg * IQ2XS_SSB]), token % mr, mr, dim, dst)
-                    } elif (t.emb_fmt == KqFmt.iq2xxs) {
-                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ2XXS_QSB]), addr(t.embs[sbg * IQ2XXS_SSB]), token % mr, mr, dim, dst)
-                    } else {
-                        panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
-                    }
-                } elif (t.emb_fmt == KqFmt.k4) {
-                    dequant_kq_row_grp(fmt, addr(t.k4q[sbg * K4_QSB]), addr(t.k4s[sbg * K4_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.k5) {
-                    dequant_kq_row_grp(fmt, addr(t.k5q[sbg * K5_QSB]), addr(t.k5s[sbg * K5_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.k6) {
-                    dequant_kq_row_grp(fmt, addr(t.k6q[sbg * K6_QSB]), addr(t.k6s[sbg * K6_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.q40) {
-                    dequant_kq_row_grp(fmt, addr(t.q40q[sbg * Q40_QSB]), addr(t.q40s[sbg * Q40_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq4xs) {
-                    dequant_kq_row_grp(fmt, addr(t.iq4xsq[sbg * IQ4XS_QSB]), addr(t.iq4xss[sbg * IQ4XS_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.k3) {
-                    dequant_kq_row_grp(fmt, addr(t.k3q[sbg * K3_QSB]), addr(t.k3s[sbg * K3_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq3s) {
-                    dequant_kq_row_grp(fmt, addr(t.iq3sq[sbg * IQ3S_QSB]), addr(t.iq3ss[sbg * IQ3S_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq3xxs) {
-                    dequant_kq_row_grp(fmt, addr(t.iq3xxsq[sbg * IQ3XXS_QSB]), addr(t.iq3xxss[sbg * IQ3XXS_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq4nl) {
-                    dequant_kq_row_grp(fmt, addr(t.iq4nlq[sbg * Q40_QSB]), addr(t.iq4nls[sbg * Q40_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.k2) {
-                    dequant_kq_row_grp(fmt, addr(t.k2q[sbg * K2_QSB]), addr(t.k2s[sbg * K2_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq2s) {
-                    dequant_kq_row_grp(fmt, addr(t.iq2sq[sbg * IQ2S_QSB]), addr(t.iq2ss[sbg * IQ2S_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq2xs) {
-                    dequant_kq_row_grp(fmt, addr(t.iq2xsq[sbg * IQ2XS_QSB]), addr(t.iq2xss[sbg * IQ2XS_SSB]), token % mr, mr, dim, dst)
-                } elif (t.emb_fmt == KqFmt.iq2xxs) {
-                    dequant_kq_row_grp(fmt, addr(t.iq2xxsq[sbg * IQ2XXS_QSB]), addr(t.iq2xxss[sbg * IQ2XXS_SSB]), token % mr, mr, dim, dst)
+                    dequant_kq_row_grp(int64(kq_schema_id(fmt)), addr(t.embq[qo]), addr(t.embs[so]), token % mr, mr, dim, dst)
                 } else {
-                    panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
+                    dequant_kq_row_grp(int64(kq_schema_id(fmt)), addr(t.kq[i].q[qo]), addr(t.kq[i].s[so]), token % mr, mr, dim, dst)
                 }
             }
         } else {
             unsafe {
                 var row = temp_array(dst, dim, type<float>)
-                // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
+                // trimmed: embq/embs hold the region's plane pair verbatim (the row form), rebased to 0
                 let sb0 = t.planes_trimmed ? (token * dim) / 256l : (t.wcls_off + token * dim) / 256l
                 for (s in range64(dim / 256l)) {
                     if (t.planes_trimmed) {
-                        if (t.emb_fmt == KqFmt.k4) {
-                            dequant_k4_plane_superblock(t.embq, (sb0 + s) * K4_QSB, t.embs, (sb0 + s) * K4_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.k5) {
-                            dequant_k5_plane_superblock(t.embq, (sb0 + s) * K5_QSB, t.embs, (sb0 + s) * K5_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.k6) {
-                            dequant_k6_plane_superblock(t.embq, (sb0 + s) * K6_QSB, t.embs, (sb0 + s) * K6_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.q40) {
-                            dequant_q40_plane_superblock(t.embq, (sb0 + s) * Q40_QSB, t.embs, (sb0 + s) * Q40_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq4xs) {
-                            dequant_iq4xs_plane_superblock(t.embq, (sb0 + s) * IQ4XS_QSB, t.embs, (sb0 + s) * IQ4XS_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.k3) {
-                            dequant_k3_plane_superblock(t.embq, (sb0 + s) * K3_QSB, t.embs, (sb0 + s) * K3_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq3s) {
-                            dequant_iq3s_plane_superblock(t.embq, (sb0 + s) * IQ3S_QSB, t.embs, (sb0 + s) * IQ3S_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq3xxs) {
-                            dequant_iq3xxs_plane_superblock(t.embq, (sb0 + s) * IQ3XXS_QSB, t.embs, (sb0 + s) * IQ3XXS_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq4nl) {
-                            dequant_iq4nl_plane_superblock(t.embq, (sb0 + s) * Q40_QSB, t.embs, (sb0 + s) * Q40_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.k2) {
-                            dequant_k2_plane_superblock(t.embq, (sb0 + s) * K2_QSB, t.embs, (sb0 + s) * K2_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq2s) {
-                            dequant_iq2s_plane_superblock(t.embq, (sb0 + s) * IQ2S_QSB, t.embs, (sb0 + s) * IQ2S_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq2xs) {
-                            dequant_iq2xs_plane_superblock(t.embq, (sb0 + s) * IQ2XS_QSB, t.embs, (sb0 + s) * IQ2XS_SSB, row, s * 256l)
-                        } elif (t.emb_fmt == KqFmt.iq2xxs) {
-                            dequant_iq2xxs_plane_superblock(t.embq, (sb0 + s) * IQ2XXS_QSB, t.embs, (sb0 + s) * IQ2XXS_SSB, row, s * 256l)
-                        } else {
-                            panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
-                        }
+                        dequant_kq_plane_sb(fmt, t.embq, t.embs, sb0 + s, false, row, s * 256l)
                     } else {
-                        var kqp : array<uint8> const?
-                        var ksp : array<uint8> const?
-                        kq_planes_of(t, t.emb_fmt, kqp, ksp)
-                        dequant_kq_plane_sb(t.emb_fmt, *kqp, *ksp, sb0 + s, t.metal_blob, row, s * 256l)
+                        dequant_kq_plane_sb(fmt, t.kq[i].q, t.kq[i].s, sb0 + s, t.metal_blob, row, s * 256l)
                     }
                 }
             }

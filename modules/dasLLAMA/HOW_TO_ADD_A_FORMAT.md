@@ -90,38 +90,23 @@ a format whose decoded form FITS the row may decode at transcode instead (IQ4_XS
 
 ## 3. Planes and the loader - `dasllama_common.das`, `dasllama_load.das`, `dasllama_layout.das`
 
-This is the ladder walk (`followup_general.md` item 131). Every site is a flat
-`if (fmt == KqFmt.k4) ... elif` chain; add the arm next to `q40`'s. The compiler does not find
-these - a missing arm falls to the `else` panic (good) or silently to k6 (bad, the
-`kq_kernel_gen` shape); grep `KqFmt.q40` and `== 40` and visit every hit.
+A lattice format's planes live in `Model.kq[int(KqFmt)]` (`KqPlanes`: the quant plane, the scale
+plane, the frozen repack interleave), and every plane consumer - the load's cursors and sizing,
+the streamed fill, the matmul dispatch, `embed_row`, the repack walkers, the device gathers, the
+PLE tripwire, the embed trim, the image walk and the bake identity - indexes that table through
+the descriptor row's strides. A new lattice format therefore needs no edit in this step: its row
+in `kq_desc` sizes, fills, streams, serializes and dispatches it. What still keys on the format
+by hand:
 
-- `Model`: the plane pair `<fmt>q` / `<fmt>s` and `kq_repack_mr<id>`.
-- `dasllama_load.das`: `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, `kq_take`, the `LayoutSizes`
-  constructor, `stream_field_of` (the streamed image plane name), the scale-half landing
-  `memcpy`, the stream repack `invoke(g_stream_repack, <id>, ...)`, `transcode_kq_tensor`,
-  `load_big`, `kq_fmt_of` (GGML type -> tag), the two `noisy` log lines,
-  `g_stream_plane_total["<fmt>q"]`, the plane `reserve`/`resize` block, and the
-  repack-interleave freeze ladder (`t.kq_repack_mr<id> = active_kq_layout_mr(<id>)`, two copies:
-  the streamed-save arm and the eager arm) - a format missing from that ladder keeps the field's
-  default while its planes sit at the companion's `mr`, every `kq_active_mr` consumer reads the
-  wrong interleave, and the model emits repeated tokens with no diagnostic; only an end-to-end
-  run sees it.
-- `dasllama_common.das`: `kq_active_mr`, `kq_fi`, `mm_at_kq_pre` (two arms), `mm_b_kq_tile`,
-  `mm_at_kq_groupn` (two arms), `mm_b_kq_groupn`, `mm_b_kq_pre`, `kq_plane_q`, `kq_plane_s`,
-  `embed_row` (four arms: grp and plane form, trimmed and untrimmed), the bake config fill
-  (`c.kq_mr<id> = active_kq_layout_mr(<id>)`).
-- `dasllama_layout.das`: the plane base pointers + the `rkq` ternary, `push_repack_kq`, the
-  `moe_gpu_gather_stack_kq` plane ternaries - the gather walks grouped rows and tail rows
-  (`d % mr`, or an unrepacked load) through two per-format ladders, so a format already in the
-  device form needs its verbatim arm in both. Bump `PACK_VERSION` with any pack edit: it folds
-  into every image identity, so the next load re-bakes instead of mapping a stale `.dlim`.
-- `dasllama_gpu_resident.das` (embed trim), `dasllama_ple.das` (two arms),
-  `dasllama_blocks.das` (`kq_bytes_per_weight`).
-- `dasllama_config.das`: `DlimCpuConfig.kq_mr<id>` AND the identity string in `dlim_identity`
-  (a field added without the string keys two interleaves identically); `dasllama_image.das`:
-  `IMAGE_VERSION` bump, the streamed plane name list in `stream_extra_bytes`, `serialize_raw`
-  of the new `kq_repack_mr<id>` in `serialize_image_meta` and `IMAGE_META_FIELDS` grown by one -
-  the count tripwire fires at the first model load, after the tokenizer build.
+- `dasllama_load.das`: `kq_fmt_of` (GGML type -> tag, with the native-knob gates) and
+  `transcode_kq_tensor` (the per-format bulk transcode call).
+- `dasllama_layout.das`: the grouped-row branch of `moe_gpu_gather_stack_kq` - a format whose
+  repack is not the uniform four-byte-column form needs its verbatim arm there; and
+  `metal_blob_scale_plane`, where a format whose scale row already IS the device form (q40,
+  iq4nl) is excluded by name. Bump `PACK_VERSION` with any pack edit: it folds into every image
+  identity, so the next load re-bakes instead of mapping a stale `.dlim`.
+- `dasllama_image.das`: bump `IMAGE_VERSION` when the plane table's shape or the meta order
+  moves; the interleaves serialize in enum order, so an appended member lands last.
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`
 

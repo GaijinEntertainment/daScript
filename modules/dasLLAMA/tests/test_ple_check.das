@@ -44,15 +44,7 @@ def test_ple_check_table(t : T?) {
             var mk <- ple_shell(fmt)
             t |> success(trips(mk), "{fmt} fmt with an empty plane trips")
             let sbytes = (need / 256l) * qsb
-            if (fmt == KqFmt.k4) {
-                mk.k4q |> resize(sbytes)
-            } elif (fmt == KqFmt.k5) {
-                mk.k5q |> resize(sbytes)
-            } elif (fmt == KqFmt.k6) {
-                mk.k6q |> resize(sbytes)
-            } else {
-                mk.q40q |> resize(sbytes)
-            }
+            mk.kq[int(fmt)].q |> resize(sbytes)
             t |> success(!trips(mk), "{fmt} fmt with the table resident passes")
             delete mk
         }

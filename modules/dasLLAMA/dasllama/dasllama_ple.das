@@ -54,32 +54,8 @@ def ple_check_table(t : Model; origin : string) {
     var have = 0l
     if (t.ple_emb_fmt == KqFmt.q8) {
         have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
-    } elif (t.ple_emb_fmt == KqFmt.k4) {
-        have = (long_length(t.k4q) / K4_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k5) {
-        have = (long_length(t.k5q) / K5_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k6) {
-        have = (long_length(t.k6q) / K6_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.q40) {
-        have = (long_length(t.q40q) / Q40_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq4xs) {
-        have = (long_length(t.iq4xsq) / IQ4XS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k3) {
-        have = (long_length(t.k3q) / K3_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq3s) {
-        have = (long_length(t.iq3sq) / IQ3S_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq3xxs) {
-        have = (long_length(t.iq3xxsq) / IQ3XXS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq4nl) {
-        have = (long_length(t.iq4nlq) / Q40_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k2) {
-        have = (long_length(t.k2q) / K2_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2s) {
-        have = (long_length(t.iq2sq) / IQ2S_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2xs) {
-        have = (long_length(t.iq2xsq) / IQ2XS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2xxs) {
-        have = (long_length(t.iq2xxsq) / IQ2XXS_QSB) * 256l
+    } elif (kq_sb(t.ple_emb_fmt)) {
+        have = (long_length(t.kq[int(t.ple_emb_fmt)].q) / kq_qsb(t.ple_emb_fmt)) * 256l
     }
     if (have < need) {
         panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
