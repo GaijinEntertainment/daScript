@@ -275,9 +275,7 @@ def private batch_greedy(tr, trg : Model; prompts : array<array<int64>>; nsteps 
         var cur : array<int64>
         var live : array<int>
         for (i in range(nb)) {
-            unsafe {
-                sess |> push(addr(ss[i]))
-            }
+            sess |> push(unsafe(addr(ss[i])))
             cur |> push(greedy_top(ss[i].logits, vocab))
             live |> push(i)
         }
@@ -439,9 +437,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
             var sessb : array<Session?>
             var cur : array<int64>
             for (i in range(nb)) {
-                unsafe {
-                    sessb |> push(addr(sb[i]))
-                }
+                sessb |> push(unsafe(addr(sb[i])))
                 cur |> push(greedy_top(sa[i].logits, vocab))
             }
             select_decode_override("metal")
@@ -520,9 +516,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
         var sess : array<Session?>
         var cur : array<int64>
         for (i in range(nb)) {
-            unsafe {
-                sess |> push(addr(ss[i]))
-            }
+            sess |> push(unsafe(addr(ss[i])))
             cur |> push(greedy_top(ss[i].logits, vocab))
         }
         select_decode_override(gpu ? "metal" : "")

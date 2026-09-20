@@ -443,9 +443,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
             sessb |> reserve(nb)
             cur |> reserve(nb)
             for (i in range64(nb)) {
-                unsafe {
-                    sessb |> push(addr(sb[i]))
-                }
+                sessb |> push(unsafe(addr(sb[i])))
                 cur |> push(greedy_top(sa[i].logits, vocab))
             }
             var one <- [0l]

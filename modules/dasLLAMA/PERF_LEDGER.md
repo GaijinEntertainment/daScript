@@ -1941,10 +1941,10 @@ process, so every bullet is [direction-grade - two processes] unless it says one
 
 - **The scoreboard (ours / llama.cpp, tg128@4 summed; then flat tg128 ours / theirs), all Q8_0
   [direction-grade - two processes]:**
-  Llama-3.2-1B 944 ± 2 / 1031 ± 55 (0.92), flat 323 / 317; Llama-3.2-3B 430 ± 18 / 430 ± 30 (1.00),
-  flat 139 / 134; Llama-3.1-8B 208 ± 2 / 199 ± 10 (1.04), flat 67 / 64; gemma-4-E2B 441 ± 15 /
-  465 ± 19 (0.95), flat 160 / 136 - the E2B row measured with `-p 0`: behind five pp512 reps
-  in the same process it read 389 ± 23 (0.84), a heat shadow the 1B does not cast (944 either
+  Llama-3.2-1B 944 +/- 2 / 1031 +/- 55 (0.92), flat 323 / 317; Llama-3.2-3B 430 +/- 18 / 430 +/- 30 (1.00),
+  flat 139 / 134; Llama-3.1-8B 208 +/- 2 / 199 +/- 10 (1.04), flat 67 / 64; gemma-4-E2B 441 +/- 15 /
+  465 +/- 19 (0.95), flat 160 / 136 - the E2B row measured with `-p 0`: behind five pp512 reps
+  in the same process it read 389 +/- 23 (0.84), a heat shadow the 1B does not cast (944 either
   way), so the batched row of a small hot model is read without a prefill row in front of it or
   after a settle. The 3B row reads a cv past 3% and stands as direction-grade until a re-run; the
   reference's E2B batched row moved between 234 and 465 across the day's runs, so that ratio's
@@ -1954,8 +1954,8 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   rows and the two-width panels reads 389 - the same step's flat row unchanged at 152 [direction-grade].
 - **The deltanet batch arm (Qwen3.5-0.8B Q8, the recurrent rows form - projections as rows GEMVs,
   the conv, history, norm, scan and gate one dispatch a row against that session's mirror):**
-  tg128@4 982.6 ± 21.3 against llama.cpp's 795.7 ± 7.2 (1.23); the flat tg128 402.1 ± 1.1 on the
-  arm's tree against 401.9 ± 1.0 on the tree before it - the row index the five kernels gained
+  tg128@4 982.6 +/- 21.3 against llama.cpp's 795.7 +/- 7.2 (1.23); the flat tg128 402.1 +/- 1.1 on the
+  arm's tree against 401.9 +/- 1.0 on the tree before it - the row index the five kernels gained
   costs the single row nothing. Per-row dispatch stands at ~360 small dispatches a four-row step
   on this 24-layer hybrid and still reads 2.4x the flat row; the state arena that folds them into
   one dispatch a stage is `followup_metal.md` item 22 [direction-grade - two processes].
@@ -1970,7 +1970,7 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   batch took the chunked per-(row, head) pair [direction-grade - two commits, two processes for the
   board numbers; the forms raced interleaved in ONE process below]:** a lane owns one quad of the head, the lanes past a
   narrow head re-read a valid quad with a zero query and never store, the combine merges four subgroups
-  at 128 threads whatever the head. Llama-3.2-1B Q8 tg128@4 942 -> 1024 ± 10 against llama.cpp's
+  at 128 threads whatever the head. Llama-3.2-1B Q8 tg128@4 942 -> 1024 +/- 10 against llama.cpp's
   1026 (0.92 -> 1.00); the flat tg128 unchanged at 324; the head-128 kernel cells bit-exact before
   and after; the batch parity arm's f16 and f32 rows within their bars on the new form. The q8_0 and
   tq4 mirrors keep the chunked pair at head 64 (the quant twin's lane mapping is its own). The
@@ -1981,12 +1981,12 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   past a 3% cv in the un-settled process, so the ranking is settled and the margin is not
   [direction-grade - one process, cv past 3%].
 - **The NextN carriers' batched rows, plain and self-speculative (three reps, `-p 0`):** Qwen3.5-0.8B-MTP
-  Q8_0 plain tg128@4 977 ± 4 against llama.cpp's 803 ± 4 (1.22), flat 402 / 303; Qwen3.6-27B-MTP
-  Q4_K_M plain 56.3 ± 0.3 against 45.9 ± 2.1 (1.23), flat 27.6 / 25.3 - the batched step lands a
+  Q8_0 plain tg128@4 977 +/- 4 against llama.cpp's 803 +/- 4 (1.22), flat 402 / 303; Qwen3.6-27B-MTP
+  Q4_K_M plain 56.3 +/- 0.3 against 45.9 +/- 2.1 (1.23), flat 27.6 / 25.3 - the batched step lands a
   NextN model's logits on the GPU like any other's now (the gate that sent them to the CPU classifier
   is gone) and carries each row's post-norm hidden as its stream's speculative carry. The
   `--npl-mtp` arm - every stream drafting on its own chain, the four streams' eight verify rows in ONE
-  pass - reads 720 ± 11 on the 0.8B and 50.3 ± 3.6 (cv 7%) on the 27B: below the plain row on both,
+  pass - reads 720 +/- 11 on the 0.8B and 50.3 +/- 3.6 (cv 7%) on the 27B: below the plain row on both,
   on the bench's synthetic ids, where the drafts are accepted as often as noise and the round pays
   four draft passes (each a NextN layer plus the 248k-row classifier) and a double-width verify for
   them. The arm proves the joint verify at four streams; its served rate is the ruler's question
@@ -1996,7 +1996,7 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
   and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].
 - **A loaded box voids the batched row first [direction-grade - two processes, a loaded box]:** with an iOS Simulator rendering (two WebContent
-  processes at 98% and 48%, SimMetalHost on the GPU, load 12) the 1B batched row read 466 ± 277 and
+  processes at 98% and 48%, SimMetalHost on the GPU, load 12) the 1B batched row read 466 +/- 277 and
   the reference's own flat tg128 fell from 317 to 200 - the GPU queue is shared with the simulator's
   Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The
   amortized weight stream leaves dispatch latency and CPU work as what is left per step, so four rows

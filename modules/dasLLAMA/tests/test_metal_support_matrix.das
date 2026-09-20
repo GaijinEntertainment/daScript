@@ -195,9 +195,7 @@ def private dim_ladder_batch_cell(t : T?; tr : Model; nb : int; tag : string) {
                 ss |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
                 let p <- encode(tr, counting_prompt(1 + i, 14 + i), true, false)
                 eval_(tr, ss[i], p)
-                unsafe {
-                    sess |> push(addr(ss[i]))
-                }
+                sess |> push(unsafe(addr(ss[i])))
                 cur |> push(greedy_top(ss[i].logits, vocab))
             }
             set_metal_prefill_min_npos(64l)
