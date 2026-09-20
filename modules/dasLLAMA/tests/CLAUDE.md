@@ -1180,8 +1180,8 @@ where the tier carries kq slots, the registered identity where it does not. Ever
 an added-value poison control.
 `test_attn_span.das` - stocked suite; the non-causal image span (`eval_embd_` with `non_causal =
 true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it),
-classic/blocked/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span
-(`eval_embd_span_`): splice equivalence via a whole-cache decode-logits witness (classic/blocked
+classic/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span
+(`eval_embd_span_`): splice equivalence via a whole-cache decode-logits witness (classic
 bit-exact, flash tolerance) and the per-query mask direction inside one eval; plus the deepstack
 wide-row rail (stamped `n_deepstack`): zero-tail wide == narrow bit-exact, nonzero tails move the
 logits, slice 0 vs slice 2 add at different depths, no stale plane after the quantum; stories15M

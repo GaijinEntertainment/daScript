@@ -68,12 +68,11 @@ enum MoeGate {
     softmax_weight
 }
 
-//! Prefill attention algorithm (A/B selectable; all variants kept). `classic` streams the full
-//! causal K/V range per query, O(npos²). `blocked` reuses each K/V tile across a query block —
-//! BIT-IDENTICAL to classic. `flash` (default) tiles with online softmax — NOT bit-identical.
+//! Prefill attention algorithm (A/B selectable). `classic` streams the full causal K/V range per
+//! query, O(npos²), the decode FMA order - the bit-exact reference the tests pin. `flash` (default)
+//! tiles with online softmax — NOT bit-identical.
 enum AttnPrefillMode {
     classic
-    blocked
     flash
 }
 
@@ -4694,8 +4693,7 @@ def get_embed_par_threshold() : int64 => g_embed_par_threshold
 
 // Decode attention threads work-proportionally; the M1-measured threshold knob is now owned per
 // box by target_chunk_work.
-// Query-block width for blocked prefill attention (each K/V tile reused across this many queries).
-let ATTN_BLOCK_Q = 8l
+
 // Tile dims for the flash prefill attention (Q rows × KV cols processed per GEMM tile). The flash
 // per-query running max/sum use fixed arrays sized ATTN_FLASH_QT — keep that a literal 64 in sync.
 let ATTN_FLASH_QT = 64l
@@ -5300,7 +5298,6 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.dn_qg_b |> grow_resize(npos * 2l * qd)
         s.dn_qgate_b |> grow_resize(npos * qd)
     }
-    // sized for blocked (ATTN_BLOCK_Q rows/head); classic indexes just the first row, a harmless superset
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
         s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_k |> resize(n_heads * head_size * ATTN_FLASH_KV)
@@ -5309,7 +5306,7 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.fa_vkq |> resize(n_heads * ATTN_FLASH_QT * head_size)
         s.fa_tmp |> resize(n_heads * head_size)
     } else {
-        s.att_b |> grow_resize(n_heads * ATTN_BLOCK_Q * (start_pos + npos))
+        s.att_b |> grow_resize(n_heads * (start_pos + npos))   // one score row per head, maxctx wide
     }
 }
 

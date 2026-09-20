@@ -737,7 +737,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.blocked)   // blocked/classic are the bit-exact modes (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the bit-exact prefill mode (flash reorders)
             var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -878,7 +878,7 @@ def test_kv_q8_decode(t : T?) {
 
 [test]
 def test_kv_q8_prefill_vs_decode(t : T?) {
-    t |> run("q8_0 KV: blocked prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
+    t |> run("q8_0 KV: classic prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
         if (gguf_missing(t)) {
             return
         }
@@ -887,7 +887,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.blocked)   // the bit-exact prefill mode (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the bit-exact prefill mode (flash reorders)
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 64l)
             let c = tr.config
@@ -901,7 +901,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
                 forward(tr, sd, tok, pos)
                 pos++
             }
-            // blocked prefill quantizes its queries and runs the SAME int8×int8 score dot as
+            // classic prefill quantizes its queries and runs the SAME int8×int8 score dot as
             // decode — the prefill==decode contract stays bit-exact under the block codec
             var lg_bad = 0
             for (i in range64(c.vocab_size)) {
