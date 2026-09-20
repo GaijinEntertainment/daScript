@@ -10,7 +10,9 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
-require dasllama/dasllama_common   // grow_resize: the N-row logits plane sized to the step's rows
+require dasllama/dasllama_common
+require dasllama/dasllama_par   // maybe_parallel_for: the N-row logits land a row a lane
+require jobque   // is_job_que_available: the landing's lanes exist
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -2330,17 +2332,20 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
     g_rdq_overflow = one_overflow
 }
 
-var private @scratch @exact_size g_rd_logits_n : array<float>   //! the N-row command's logits plane, read off the mapped memory in one pass
 
-//! the rows' logits from the mapped plane to their pointers: one read of the plane, then a row a copy
+//! the rows' logits from the mapped plane to their pointers: a row a copy straight off the cached mapping, the rows on the
+//! job queue's lanes at once where it serves (a lane copies about 14 GB/s; the rows together read the plane once)
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
-    let vocab = g_rd.vocab
-    g_rd_logits_n |> grow_resize(vocab * nrows)
-    unsafe {
-        memcpy(addr<void?>(g_rd_logits_n[0]), g_rd.logits_host.mapped, vocab * 4l * nrows)
-        for (i in range64(nrows)) {
-            memcpy(addr<void?>(*lrows[i]), addr<void?>(g_rd_logits_n[i * vocab]), vocab * 4l)
+    let row_bytes = g_rd.vocab * 4l
+    var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
+    var rows = unsafe(addr<float ??>(lrows[0]))  //! the row pointers as a raw pointer: the lanes' lambda captures no array
+    let jobs = is_job_que_available() ? int(nrows) : 1
+    maybe_parallel_for(0, int(nrows), jobs) $(rb, re) {
+        unsafe {
+            for (i in range(rb, re)) {
+                memcpy(reinterpret<void?>(rows[i]), reinterpret<void?>(src + int64(i) * row_bytes), row_bytes)
+            }
         }
     }
 }
