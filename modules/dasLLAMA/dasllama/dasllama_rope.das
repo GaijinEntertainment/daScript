@@ -28,128 +28,150 @@ def private rope_freq_j(j, head_size : int64; theta : float; ffp : float const?)
     return freq
 }
 
-//! Positions [start_pos, start_pos+npos) as two cos/sin tables: cos_tab[pi*half + j] =
-//! cos((start_pos+pi) * fscale * freq[j]) * mscale, sin likewise. freq[j] is hoisted out of the
-//! position loop; mscale folds in here (it applies to NORM and NEOX alike).
+// ===== the two-table builders are ONE fill over a position source: the source answers which axis
+// half-dim j reads (rope_axis, once per j) and row pi's position on it (rope_pos); the vision grid
+// also owns its restarted frequency ladder (rope_freq_of). Every builder keeps the same float order.
+
+//! Positions [start, start + nrows): row pi is at start + pi.
+struct private RopeSeq {
+    start : int64
+}
+
+//! Row pi is at positions[pi] (batch rows from different sequences at unrelated positions).
+struct private RopeRows {
+    pp : int64 const?
+}
+
+//! Interleaved M-RoPE (qwen3vl image spans): half-dim j reads the axis of positions4[pi] = (t, h =
+//! grid row, w = column, e) that its sector selects.
+struct private RopeImrope {
+    pp : int4 const?
+    sections : int4
+}
+
+//! Contiguous M-RoPE (the qwen2vl decoder): j < x reads t, then y reads h, then z reads w, then e,
+//! the frequency ladder running continuously across the sections (never restarting).
+struct private RopeMrope {
+    pp : int4 const?
+    sec_h : int64
+    sec_w : int64
+    sec_e : int64
+}
+
+//! The qwen3vl ViT's VISION grid: row pi's hs/2 slots are the h ladder (grid row) then the w ladder
+//! RESTARTED, frequency divisor hs/2 - slot j reads θ^(−2·(j%(hs/4))/(hs/2)); positions2 = (h, w).
+struct private RopeGrid {
+    pp : int2 const?
+    sect : int64
+}
+
+def private rope_axis(_src : RopeSeq; _j : int64) : int => 0
+
+def private rope_axis(_src : RopeRows; _j : int64) : int => 0
+
+def private rope_axis(src : RopeImrope; j : int64) : int {
+    let s = src.sections
+    let sector = int(j) % (s.x + s.y + s.z + s.w)
+    if (sector % 3 == 1 && sector < 3 * s.y) {
+        return 1
+    } elif (sector % 3 == 2 && sector < 3 * s.z) {
+        return 2
+    } elif (sector % 3 == 0 && sector < 3 * s.x) {
+        return 0
+    }
+    return 3
+}
+
+def private rope_axis(src : RopeMrope; j : int64) : int {
+    if (j >= src.sec_e) {
+        return 3
+    } elif (j >= src.sec_w) {
+        return 2
+    } elif (j >= src.sec_h) {
+        return 1
+    }
+    return 0
+}
+
+def private rope_axis(src : RopeGrid; j : int64) : int => j < src.sect ? 0 : 1
+
+def private rope_pos(src : RopeSeq; pi : int64; _axis : int) : int64 => src.start + pi
+
+def private rope_pos(src : RopeRows; pi : int64; _axis : int) : int64 => unsafe(src.pp[pi])
+
+def private rope_pos(src : RopeImrope; pi : int64; axis : int) : int64 => int64(unsafe(src.pp[pi])[axis])
+
+def private rope_pos(src : RopeMrope; pi : int64; axis : int) : int64 => int64(unsafe(src.pp[pi])[axis])
+
+def private rope_pos(src : RopeGrid; pi : int64; axis : int) : int64 => int64(axis == 0 ? unsafe(src.pp[pi]).x : unsafe(src.pp[pi]).y)
+
+def private rope_freq_of(_src : RopeSeq; j, head_size : int64; theta : float; ffp : float const?) : float => rope_freq_j(j, head_size, theta, ffp)
+
+def private rope_freq_of(_src : RopeRows; j, head_size : int64; theta : float; ffp : float const?) : float => rope_freq_j(j, head_size, theta, ffp)
+
+def private rope_freq_of(_src : RopeImrope; j, head_size : int64; theta : float; ffp : float const?) : float => rope_freq_j(j, head_size, theta, ffp)
+
+def private rope_freq_of(_src : RopeMrope; j, head_size : int64; theta : float; ffp : float const?) : float => rope_freq_j(j, head_size, theta, ffp)
+
+def private rope_freq_of(src : RopeGrid; j, head_size : int64; theta : float; _ffp : float const?) : float => rope_freq_j(j % src.sect, head_size / 2l, theta, null)
+
+//! cos_tab[pi*half + j] = cos(pos(pi, axis(j)) * fscale * freq[j]) * mscale, sin likewise: freq[j]
+//! and the axis are hoisted out of the row loop; mscale folds in here (it applies to NORM and NEOX alike).
+def private rope_tabs_fill(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; src : auto(TS);
+                           theta, fscale, mscale : float; ffp : float const?; nrows, head_size : int64) {
+    let half = head_size / 2l
+    cos_tab |> resize(nrows * half)
+    sin_tab |> resize(nrows * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        for (j in range64(half)) {
+            let freq = rope_freq_of(src, j, head_size, theta, ffp)
+            let axis = rope_axis(src, j)
+            for (pi in range64(nrows)) {
+                let angle = float(rope_pos(src, pi, axis)) * fscale * freq
+                cp[pi * half + j] = cos(angle) * mscale
+                sp[pi * half + j] = sin(angle) * mscale
+            }
+        }
+    }
+}
+
+def private rope_ffp(rope_freqs : array<float>; use_ff : bool) : float const? => use_ff && !empty(rope_freqs) ? unsafe(addr<float const?>(rope_freqs[0])) : null
+
+//! Positions [start_pos, start_pos+npos) as two cos/sin tables.
 def build_rope_tabs(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                     theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                     start_pos, npos, head_size : int64) {
-    let half = head_size / 2l
-    let has_ff = use_ff && !empty(rope_freqs)
-    cos_tab |> resize(npos * half)
-    sin_tab |> resize(npos * half)
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
-        for (j in range64(half)) {
-            let freq = rope_freq_j(j, head_size, theta, ffp)
-            for (pi in range64(npos)) {
-                let angle = float(start_pos + pi) * fscale * freq
-                cp[pi * half + j] = cos(angle) * mscale
-                sp[pi * half + j] = sin(angle) * mscale
-            }
-        }
-    }
+    rope_tabs_fill(cos_tab, sin_tab, RopeSeq(start = start_pos), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), npos, head_size)
 }
 
-//! build_rope_tabs' batched-decode twin: row pi's angle uses positions[pi] (batch rows come from
-//! different sequences at unrelated positions). Bit-identical per row to the npos=1 table at
-//! that position.
+//! build_rope_tabs' batched-decode twin: row pi's angle uses positions[pi]. Bit-identical per row
+//! to the npos=1 table at that position.
 def build_rope_tabs_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                          theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                          positions : array<int64>; nrows, head_size : int64) {
-    let half = head_size / 2l
-    let has_ff = use_ff && !empty(rope_freqs)
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
     unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr<int64 const?>(positions[0])
-        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
-        for (j in range64(half)) {
-            let freq = rope_freq_j(j, head_size, theta, ffp)
-            for (pi in range64(nrows)) {
-                let angle = float(pp[pi]) * fscale * freq
-                cp[pi * half + j] = cos(angle) * mscale
-                sp[pi * half + j] = sin(angle) * mscale
-            }
-        }
+        rope_tabs_fill(cos_tab, sin_tab, RopeRows(pp = addr<int64 const?>(positions[0])), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
     }
 }
 
-//! build_rope_tabs_rows' interleaved-M-RoPE twin (qwen3vl image spans), an interleaved sector
-//! walk: half-dim j reads the axis of positions4[pi] = (t, h=grid row, w=column, e) its sector
-//! selects; all-equal rows collapse bit-exactly.
+//! The interleaved-M-RoPE table (qwen3vl image spans); all-equal rows collapse bit-exactly.
 def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                            theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                            positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
-    let half = head_size / 2l
-    let has_ff = use_ff && !empty(rope_freqs)
-    let sect_dims = sections.x + sections.y + sections.z + sections.w
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
     unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr<int4 const?>(positions4[0])
-        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
-        for (j in range64(half)) {
-            let freq = rope_freq_j(j, head_size, theta, ffp)
-            let sector = int(j) % sect_dims
-            var axis = 3
-            if (sector % 3 == 1 && sector < 3 * sections.y) {
-                axis = 1
-            } elif (sector % 3 == 2 && sector < 3 * sections.z) {
-                axis = 2
-            } elif (sector % 3 == 0 && sector < 3 * sections.x) {
-                axis = 0
-            }
-            for (pi in range64(nrows)) {
-                let angle = float(pp[pi][axis]) * fscale * freq
-                cp[pi * half + j] = cos(angle) * mscale
-                sp[pi * half + j] = sin(angle) * mscale
-            }
-        }
+        rope_tabs_fill(cos_tab, sin_tab, RopeImrope(pp = addr<int4 const?>(positions4[0]), sections = sections), theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
     }
 }
 
-//! ``build_rope_tabs_imrope``'s NON-interleaved twin (MROPE, the qwen2vl decoder): the
-//! half-dim sections read as CONTIGUOUS ranges — j < x reads t, then y reads h, then z reads
-//! w, then e — with the frequency ladder running continuously across them (never restarting).
+//! The contiguous-section MROPE table (the qwen2vl decoder).
 def build_rope_tabs_mrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                           theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                           positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
-    let half = head_size / 2l
-    let has_ff = use_ff && !empty(rope_freqs)
-    let sec_h = int64(sections.x)
-    let sec_w = int64(sections.x + sections.y)
-    let sec_e = int64(sections.x + sections.y + sections.z)
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr<int4 const?>(positions4[0])
-        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
-        for (j in range64(half)) {
-            let freq = rope_freq_j(j, head_size, theta, ffp)
-            var axis = 0
-            if (j >= sec_e) {
-                axis = 3
-            } elif (j >= sec_w) {
-                axis = 2
-            } elif (j >= sec_h) {
-                axis = 1
-            }
-            for (pi in range64(nrows)) {
-                let angle = float(pp[pi][axis]) * fscale * freq
-                cp[pi * half + j] = cos(angle) * mscale
-                sp[pi * half + j] = sin(angle) * mscale
-            }
-        }
-    }
+    let src = RopeMrope(pp = unsafe(addr<int4 const?>(positions4[0])), sec_h = int64(sections.x),
+        sec_w = int64(sections.x + sections.y), sec_e = int64(sections.x + sections.y + sections.z))
+    rope_tabs_fill(cos_tab, sin_tab, src, theta, fscale, mscale, rope_ffp(rope_freqs, use_ff), nrows, head_size)
 }
 
 //! The mrope position map of one image-span prefill quantum (the image-grid walk):
@@ -175,28 +197,13 @@ def mrope_span_positions(@scratch var out : array<int4>; base, npos, span_lo, sp
     }
 }
 
-//! The qwen3vl ViT's VISION-mode rope table: row pi's hs/2 slots = the h
-//! ladder (grid row) then the w ladder RESTARTED, freq divisor hs/2 — slot j reads
-//! θ^(−2·(j%(hs/4))/(hs/2)). Apply full-head NEOX (rope_scaled_neox_tab); positions2 = (h, w).
+//! The qwen3vl ViT's VISION-mode rope table (RopeGrid); apply full-head NEOX (rope_scaled_neox_tab).
+//! No frequency scale and no mscale: the fill's unit factors multiply exactly, so the row is the
+//! bare cos(pos * freq) / sin(pos * freq).
 def build_rope_tabs_vision(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                            theta : float; positions2 : array<int2>; nrows, head_size : int64) {
-    let half = head_size / 2l
-    let sect = half / 2l
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
     unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr<int2 const?>(positions2[0])
-        for (j in range64(half)) {
-            let freq = rope_freq_j(j % sect, half, theta, null)
-            let is_h = j < sect
-            for (pi in range64(nrows)) {
-                let angle = float(is_h ? pp[pi].x : pp[pi].y) * freq
-                cp[pi * half + j] = cos(angle)
-                sp[pi * half + j] = sin(angle)
-            }
-        }
+        rope_tabs_fill(cos_tab, sin_tab, RopeGrid(pp = addr<int2 const?>(positions2[0]), sect = head_size / 4l), theta, 1.0, 1.0, null, nrows, head_size)
     }
 }
 
