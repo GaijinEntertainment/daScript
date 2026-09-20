@@ -222,10 +222,13 @@ rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
 MoE, per-layer-embedding or shared-KV layer, a gated q, a classifier epilogue, or a weight
-format with no N-column leaf. A q/k norm has one: the per-head rms runs over every row's
-projection row before the rope (`qk_rms_cls`, a head-row a workgroup with the row in the
-workgroup id, the projection row's width as both strides), the split pair the one-row command
-runs unfused, so the rows' q and k are the one-row command's bit for bit. Every set over a per-row plane binds the plane's whole `nb`
+format with no N-column leaf. A q/k norm has one: the rows take whichever form the one-row
+command takes - the fused norm + rope + store (`QknRopeKvT`, a head-row a workgroup with the row
+in the workgroup id, each row at its own token meta) where the one-row command fuses, the split
+pair (`qk_rms_cls`, the per-head rms over every row's projection row before the rope, the
+projection row's width as both strides) where it does not - so the rows' q and k are the one-row
+command's bit for bit. The fused kernel and the split pair round apart, because the compiler
+contracts each kernel on its own, so one command runs one form for every row. Every set over a per-row plane binds the plane's whole `nb`
 extent; the rule guards two shapes - an ungated q row sitting inside the projection row, and a q
 binding sized to one row, which leaves every row but the first reading past its binding. The MoE
 feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE layers, and
@@ -251,9 +254,12 @@ names; the one-row command's list is borrowed for the record and put back. The c
 on the first batched step; a stamp that declines on the device logs once, and the command answers
 0 rows from then on, so the row-at-a-time loop serves.
 
-**The rows' logits come home in one read of the mapped plane.** `rd_land_logits_n` copies the
-whole plane into a scratch row, then a row a copy to each session's pointer: four reads straight
-off the mapping cost the pod eight times the one (785 us a step against 92).
+**The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
+`rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+the lanes idle while the device owns the step) and copies in order without one: a lane copies
+about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
+a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
+pod, ten percent of the step).
 
 **The engine reaches the command through the driver seam, and falls back a row at a time.**
 `install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside

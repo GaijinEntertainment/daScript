@@ -204,3 +204,13 @@ form that leaves its list installed sends every later one-row profile to another
 (`dasllama/dasllama_vulkan_common.das`) calls `xfer_spin_wait` on the value it returned before it
 submits any command that writes the buffer that copy reads.** The host's wait is the only order
 between the copy's read and that write.
+
+**A kernel body in `dasllama/dasllama_vulkan_classes.das` that divides or takes a modulo by a
+push-constant field clamps the divisor to at least one - never guards the division with a `?:`
+select on that field.** Some drivers evaluate both arms of a select, and an integer division by
+zero is undefined in SPIR-V, so the selected arm can carry the undefined result.
+
+**A path in `dasllama/dasllama_vulkan_decode.das` that records or re-records a token command's
+split form clears that region's or row count's wide-twin recorded flag (`RDec.tok_wide_recorded`,
+`RDec.tok_n_wide_recorded`) in the same path.** The wide twin dispatches the same descriptor sets,
+so a twin left marked recorded runs sets the new record replaced.

@@ -9564,17 +9564,14 @@ struct QknRopeArgs {
     cbase : uint    //! this layer's rope class's row base in the cos/sin plane
     vfk : uint      //! V is the raw k row scaled by its own rms (a layer with no v plane: gemma-4's global layers)
     vnorm : uint    //! V is its own projection scaled by its rms, no weight (gemma-4's v-norm)
-    per : uint      //! the N-row command: head-row workgroups a row (q heads + k heads), the row riding the workgroup id; 0 = the one-row command
+    rowwg : uint    //! the N-row command: head-row workgroups a row (q heads + k heads); 0 = the one-row command
     kvrow : uint    //! the N-row command: a row's stride in the projection plane
     qrow : uint     //! the N-row command: a row's stride in qrows
     cosrow : uint   //! the N-row command: a row's stride in the cos/sin plane
 }
 
-// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row, the same reduce
-// and rotation order as the split pair (the two still round apart: the compiler contracts each
-// kernel on its own, so a command runs one form for every row). KT/CLAMP16 as in RopeKvStoreT.
+// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; KT/CLAMP16 as in RopeKvStoreT.
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
-// Under `per` the N-row command's rows ride the workgroup id, each at its own token meta.
 [ |> template_struct_instance]
 class template QknRopeKvT : RmsWgBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
@@ -9608,24 +9605,24 @@ class template QknRopeKvT : RmsWgBase {
         }
     }
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
         let gwid = gl_WorkGroupID.x
-        let per = max(pa.per, 1u)   //! a select evaluates both arms on some drivers, and an integer division by zero is undefined in SPIR-V: the divisor is never zero
-        let rr = pa.per == 0u ? 0u : gwid / per   // this workgroup's row of the N-row command
-        let wid = pa.per == 0u ? gwid : gwid % per
+        let per = max(pa.rowwg, 1u)
+        let rowi = pa.rowwg == 0u ? 0u : gwid / per
+        let wid = pa.rowwg == 0u ? gwid : gwid % per
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x
         let t1 = tid + 256u
         let two = t1 < pa.hs   // the wide head's second element
         let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
-        let qb = rr * pa.qrow + h * qstride   // this row's head in qrows
-        let kvb = rr * pa.kvrow               // this row's projection row
+        let qb = rowi * pa.qrow + h * qstride
+        let kvb = rowi * pa.kvrow
         let sbase = is_k ? kvb + pa.qd + h * pa.hs : qb
         let bbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
-        let cb = rr * pa.cosrow + pa.cbase
-        let mrow = pa.layerbase + tok[rr].mirbase + tok[rr].pos * pa.kvd
+        let cb = rowi * pa.cosrow + pa.cbase
+        let mrow = pa.layerbase + tok[rowi].mirbase + tok[rowi].pos * pa.kvd
         var v = 0.0
         var v1 = 0.0
         if (tid < pa.hs) {
@@ -9828,6 +9825,7 @@ class template Q8GemvNT {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
             }
+            let clast = pa.ncols - 1u   //! a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
             var bi0 = 0u
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
@@ -9835,21 +9833,19 @@ class template Q8GemvNT {
                     let wv0 = wq4[(wb0 + bi0) * 2u + lane]
                     let ws0 = float(wsh[wb0 + b])
                     for [unroll] (c in range(NC)) {
-                        if (uint(c) < pa.ncols) {
-                            let xb = xb0 + uint(c) * nb
-                            let xv = xq4[(xb + bi0) * 2u + lane]
-                            let i0 = pair_dot(wv0, xv)
-                            static_if (R2) {
-                                let i1 = pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
-                                if (lane % 2u == 0u) {
-                                    let xs = axs[xb + b]
-                                    acc0[c] += float(i0) * ws0 * xs
-                                    acc1[c] += float(i1) * float(wsh[wb0 + nb + b]) * xs
-                                }
-                            } else {
-                                if (lane % 2u == 0u) {
-                                    acc0[c] += float(i0) * ws0 * axs[xb + b]
-                                }
+                        let xb = xb0 + min(uint(c), clast) * nb
+                        let xv = xq4[(xb + bi0) * 2u + lane]
+                        let i0 = pair_dot(wv0, xv)
+                        static_if (R2) {
+                            let i1 = pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
+                            if (lane % 2u == 0u) {
+                                let xs = axs[xb + b]
+                                acc0[c] += float(i0) * ws0 * xs
+                                acc1[c] += float(i1) * float(wsh[wb0 + nb + b]) * xs
+                            }
+                        } else {
+                            if (lane % 2u == 0u) {
+                                acc0[c] += float(i0) * ws0 * axs[xb + b]
                             }
                         }
                     }
@@ -10189,9 +10185,8 @@ struct GuNArgs {
     ncols : uint  //! the rows the command steps at once, 1 to 8: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
 }
 
-//! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both planes
-//! against each column's row off one weight word, and a subgroup a column activates and quantizes the column's block - the
-//! columns' rows quantize in parallel subgroups, so no row waits on another
+//! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both
+//! planes against each column's row off one weight word, and a subgroup a column activates and quantizes its block
 [vk_dispatch(name = "q8_gemv_gu_n_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGuN {
     @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
@@ -10278,7 +10273,7 @@ class Q8GemvGuN {
             k++
         }
         barrier()
-        var c = gl_SubgroupID   // the block's activation and Q8_0 quant, a subgroup a column: one lane an output row
+        var c = gl_SubgroupID
         while (c < pa.ncols) {
             let lane = gl_SubgroupInvocationID
             let li = min(lane, 31u)

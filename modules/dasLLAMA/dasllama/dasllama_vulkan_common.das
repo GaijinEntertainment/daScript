@@ -2593,17 +2593,24 @@ def rd_invalidate_token {
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
 let RD_WIDE_POS = 3072l   //! ... and its wide twin from this one; between them the split form
-let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head, and the wide form's - the attended span picks the form, never the row count or the SM count (sec.2.2al)
+let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head, and the wide form's; the attended span picks the form (sec.2.2al)
 let RD_SPLIT_WIDE_PIECES = 8l
 
 //! the split form's pieces on this device: the ladder's count, never past the partials plane's (`attn_nsplit`)
 def rd_split_pieces : int64 => min(RD_SPLIT_PIECES, g_rd.attn_nsplit)
 def rd_wide_pieces : int64 => min(RD_SPLIT_WIDE_PIECES, g_rd.attn_nsplit)
 
-//! the form a step at `pos` takes: 0 = the unsplit twin, 1 = the split form, 2 = the wide twin
-def rd_form_at(pos : int64) : int {
-    if (g_rd.unsplit_on && pos < RD_UNSPLIT_POS) return 0
-    return (g_rd.wide_on && pos >= RD_WIDE_POS) ? 2 : 1
+//! the token command's attention forms: the unsplit twin under RD_UNSPLIT_POS, the wide twin from RD_WIDE_POS, the split form between
+enum RdForm {
+    unsplit
+    split
+    wide
+}
+
+//! the form a step at `pos` takes
+def rd_form_at(pos : int64) : RdForm {
+    if (g_rd.unsplit_on && pos < RD_UNSPLIT_POS) return RdForm.unsplit
+    return (g_rd.wide_on && pos >= RD_WIDE_POS) ? RdForm.wide : RdForm.split
 }
 
 //! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
@@ -2709,7 +2716,7 @@ var g_rdq_overflow_unsplit = false
 var g_rdq_names_wide : array<string>        //! ... and the wide twin's
 var g_rdq_n_wide = 0u
 var g_rdq_overflow_wide = false
-var g_rdq_form_band = 1   //! the form the last sampled token took (0 unsplit, 1 split, 2 wide): a switch restarts the averages
+var g_rdq_form_band = RdForm.split   //! the form the last sampled token took: a switch restarts the averages
 var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit and wide twins'
 var g_rdq_n_n = 0u
 var g_rdq_overflow_n = false
@@ -2729,8 +2736,8 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 //! the decode profiler's averages back to zero (the recorded stamp names stay): a switch between the token command's two forms
 //! the token command changed forms mid-run: say so and restart the ledger's averages, since the two forms' stamp roles differ
 [cold_path]
-def rdq_form_switch(band : int; pos : int64) {
-    let form = band == 0 ? "unsplit" : (band == 2 ? "wide" : "split")
+def rdq_form_switch(band : RdForm; pos : int64) {
+    let form = band == RdForm.unsplit ? "unsplit" : (band == RdForm.wide ? "wide" : "split")
     to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
     rdq_reset_averages()
 }
@@ -2758,7 +2765,7 @@ def rdq_reset {
     g_rdq_names_wide |> clear()
     g_rdq_n_wide = 0u
     g_rdq_overflow_wide = false
-    g_rdq_form_band = 1
+    g_rdq_form_band = RdForm.split
     g_rdq_names_n |> clear()
     g_rdq_n_n = 0u
     g_rdq_overflow_n = false

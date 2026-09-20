@@ -1925,6 +1925,58 @@ named; the local RTX 5060 Ti carries decode-vector.
   the planes are megabytes against a weight pass shared across the rows, so the row cap is the
   command's, not memory's.
 
+### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
+
+Instruments as the section above: `lcpp_bench --npl 4` on the pod (RTX PRO 4500, cm2 without
+decode-vector, and KHR) and the local RTX 5060 Ti (cm2 with decode-vector), llama.cpp b10660's
+`llama-batched-bench` rows the same hour on the same box, `DASLLAMA_GPU_PROF=1` for the stamps, the
+attention ruler `harness/vk_attn_probe.das` for the key split. Every ratio is `tg128@4` summed over
+four device-home streams through the scheduler's device mode against the reference's `S_TG` at
+`-npl 4`, conservative as before (the served step samples and detokenizes inside the clock).
+
+- **The baseline (master before the arc, the pod):** qwen2 0.5B 1205 against 1385 (0.87 - batched,
+  a gap); qwen3 0.6B 425 against 1193 and 4B 129 against 473 (0.36 and 0.27 - not batched: the N-row
+  command answered zero rows for a q/k-norm model, so the scheduler stepped the four streams a row
+  at a time, four weight passes a step, below one stream's rate).
+- **The q/k-norm form of the N-row command:** the per-head rms kernel was already row-indexed, and
+  the fused norm+rope+store kernel gained the row in its workgroup id; 0.6B 425 -> 1044, 4B 129 ->
+  427 (0.87 and 0.90). The fused kernel and the split pair round apart (the compiler contracts
+  each kernel on its own - the earlier "bit-identical" claim was false), so the rows take the
+  form the one-row command takes and read bit for bit. On the 5060 Ti's Windows driver the
+  one-row form then read twelve logits off the CPU chain: the new row arithmetic divided by a
+  push field that is zero in the one-row form behind a select, and that driver evaluates both
+  arms - an integer division by zero is undefined in SPIR-V. The divisor is clamped;
+  `DASLLAMA_VK_FUSE_BISECT` names such a kernel in seven runs against the CPU chain.
+- **The key split follows the attended span, not the SM count (the ruler, us a layer, qwen2 0.5B
+  geometry, the pod):** at 640 positions one piece 14.5 and sixteen 33; at 2048 four 20.6 and
+  sixteen 33; at 4096 four to eight 27 and sixteen 34; one row or four the same at four pieces or
+  fewer. The old rule recorded sixteen for one row and eleven for four; the ladder (one under 512,
+  four to 3072, eight past it) cut the 0.5B's four-row attention 793 -> 446 us a step, and the
+  qwen3 0.6B's 767 stays bandwidth-bound (eight kv heads of 128, the rows' K/V bytes eight times
+  the 0.5B's, linear in rows). It also puts the one-row and N-row forms in one summation order,
+  so the qwen3 regions cells read bit for bit on the 36-SM card where the rules had them nine and
+  sixteen pieces apart. Pod: 0.5B 1356, 0.6B 1111, 4B 449 (0.98, 0.92, 0.95).
+- **A residual epilogue fused into the GEMV's last workgroup does not batch (tried, reverted):**
+  the N-column form of `Q8GemvAr`, bit-exact in its kernel cell and the regions cells, read the
+  0.5B 1076 -> 988 and the 0.6B 822 -> 784 on the 5060 Ti: the last workgroup runs the rows'
+  residual steps one after another where the separate `cls_ar_rq_b` dispatch runs them in
+  parallel workgroups. The fused gate-up's N form (`Q8GemvGuN`, a subgroup a column quantizes)
+  batches and is bit-exact, and bought nothing measurable on either card (pod 0.5B 1331, 0.6B
+  1103, 4B 454); kept for the dispatch it saves.
+- **The rows' logits a row a job-queue lane (`rd_land_logits_n`):** the one-lane form passed
+  2.4 MB of a 152k-vocab plane twice, 322 us of a 3037 us step on the pod; the lanes read the
+  plane once. 5060 Ti: 0.5B 1068 -> 1172, 0.6B 833 -> 895. A parallel sample of the rows threw in
+  a forked context and stays `followup_vulkan.md` item 76.
+- **The boards at the arc's tip, tg128@4 against llama.cpp the same hour** - the pod, cm2 / KHR:
+  qwen2 0.5B 1443 / 1428 against 1373 (1.05 / 1.04), qwen3 0.6B 1154 / 1156 against 1199 (0.96 /
+  0.96), qwen3 4B 459 / 456 against 476 (0.96 / 0.96), qwen2 1.5B 871 / 871 against 920 (0.95 /
+  0.95 - the flat row 330 against 314), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25);
+  the llama family at the same tip 1B 1249 / 1252 against 1218 (1.03), 3B 591 / 588 against 606
+  (0.97), 8B 378 / 378 against 361 (1.05). The 5060 Ti, cm2 with decode-vector: 0.5B 1172 against 922 (1.27), 1.5B 615 against 578
+  (1.06), 0.6B 895 against 740 (1.21), 4B 269 against 263 (1.02, under `DASLLAMA_GPU_VRAM_MB=9000`:
+  the 16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
+  Q4_K_M 357 against 183 (1.95). The flat rows did not move.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

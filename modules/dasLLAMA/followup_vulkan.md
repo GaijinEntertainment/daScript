@@ -1599,3 +1599,12 @@ module) is independent and can land any time - it is pure structure.
     `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
     one-token-off control meanwhile. The work: the arm found by pinning each site's N-row form to
     its one-row twin in turn, then the exact bar restored in that file.
+76. **The batched step's rows sample one after another on the calling thread.** The scheduler's
+    `sample_advance` loop runs each row's `sample` in turn after `eval_batch` (about 40 us a row
+    of a 152k vocab at greedy), while the job queue's lanes sit idle; a `sample_rows` that handed
+    the rows to the lanes through `maybe_parallel_for` threw "unhandled exception" with an empty
+    das call stack on the first batched step of every scheduler path, where the same lever over
+    the logits landing (`rd_land_logits_n`) runs clean - a forked context refuses something the
+    sampler does (its `s.sampled` write, the penalties over `s.recent`, or the draw). The work:
+    the refusal named under `--track-job-status` / a panic hook, then the rows' samples on the
+    lanes, priced on the tg128@4 row (about a hundred microseconds a step at four rows).

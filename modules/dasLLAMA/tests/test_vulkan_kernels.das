@@ -6567,7 +6567,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; gelu : bool) {
         gsh[i] = ws_word(uint(i) + 3u)
         ush[i] = ws_word(uint(i) * 7u + 11u)
     }
-    for (i in range(nb * 8 * ncols)) {   //! every column its own activation row
+    for (i in range(nb * 8 * ncols)) {
         xqh[i] = hash_word(uint(i) * 17u + 9u)
     }
     for (i in range(nb * ncols)) {
@@ -6585,7 +6585,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; gelu : bool) {
         upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
         upload_region_at(uqd, 0l, addr<uint8 const?>(uqh[0]), wq_bytes)
         upload_region_at(usd, 0l, addr<uint8 const?>(ush[0]), ws_bytes)
-        for (c in range(ncols)) {   // the one-row kernel a column at a time
+        for (c in range(ncols)) {
             let xqd = make_device_buf(xq_bytes)
             let xsd = make_device_buf(xs_bytes)
             let oqd = make_device_buf(oq_bytes)
@@ -6610,7 +6610,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; gelu : bool) {
             vk_check(vkEndCommandBuffer(raw1), null)
             submit_wait(raw1)
         }
-        let xqd_n = make_device_buf(xq_bytes * int64(ncols))   // the N-row kernel once over the stacked planes
+        let xqd_n = make_device_buf(xq_bytes * int64(ncols))
         let xsd_n = make_device_buf(xs_bytes * int64(ncols))
         let oqd_n = make_device_buf(oq_bytes * int64(ncols))
         let osd_n = make_device_buf(os_bytes * int64(ncols))
@@ -6638,12 +6638,12 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; gelu : bool) {
         var bad_s = 0
         for (c in range(ncols)) {
             let one = col_bytes * int64(c)
-            for (i in range(hid)) {   // the quant bytes
+            for (i in range(hid)) {
                 if (bytes[one + int64(i)] != bytes[nbase + int64(c * hid + i)]) {
                     bad_q++
                 }
             }
-            for (i in range(nblk_out)) {   // the scale rows, byte for byte
+            for (i in range(nblk_out)) {
                 for (k in range(4)) {
                     if (bytes[one + oq_bytes + int64(i) * 4l + int64(k)] != bytes[nbase + oq_bytes * int64(ncols) + int64(c * nblk_out + i) * 4l + int64(k)]) {
                         bad_s++
