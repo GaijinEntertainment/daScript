@@ -9,7 +9,7 @@ require dasllama/dasllama_math       // KernelBackend + register_kernel_backend 
 require dasllama/dasllama_tune       // [tuned]: reconstitute dot_q8q8 from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
-require daslib/f16_cvt               // dot_q8q8_f16s widens the binary16 weight scale in-loop
+require daslib/f16_cvt               // wscale_f16 - the binary16 weight-scale plane widens in-loop
 require daslib/jobque_boost public   // parallel_for / notify_and_release (the kernels expand parallel_for)
 require dasllama/dasllama_par        // maybe_parallel_for
 require math
@@ -64,11 +64,24 @@ def template dot_q8q8_f16s_template(wq : int8 const ?; ws : uint16 const ?; xq :
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), tuned(fallback = "vec16")]
 def dot_q8q8_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-//! The 4-accumulator idot4 GEMV dot (4 blocks/iter, 2 idot4/block, per-block hsum into 4 rotating
-//! float accs): plain-das byte16 loads + the idot4 builtin — one SDOT per call on arm64 JIT,
-//! ~1.35x the autovectorized dot_q8q8, bit-identical to the hand-NEON sdot4x4 leg it retired.
+// ===== the wscale_f16 rail: each Q8·Q8 dot and kernel is ONE body, stamped per scale plane through
+// [from_template] - WSCALE = wscale_f32 reads the f32 block scale, wscale_f16 widens the binary16
+// halfword in-loop (vcvtph2ps / fcvtl under the JIT); bit-identical over the widened plane =====
+
+def wscale_f32(ws : float const?; bi : int64) : float {
+    unsafe {
+        return ws[bi]
+    }
+}
+
+def wscale_f16(ws : uint16 const?; bi : int64) : float {
+    unsafe {
+        return f16_to_f32(uint(ws[bi]))
+    }
+}
+
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
+def template dot_q8q8_idot4x4_template(wq : int8 const ?; ws : float const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
     let nb = n / 32l
     var f0 = 0.0
     var f1 = 0.0
@@ -88,136 +101,75 @@ def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs :
             a2 = idot4(a2, wv[v + 5l], xv[v + 5l])
             var a3 = idot4(wv[v + 6l], xv[v + 6l])
             a3 = idot4(a3, wv[v + 7l], xv[v + 7l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi + 0l] * xs[bi + 0l]
-            f1 += float(a1.x + a1.y + a1.z + a1.w) * ws[bi + 1l] * xs[bi + 1l]
-            f2 += float(a2.x + a2.y + a2.z + a2.w) * ws[bi + 2l] * xs[bi + 2l]
-            f3 += float(a3.x + a3.y + a3.z + a3.w) * ws[bi + 3l] * xs[bi + 3l]
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * WSCALE(ws, bi + 0l) * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * WSCALE(ws, bi + 1l) * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * WSCALE(ws, bi + 2l) * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * WSCALE(ws, bi + 3l) * xs[bi + 3l]
             bi += 4l
         }
         while (bi < nb) {
             let v = bi * 2l
             var a0 = idot4(wv[v], xv[v])
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * ws[bi] * xs[bi]
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * WSCALE(ws, bi) * xs[bi]
             bi++
         }
     }
     return f0 + f1 + f2 + f3
 }
 
-//! The wscale_f16 twin of dot_q8q8_idot4x4: the per-block WEIGHT scale is a raw binary16
-//! halfword widened in-loop — same fold order, bit-identical over the widened plane.
+//! The 4-accumulator idot4 GEMV dot (4 blocks/iter, 2 idot4/block, per-block hsum into 4 rotating
+//! float accs): plain-das byte16 loads + the idot4 builtin — one SDOT per call on arm64 JIT, ~1.35x the
+//! autovectorized dot_q8q8. noinline: inlined into its kernel stamps' batch row loop it runs 9% slower on the M5.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f32")]
+def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
+
 //! Not `private`: called from lifted parallel_for worker lambdas.
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f16")]
+def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
+
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+def template dot_q8q8_idot4_ps_template(wq : int8 const ?; ws : float const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
     let nb = n / 32l
-    var f0 = 0.0
-    var f1 = 0.0
-    var f2 = 0.0
-    var f3 = 0.0
+    var f0 = float4(0.0, 0.0, 0.0, 0.0)
+    var f1 = float4(0.0, 0.0, 0.0, 0.0)
     var bi = 0l
     unsafe {
         let wv = reinterpret<byte16 const?>(wq)
         let xv = reinterpret<byte16 const?>(xq)
-        while (bi + 4l <= nb) {
+        while (bi + 2l <= nb) {
             let v = bi * 2l
             var a0 = idot4(wv[v], xv[v])
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
             var a1 = idot4(wv[v + 2l], xv[v + 2l])
             a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
-            var a2 = idot4(wv[v + 4l], xv[v + 4l])
-            a2 = idot4(a2, wv[v + 5l], xv[v + 5l])
-            var a3 = idot4(wv[v + 6l], xv[v + 6l])
-            a3 = idot4(a3, wv[v + 7l], xv[v + 7l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * f16_to_f32(uint(ws[bi + 0l])) * xs[bi + 0l]
-            f1 += float(a1.x + a1.y + a1.z + a1.w) * f16_to_f32(uint(ws[bi + 1l])) * xs[bi + 1l]
-            f2 += float(a2.x + a2.y + a2.z + a2.w) * f16_to_f32(uint(ws[bi + 2l])) * xs[bi + 2l]
-            f3 += float(a3.x + a3.y + a3.z + a3.w) * f16_to_f32(uint(ws[bi + 3l])) * xs[bi + 3l]
-            bi += 4l
+            let s0 = WSCALE(ws, bi) * xs[bi]
+            let s1 = WSCALE(ws, bi + 1l) * xs[bi + 1l]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
+            f1 += float4(a1) * float4(s1, s1, s1, s1)
+            bi += 2l
         }
         while (bi < nb) {
             let v = bi * 2l
             var a0 = idot4(wv[v], xv[v])
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * f16_to_f32(uint(ws[bi])) * xs[bi]
+            let s0 = WSCALE(ws, bi) * xs[bi]
+            f0 += float4(a0) * float4(s0, s0, s0, s0)
             bi++
         }
     }
-    return f0 + f1 + f2 + f3
+    let f = f0 + f1
+    return f.x + f.y + f.z + f.w
 }
 
 //! The vector-epilogue idot4 dot: per 32-block one idot4 pair, then float4 accumulate under the block's
 //! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form
 //! (dot_q8q8_idot4x4's per-block hsum is four lane extracts there). Called from lifted lambdas.
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    let nb = n / 32l
-    var f0 = float4(0.0, 0.0, 0.0, 0.0)
-    var f1 = float4(0.0, 0.0, 0.0, 0.0)
-    var bi = 0l
-    unsafe {
-        let wv = reinterpret<byte16 const?>(wq)
-        let xv = reinterpret<byte16 const?>(xq)
-        while (bi + 2l <= nb) {
-            let v = bi * 2l
-            var a0 = idot4(wv[v], xv[v])
-            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            var a1 = idot4(wv[v + 2l], xv[v + 2l])
-            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
-            let s0 = ws[bi] * xs[bi]
-            let s1 = ws[bi + 1l] * xs[bi + 1l]
-            f0 += float4(a0) * float4(s0, s0, s0, s0)
-            f1 += float4(a1) * float4(s1, s1, s1, s1)
-            bi += 2l
-        }
-        while (bi < nb) {
-            let v = bi * 2l
-            var a0 = idot4(wv[v], xv[v])
-            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            let s0 = ws[bi] * xs[bi]
-            f0 += float4(a0) * float4(s0, s0, s0, s0)
-            bi++
-        }
-    }
-    let f = f0 + f1
-    return f.x + f.y + f.z + f.w
-}
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template", WSCALE = "wscale_f32")]
+def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-//! The wscale_f16 twin of dot_q8q8_idot4_ps: the per-block weight scale is a raw binary16 halfword
-//! widened in-loop. Not `private`: called from lifted worker lambdas.
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
-def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    let nb = n / 32l
-    var f0 = float4(0.0, 0.0, 0.0, 0.0)
-    var f1 = float4(0.0, 0.0, 0.0, 0.0)
-    var bi = 0l
-    unsafe {
-        let wv = reinterpret<byte16 const?>(wq)
-        let xv = reinterpret<byte16 const?>(xq)
-        while (bi + 2l <= nb) {
-            let v = bi * 2l
-            var a0 = idot4(wv[v], xv[v])
-            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            var a1 = idot4(wv[v + 2l], xv[v + 2l])
-            a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
-            let s0 = f16_to_f32(uint(ws[bi])) * xs[bi]
-            let s1 = f16_to_f32(uint(ws[bi + 1l])) * xs[bi + 1l]
-            f0 += float4(a0) * float4(s0, s0, s0, s0)
-            f1 += float4(a1) * float4(s1, s1, s1, s1)
-            bi += 2l
-        }
-        while (bi < nb) {
-            let v = bi * 2l
-            var a0 = idot4(wv[v], xv[v])
-            a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            let s0 = f16_to_f32(uint(ws[bi])) * xs[bi]
-            f0 += float4(a0) * float4(s0, s0, s0, s0)
-            bi++
-        }
-    }
-    let f = f0 + f1
-    return f.x + f.y + f.z + f.w
-}
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template", WSCALE = "wscale_f16")]
+def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
 //! a def, not a module global: team lanes run no global initializers, and the fold below is a
 //! compile-time constant either way
@@ -263,21 +215,29 @@ def pf_prof_report() {
     to_log(LOG_INFO, "  last-start as % of wall = {100l * g_pf_last_sum / max(g_pf_wall_sum, 1l)}% (high = workers trickle in / pool wake-up stall)\n")
 }
 
-// Portable kernels (auto-vectorized dot_q8q8). 1N threading (one chunk per hw job) measured fastest
-// for this compute-light kernel (~52 vs ~51 tok/s at 2N end-to-end).
-def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+// ===== the Q8·Q8 kernel shapes, written ONCE each over a Q8DOT and a Q8SPLIT the stamps bind: the
+// portable tier binds the autovectorized dot with one chunk per hw job (1N measured fastest for the
+// compute-light dot, ~52 vs ~51 tok/s at 2N), the idot4 tier its dot with the batch-chunks oversplit =====
+
+//! The chunk oversplit the idot4 stamps bind: the batch-chunks knob, group3 only under team
+//! dispatch (x4 costs the fifo path ~20% but wins ~19% under team: 1B mm_qkv 86.6k -> 108k us).
+def q8_split_idot4x4(team_only : bool) : int => (!team_only || get_jobque_team_mode()) ? get_q8_batch_chunks_per_job() : 1
+
+def q8_split_portable(_team_only : bool) : int => 1
+
+def template q8q8_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
+    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), Q8SPLIT(false), n * d)) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
-                myp[i] = dot_q8q8_p(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
+                myp[i] = Q8DOT(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
             }
         }
     }
 }
 
-def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+def template q8q8_batch_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; n, d, ntok : int64) : void {
     let nb = n / 32l
     var myp = yp
     // the raw parallel_for below is a dispatch single-thread mode admits no exception for
@@ -298,7 +258,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
                         let wrow = wp + int64(i) * n
                         let srow = sp + int64(i) * nb
                         for (tk in range64(ntok)) {
-                            myp[tk * d + int64(i)] = dot_q8q8_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                            myp[tk * d + int64(i)] = Q8DOT(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                         }
                     }
                 }
@@ -327,7 +287,7 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
                 let wrow = wp + int64(i) * n
                 let srow = sp + int64(i) * nb
                 for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
+                    myp[tk * d + int64(i)] = Q8DOT(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
                 }
             }
         }
@@ -335,112 +295,48 @@ def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float cons
 }
 
 // Row-range core (mm_rows slot): rows [rb,re) of one region, no dispatch — the fused decode
-// chains thread it from their own stage lambdas. Same dot_q8q8 rows as q8q8_kernel. Not `private`:
-// invoked through the kernel pointer from lifted worker lambdas.
-def q8q8_rows_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
+// chains thread it from their own stage lambdas.
+def template q8q8_rows_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; n, rb, re : int64) : void {
     let nb = n / 32l
     unsafe {
         for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8_p(wp + i * n, sp + i * nb, xqp, xsp, n)
+            yp[i] = Q8DOT(wp + i * n, sp + i * nb, xqp, xsp, n)
         }
     }
 }
 
-def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
-                               woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
+def template q8q8_group3_kernel_template(var y0p : float ?; var y1p : float ?; var y2p : float ?; wp : int8 const ?; sp : float const ?;
+                                         woff0, woff1, woff2 : int64; xqp : int8 const ?; xsp : float const ?; n, d0, d1, d2 : int64) : void {
     let nb = n / 32l
     let dtot = d0 + d1 + d2
     var w0 = y0p
     var w1 = y1p
     var w2 = y2p
-    maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), 1, n * dtot)) $(rb, re) {
+    maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), Q8SPLIT(true), n * dtot)) $(rb, re) {
         unsafe {
             for (gi in range(rb, re)) {
                 let g = int64(gi)
                 if (g < d0) {
-                    w0[g] = dot_q8q8_p(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
+                    w0[g] = Q8DOT(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
                 } elif (g < d0 + d1) {
                     let r = g - d0
-                    w1[r] = dot_q8q8_p(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
+                    w1[r] = Q8DOT(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
                 } else {
                     let r = g - d0 - d1
-                    w2[r] = dot_q8q8_p(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
+                    w2[r] = Q8DOT(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
                 }
             }
         }
     }
 }
 
-// ===== f16-scale twins (the wscale_f16 rail): the same portable loops over the binary16
-// weight-scale plane, one dot swap — bit-identical to the f32 forms over the widened plane =====
-
-def private q8q8_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+// region-list (groupN) kernel — the MoE decode dispatch fuse: one parallel_for over nregions*d
+// rows fans out all routed experts in one fork/join; bit-exact vs the single-region kernel,
+// only scheduling differs
+def template q8q8_groupn_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; offs : int64 const ?; nregions : int64; xqp : int8 const ?; xsp : float const ?; bp : float const ?; boffs : int64 const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                myp[i] = dot_q8q8_f16s_p(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-            }
-        }
-    }
-}
-
-def private q8q8_batch_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let wrow = wp + int64(i) * n
-                let srow = sp + int64(i) * nb
-                for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8_f16s_p(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                }
-            }
-        }
-    }
-}
-
-// Not `private`: invoked through the kernel pointer from lifted worker lambdas.
-def q8q8_rows_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
-    let nb = n / 32l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8_f16s_p(wp + i * n, sp + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
-def private q8q8_group3_kernel_s16(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
-                                   woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let dtot = d0 + d1 + d2
-    var w0 = y0p
-    var w1 = y1p
-    var w2 = y2p
-    maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), 1, n * dtot)) $(rb, re) {
-        unsafe {
-            for (gi in range(rb, re)) {
-                let g = int64(gi)
-                if (g < d0) {
-                    w0[g] = dot_q8q8_f16s_p(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
-                } elif (g < d0 + d1) {
-                    let r = g - d0
-                    w1[r] = dot_q8q8_f16s_p(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
-                } else {
-                    let r = g - d0 - d1
-                    w2[r] = dot_q8q8_f16s_p(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
-                }
-            }
-        }
-    }
-}
-
-def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
+    maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), Q8SPLIT(false), n * d * nregions)) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
                 let ii = int64(i)
@@ -448,7 +344,7 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
                 let row = ii % d
                 let woff = offs[r * 2l]
                 let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8_f16s_p(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
+                var v = Q8DOT(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
                 if (bp != null) {
                     v += bp[boffs[r] + row]
                 }
@@ -457,6 +353,76 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
         }
     }
 }
+
+// The portable stamps. q8q8_rows_kernel / q8q8_groupn_kernel (and the s16 pair) are NOT private:
+// invoked through the kernel pointer from lifted worker lambdas, and backends without a native
+// groupn tier register the portable groupn to satisfy the every-backend-supplies-one contract.
+[from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable")]
+def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_batch_kernel_template", Q8DOT = "dot_q8q8_p")]
+def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {}
+
+[from_template(src = "q8q8_rows_kernel_template", Q8DOT = "dot_q8q8_p")]
+def q8q8_rows_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {}
+
+[from_template(src = "q8q8_group3_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable")]
+def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                               woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable")]
+def q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
+
+[from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
+def private q8q8_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_batch_kernel_template", Q8DOT = "dot_q8q8_f16s_p")]
+def private q8q8_batch_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {}
+
+[from_template(src = "q8q8_rows_kernel_template", Q8DOT = "dot_q8q8_f16s_p")]
+def q8q8_rows_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {}
+
+[from_template(src = "q8q8_group3_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
+def private q8q8_group3_kernel_s16(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
+                                   woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
+def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
+
+// The idot4 stamps: the "arm64-sdot" backend dasllama_math_aarch64_neon registers (the idot4
+// builtin lowers to one SDOT per call on an arm64 JIT host; off the JIT its extern is correct but
+// not fast, so that backend registers only under the JIT). Not private: registered from that module.
+[from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_idot4x4", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_kernel_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_batch_kernel_template", Q8DOT = "dot_q8q8_idot4x4")]
+def q8q8_batch_kernel_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {}
+
+[from_template(src = "q8q8_rows_kernel_template", Q8DOT = "dot_q8q8_idot4x4")]
+def q8q8_rows_kernel_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {}
+
+[from_template(src = "q8q8_group3_kernel_template", Q8DOT = "dot_q8q8_idot4x4", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_group3_kernel_idot4x4(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                               woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_idot4x4", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_groupn_kernel_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
+
+[from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_idot4x4_f16s", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_kernel_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_batch_kernel_template", Q8DOT = "dot_q8q8_idot4x4_f16s")]
+def q8q8_batch_kernel_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {}
+
+[from_template(src = "q8q8_rows_kernel_template", Q8DOT = "dot_q8q8_idot4x4_f16s")]
+def q8q8_rows_kernel_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {}
+
+[from_template(src = "q8q8_group3_kernel_template", Q8DOT = "dot_q8q8_idot4x4_f16s", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_group3_kernel_idot4x4_s16(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
+                                   woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_idot4x4_f16s", Q8SPLIT = "q8_split_idot4x4")]
+def q8q8_groupn_kernel_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
 
 // ===== Native K-quant (Q4_K/Q5_K/Q6_K) dots + rows kernels =====
 // Plane layouts per 256-weight superblock: k4 128B nibbles+32B f16(s,o); k5 adds 32B qh; k6
@@ -1373,22 +1339,66 @@ def dot_mx4q8_scalar(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq
     return f
 }
 
-// mx4q8_kernel / q8q8_groupn_kernel / mx4q8_groupn_kernel are NOT private: backends without a
-// native mx4/groupn tier yet (the x64 family) register these portable forms to satisfy the
-// every-backend-supplies-one contract (see KernelBackend in dasllama_math).
-def mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+[hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs)]
+def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uint8 const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
+    let nb = n / 32l
+    var f = 0.0
+    unsafe {
+        let lutv = reinterpret<byte16 const?>(lut)[0]
+        let wv = reinterpret<ubyte16 const?>(wn)
+        let xv = reinterpret<byte16 const?>(xq)
+        for [tune = 1] (bi in range64(nb)) {   // fallback u2 = two blocks per iteration
+            let nib = wv[bi]
+            var acc = idot4(shuffle(lutv, nib), xv[bi * 2l])
+            acc = idot4(acc, shuffle(lutv, nib >> 4), xv[bi * 2l + 1l])
+            f += float(acc.x + acc.y + acc.z + acc.w) * e8m0_half(uint(we[bi])) * xs[bi]
+        }
+    }
+    return f
+}
+
+//! MXFP4·Q8 dot in plain das: one nibble load, two shuffle LUT
+//! lookups (low via the &15 mask, high via the per-byte >> 4), each idot4'd against the Q8
+//! activation (one TBL + one SDOT each on arm64 JIT). Not `private`: called from lifted workers.
+[hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
+def dot_mx4q8(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
+
+// The mx4 kernel shapes, written once over an MX4DOT and a Q8SPLIT (portable: the scalar reference
+// dot, one chunk per job; idot4: dot_mx4q8 with the batch-chunks oversplit). NOT private: the x64
+// family registers the portable forms (every-backend-supplies-one), the neon module the idot4 forms.
+def template mx4q8_kernel_template(var yp : float ?; wn : uint8 const ?; we : uint8 const ?; xqp : int8 const ?; xsp : float const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
     var lut : int8[16]
     mxfp4_fill_lut(lut)
     unsafe {
         let lutp = addr(lut[0])   // frame outlives the join, so workers read a live pointer
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
+        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), Q8SPLIT(false), n * d)) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
-                    myp[i] = dot_mx4q8_scalar(lutp, wn + int64(i) * (n / 2l), we + int64(i) * nb, xqp, xsp, n)
+                    myp[i] = MX4DOT(lutp, wn + int64(i) * (n / 2l), we + int64(i) * nb, xqp, xsp, n)
                 }
             }
+        }
+    }
+}
+
+[from_template(src = "mx4q8_kernel_template", MX4DOT = "dot_mx4q8_scalar", Q8SPLIT = "q8_split_portable")]
+def mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "mx4q8_kernel_template", MX4DOT = "dot_mx4q8", Q8SPLIT = "q8_split_idot4x4")]
+def mx4q8_kernel_idot4x4(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+//! The idot4 mx4 row-range core (mx4_rows slot): rows [rb, re) over dot_mx4q8, no dispatch - the
+//! fused MoE expert chain threads it. Not `private`: invoked through the kernel pointer from lifted workers.
+def mx4q8_rows_kernel_idot4x4(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
+    let nb = n / 32l
+    var lut : int8[16]
+    mxfp4_fill_lut(lut)
+    unsafe {
+        let lutp = addr(lut[0])
+        for (i in range64(rb, re)) {
+            yp[i] = dot_mx4q8(lutp, wn + i * (n / 2l), we + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -1450,35 +1460,14 @@ def mx4q8_batch_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 con
     }
 }
 
-def q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let ii = int64(i)
-                let r = ii / d
-                let row = ii % d
-                let woff = offs[r * 2l]
-                let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8_p(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
-                if (bp != null) {
-                    v += bp[boffs[r] + row]
-                }
-                myp[ii] = v
-            }
-        }
-    }
-}
-
-def mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
+def template mx4q8_groupn_kernel_template(var yp : float ?; wn : uint8 const ?; we : uint8 const ?; offs : int64 const ?; nregions : int64; xqp : int8 const ?; xsp : float const ?; bp : float const ?; boffs : int64 const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
     var lut : int8[16]
     mxfp4_fill_lut(lut)
     unsafe {
         let lutp = addr(lut[0])   // frame outlives the join, so workers read a live pointer
-        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
+        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), Q8SPLIT(false), n * d * nregions)) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
                     let ii = int64(i)
@@ -1486,7 +1475,7 @@ def mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; o
                     let row = ii % d
                     let woff = offs[r * 2l]
                     let xoff = offs[r * 2l + 1l]
-                    var v = dot_mx4q8_scalar(lutp, wn + woff / 2l + row * (n / 2l), we + woff / 32l + row * nb,
+                    var v = MX4DOT(lutp, wn + woff / 2l + row * (n / 2l), we + woff / 32l + row * nb,
                         xqp + xoff, xsp + xoff / 32l, n)
                     if (bp != null) {
                         v += bp[boffs[r] + row]
@@ -1497,6 +1486,12 @@ def mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; o
         }
     }
 }
+
+[from_template(src = "mx4q8_groupn_kernel_template", MX4DOT = "dot_mx4q8_scalar", Q8SPLIT = "q8_split_portable")]
+def mx4q8_groupn_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
+
+[from_template(src = "mx4q8_groupn_kernel_template", MX4DOT = "dot_mx4q8", Q8SPLIT = "q8_split_idot4x4")]
+def mx4q8_groupn_kernel_idot4x4(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
 
 //! Register the portable Q8·Q8 backend (row-major, no repack). Lowest priority — a platform ISA backend
 //! out-ranks it in the auto-select where available; it stays the fallback everywhere else.

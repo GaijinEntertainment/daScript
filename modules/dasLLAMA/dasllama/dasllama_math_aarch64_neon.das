@@ -6,176 +6,19 @@ module dasllama_math_aarch64_neon shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_math
-require dasllama/dasllama_math_default  // dot_q8q8_idot4x4/_f16s — the plain-das GEMV dots this backend dispatches
+require dasllama/dasllama_math_default  // the idot4x4 kernel stamps this backend registers + dot_mx4q8
 require dasllama/dasllama_tune  // [tuned]: reconstitute the laneq4x4 tile from its template with per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 require daslib/aarch64_neon  // tbl16/sdot4_w/sdot4_laneq: the mx4 + laneq tiles' JIT intrinsics
-require daslib/f16_cvt  // f16_to_f32 — the wscale_f16 twins widen the binary16 scale in-loop
+require daslib/f16_cvt  // f16_to_f32 — the wscale_f16 laneq stamp widens the binary16 scale in-loop
 require daslib/jobque_boost public  // kernels expand parallel_for; consumers need its symbols
-require dasllama/dasllama_par  // maybe_parallel_for
 
 // arm64 SDOT backend for the Q8·Q8 matmuls. dasllama_math owns the public matmul wrappers + the
-// kernel-backend registry; dasllama_math_default supplies the portable fallback AND the plain-das
-// idot4x4 GEMV dots this backend's q8q8 kernels dispatch (the idot4 builtin lowers to one SDOT per
-// call on an arm64 JIT host — the hand-NEON sdot4x4 dots this module used to carry are retired).
-// The NEON intrinsics (tbl16 + sdot4_w/sdot4_laneq) remain for the mx4 and laneq tiles below.
+// kernel-backend registry; dasllama_math_default owns every kernel this backend registers - the
+// idot4x4 stamps of the shared kernel shapes (the idot4 builtin lowers to one SDOT per call on an
+// arm64 JIT host). Only the lane-indexed SDOT composers (sdot4_laneq / tbl16) live here.
 // Registration stays gated on `jit_enabled()` + arm64: off-JIT the idot externs are correct but not
 // fast, so the portable backend stays selected there, as it does on every non-arm64 host.
-//
-// The kernels mirror the portable ones in dasllama_math (same raw-pointer signatures = the
-// MatmulQ8Q8*Fn typedefs, same 1N threading) and differ only in the inner dot. They are free to
-// diverge in threading/tiling per-platform since dispatch is at the whole-matmul level.
-
-// ===== default backend (idot4x4 on row-major weights) — direct callers (tests, benches) =====
-
-def private q8q8_kernel_neon_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                myp[i] = dot_q8q8_idot4x4(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-            }
-        }
-    }
-}
-
-def private q8q8_batch_kernel_neon_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let wrow = wp + int64(i) * n
-                let srow = sp + int64(i) * nb
-                for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8_idot4x4(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                }
-            }
-        }
-    }
-}
-
-def private q8q8_group3_kernel_neon_idot4x4(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
-                                            woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let dtot = d0 + d1 + d2
-    var w0 = y0p
-    var w1 = y1p
-    var w2 = y2p
-    // oversplit ×4 costs the fifo path ~20% but wins ~19% under team dispatch (1B mm_qkv 86.6k->108k us)
-    maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * dtot)) $(rb, re) {
-        unsafe {
-            for (gi in range(rb, re)) {
-                let g = int64(gi)
-                if (g < d0) {
-                    w0[g] = dot_q8q8_idot4x4(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
-                } elif (g < d0 + d1) {
-                    let r = g - d0
-                    w1[r] = dot_q8q8_idot4x4(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
-                } else {
-                    let r = g - d0 - d1
-                    w2[r] = dot_q8q8_idot4x4(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
-                }
-            }
-        }
-    }
-}
-
-// ===== MXFP4·Q8 (native 4-bit expert weights) =====
-
-[hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs)]
-def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uint8 const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
-    let nb = n / 32l
-    var f = 0.0
-    unsafe {
-        let lutv = reinterpret<byte16 const?>(lut)[0]
-        let wv = reinterpret<ubyte16 const?>(wn)
-        let xv = reinterpret<byte16 const?>(xq)
-        for [tune = 1] (bi in range64(nb)) {   // fallback u2 = two blocks per iteration
-            let nib = wv[bi]
-            var acc = idot4(shuffle(lutv, nib), xv[bi * 2l])
-            acc = idot4(acc, shuffle(lutv, nib >> 4), xv[bi * 2l + 1l])
-            f += float(acc.x + acc.y + acc.z + acc.w) * e8m0_half(uint(we[bi])) * xs[bi]
-        }
-    }
-    return f
-}
-
-//! MXFP4·Q8 dot in plain das: one nibble load, two shuffle LUT
-//! lookups (low via the &15 mask, high via the per-byte >> 4), each idot4'd against the Q8
-//! activation (one TBL + one SDOT each on arm64 JIT). Not `private`: called from lifted workers.
-[hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
-def dot_mx4q8(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
-
-def mx4q8_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    var lut : int8[16]
-    mxfp4_fill_lut(lut)
-    unsafe {
-        let lutp = addr(lut[0])   // frame outlives the join, so workers read a live pointer
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    myp[i] = dot_mx4q8(lutp, wn + int64(i) * (n / 2l), we + int64(i) * nb, xqp, xsp, n)
-                }
-            }
-        }
-    }
-}
-
-// ===== region-list (groupN) kernels — the MoE decode dispatch fuse =====
-// One parallel_for over nregions*d rows fans out all routed experts in one fork/join; math is
-// bit-exact vs the single-region kernels, only scheduling differs.
-
-def private q8q8_groupn_kernel_neon_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let ii = int64(i)
-                let r = ii / d
-                let row = ii % d
-                let woff = offs[r * 2l]
-                let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8_idot4x4(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
-                if (bp != null) {
-                    v += bp[boffs[r] + row]
-                }
-                myp[ii] = v
-            }
-        }
-    }
-}
-
-def mx4q8_groupn_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    var lut : int8[16]
-    mxfp4_fill_lut(lut)
-    unsafe {
-        let lutp = addr(lut[0])   // frame outlives the join, so workers read a live pointer
-        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    let ii = int64(i)
-                    let r = ii / d
-                    let row = ii % d
-                    let woff = offs[r * 2l]
-                    let xoff = offs[r * 2l + 1l]
-                    var v = dot_mx4q8(lutp, wn + woff / 2l + row * (n / 2l), we + woff / 32l + row * nb,
-                        xqp + xoff, xsp + xoff / 32l, n)
-                    if (bp != null) {
-                        v += bp[boffs[r] + row]
-                    }
-                    myp[ii] = v
-                }
-            }
-        }
-    }
-}
 
 // ===== MXFP4 laneq dot (interleaved 4-row groups) — gen composer =====
 // Repack (repack_mx4_grp, mr=4) interleaves nibble bytes 4-rows-per-sub-chunk: one v16i8 load +
@@ -214,11 +57,23 @@ def dot_mx4q8_laneq4(lut : int8 const?; wg : uint8 const?; eg : uint8 const?; xq
 // Repack (repack_q8q8_grp, mr=4) makes each accumulator lane a distinct output row (no horizontal
 // reduce); group = 4*n int8, block bi at +bi*128. Tail rows (d % 4) fall back to row-major idot4x4.
 
-//! Lane-indexed SDOT over one 4-row interleaved group vs one token: 8 sdot4_laneq per 32-block,
-//! accumulator lane L is output row L, flushed to a float4 via block scales × token scale — no
-//! horizontal reduce. Not `private`: called from lifted parallel_for worker lambdas.
+//! The 4-row group's block scales as one float4: the f32 plane's four, or the binary16 plane's four
+//! widened in-loop (the wscale_f16 rail; bit-identical to the f32 stamp over the widened plane).
+def wscale4_f32(sg : float const?; bi : int64) : float4 {
+    unsafe {
+        return float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+    }
+}
+
+def wscale4_f16(sg : uint16 const?; bi : int64) : float4 {
+    unsafe {
+        return float4(f16_to_f32(uint(sg[bi * 4l])), f16_to_f32(uint(sg[bi * 4l + 1l])),
+            f16_to_f32(uint(sg[bi * 4l + 2l])), f16_to_f32(uint(sg[bi * 4l + 3l])))
+    }
+}
+
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
-def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
+def template dot_q8q8_laneq4_template(wg : int8 const ?; sg : float const ?; xq : int8 const ?; xs : float const ?; n : int64) : float4 {
     let nb = n / 32l
     var f = float4(0.0, 0.0, 0.0, 0.0)
     unsafe {
@@ -234,7 +89,7 @@ def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : 
             acc = sdot4_laneq(acc, wg + wb + 80l, xq + xb + 16l, 1)
             acc = sdot4_laneq(acc, wg + wb + 96l, xq + xb + 16l, 2)
             acc = sdot4_laneq(acc, wg + wb + 112l, xq + xb + 16l, 3)
-            let s = float4(sg[bi * 4l], sg[bi * 4l + 1l], sg[bi * 4l + 2l], sg[bi * 4l + 3l])
+            let s = WSCALE4(sg, bi)
             let xsb = xs[bi]
             f += float4(acc) * s * float4(xsb, xsb, xsb, xsb)
         }
@@ -242,34 +97,14 @@ def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : 
     return f
 }
 
-//! wscale_f16 twin of dot_q8q8_laneq4: block scales are raw binary16 halfwords widened in-loop —
-//! same fold order, bit-identical over the widened plane. Not `private`: called from lifted
-//! parallel_for worker lambdas.
-[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
-def dot_q8q8_laneq4_f16s(wg : int8 const?; sg : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
-    let nb = n / 32l
-    var f = float4(0.0, 0.0, 0.0, 0.0)
-    unsafe {
-        for (bi in range64(nb)) {
-            let wb = bi * 128l
-            let xb = bi * 32l
-            var acc = int4(0, 0, 0, 0)
-            acc = sdot4_laneq(acc, wg + wb, xq + xb, 0)
-            acc = sdot4_laneq(acc, wg + wb + 16l, xq + xb, 1)
-            acc = sdot4_laneq(acc, wg + wb + 32l, xq + xb, 2)
-            acc = sdot4_laneq(acc, wg + wb + 48l, xq + xb, 3)
-            acc = sdot4_laneq(acc, wg + wb + 64l, xq + xb + 16l, 0)
-            acc = sdot4_laneq(acc, wg + wb + 80l, xq + xb + 16l, 1)
-            acc = sdot4_laneq(acc, wg + wb + 96l, xq + xb + 16l, 2)
-            acc = sdot4_laneq(acc, wg + wb + 112l, xq + xb + 16l, 3)
-            let s = float4(f16_to_f32(uint(sg[bi * 4l])), f16_to_f32(uint(sg[bi * 4l + 1l])),
-                f16_to_f32(uint(sg[bi * 4l + 2l])), f16_to_f32(uint(sg[bi * 4l + 3l])))
-            let xsb = xs[bi]
-            f += float4(acc) * s * float4(xsb, xsb, xsb, xsb)
-        }
-    }
-    return f
-}
+//! Lane-indexed SDOT over one 4-row interleaved group vs one token: 8 sdot4_laneq per 32-block,
+//! accumulator lane L is output row L, flushed to a float4 via block scales × token scale — no
+//! horizontal reduce. Not `private`: called from lifted parallel_for worker lambdas.
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs), from_template(src = "dot_q8q8_laneq4_template", WSCALE4 = "wscale4_f32")]
+def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {}
+
+[hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs), from_template(src = "dot_q8q8_laneq4_template", WSCALE4 = "wscale4_f16")]
+def dot_q8q8_laneq4_f16s(wg : int8 const?; sg : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float4 {}
 
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp)]
 def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg : float const ?; xqp : int8 const ?; xsp : float const ?; n, d, g, t0 : int64) : void {
@@ -340,130 +175,19 @@ def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg 
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp), tuned(fallback = "u2")]
 def dot_q8q8_laneq4x4(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; n, d, g, t0 : int64) {}
 
-// Row-range core (mm_rows slot): rows [rb,re) of one region, no dispatch — fused decode chains
-// thread these from their own stage lambdas. Not `private`: invoked through the kernel pointer
-// from lifted worker lambdas. rb/re are multiples of 32 (slot contract).
-def q8q8_rows_kernel_neon_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
-    let nb = n / 32l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8_idot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
-// ===== f16-scale twins (the wscale_f16 rail): the same idot4x4 dispatch over the binary16
-// weight-scale plane (dot_q8q8_idot4x4_f16s widens in-loop, the f16-KV codec pattern) =====
-
-def private q8q8_kernel_neon_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                myp[i] = dot_q8q8_idot4x4_f16s(wp + int64(i) * n, sp + int64(i) * nb, xqp, xsp, n)
-            }
-        }
-    }
-}
-
-def private q8q8_batch_kernel_neon_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let wrow = wp + int64(i) * n
-                let srow = sp + int64(i) * nb
-                for (tk in range64(ntok)) {
-                    myp[tk * d + int64(i)] = dot_q8q8_idot4x4_f16s(wrow, srow, xqp + tk * n, xsp + tk * nb, n)
-                }
-            }
-        }
-    }
-}
-
-def private q8q8_group3_kernel_neon_idot4x4_s16(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
-                                                woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let dtot = d0 + d1 + d2
-    var w0 = y0p
-    var w1 = y1p
-    var w2 = y2p
-    maybe_parallel_for(0, int(dtot), matmul_chunks_gemv(int(dtot), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * dtot)) $(rb, re) {
-        unsafe {
-            for (gi in range(rb, re)) {
-                let g = int64(gi)
-                if (g < d0) {
-                    w0[g] = dot_q8q8_idot4x4_f16s(wp + woff0 + g * n, sp + woff0 / 32l + g * nb, xqp, xsp, n)
-                } elif (g < d0 + d1) {
-                    let r = g - d0
-                    w1[r] = dot_q8q8_idot4x4_f16s(wp + woff1 + r * n, sp + woff1 / 32l + r * nb, xqp, xsp, n)
-                } else {
-                    let r = g - d0 - d1
-                    w2[r] = dot_q8q8_idot4x4_f16s(wp + woff2 + r * n, sp + woff2 / 32l + r * nb, xqp, xsp, n)
-                }
-            }
-        }
-    }
-}
-
-def private q8q8_groupn_kernel_neon_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    var myp = yp
-    maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
-        unsafe {
-            for (i in range(rb, re)) {
-                let ii = int64(i)
-                let r = ii / d
-                let row = ii % d
-                let woff = offs[r * 2l]
-                let xoff = offs[r * 2l + 1l]
-                var v = dot_q8q8_idot4x4_f16s(wp + woff + row * n, sp + woff / 32l + row * nb, xqp + xoff, xsp + xoff / 32l, n)
-                if (bp != null) {
-                    v += bp[boffs[r] + row]
-                }
-                myp[ii] = v
-            }
-        }
-    }
-}
-
-// Not `private`: invoked through the kernel pointer from lifted worker lambdas.
-def q8q8_rows_kernel_neon_idot4x4_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
-    let nb = n / 32l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_q8q8_idot4x4_f16s(wp + i * n, sp + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
-def mx4q8_rows_kernel_neon(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
-    let nb = n / 32l
-    var lut : int8[16]
-    mxfp4_fill_lut(lut)
-    unsafe {
-        let lutp = addr(lut[0])
-        for (i in range64(rb, re)) {
-            yp[i] = dot_mx4q8(lutp, wn + i * (n / 2l), we + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
 [init, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
 def dasllama_math_aarch64_neon_register() {
     if (get_target_architecture_name() == "arm64" && jit_enabled()) {
         // arm64-sdot: idot4x4 on row-major weights (idot4 → SDOT) — the auto-selected default for direct callers
-        // (tests, benchmarks). priority 10 out-ranks portable (0).
-        register_kernel_backend(KernelBackend(name = "arm64-sdot", mm = @@q8q8_kernel_neon_idot4x4,
-            batch = @@q8q8_batch_kernel_neon_idot4x4, group3 = @@q8q8_group3_kernel_neon_idot4x4,
-            repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel_neon,
-            groupn = @@q8q8_groupn_kernel_neon_idot4x4, groupn_mx4 = @@mx4q8_groupn_kernel_neon,
-            mm_rows = @@q8q8_rows_kernel_neon_idot4x4, mx4_rows = @@mx4q8_rows_kernel_neon,
-            mm_s16 = @@q8q8_kernel_neon_idot4x4_s16, batch_s16 = @@q8q8_batch_kernel_neon_idot4x4_s16,
-            group3_s16 = @@q8q8_group3_kernel_neon_idot4x4_s16, groupn_s16 = @@q8q8_groupn_kernel_neon_idot4x4_s16,
-            mm_rows_s16 = @@q8q8_rows_kernel_neon_idot4x4_s16,
+        // (tests, benchmarks). priority 10 out-ranks portable (0). rb/re of the rows cores are multiples of 32 (slot contract).
+        register_kernel_backend(KernelBackend(name = "arm64-sdot", mm = @@q8q8_kernel_idot4x4,
+            batch = @@q8q8_batch_kernel_idot4x4, group3 = @@q8q8_group3_kernel_idot4x4,
+            repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel_idot4x4,
+            groupn = @@q8q8_groupn_kernel_idot4x4, groupn_mx4 = @@mx4q8_groupn_kernel_idot4x4,
+            mm_rows = @@q8q8_rows_kernel_idot4x4, mx4_rows = @@mx4q8_rows_kernel_idot4x4,
+            mm_s16 = @@q8q8_kernel_idot4x4_s16, batch_s16 = @@q8q8_batch_kernel_idot4x4_s16,
+            group3_s16 = @@q8q8_group3_kernel_idot4x4_s16, groupn_s16 = @@q8q8_groupn_kernel_idot4x4_s16,
+            mm_rows_s16 = @@q8q8_rows_kernel_idot4x4_s16,
             needs_repack = false, priority = 10))
         // The repack tier (interleaved groups, load-select only) is "arm64-gen" in
         // dasllama_math_gen — it superseded the hand arm64-laneq backend that lived here.

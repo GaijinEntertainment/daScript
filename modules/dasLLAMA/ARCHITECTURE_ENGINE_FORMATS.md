@@ -111,10 +111,15 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   wrappers, dispatch shaping. Kernels themselves live in a tier file; a kernel body here is a
   placement defect.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
-  out-ranked by any platform tier.
-- **`dasllama_math_aarch64_neon.das`** - the arm64 SDOT/tbl tier. Its `[init]` never fires
-  off-arch (`ARCHITECTURE_INVARIANTS.md` sec.3, three-layer safety model), so an intrinsic here
-  needs a correct scalar fallback body, not a guard at the call site.
+  out-ranked by any platform tier - and the ONE body of every Q8·Q8 and mx4 kernel shape: each
+  shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
+  it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
+  bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
+  the `idot4` builtin is plain das that every target lowers for itself.
+- **`dasllama_math_aarch64_neon.das`** - the arm64 lane-indexed SDOT tier: the `sdot4_laneq` /
+  `tbl16` composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]`
+  never fires off-arch (`ARCHITECTURE_INVARIANTS.md` sec.3, three-layer safety model), so an
+  intrinsic here needs a correct scalar fallback body, not a guard at the call site.
 - **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+),
   for genuinely-float planes only. BLAS-for-quant is ruled out structurally
   (`ARCHITECTURE_INVARIANTS.md` sec.3).
@@ -122,7 +127,9 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
   generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
   registration. A hand-written tile that the generator could emit belongs in the generator.
-- **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
+- **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`) and the
+  perm-less clone `[from_template]` (a template body into an empty stub, placeholder calls
+  renamed to the annotation's targets - the kernel shapes' stamp). Tuning
   POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
   OPTIONAL: `llvm_tune` comes through the `tune_framework` group, empty in a build that did not
   configure dasLLVM, and every use of it sits behind `static_if (typeinfo module_exists(llvm_tune))`, so a build without dasLLVM opens no

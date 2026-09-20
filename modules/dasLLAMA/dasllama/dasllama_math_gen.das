@@ -8,7 +8,8 @@ options _function_length = 0   // kernel generator bodies are the domain shape
 require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
-require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails of the s16 twins
+require dasllama/dasllama_math_default  // the row-major tail dots of the slot walks
+require dasllama/dasllama_tune  // [from_template]: the slot walks stamped per scale plane
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
 require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
@@ -1669,28 +1670,32 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     delete bs
 }
 
+// ===== the three slot walks over the generated rows core, written once each over a Q8GEMV (the
+// stamped rows core) and a Q8DOT (the row-major tail dot), stamped for the f32 plane and again
+// for the binary16 plane (the wscale_f16 rail: the s16 companions and dot_q8q8_f16s) =====
+
 // mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows core —
 // ONE core call per chunk. Strides come off the layout companion, so the same wrapper serves
-// both stamped layouts; the row tail (d % mr) stays row-major and rides idot4x4.
-def private q8q8_kernel_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
+// both stamped layouts; the row tail (d % mr) stays row-major and rides the tail dot.
+def template q8q8_kernel_gen_template(var yp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; n, d : int64) : void {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
     let ng = d / mr
     var myp = yp
     maybe_parallel_for(0, int(ng), matmul_chunks_gemv(int(ng * mr), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-        q8q8_gemv_gen(myp, wp, sp, xqp, xsp, n, int64(rb) * mr, int64(re) * mr)
+        Q8GEMV(myp, wp, sp, xqp, xsp, n, int64(rb) * mr, int64(re) * mr)
     }
     unsafe {
         for (i in range64(ng * mr, d)) {
-            myp[i] = dot_q8q8_idot4x4(wp + i * n, sp + i * nb, xqp, xsp, n)
+            myp[i] = Q8DOT(wp + i * n, sp + i * nb, xqp, xsp, n)
         }
     }
 }
 
 // group3: the hand laneq fused walk (one dispatch over the three regions' combined group
 // space), each worker chunk split at region boundaries into at most three rows-core calls
-def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
-                            woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
+def template q8q8_group3_gen_template(var y0p : float ?; var y1p : float ?; var y2p : float ?; wp : int8 const ?; sp : float const ?;
+                                      woff0, woff1, woff2 : int64; xqp : int8 const ?; xsp : float const ?; n, d0, d1, d2 : int64) : void {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
     let ng0 = d0 / mr
@@ -1706,29 +1711,29 @@ def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?
             let b0 = int64(rb)
             let e0 = min(int64(re), ng0)
             if (b0 < e0) {
-                q8q8_gemv_gen(w0, wp + woff0, sp + woff0 / 32l, xqp, xsp, n, b0 * mr, e0 * mr)
+                Q8GEMV(w0, wp + woff0, sp + woff0 / 32l, xqp, xsp, n, b0 * mr, e0 * mr)
             }
             let b1 = max(int64(rb) - ng0, 0l)
             let e1 = min(int64(re) - ng0, ng1)
             if (b1 < e1) {
-                q8q8_gemv_gen(w1, wp + woff1, sp + woff1 / 32l, xqp, xsp, n, b1 * mr, e1 * mr)
+                Q8GEMV(w1, wp + woff1, sp + woff1 / 32l, xqp, xsp, n, b1 * mr, e1 * mr)
             }
             let b2 = max(int64(rb) - ng0 - ng1, 0l)
             let e2 = min(int64(re) - ng0 - ng1, ng2)
             if (b2 < e2) {
-                q8q8_gemv_gen(w2, wp + woff2, sp + woff2 / 32l, xqp, xsp, n, b2 * mr, e2 * mr)
+                Q8GEMV(w2, wp + woff2, sp + woff2 / 32l, xqp, xsp, n, b2 * mr, e2 * mr)
             }
         }
     }
     unsafe {
         for (i in range64(ng0 * mr, d0)) {
-            w0[i] = dot_q8q8_idot4x4(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
+            w0[i] = Q8DOT(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
         }
         for (i in range64(ng1 * mr, d1)) {
-            w1[i] = dot_q8q8_idot4x4(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
+            w1[i] = Q8DOT(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
         }
         for (i in range64(ng2 * mr, d2)) {
-            w2[i] = dot_q8q8_idot4x4(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
+            w2[i] = Q8DOT(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
         }
     }
 }
@@ -1736,7 +1741,7 @@ def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?
 // groupn: the hand laneq fused walk over the (region x group) space; each worker chunk runs
 // region-contiguous rows-core spans + the bias post-add over the same span (an extra y pass,
 // trivial next to the dots)
-def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
+def template q8q8_groupn_gen_template(var yp : float ?; wp : int8 const ?; sp : float const ?; offs : int64 const ?; nregions : int64; xqp : int8 const ?; xsp : float const ?; bp : float const ?; boffs : int64 const ?; n, d : int64) : void {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
     let ng = d / mr
@@ -1750,7 +1755,7 @@ def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?
                 let gEnd = min(int64(ge) - r * ng, ng)
                 let woff = offs[r * 2l]
                 let xoff = offs[r * 2l + 1l]
-                q8q8_gemv_gen(myp + r * d, wp + woff, sp + woff / 32l, xqp + xoff, xsp + xoff / 32l, n, gLocal * mr, gEnd * mr)
+                Q8GEMV(myp + r * d, wp + woff, sp + woff / 32l, xqp + xoff, xsp + xoff / 32l, n, gLocal * mr, gEnd * mr)
                 if (bp != null) {
                     for (i in range64(gLocal * mr, gEnd * mr)) {
                         myp[r * d + i] += bp[boffs[r] + i]
@@ -1761,11 +1766,11 @@ def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?
         }
     }
     unsafe {
-        for (r in range64(nregions)) {   // row tails (d % mr): row-major idot4x4 per region
+        for (r in range64(nregions)) {   // row tails (d % mr): row-major per region
             let woff = offs[r * 2l]
             let xoff = offs[r * 2l + 1l]
             for (i in range64(ng * mr, d)) {
-                var v = dot_q8q8_idot4x4(wp + woff + i * n, sp + woff / 32l + i * nb, xqp + xoff, xsp + xoff / 32l, n)
+                var v = Q8DOT(wp + woff + i * n, sp + woff / 32l + i * nb, xqp + xoff, xsp + xoff / 32l, n)
                 if (bp != null) {
                     v += bp[boffs[r] + i]
                 }
@@ -1774,6 +1779,26 @@ def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?
         }
     }
 }
+
+[from_template(src = "q8q8_kernel_gen_template", Q8GEMV = "q8q8_gemv_gen", Q8DOT = "dot_q8q8_idot4x4")]
+def private q8q8_kernel_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_group3_gen_template", Q8GEMV = "q8q8_gemv_gen", Q8DOT = "dot_q8q8_idot4x4")]
+def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
+                            woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_gen_template", Q8GEMV = "q8q8_gemv_gen", Q8DOT = "dot_q8q8_idot4x4")]
+def private q8q8_groupn_gen(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
+
+[from_template(src = "q8q8_kernel_gen_template", Q8GEMV = "q8q8_gemv_s16_gen", Q8DOT = "dot_q8q8_f16s")]
+def private q8q8_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
+
+[from_template(src = "q8q8_group3_gen_template", Q8GEMV = "q8q8_gemv_s16_gen", Q8DOT = "dot_q8q8_f16s")]
+def private q8q8_group3_s16_gen(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
+                                woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
+
+[from_template(src = "q8q8_groupn_gen_template", Q8GEMV = "q8q8_gemv_s16_gen", Q8DOT = "dot_q8q8_f16s")]
+def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
 
 // mm_mx4 slot: the mx4 twin of q8q8_kernel_gen — group chunks handed to the generated mx4
 // rows core, row tail (d % mr) row-major via dot_mx4q8 (tail planes stay row-major in the
@@ -2364,8 +2389,9 @@ def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 co
     }
 }
 
-// ===== f16-scale twins (wscale_f16 rail): same slot traversals over the binary16 group-scale
-// plane — generated cores via s16 companions, tails via dot_q8q8_f16s / the s16 rows core =====
+// ===== the batch walk's f16-scale twin (wscale_f16 rail): the s16 companions' cells and driver -
+// its own bodies, because the f32 cell's tail rides the kgroup-aware laneq / generic token forms
+// while the s16 cell's rides the stamped GEMV =====
 
 def private q8q8_batch_cell_s16_gen(var myp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, te : int64) {
     unsafe {
@@ -2515,103 +2541,6 @@ def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : ui
         }
     }
     delete bs
-}
-
-def private q8q8_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    let mr = int64(q8q8_layout_gen())
-    let ng = d / mr
-    var myp = yp
-    maybe_parallel_for(0, int(ng), matmul_chunks_gemv(int(ng * mr), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-        q8q8_gemv_s16_gen(myp, wp, sp, xqp, xsp, n, int64(rb) * mr, int64(re) * mr)
-    }
-    unsafe {
-        for (i in range64(ng * mr, d)) {
-            myp[i] = dot_q8q8_f16s(wp + i * n, sp + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
-def private q8q8_group3_s16_gen(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
-                                woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {
-    let nb = n / 32l
-    let mr = int64(q8q8_layout_gen())
-    let ng0 = d0 / mr
-    let ng1 = d1 / mr
-    let ng2 = d2 / mr
-    let ngtot = int(ng0 + ng1 + ng2)
-    var w0 = y0p
-    var w1 = y1p
-    var w2 = y2p
-    maybe_parallel_for(0, ngtot, matmul_chunks_gemv(ngtot * int(mr), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * (d0 + d1 + d2))) $(rb, re) {
-        unsafe {
-            let b0 = int64(rb)
-            let e0 = min(int64(re), ng0)
-            if (b0 < e0) {
-                q8q8_gemv_s16_gen(w0, wp + woff0, sp + woff0 / 32l, xqp, xsp, n, b0 * mr, e0 * mr)
-            }
-            let b1 = max(int64(rb) - ng0, 0l)
-            let e1 = min(int64(re) - ng0, ng1)
-            if (b1 < e1) {
-                q8q8_gemv_s16_gen(w1, wp + woff1, sp + woff1 / 32l, xqp, xsp, n, b1 * mr, e1 * mr)
-            }
-            let b2 = max(int64(rb) - ng0 - ng1, 0l)
-            let e2 = min(int64(re) - ng0 - ng1, ng2)
-            if (b2 < e2) {
-                q8q8_gemv_s16_gen(w2, wp + woff2, sp + woff2 / 32l, xqp, xsp, n, b2 * mr, e2 * mr)
-            }
-        }
-    }
-    unsafe {
-        for (i in range64(ng0 * mr, d0)) {
-            w0[i] = dot_q8q8_f16s(wp + woff0 + i * n, sp + woff0 / 32l + i * nb, xqp, xsp, n)
-        }
-        for (i in range64(ng1 * mr, d1)) {
-            w1[i] = dot_q8q8_f16s(wp + woff1 + i * n, sp + woff1 / 32l + i * nb, xqp, xsp, n)
-        }
-        for (i in range64(ng2 * mr, d2)) {
-            w2[i] = dot_q8q8_f16s(wp + woff2 + i * n, sp + woff2 / 32l + i * nb, xqp, xsp, n)
-        }
-    }
-}
-
-def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    let nb = n / 32l
-    let mr = int64(q8q8_layout_gen())
-    let ng = d / mr
-    var myp = yp
-    maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
-        unsafe {
-            var gg = int64(gb)
-            while (gg < int64(ge)) {
-                let r = gg / ng
-                let gLocal = gg % ng
-                let gEnd = min(int64(ge) - r * ng, ng)
-                let woff = offs[r * 2l]
-                let xoff = offs[r * 2l + 1l]
-                q8q8_gemv_s16_gen(myp + r * d, wp + woff, sp + woff / 32l, xqp + xoff, xsp + xoff / 32l, n, gLocal * mr, gEnd * mr)
-                if (bp != null) {
-                    for (i in range64(gLocal * mr, gEnd * mr)) {
-                        myp[r * d + i] += bp[boffs[r] + i]
-                    }
-                }
-                gg = r * ng + gEnd
-            }
-        }
-    }
-    unsafe {
-        for (r in range64(nregions)) {   // row tails (d % mr): row-major per region
-            let woff = offs[r * 2l]
-            let xoff = offs[r * 2l + 1l]
-            for (i in range64(ng * mr, d)) {
-                var v = dot_q8q8_f16s(wp + woff + i * n, sp + woff / 32l + i * nb, xqp + xoff, xsp + xoff / 32l, n)
-                if (bp != null) {
-                    v += bp[boffs[r] + i]
-                }
-                myp[r * d + i] = v
-            }
-        }
-    }
 }
 
 [init]
