@@ -221,8 +221,11 @@ once for the step instead of once a row.** The driver sizes every per-token plan
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
-MoE, per-layer-embedding or shared-KV layer, a q/k norm, a gated q, a classifier epilogue, or a
-weight format with no N-column leaf. Every set over a per-row plane binds the plane's whole `nb`
+MoE, per-layer-embedding or shared-KV layer, a gated q, a classifier epilogue, or a weight
+format with no N-column leaf. A q/k norm has one: the per-head rms runs over every row's
+projection row before the rope (`qk_rms_cls`, a head-row a workgroup with the row in the
+workgroup id, the projection row's width as both strides), the split pair the one-row command
+runs unfused, so the rows' q and k are the one-row command's bit for bit. Every set over a per-row plane binds the plane's whole `nb`
 extent; the rule guards two shapes - an ungated q row sitting inside the projection row, and a q
 binding sized to one row, which leaves every row but the first reading past its binding. The MoE
 feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE layers, and

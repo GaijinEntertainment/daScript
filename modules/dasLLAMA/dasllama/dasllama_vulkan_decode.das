@@ -1958,7 +1958,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
 def vk_rdec_token_n_rows : int64 {
-    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.qk_norm || g_rd.q_gated || rd_cls_epi_on()
+    if (g_rd == null || !g_rd.ready || g_rd.hybrid || g_rd.ple > 0l || g_rd.q_gated || rd_cls_epi_on()
             || !gemv_cls_has_n(g_rd.cls_fmt_marker)) return 0l
     for (L in g_rd.layers) {
         if (L.moe || L.recurrent || L.ple || L.kv_shared
@@ -2066,6 +2066,18 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
         rows = nr, kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
     let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
+    if (g_rd.qk_norm && (g_rd_nrow_bisect & 4) == 0) {
+        //! the per-head q/k rms over every row's projection row before the rope - the split pair the one-row command runs unfused, a head-row a workgroup, the row index riding the workgroup id
+        let nkh = kvd / int64(hs)
+        let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
+        let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
+        var pcn = QkRmsArgs(hs = hs, nh = uint(g_rd.n_heads), nkvh = uint(nkh),
+            qstride = kvrow, kstride = kvrow, kbase = uint(qd),
+            qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
+            eps = g_rd.eps, qhs = hs)
+        enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
+        rd_ts(raw, "a:qkn")
+    }
     if ((g_rd_nrow_bisect & 4) == 0) {
         if (g_rd.kv16) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
