@@ -38,26 +38,29 @@ Write the answers down; they are the first lines of the PR body's format section
 
 ## 1. Identity - `dasllama/dasllama_kqformat.das`
 
-The taxonomy every other file keys off. One edit here, then the compiler finds the ladders.
+The taxonomy every other file keys off. One member and one descriptor row here; every
+per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `kq_stream_code`,
+`kq_ggml_type`, the int-id twins in `dasllama_gemm_schema.das`) reads the row.
 
 - Append the member to `KqFmt` - **append, never reorder**: the int value is the device stack
   tag (`vk_kq_schema_id`) and the image plane id.
-- `kq_sb` (both overloads) if it is a superblock format.
-- `kq_schema_id`: the kernel/IR id. The ids are mnemonics - K-quants by bit width (4/5/6),
-  Q4_0 = 40, i-quants = bit width x 10 + a variant digit (IQ4_XS = 44). Three id spaces exist -
-  `int(KqFmt)`, the kernel id, and the stream/repack region code (`kq_stream_code`: 0/2 are
-  q8/q51, else the kernel id) - and a new format touches all three; `test_kqformat` pins them.
-  A kernel id of 0, 1 or 2 collides in the stream space (Q2_K streams under 20 and translates
-  back at every dispatch boundary), so dodge those or claim a distinct code the same way, and
-  key every region ladder on the translated kernel id, never on the stream code by position.
-- The stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per superblock row of the quant and
-  scale planes) and the `kq_qsb` / `kq_ssb` arms. A codebook goes here too (`IQ4NL_LUT`); a grid
-  or codebook table reaches worker lanes only as a function returning the literal
-  (`iq3s_grid()`, `iq2s_grid2()`: a direct `return fixed_array<T>(...)`, no local), never as a
-  module global - a team-lane kernel reads a `let` global as zero.
-- `dasllama_gemm_schema.das`: the int-id twins `kq_qsb(int)` / `kq_ssb(int)`, and
-  `kq_reads_packed_planes` - the one packed-versus-panel predicate the batch cell generator, the
-  probe, the tests and the bench all read.
+- The `GGML_TYPE_<FMT>` constant, the stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per
+  superblock row of the quant and scale planes), and the `kq_desc` row: strides, weights per
+  stride unit, disk bytes per stride unit (the ggml block bytes), the ggml type, the kernel/IR id
+  and the stream code. The kernel ids are mnemonics - K-quants by bit width (4/5/6), Q4_0 = 40,
+  i-quants = bit width x 10 + a variant digit (IQ4_XS = 44). Three id spaces exist -
+  `int(KqFmt)`, the kernel id, and the stream/repack region code (0/2 are q8/q51, else the kernel
+  id) - and the row carries all three; `test_kqformat` pins them and holds the disk bytes to
+  `ggml_type_bytes`. A kernel id of 0, 1 or 2 collides in the stream space (Q2_K streams under
+  20 and translates back at every dispatch boundary), so dodge those or claim a distinct code the
+  same way, and key every region ladder on the translated kernel id, never on the stream code by
+  position.
+- A codebook goes here too; a grid or codebook table reaches worker lanes only as a function
+  returning the literal (`iq4nl_lut()`, `iq3s_grid()`, `iq2s_grid2()`: a direct
+  `return fixed_array<T>(...)`, no local), never as a module global - a team-lane kernel reads a
+  `let` global as zero; the global twin (`IQ4NL_LUT = iq4nl_lut()`) serves tests and oracles.
+- `dasllama_gemm_schema.das`: `kq_reads_packed_planes` - the one packed-versus-panel predicate
+  the batch cell generator, the probe, the tests and the bench all read.
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream
   code, and the codebook's edge values; its radix guard holds every id under `DAT_KEY_FMTS`
   (`dasllama_vulkan_common.das`, the Vulkan decode block's layer-key radix) - the 32nd member
@@ -65,7 +68,6 @@ The taxonomy every other file keys off. One edit here, then the compiler finds t
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 
-- `GGML_TYPE_<FMT>` constant (`dasllama_gguf.das`).
 - `transcode_<fmt>_superblock(bytes, bo, kq, kqo, ks, kso)` - the per-superblock disk -> plane
   split, array form (what the tests drive).
 - `dequant_<fmt>_plane_superblock` - the reference dequant off the planes, in ggml's own float

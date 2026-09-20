@@ -42,28 +42,6 @@ let private GT_U64 = 10
 let private GT_I64 = 11
 let private GT_F64 = 12
 
-// upstream tensor data types (subset we read)
-let GGML_TYPE_F32 = 0
-let GGML_TYPE_F16 = 1
-let GGML_TYPE_Q4_0 = 2
-let GGML_TYPE_Q5_0 = 6
-let GGML_TYPE_Q5_1 = 7
-let GGML_TYPE_Q8_0 = 8
-let GGML_TYPE_Q3_K = 11
-let GGML_TYPE_Q2_K = 10
-let GGML_TYPE_IQ3_S = 21
-let GGML_TYPE_IQ2_S = 22
-let GGML_TYPE_IQ2_XS = 17
-let GGML_TYPE_IQ2_XXS = 16
-let GGML_TYPE_IQ3_XXS = 18
-let GGML_TYPE_IQ4_NL = 20
-let GGML_TYPE_Q4_K = 12
-let GGML_TYPE_Q5_K = 13
-let GGML_TYPE_Q6_K = 14
-let GGML_TYPE_IQ4_XS = 23
-let GGML_TYPE_BF16 = 30
-let GGML_TYPE_MXFP4 = 39
-
 //! Bytes `n` elements of a ggml type take on disk (block bytes x blocks); 0 for a type the loader
 //! does not know, so a census sums what it can and names the rest.
 def ggml_type_bytes(gt : int; n : int64) : int64 {
@@ -87,29 +65,8 @@ def ggml_type_bytes(gt : int; n : int64) : int64 {
     return 0l
 }
 
-//! The ggml type a kq format's plane converts from; -1 for a format no ggml type spells.
-def kq_ggml_type(f : KqFmt) : int {
-    if (f == KqFmt.q8) return GGML_TYPE_Q8_0
-    if (f == KqFmt.q40) return GGML_TYPE_Q4_0
-    if (f == KqFmt.iq4nl) return GGML_TYPE_IQ4_NL
-    if (f == KqFmt.q51) return GGML_TYPE_Q5_1
-    if (f == KqFmt.k2) return GGML_TYPE_Q2_K
-    if (f == KqFmt.k3) return GGML_TYPE_Q3_K
-    if (f == KqFmt.iq3s) return GGML_TYPE_IQ3_S
-    if (f == KqFmt.k4) return GGML_TYPE_Q4_K
-    if (f == KqFmt.k5) return GGML_TYPE_Q5_K
-    if (f == KqFmt.k6) return GGML_TYPE_Q6_K
-    if (f == KqFmt.iq4xs) return GGML_TYPE_IQ4_XS
-    if (f == KqFmt.iq3xxs) return GGML_TYPE_IQ3_XXS
-    if (f == KqFmt.iq2s) return GGML_TYPE_IQ2_S
-    if (f == KqFmt.iq2xs) return GGML_TYPE_IQ2_XS
-    if (f == KqFmt.iq2xxs) return GGML_TYPE_IQ2_XXS
-    if (f == KqFmt.mx4) return GGML_TYPE_MXFP4
-    return -1
-}
-
-//! Bytes `n` weights of a kq format take on disk (the ggml block sizes) - what a device plane
-//! is measured against; q8 counts its Q8_0 blocks.
+//! Bytes `n` weights of a kq format take on disk (the ggml block sizes, so a 32-block format
+//! answers per 32) - what a device plane is measured against; q8 counts its Q8_0 blocks.
 def kq_disk_bytes(f : KqFmt; n : int64) : int64 => ggml_type_bytes(kq_ggml_type(f), n)
 
 let private GGML_TYPE_NAMES <- {

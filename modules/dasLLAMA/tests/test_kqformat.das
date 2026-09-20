@@ -12,6 +12,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
+require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
@@ -209,6 +210,23 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.iq2xxs), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
+    }
+    t |> run("every descriptor row's disk bytes are the ggml block bytes of its type, and its ids round-trip") @(t : T?) {
+        for (f in type<KqFmt>) {
+            let d = kq_desc(f)
+            t |> equal(d.fmt, f, "row {f} names itself")
+            t |> equal(d.disk_bytes, ggml_type_bytes(d.ggml_type, d.elems), "{f}: disk bytes per stride unit")
+            t |> equal(d.elems, kq_sb(f) ? 256l : 32l, "{f}: stride unit")
+            if (kq_sb(f)) {
+                var back = KqFmt.q8
+                t |> success(kq_fmt_of_id(d.schema_id, back) && back == f, "{f}: the schema id names the row back")
+                t |> success(d.qsb > 0l && d.ssb > 0l, "{f}: a lattice format has a plane pair")
+            } else {
+                t |> equal(d.schema_id, -1, "{f}: no kernel id off the lattice")
+            }
+        }
+        var none = KqFmt.q8
+        t |> success(!kq_fmt_of_id(99, none), "an id no format carries")
     }
     t |> run("kq_bytes_per_weight is the stride table's arithmetic on every superblock format") @(t : T?) {
         // the MoE split estimate prices an expert stack by this number; a hand-copied row drifts
