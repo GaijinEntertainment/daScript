@@ -10180,6 +10180,122 @@ class Q8GemvGu {
     }
 }
 
+struct GuNArgs {
+    n : uint      //! the reduction width (the model dim)
+    d : uint      //! the output rows (the FFN width), a 32-multiple
+    gblk : uint   //! the gate plane's block base in its slab
+    ublk : uint   //! the up plane's block base in its slab
+    act : uint    // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
+    ncols : uint  //! the rows the command steps at once, 1 to 8: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
+}
+
+//! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both planes
+//! against each column's row off one weight word, and a subgroup a column activates and quantizes the column's block - the
+//! columns' rows quantize in parallel subgroups, so no row waits on another
+[vk_dispatch(name = "q8_gemv_gu_n_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN {
+    @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
+    @ssbo @binding = 1 gsh : array<float16>   // gate per-block f16 scales
+    @ssbo @binding = 2 uq4 : array<uint4>     // up quant words, vec4 view
+    @ssbo @binding = 3 ush : array<float16>   // up per-block f16 scales
+    @ssbo @binding = 4 xqw : array<uint>      // the normed rows' Q8_0 quant words, a row a column
+    @ssbo @binding = 5 axs : array<float>     // ... and their per-block scales
+    @ssbo @binding = 6 outq : array<int8>     // the activated hidden rows' Q8_0 quants (the down GEMV's feed), d apart
+    @ssbo @binding = 7 outs : array<float>    // ... and their per-block scales, d / 32 apart
+    @push_constant pa : GuNArgs
+    @workgroup wg_g : float[256]   //! the block's gate dots, [column x 32 rows]
+    @workgroup wg_u : float[256]   //! ... and up dots
+
+    //! one output row's gate and up dots against every column's row, a subgroup wide, into the slab
+    def row_dots(r : uint) {
+        let nb = pa.n / 32u
+        let row = gl_WorkGroupID.x * 32u + r
+        let gb0 = pa.gblk + row * nb
+        let ub0 = pa.ublk + row * nb
+        let lane = gl_SubgroupInvocationID
+        let bpp = gl_SubgroupSize / 2u
+        var accg : float[8]
+        var accu : float[8]
+        for [unroll] (c in range(8)) {
+            accg[c] = 0.0
+            accu[c] = 0.0
+        }
+        var bi0 = 0u
+        while (bi0 < nb) {
+            let b = bi0 + lane / 2u
+            if (b < nb) {
+                let gv = gq4[(gb0 + bi0) * 2u + lane]
+                let uv = uq4[(ub0 + bi0) * 2u + lane]
+                let gs = float(gsh[gb0 + b])
+                let us = float(ush[ub0 + b])
+                for [unroll] (c in range(8)) {
+                    if (uint(c) < pa.ncols) {
+                        let xbase = (uint(c) * nb + bi0) * 8u + lane * 4u
+                        let x0 = xqw[xbase]
+                        let x1 = xqw[xbase + 1u]
+                        let x2 = xqw[xbase + 2u]
+                        let x3 = xqw[xbase + 3u]
+                        var gd = sdot4(gv.x, x0)
+                        gd += sdot4(gv.y, x1)
+                        gd += sdot4(gv.z, x2)
+                        gd += sdot4(gv.w, x3)
+                        var ud = sdot4(uv.x, x0)
+                        ud += sdot4(uv.y, x1)
+                        ud += sdot4(uv.z, x2)
+                        ud += sdot4(uv.w, x3)
+                        gd += subgroupShuffleXor(gd, 1u)
+                        ud += subgroupShuffleXor(ud, 1u)
+                        if (lane % 2u == 0u) {
+                            let xs = axs[uint(c) * nb + b]
+                            accg[c] += float(gd) * gs * xs
+                            accu[c] += float(ud) * us * xs
+                        }
+                    }
+                }
+            }
+            bi0 += bpp
+        }
+        for [unroll] (c in range(8)) {
+            if (uint(c) < pa.ncols) {
+                let g = subgroupAdd(accg[c])
+                let u = subgroupAdd(accu[c])
+                if (subgroupElect()) {
+                    wg_g[uint(c) * 32u + r] = g
+                    wg_u[uint(c) * 32u + r] = u
+                }
+            }
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_gemv_gu_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let row0 = gl_WorkGroupID.x * 32u
+        let nsg = gl_NumSubgroups
+        let rows_per = 32u / nsg
+        var k = 0u
+        while (k < rows_per) {
+            row_dots(gl_SubgroupID + k * nsg)
+            k++
+        }
+        barrier()
+        var c = gl_SubgroupID   // the block's activation and Q8_0 quant, a subgroup a column: one lane an output row
+        while (c < pa.ncols) {
+            let lane = gl_SubgroupInvocationID
+            let li = min(lane, 31u)
+            let a = lane < 32u ? act_mul_sel(wg_g[c * 32u + li], wg_u[c * 32u + li], pa.act) : 0.0
+            let d = da_q8_blk_d(a)
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane == 0u) {
+                outs[c * (pa.d / 32u) + gl_WorkGroupID.x] = d
+            }
+            if (lane < 32u) {
+                outq[c * pa.d + row0 + lane] = q8_quant1(a, id)
+            }
+            c += nsg
+        }
+    }
+}
+
 struct PleActArgs {
     n : uint      //! the side row's width (the reduction; at most 256, a 32-multiple)
     d : uint      //! the output rows (the model dim)

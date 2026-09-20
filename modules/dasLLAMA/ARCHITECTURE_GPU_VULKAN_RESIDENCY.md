@@ -232,7 +232,13 @@ feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE
 their sets bind one row. Every GEMV goes out as an N-column dispatch
 (`GemvArgs.ncols` activation rows one weight pass apart by `ystride`); the q8 leaf takes its
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
-because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup. The
+because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
+Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
+requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuN`: a workgroup owns 32 output rows for
+every column, a subgroup a column quantizes the column's block, so the columns' rows quantize in
+parallel); the residual epilogues stay separate dispatches over the rows, because an epilogue
+run by the last workgroup would serialize the rows' steps where the separate dispatch runs them
+in parallel workgroups. The
 row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
 run at each row's own position, cached count and mirror region, which ride the shared `TokMeta`
 block a row (`mirbase` an element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into

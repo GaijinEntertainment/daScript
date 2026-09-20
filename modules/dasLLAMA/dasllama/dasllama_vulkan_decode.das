@@ -2045,6 +2045,14 @@ def private rd_ensure_n_sets {
         if (!kq_sb(fn)) {
             L.s_addr_next_rq_b = set_ar_rq_rows(g_rd.ffnout_dev, VHZ_FFO)
         }
+        if (L.gu_on && ensure_q8_gemv_gu_n_cls()) {   //! the fused gate-up over the rows' planes: the one-row set's bindings, the per-row planes at their nb extent
+            let dim = g_rd.dim
+            let p1 = arena_planes(L.f1, L.b1)
+            let p3 = arena_planes(L.f3, L.b3)
+            L.s_gu_n = set_q8_gemv_gu_n_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+                fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * g_rd.nb, (dim / 32l) * 4l * g_rd.nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+        }
     }
     g_rd.n_sets_made = true
 }
@@ -2178,6 +2186,15 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     let hid = L.hid
     let nr = uint(nrows)
     let act = L.gelu ? ACT_GELU : ACT_SILU
+    if (L.gu_on && (g_rd_nrow_bisect & 10) == 0) {   //! the fused form over the rows: gate and up off one weight pass, the activation and its requant a subgroup a column
+        var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = nr)
+        enc_q8_gemv_gu_n_cls(raw, h, L.s_gu_n, pcgu, hid / 32l)
+        rd_ts(raw, "a:gu")
+        var pcd_gu = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(dim))
+        rd_gemv_n(L.f2, raw, h, L.s_down, pcd_gu, dim)
+        rd_ts(raw, "a:down")
+        return
+    }
     var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(hid))
     rd_gemv_n(L.f1, raw, h, L.s_gate, pcg, hid)
     rd_ts(raw, "a:gate")

@@ -2265,6 +2265,7 @@ struct RLayer {
     s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
+    s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuN`), where `gu_on`
     wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
     s_wo_ar : VkDescriptorSet
     down_ar : bool                  //! the down GEMV carries the post-FFN residual step the same way

@@ -6536,6 +6536,144 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
     }
 }
 
+//! the fused gate-up GEMV's N-column form over `ncols` rows against the one-row kernel run a column at a time, bit for bit
+def private q8_gemv_gu_n_run(t; n, hid, ncols : int; gelu : bool) {
+    let nb = n / 32
+    let nblk_out = hid / 32
+    let totblk = hid * nb
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let oq_bytes = int64(hid)
+    let os_bytes = int64(nblk_out) * 4l
+    var gqh : array<uint>
+    var gsh : array<uint>
+    var uqh : array<uint>
+    var ush : array<uint>
+    var xqh : array<uint>
+    var xsh : array<float>
+    gqh |> resize(totblk * 8)
+    uqh |> resize(totblk * 8)
+    gsh |> resize(totblk / 2 + 1)
+    ush |> resize(totblk / 2 + 1)
+    xqh |> resize(nb * 8 * ncols)
+    xsh |> resize(nb * ncols)
+    for (i in range(totblk * 8)) {
+        gqh[i] = hash_word(uint(i) + 71u)
+        uqh[i] = hash_word(uint(i) * 3u + 5u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        gsh[i] = ws_word(uint(i) + 3u)
+        ush[i] = ws_word(uint(i) * 7u + 11u)
+    }
+    for (i in range(nb * 8 * ncols)) {   //! every column its own activation row
+        xqh[i] = hash_word(uint(i) * 17u + 9u)
+    }
+    for (i in range(nb * ncols)) {
+        xsh[i] = 0.25 + float(i % 5) * 0.125
+    }
+    let gqd = make_device_buf(wq_bytes)
+    let gsd = make_device_buf(ws_bytes)
+    let uqd = make_device_buf(wq_bytes)
+    let usd = make_device_buf(ws_bytes)
+    let col_bytes = oq_bytes + os_bytes
+    var host = make_host_buf(col_bytes * int64(ncols) * 2l, true, [cached = true])   //! the one-row runs' rows, then the N-row run's
+    let act = gelu ? ACT_GELU : ACT_SILU
+    unsafe {
+        upload_region_at(gqd, 0l, addr<uint8 const?>(gqh[0]), wq_bytes)
+        upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
+        upload_region_at(uqd, 0l, addr<uint8 const?>(uqh[0]), wq_bytes)
+        upload_region_at(usd, 0l, addr<uint8 const?>(ush[0]), ws_bytes)
+        for (c in range(ncols)) {   // the one-row kernel a column at a time
+            let xqd = make_device_buf(xq_bytes)
+            let xsd = make_device_buf(xs_bytes)
+            let oqd = make_device_buf(oq_bytes)
+            let osd = make_device_buf(os_bytes)
+            upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[c * nb * 8]), xq_bytes)
+            upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[c * nb]), xs_bytes)
+            nan_sentinel_upload(oqd, oq_bytes)
+            nan_sentinel_upload(osd, os_bytes)
+            var s_one = set_q8_gemv_gu_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
+                fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, oq_bytes, os_bytes),
+                fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+            var raw1 = alloc_cmd()
+            let begin1 = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw1, begin1), null)
+            var h1 : VkHaz
+            var pc1 = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act)
+            enc_q8_gemv_gu_cls(raw1, h1, s_one, pc1, int64(nblk_out))
+            vhz_dep(raw1, h1, 64u, 0u, true)
+            let cb = col_bytes * int64(c)
+            cmd_copy_range(raw1, oqd, 0l, host.buf, cb, oq_bytes)
+            cmd_copy_range(raw1, osd, 0l, host.buf, cb + oq_bytes, os_bytes)
+            vk_check(vkEndCommandBuffer(raw1), null)
+            submit_wait(raw1)
+        }
+        let xqd_n = make_device_buf(xq_bytes * int64(ncols))   // the N-row kernel once over the stacked planes
+        let xsd_n = make_device_buf(xs_bytes * int64(ncols))
+        let oqd_n = make_device_buf(oq_bytes * int64(ncols))
+        let osd_n = make_device_buf(os_bytes * int64(ncols))
+        upload_region_at(xqd_n, 0l, addr<uint8 const?>(xqh[0]), xq_bytes * int64(ncols))
+        upload_region_at(xsd_n, 0l, addr<uint8 const?>(xsh[0]), xs_bytes * int64(ncols))
+        nan_sentinel_upload(oqd_n, oq_bytes * int64(ncols))
+        nan_sentinel_upload(osd_n, os_bytes * int64(ncols))
+        var s_n = set_q8_gemv_gu_n_cls(fixed_array(gqd, gsd, uqd, usd, xqd_n, xsd_n, oqd_n, osd_n),
+            fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes * int64(ncols), xs_bytes * int64(ncols), oq_bytes * int64(ncols), os_bytes * int64(ncols)),
+            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act, ncols = uint(ncols))
+        enc_q8_gemv_gu_n_cls(raw2, h2, s_n, pc, int64(nblk_out))
+        vhz_dep(raw2, h2, 64u, 0u, true)
+        let nbase = col_bytes * int64(ncols)
+        cmd_copy_range(raw2, oqd_n, 0l, host.buf, nbase, oq_bytes * int64(ncols))
+        cmd_copy_range(raw2, osd_n, 0l, host.buf, nbase + oq_bytes * int64(ncols), os_bytes * int64(ncols))
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        let bytes = reinterpret<uint8?>(host.mapped)
+        var bad_q = 0
+        var bad_s = 0
+        for (c in range(ncols)) {
+            let one = col_bytes * int64(c)
+            for (i in range(hid)) {   // the quant bytes
+                if (bytes[one + int64(i)] != bytes[nbase + int64(c * hid + i)]) {
+                    bad_q++
+                }
+            }
+            for (i in range(nblk_out)) {   // the scale rows, byte for byte
+                for (k in range(4)) {
+                    if (bytes[one + oq_bytes + int64(i) * 4l + int64(k)] != bytes[nbase + oq_bytes * int64(ncols) + int64(c * nblk_out + i) * 4l + int64(k)]) {
+                        bad_s++
+                        break
+                    }
+                }
+            }
+        }
+        t |> success(bad_q == 0, "N-row fused gate-up: the quant bytes over {ncols} columns are the one-row kernel's bit for bit (n {n}, hid {hid}, gelu {gelu}; {bad_q} off)")
+        t |> success(bad_s == 0, "N-row fused gate-up: the block scales over {ncols} columns are the one-row kernel's ({bad_s} off)")
+    }
+}
+
+[test]
+def test_vkd_q8_gemv_gu_n(t0 : T?) {
+    t0 |> run("fused q8 gate-up GEMV's N-column form == the one-row kernel a column at a time, bit for bit") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_q8_gemv_gu_cls() && ensure_q8_gemv_gu_n_cls())) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            q8_gemv_gu_n_run(t, 512, 1152, 4, false)   // silu, four rows
+            q8_gemv_gu_n_run(t, 256, 512, 2, true)     // gelu, two rows
+            q8_gemv_gu_n_run(t, 512, 1024, 8, false)   // eight rows: every subgroup a column at 32 lanes, two rounds at 64
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_q8_gemv_pleact(t0 : T?) {
     t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
