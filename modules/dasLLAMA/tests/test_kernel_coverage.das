@@ -740,6 +740,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // test_vkd_fa_cm2, test_vkd_fa_khr and test_vkd_da_attn in test_vulkan_kernels.das
     "fa_cm2_h64_sink_cls_spv", "fa_cm2_h64_sink_f16_cls_spv", "fa_khr_h64_sink_cls_spv", "fa_khr_h64_sink_f16_cls_spv",
     "da_attn_sink_cls_spv", "da_attn_f16_sink_cls_spv",
+    // the token command's f32-mirror attention stamps (the four-head slab and the two-head one): the census steps every
+    // session on the f16 mirror the tier arms, the f32 twin serves under DASLLAMA_VK_KV32=1 (gemma-2-2b Q8_0's f32 parity
+    // run dispatches both); their coverage is test_vkd_da_attn and test_vkd_da_attn_rqk in test_vulkan_kernels.das
+    "da_attn_cls_spv", "da_attn_g2_cls_spv",
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",

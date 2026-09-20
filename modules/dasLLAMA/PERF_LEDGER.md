@@ -2166,7 +2166,12 @@ two commits in two processes [direction-grade - two commits].
   split and 35.8 / 36.0 -> 26.6 / 26.6 at two; the gemma-2 shape (head 256, 8 heads, two a kv
   head) 39.0 -> 26.6 at one split and 22.5 -> 18.4 at four, its best split - the two-head slab
   a quarter to a third faster a layer where the pod's step read 6%, the smaller card's pass
-  nearer its FMA bound.
+  nearer its FMA bound. The same race on the pod (82 SMs, the arms alternated the same way, the
+  four-head rows repeating within 0.5 us across the two orders): the 12B's sliding shape 32.9 ->
+  26.8 at one split, 24.7 -> 20.6 at two and 28.8 -> 18.6 at four, its best; gemma-2's shape 32.9
+  -> 26.8 at one split and 18.6 -> 16.5 at three and four - a third at the best split where the
+  served step moved 6%, so the layer's attention is a smaller share of that step than of the
+  smaller card's.
 - **The board at the arc's tip, tg128@4 (ours cm2 / ours KHR / llama.cpp, three reps ours; then flat
   tg128 ours / theirs - the reference's flat figure is the same `llama-batched-bench` run's
   `S_TG` at `-npl 1`, ours the `-npl 4` run's flat row):** gemma-2-2b Q8_0 704 / 709 / 618 (1.14 / 1.15), flat 216 / 201; gemma-3-1b
