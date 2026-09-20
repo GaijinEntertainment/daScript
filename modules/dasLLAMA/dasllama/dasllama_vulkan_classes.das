@@ -4319,8 +4319,8 @@ class template DaAttnT {
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
             let krow = kbase + (c0 + min(tid, clen - 1u)) * pa.kvd + kvh * hs
-            var kw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
-            var vw : uint4[8]   // nolint:LINT002 -- the f32 stamp's static_if leaves the word batches unused
+            var kw : uint4[8]   // nolint:LINT002,LINT019 -- the f32 stamp's static_if leaves the word batches unused; the rule fires in that stamp's compile alone
+            var vw : uint4[8]   // nolint:LINT002,LINT019 -- the f32 stamp's static_if leaves the word batches unused; the rule fires in that stamp's compile alone
             static_if (KV16) {
                 if (vec) {
                     for [unroll] (b in range(8)) {
@@ -9564,11 +9564,17 @@ struct QknRopeArgs {
     cbase : uint    //! this layer's rope class's row base in the cos/sin plane
     vfk : uint      //! V is the raw k row scaled by its own rms (a layer with no v plane: gemma-4's global layers)
     vnorm : uint    //! V is its own projection scaled by its rms, no weight (gemma-4's v-norm)
+    per : uint      //! the N-row command: head-row workgroups a row (q heads + k heads), the row riding the workgroup id; 0 = the one-row command
+    kvrow : uint    //! the N-row command: a row's stride in the projection plane
+    qrow : uint     //! the N-row command: a row's stride in qrows
+    cosrow : uint   //! the N-row command: a row's stride in the cos/sin plane
 }
 
-// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
-// reduce + rotation order, so bit-identical to the split pair. KT/CLAMP16 as in RopeKvStoreT.
+// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row, the same reduce
+// and rotation order as the split pair (the two still round apart: the compiler contracts each
+// kernel on its own, so a command runs one form for every row). KT/CLAMP16 as in RopeKvStoreT.
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
+// Under `per` the N-row command's rows ride the workgroup id, each at its own token meta.
 [ |> template_struct_instance]
 class template QknRopeKvT : RmsWgBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
@@ -9604,15 +9610,21 @@ class template QknRopeKvT : RmsWgBase {
 
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
-        let wid = gl_WorkGroupID.x
+        let gwid = gl_WorkGroupID.x
+        let rr = pa.per == 0u ? 0u : gwid / pa.per   // this workgroup's row of the N-row command
+        let wid = pa.per == 0u ? gwid : gwid % pa.per
         let is_k = wid >= pa.nh
         let h = is_k ? wid - pa.nh : wid
         let tid = gl_LocalInvocationID.x
         let t1 = tid + 256u
         let two = t1 < pa.hs   // the wide head's second element
         let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
-        let sbase = is_k ? pa.qd + h * pa.hs : h * qstride
+        let qb = rr * pa.qrow + h * qstride   // this row's head in qrows
+        let kvb = rr * pa.kvrow               // this row's projection row
+        let sbase = is_k ? kvb + pa.qd + h * pa.hs : qb
         let bbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
+        let cb = rr * pa.cosrow + pa.cbase
+        let mrow = pa.layerbase + tok[rr].mirbase + tok[rr].pos * pa.kvd
         var v = 0.0
         var v1 = 0.0
         if (tid < pa.hs) {
@@ -9633,8 +9645,8 @@ class template QknRopeKvT : RmsWgBase {
         barrier()
         // rope this head's pairs off the normed row; the pairs partition [0, 2 * half)
         if (tid < pa.half) {
-            let fcr = cossin[pa.cbase + tid]
-            let fci = cossin[pa.cbase + pa.half + tid]
+            let fcr = cossin[cb + tid]
+            let fci = cossin[cb + pa.half + tid]
             let e0 = pa.neox != 0u ? tid : tid * 2u
             let e1 = pa.neox != 0u ? tid + pa.half : tid * 2u + 1u
             let a0 = row[e0]
@@ -9642,31 +9654,29 @@ class template QknRopeKvT : RmsWgBase {
             let r0 = a0 * fcr - a1 * fci
             let r1 = a0 * fci + a1 * fcr
             if (is_k) {
-                let mrow = pa.layerbase + tok[0u].pos * pa.kvd
                 st_k(mrow + h * pa.hs + e0, r0)
                 st_k(mrow + h * pa.hs + e1, r1)
             } else {
-                qrows[h * qstride + e0] = r0
-                qrows[h * qstride + e1] = r1
+                qrows[qb + e0] = r0
+                qrows[qb + e1] = r1
             }
         }
         if (!is_k && tid >= 2u * pa.half && tid < pa.hs) {
-            qrows[h * qstride + tid] = row[tid]
+            qrows[qb + tid] = row[tid]
         }
         if (!is_k && two && t1 >= 2u * pa.half) {
-            qrows[h * qstride + t1] = row[t1]
+            qrows[qb + t1] = row[t1]
         }
         // the V row, by the k-head wgs: the raw projection (plus its bias), that row scaled by its own
         // rms under vnorm, or under vfk the raw k row scaled by the rms the k-norm just took
         if (is_k) {
-            let mrow = pa.layerbase + tok[0u].pos * pa.kvd
             var w0 = 0.0
             var w1 = 0.0
             if (pa.vfk != 0u) {
                 w0 = v * inv
                 w1 = v1 * inv
             } else {
-                let vi = pa.qd + pa.kvd + h * pa.hs
+                let vi = kvb + pa.qd + pa.kvd + h * pa.hs
                 if (tid < pa.hs) {
                     w0 = kvsrc[vi + tid] + (pa.hasb != 0u ? bias[pa.boff + vi + tid] : 0.0)
                 }

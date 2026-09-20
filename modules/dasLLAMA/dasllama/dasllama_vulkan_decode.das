@@ -2066,19 +2066,36 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         layerbase = uint(L.mir_base), boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
         rows = nr, kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
     let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
-    if (g_rd.qk_norm && (g_rd_nrow_bisect & 4) == 0) {
-        //! the per-head q/k rms over every row's projection row before the rope - the split pair the one-row command runs unfused, a head-row a workgroup, the row index riding the workgroup id
+    let fuse_qkr = g_rd.qk_norm && rd_fuse_gates().fuse_qkr   //! the rows take the form the one-row command takes: the fused norm + rope + store, or the split pair; the two round apart
+    if (fuse_qkr && (g_rd_nrow_bisect & 4) == 0) {
         let nkh = kvd / int64(hs)
         let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
         let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
-        var pcn = QkRmsArgs(hs = hs, nh = uint(g_rd.n_heads), nkvh = uint(nkh),
-            qstride = kvrow, kstride = kvrow, kbase = uint(qd),
+        var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = uint(L.rot / 2l),
+            neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = uint(L.mir_base),
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
-            eps = g_rd.eps, qhs = hs)
-        enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
-        rd_ts(raw, "a:qkn")
-    }
-    if ((g_rd_nrow_bisect & 4) == 0) {
+            eps = g_rd.eps, qstride = hs, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
+            vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u,
+            per = uint(g_rd.n_heads + nkh), kvrow = kvrow, qrow = kvrow, cosrow = uint(g_rd.cos_elems))
+        if (g_rd.kv16) {
+            enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (g_rd.n_heads + nkh) * nrows)
+        } else {
+            enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, (g_rd.n_heads + nkh) * nrows)
+        }
+        rd_ts(raw, "a:qknrope")
+    } elif ((g_rd_nrow_bisect & 4) == 0) {
+        if (g_rd.qk_norm) {
+            //! the per-head q/k rms over every row's projection row before the rope, a head-row a workgroup, the row index riding the workgroup id
+            let nkh = kvd / int64(hs)
+            let nlfin = rd_norm_final()   // nolint:LINT021 — the norm-row offsets multiply 64-bit before the push-field narrow
+            let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
+            var pcn = QkRmsArgs(hs = hs, nh = uint(g_rd.n_heads), nkvh = uint(nkh),
+                qstride = kvrow, kstride = kvrow, kbase = uint(qd),
+                qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
+                eps = g_rd.eps, qhs = hs)
+            enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
+            rd_ts(raw, "a:qkn")
+        }
         if (g_rd.kv16) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
         } else {

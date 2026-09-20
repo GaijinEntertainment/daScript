@@ -13,6 +13,11 @@ require _resident_regions
 let private REGIONS_FILE = "Qwen3-0.6B-Q8_0.gguf"
 
 [test]
+def test_regions_interleaved_single_steps_qwen3(t : T?) {
+    cell_regions_interleaved_single_steps(t, REGIONS_FILE)
+}
+
+[test]
 def test_regions_batched_steps_qwen3(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE)
 }
