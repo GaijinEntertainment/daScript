@@ -2086,7 +2086,7 @@ def private rd_ensure_n_rail : bool {
         break if (!ok)
         ok = (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)
             && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)
-            && (!L.gu_on || ensure_q8_gemv_gu_n_cls()))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
+            && (!L.gu_on || q8_gemv_gu_n_ensure(nb)))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an N-column GEMV class or the N-row fused add+rms+requant class declined on this device - the batched step runs a row at a time\n")
@@ -2121,7 +2121,7 @@ def private rd_ensure_n_sets {
             let dim = g_rd.dim
             let p1 = arena_planes(L.f1, L.b1)
             let p3 = arena_planes(L.f3, L.b3)
-            L.s_gu_n = set_q8_gemv_gu_n_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            L.s_gu_n = q8_gemv_gu_n_set(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * g_rd.nb, (dim / 32l) * 4l * g_rd.nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
         }
@@ -2259,7 +2259,7 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     let act = L.gelu ? ACT_GELU : ACT_SILU
     if (L.gu_on && (g_rd_nrow_bisect & 10) == 0) {
         var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = nr)
-        enc_q8_gemv_gu_n_cls(raw, h, L.s_gu_n, pcgu, hid / 32l)
+        q8_gemv_gu_n_enc(raw, h, L.s_gu_n, pcgu, hid / 32l)
         rd_ts(raw, "a:gu")
         var pcd_gu = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(dim))
         rd_gemv_n(L.f2, raw, h, L.s_down, pcd_gu, dim)

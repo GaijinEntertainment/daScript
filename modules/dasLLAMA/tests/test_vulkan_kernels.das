@@ -6796,7 +6796,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
         upload_region_at(xsd_n, 0l, addr<uint8 const?>(xsh[0]), xs_bytes * int64(ncols))
         nan_sentinel_upload(oqd_n, oq_bytes * int64(ncol_max))
         nan_sentinel_upload(osd_n, os_bytes * int64(ncol_max))
-        var s_n = set_q8_gemv_gu_n_cls(fixed_array(gqd, gsd, uqd, usd, xqd_n, xsd_n, oqd_n, osd_n),
+        var s_n = q8_gemv_gu_n_set(fixed_array(gqd, gsd, uqd, usd, xqd_n, xsd_n, oqd_n, osd_n),
             fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes * int64(ncols), xs_bytes * int64(ncols), oq_bytes * int64(ncol_max), os_bytes * int64(ncol_max)),
             fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
         var raw2 = alloc_cmd()
@@ -6804,7 +6804,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var h2 : VkHaz
         var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act, ncols = uint(ncols))
-        enc_q8_gemv_gu_n_cls(raw2, h2, s_n, pc, int64(nblk_out))
+        q8_gemv_gu_n_enc(raw2, h2, s_n, pc, int64(nblk_out))
         vhz_dep(raw2, h2, 64u, 0u, true)
         let nsbase = nbase + oq_bytes * int64(ncol_max)   // the N-row run's scale slots past its quant slots
         cmd_copy_range(raw2, oqd_n, 0l, host.buf, nbase, oq_bytes * int64(ncol_max))
@@ -6870,16 +6870,18 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
 
 [test]
 def test_vkd_q8_gemv_gu_n(t0 : T?) {
-    t0 |> run("fused q8 gate-up GEMV's N-column form == the one-row kernel a column at a time, bit for bit; the one-row rows == the CPU chain") <| @(t : T?) {
+    t0 |> run("fused q8 gate-up GEMV's N-column stamps == the one-row kernel a column at a time, bit for bit; the one-row rows == the CPU chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_q8_gemv_gu_cls() && ensure_q8_gemv_gu_n_cls())) {
+            if (!(ensure_q8_gemv_gu_cls() && q8_gemv_gu_n_ensure(8l))) {
                 t |> skip("no Vulkan device")
                 return
             }
-            q8_gemv_gu_n_run(t, 512, 1152, 4, ACT_SILU)
-            q8_gemv_gu_n_run(t, 256, 512, 3, ACT_GELU)   //! an odd count: a subgroup idles in the quantize
-            q8_gemv_gu_n_run(t, 512, 1024, 8, ACT_SILU)   //! every subgroup a column at 32 lanes, two rounds at 64
-            q8_gemv_gu_n_run(t, 256, 512, 5, ACT_SILU)
+            q8_gemv_gu_n_run(t, 512, 1152, 4, ACT_SILU)   //! the four-column stamp full
+            q8_gemv_gu_n_run(t, 256, 512, 3, ACT_GELU)   //! an odd count on the four-column stamp: its last lane re-dots column 2, a subgroup idles in the quantize
+            q8_gemv_gu_n_run(t, 512, 1024, 8, ACT_SILU)   //! the eight-column stamp full: every subgroup a column at 32 lanes, two rounds at 64
+            q8_gemv_gu_n_run(t, 256, 512, 5, ACT_SILU)   //! the eight-column stamp at five: three lanes re-dot column 4
+            q8_gemv_gu_n_run(t, 256, 512, 2, ACT_GELU)   //! the two-column stamp full
+            q8_gemv_gu_n_run(t, 256, 512, 1, ACT_SILU)   //! one column on the two-column stamp: the one-row command's shape through the N form
         } else {
             t |> skip("dasVulkan not present")
         }

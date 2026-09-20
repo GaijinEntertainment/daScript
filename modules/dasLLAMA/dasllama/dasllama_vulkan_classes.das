@@ -10188,21 +10188,23 @@ struct GuNArgs {
     ncols : uint  //! the rows the command steps at once, 1 to GU_N_COLS: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
 }
 
-let GU_N_COLS = 8u   //! the fused gate-up N form's column slots: its slabs hold this many, and a wider count is clamped to it
+let GU_N_COLS = 8u   //! the fused gate-up N form's widest stamp: its slabs hold this many columns, and a wider count is clamped to it
 
-//! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both
-//! planes against each column's row off one weight word, and a subgroup a column activates and quantizes its block
-[vk_dispatch(name = "q8_gemv_gu_n_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvGuN {
+//! the fused gate-up GEMV's N-column forms: a workgroup owns 32 output rows for every column, its subgroups dot both
+//! planes against `NC` columns' rows off one weight word (a column past the live ones dots the last live column again,
+//! its loads beside the live ones and its block never stored), and a subgroup a column activates and quantizes its block
+[ |> template_struct_instance]
+class template Q8GemvGuNT {
     @ssbo @binding = 0 @role = "weight" gq4 : array<uint4>     // gate quant words, vec4 view
     @ssbo @binding = 1 @role = "weight" gsh : array<float16>   // gate per-block f16 scales
     @ssbo @binding = 2 @role = "weight" uq4 : array<uint4>     // up quant words, vec4 view
     @ssbo @binding = 3 @role = "weight" ush : array<float16>   // up per-block f16 scales
-    @ssbo @binding = 4 xqw : array<uint>      // the normed rows' Q8_0 quant words, a row a column
+    @ssbo @binding = 4 xq4 : array<uint4>     // the normed rows' Q8_0 quant words, vec4 view, a row a column
     @ssbo @binding = 5 axs : array<float>     // ... and their per-block scales
     @ssbo @binding = 6 outq : array<int8>     // the activated hidden rows' Q8_0 quants (the down GEMV's feed), d apart
     @ssbo @binding = 7 outs : array<float>    // ... and their per-block scales, d / 32 apart
     @push_constant pa : GuNArgs
+    @template_constant NC : int = 4       //!< the columns a lane dots per weight word
     @workgroup wg_g : float[256]   //! the block's gate dots, [column x 32 rows]
     @workgroup wg_u : float[256]   //! ... and up dots
 
@@ -10216,11 +10218,11 @@ class Q8GemvGuN {
         let bpp = gl_SubgroupSize / 2u
         var accg : float[8]
         var accu : float[8]
-        for [unroll] (c in range(8)) {
+        for [unroll] (c in range(NC)) {
             accg[c] = 0.0
             accu[c] = 0.0
         }
-        let ncols = min(pa.ncols, GU_N_COLS)
+        let clast = pa.ncols - 1u
         var bi0 = 0u
         while (bi0 < nb) {
             let b = bi0 + lane / 2u
@@ -10229,35 +10231,30 @@ class Q8GemvGuN {
                 let uv = uq4[(ub0 + bi0) * 2u + lane]
                 let gs = float(gsh[gb0 + b])
                 let us = float(ush[ub0 + b])
-                for [unroll] (c in range(8)) {
-                    if (uint(c) < ncols) {   // the guard stays: the unroll is eight columns wide whatever the count, and a dead column's two dots cost more than its branch (PERF_LEDGER.md, the 2026-09-20 section)
-                        let xbase = (uint(c) * nb + bi0) * 8u + lane * 4u
-                        let x0 = xqw[xbase]
-                        let x1 = xqw[xbase + 1u]
-                        let x2 = xqw[xbase + 2u]
-                        let x3 = xqw[xbase + 3u]
-                        var gd = sdot4(gv.x, x0)
-                        gd += sdot4(gv.y, x1)
-                        gd += sdot4(gv.z, x2)
-                        gd += sdot4(gv.w, x3)
-                        var ud = sdot4(uv.x, x0)
-                        ud += sdot4(uv.y, x1)
-                        ud += sdot4(uv.z, x2)
-                        ud += sdot4(uv.w, x3)
-                        gd += subgroupShuffleXor(gd, 1u)
-                        ud += subgroupShuffleXor(ud, 1u)
-                        if (lane % 2u == 0u) {
-                            let xs = axs[uint(c) * nb + b]
-                            accg[c] += float(gd) * gs * xs
-                            accu[c] += float(ud) * us * xs
-                        }
+                for [unroll] (c in range(NC)) {
+                    let xb = min(uint(c), clast) * nb
+                    let xv = xq4[(xb + bi0) * 2u + lane]
+                    var gd = sdot4(gv.x, xv.x)
+                    gd += sdot4(gv.y, xv.y)
+                    gd += sdot4(gv.z, xv.z)
+                    gd += sdot4(gv.w, xv.w)
+                    var ud = sdot4(uv.x, xv.x)
+                    ud += sdot4(uv.y, xv.y)
+                    ud += sdot4(uv.z, xv.z)
+                    ud += sdot4(uv.w, xv.w)
+                    gd += subgroupShuffleXor(gd, 1u)
+                    ud += subgroupShuffleXor(ud, 1u)
+                    if (lane % 2u == 0u) {
+                        let xs = axs[xb + b]
+                        accg[c] += float(gd) * gs * xs
+                        accu[c] += float(ud) * us * xs
                     }
                 }
             }
             bi0 += bpp
         }
-        for [unroll] (c in range(8)) {
-            if (uint(c) < ncols) {
+        for [unroll] (c in range(NC)) {
+            if (uint(c) < pa.ncols) {
                 let g = subgroupAdd(accg[c])
                 let u = subgroupAdd(accu[c])
                 if (subgroupElect()) {
@@ -10268,7 +10265,7 @@ class Q8GemvGuN {
         }
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_gemv_gu_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let row0 = gl_WorkGroupID.x * 32u
         let nsg = gl_NumSubgroups
@@ -10279,7 +10276,7 @@ class Q8GemvGuN {
             k++
         }
         barrier()
-        let ncols = min(pa.ncols, GU_N_COLS)
+        let ncols = min(pa.ncols, uint(NC))
         var c = gl_SubgroupID
         while (c < ncols) {
             let lane = gl_SubgroupInvocationID
@@ -10295,6 +10292,48 @@ class Q8GemvGuN {
             }
             c += nsg
         }
+    }
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n2_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN2 : Q8GemvGuNT {
+    override NC = 2
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n4_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN4 : Q8GemvGuNT {
+    override NC = 4
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n8_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN8 : Q8GemvGuNT {
+    override NC = 8
+}
+
+//! the fused gate-up N stamps for up to `nb` columns
+def q8_gemv_gu_n_ensure(nb : int64 = 8l) : bool {
+    var ok = ensure_q8_gemv_gu_n2_cls()
+    if (nb > 2l) {
+        ok = ok && ensure_q8_gemv_gu_n4_cls()
+    }
+    if (nb > 4l) {
+        ok = ok && ensure_q8_gemv_gu_n8_cls()
+    }
+    return ok
+}
+
+//! the stamps share one layout
+def q8_gemv_gu_n_set(bufs : uint64 const[8]; sizes : int64 const[8]; gbits : uint const[8]) : VkDescriptorSet
+    => set_q8_gemv_gu_n2_cls(bufs, sizes, gbits)
+
+//! the stamp for `pc.ncols` columns: the narrowest that holds them
+def q8_gemv_gu_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GuNArgs; wgs : int64) {
+    if (pc.ncols <= 2u) {
+        enc_q8_gemv_gu_n2_cls(raw, h, set_, pc, wgs)
+    } elif (pc.ncols <= 4u) {
+        enc_q8_gemv_gu_n4_cls(raw, h, set_, pc, wgs)
+    } else {
+        enc_q8_gemv_gu_n8_cls(raw, h, set_, pc, wgs)
     }
 }
 
