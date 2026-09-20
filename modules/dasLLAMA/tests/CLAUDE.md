@@ -364,7 +364,11 @@ gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
 suppressed id pinned on every row),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
-the biased add partner beside the plain step) and
+the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
+against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and
+the quants bit for bit - the sandwich column at gemma-3-1b's and gemma-2's widths and the plain
+column; the N-row command's sites take the row kernel where the one-row command's take the
+epilogue) and
 `test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
 the gpt-oss arc's arms - `test_vkd_ar_class` and `test_vkd_ar_rq_fused` add the biased add
 partner (the output bias row past the norm row) against the seam and the CPU oracle,

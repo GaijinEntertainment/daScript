@@ -6484,45 +6484,64 @@ def private q8_gemv_pleact_run(t; n, d : int) {
 //! `ArRq`'s math on the CPU: the residual row updated in place, the normed (or raw) row's Q8_0 blocks; the counter
 //! reads zero after the dispatch; a poisoned expectation must red
 //! `abias`: the GEMV's row takes a bias row out of the norms plane (its third row here) before the add - gpt-oss's attention output bias
+//! the GEMV-epilogue cells' host fixture: the q8 weight plane over `d` rows of `n`, the Q8_0 x row, the residual row,
+//! and three rows in the norms plane - the post norm at 0, the next norm at d, the bias row at 2d
+struct GemvArFixture {
+    wqh : array<uint>
+    wsh : array<uint>
+    xqh : array<uint>
+    xsh : array<float>
+    xres : array<float>
+    wnh : array<float>
+}
+
+def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
+    let nb = n / 32
+    let totblk = d * nb
+    var fx : GemvArFixture
+    fx.wqh |> resize(totblk * 8)
+    fx.wsh |> resize(totblk / 2 + 1)
+    fx.xqh |> resize(nb * 8)
+    fx.xsh |> resize(nb)
+    fx.xres |> resize(d)
+    fx.wnh |> resize(3 * d)
+    for (i in range(totblk * 8)) {
+        fx.wqh[i] = hash_word(uint(i) * 3u + 29u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        fx.wsh[i] = ws_word(uint(i) * 5u + 1u)
+    }
+    for (i in range(nb * 8)) {
+        fx.xqh[i] = hash_word(uint(i) * 13u + 7u)
+    }
+    for (i in range(nb)) {
+        fx.xsh[i] = 0.2 + float(i % 7) * 0.1
+    }
+    for (i in range(d)) {
+        fx.xres[i] = float((i * 43) % 97) * 0.4 - 19.0
+    }
+    for (i in range(2 * d)) {
+        fx.wnh[i] = 0.8 + float(i % 9) * 0.05
+    }
+    for (i in range(d)) {
+        fx.wnh[2 * d + i] = float((i * 31) % 67) * 0.6 - 19.8   //! a bias of the residual row's own magnitude, so a dropped add is loud
+    }
+    return <- fx
+}
+
 def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {   // nolint:STYLE037 — one linear fixture: the GEMV, the residual step and its quant, each with its bar
     let nb = n / 32
     let totblk = d * nb
     let nblk_out = d / 32
     let wq_bytes = int64(totblk) * 32l
     let ws_bytes = int64(totblk) * 2l
-    var wqh : array<uint>
-    var wsh : array<uint>
-    var xqh : array<uint>
-    var xsh : array<float>
-    var xres : array<float>
-    var wnh : array<float>
-    wqh |> resize(totblk * 8)
-    wsh |> resize(totblk / 2 + 1)
-    xqh |> resize(nb * 8)
-    xsh |> resize(nb)
-    xres |> resize(d)
-    wnh |> resize(3 * d)   // two norm rows - the post norm at 0, the next norm at d - then the bias row at 2d
-    for (i in range(totblk * 8)) {
-        wqh[i] = hash_word(uint(i) * 3u + 29u)
-    }
-    for (i in range(totblk / 2 + 1)) {
-        wsh[i] = ws_word(uint(i) * 5u + 1u)
-    }
-    for (i in range(nb * 8)) {
-        xqh[i] = hash_word(uint(i) * 13u + 7u)
-    }
-    for (i in range(nb)) {
-        xsh[i] = 0.2 + float(i % 7) * 0.1
-    }
-    for (i in range(d)) {
-        xres[i] = float((i * 43) % 97) * 0.4 - 19.0
-    }
-    for (i in range(2 * d)) {
-        wnh[i] = 0.8 + float(i % 9) * 0.05
-    }
-    for (i in range(d)) {
-        wnh[2 * d + i] = float((i * 31) % 67) * 0.6 - 19.8   //! a bias of the residual row's own magnitude, so a dropped add is loud
-    }
+    var fx <- q8_gemv_ar_fixture(n, d)
+    var wqh <- fx.wqh
+    var wsh <- fx.wsh
+    var xqh <- fx.xqh
+    var xsh <- fx.xsh
+    var xres <- fx.xres
+    var wnh <- fx.wnh
     let xq_bytes = int64(nb) * 32l
     let xs_bytes = int64(nb) * 4l
     let r_bytes = int64(d) * 4l
@@ -6699,6 +6718,146 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 1152, true, false, 1.0, true)    // a sandwich-normed wo step with an output bias: the bias rides the partner before its norm
             q8_gemv_ar_run(t, 512, 2816, true, false, 1.0)    // gemma-4-26B's wo step: two whole four-column rounds and a three-column tail
             q8_gemv_ar_run(t, 512, 2816, false, false, 1.0)   // the same width on the plain step (the four-column arm's tail)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the epilogue's residual step against the row kernel fed the GEMV's own y row - the same residual row and norms, the
+//! updated row, the quants and the scales bit for bit: the N-row command's sites take the row kernel where the one-row
+//! command's take the epilogue, and the regions cells hold the two commands bit for bit
+def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
+    let nb = n / 32
+    let totblk = d * nb
+    let nblk_out = d / 32
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    var fx <- q8_gemv_ar_fixture(n, d)
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let r_bytes = int64(d) * 4l
+    let wn_bytes = int64(3 * d) * 4l
+    let oq_bytes = int64(d)
+    let os_bytes = int64(nblk_out) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let xsd = make_device_buf(xs_bytes)
+    let yd = make_device_buf(r_bytes)
+    let xr_epi = make_device_buf(r_bytes)
+    let xr_row = make_device_buf(r_bytes)
+    let wnd = make_device_buf(wn_bytes)
+    let oq_epi = make_device_buf(oq_bytes)
+    let os_epi = make_device_buf(os_bytes)
+    let oq_row = make_device_buf(oq_bytes)
+    let os_row = make_device_buf(os_bytes)
+    let cntd = make_device_buf(16l)
+    var zeros : array<uint>
+    zeros |> resize(4)
+    let leg_bytes = r_bytes + oq_bytes + os_bytes
+    var host = make_host_buf(leg_bytes * 2l, true, [cached = true])
+    var xr_epi_h : array<float>
+    var xr_row_h : array<float>
+    var oq_epi_h : array<uint>
+    var oq_row_h : array<uint>
+    var os_epi_h : array<float>
+    var os_row_h : array<float>
+    xr_epi_h |> resize(d)
+    xr_row_h |> resize(d)
+    oq_epi_h |> resize(d / 4)
+    oq_row_h |> resize(d / 4)
+    os_epi_h |> resize(nblk_out)
+    os_row_h |> resize(nblk_out)
+    let eps = 1.0e-6
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(fx.wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(fx.wsh[0]), ws_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(fx.xqh[0]), xq_bytes)
+        upload_region_at(xsd, 0l, addr<uint8 const?>(fx.xsh[0]), xs_bytes)
+        upload_region_at(xr_epi, 0l, addr<uint8 const?>(fx.xres[0]), r_bytes)
+        upload_region_at(xr_row, 0l, addr<uint8 const?>(fx.xres[0]), r_bytes)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(fx.wnh[0]), wn_bytes)
+        upload_region_at(cntd, 0l, addr<uint8 const?>(zeros[0]), 16l)
+        nan_sentinel_upload(yd, r_bytes)
+        nan_sentinel_upload(oq_epi, oq_bytes)
+        nan_sentinel_upload(os_epi, os_bytes)
+        nan_sentinel_upload(oq_row, oq_bytes)
+        nan_sentinel_upload(os_row, os_bytes)
+        var s_epi = set_q8_gemv_ar_cls(fixed_array(wqd, wsd, xqd, xsd, yd, xr_epi, wnd, oq_epi, os_epi, cntd),
+            fixed_array(wq_bytes, ws_bytes, xq_bytes, xs_bytes, r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes, 16l),
+            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 64u, 16u))
+        var s_row = set_cls_ar_rq_b(fixed_array(xr_row, yd, wnd, oq_row, os_row),
+            fixed_array(r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes),
+            fixed_array(128u, 16u, 0u, 256u, 256u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
+            pre_on = pre_on ? 1u : 0u, no_norm = 0u, eps = eps, ascale = ascale, abias_on = 0u, aboff = uint(2 * d))
+        let rpw = 4l * g_gpu.rows_per_wg
+        enc_q8_gemv_ar_cls(raw2, h2, s_epi, pc, (int64(d) + rpw - 1l) / rpw)
+        var pca = ArArgs(dim = uint(d), add_on = 1u, woff = uint(d), eps = eps, ascale = ascale, pre_on = pre_on ? 1u : 0u, pwoff = 0u)
+        enc_cls_ar_rq_b(raw2, h2, s_row, pca, 1l)   //! the row kernel reads the y row the epilogue's GEMV wrote (the hazard on binding 16)
+        vhz_dep(raw2, h2, 32u | 64u | 128u | 256u, 0u, true)
+        cmd_copy_whole(raw2, xr_epi, host.buf, r_bytes)
+        cmd_copy_range(raw2, oq_epi, 0l, host.buf, r_bytes, oq_bytes)
+        cmd_copy_range(raw2, os_epi, 0l, host.buf, r_bytes + oq_bytes, os_bytes)
+        cmd_copy_range(raw2, xr_row, 0l, host.buf, leg_bytes, r_bytes)
+        cmd_copy_range(raw2, oq_row, 0l, host.buf, leg_bytes + r_bytes, oq_bytes)
+        cmd_copy_range(raw2, os_row, 0l, host.buf, leg_bytes + r_bytes + oq_bytes, os_bytes)
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        let hp = intptr(host.mapped)
+        memcpy(addr<void?>(xr_epi_h[0]), host.mapped, r_bytes)
+        memcpy(addr<void?>(oq_epi_h[0]), reinterpret<void?>(hp + uint64(r_bytes)), oq_bytes)
+        memcpy(addr<void?>(os_epi_h[0]), reinterpret<void?>(hp + uint64(r_bytes + oq_bytes)), os_bytes)
+        memcpy(addr<void?>(xr_row_h[0]), reinterpret<void?>(hp + uint64(leg_bytes)), r_bytes)
+        memcpy(addr<void?>(oq_row_h[0]), reinterpret<void?>(hp + uint64(leg_bytes + r_bytes)), oq_bytes)
+        memcpy(addr<void?>(os_row_h[0]), reinterpret<void?>(hp + uint64(leg_bytes + r_bytes + oq_bytes)), os_bytes)
+    }
+    let tag = "n {n} d {d} pre {pre_on ? 1 : 0}"
+    t |> success(xr_epi_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the epilogue wrote the residual row")
+    t |> success(xr_row_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the row kernel wrote the residual row")
+    let badx = mismatch_exact(xr_epi_h, xr_row_h)
+    var first = -1
+    for (i in range(d)) {
+        if (xr_epi_h[i] != xr_row_h[i]) {
+            first = i
+            break
+        }
+    }
+    if (first >= 0) {
+        to_log(LOG_INFO, "q8 gemv+ar twin {tag}: first residual mismatch at {first}: epilogue {xr_epi_h[first]} row kernel {xr_row_h[first]}\n")
+    }
+    t |> success(badx == 0, "q8 gemv+ar twin {tag}: the epilogue's residual row == the row kernel's ({badx} of {d} off)")
+    let bads = mismatch_exact(os_epi_h, os_row_h)
+    t |> success(bads == 0, "q8 gemv+ar twin {tag}: the epilogue's block scales == the row kernel's ({bads} of {nblk_out} off)")
+    let badq = mismatch_qbytes(oq_epi_h, oq_row_h, 0)
+    t |> success(badq == 0, "q8 gemv+ar twin {tag}: the epilogue's quants == the row kernel's ({badq} of {d} off)")
+    delete fx
+    delete zeros
+    delete xr_epi_h
+    delete xr_row_h
+    delete oq_epi_h
+    delete oq_row_h
+    delete os_epi_h
+    delete os_row_h
+}
+
+[test]
+def test_vkd_q8_gemv_ar_row_twin(t0 : T?) {
+    t0 |> run("q8 GEMV epilogue's residual step == the row kernel fed the same y row, bit for bit (the sandwich step and the plain step)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_ar_cls() || !ensure_cls_ar_rq_b()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            q8_gemv_ar_twin_run(t, 512, 1152, true, 1.0)    // gemma-3-1b's wo step
+            q8_gemv_ar_twin_run(t, 2048, 2304, true, 1.0)   // gemma-2-2b's wo step: eight heads of 256 into the 2304 residual
+            q8_gemv_ar_twin_run(t, 9216, 2304, true, 1.0)   // gemma-2-2b's down step
+            q8_gemv_ar_twin_run(t, 512, 1024, false, 0.5)   // a plain step under an output scale
         } else {
             t |> skip("dasVulkan not present")
         }

@@ -283,3 +283,18 @@ host-cached row's K/V back and lands its logits; it returns false when a row fin
 two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
+
+### 2.2ap The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
+
+The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
+row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
+(`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
+regions cells hold the two commands bit for bit. The forms share their reduce, their four-column
+round and their requant word for word, and a driver still decides per kernel whether a multiply
+feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
+ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
+apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
+spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
+contraction to choose; the plain column carries no multiply before its add.
+`test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
+fed the GEMV's own y row.

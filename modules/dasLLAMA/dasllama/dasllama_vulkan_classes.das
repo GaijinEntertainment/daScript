@@ -115,6 +115,7 @@ class ArBase : RmsWgBase {
 
     // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
     // partner is normed first (its own reduce, the row stash holding it meanwhile)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
     def accum_row(base : uint) : float {
         var ainv = 0.0
         if (pa.pre_on != 0u && pa.add_on != 0u) {
@@ -132,8 +133,7 @@ class ArBase : RmsWgBase {
         var k = gl_LocalInvocationID.x
         if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
             while (k < pa.dim) {
-                let a = wn[pa.pwoff + k] * (row[k] * ainv)
-                let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
+                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], row[k] * ainv, xs[base + k]) * pa.ascale : xs[base + k]
                 xs[base + k] = vv
                 row[k] = vv
                 ss += vv * vv
@@ -9972,6 +9972,7 @@ class Q8GemvAr : RmsWgBase {
     def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
     def epilogue {   // nolint:STYLE038 — one row pass: the sandwich column, the four-column round, the requant
         let tid = gl_LocalInvocationID.x
         var ainv = 0.0
@@ -9989,8 +9990,7 @@ class Q8GemvAr : RmsWgBase {
         var k = tid
         if (pa.pre_on != 0u) {   //! the sandwich form, a column a round
             while (k < pa.d) {
-                let a = wn[pa.pwoff + k] * (ya(k) * ainv)
-                let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
+                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], ya(k) * ainv, xres[k]) * pa.ascale : xres[k]
                 xres[k] = vv
                 ss += vv * vv
                 k += 256u
