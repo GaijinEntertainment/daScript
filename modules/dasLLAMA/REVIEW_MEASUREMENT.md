@@ -38,9 +38,10 @@ rather than as the released exe. A rig leg is the backend arm a board cell runs 
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
-builds only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das` built by `daspkg release`) or a board cell
-produced it.** A served turn is one whole request an engine serves, whatever the modality; a turn
-wall is its wall.
+builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
+or as the `-jit` script, the two serving one code path and reading alike - or a board cell did.**
+A served turn is one whole request an engine serves, whatever the modality; a turn wall is its
+wall.
 
 **A `-jit` A/B pair's arms keep their absolute rates in the commit message or PR body that states
 the pair.**
