@@ -709,12 +709,7 @@ def dot_iq3s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; x
                     let sgn = int(kqrow[kqo + 72l + blk * 4l + l])
                     let g1 = grid[int(kqrow[kqo + blk * 8l + 2l * l]) | ((qh << int(8l - 2l * l)) & 256)]
                     let g2 = grid[int(kqrow[kqo + blk * 8l + 2l * l + 1l]) | ((qh << int(7l - 2l * l)) & 256)]
-                    for (j in range64(4l)) {
-                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
-                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
-                        ib += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
-                        ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
-                    }
+                    ib += grid_octet_dot(g1, g2, sgn, xqp, ab + l * 8l)
                 }
                 isum += int(int8(ksrow[kso + 4l + blk])) * ib
             }
@@ -745,13 +740,7 @@ def dot_iq2s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; x
                     let idx = int(kqrow[kqo + b * 4l + l]) | ((qh << int(8l - 2l * l)) & 0x300)
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    var ig = 0
-                    for (j in range64(4l)) {
-                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
-                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
-                        ig += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
-                        ig += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
-                    }
+                    let ig = grid_octet_dot(g1, g2, sgn, xqp, ab + l * 8l)
                     isum += int(ksrow[kso + 4l + 2l * b + l / 2l]) * ig
                 }
             }
@@ -783,13 +772,7 @@ def dot_iq2xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
                     let idx = int(w16 & 511u)
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    var ig = 0
-                    for (j in range64(4l)) {
-                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
-                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
-                        ig += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
-                        ig += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
-                    }
+                    let ig = grid_octet_dot(g1, g2, sgn, xqp, ab + l * 8l)
                     isum += int(ksrow[kso + 4l + 2l * b + l / 2l]) * ig
                 }
             }
@@ -822,12 +805,7 @@ def dot_iq2xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?;
                     let idx = int(kqrow[kqo + blk * 8l + l])
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    for (j in range64(4l)) {
-                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
-                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
-                        ib += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
-                        ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
-                    }
+                    ib += grid_octet_dot(g1, g2, sgn, xqp, ab + l * 8l)
                 }
                 isum += int(ksrow[kso + 4l + blk]) * ib
             }
@@ -912,12 +890,7 @@ def dot_iq3xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?;
                     let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
                     let g1 = grid[int(kqrow[kqo + blk * 8l + 2l * l])]
                     let g2 = grid[int(kqrow[kqo + blk * 8l + 2l * l + 1l])]
-                    for (j in range64(4l)) {
-                        let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
-                        let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
-                        ib += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(xqp[ab + l * 8l + j])
-                        ib += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(xqp[ab + l * 8l + 4l + j])
-                    }
+                    ib += grid_octet_dot(g1, g2, sgn, xqp, ab + l * 8l)
                 }
                 isum += int(int8(ksrow[kso + 4l + blk])) * ib
             }
@@ -1173,11 +1146,7 @@ def private dequant_iq3s_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, 
                     let q2p = q1p + 1l
                     let g1 = grid[int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l]) | ((qh << int(8l - 2l * l)) & 256)]
                     let g2 = grid[int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l]) | ((qh << int(7l - 2l * l)) & 256)]
-                    let kb = sbi * 256l + blk * 32l + l * 8l
-                    for (j in range64(4l)) {
-                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-                    }
+                    store_grid_pair(dst, sbi * 256l + blk * 32l + l * 8l, db, g1, g2, sgn)
                 }
             }
         }
@@ -1207,11 +1176,7 @@ def private dequant_iq3xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr
                     let q2p = q1p + 1l
                     let g1 = grid[int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l])]
                     let g2 = grid[int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l])]
-                    let kb = sbi * 256l + blk * 32l + l * 8l
-                    for (j in range64(4l)) {
-                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-                    }
+                    store_grid_pair(dst, sbi * 256l + blk * 32l + l * 8l, db, g1, g2, sgn)
                 }
             }
         }
@@ -1288,11 +1253,7 @@ def private dequant_iq2s_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, 
                     let idx = int(kqg[qb + ((ip / 4l) * mr + r) * 4l + ip % 4l]) | ((qh << int(8l - 2l * l)) & 0x300)
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    let kb = sbi * 256l + b * 32l + l * 8l
-                    for (j in range64(4l)) {
-                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-                    }
+                    store_grid_pair(dst, sbi * 256l + b * 32l + l * 8l, db, g1, g2, sgn)
                 }
             }
         }
@@ -1318,11 +1279,7 @@ def private dequant_iq2xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
                     let idx = int(w16 & 511u)
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    let kb = sbi * 256l + b * 32l + l * 8l
-                    for (j in range64(4l)) {
-                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-                    }
+                    store_grid_pair(dst, sbi * 256l + b * 32l + l * 8l, db, g1, g2, sgn)
                 }
             }
         }
@@ -1350,11 +1307,7 @@ def private dequant_iq2xxs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr
                     let idx = int(kqg[qb + gc * 4l + l])
                     let g1 = grid[idx * 2]
                     let g2 = grid[idx * 2 + 1]
-                    let kb = sbi * 256l + b * 32l + l * 8l
-                    for (j in range64(4l)) {
-                        dst[kb + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                        dst[kb + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-                    }
+                    store_grid_pair(dst, sbi * 256l + b * 32l + l * 8l, db, g1, g2, sgn)
                 }
             }
         }

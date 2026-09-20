@@ -59,6 +59,12 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
   returning the literal (`iq4nl_lut()`, `iq3s_grid()`, `iq2s_grid2()`: a direct
   `return fixed_array<T>(...)`, no local), never as a module global - a team-lane kernel reads a
   `let` global as zero; the global twin (`IQ4NL_LUT = iq4nl_lut()`) serves tests and oracles.
+- A signed-grid format (two grid words per octet, a sign byte flipping element j) shares the
+  octet with the five it joins: `grid_octet_dot` (the dot), `store_grid_pair` (the dequant),
+  `store_grid_panel_pair` + `sign_masks_iq` (the panel unpack) - what a new member writes is
+  the grid-index and sign derivation alone. The helpers are generic in their operand ON PURPOSE:
+  a generic instantiates in the caller's partition, and the split-module JIT inlines within a
+  partition only - a plain kqformat function would be a real call per eight weights.
 - `dasllama_gemm_schema.das`: `kq_reads_packed_planes` - the one packed-versus-panel predicate
   the batch cell generator, the probe, the tests and the bench all read.
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream

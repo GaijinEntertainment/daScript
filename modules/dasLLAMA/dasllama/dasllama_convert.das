@@ -921,10 +921,7 @@ def dequant_iq3xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
             let sgn = int(signs[int((aux >> uint(7l * l)) & 127u)])
             let g1 = grid[int(kq[kqo + b * 8l + 2l * l])]
             let g2 = grid[int(kq[kqo + b * 8l + 2l * l + 1l])]
-            for (j in range64(4l)) {
-                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-            }
+            store_grid_pair(dst, doff + b * 32l + l * 8l, db, g1, g2, sgn)
         }
     }
 }
@@ -960,10 +957,7 @@ def dequant_iq3s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : ar
             let sgn = int(kq[kqo + 72l + b * 4l + l])
             let g1 = grid[int(kq[kqo + b * 8l + 2l * l]) | ((qh << int(8l - 2l * l)) & 256)]
             let g2 = grid[int(kq[kqo + b * 8l + 2l * l + 1l]) | ((qh << int(7l - 2l * l)) & 256)]
-            for (j in range64(4l)) {
-                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-            }
+            store_grid_pair(dst, doff + b * 32l + l * 8l, db, g1, g2, sgn)
         }
     }
 }
@@ -998,10 +992,7 @@ def dequant_iq2s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : ar
             let idx = int(kq[kqo + b * 4l + l]) | ((qh << int(8l - 2l * l)) & 0x300)
             let g1 = grid[idx * 2]
             let g2 = grid[idx * 2 + 1]
-            for (j in range64(4l)) {
-                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-            }
+            store_grid_pair(dst, doff + b * 32l + l * 8l, db, g1, g2, sgn)
         }
     }
 }
@@ -1037,10 +1028,7 @@ def dequant_iq2xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : a
             let idx = int(w16 & 511u)
             let g1 = grid[idx * 2]
             let g2 = grid[idx * 2 + 1]
-            for (j in range64(4l)) {
-                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-            }
+            store_grid_pair(dst, doff + b * 32l + l * 8l, db, g1, g2, sgn)
         }
     }
 }
@@ -1080,10 +1068,7 @@ def dequant_iq2xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
             let idx = int(kq[kqo + b * 8l + l])
             let g1 = grid[idx * 2]
             let g2 = grid[idx * 2 + 1]
-            for (j in range64(4l)) {
-                dst[doff + b * 32l + l * 8l + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
-                dst[doff + b * 32l + l * 8l + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
-            }
+            store_grid_pair(dst, doff + b * 32l + l * 8l, db, g1, g2, sgn)
         }
     }
 }

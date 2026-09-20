@@ -430,6 +430,55 @@ def ksigns_iq2xs() : uint8[128] {
 //! Main-context copy of ksigns_iq2xs.
 let KSIGNS_IQ2XS = ksigns_iq2xs()
 
+//! The signed-grid octet the grid formats share (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs): two grid
+//! words carry eight magnitudes and `sgn`'s bit j flips element j. Generic in the operand so each
+//! calling module instantiates its own copy - the split-module JIT inlines within a partition only.
+def grid_octet_dot(g1, g2 : uint; sgn : int; a : auto(TA) const?; ab : int64) : int {
+    var acc = 0
+    unsafe {
+        for (j in range64(4l)) {
+            let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
+            let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
+            acc += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(a[ab + j])
+            acc += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(a[ab + 4l + j])
+        }
+    }
+    return acc
+}
+
+//! The octet dequantized: dst[at .. at + 8) = db * magnitude * sign, ggml's own float order.
+def store_grid_pair(var dst : auto(TD); at : int64; db : float; g1, g2 : uint; sgn : int) {
+    unsafe {
+        for (j in range64(4l)) {
+            dst[at + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+            dst[at + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+        }
+    }
+}
+
+//! The 16 byte-select masks the panel unpacks negate through: mask n selects the bytes whose
+//! sign bit is set in nibble n. Built per call, never a module global (a forked worker reads a
+//! `let` global as zero).
+def sign_masks_iq() : uint[16] => fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu, 0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu, 0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu, 0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+
+//! The octet into the byte-expanded signed panel at superblock base `ob`: each word's four
+//! magnitudes negated byte-wise through the sign nibble's mask (odd 1..15, no cross-byte carry),
+//! one u32 store each; element l*8 + half*4 + t of (blk, row r) lands in the lo half below 16.
+def store_grid_panel_pair(var dst : auto(TD)?; ob, blk, l, r, mr : int64; g1, g2 : uint; sgn : int; smask : uint[16]) {
+    unsafe {
+        let m1 = smask[sgn & 15]
+        let m2 = smask[(sgn >> 4) & 15]
+        let e1 = l * 8l
+        let e2 = l * 8l + 4l
+        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+        wp1[0] = (g1 ^ m1) + (m1 & 0x01010101u)
+        wp2[0] = (g2 ^ m2) + (m2 & 0x01010101u)
+    }
+}
+
 //! Halve an f16 bit pattern exactly (exponent decrement; subnormal results truncate-halve).
 //! The IQ3_XXS transcode folds upstream's 0.25 into the stored d (one half) and the grid (the other).
 def f16_half_bits(u : uint) : uint {

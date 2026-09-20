@@ -457,10 +457,7 @@ def repack_grp(_f : KqTag_iq2xxs; var kq : uint8?; var ks : uint8?; n, d, mr : i
 //! the mask table and negates byte-wise (magnitudes are odd 1..15 - no cross-byte carry).
 def unpack_iq3s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let grid = iq3s_grid()
-    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
-                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
-                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
-                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    let smask = sign_masks_iq()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 104l * mr
@@ -476,19 +473,7 @@ def unpack_iq3s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64)
                         let q2p = q1p + 1l
                         let i1 = int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l]) | ((qh << int(8l - 2l * l)) & 256)
                         let i2 = int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l]) | ((qh << int(7l - 2l * l)) & 256)
-                        let m1 = smask[sgn & 15]
-                        let m2 = smask[(sgn >> 4) & 15]
-                        let w1 = (grid[i1] ^ m1) + (m1 & 0x01010101u)
-                        let w2 = (grid[i2] ^ m2) + (m2 & 0x01010101u)
-                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
-                        let e1 = l * 8l
-                        let e2 = l * 8l + 4l
-                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
-                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
-                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
-                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
-                        wp1[0] = w1
-                        wp2[0] = w2
+                        store_grid_panel_pair(dst, ob, blk, l, r, mr, grid[i1], grid[i2], sgn, smask)
                     }
                 }
             }
@@ -506,10 +491,7 @@ def repack_grp(_f : KqTag_iq3xxs; var kq : uint8?; var ks : uint8?; n, d, mr : i
 def unpack_iq3xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let grid = iq3xxs_grid()
     let ksg = ksigns_iq2xs()
-    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
-                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
-                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
-                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    let smask = sign_masks_iq()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 96l * mr
@@ -527,19 +509,7 @@ def unpack_iq3xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int6
                         let q2p = q1p + 1l
                         let i1 = int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l])
                         let i2 = int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l])
-                        let m1 = smask[sgn & 15]
-                        let m2 = smask[(sgn >> 4) & 15]
-                        let w1 = (grid[i1] ^ m1) + (m1 & 0x01010101u)
-                        let w2 = (grid[i2] ^ m2) + (m2 & 0x01010101u)
-                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
-                        let e1 = l * 8l
-                        let e2 = l * 8l + 4l
-                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
-                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
-                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
-                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
-                        wp1[0] = w1
-                        wp2[0] = w2
+                        store_grid_panel_pair(dst, ob, blk, l, r, mr, grid[i1], grid[i2], sgn, smask)
                     }
                 }
             }
@@ -552,10 +522,7 @@ def unpack_iq3xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int6
 //! byte-expanded signed panel (the fmt-33/34 panel form; d is pre-eighth-ed at transcode).
 def unpack_iq2s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let grid = iq2s_grid2()
-    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
-                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
-                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
-                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    let smask = sign_masks_iq()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 72l * mr
@@ -569,19 +536,7 @@ def unpack_iq2s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64)
                         let sgn = int(kqg[qb + ((sp / 4l) * mr + r) * 4l + sp % 4l])
                         let ip = blk * 4l + l
                         let ix = (int(kqg[qb + ((ip / 4l) * mr + r) * 4l + ip % 4l]) | ((qh << int(8l - 2l * l)) & 0x300)) * 2
-                        let m1 = smask[sgn & 15]
-                        let m2 = smask[(sgn >> 4) & 15]
-                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
-                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
-                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
-                        let e1 = l * 8l
-                        let e2 = l * 8l + 4l
-                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
-                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
-                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
-                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
-                        wp1[0] = w1
-                        wp2[0] = w2
+                        store_grid_panel_pair(dst, ob, blk, l, r, mr, grid[ix], grid[ix + 1], sgn, smask)
                     }
                 }
             }
@@ -594,10 +549,7 @@ def unpack_iq2s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64)
 def unpack_iq2xs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let grid = iq2xs_grid2()
     let ksgn = ksigns_iq2xs()
-    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
-                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
-                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
-                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    let smask = sign_masks_iq()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 64l * mr
@@ -609,19 +561,7 @@ def unpack_iq2xs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64
                         let w16 = uint(kqg[qb + ((lp / 4l) * mr + r) * 4l + lp % 4l]) | (uint(kqg[qb + ((lp / 4l) * mr + r) * 4l + lp % 4l + 1l]) << 8u)
                         let sgn = int(ksgn[int(w16 >> 9u)])
                         let ix = int(w16 & 511u) * 2
-                        let m1 = smask[sgn & 15]
-                        let m2 = smask[(sgn >> 4) & 15]
-                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
-                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
-                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
-                        let e1 = l * 8l
-                        let e2 = l * 8l + 4l
-                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
-                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
-                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
-                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
-                        wp1[0] = w1
-                        wp2[0] = w2
+                        store_grid_panel_pair(dst, ob, blk, l, r, mr, grid[ix], grid[ix + 1], sgn, smask)
                     }
                 }
             }
@@ -635,10 +575,7 @@ def unpack_iq2xs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64
 def unpack_iq2xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
     let grid = iq2xxs_grid2()
     let ksgn = ksigns_iq2xs()
-    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
-                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
-                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
-                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    let smask = sign_masks_iq()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 64l * mr
@@ -651,18 +588,7 @@ def unpack_iq2xxs_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int6
                     for (l in range64(4l)) {
                         let sgn = int(ksgn[int((aux >> uint(7l * l)) & 127u)])
                         let ix = int(kqg[qb + gc * 4l + l]) * 2
-                        let m1 = smask[sgn & 15]
-                        let m2 = smask[(sgn >> 4) & 15]
-                        let w1 = (grid[ix] ^ m1) + (m1 & 0x01010101u)
-                        let w2 = (grid[ix + 1] ^ m2) + (m2 & 0x01010101u)
-                        let e1 = l * 8l
-                        let e2 = l * 8l + 4l
-                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
-                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
-                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
-                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
-                        wp1[0] = w1
-                        wp2[0] = w2
+                        store_grid_panel_pair(dst, ob, blk, l, r, mr, grid[ix], grid[ix + 1], sgn, smask)
                     }
                 }
             }
