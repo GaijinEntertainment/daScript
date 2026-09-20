@@ -40,7 +40,7 @@ require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_convert
-require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
+require dasllama/dasllama_gguf   // kq_transcode_superblock — the kq fixture pack rail
 require daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this probe races exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_tune
@@ -662,38 +662,16 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
     fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
     blkb |> resize(fmt == 2l ? 84l : (fmt == 23l ? 82l : (fmt == 24l ? 74l : (fmt == 25l ? 66l : (fmt == 4l || fmt == 40l || fmt == 45l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l || fmt == 33l ? 110l : (fmt == 34l ? 98l : 210l)))))))))
+    var kf : KqFmt
+    if (!kq_fmt_of_id(int(fmt), kf)) {
+        panic("build_kq_fixture: no kq format carries kernel id {fmt}")
+    }
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
             pack_kq_disk_block(fmt, blkb, base)
             let sb = r * fx.nsb + s
-            if (fmt == 4l) {
-                transcode_q4k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 5l) {
-                transcode_q5k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 40l) {
-                transcode_q40_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 44l) {
-                transcode_iq4xs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 3l) {
-                transcode_q3k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 33l) {
-                transcode_iq3s_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 34l) {
-                transcode_iq3xxs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 45l) {
-                transcode_iq4nl_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 2l) {
-                transcode_q2k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 23l) {
-                transcode_iq2s_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 24l) {
-                transcode_iq2xs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 25l) {
-                transcode_iq2xxs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } else {
-                transcode_q6k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            }
+            kq_transcode_superblock(kf, blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
         }
     }
     delete blkb

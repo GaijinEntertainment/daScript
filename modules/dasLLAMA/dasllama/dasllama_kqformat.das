@@ -12,6 +12,10 @@ module dasllama_kqformat shared public
 
 require dasllama/dasllama_lint public
 require daslib/enum_trait   // kq_fmt_of_name walks the enum
+require daslib/ast
+require daslib/ast_boost
+require daslib/templates_boost
+require daslib/macro_boost
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
@@ -34,6 +38,63 @@ enum KqFmt : uint8 {
     iq2xs
     iq2xxs
     mx4
+}
+
+//! One empty tag type per KqFmt member - the overload key of every per-format function family
+//! (the plane codec, the grp repack); `kq_fmt_stamp` binds the member's tag, so a family is a
+//! set of overloads and a format without one fails to compile at the stamp, never at runtime.
+struct KqTag_q8 {}
+struct KqTag_k4 {}
+struct KqTag_k5 {}
+struct KqTag_k6 {}
+struct KqTag_q40 {}
+struct KqTag_q51 {}
+struct KqTag_iq4xs {}
+struct KqTag_k3 {}
+struct KqTag_iq3s {}
+struct KqTag_iq3xxs {}
+struct KqTag_iq4nl {}
+struct KqTag_k2 {}
+struct KqTag_iq2s {}
+struct KqTag_iq2xs {}
+struct KqTag_iq2xxs {}
+struct KqTag_mx4 {}
+
+[call_macro(name = "kq_fmt_stamp")]
+class KqFmtStamp : AstCallMacro {
+    //! ``kq_fmt_stamp(fmt) <| $(F) { ... }`` stamps the block once per ``KqFmt`` member behind a ladder on
+    //! ``fmt``, ``F`` bound to the member's tag value (``KqTag_k4()`` ...), so a per-format overload family
+    //! called on ``F`` resolves at compile time and a member without an overload fails the compile.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 2 && expr.arguments[1] is ExprMakeBlock, prog, expr.at,
+            "expecting kq_fmt_stamp(fmt) followed by a block")
+        macro_verify(expr.arguments[0] is ExprVar, prog, expr.at,
+            "kq_fmt_stamp takes a plain variable for the format, got {describe(expr.arguments[0])}")
+        let emb = expr.arguments[1] as ExprMakeBlock
+        macro_verify(emb._block is ExprBlock, prog, expr.at, "expecting a block body, got {describe(emb._block)}")
+        var blk = emb._block as ExprBlock
+        macro_verify(length(blk.arguments) == 1 && empty(blk.finalList), prog, expr.at,
+            "expecting one block argument, the format tag, and no finally section")
+        let tp = "{blk.arguments[0].name}"
+        var fmt = expr.arguments[0]
+        var ladder : ExpressionPtr
+        for (f in type<KqFmt>) {
+            let tagName = "KqTag_{f}"
+            var arm = bind_block_argument(blk, tp, qmacro($c(tagName)()), expr.at)
+            if (ladder == null) {
+                ladder = arm
+            } else {
+                ladder = qmacro_expr() {
+                    if ($e(fmt) == $v(f)) {
+                        $e(arm)
+                    } else {
+                        $e(ladder)
+                    }
+                }
+            }
+        }
+        return ladder
+    }
 }
 
 // upstream (ggml) tensor data type ids - the subset the loader reads

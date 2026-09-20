@@ -301,3 +301,29 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
     }
 }
+
+// a per-format family with two named overloads and a generic fallback - what the stamp resolves
+def private stamp_family(_f : KqTag_k4) : string => "k4"
+def private stamp_family(_f : KqTag_q51) : string => "q51"
+def private stamp_family(_f : auto(TT)) : string => "other:{typeinfo typename(type<TT>)}"
+
+def private stamped_family(fmt : KqFmt) : string {
+    var r = ""
+    kq_fmt_stamp(fmt) <| $(F) {
+        r = stamp_family(F)
+    }
+    return r
+}
+
+[test]
+def test_kq_fmt_stamp(t : T?) {
+    t |> run("kq_fmt_stamp binds every member's tag, so a per-format overload family resolves at compile time") <| @(t : T?) {
+        t |> equal("k4", stamped_family(KqFmt.k4))
+        t |> equal("q51", stamped_family(KqFmt.q51))
+        for (f in type<KqFmt>) {
+            if (f != KqFmt.k4 && f != KqFmt.q51) {
+                t |> equal("other:dasllama_kqformat::KqTag_{f} const", stamped_family(f), "{f}")
+            }
+        }
+    }
+}

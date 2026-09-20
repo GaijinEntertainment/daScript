@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_math_default   // dot_k4q8, the K-quant leaf per row
-require dasllama/dasllama_convert   // transcode_q4k_superblock, quantize_q8_k_into_ptr
+require dasllama/dasllama_convert   // kq_transcode_superblock, quantize_q8_k_into_ptr
 require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
 require daslib/f16_cvt
 require daslib/jobque_boost
@@ -567,7 +567,7 @@ def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows,
     ks |> resize(rows * nsb * ssb)
     for (r in range64(rows)) {
         for (s in range64(nsb)) {
-            transcode_q4k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            kq_transcode_superblock(KqFmt.k4, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
         }
         var st = seed + uint(r) * 0x85EBCA6Bu
         for (i in range64(nsb * qsb)) {

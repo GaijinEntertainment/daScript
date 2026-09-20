@@ -1470,8 +1470,9 @@
     and `kq_repack_mr<id>` fields; `dasllama_kqformat.das`'s `kq_desc` row carries every
     per-format number, and the load's cursors and sizing, the streamed fill, the kq matmul
     dispatch, `embed_row`, the repack walkers, the device gather, the PLE tripwire, the embed
-    trim, the image walk and the bake identity index the table through it. What stays per format
-    by hand: `transcode_kq_tensor`'s bulk-transcode call, `kq_fmt_of`'s native-knob gates, the
+    trim, the image walk and the bake identity index the table through it; the bulk transcode
+    (`gguf_transcode_kq`) walks the row and stamps the per-format codec through `kq_fmt_stamp`.
+    What stays per format by hand: `kq_fmt_of`'s native-knob gates, the
     grouped-row branch of `moe_gpu_gather_stack_kq`, and the kernel-side int-id ladders
     (`kq_rows_fn`, `kq_gemv_kernel`, the `dasllama_math_gen.das` family selects) - the last are
     item 133's.

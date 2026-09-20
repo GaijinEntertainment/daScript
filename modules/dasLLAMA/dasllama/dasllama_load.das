@@ -1104,55 +1104,15 @@ def fill_plan_take(var out : array<FillJob>) {
 def private transcode_kq_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt;
                                 var kq : array<uint8>; var ks : array<uint8>; eloff, n, src_off : int64;
                                 var scratch : array<float>) : string {
-    if (fmt == KqFmt.k4) {
-        gguf_transcode_q4k(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "k4 transcode (Q4_K)"
-    } elif (fmt == KqFmt.k5) {
-        if (gguf_tensor_type(m, name) == GGML_TYPE_Q5_K) {
-            gguf_transcode_q5k(m, bytes, name, kq, ks, eloff, n, src_off)
-            return "k5 transcode (Q5_K)"
-        }
+    if (fmt == KqFmt.k5 && gguf_tensor_type(m, name) != GGML_TYPE_Q5_K) {
         // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
         scratch |> grow_resize(n)
         gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
         quantize_k5_plane(scratch, n, kq, ks, eloff)
         return "k5 RE-ENCODE (Q5_0 dequant+quant)"
-    } elif (fmt == KqFmt.k6) {
-        gguf_transcode_q6k(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "k6 transcode (Q6_K)"
-    } elif (fmt == KqFmt.q40) {
-        gguf_transcode_q40(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "q40 transcode (Q4_0)"
-    } elif (fmt == KqFmt.iq4xs) {
-        gguf_transcode_iq4xs(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq4xs transcode (IQ4_XS)"
-    } elif (fmt == KqFmt.k3) {
-        gguf_transcode_q3k(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "k3 transcode (Q3_K)"
-    } elif (fmt == KqFmt.iq3s) {
-        gguf_transcode_iq3s(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq3s transcode (IQ3_S)"
-    } elif (fmt == KqFmt.iq3xxs) {
-        gguf_transcode_iq3xxs(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq3xxs transcode (IQ3_XXS)"
-    } elif (fmt == KqFmt.iq4nl) {
-        gguf_transcode_iq4nl(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq4nl transcode (IQ4_NL)"
-    } elif (fmt == KqFmt.k2) {
-        gguf_transcode_q2k(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "k2 transcode (Q2_K)"
-    } elif (fmt == KqFmt.iq2s) {
-        gguf_transcode_iq2s(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq2s transcode (IQ2_S)"
-    } elif (fmt == KqFmt.iq2xs) {
-        gguf_transcode_iq2xs(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq2xs transcode (IQ2_XS)"
-    } elif (fmt == KqFmt.iq2xxs) {
-        gguf_transcode_iq2xxs(m, bytes, name, kq, ks, eloff, n, src_off)
-        return "iq2xxs transcode (IQ2_XXS)"
     }
-    gguf_transcode_q51(m, bytes, name, kq, ks, eloff, n, src_off)
-    return "q51 transcode (Q5_1)"
+    gguf_transcode_kq(m, bytes, name, fmt, kq, ks, eloff, n, src_off)
+    return g_conv_prof ? "{fmt} transcode ({ggml_type_name(kq_ggml_type(fmt))})" : "kq transcode"
 }
 
 // The q8-family half of the same tree: verbatim Q8_0, exact Q5_0->Q8, or dequant+requant.

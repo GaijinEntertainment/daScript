@@ -448,7 +448,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(20)
-        transcode_q4k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k4, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q4k_superblock(blkb, 0l, want, 0l)
@@ -465,7 +465,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(160)
         ks |> resize(20)
-        transcode_q5k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k5, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q5k_superblock(blkb, 0l, want, 0l)
@@ -482,7 +482,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(192)
         ks |> resize(18)
-        transcode_q6k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k6, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q6k_superblock(blkb, 0l, want, 0l)
@@ -499,7 +499,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
-        transcode_q40_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.q40, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_q40_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -514,7 +514,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(20)
-        transcode_iq4xs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq4xs, blkb, 0l, kq, 0l, ks, 0l)
         for (blk in range(8)) {
             t |> equal(iq4xs_sc(ks, 0l, int64(blk)), SYNTH_SC[blk] - 32, "decoded sub-scale is ls - 32, signed")
         }
@@ -532,7 +532,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(96)
         ks |> resize(18)
-        transcode_q3k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k3, blkb, 0l, kq, 0l, ks, 0l)
         for (i in range(16)) {
             t |> equal(int(int8(ks[i])), SYNTH_SC[i % 8] - 32, "decoded sub-scale is scale - 32, signed")
         }
@@ -550,7 +550,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(104)
         ks |> resize(20)
-        transcode_iq3s_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq3s, blkb, 0l, kq, 0l, ks, 0l)
         for (b in range(8)) {
             t |> equal(int(int8(ks[4 + b])), 1 + 2 * (SYNTH_SC[b] & 15), "decoded sub-scale is 1 + 2s")
         }
@@ -574,7 +574,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_q2k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k2, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_k2_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -590,7 +590,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_iq2xs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2xs, blkb, 0l, kq, 0l, ks, 0l)
         for (g in range(16)) {
             t |> equal(int(ks[4 + g]), 1 + 2 * (SYNTH_SC[g % 8] & 15), "decoded strip is 1 + 2s")
         }
@@ -616,7 +616,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_iq2xxs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2xxs, blkb, 0l, kq, 0l, ks, 0l)
         for (b in range(8)) {
             t |> equal(int(ks[4 + b]), 1 + 2 * (SYNTH_SC[b % 8] & 15), "decoded per-32 strip is 1 + 2s")
         }
@@ -642,7 +642,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(72)
         ks |> resize(20)
-        transcode_iq2s_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2s, blkb, 0l, kq, 0l, ks, 0l)
         for (g in range(16)) {
             t |> equal(int(ks[4 + g]), 1 + 2 * (SYNTH_SC[g % 8] & 15), "decoded strip is 1 + 2s")
         }
@@ -669,7 +669,7 @@ def test_kq_transcode_planes(t : T?) {
             var ks : array<uint8>
             kq |> resize(20)
             ks |> resize(4)
-            transcode_q51_block(blkb, 0l, kq, 0l, ks, 0l)
+            kq_transcode_superblock(KqFmt.q51, blkb, 0l, kq, 0l, ks, 0l)
             var dst : array<float>
             dst |> resize(32)
             dequant_q51_plane_block(kq, 0l, ks, 0l, dst, 0l)
@@ -703,7 +703,7 @@ def private q51_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, 
     for (r in range64(rows)) {
         for (b in range64(nb)) {
             let blkb <- build_q51_block(int(r * 31l + b))
-            transcode_q51_block(blkb, 0l, kq, (r * nb + b) * 20l, ks, (r * nb + b) * 4l)
+            kq_transcode_superblock(KqFmt.q51, blkb, 0l, kq, (r * nb + b) * 20l, ks, (r * nb + b) * 4l)
         }
     }
 }
@@ -975,31 +975,31 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     ks |> resize(nsb * ssb)
     for (s in range64(nsb)) {
         if (fmt == 4) {
-            transcode_q4k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 5) {
-            transcode_q5k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 40) {
-            transcode_q40_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 44) {
-            transcode_iq4xs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 3) {
-            transcode_q3k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 33) {
-            transcode_iq3s_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 34) {
-            transcode_iq3xxs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 45) {
-            transcode_iq4nl_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 2) {
-            transcode_q2k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 24) {
-            transcode_iq2xs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 25) {
-            transcode_iq2xxs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 23) {
-            transcode_iq2s_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } else {
-            transcode_q6k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, s * qsb, ks, s * ssb)
         }
     }
     var st = 0x12345u
@@ -1144,31 +1144,31 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         // per-row LCG over the quant payload only (scale planes stay valid f16/int8)
@@ -1292,31 +1292,31 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         // per-row LCG over the quant payload only (scale planes stay valid f16/int8)
@@ -1506,31 +1506,31 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0xDEADBEFu + uint(r) * 0x9E3779Bu
@@ -1746,31 +1746,31 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0x51ED270Bu + uint(r) * 0x85EBCA6Bu
@@ -2043,31 +2043,31 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0x7F4A7C15u + uint(r) * 0x85EBCA6Bu
@@ -2636,7 +2636,7 @@ def test_iq3xxs_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(96)
         ks |> resize(20)
-        transcode_iq3xxs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq3xxs, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_iq3xxs_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -2674,7 +2674,7 @@ def test_iq4nl_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
-        transcode_iq4nl_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq4nl, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_iq4nl_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -2700,7 +2700,7 @@ def test_iq4nl_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
-        transcode_iq4nl_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq4nl, blkb, 0l, kq, 0l, ks, 0l)
         var main_dst : array<float>
         main_dst |> resize(256)
         dequant_iq4nl_plane_superblock(kq, 0l, ks, 0l, main_dst, 0l)
@@ -2895,9 +2895,9 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
     for (r in range64(d)) {
         for (sbi in range64(nsb)) {
             if (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
             }
         }
         var st = 0xC0FFEEu + uint(r) * 0x9E3779Bu

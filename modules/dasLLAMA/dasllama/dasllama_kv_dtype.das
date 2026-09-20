@@ -25,18 +25,6 @@ enum KVDtype {
 //! identity at zero runtime cost (byte-strided arithmetic, ABI identical to uint8).
 typedef distinct TQ4B = uint8
 
-def private stamp_arm(blk : ExprBlock?; tp : string; var bound : ExpressionPtr; at : LineInfo) : ExpressionPtr {
-    var body = clone_expression(blk)
-    var bblk = body as ExprBlock
-    while (!empty(bblk.arguments)) {
-        bblk.arguments |> erase(0)
-    }
-    remove_deref(tp, body)
-    var rules : Template
-    rules |> replaceVariable(tp, bound)
-    return rules |> apply_template(at, body, false)
-}
-
 [call_macro(name = "kv_codec_side")]
 class KvCodecSide : AstCallMacro {
     //! ``kv_codec_side(dt, p) <| $(tp) { ... }`` stamps the block once per ``KVDtype`` member behind a
@@ -55,10 +43,10 @@ class KvCodecSide : AstCallMacro {
         let tp = "{blk.arguments[0].name}"
         var dt = expr.arguments[0]
         var p = expr.arguments[1]
-        var arm_q8 = stamp_arm(blk, tp, qmacro($e(p)), expr.at)
-        var arm_tq4 = stamp_arm(blk, tp, qmacro(unsafe(reinterpret<TQ4B const?>($e(p)))), expr.at)
-        var arm_f16 = stamp_arm(blk, tp, qmacro(unsafe(reinterpret<uint16 const?>($e(p)))), expr.at)
-        var arm_f32 = stamp_arm(blk, tp, qmacro(unsafe(reinterpret<float const?>($e(p)))), expr.at)
+        var arm_q8 = bind_block_argument(blk, tp, qmacro($e(p)), expr.at)
+        var arm_tq4 = bind_block_argument(blk, tp, qmacro(unsafe(reinterpret<TQ4B const?>($e(p)))), expr.at)
+        var arm_f16 = bind_block_argument(blk, tp, qmacro(unsafe(reinterpret<uint16 const?>($e(p)))), expr.at)
+        var arm_f32 = bind_block_argument(blk, tp, qmacro(unsafe(reinterpret<float const?>($e(p)))), expr.at)
         return qmacro_block() {
             if ($e(dt) == KVDtype.q8_0) {
                 $e(arm_q8)

@@ -94,11 +94,11 @@ def private build_kq_region(fmt : int; var kq : array<uint8>; var ks : array<uin
     for (r in range64(rows)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = seed + uint(r) * 0x85EBCA6Bu

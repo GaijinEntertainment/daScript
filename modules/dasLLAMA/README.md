@@ -132,7 +132,7 @@ modules/dasLLAMA/
     dasllama_math.das         #   numeric primitives + matmul/dot kernels + Q8·Q8 kernel-backend registry + dispatch shaping
     dasllama_kv_dtype.das     #   the KV codec tag (KVDtype), the tq4 pointer newtype and the kv_codec_side stamp (the K x V pointer matrix, spelled once)
     dasllama_kv_codec.das     #   the KV-cache codec — per cache format (f16/q8_0/tq4) the WHOLE family: store/read/dot/axpy (+ tq4 FWHT rotation)
-    dasllama_kqformat.das     #   format identity — the KqFmt enum, per-format strides/geometry/stream codes, the one enum->kernel-id bridge
+    dasllama_kqformat.das     #   format identity — the KqFmt enum, its descriptor rows, the per-format tag structs and the kq_fmt_stamp macro that binds them
     dasllama_rope.das         #   RoPE angle/table generation (theta schedule, rope_freqs, every materialized layout)
     dasllama_gpu_tier.das     #   the device-cooperation SPI — hook types, install slots, want/status (vulkan implements; metal uses common's override registries)
     dasllama_repack.das       #   disk-order -> compute-order kernel-layout transforms (grp<mr> interleaves, extractors, panel unpacks)

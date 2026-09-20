@@ -68,14 +68,19 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 
-- `transcode_<fmt>_superblock(bytes, bo, kq, kqo, ks, kso)` - the per-superblock disk -> plane
-  split, array form (what the tests drive).
+- `KqTag_<fmt>` (`dasllama_kqformat.das`) - the format's empty tag struct beside the others; it
+  is the overload key every per-format family resolves on, and `kq_fmt_stamp(fmt) <| $(F)`
+  binds it, so a member without an overload fails the compile at the stamp.
+- `kq_transcode_p(_f : KqTag_<fmt>; src, kq, ks)` - the ONE codec of the format: one stride
+  unit (the superblock; q51's 32-block) from its disk bytes at `src` into the quant plane at
+  `kq` and the scale plane at `ks`, pointer form. The array form the tests drive is the shared
+  `kq_transcode_superblock(fmt, bytes, bo, kq, kqo, ks, kso)` (bounds-checked, then the stamp),
+  and the bulk loader is the shared `gguf_transcode_kq` (`dasllama_gguf.das`: the descriptor
+  row sizes the slice, `kq_transcode_check` + `guard_dst` + `with_tensor_view` +
+  `maybe_parallel_for` over units, the stamp hoisted outside the loop) - neither needs an edit.
 - `dequant_<fmt>_plane_superblock` - the reference dequant off the planes, in ggml's own float
   order (`dequantize_row_<fmt>` decides the order; match it operation for operation so the
   plane dequant is bit-exact against the file dequant).
-- `gguf_transcode_<fmt>` (`dasllama_gguf.das`) - the bulk, threaded, pointerized twin of the
-  superblock transcode (`kq_transcode_check` + `guard_dst` + `with_tensor_view` +
-  `maybe_parallel_for` over superblocks).
 - `tests/test_kquant.das`: a hand-packed synthetic superblock (`build_<fmt>_block`, written in
   the PACK direction so a misread cannot cancel; `|=` is not defined on `uint8`, so build each
   byte in an `int` and store it once) and an arm asserting the plane dequant equals the
@@ -98,8 +103,8 @@ the descriptor row's strides. A new lattice format therefore needs no edit in th
 in `kq_desc` sizes, fills, streams, serializes and dispatches it. What still keys on the format
 by hand:
 
-- `dasllama_load.das`: `kq_fmt_of` (GGML type -> tag, with the native-knob gates) and
-  `transcode_kq_tensor` (the per-format bulk transcode call).
+- `dasllama_load.das`: `kq_fmt_of` (GGML type -> tag, with the native-knob gates); the bulk
+  transcode call (`transcode_kq_tensor`) is generic over the descriptor row.
 - `dasllama_layout.das`: the grouped-row branch of `moe_gpu_gather_stack_kq` - a format whose
   repack is not the uniform four-byte-column form needs its verbatim arm there; and
   `metal_blob_scale_plane`, where a format whose scale row already IS the device form (q40,
