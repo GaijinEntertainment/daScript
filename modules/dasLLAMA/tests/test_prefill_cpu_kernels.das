@@ -137,11 +137,11 @@ def private kq_row_dot(fmt : int; kq : array<uint8>; ks : array<uint8>; row, nsb
         let xsp = addr<float const?>(xs[soff])
         let xbp = addr<int const?>(xbs[boff])
         if (fmt == 4) {
-            return dot_k4q8(kqr, ksr, xqp, xsp, xbp, n)
+            return dot_kq(KqTag_k4(), kqr, ksr, xqp, xsp, xbp, n)
         } elif (fmt == 40) {
-            return dot_q40q8(kqr, ksr, xqp, xsp, xbp, n)
+            return dot_kq(KqTag_q40(), kqr, ksr, xqp, xsp, xbp, n)
         }
-        return dot_k6q8(kqr, ksr, xqp, xsp, xbp, n)
+        return dot_kq(KqTag_k6(), kqr, ksr, xqp, xsp, xbp, n)
     }
 }
 

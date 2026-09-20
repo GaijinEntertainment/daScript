@@ -13,7 +13,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
 require dasllama/dasllama_convert
 require dasllama/dasllama_math   // pin_kernel_backend — the layout arm needs disk-order planes
-require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel arms gate them vs the plane dequant
+require dasllama/dasllama_math_default   // dot_kq on the format tag — the kernel arms gate it vs the plane dequant
 require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack oracle
 require dasllama/dasllama_repack     // repack_k4/k5/k6/q40_grp + repack_q51_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
@@ -111,7 +111,7 @@ def private build_q6k_block() : array<uint8> {
 }
 
 // loop-generated test labels: "k4"/"k5"/"k6" for the K-quants, "q40" for fmt 40, "iq4xs" for
-// fmt 44 — matches the kernel/repack function names (dot_q40q8, repack_q40_grp) so failures grep 1:1
+// fmt 44 — matches the format tag names (KqTag_q40, KqFmt.q40) so failures grep 1:1
 // iq3xxs synthetic superblock: 98B IQ3_XXS disk block — f16 d, 64 grid-index bytes, 8 x aux32
 // (4x7-bit ksigns indices + a 4-bit scale in the top nibble). Any byte pattern is legal.
 def private iq3xxs_qs_pat(i : int) : int => (i * 13 + 5) % 256
@@ -1061,31 +1061,31 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     var got = 0.0
     unsafe {
         if (fmt == 4) {
-            got = dot_k4q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_k4(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 5) {
-            got = dot_k5q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_k5(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 40) {
-            got = dot_q40q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_q40(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 44) {
-            got = dot_iq4xs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq4xs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 3) {
-            got = dot_k3q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_k3(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 33) {
-            got = dot_iq3s_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq3s(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 34) {
-            got = dot_iq3xxs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq3xxs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 45) {
-            got = dot_iq4nl_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq4nl(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 2) {
-            got = dot_k2q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_k2(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 24) {
-            got = dot_iq2xs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq2xs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 25) {
-            got = dot_iq2xxs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq2xxs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } elif (fmt == 23) {
-            got = dot_iq2s_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_iq2s(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         } else {
-            got = dot_k6q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+            got = dot_kq(KqTag_k6(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
         }
     }
     let denom = max(abs(float(ref)), 1.0e-6)
@@ -1200,31 +1200,31 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
             let ksr = addr(ks[r * nsb * ssb])
             var want = 0.0
             if (fmt == 4) {
-                want = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 5) {
-                want = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 40) {
-                want = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 44) {
-                want = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 3) {
-                want = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 33) {
-                want = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 34) {
-                want = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 45) {
-                want = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 2) {
-                want = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 24) {
-                want = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 25) {
-                want = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 23) {
-                want = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } else {
-                want = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             }
             if (y[r] != want) {
                 bad++
@@ -1347,31 +1347,31 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
             let kqr = addr(kq[r * nsb * qsb])
             let ksr = addr(ks[r * nsb * ssb])
             if (fmt == 4) {
-                want[r] = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 5) {
-                want[r] = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 40) {
-                want[r] = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 44) {
-                want[r] = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 3) {
-                want[r] = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 33) {
-                want[r] = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 34) {
-                want[r] = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 45) {
-                want[r] = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 2) {
-                want[r] = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 24) {
-                want[r] = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 25) {
-                want[r] = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } elif (fmt == 23) {
-                want[r] = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             } else {
-                want[r] = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                want[r] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
             }
             for (s in range64(nsb)) {
                 if (fmt == 4) {
@@ -1818,44 +1818,44 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
                 let kqr = addr(kq[sb * qsb])
                 let ksr = addr(ks[sb * ssb])
                 if (fmt == 4) {
-                    want_sh[r * d + row] = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k4q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 5) {
-                    want_sh[r * d + row] = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k5q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 40) {
-                    want_sh[r * d + row] = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_q40q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 44) {
-                    want_sh[r * d + row] = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq4xs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 3) {
-                    want_sh[r * d + row] = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k3q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 33) {
-                    want_sh[r * d + row] = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq3s_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 34) {
-                    want_sh[r * d + row] = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq3xxs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 45) {
-                    want_sh[r * d + row] = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq4nl_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 2) {
-                    want_sh[r * d + row] = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k2q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 24) {
-                    want_sh[r * d + row] = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2xs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 25) {
-                    want_sh[r * d + row] = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2xxs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } elif (fmt == 23) {
-                    want_sh[r * d + row] = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2s_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 } else {
-                    want_sh[r * d + row] = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k6q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
+                    want_sh[r * d + row] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
+                    want_pr[r * d + row] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
                 }
             }
         }

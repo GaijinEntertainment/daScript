@@ -316,7 +316,7 @@ def kq_layout_of(fmt : int) : int64 {
 
 //! One row's dot off the grp<mr> q40 planes, scalar — the q40 stubs' reference body and the
 //! tests' repack oracle (kq_grp_row_dot's q40 sibling; quant plane IS the k4 tiling, only the
-//! scale plane differs). Same float fold order as dot_q40q8.
+//! scale plane differs). Same float fold order as the q40 dot_kq.
 def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -381,7 +381,7 @@ def iq4xs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp
 
 //! One row's dot off the grp<mr> k3 planes, scalar — the k3 stubs' reference body and the repack
 //! oracle: k6's fold (per-16 signed sub-scales, the -4 offset through the activation sums) over
-//! the 2-bit lane + hmask compose. Same float fold order as dot_k3q8.
+//! the 2-bit lane + hmask compose. Same float fold order as the k3 dot_kq.
 def k3_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -421,7 +421,7 @@ def k3_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : 
 
 //! One row's dot off the grp<mr> iq3s planes, scalar — the iq3s stubs' reference body and the
 //! repack oracle: the 26-column layout's per-block grid gather + sign flip, sub-scale (1 + 2s)
-//! per block, no activation-sum term. Same integer regroup and float fold as dot_iq3s_q8.
+//! per block, no activation-sum term. Same integer regroup and float fold as the iq3s dot_kq.
 [unused_argument(xbsp)]
 def iq3s_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -703,7 +703,7 @@ def iq3sq8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp
 
 //! One row's dot off the grp<mr> iq3xxs planes, scalar — the iq3xxs stubs' reference body and
 //! the tile oracle. d_halved x (2ls + 1) per block, signs off the aux 7-bit ksigns indices,
-//! no activation-sum term. Same integer regroup and float fold as dot_iq3xxs_q8.
+//! no activation-sum term. Same integer regroup and float fold as the iq3xxs dot_kq.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqg, noalias = ksg, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def iq3xxs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -844,7 +844,7 @@ def iq4nlq8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xq
 
 //! One row's dot off the grp<mr> k2 planes, scalar - the k2 stubs' reference body and the
 //! repack oracle: the k4/k5 fold (per-16 nibble sc/min pairs, the min term through the
-//! activation sums) over the in-place 2-bit lanes. Same float fold order as dot_k2q8.
+//! activation sums) over the in-place 2-bit lanes. Same float fold order as the k2 dot_kq.
 def k2_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -914,7 +914,7 @@ def k2q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp :
 
 //! One row's dot off the grp<mr> iq2s planes, scalar - the iq2s stubs' reference body and the
 //! repack oracle: the 18-column layout's per-block grid gather + sign flip, per-16 strips
-//! (1 + 2s) on the eighth-ed d, no activation-sum term. Same fold order as dot_iq2s_q8.
+//! (1 + 2s) on the eighth-ed d, no activation-sum term. Same fold order as the iq2s dot_kq.
 [unused_argument(xbsp)]
 def iq2s_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -988,7 +988,7 @@ def iq2sq8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp
 
 //! One row's dot off the grp<mr> iq2xs planes, scalar - the iq2xs stubs' reference body and
 //! the repack oracle: per u16 qs word the 9-bit grid gather + ksigns sign flip, per-16 strips
-//! (1 + 2s) on the eighth-ed d, no activation-sum term. Same fold order as dot_iq2xs_q8.
+//! (1 + 2s) on the eighth-ed d, no activation-sum term. Same fold order as the iq2xs dot_kq.
 [unused_argument(xbsp)]
 def iq2xs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -1062,7 +1062,7 @@ def iq2xsq8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xq
 
 //! One row's dot off the grp<mr> iq2xxs planes, scalar - the iq2xxs stubs' reference body and
 //! the repack oracle: column 2b carries block b's grid bytes, column 2b+1 its aux32 (ksigns +
-//! per-32 scale, mirrored into the strip row). Same fold order as dot_iq2xxs_q8.
+//! per-32 scale, mirrored into the strip row). Same fold order as the iq2xxs dot_kq.
 [unused_argument(xbsp)]
 def iq2xxs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
@@ -1952,76 +1952,152 @@ def private mx4q8_batch_groupn_gen(var yp : float?; wn : uint8 const?; we : uint
 // the stamped kq rows core for the format, row tail (d % mr) row-major via the portable dots
 // (tail rows stay disk-order in the repack)
 def private kq_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
-    let nsb = n / 256l
     let mr = kq_layout_of(fmt)
     let ng = d / mr
     var myp = yp
-    maybe_parallel_for(0, int(ng), matmul_chunks_gemv(int(ng * mr), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
-        if (fmt == 4) {
-            k4q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 5) {
-            k5q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 40) {
-            q40q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 44) {
-            iq4xsq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 3) {
-            k3q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 33) {
-            iq3sq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 34) {
-            iq3xxsq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 45) {
-            iq4nlq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 2) {
-            k2q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 23) {
-            iq2sq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 24) {
-            iq2xsq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } elif (fmt == 25) {
-            iq2xxsq8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
-        } else {
-            k6q8_gemv_gen(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
+    let kf = kq_fmt_of_id(fmt, "kq_kernel_gen")
+    kq_fmt_stamp(kf) $(F) {
+        maybe_parallel_for(0, int(ng), matmul_chunks_gemv(int(ng * mr), get_q8_batch_chunks_per_job(), n * d)) $(rb, re) {
+            kq_gemv_gen(F, myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb) * mr, int64(re) * mr)
         }
+        kq_rows_kernel(F, kf, myp, kqp, ksp, xqp, xsp, xbsp, n, ng * mr, d)
     }
-    unsafe {
-        for (i in range64(ng * mr, d)) {
-            if (fmt == 4) {
-                myp[i] = dot_k4q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 5) {
-                myp[i] = dot_k5q8(kqp + i * nsb * 160l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 40) {
-                myp[i] = dot_q40q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp, xsp, xbsp, n)
-            } elif (fmt == 44) {
-                myp[i] = dot_iq4xs_q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 3) {
-                myp[i] = dot_k3q8(kqp + i * nsb * 96l, ksp + i * nsb * 18l, xqp, xsp, xbsp, n)
-            } elif (fmt == 33) {
-                myp[i] = dot_iq3s_q8(kqp + i * nsb * 104l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 34) {
-                myp[i] = dot_iq3xxs_q8(kqp + i * nsb * 96l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 45) {
-                myp[i] = dot_iq4nl_q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp, xsp, xbsp, n)
-            } elif (fmt == 2) {
-                myp[i] = dot_k2q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 23) {
-                myp[i] = dot_iq2s_q8(kqp + i * nsb * 72l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 24) {
-                myp[i] = dot_iq2xs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } elif (fmt == 25) {
-                myp[i] = dot_iq2xxs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-            } else {
-                myp[i] = dot_k6q8(kqp + i * nsb * 192l, ksp + i * nsb * 18l, xqp, xsp, xbsp, n)
-            }
-        }
-    }
+}
+
+// The stamped kq cores are one overload family per role on the format tag, so the slot walkers
+// pick a format's core through kq_fmt_stamp; q8, q51 and mx4 carry no kq stamp.
+def private kq_gemv_gen(_f : KqTag_q8; var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64) {
+    panic("q8 has no kq gemv stamp")
+}
+
+def private kq_gemv_gen(_f : KqTag_q51; var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64) {
+    panic("q51 has no kq gemv stamp")
+}
+
+def private kq_gemv_gen(_f : KqTag_mx4; var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64) {
+    panic("mx4 has no kq gemv stamp")
+}
+
+def private kq_gemv_gen(_f : KqTag_k4; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    k4q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_k5; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    k5q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_k6; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    k6q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_q40; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    q40q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq4xs; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq4xsq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_k3; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    k3q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq3s; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq3sq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq3xxs; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq3xxsq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq4nl; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq4nlq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_k2; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    k2q8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq2s; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq2sq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq2xs; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq2xsq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_gemv_gen(_f : KqTag_iq2xxs; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    iq2xxsq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
+}
+
+def private kq_tile_gen(_f : KqTag_q8; var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64) {
+    panic("q8 has no kq tile stamp")
+}
+
+def private kq_tile_gen(_f : KqTag_q51; var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64) {
+    panic("q51 has no kq tile stamp")
+}
+
+def private kq_tile_gen(_f : KqTag_mx4; var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64) {
+    panic("mx4 has no kq tile stamp")
+}
+
+def private kq_tile_gen(_f : KqTag_k4; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    k4q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_k5; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    k5q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_k6; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    k6q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_q40; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    q40q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq4xs; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq4xsq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_k3; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    k3q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq3s; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq3sq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq3xxs; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq3xxsq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq4nl; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq4nlq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_k2; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    k2q8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq2s; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq2sq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq2xs; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq2xsq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+}
+
+def private kq_tile_gen(_f : KqTag_iq2xxs; var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64) {
+    iq2xxsq8_tile_gen(yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
 }
 
 // One (group range x token range) cell of the kq batch walk: TB token blocks outer, groups
 // inner, 4-token tile calls + per-token gemv tails (ts pinned 4 — no TMUL kq tile exists). k5/k6
 // tiles unpack a BYTE-EXPANDED scratch panel once per (group, token-block), amortized over TB.
-def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -2032,85 +2108,37 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
         scratch |> reserve(mr * nsb * 256l + 64l)
         scratch |> resize(mr * nsb * 256l + 64l)   // + a cache line: the panel starts 64-aligned, the tile's 32/64-byte loads never straddle one
     }
-    unsafe {
-        var scp = !packed ? addr(scratch[0]) : reinterpret<uint8?>(null)
-        if (!packed) {
-            scp += int64((64ul - (intptr(scp) & 63ul)) & 63ul)
-        }
-        var tb = tb0
-        while (tb < tend) {
-            let tbe = min(tb + TB, tend)
-            let tb4 = tb + ((tbe - tb) / 4l) * 4l
-            for (gi in range(ub, ue)) {
-                let g = int64(gi)
-                let kqg = kqp + g * mr * nsb * qsb
-                let ksg = ksp + g * mr * nsb * ssb
-                var tk = tb
-                if (tk < tb4 && !packed) {
-                    unpack_kq_panel_grp(int64(fmt), kqg, scp, mr, nsb)
-                }
-                while (tk < tb4) {
-                    if (fmt == 4) {
-                        k4q8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 5) {
-                        k5q8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 40) {
-                        q40q8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 44) {
-                        iq4xsq8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 3) {
-                        k3q8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 33) {
-                        iq3sq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 34) {
-                        iq3xxsq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 45) {
-                        iq4nlq8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 2) {
-                        k2q8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 25) {
-                        iq2xxsq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 23) {
-                        iq2sq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } elif (fmt == 24) {
-                        iq2xsq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    } else {
-                        k6q8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
-                    }
-                    tk += 4l
-                }
-                while (tk < tbe) {   // token tail (< 4): the rows core, one position
-                    if (fmt == 4) {
-                        k4q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 5) {
-                        k5q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 40) {
-                        q40q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 44) {
-                        iq4xsq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 3) {
-                        k3q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 33) {
-                        iq3sq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 34) {
-                        iq3xxsq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 45) {
-                        iq4nlq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 2) {
-                        k2q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 23) {
-                        iq2sq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 24) {
-                        iq2xsq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } elif (fmt == 25) {
-                        iq2xxsq8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    } else {
-                        k6q8_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
-                    }
-                    tk++
-                }
+    let kf = kq_fmt_of_id(fmt, "kq_batch_cell_gen")
+    kq_fmt_stamp(kf) $(F) {
+        unsafe {
+            var scp = !packed ? addr(scratch[0]) : reinterpret<uint8?>(null)
+            if (!packed) {
+                scp += int64((64ul - (intptr(scp) & 63ul)) & 63ul)
             }
-            tb += TB
+            var tb = tb0
+            while (tb < tend) {
+                let tbe = min(tb + TB, tend)
+                let tb4 = tb + ((tbe - tb) / 4l) * 4l
+                for (gi in range(ub, ue)) {
+                    let g = int64(gi)
+                    let kqg = kqp + g * mr * nsb * qsb
+                    let ksg = ksp + g * mr * nsb * ssb
+                    var tk = tb
+                    if (tk < tb4 && !packed) {
+                        unpack_kq_panel_grp(int64(fmt), kqg, scp, mr, nsb)
+                    }
+                    let kqsrc = packed ? kqg : reinterpret<uint8 const?>(scp)   // a panel format's tile reads the byte-expanded panel
+                    while (tk < tb4) {
+                        kq_tile_gen(F, myp, kqsrc, ksg, xqp, xsp, xbsp, n, d, g, tk)
+                        tk += 4l
+                    }
+                    while (tk < tbe) {   // token tail (< 4): the rows core, one position
+                        kq_gemv_gen(F, myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + 1l) * mr)
+                        tk++
+                    }
+                }
+                tb += TB
+            }
         }
     }
     delete scratch
@@ -2119,7 +2147,6 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
 // kq_batch slot: batched K-quant GEMM over the repacked planes — group chunks parallel, the
 // cell walk above per chunk, row tails (d % mr) disk-order per token via the portable dots
 def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {
-    let nsb = n / 256l
     let mr = kq_layout_of(fmt)
     let ng = d / mr
     var myp = yp
@@ -2128,36 +2155,11 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
         kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, ub, ue, 0l, ntok)
     }
-    unsafe {
-        for (tk in range64(ntok)) {
-            for (i in range64(ng * mr, d)) {
-                if (fmt == 4) {
-                    myp[tk * d + i] = dot_k4q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 5) {
-                    myp[tk * d + i] = dot_k5q8(kqp + i * nsb * 160l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 40) {
-                    myp[tk * d + i] = dot_q40q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 44) {
-                    myp[tk * d + i] = dot_iq4xs_q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 3) {
-                    myp[tk * d + i] = dot_k3q8(kqp + i * nsb * 96l, ksp + i * nsb * 18l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 33) {
-                    myp[tk * d + i] = dot_iq3s_q8(kqp + i * nsb * 104l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 34) {
-                    myp[tk * d + i] = dot_iq3xxs_q8(kqp + i * nsb * 96l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 45) {
-                    myp[tk * d + i] = dot_iq4nl_q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 2) {
-                    myp[tk * d + i] = dot_k2q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 23) {
-                    myp[tk * d + i] = dot_iq2s_q8(kqp + i * nsb * 72l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 24) {
-                    myp[tk * d + i] = dot_iq2xs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } elif (fmt == 25) {
-                    myp[tk * d + i] = dot_iq2xxs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                } else {
-                    myp[tk * d + i] = dot_k6q8(kqp + i * nsb * 192l, ksp + i * nsb * 18l, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n)
-                }
+    let kf = kq_fmt_of_id(fmt, "kq_batch_kernel_gen")
+    kq_fmt_stamp(kf) $(F) {
+        unsafe {
+            for (tk in range64(ntok)) {   // row tails (d % mr): disk-order per token
+                kq_rows_kernel(F, kf, myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n, ng * mr, d)
             }
         }
     }
@@ -2167,7 +2169,6 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
 // batched GEMM through the SAME batch cell walk the per-expert tile uses, so it is bit-exact
 // vs a per-region loop of kq_batch_kernel_gen.
 def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
-    let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let mr = kq_layout_of(fmt)
@@ -2190,40 +2191,15 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
             }
         }
     }
-    unsafe {
-        for (r in range64(nregions)) {   // row tails (d % mr): disk-order per (region, token)
-            let sb = offs[r * 3l] / 256l
-            let row0 = offs[r * 3l + 1l]
-            let cnt = offs[r * 3l + 2l]
-            for (tk in range64(row0, row0 + cnt)) {
-                for (i in range64(ng * mr, d)) {
-                    if (fmt == 4) {
-                        myp[tk * d + i] = dot_k4q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 5) {
-                        myp[tk * d + i] = dot_k5q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 40) {
-                        myp[tk * d + i] = dot_q40q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 44) {
-                        myp[tk * d + i] = dot_iq4xs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 3) {
-                        myp[tk * d + i] = dot_k3q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 33) {
-                        myp[tk * d + i] = dot_iq3s_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 34) {
-                        myp[tk * d + i] = dot_iq3xxs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 45) {
-                        myp[tk * d + i] = dot_iq4nl_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 2) {
-                        myp[tk * d + i] = dot_k2q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 23) {
-                        myp[tk * d + i] = dot_iq2s_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 24) {
-                        myp[tk * d + i] = dot_iq2xs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } elif (fmt == 25) {
-                        myp[tk * d + i] = dot_iq2xxs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    } else {
-                        myp[tk * d + i] = dot_k6q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n)
-                    }
+    let kf = kq_fmt_of_id(fmt, "kq_batch_groupn_gen")
+    kq_fmt_stamp(kf) $(F) {
+        unsafe {
+            for (r in range64(nregions)) {   // row tails (d % mr): disk-order per (region, token)
+                let sb = offs[r * 3l] / 256l
+                let row0 = offs[r * 3l + 1l]
+                let cnt = offs[r * 3l + 2l]
+                for (tk in range64(row0, row0 + cnt)) {
+                    kq_rows_kernel(F, kf, myp + tk * d, kqp + sb * qsb, ksp + sb * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, ng * mr, d)
                 }
             }
         }
@@ -2357,84 +2333,32 @@ def private q51q8_batch_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint
 // spans through the format's rows core, row tails disk-order per region. Not `private`: the
 // groupn bit-exactness gate in test_kquant drives it directly.
 def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
-    let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let mr = kq_layout_of(fmt)
     let ng = d / mr
     var myp = yp
-    maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
-        unsafe {
-            var gg = int64(gb)
-            while (gg < int64(ge)) {
-                let r = gg / ng
-                let gLocal = gg % ng
-                let gEnd = min(int64(ge) - r * ng, ng)
-                let sb = offs[r * 2l] / 256l
-                let xoff = offs[r * 2l + 1l]
-                if (fmt == 4) {
-                    k4q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 5) {
-                    k5q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 40) {
-                    q40q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 44) {
-                    iq4xsq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 3) {
-                    k3q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 33) {
-                    iq3sq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 34) {
-                    iq3xxsq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 45) {
-                    iq4nlq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 2) {
-                    k2q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 23) {
-                    iq2sq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 24) {
-                    iq2xsq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } elif (fmt == 25) {
-                    iq2xxsq8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
-                } else {
-                    k6q8_gemv_gen(myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
+    let kf = kq_fmt_of_id(fmt, "kq_groupn_gen")
+    kq_fmt_stamp(kf) $(F) {
+        maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
+            unsafe {
+                var gg = int64(gb)
+                while (gg < int64(ge)) {
+                    let r = gg / ng
+                    let gLocal = gg % ng
+                    let gEnd = min(int64(ge) - r * ng, ng)
+                    let sb = offs[r * 2l] / 256l
+                    let xoff = offs[r * 2l + 1l]
+                    kq_gemv_gen(F, myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, gLocal * mr, gEnd * mr)
+                    gg = r * ng + gEnd
                 }
-                gg = r * ng + gEnd
             }
         }
-    }
-    unsafe {
-        for (r in range64(nregions)) {   // row tails (d % mr): disk-order per region
-            let sb = offs[r * 2l] / 256l
-            let xoff = offs[r * 2l + 1l]
-            for (i in range64(ng * mr, d)) {
-                if (fmt == 4) {
-                    myp[r * d + i] = dot_k4q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 5) {
-                    myp[r * d + i] = dot_k5q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 40) {
-                    myp[r * d + i] = dot_q40q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 44) {
-                    myp[r * d + i] = dot_iq4xs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 3) {
-                    myp[r * d + i] = dot_k3q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 33) {
-                    myp[r * d + i] = dot_iq3s_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 34) {
-                    myp[r * d + i] = dot_iq3xxs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 45) {
-                    myp[r * d + i] = dot_iq4nl_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 2) {
-                    myp[r * d + i] = dot_k2q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 23) {
-                    myp[r * d + i] = dot_iq2s_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 24) {
-                    myp[r * d + i] = dot_iq2xs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } elif (fmt == 25) {
-                    myp[r * d + i] = dot_iq2xxs_q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                } else {
-                    myp[r * d + i] = dot_k6q8(kqp + (sb + i * nsb) * qsb, ksp + (sb + i * nsb) * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                }
+        unsafe {
+            for (r in range64(nregions)) {   // row tails (d % mr): disk-order per region
+                let sb = offs[r * 2l] / 256l
+                let xoff = offs[r * 2l + 1l]
+                kq_rows_kernel(F, kf, myp + r * d, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, ng * mr, d)
             }
         }
     }

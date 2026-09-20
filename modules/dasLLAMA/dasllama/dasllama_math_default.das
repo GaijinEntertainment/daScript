@@ -467,7 +467,7 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
 // Int sums are exact, so this is bit-exact vs the grp walk regardless of sub-block order.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select"),
  hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_k4q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_k4; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nibble_mask = byte16(15)
     unsafe {
@@ -500,10 +500,10 @@ def dot_k4q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
     return acc
 }
 
-// kq v2: same Q8_K-form contract and integer folds as dot_k4q8 (k5 shares the Q4_K scale-block
+// kq v2: same Q8_K-form contract and integer folds as the k4 dot_kq (k5 shares the Q4_K scale-block
 // form) — only the quant reconstruction differs (nibble | high-bit << 4).
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_k5q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_k5; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -545,7 +545,7 @@ def dot_k5q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
 // accumulators — isum = Σ sc·dot, bsum = Σ sc·Σa16 (the -32 offset term) — combined exactly in
 // int32 (|isum| < 2^28, |32·bsum| < 2^28), then ONE d·d8 float fold per superblock.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_k6q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_k6; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -590,7 +590,7 @@ def dot_k6q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
 // accumulates float(ilo+ihi−8·Σa32)·d over the superblock's 8 blocks, closed by ONE ·d8.
 // This per-block/per-superblock fma order is the contract every q40 kernel must reproduce.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_q40q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_q40; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -622,7 +622,7 @@ def dot_q40q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp
 //! exact int), folded as sum sc_blk * idot_blk over the superblock, then * (d * xs). No bsum
 //! term — the codebook carries the sign, so xbsp is unused.
 [unused_argument(xbsp)]
-def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq4xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let lut = iq4nl_lut()
     unsafe {
@@ -652,7 +652,7 @@ def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
 //! h*32 + l at shift 2j plus hmask bit b of byte l (q in 0..7); k6's fold with the -4 offset:
 //! isum = sum sc16 * dot, bsum = sum sc16 * sum a16, then (isum - 4 * bsum) * d * xs per superblock.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_k3q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_k3; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -692,7 +692,7 @@ def dot_k3q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
 //! (qh[b] bit << 8) yields four magnitudes, the block's sign bytes flip them, sub-scale
 //! (1 + 2s) folds per block; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_iq3s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq3s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let grid = iq3s_grid()
     unsafe {
@@ -723,7 +723,7 @@ def dot_iq3s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; x
 //! EIGHT magnitudes (two uint words), the block's sign bytes flip them, per-16 strips (1 + 2s)
 //! fold on the eighth-ed d; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_iq2s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq2s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let grid = iq2s_grid2()
     unsafe {
@@ -754,7 +754,7 @@ def dot_iq2s_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; x
 //! entry (EIGHT magnitudes, two uint words), its high 7 bits pick the ksigns sign byte; per-16
 //! strips (1 + 2s) fold on the eighth-ed d; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_iq2xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq2xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let grid = iq2xs_grid2()
     let ksg = ksigns_iq2xs()
@@ -786,7 +786,7 @@ def dot_iq2xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
 //! entries (two words each), the aux32[1]'s 7-bit ksigns indices flip signs, its top nibble
 //! is the per-32 strip (1 + 2s) on the eighth-ed d - decoded to the strip byte at transcode.
 [unused_argument(xbsp)]
-def dot_iq2xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq2xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let grid = iq2xxs_grid2()
     let signs = ksigns_iq2xs()
@@ -815,64 +815,40 @@ def dot_iq2xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?;
     return acc
 }
 
-// Row-range cores + full GEMVs per format. Not `private`: invoked through hoisted function
-// pointers from lifted worker lambdas (the fused chains) and the dispatch wrappers in common.
-def k4_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_k4q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
+// The per-format dots above are one overload family on the format tag (q8, q51 and mx4 have no
+// kq plane and panic); the row-range core is generic on that tag, so kq_fmt_stamp picks the dot
+// at compile time and the row strides come off the descriptor row.
+def dot_kq(_f : KqTag_q8; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+    panic("q8 has no kq plane dot")
+    return 0.0
 }
 
-def k5_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_k5q8(kqp + i * nsb * 160l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
+def dot_kq(_f : KqTag_q51; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+    panic("q51 rides the per-32 planes, not the kq lattice dot")
+    return 0.0
 }
 
-def k6_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_k6q8(kqp + i * nsb * 192l, ksp + i * nsb * 18l, xqp, xsp, xbsp, n)
-        }
-    }
+def dot_kq(_f : KqTag_mx4; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+    panic("mx4 rides the expert nibble planes, not the kq lattice dot")
+    return 0.0
 }
 
-def q40_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+//! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
+//! dot of row i, the row strides off the descriptor. Generic in the tag so a caller's partition
+//! instantiates its own copy; the gen tier's row tails and the fused chains thread it.
+def kq_rows_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
     let nsb = n / 256l
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
     unsafe {
         for (i in range64(rb, re)) {
-            yp[i] = dot_q40q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq4xs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq4xs_q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def k3_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_k3q8(kqp + i * nsb * 96l, ksp + i * nsb * 18l, xqp, xsp, xbsp, n)
+            yp[i] = dot_kq(f, kqp + i * nsb * qsb, ksp + i * nsb * ssb, xqp, xsp, xbsp, n)
         }
     }
 }
 
 [unused_argument(xbsp)]
-def dot_iq3xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq3xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let grid = iq3xxs_grid()
     let signs = ksigns_iq2xs()
@@ -901,7 +877,7 @@ def dot_iq3xxs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?;
 }
 
 [unused_argument(xbsp)]
-def dot_iq4nl_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_iq4nl; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let lut = iq4nl_lut()
     unsafe {
@@ -926,38 +902,11 @@ def dot_iq4nl_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
     return acc
 }
 
-def iq3s_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq3s_q8(kqp + i * nsb * 104l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq3xxs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq3xxs_q8(kqp + i * nsb * 96l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq4nl_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq4nl_q8(kqp + i * nsb * 128l, ksp + i * nsb * 16l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
 //! Q2_K row dot off the DISK-ORDER planes: per 16-elem group g, sc/mn = the group's nibble
 //! pair, q = the unsigned 2-bit lane; the k4/k5 fold - isum on d*sc, the min term through the
 //! activation 16-sums (bsum on dmin*mn).
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_k2q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(_f : KqTag_k2; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -987,71 +936,12 @@ def dot_k2q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp 
     return acc
 }
 
-def k2_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_k2q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq2s_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq2s_q8(kqp + i * nsb * 72l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq2xs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq2xs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
-def iq2xxs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_iq2xxs_q8(kqp + i * nsb * 64l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
-        }
-    }
-}
-
 def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
+    let kf = kq_fmt_of_id(fmt, "kq_gemv_kernel")
     var myp = yp
-    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
-        if (fmt == 4) {
-            k4_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 5) {
-            k5_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 40) {
-            q40_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 44) {
-            iq4xs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 3) {
-            k3_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 33) {
-            iq3s_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 34) {
-            iq3xxs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 45) {
-            iq4nl_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 2) {
-            k2_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 23) {
-            iq2s_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 24) {
-            iq2xs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } elif (fmt == 25) {
-            iq2xxs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
-        } else {
-            k6_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+    kq_fmt_stamp(kf) $(F) {
+        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
+            kq_rows_kernel(F, kf, myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         }
     }
 }
@@ -1442,40 +1332,17 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
         let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var myp = addr(y[0])
-        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    let ii = int64(i)
-                    let r = ii / d
-                    let row = ii % d
-                    let sb = offp[r * 2l] / 256l + row * nsb
-                    let xoff = offp[r * 2l + 1l]
-                    if (fmt == 4) {
-                        myp[ii] = dot_k4q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 5) {
-                        myp[ii] = dot_k5q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 40) {
-                        myp[ii] = dot_q40q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 44) {
-                        myp[ii] = dot_iq4xs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 3) {
-                        myp[ii] = dot_k3q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 33) {
-                        myp[ii] = dot_iq3s_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 34) {
-                        myp[ii] = dot_iq3xxs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 45) {
-                        myp[ii] = dot_iq4nl_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 2) {
-                        myp[ii] = dot_k2q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 23) {
-                        myp[ii] = dot_iq2s_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 24) {
-                        myp[ii] = dot_iq2xs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } elif (fmt == 25) {
-                        myp[ii] = dot_iq2xxs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
-                    } else {
-                        myp[ii] = dot_k6q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+        let kf = kq_fmt_of_id(fmt, "matmul_kq_groupn")
+        kq_fmt_stamp(kf) $(F) {
+            maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
+                unsafe {
+                    for (i in range(rb, re)) {
+                        let ii = int64(i)
+                        let r = ii / d
+                        let row = ii % d
+                        let sb = offp[r * 2l] / 256l + row * nsb
+                        let xoff = offp[r * 2l + 1l]
+                        myp[ii] = dot_kq(F, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     }
                 }
             }
