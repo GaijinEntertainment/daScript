@@ -10219,7 +10219,6 @@ class Q8GemvGuN {
             accu[c] = 0.0
         }
         let ncols = min(pa.ncols, GU_N_COLS)
-        let clast = ncols - 1u   // a column past the live ones dots the last live column's row again: its loads issue beside the live ones and its sums are never stored
         var bi0 = 0u
         while (bi0 < nb) {
             let b = bi0 + lane / 2u
@@ -10229,26 +10228,27 @@ class Q8GemvGuN {
                 let gs = float(gsh[gb0 + b])
                 let us = float(ush[ub0 + b])
                 for [unroll] (c in range(8)) {
-                    let cc = min(uint(c), clast)
-                    let xbase = (cc * nb + bi0) * 8u + lane * 4u
-                    let x0 = xqw[xbase]
-                    let x1 = xqw[xbase + 1u]
-                    let x2 = xqw[xbase + 2u]
-                    let x3 = xqw[xbase + 3u]
-                    var gd = sdot4(gv.x, x0)
-                    gd += sdot4(gv.y, x1)
-                    gd += sdot4(gv.z, x2)
-                    gd += sdot4(gv.w, x3)
-                    var ud = sdot4(uv.x, x0)
-                    ud += sdot4(uv.y, x1)
-                    ud += sdot4(uv.z, x2)
-                    ud += sdot4(uv.w, x3)
-                    gd += subgroupShuffleXor(gd, 1u)
-                    ud += subgroupShuffleXor(ud, 1u)
-                    if (lane % 2u == 0u) {
-                        let xs = axs[cc * nb + b]
-                        accg[c] += float(gd) * gs * xs
-                        accu[c] += float(ud) * us * xs
+                    if (uint(c) < ncols) {   // the guard stays: the unroll is eight columns wide whatever the count, and a dead column's two dots cost more than its branch (PERF_LEDGER.md, the 2026-09-20 section)
+                        let xbase = (uint(c) * nb + bi0) * 8u + lane * 4u
+                        let x0 = xqw[xbase]
+                        let x1 = xqw[xbase + 1u]
+                        let x2 = xqw[xbase + 2u]
+                        let x3 = xqw[xbase + 3u]
+                        var gd = sdot4(gv.x, x0)
+                        gd += sdot4(gv.y, x1)
+                        gd += sdot4(gv.z, x2)
+                        gd += sdot4(gv.w, x3)
+                        var ud = sdot4(uv.x, x0)
+                        ud += sdot4(uv.y, x1)
+                        ud += sdot4(uv.z, x2)
+                        ud += sdot4(uv.w, x3)
+                        gd += subgroupShuffleXor(gd, 1u)
+                        ud += subgroupShuffleXor(ud, 1u)
+                        if (lane % 2u == 0u) {
+                            let xs = axs[uint(c) * nb + b]
+                            accg[c] += float(gd) * gs * xs
+                            accu[c] += float(ud) * us * xs
+                        }
                     }
                 }
             }

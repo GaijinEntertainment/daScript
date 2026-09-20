@@ -1927,12 +1927,19 @@ named; the local RTX 5060 Ti carries decode-vector.
 
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 
-Instruments as the section above: `lcpp_bench --npl 4` on the pod (RTX PRO 4500, cm2 without
-decode-vector, and KHR) and the local RTX 5060 Ti (cm2 with decode-vector), llama.cpp b10660's
-`llama-batched-bench` rows the same hour on the same box, `DASLLAMA_GPU_PROF=1` for the stamps, the
-attention ruler `harness/vk_attn_probe.das` for the key split. Every ratio is `tg128@4` summed over
-four device-home streams through the scheduler's device mode against the reference's `S_TG` at
-`-npl 4`, conservative as before (the served step samples and detokenizes inside the clock).
+Instruments as the section above: `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod (RTX
+PRO 4500, driver 580.173, cm2 without decode-vector, and KHR) and the local RTX 5060 Ti (driver
+616.56, cm2 with decode-vector), `DASLLAMA_ALLOW_UNTUNED=1` and no `DAS_TUNE_POLICY` override on
+either box (an untuned sidecar serves the reference bodies), `DAS_JOBQUE_THREADS=16`, llama.cpp
+b10660's `llama-batched-bench` under the section above's command line the same hour on the same
+box (every llama.cpp figure below `external`, from that exe's own table), `DASLLAMA_GPU_PROF=1`
+for the stamps, the attention ruler `harness/vk_attn_probe.das` for the key split. Every ratio is
+`tg128@4` summed over four device-home streams through the scheduler's device mode against the
+reference's `S_TG` at `-npl 4`, conservative as before (the served step samples and detokenizes
+inside the clock); every lever's before -> after pair is two commits in two processes
+[direction-grade - two commits], every ratio against llama.cpp two processes [direction-grade -
+two processes]. The wide twin's command buffers (one a region, one a row count) are pool handles
+the recorder fills - no plane grows with them, so the ladder's footprint half is nil.
 
 - **The baseline (master before the arc, the pod):** qwen2 0.5B 1205 against 1385 (0.87 - batched,
   a gap); qwen3 0.6B 425 against 1193 and 4B 129 against 473 (0.36 and 0.27 - not batched: the N-row
@@ -1956,7 +1963,8 @@ four device-home streams through the scheduler's device mode against the referen
   the 0.5B's, linear in rows). It also puts the one-row and N-row forms in one summation order,
   so the qwen3 regions cells read bit for bit on the 36-SM card where the rules had them nine and
   sixteen pieces apart. Pod: 0.5B 1356, 0.6B 1111, 4B 449 (0.98, 0.92, 0.95).
-- **A residual epilogue fused into the GEMV's last workgroup does not batch (tried, reverted):**
+- **A residual epilogue fused into the GEMV's last workgroup does not batch (Decision: rejected,
+  the tree keeps the separate residual dispatch):**
   the N-column form of `Q8GemvAr`, bit-exact in its kernel cell and the regions cells, read the
   0.5B 1076 -> 988 and the 0.6B 822 -> 784 on the 5060 Ti: the last workgroup runs the rows'
   residual steps one after another where the separate `cls_ar_rq_b` dispatch runs them in
@@ -1967,15 +1975,49 @@ four device-home streams through the scheduler's device mode against the referen
   2.4 MB of a 152k-vocab plane twice, 322 us of a 3037 us step on the pod; the lanes read the
   plane once. 5060 Ti: 0.5B 1068 -> 1172, 0.6B 833 -> 895. A parallel sample of the rows threw in
   a forked context and stays `followup_vulkan.md` item 76.
+- **The Q8_0 N-column GEMV's column loads issue together (`Q8GemvNT`):** the qwen2 1.5B's
+  four-row step on the pod read 4313 us against the one-row step's 2963, and the stamps put the
+  gap in the N-column GEMVs - the down GEMV 1144 against the one-row form's 694 (n 8960, d
+  1536), the qkv 340 against 229, the wo 289 against the fused 289 plus a 168 requant - where
+  the fused gate-up at n 1536 sat 14 percent over its one-row twin. Each column's activation
+  load sat behind its own `c < ncols` branch, so the four loads issued one after another, an L2
+  latency each, per weight word. Unguarded (a column past the live ones dots the last live
+  column's row again, its sum never stored), the step reads 3775: down 744, qkv 286, wo 230.
+  Pod, cm2 / KHR: 1.5B 871 -> 980 / 982, 0.5B 1443 -> 1615 / 1604, 0.6B 1154 -> 1261 / 1251, 4B
+  459 -> 482 / 481; the 5060 Ti 0.5B 1172 -> 1246, 1.5B 615 -> 621 (its decode-vector rail hid
+  most of the serialisation). Bit for bit in the kernel cell and the regions cells.
+- **The ruler on both sides of the ladder's edges (us a layer, the pod, one row / four rows):** the 0.5B
+  geometry at 384 one piece 10.4 / 10.4 against four 16.5 / 16.5, at 640 14.5 / 14.5 against 16.5 /
+  16.5, at 1024 18.6 / 18.6 against 16.5 / 16.5, at 1536 26.7 / 26.7 against 18.6 / 20.6 - the
+  one-to-four edge sits between 640 and 1024 for this geometry; the qwen3 0.6B geometry (head 128,
+  two heads a kv head) at 384 one piece 14.5 / 14.5 against four 12.4 / 18.6, at 640 20.6 / 20.6
+  against 14.4 / 20.8, at 1024 28.8 / 28.8 against 14.5 / 24.6 - its edge sits at 512 for one row
+  and near 640 for four. `RD_UNSPLIT_POS` stays 512: the wrong side of either edge costs two
+  microseconds a layer. The wide edge: at 8192 eight pieces read 32.9 against four's 41.1 for one
+  row of the 0.5B geometry (37.3 against 59.2 for the 0.6B's) and 51.3 against 44.3 for four rows
+  (189 against 181); at 16384 47.3 against 71.6 for one row, 81.1 against 73.8 for four. Decision:
+  taken - the one-row command keeps its wide twin from 3072, the N-row command takes the split
+  form at every span past 512 and its wide twin, its recorded flag and its stamp slots go.
+- **The fused gate-up N form keeps its column guard (Decision: rejected - the unguarded form):**
+  the same clamp that freed the plain N-column GEMV's loads made `Q8GemvGuN` slower - the 1.5B's
+  four-row gate-up 1212 -> 1252 us a step on the pod, the step 3775 -> 3847, tg128@4 980 -> 965,
+  the 4B 482 -> 477 and the llama 1B 1343 -> 1325 - because its unroll is eight columns wide
+  whatever the count where the plain GEMV picks a stamp by count: a dead column's two dots against
+  both planes cost more than its branch. The stamp by column count is `followup_vulkan.md` item
+  77's fold. The ladder caps a sliding-window layer's count at its window's span: a windowed
+  carrier (gemma-3's 512, gemma-4's 1024) attends at most its window, so its local layers take
+  one piece at every position where the position alone read four or eight; no windowed carrier
+  sits on this arc's board, so the count is the ruler's reading, not a measured step.
 - **The boards at the arc's tip, tg128@4 against llama.cpp the same hour** - the pod, cm2 / KHR:
-  qwen2 0.5B 1443 / 1428 against 1373 (1.05 / 1.04), qwen3 0.6B 1154 / 1156 against 1199 (0.96 /
-  0.96), qwen3 4B 459 / 456 against 476 (0.96 / 0.96), qwen2 1.5B 871 / 871 against 920 (0.95 /
-  0.95 - the flat row 330 against 314), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25);
-  the llama family at the same tip 1B 1249 / 1252 against 1218 (1.03), 3B 591 / 588 against 606
-  (0.97), 8B 378 / 378 against 361 (1.05). The 5060 Ti, cm2 with decode-vector: 0.5B 1172 against 922 (1.27), 1.5B 615 against 578
-  (1.06), 0.6B 895 against 740 (1.21), 4B 269 against 263 (1.02, under `DASLLAMA_GPU_VRAM_MB=9000`:
-  the 16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
-  Q4_K_M 357 against 183 (1.95). The flat rows did not move.
+  qwen2 0.5B 1615 / 1604 against 1373 (1.18 / 1.17), qwen2 1.5B 980 / 982 against 920 (1.07 /
+  1.07 - the flat row 335 against 314), qwen3 0.6B 1261 / 1251 against 1199 (1.05 / 1.04), qwen3
+  4B 482 / 481 against 476 (1.01 / 1.01), Phi-3.5-mini Q4_K_M 524 / 522 against 418 (1.25 / 1.25,
+  the K-quant leaves the lever does not reach); the llama family at the same tip 1B 1343 / 1346 against 1220 (1.10 / 1.10), 3B 613 / 612
+  against 606 (1.01 / 1.01), 8B 380 / 378 against 361 (1.05 / 1.05). The
+  5060 Ti, cm2 with decode-vector: 0.5B 1246 against 922 (1.35), 1.5B 621 against 578 (1.07),
+  0.6B 922 against 740 (1.25), 4B 273 against 263 (1.04, under `DASLLAMA_GPU_VRAM_MB=9000`: the
+  16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
+  Q4_K_M 347 against 183 (1.89). The flat rows did not move.
 
 ### From the M4 Metal pass (2026-09-13)
 

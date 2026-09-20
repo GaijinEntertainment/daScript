@@ -1709,9 +1709,10 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
             var L & = g_rd.layers[l]
             let hpfx = rd_head_pfx(L)
             let tpfx = rd_tail_pfx(L)
-            let after_moe_combine = l > 0l && g_rd.layers[l - 1l].moe && !g_rd.layers[l - 1l].comb_rq   //! a combine that quantized the feed leaves nothing to requant
-            let feed_quantized = l == 0l ? pro_fused : next_fused
-            if (!feed_quantized || after_moe_combine) {
+            //! the site before quantized this head's feed: the fused prologue, a MoE layer's quantizing combine (which writes no float row
+            //! to requant), or the fused next stamp - the bisect's split next site leaves the float row, a quantizing combine never
+            let feed_quantized = l == 0l ? pro_fused : (g_rd.layers[l - 1l].moe ? g_rd.layers[l - 1l].comb_rq : next_fused)
+            if (!feed_quantized) {
                 if (kq_sb(L.recurrent ? L.fqkv : L.fq)) {
                     enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
                 } else {
@@ -1789,7 +1790,8 @@ def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
                 rd_ts(raw, "{tpfx}ar2")
             }
         }
-        if (!next_fused || (g_rd.layers[g_rd.n_layers - 1l].moe && !g_rd.layers[g_rd.n_layers - 1l].comb_rq)) {   //! the fused next site (or the quantizing combine) did the final norm and its requant
+        let last_quantized = g_rd.layers[g_rd.n_layers - 1l].moe ? g_rd.layers[g_rd.n_layers - 1l].comb_rq : next_fused   //! the fused next site or the quantizing combine did the final norm and its requant
+        if (!last_quantized) {
             if (kq_sb(g_rd.cls_fmt_marker)) {
                 enc_cls_q8k_rq(raw, h, g_rd.s_quant_final, pc_rq_dim_k, rqwg_dim_k)
             } else {

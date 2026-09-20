@@ -18,6 +18,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard 
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed; gpu_cpu_passes_
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 
 // The resident driver's mirror regions (a small carrier under DASLLAMA_GPU=1): two
@@ -325,6 +326,9 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     var passes <- gpu_cpu_passes_()
     t |> equal(length(passes), 0, "the device served every call: {passes}")
     delete passes
+    static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
+        t |> success(vk_rdec_token_n_rows() >= 2l, "the N-row token command serves the two rows at once ({vk_rdec_token_n_rows()} rows)")
+    }
     sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
     unsafe {
         delete ws
@@ -372,6 +376,47 @@ def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = Lo
             delete pb
         }
         delete tr
+    }
+}
+
+//! DASLLAMA_VK_FUSE_BISECT a bit at a time: the one-row steps under each bit within the split bar of the fused run (the fused
+//! and split forms round apart), the one-token-off control outside it; under the fused q/k norm's bit the batched rows
+//! hold bit for bit to the row alone on the split pair
+def cell_regions_fuse_bisect(t : T?; file : string) {
+    t |> run("the fuse bisect's every bit serves logits within the split bar of the fused run; the split-pair rows batch bit for bit") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var pa <- prompt_a()
+            var fa <- feed_a()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                vk_fuse_bisect_pin(0l)
+                var tr0 <- load_two_regions(t, file)
+                var base <- logits_alone(tr0, pa, fa)
+                delete tr0
+                for (bit in fixed_array(1l, 2l, 4l, 8l, 16l, 32l, 64l)) {
+                    vk_fuse_bisect_pin(bit)
+                    var tr <- load_two_regions(t, file)
+                    var got <- logits_alone(tr, pa, fa)
+                    for (st in range64(STEPS)) {
+                        hold_within(t, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
+                    }
+                    delete got
+                    if (bit == 64l) {
+                        var pb <- prompt_b()
+                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
+                        delete pb
+                    }
+                    delete tr
+                }
+                vk_fuse_bisect_pin(-1l)
+                delete base
+            }
+            delete pa
+            delete fa
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 

@@ -1603,3 +1603,12 @@ module) is independent and can land any time - it is pure structure.
     sampler does (its `s.sampled` write, the penalties over `s.recent`, or the draw). The work:
     the refusal named under `--track-job-status` / a panic hook, then the rows' samples on the
     lanes, priced on the tg128@4 row (about a hundred microseconds a step at four rows).
+77. **The fused gate-up GEMV's N form is a second copy of its one-row class.** `Q8GemvGuN`
+    reproduces `Q8GemvGu`'s weight loads, dots, activation and Q8_0 requant with the column count
+    as its one axis (at one column the N form is the one-row kernel), where the plain GEMV
+    carries the same axis as `Q8GemvNT`'s template constant; the profiler's per-form stamp slots
+    (unsplit, split and wide, one-row and N-row) are likewise six hand-written triples with two
+    sample ladders and a slot fill over them. The work: one class template stamped at one and
+    eight columns (the one-row stamp re-sources, so the record owes the SPIR-V-dump compare
+    against the tree before it) and one `RdqForm` table the reset, the sample ladders and the
+    slot fill index - a dedup pass of its own, not a lever.

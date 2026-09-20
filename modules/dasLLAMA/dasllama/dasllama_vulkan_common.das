@@ -3274,9 +3274,16 @@ def vk_fa_on : bool {
 
 var g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail dispatches (same-build A/B)
 
+var g_vk_fuse_bisect_pin = -1l   //! a cell's pin over the knob (-1 = the environment's value): the bisect cell loads the model once a bit
+
 //! DASLLAMA_VK_FUSE_BISECT: the token command's fused forms kept on their split dispatches, by bit (ENVIRONMENT.md); the N-row
 //! command shares the gate-up and the fused q/k norm through the layer flags
-def vk_fuse_bisect_bits : int64 => g_env_vulkan.vk_fuse_bisect
+def vk_fuse_bisect_bits : int64 => g_vk_fuse_bisect_pin >= 0l ? g_vk_fuse_bisect_pin : g_env_vulkan.vk_fuse_bisect
+
+//! pins the bisect bits a load reads in place of the environment's; -1 unpins
+def vk_fuse_bisect_pin(bits : int64) {
+    g_vk_fuse_bisect_pin = bits
+}
 
 let FUSE_BX_WO_AR = 1l         //! the wo GEMV's residual epilogue
 let FUSE_BX_DOWN_AR = 2l       //! the down GEMV's
