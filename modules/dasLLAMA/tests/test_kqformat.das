@@ -227,6 +227,18 @@ def test_kqfmt_elems_and_stream(t : T?) {
         }
         var none = KqFmt.q8
         t |> success(!kq_fmt_of_id(99, none), "an id no format carries")
+        none = KqFmt.k4
+        t |> success(!kq_fmt_of_id(-1, none), "the off-lattice rows' -1 names no format")
+        t |> equal(none, KqFmt.k4, "a refused id leaves the out slot alone")
+        t |> success(!kq_sb(-1) && !kq_sb(KQ_FMT_COUNT) && !kq_sb(99), "an int off the enum is not a lattice format")
+        var tripped = false
+        try {
+            let f = kq_fmt_of_id(99, "test")
+            t |> success(false, "unreachable: {f}")
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "the panicking overload refuses an id no row carries")
     }
     t |> run("kq_bytes_per_weight is the stride table's arithmetic on every superblock format") @(t : T?) {
         for (f in type<KqFmt>) {

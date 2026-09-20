@@ -1170,8 +1170,9 @@ def image_backing_release(map : void?; bytes : uint64) {
     unsafe(fmap_close(map, bytes))
 }
 
-// an image-backed model's plane is a locked BORROWED view - forgotten, never freed
-def private release_plane(var a : array<auto(TT)>) {
+//! Forget a borrowed view (an image-backed plane is a locked view) or delete an owned buffer -
+//! the one teardown for a plane or weight array of any element type.
+def release_plane(var a : array<auto(TT)>) {
     if (lock_count(a) != 0) {
         unsafe(_builtin_forget_temp_array(a))
     } else {

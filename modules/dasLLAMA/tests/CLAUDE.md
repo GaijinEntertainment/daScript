@@ -822,8 +822,25 @@ onto the pp and tg axes separately and `keep_cold` keeping the cold cell when th
 slower on either, each bar with its control - the branches that decide what lands on the public
 board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
-`grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
-grows past the `max_unreserved_size` guard that must not panic.
+`grow_resize` geometric reuse and its re-added tail reading zero, `ensure_length` grow-only with
+the grown tail zeroed, `overwrite_resize` grow-only no-init) fed directly, including grows past
+the `max_unreserved_size` guard that must not panic.
+`test_from_template.das` - model-free: the `[from_template]` stamp (`dasllama/dasllama_tune`) - a
+placeholder call renames to the annotation's target per stub, and the stub's signature types the
+clone so one template stamps both plane overloads.
+`test_kqformat.das` - model-free: the per-format descriptor row (`kq_desc`: disk bytes equal the
+ggml block bytes of the type, ids round-trip, `kq_fmt_of_id` refuses an id no format carries),
+`kq_bytes_per_weight` as the stride table's arithmetic on every superblock format, the
+`kq_fmt_stamp` call macro binding every member's tag so a tag-overload family resolves at compile
+time, and the key-radix and lattice-predicate cells.
+`test_kv_codec.das` - stocked suite; its model-free cell `test_kv_codec_side_stamp` holds the
+`kv_codec_side` macro (`dasllama/dasllama_kv_dtype`): each codec's arm sees its own cache-pointer
+type and, nested once per side, the sixteen K x V pairs each carry the same address.
+`test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test
+references, including the iq4nl plane dequant on a jobque team lane reading the same values as the
+main thread (its codebook read is fork-safe).
+`test_softmax.das` - model-free: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
+empty row a no-op) and `hlse`.
 `test_deltanet.das` - stocked suite; model-free cells: the deltanet session-state sizing at 27B
 geometry through `make_run_state` (S state + widened-conv history past the guard); model-gated:
 the chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed

@@ -12,7 +12,9 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   (plane strides, block geometry, stream codes), format predicates, and the shared decode
   tables the grid and codebook formats key off - each as a builder function (`iq3s_grid()`,
   `iq4nl_lut()`) for kernels that may run on a team lane, plus a global twin for tests,
-  oracles and the emitter's constant bake. It requires nothing else in
+  oracles and the emitter's constant bake, the `KqTag_<fmt>` tag family (one empty struct per
+  member, the LAST parameter of every per-format overload family) and the `kq_fmt_stamp` call
+  macro that binds a member's tag per arm. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space - the enum; integer ids
   exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
   `fmt != q8` test does not imply the lattice, so branch on the predicate.
@@ -120,8 +122,9 @@ trunk-only and trunk+head images never collide and one image file serves both tr
 ### 1.4 CPU kernel tiers
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
-  wrappers, dispatch shaping. Kernels themselves live in a tier file; a kernel body here is a
-  placement defect.
+  wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
+  (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`). Kernels themselves
+  live in a tier file; a kernel body here is a placement defect.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
   out-ranked by any platform tier - and the ONE body of every Q8·Q8 and mx4 kernel shape: each
   shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps

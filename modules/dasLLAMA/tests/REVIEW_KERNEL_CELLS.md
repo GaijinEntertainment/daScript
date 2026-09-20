@@ -31,8 +31,10 @@ say how far and where, not only how many.
 their output - missing a compare against a CPU oracle in the cell itself is a defect; where the
 cell compares two kernel forms against each other, the oracle compare targets one of those two
 forms, in that cell or in a cell of the same file that dispatches that form at the same shapes.**
-A cell is a `t |> run` block, or a helper that asserts on `t`; a CPU oracle is the same
-computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
+A kernel class is a `[metal_dispatch]` or `[vk_dispatch]` class - the CPU kernel leaves under
+`dasllama_math*` answer to `REVIEW.md`'s rules, not to this list. A cell is a `t |> run` block, or
+a helper that asserts on `t`; a CPU oracle is the same computation written in plain code and run
+on the CPU. Two forms can be bit-equal and both wrong.
 
 **A diff that changes a `[vk_dispatch]` or `[metal_dispatch]` class's branch selection - a
 branch added, or a predicate widened or narrowed, so that a different set of kargs values, or of

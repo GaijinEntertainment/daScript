@@ -656,7 +656,7 @@ def public bind_block_argument(blk : ExprBlock?; argname : string; var bound : E
         bblk.arguments |> erase(0)
     }
     remove_deref(argname, body)
-    var rules : Template
+    var inscope rules : Template
     rules |> replaceVariable(argname, bound)
     return rules |> apply_template(at, body, false)
 }

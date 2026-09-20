@@ -2526,6 +2526,17 @@ def test_dlim_flavor_lanes(t : T?) {
 // Split layout owner: metal_blob_scale_plane in dasllama_layout.das.
 [test]
 def test_k6_scale_split_sizing(t : T?) {
+    t |> run("a scale-plane name is a lattice format's member spelling plus s, and nothing else") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var m = Model()
+        t |> success(metal_blob_scale_plane(m, "k4s") && metal_blob_scale_plane(m, "iq2xxss"), "k4s and iq2xxss name lattice scale planes")
+        t |> success(!metal_blob_scale_plane(m, "k6"), "no s suffix")
+        t |> success(!metal_blob_scale_plane(m, "zzs"), "no such format")
+        t |> success(!metal_blob_scale_plane(m, "q8s"), "q8 is off the lattice")
+        t |> success(!metal_blob_scale_plane(m, "q40s") && !metal_blob_scale_plane(m, "iq4nls"), "q40 and iq4nl carry no split scale plane")
+    }
     t |> run("k6 scale split at 27B-scale strip clears max_unreserved_size") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
@@ -2826,6 +2837,34 @@ def test_layout_fingerprint(t : T?) {
 
 [test]
 def test_dlim_identity_pack_version(t : T?) {
+    t |> run("the interleave segment has one slot per lattice format, in enum order") <| @(t : T?) {
+        var lattice = 0
+        for (i in range(KQ_FMT_COUNT)) {
+            if (kq_sb(i)) {
+                lattice++
+            }
+        }
+        var c = DlimConfiguration()
+        let base = dlim_identity(c, IMAGE_VERSION, "", 0)
+        let seg = base |> find("|kq ")
+        t |> success(seg >= 0, "the identity carries its kq segment: {base}")
+        let rest = slice(base, seg + 4)
+        let segment = slice(rest, 0, rest |> find("|"))
+        var slots = 1
+        for (ch in segment) {
+            if (ch == '/') {
+                slots++
+            }
+        }
+        t |> equal(slots, lattice, "one slot per lattice format: {segment}")
+        c.cpu.kq_mr |> resize(KQ_FMT_COUNT)
+        c.cpu.kq_mr[int(KqFmt.k4)] = 8l
+        let k4 = dlim_identity(c, IMAGE_VERSION, "", 0)
+        c.cpu.kq_mr[int(KqFmt.k4)] = 0l
+        c.cpu.kq_mr[int(KqFmt.k6)] = 8l
+        let k6 = dlim_identity(c, IMAGE_VERSION, "", 0)
+        t |> success(k4 != base && k6 != base && k4 != k6, "the slot a format's interleave lands in is its own: {k4} vs {k6}")
+    }
     t |> run("the pack-code version folds into the identity and nothing else moves") <| @(t : T?) {
         let c = DlimConfiguration()
         let base = dlim_identity(c, IMAGE_VERSION, "", 0)

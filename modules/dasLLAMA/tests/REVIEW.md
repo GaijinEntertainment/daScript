@@ -4,10 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
-issues asserts on `t`) that dispatches one or more kernel classes and asserts on their output -
-or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
-`REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+**A kernel-unit cell - a model-less cell (a `t |> run` block, or a helper call that asserts on
+`t`) that dispatches one or more kernel classes (a `[metal_dispatch]` or `[vk_dispatch]` class)
+and asserts on their output - or a gate that hand-dispatches or hand-binds such a kernel, wherever
+the diff puts it, applies `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
 **A diff that touches a pinned test cell - one whose expected value is written down where a
 person edits it, a document, a checked-in table, a generated artifact's committed form, a

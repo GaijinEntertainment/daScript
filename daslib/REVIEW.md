@@ -46,8 +46,8 @@ construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
 decided by a definition outside this folder - a C++ definition, or another module's descriptor
-- with no lint, compile error, or default-suite test (what `dastest` runs over `tests/` with no
-flags) failing when the two sides no longer match, records the pair, naming both sides, in this
+- with no lint, compile error, or default-suite test (what `dastest` runs over `tests/` (repo
+root) with no flags) failing when the two sides no longer match, records the pair, naming both sides, in this
 folder's architecture doc.** The section a daslib file's pair lands in is the one that holds that
 file, or a new one in `ARCHITECTURE.md` when none does.
 
@@ -66,7 +66,7 @@ not count.
 
 **A diff that changes daslib's nolint scanning - suppression parsing, staleness detection, or
 the header window - keeps `tests/lint/test_nolint_suppression.das` and
-`tests/lint/test_stale_nolint.das` green without weakening them.** They pin that a string
+`tests/lint/test_stale_nolint.das` (repo root) green without weakening them.** They pin that a string
 literal, a URL, and a mid-comment `nolint:` do not suppress while a first-token directive
 after `//` or `//!` does, and that a `lint-skip-file` past the header window is prose.
 
@@ -78,7 +78,7 @@ a one-run `DAS_LINT_DISABLE` beat a `CODE = true`.
 seeding and the repo `off` directives.** Repo policy must not silence the rule a fixture
 exists to exercise.
 
-**A diff that changes daslib's `.lint_config` resolution keeps `tests/lint/test_lint_config.das`
+**A diff that changes daslib's `.lint_config` resolution keeps `tests/lint/test_lint_config.das` (repo root)
 green without weakening it** - it pins that each `[format]` key resolves nearest-wins
 independently up to the `.git` root, so a nearer `.lint_config` declaring one key does not
 reset the other.

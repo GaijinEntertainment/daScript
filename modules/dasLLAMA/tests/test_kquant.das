@@ -2578,6 +2578,33 @@ def test_iq4nl_planes(t : T?) {
         delete ks
         delete dst
     }
+    t |> run("the per-32 formats refuse the lattice codecs by name: q8 has no plane transcode and no grp repack") @(t : T?) {
+        var blkb : array<uint8>
+        blkb |> resize(34)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(128)
+        ks |> resize(16)
+        var tripped = false
+        try {
+            kq_transcode_superblock(KqFmt.q8, blkb, 0l, kq, 0l, ks, 0l)
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "q8 plane transcode panics")
+        tripped = false
+        try {
+            unsafe {
+                repack_kq_grp(KqFmt.q8, addr(kq[0]), addr(ks[0]), 32l, 1l, 4l)
+            }
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "q8 grp repack panics")
+        delete blkb
+        delete kq
+        delete ks
+    }
     t |> run("iq4nl plane dequant reads its codebook on a team lane: lane values == main-thread values") @(t : T?) {
         let blkb <- build_iq4nl_block()
         var kq : array<uint8>

@@ -355,7 +355,7 @@ var private g_stage_repack = false
 def finalize(var m : StyleTts2Model) {
     for (name in m.voice_names) {
         if (key_exists(m.voices, name)) {
-            release_weight(m.voices[name])
+            release_plane(m.voices[name])
         }
     }
     delete m.voices

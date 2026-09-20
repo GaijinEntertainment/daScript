@@ -1662,3 +1662,8 @@ module) is independent and can land any time - it is pure structure.
     a token; the rate then reads as PCIe's bandwidth over the bytes past the resident set, and a
     row a step sees no benefit from four streams' worth of streaming unless the ring serves all
     four rows a layer. Both rungs are measured against llama.cpp's paged rows on the same card.
+82. **The device gather's grouped-row branch is a per-format ladder.** `moe_gpu_gather_stack_kq`
+    (`dasllama/dasllama_layout.das`) reads its plane pair off `Model.kq[]` through the descriptor
+    row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
+    where every other lookup walks `kq_desc`. Done looks like: a grouped-row stride column on the
+    descriptor row and the branch reading it, the resident MoE files bit for bit before and after.
