@@ -15,7 +15,7 @@ require ?das_metal dasllama/dasllama_metal_common  // the kernel coverage census
 require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_count
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
-require math  // used only inside the Apple static_if half
+require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
 require strings
 require _model_tier
 

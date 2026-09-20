@@ -16,7 +16,7 @@ require ?das_metal metal/das_metal_boost  // metal_live_object_count for the lea
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require strings
-require math
+require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
 require _model_tier
 
 // End-to-end gate for the dasMetal whole-prefill override (Phase 6): greedy continuation of a

@@ -4,14 +4,14 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama   // the public facade - engine + arch registrations + (on Apple) the metal overrides
+require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade, reached inside the das_metal halves
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier every Metal serving cell loads
-require dasllama/dasllama_batch   // batch_step_census - how the scheduler's steps were served
-require dasllama/dasllama_bench   // bench_tg_batched_rep - the batched row
-require dasllama/dasllama_scheduler   // the joint speculative tick's invariance cell drives the scheduler itself
-require _scheduler_rig   // toks_of
-require _ids   // same_ids
+require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 - batch_step_census, inside the das_metal halves
+require dasllama/dasllama_bench   // nolint:STYLE030,LINT019 - bench_tg_batched_rep, inside the das_metal halves
+require dasllama/dasllama_scheduler   // nolint:STYLE030,LINT019 - the scheduler the joint cell drives, inside the das_metal halves
+require _scheduler_rig   // nolint:STYLE030,LINT019 - toks_of, inside the das_metal halves
+require _ids   // nolint:STYLE030,LINT019 - same_ids, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_stats - the batched driver's own count
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the das_metal halves
