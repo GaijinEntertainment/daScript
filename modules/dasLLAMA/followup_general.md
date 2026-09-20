@@ -1743,3 +1743,41 @@
     batched steps with no tick between, seconds of unanswered HTTP on a large model. The work:
     the phase holding the scheduler across ticks - admit on one tick, then one `scheduler_step` a
     tick until the timed steps are done - with the rate read over the timed ticks alone.
+156. **The decode and prefill halves of a block are two bodies over the GEMV and the GEMM
+    families.** `ple_block_decode` / `ple_block_prefill` (`dasllama_ple.das`) and
+    `attention_std_decode`'s inline QKV+RoPE prefix against `attn_qkv_rope_prefix`
+    (`dasllama_blocks.das`, `dasllama_common.das`, the qwen35 gated twins beside them) are
+    statement-for-statement the same walk, but the decode half calls `mm` / `mm_qkv` (the GEMV
+    family, one fused dispatch) and the prefill half `mm_b` (the batch family) - so a single body
+    over npos with decode at npos = 1 changes the decode kernels, not just the source. The gemma4
+    router (`gemma4_router`) folded because its body is plain arithmetic. Done looks like: a
+    ruling on whether the GEMV family gets an npos = 1 entry the batch family forwards to, or the
+    two halves stay; then the fold, with the decode step's tok/s at parity on the M5 and the zen4.
+157. **The KV codec rungs are twins across q8_0 and tq4.** `dasllama_kv_codec.das`'s dot / axpy /
+    cvt / quantize templates differ only in the block geometry (34 B with the f16 scale at
+    `b16[bi*17]` against 18 B at `b16[bi*9]`) and the quant read (a byte against two nibbles);
+    each template's `[tune = 1]` loop and `[tuned]` stub is the per-format sidecar key. Done looks
+    like: one template per rung over a (block bytes, scale stride, nibble) triple stamped per
+    format through `[from_template]`, the `[tuned]` stubs one per stamp, byte-identical
+    `test_kv_codec` and the tuner's per-format winners unchanged.
+158. **The pretokenizer splitters are four ladders over one skeleton.** `pretok_split`,
+    `_gpt2`, `_gpt4o`, `_tekken` (`dasllama_pretok.das`) differ in five compile-time choices
+    (contraction rule, letter-run class, digit grouping, the punctuation tail set, the
+    whitespace tail's `\r\n` rule) over one walk; the 19-line whitespace tail and the 16-line
+    punctuation arm are copied verbatim three times. Done looks like: one body over a per-family
+    rule struct (or a stamp per family), `test_tokenizer`'s corpora byte-identical, and `--tok`
+    rows at two sizes per family at parity - the pretokenizer is the BPE encode's hot loop.
+159. **`range_flags` is `upper_bound` written by hand, and the stdlib form costs a closure per
+    probe.** `dasllama_unicode.das`'s binary search over the 1512-entry range table is
+    `daslib/algorithm`'s `upper_bound(...) - 1` with the key unpacked in the comparator; the
+    block-taking overload pays an invoke per compare, eleven per codepoint, on the pretokenizer's
+    per-codepoint path. Done looks like: a comparator-inlining stdlib form (a generic over a
+    key-extractor, or the block inlined by the JIT) measured at parity under `--tok`, then the
+    fold; until then the hand loop stays.
+160. **The knob accessor rail is ninety hand-written pairs.** Every runtime knob (`dasllama_math.das`
+    :165-544, `dasllama_common.das`'s thresholds, A/B bools and clamps, `dasllama_par.das`,
+    `dasllama_config.das`) is a global, a setter with its clamp and a getter written by hand,
+    and `apply_box_profile_runtime_at` walks the same facts a third time. Done looks like: one
+    knob declaration (name, default, clamp, env name, JSON key) generating the pair and the
+    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md` sec.2.9 uses; the unused
+    `set/get_embed_par_threshold` pair goes with it.

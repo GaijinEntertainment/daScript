@@ -2264,3 +2264,26 @@ Qwen3.8-27B-Q4_K_M carry committed board rows on both boxes (`performance/record
   twin, the double buffer off, the floor at 16, a re-mint and a re-baked image each left Q4_0
   within 0.2% of the never-tall arm. The M5's tall win stands (its Llama-1B Q8 prefill reads
   1.00x either way under the hand crown).
+
+### From the CPU dedup arc (2026-09-20)
+
+Every row here is one process, both arms interleaved, best of six after a warm-up; the M5 Max
+and the zen4 (Ryzen 7 PRO 8700GE) both, `-jit`, `DAS_TUNE_MANIFEST` unset on the zen4 and the
+box's rig sidecar on the M5.
+
+- **`gemm_f32` (row blocks outer) against `gemm_f32_jo` (column blocks outer), C += A·B at
+  the deltanet chunk and ASR attention shapes, jo / ij:** M5 64×128×64 0.99, 64×64×128 1.00,
+  128×128×128 0.96, 128×64×1000 0.96, 128×128×3000 0.94, 256×64×4000 0.99, 1024×64×1024
+  **1.17**; zen4 the same seven 1.01, 1.01, 1.00, 1.01, 0.97, **0.92**, 1.00. Both forms stay:
+  jo wins where B is wide and streamed once (the ASR scores, its callers today), ij wins the
+  M5's tall square; neither is a default for the other's shapes.
+- **Classic against blocked prefill attention (the two bit-identical CPU forms; flash is the
+  default), the whole CPU prefill of gemma-4-E2B-it-Q8_0 at 2048 tokens, `DASLLAMA_GPU=0`,
+  blocked / classic:** M5 **1.052** (5.13 vs 5.40 s), zen4 0.996 (15.42 vs 15.36 s). The blocked
+  form's K/V reuse across an 8-query block buys nothing the score-row reuse of the classic form
+  does not, so the blocked arm goes and the tests' bit-exact mode is classic.
+- **The tokenizer folds (`lcpp_bench --tok`, prose, 1 KB to 64 KB), MB/s before -> after on
+  the M5:** Qwen3-0.6B BPE 12.1 -> 16.6 at every size (the encode walk appends each codepoint's
+  bytes into one reused buffer instead of building a string per codepoint); gemma-3-1b SPM
+  24.0 -> 22.8 at 1 KB and 5.85 -> 5.76 at 64 KB, cv under 1% both readings, the ladder's
+  shape unchanged (one merge heap for both backends, the priority a double).
