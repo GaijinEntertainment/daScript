@@ -85,7 +85,7 @@ struct Args {
     @clarg_doc = "GPU layers, llama-bench spelling: 0 = CPU, anything else = Metal, required (default: 0)"
     ngl : int = 0
 
-    @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many device-home streams through the scheduler's device mode, the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
+    @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many streams through the scheduler - device-home where a whole-model driver homes them, host-cached otherwise - the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
     npl : int = 0
 
     @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier for the das run — the 'cpu + AMX' board row (records flavor 'accel'; CPU only, fails where das_accelerate is not built)"
@@ -1362,8 +1362,8 @@ def main() : int {
         print("error: --submit refused - this build carries no sidecar exchange client (no tune framework)\n")
         return 1
     }
-    if (cfg.submit && cfg.npl > 1) {
-        print("error: --npl reshapes the model (N mirror regions): its flat rows are not the board's, so --submit is refused with --npl\n")
+    if (cfg.submit && cfg.npl > 1 && cfg.ngl == 0) {
+        print("error: --npl reshapes the model on the whole-model Vulkan driver (N mirror regions): its flat rows are not the board's, so --submit is refused with --npl off Metal\n")
         return 1
     }
     if (cfg.npl == 1) {
@@ -1773,6 +1773,7 @@ def main() : int {
         }
         // the reference runs AFTER our model is freed — one model in memory at a time
         var refRows : array<LlamaBenchRow>
+        var refBatched = BenchTest()   //! the batched reference row; a 0 rate is none
         var refCmd = ""
         if (!empty(cfg.ref)) {
             var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
@@ -1790,6 +1791,22 @@ def main() : int {
             for (rr in refRows) {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
                 say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+            }
+            if (ngen > 0l && cfg.npl > 1) {   //! the batched row's reference: the batched exe beside llama-bench, at the row's parallel count
+                let batched_bin = llama_batched_bench_sibling(cfg.ref)
+                if (empty(batched_bin)) {
+                    say(fmt, "warning: no llama-batched-bench beside {cfg.ref} - no ref tg{ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
+                } else {
+                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), reps)
+                    say(fmt, "ref: {br.cmd}\n")
+                    if (empty(br.why)) {
+                        refBatched = br.row
+                        refCmd = "{refCmd} ; {br.cmd}"
+                        say(fmt, "ref tg{ngen}@{cfg.npl}: {br.row.tok_s:.2f} ± {br.row.stddev:.2f} tok/s\n")
+                    } else {
+                        say(fmt, "warning: {br.why}\n")
+                    }
+                }
             }
         }
         if (fmt == OutFmt.txt) {
@@ -1812,6 +1829,10 @@ def main() : int {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
                 let sd = rr.stddev_ts
                 var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            if (refBatched.tok_s > 0.0lf) {
+                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", "tg{ngen}@{cfg.npl}", "{refBatched.tok_s:.2f} ± {refBatched.stddev:.2f}"]
                 mdRows |> emplace(row)
             }
             delete results
@@ -1867,6 +1888,9 @@ def main() : int {
         for (row in refRows) {
             let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
             rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
+        }
+        if (refBatched.tok_s > 0.0lf) {
+            rr.tests |> insert("tg{ngen}@{cfg.npl}", refBatched)
         }
         m.runs |> emplace(rr)
     }

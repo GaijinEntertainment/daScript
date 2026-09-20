@@ -344,6 +344,51 @@ def test_batch_decode_q4_fallback(t : T?) {
 }
 
 [test]
+def test_batch_decode_step_census(t : T?) {
+    t |> run("the step census: a B-row step counts on the CPU batched stack, a one-row step as per-row (needs stories15M.bin)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        quantize_weights(tr)
+        let c = tr.config
+        let vocab = c.vocab_size
+        let prev_fused = get_fused_decode()
+        set_fused_decode(false)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var sa <- make_run_state(c)
+            var sb <- make_run_state(c)
+            eval_(tr, sa, pa)
+            eval_(tr, sb, pb)
+            var ws <- create_batch_workspace_(tr)
+            var both <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var one <- [unsafe(addr(sa))]
+            let toks <- [greedy_top(sa.logits, vocab), greedy_top(sb.logits, vocab)]
+            let tok <- [greedy_top(sa.logits, vocab)]
+            let c0 = batch_step_census()
+            eval_batch_(tr, ws, both, toks)
+            eval_batch_(tr, ws, both, toks)
+            let c1 = batch_step_census()
+            t |> equal(c1.cpu_stack - c0.cpu_stack, 2l, "two B=2 steps ran on the CPU batched stack")
+            t |> equal(c1.per_row - c0.per_row, 0l, "... none of them a row at a time")
+            t |> equal(c1.device - c0.device, 0l, "... none on a device driver")
+            eval_batch_(tr, ws, one, tok)
+            let c2 = batch_step_census()
+            t |> equal(c2.per_row - c1.per_row, 1l, "a B=1 step counts as per-row")
+            t |> equal(c2.cpu_stack - c1.cpu_stack, 0l, "... not on the batched stack")
+            delete ws
+            delete sa
+            delete sb
+        }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}
+
+[test]
 def test_batch_decode_b1_delegation(t : T?) {
     t |> run("B == 1 delegates to forward() bit-exactly (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {

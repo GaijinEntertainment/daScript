@@ -15,6 +15,27 @@ require math
 // One decode step over B sessions through ONE pass of the weights: GEMVs become B-row GEMMs via
 // the batched prefill blocks; attention stays per-(row, head) since each reads only ITS session's cache.
 
+var private g_batch_steps_device = 0l
+var private g_batch_steps_cpu_stack = 0l
+var private g_batch_steps_per_row = 0l
+
+//! how the batched steps since load were served: a device driver ran the whole stack in one pass, the
+//! CPU batched stack ran it, or the rows stepped one at a time - a weight pass a row (one row, a q4_0
+//! model, a non-standard graph, or a blob-only model whose device driver declined the step)
+def public batch_step_census() : tuple<device : int64; cpu_stack : int64; per_row : int64> {
+    return (device = g_batch_steps_device, cpu_stack = g_batch_steps_cpu_stack, per_row = g_batch_steps_per_row)
+}
+
+//! every row through the single-row forward: the batched drivers have no form for this step
+def private batch_rows_one_at_a_time(t : Model; var sessions : array<Session?>; tokens : array<int64>; nrows : int64) {
+    g_batch_steps_per_row++
+    for (i in range64(nrows)) {
+        var sp = sessions[i]
+        forward(t, *sp, tokens[i], sp.n_past)
+        sp.n_past++
+    }
+}
+
 def create_batch_workspace_(model : Model) : BatchWorkspace {
     var ws : BatchWorkspace
     // the scratch Session never owns cache or sampler state — eval_batch reads/writes the real
@@ -313,11 +334,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     // has no batched kernels, non-std arches have no batch attention worker, and the classic rope
     // path can't express per-row positions
     if (nrows == 1l || t.quant == QuantMode.q4_0 || !t.blocks.attn_is_std || !g_use_rope_table) {
-        for (i in range64(nrows)) {
-            var sp = sessions[i]
-            forward(t, *sp, tokens[i], sp.n_past)
-            sp.n_past++
-        }
+        batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
     }
     // snapshot cache geometry onto the scratch Session; kv_ensure runs for every row FIRST because
@@ -356,7 +373,14 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (batch_decode_override_armed()) {
         stack_done = batch_decode_override_invoke(t, ws, sessions, nrows)
     }
-    if (!stack_done) {
+    if (!stack_done && t.metal_blob) {   //! the device driver declined a blob-only model's step: the single-row driver serves what the batched one has no form for
+        batch_rows_one_at_a_time(t, sessions, tokens, nrows)
+        return
+    }
+    if (stack_done) {
+        g_batch_steps_device++
+    } else {
+        g_batch_steps_cpu_stack++
         blob_only_panic(t, "batch-decode stack")
         for (l in range64(c.n_layers)) {
             attention_batch_decode(t, ws, sessions, l, nrows)

@@ -58,6 +58,12 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   implementation.
 - **`dasllama_batch.das`** - the batched decode step: one pass of the weights over B sessions,
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
+  A step is served one of three ways, and `batch_step_census` counts each since load: the armed
+  device driver claimed the whole stack, the CPU batched stack ran it, or the rows stepped one at
+  a time through the single-row forward - one row, a q4_0 model, a non-standard graph, or a
+  blob-only model whose device driver declined the step (the CPU stack cannot run a blob-only
+  model, so the decline falls to the single-row driver, which serves what the batched one has no
+  form for: the E-series' per-layer embedding, `followup_metal.md` item 16).
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
@@ -228,9 +234,11 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   the pp warmup and timed prefill, the tg warmup and timed single-token forwards (whole-rep, or
   one token at a time for a driver that keeps its tick loop live), the warmup logit sanity check,
   the row-sized session under a caller's KV codec, the row statistic, and the batched row
-  `bench_tg_batched_rep` - one timed rep of `npl` device-home streams through the scheduler's
-  device mode (a `Scheduler` over N sessions, prefilled untimed, `ngen` batched steps timed, the
-  summed rate), so the file requires `dasllama_scheduler` and `dasllama_gpu_tier`. A sanctioned
+  `bench_tg_batched_rep` - one timed rep of `npl` streams through the scheduler, device-home
+  where a whole-model driver homes them and host-cached otherwise (a `Scheduler` over N sessions,
+  prefilled untimed, `ngen` batched steps timed, the summed rate; a timed step the census counted
+  per-row, or on the CPU batched stack under a device driver, refuses the row by name), so the
+  file requires `dasllama_scheduler`, `dasllama_batch` and `dasllama_gpu_tier`. A sanctioned
   public entry point, like the exchange: the fourth door in `dasllama_lint`'s allowed table.
   `benchmarks/lcpp_bench.das` drives it from its loop; dasllama-server's in-process `/bench` runs
   one step per tick (`ARCHITECTURE_MEASUREMENT.md` sec.2.5).

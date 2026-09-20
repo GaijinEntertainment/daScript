@@ -13,13 +13,20 @@ sections 2.21, 2.26 and 2.27. The Vulkan GEMM probe's arms, shapes and alternate
 boundaries, applied to our engine - so `pp` is one batched prefill of `-p` tokens from an empty
 cache per rep and `tg` is `-n` single-token forwards with no logit read, each row one untimed
 warmup plus `-r` timed reps; its `tg128@N` row (`--npl N`) mirrors the reference's batched bench
-at that parallel count - N streams served together through the scheduler's device mode, the rate
-their served tokens summed over the step wall. The batched row's clock covers the scheduler step
-whole - the sampling, the detokenization and the event list inside it - where the reference exe
-times its decode call alone, so a ratio taken between the two reads conservative for ours. The
-row's prefills and first tokens run before the clock starts, as the reference times PP apart, and
-each of its streams decodes to `plen + npl + ngen` positions - the context a driver sizes before
-it opens the row's session. The rows' protocol lives in one place,
+at that parallel count - N streams served together through the scheduler, device-home where a
+whole-model driver homes that many and host-cached otherwise (the Metal batched driver and the CPU
+batched stack take host-cached rows), the rate their served tokens summed over the step wall. The
+row stands only where every timed step was ONE batched dispatch: a step that ran its rows one at
+a time, or that a device-served model ran on the CPU batched stack, refuses the row by name -
+`dasllama_batch.das`'s step census counts the three ways a step is served - so a per-row fallback
+never posts a number under the batched label, whatever its rate. The batched row's clock covers
+the scheduler step whole - the sampling, the detokenization and the event list inside it - where
+the reference exe times its decode call alone, so a ratio taken between the two reads conservative
+for ours. The row's prefills and first tokens run before the clock starts, as the reference times
+PP apart, and each of its streams decodes to `plen + npl + ngen` positions - the context a driver
+sizes before it opens the row's session. The row's reference is `llama-batched-bench` beside the
+`--ref` binary (`setup_lcpp_ref.das` builds both), `-r` runs of its `-npl N` row folded to one
+`tg128@N` test on the reference run. The rows' protocol lives in one place,
 `dasllama/dasllama_bench.das` (the synthetic ids, the warmups, the timed reps, the warmup logit
 check, the row statistic), and
 two drivers run it: `lcpp_bench` from its loop, and dasllama-server's in-process `/bench` one
