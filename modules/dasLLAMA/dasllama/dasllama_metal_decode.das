@@ -2892,10 +2892,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let fuse13 = g_bfuse && !mv && !use_gemm && !use_mm && empty(g_skip) && !t.kquant_native && !geglu
     let chunked = maxcnt > g_attn_single_max
     let nchmax = (maxcnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
-    // partD (walkthrough kernel-2 winner): fused single-pass slice kernel + parallel comb — lane
-    // ownership assumes hs == 128 (32 lanes x half4 = one head); no softcap/window uniforms, so those
-    // models stand down to the chunked pair. DASLLAMA_METAL_ATTN_D=0 = the A/B rail to the old path.
-    let use_attn_d = (head_size == 128l && !hetero && c.attn_logit_softcap <= 0.0 && c.sliding_window == 0l &&
+    // partD (walkthrough kernel-2 winner): fused single-pass slice kernel + parallel comb — a lane owns
+    // one quad of the head (32 lanes x half4 = 128; a head of 64 idles the lanes past it, f16/f32 mirrors
+    // only); no softcap/window uniforms, so those models take the chunked pair. DASLLAMA_METAL_ATTN_D=0 = the A/B rail
+    let use_attn_d = ((head_size == 128l || (head_size == 64l && !blockc)) && !hetero && c.attn_logit_softcap <= 0.0 && c.sliding_window == 0l &&
         !c.attn_sinks &&   // partD's online softmax has no sink seed — sink models take the chunked pair
         g_env_attn_d)
     let d_nsgs = min((maxcnt + 31l) / 32l, 16l)

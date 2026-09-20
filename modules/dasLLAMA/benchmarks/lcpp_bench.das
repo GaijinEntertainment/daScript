@@ -1746,10 +1746,16 @@ def main() : int {
                 }
                 if (cfg.prof && empty(refused)) {   //! one untimed rep under the buckets: the step's host phases beside the device's
                     forward_profile_reset()
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_reset()
+                    }
                     let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps))
                     if (empty(br.why)) {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
                         forward_profile_report()
+                        static_if (typeinfo builtin_module_exists(das_metal)) {
+                            metal_decode_stage_report()   //! the batched steps' setup / encode / wait / gpu / readback phases
+                        }
                     } else {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} REFUSED - {br.why} ---\n")
                     }

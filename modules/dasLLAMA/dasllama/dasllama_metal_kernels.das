@@ -3015,10 +3015,12 @@ def private sqd_merge(var wacc : float[512]; wo : uint; bacc : float4; bm, btot 
 def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl, hs : uint;
                       mm, tot : float) {
     let po = pbase + sl * 4u
-    part[po] = wacc[wo]
-    part[po + 1u] = wacc[wo + 1u]
-    part[po + 2u] = wacc[wo + 2u]
-    part[po + 3u] = wacc[wo + 3u]
+    if (sl * 4u < hs) {   // a head narrower than the 32 lanes' quads: the lanes past it own no dims
+        part[po] = wacc[wo]
+        part[po + 1u] = wacc[wo + 1u]
+        part[po + 2u] = wacc[wo + 2u]
+        part[po + 3u] = wacc[wo + 3u]
+    }
     if (sl == 0u) {
         part[pbase + hs] = mm
         part[pbase + hs + 1u] = tot
@@ -3062,7 +3064,11 @@ class template MetalSqAttnDKvT {
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * hs
         let kv4 = kv_dim / 4u
-        let q4 = float4(q[qoff / 4u + sl])
+        // a lane owns one quad of the head; a head narrower than 32 quads leaves the lanes past it
+        // re-reading a valid quad with a zero q, so they score nothing and their sums are never stored
+        let ld = hs / 4u
+        let slc = sl % ld
+        let q4 = sl < ld ? float4(q[qoff / 4u + slc]) : float4(0.0)
         let wo = gl_SubgroupID * 128u + sl * 4u
         sqd_zero(wacc, wo)
         var mm = -3.0e38
@@ -3071,8 +3077,8 @@ class template MetalSqAttnDKvT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + sl]))
-            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + sl]))
+            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + slc]))
+            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + slc]))
             // invalid tail lanes keep the -inf seed -> weight 0
             let keep = sqd_score_blk(kp, q4, -3.0e38, nrows, kv4, sl) * scale
             let bm = sqd_block_max(keep)
@@ -3100,7 +3106,7 @@ class MetalSqAttnDF32 : MetalSqAttnDKvT {
 
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
-[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = "head_size", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64, head_size : int64")]
 class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
@@ -3123,6 +3129,7 @@ class MetalSqAttnCombD {
         let nch = min((cnt + 31u) / 32u, nchmax)
         let s4 = (hs + 4u) / 4u
         let base4 = (bb * nheads + h) * nchmax * s4
+        let ld = hs / 4u   // the lanes that own a quad of this head; the 128-thread group merges four subgroups whatever the head
         var mm = -3.0e38
         var tot = 0.0
         var acc4 = float4(0.0)
@@ -3130,7 +3137,7 @@ class MetalSqAttnCombD {
         while (e < nch) {
             let eb = base4 + e * s4
             let ml = float4(part[eb + hs / 4u])
-            let av = float4(part[eb + sl])
+            let av = sl < ld ? float4(part[eb + sl]) : float4(0.0)
             let nm = max(mm, ml.x)
             let r1 = exp(mm - nm)
             let r2 = exp(ml.x - nm)
@@ -3161,7 +3168,9 @@ class MetalSqAttnCombD {
         let r3 = exp(m3 - gm)
         let l = wml[1] * r0 + wml[3] * r1 + wml[5] * r2 + wml[7] * r3
         let acc = wacc[lid] * r0 + wacc[128u + lid] * r1 + wacc[256u + lid] * r2 + wacc[384u + lid] * r3
-        yo[bb * (nheads * hs) + h * hs + lid] = acc / l
+        if (lid < hs) {
+            yo[bb * (nheads * hs) + h * hs + lid] = acc / l
+        }
     }
 }
 

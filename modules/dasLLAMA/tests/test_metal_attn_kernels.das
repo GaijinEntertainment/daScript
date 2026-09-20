@@ -592,15 +592,15 @@ let private D_HS = 128
 let private D_NHEADS = 2
 let private D_KVMUL = 2
 
-def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, h, cnt : int; scale : float) : array<float> {
-    let khoff = (h / D_KVMUL) * D_HS
+def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, h, cnt, hs : int; scale : float) : array<float> {
+    let khoff = (h / D_KVMUL) * hs
     var sc : array<float>
     sc |> resize(cnt)
     var mm = -3.0e38
     for (j in range(cnt)) {
         var s = 0.0
-        for (d in range(D_HS)) {
-            s += q[qbase + h * D_HS + d] * kdeq[kvbase + j * KV_DIM + khoff + d]
+        for (d in range(hs)) {
+            s += q[qbase + h * hs + d] * kdeq[kvbase + j * KV_DIM + khoff + d]
         }
         sc[j] = s * scale
         mm = max(mm, sc[j])
@@ -611,8 +611,8 @@ def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<flo
         tot += sc[j]
     }
     var out : array<float>
-    out |> resize(D_HS)
-    for (d in range(D_HS)) {
+    out |> resize(hs)
+    for (d in range(hs)) {
         var acc = 0.0
         for (j in range(cnt)) {
             acc += sc[j] * vdeq[kvbase + j * KV_DIM + khoff + d]
@@ -623,8 +623,9 @@ def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<flo
     return <- out
 }
 
-def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsgs : int) {
-    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs}"
+def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS) {
+    let nheads = D_NHEADS * (D_HS / hs)   //! a narrower head keeps the fixture's kv_dim and qd: more heads, the same slab
+    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs}"
     var err : string
     let src = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl : MetalSqAttnDTq4_metal_sq_attn_d_msl))
     let entry = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_entry : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_entry : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_entry : MetalSqAttnDTq4_metal_sq_attn_d_msl_entry))
@@ -644,14 +645,14 @@ def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsg
     let quant = codec == "q8" || codec == "tq4"
     var fx : BatchAttnFix
     build_batch_fix(codec, cnts, qstride, fx)
-    let scale = 1.0 / sqrt(float(D_HS))
+    let scale = 1.0 / sqrt(float(hs))
     var want : array<float>
     want |> resize(nb2 * QD)
     for (r in range(nb2)) {
-        for (h in range(D_NHEADS)) {
-            var col <- attn_oracle_d(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, h, cnts[r], scale)
-            for (d in range(D_HS)) {
-                want[r * QD + h * D_HS + d] = col[d]
+        for (h in range(nheads)) {
+            var col <- attn_oracle_d(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, h, cnts[r], hs, scale)
+            for (d in range(hs)) {
+                want[r * QD + h * hs + d] = col[d]
             }
             delete col
         }
@@ -659,12 +660,12 @@ def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsg
     var bk = quant ? buf_upload(dev, fx.kslab) : (codec == "f16" ? buf_upload(dev, fx.kh) : buf_upload(dev, fx.kf))
     var bv = quant ? buf_upload(dev, fx.vslab) : (codec == "f16" ? buf_upload(dev, fx.vh) : buf_upload(dev, fx.vf))
     var bq = buf_upload(dev, fx.q)
-    var bpart = buf_fill(dev, nb2 * D_NHEADS * nsgs * (D_HS + 4), -1000.0)
+    var bpart = buf_fill(dev, nb2 * nheads * nsgs * (hs + 4), -1000.0)
     var by = buf_fill(dev, nb2 * QD, -1000.0)
     var brt = buf_upload(dev, fx.rt)
-    var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(D_NHEADS),
-        kv_mul = uint(D_KVMUL), hs = uint(D_HS), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
-    var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(D_NHEADS), hs = uint(D_HS))
+    var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(nheads),
+        kv_mul = uint(D_KVMUL), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
+    var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads), hs = uint(hs))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_d)
         metal_set_threadgroup_memory_length(enc, tgm, 0)
@@ -685,14 +686,14 @@ def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsg
             metal_set_buffer(enc, brt, 0ul, 4)
             metal_set_bytes(enc, unsafe(addr<void?>(kad)), uint64(typeinfo sizeof(kad)), 5)
         }
-        metal_dispatch_threadgroups(enc, uint3(uint(D_NHEADS), uint((nsgs + 3) / 4), uint(nb2)), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(nheads), uint((nsgs + 3) / 4), uint(nb2)), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_c)
         metal_set_threadgroup_memory_length(enc, metal_sq_attn_comb_d_msl_tgmem, 0)
         metal_set_buffer(enc, bpart, 0ul, 0)
         metal_set_buffer(enc, by, 0ul, 1)
         metal_set_buffer(enc, brt, 0ul, 2)
         metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(D_NHEADS), uint(nb2), 1u), uint3(uint(D_HS), 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(nheads), uint(nb2), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -750,6 +751,8 @@ def test_metal_attn_codec_kernels(t : T?) {
                 // the fused single-pass D family (hs = 128): slice-group counts off the 4-sg grid
                 sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "f32", [40, 130], 5)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, 64)
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, 64)
                 sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "tq4", [30, 100], 2)
                 metal_release(queue)

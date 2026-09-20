@@ -1937,10 +1937,13 @@ decode call alone, so every ratio reads conservative for ours.
 
 - **The scoreboard (ours / llama.cpp, tg128@4 summed; then flat tg128 ours / theirs), all Q8_0:**
   Llama-3.2-1B 944 ± 2 / 1031 ± 55 (0.92), flat 323 / 317; Llama-3.2-3B 430 ± 18 / 430 ± 30 (1.00),
-  flat 139 / 134; Llama-3.1-8B 208 ± 2 / 199 ± 10 (1.04), flat 67 / 64; gemma-4-E2B 389 ± 23 /
-  464 ± 16 (0.84), flat 152 / 128. The 3B and E2B rows read a cv past 3% and stand as
-  direction-grade until a re-run; the reference's E2B batched row moved between 234 and 464
-  across the day's runs, so that ratio's denominator is unsettled [direction-grade - two processes].
+  flat 139 / 134; Llama-3.1-8B 208 ± 2 / 199 ± 10 (1.04), flat 67 / 64; gemma-4-E2B 441 ± 15 /
+  465 ± 19 (0.95), flat 160 / 136 - the E2B row measured with `-p 0`: behind five pp512 reps
+  in the same process it read 389 ± 23 (0.84), a heat shadow the 1B does not cast (944 either
+  way), so the batched row of a small hot model is read without a prefill row in front of it or
+  after a settle. The 3B row reads a cv past 3% and stands as direction-grade until a re-run; the
+  reference's E2B batched row moved between 234 and 465 across the day's runs, so that ratio's
+  denominator is unsettled [direction-grade - two processes].
 - **The E-series batch arm (gemma-4-E2B Q8):** per-row steps read ~90 tok/s summed at four streams
   (each stream a weight pass a token); the batched step with the PLE rows form, the Q-only shared-KV
   rows and the two-width panels reads 389 - the same step's flat row unchanged at 152 [direction-grade].
@@ -1951,6 +1954,20 @@ decode call alone, so every ratio reads conservative for ours.
   costs the single row nothing. Per-row dispatch stands at ~360 small dispatches a four-row step
   on this 24-layer hybrid and still reads 2.4x the flat row; the state arena that folds them into
   one dispatch a stage is `followup_metal.md` item 16 [direction-grade - two processes].
+- **The 1B's four-row step, attributed (the knockout rail `set_metal_decode_skip` under the board's
+  own rep, one process, heat drifting 937 -> 865 across the ladder):** full 4267 us a step; the
+  weight sites out 1952 (~2.3 ms of weights, 1.24 GB at ~540 GB/s - the memory roof); attention out
+  3438 (~830 us, 52 us a layer, five times its byte roof); elementwise out 4134; the qkv sites out
+  4076. The stage report (`--prof` after the batched row): GPU 3807, encode 156, handoff 70, readback
+  34, setup 22 us a step. The worker spin window (30 ms against 500 us) moves nothing on this box:
+  942.8 against 942.0 [direction-grade - one process].
+- **The split single-pass attention serves a head of 64 (the 1B's) on the f16/f32 mirrors, where the
+  batch took the chunked per-(row, head) pair:** a lane owns one quad of the head, the lanes past a
+  narrow head re-read a valid quad with a zero query and never store, the combine merges four subgroups
+  at 128 threads whatever the head. Llama-3.2-1B Q8 tg128@4 942 -> 1024 ± 10 against llama.cpp's
+  1026 (0.92 -> 1.00); the flat tg128 unchanged at 324; the head-128 kernel cells bit-exact before
+  and after; the batch parity arm's f16 and f32 rows within their bars on the new form. The q8_0 and
+  tq4 mirrors keep the chunked pair at head 64 (the quant twin's lane mapping is its own).
 - **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
   and the Metal crowns are part of the step, not only its provenance [direction-grade - two processes].
