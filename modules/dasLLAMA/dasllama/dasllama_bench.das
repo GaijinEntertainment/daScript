@@ -6,9 +6,10 @@ module dasllama_bench shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common   // Model, Session, Config, make_run_state, forward_prefill, forward, piece_
-require dasllama/dasllama   // gpu_device_sessions: the device homes the batched row's streams
-require dasllama/dasllama_scheduler   // the batched row runs the served shape: device-home streams through the scheduler
+require dasllama/dasllama   // gpu_device_sessions: a whole-model driver homes the batched row's streams
+require dasllama/dasllama_scheduler   // the batched row runs the served shape: N streams through the scheduler
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: a step the driver handed to the CPU refuses the batched row
+require dasllama/dasllama_batch   // batch_step_census: a timed step served a row at a time refuses the batched row
 require math
 
 // The llama-bench protocol, one rep at a time: an untimed full-size warmup, then timed reps of
@@ -34,6 +35,15 @@ struct public BenchRow {
     test : string
     mean : double
     sd : double
+}
+
+//! the batched reference row's command line, the one shape every driver spells: `llama-batched-bench`
+//! at `npl` parallel sequences of `plen` prompt and `ngen` generated tokens, its context spanning every
+//! sequence above the published protocol's 4096 floor, the flash-attention path on
+def public llama_batched_bench_args(bin, mpath : string; ngl, threads : int; plen, ngen, npl : int64) : array<string> {
+    let ctx = max(4096l, ((npl * (plen + ngen) + 255l) / 256l) * 256l)
+    return <- [bin, "-m", mpath, "-ngl", "{ngl}", "-t", "{threads}", "-c", "{ctx}", "-b", "2048", "-ub", "512",
+               "-npp", "{plen}", "-ntg", "{ngen}", "-npl", "{npl}", "-fa", "on"]
 }
 
 //! mean and sample standard deviation of the per-rep rates (tok/s, MB/s - whatever the row measures),
@@ -159,24 +169,31 @@ def private all_streams_decoding(sch : Scheduler; npl : int64) : bool {
 }
 
 //! one timed batched tg rep in the served shape - what the batched reference exe's parallel row reads at that PL:
-//! `npl` device-home streams through the scheduler's device mode over distinct `plen`-token prompts, prefilled
-//! untimed, then `ngen` batched steps timed, the rate `npl x ngen` over their wall. `why` names a refusal and the
-//! rate then reads 0: the device homes fewer streams than `npl` (the region count is asked before the load), the
-//! streams never all reached decode within `npl x 8` steps, a stream that ended inside the timed steps, or a step
-//! the driver handed to the CPU chain. Every path past `submit` parks the streams' regions for the next rep, a
-//! refusal included
+//! `npl` streams through the scheduler over distinct `plen`-token prompts - device-home where a whole-model
+//! driver homes that many, host-cached otherwise - prefilled untimed, then `ngen` batched steps timed, the rate
+//! the tokens those steps emitted over their wall (`npl x ngen` for plain decode; a self-speculative stream, `mtp`,
+//! emits its accepted drafts too). `why` names a refusal and the rate then reads 0: a whole-model driver homes
+//! fewer streams than `npl` (the region count is asked before the load), the streams never all reached decode
+//! within `npl x 8` steps, a stream that ended inside the timed steps, a timed step that ran its rows one at a
+//! time, a timed step a device-served model ran on the CPU batched stack, or a call the driver handed to the CPU
+//! chain. Every path past `submit` parks the streams' regions for the next rep, a refusal included
 [cold_path, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tuple<tps : double; why : string> {
+def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false) : tuple<tps : double; why : string> {
     let homes = gpu_device_sessions()
-    if (homes < npl) {
+    if (homes > 0l && homes < npl) {
         return (tps = 0.0lf, why = "the device homes {homes} stream(s), the row asks {npl}")
     }
+    let device_home = homes >= npl
+    let device_served = device_home || batch_decode_override_armed()
     let passes0 = cpu_pass_total()
-    var sch <- create_scheduler(t, npl, npl, plen)   //! a prompt is one prefill quantum
-    verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
+    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, KVDtype.f16, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify
+    if (device_home) {
+        verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
+    }
     var events : array<SchedEvent>
     for (i in range64(npl)) {
-        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = ngen + npl + 8l)
+        //! a self-speculative stream may emit depth + 1 tokens a tick, so its budget covers the timed ticks that many times over
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = (ngen + npl + 8l) * (mtp ? get_mtp_depth() + 1l : 1l))
         verify(submit(t, sch, req), "bench_tg_batched_rep: the queue holds the row's streams")
     }
     var why = ""
@@ -191,15 +208,24 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tupl
         steps++
     }
     var ns = 0l
+    var served = 0l
+    var per_row = 0l
+    var cpu_stack = 0l
     if (empty(why)) {
         scheduler_step(t, sch, events)   //! the untimed warm step: the batched command's first record
         delete events
+        let census0 = batch_step_census()
+        let gen0 = sch.gen_tokens
         let t0 = ref_time_ticks()
         for (_i in range64(ngen)) {
             scheduler_step(t, sch, events)
             delete events
         }
         ns = get_time_nsec(t0)
+        served = sch.gen_tokens - gen0   //! the tokens the timed ticks emitted: npl x ngen for plain decode, more where speculative ticks accepted drafts
+        let census1 = batch_step_census()
+        per_row = census1.per_row - census0.per_row
+        cpu_stack = census1.cpu_stack - census0.cpu_stack
     }
     let alive = n_active(sch)
     let ids <- [for (st in sch.streams); st.id]
@@ -212,9 +238,15 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64) : tupl
     if (empty(why) && alive != npl) {
         why = "{npl - alive} of the {npl} streams ended inside the timed steps"
     }
+    if (empty(why) && per_row > 0l) {
+        why = "{per_row} of the {ngen} timed steps ran their rows one at a time"
+    }
+    if (empty(why) && device_served && cpu_stack > 0l) {
+        why = "{cpu_stack} of the {ngen} timed steps ran on the CPU batched stack, not the device"
+    }
     let passed = cpu_pass_total() - passes0
     if (empty(why) && passed > 0l) {
         why = "{passed} call(s) passed to the CPU chain inside the row"
     }
-    return (tps = empty(why) ? double(npl * ngen) * 1.0e9lf / double(ns) : 0.0lf, why = why)
+    return (tps = empty(why) ? double(served) * 1.0e9lf / double(ns) : 0.0lf, why = why)
 }

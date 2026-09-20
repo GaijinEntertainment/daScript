@@ -43,7 +43,7 @@ def records_doc : string {
                 "tune" : "k4q8_tile_gen=mr8 (manifest)", "tune_sha" : "cafe0123beef",
                 "exec_fmt" : "q8 blob",
                 "hardware" : { "cpu" : "Test CPU 9000" },
-                "tests" : { "pp512" : { "tok_s" : 100.0, "stddev" : 1.0 }, "tg128" : { "tok_s" : 25.0, "stddev" : 0.5 } }
+                "tests" : { "pp512" : { "tok_s" : 100.0, "stddev" : 1.0 }, "tg128" : { "tok_s" : 25.0, "stddev" : 0.5 }, "tg128@4" : { "tok_s" : 60.0, "stddev" : 2.0 } }
             },
             {
                 "engine" : "llama.cpp", "backend" : "cpu", "flavor" : "clean-cpu",

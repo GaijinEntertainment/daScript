@@ -11,24 +11,26 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 twin, or shifts a shared field to a different binding number, is a defect - even where one
 twin ignores that field.** Two kernel classes are twins when their compiled bodies differ only
 on choices fixed at compile time - a template constant, a typedef, or which base shell's method
-they inherit.
+they inherit; a base shell is the dispatch-less base class whose methods the emitter splices
+flat into each deriving class.
 
-**A copy-pasted kernel twin, or a kernel split into hand instances where a `static_if` on a
-`@template_constant` serves, is a defect - kernel twins stamp one `class template` or derive from
-one base shell.** Body divergence is carried by a `@template_constant`, or by an overridden method
-spliced flat at emission.
+**A kernel class whose body differs from a sibling's only on compile-time choices - a copy-pasted
+twin, a hand instance where a `static_if` on a `@template_constant` serves, or a class forked out
+of a shared template - is a defect: twins stamp one `class template` or derive from one base
+shell.** Body divergence is carried by a `@template_constant`, or by an overridden method spliced
+flat at emission.
 
 **A `@template_constant` a stamp - one instance of a class template, or one class deriving from a
 base shell - sets, that nothing in that stamp resolves at compile time - a `static_if` arm, a
 `@template_gate`, a value select, an array extent - reads, is a defect - move the constant to the
 template whose body reads it, or make the body read it.**
 
-**A diff that changes where a `[vk_dispatch]` / `[metal_dispatch]` class's compiled body comes
-from (a different template, a different base shell, another class's body folded in, or a fork out
-of a shared template) carries in the PR body, for each affected stamp, its generated source diffed
-against the pre-change tree - the `*_msl` global, or the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>`
-writes - with an empty diff, or names there the difference and the compile-time choice that
-carries it, or names the behaviour change and the test cell that pins it.**
+**A diff that changes a stamp's generated source - through the class's own body, the template or
+base shell it stamps, or a helper its body splices - carries in the PR body, for each affected
+stamp, its generated source diffed against the pre-change tree (the `*_msl` global, or the `.spv`
+files `DASLLAMA_VK_SPV_DUMP=<dir>` writes).** The evidence is one of three: an empty diff; the
+difference named with the compile-time choice that carries it; or the behaviour change named with
+the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
@@ -38,9 +40,6 @@ shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.
 kernel-binding asymmetries.** A binding counts as read when the compiled
 body reads any field declared on it - fields in the stamp or in the shell may share a binding,
 `@role = "alias"` marks such a view - including a field read only under a run-time flag.
-
-**A kernel class forked out of a shared template whose body still differs from the template only
-on compile-time choices is a twin, and a twin stamps the template - the fork is a defect.**
 
 **A forked kernel class carries a `//!` line above its `[metal_dispatch]` / `[vk_dispatch]`
 declaration naming the body difference that keeps it out of its former siblings' template.**
@@ -94,6 +93,10 @@ defaults or composes generated builders binds nothing.
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
 `grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
+
+**A diff that stops the `grid=`/`tg=` spec consuming a `params=` value drops that value from the
+`params=` spec and from every call site in the same change.** The value then reaches neither the
+host nor the device, so nothing reads it.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

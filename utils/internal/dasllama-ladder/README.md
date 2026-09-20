@@ -24,7 +24,7 @@ The anatomy mirrors `utils/internal/dasweb-playground`.
 ### 1.1 Routes
 
 Public (proxied by `caddy.snippet`): `GET /api/versions`, `GET /api/runs[?version=N]` (the
-board: every run's filter columns plus its `pp512`/`tg128` cells and `cpu` label, so a page
+board: every run's filter columns plus its `pp512`/`tg128`/`tg128b4` cells and `cpu` label, so a page
 paints and pairs from this one response), `GET /api/submission/:id` (the verbatim receipt,
 fetched only for a receipt a visitor opens), `GET /api/sidecars[?version=N]` (the
 browse listing; absent/0 version = all), `GET /api/sidecars?version=N&box=<encoded>` (the
@@ -48,10 +48,11 @@ Three tables, one migration stream (`ladder_migration_*`):
 - `submissions` - one row per accepted upload, the document kept **verbatim** (`Doc`),
   content-hashed (`DocSha`, unique - byte-identical resubmits dedup). Kinds: `records`,
   `sidecar`, `official`.
-- `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128` cells
-  and the `Cpu` label the board paints from; the truth stays in the submission `Doc` at
-  (`ModelIdx`, `RunIdx`); the three cell columns hold `run_cells` of that node, and migration 2
-  fills them for rows older than the columns. Identity per `modules/dasLLAMA/METHODOLOGY.md`
+- `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128`/`Tg128b4`
+  cells (`Tg128b4` is the `tg128@4` test, the four-stream batched row) and the `Cpu` label the
+  board paints from; the truth stays in the submission `Doc` at (`ModelIdx`, `RunIdx`); the cell
+  columns hold `run_cells` of that node, and migrations 2 and 3 fill them for rows older than the
+  columns. Identity per `modules/dasLLAMA/METHODOLOGY.md`
   is (`Gguf`, `Box`, `Engine`, `Backend`, `Flavor`, `Workload`); official imports replace on
   it, community rows append.
 - `sidecars` - content-addressed by the document's own sha256; identity columns come from

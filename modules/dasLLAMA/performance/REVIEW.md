@@ -31,9 +31,19 @@ renames the file and repoints every `records/<box>.json` row whose `tune_sha` na
 name, in the same change.** The archive is content-addressed; a row left on the old name
 points at a file that no longer exists.
 
-**A diff that writes a reference-engine row - a run row whose `engine` is not `das` - to
-`records/<box>.json` whose `sha` names anything but the standing ref pin (`DEFAULT_REF_SHA`,
-`../benchmarks/setup_lcpp_ref.das`) is a defect - re-mint.**
+**A diff that writes a run row carrying a `sha` to `records/<box>.json` stamps it with the build
+that timed every cell of the row - re-mint otherwise.**
+
+**A `das` row (a run row whose `engine` is `das`) carrying a `sha` is timed by the released
+`lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha` -
+re-mint otherwise.**
+
+**A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
+standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) - both flavors that script
+builds, `clean-cpu` and `stock`, are the pinned checkout - re-mint otherwise.**
+
+**A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
+build - names both exes in its `cmd`.**
 
 **A diff that writes a reference-engine row carrying no `sha` to `records/<box>.json` names,
 in that row's provenance, the checkout that built the binary it timed; a python leg names
@@ -71,17 +81,10 @@ the ruler's `--settle` default (the ruler's `--help` states it), names the reaso
 and labels the file's rows `direction-grade` everywhere the change cites them - PR body, ledger
 rows, architecture or profile docs.**
 
-**A diff that writes a `das` row - a run row whose `engine` is `das` - to `records/<box>.json`
-times that row with the released `lcpp_bench` exe.** That exe is
-`../benchmarks/lcpp_bench.das` built by `daspkg release`.
-
 **A diff that writes a `das` row to `records/<box>.json` names on the row the codegen form of the
 exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three
 (`skills/internal/build_and_debug.md`), and a rate that does not name its form cannot be compared
 with one that was built another way.
-
-**A diff that writes a `llama.cpp` row - a run row whose `engine` is `llama.cpp` - to
-`records/<box>.json` times that row with the reference exe the ref pin builds.**
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the

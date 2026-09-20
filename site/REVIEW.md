@@ -11,13 +11,13 @@ into that editor - and not the generated Sphinx output under `doc/` (this folder
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed, with every home directory
-spelled `~`.** A rendered `cmd` identifies
-the RUN, not the row: where one run produced several rendered rows (an ASR run's per-clip
-rows), each row's receipt is the run's command.
+spelled `~`.** A rendered `cmd` identifies the RUN, not the row: where one run produced several
+rendered rows (an ASR run's per-clip rows), each row's receipt is the run's command.
 
-**A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
-argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
-spawns) ran, with every home directory spelled `~` outside the quotes, is a defect.**
+**A `cmd` field in `files/dasllama/bench_records.json` holds only the argvs the run executed -
+`modules/dasLLAMA/performance/gen_bench_records.das`'s, or the released bench exe's it spawns,
+joined by `" ; "` where a run spawned more than one; a diff that writes anything else there is
+a defect.**
 
 **A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
 render that line on every row the run produced.**
@@ -40,9 +40,12 @@ render every such number only from the vendored dasProfile records, the
 `files/profile_results_<platform>.json` files `.github/workflows/pages.yml` (repo root)
 fetches from borisbat/dasProfile at deploy time.**
 
-**A claim on a page about how a dasProfile number was captured - its statistic, its sample
-count, its spread - that the record the page renders does not itself carry is a defect -
-render the claim from the record or drop it.**
+**A claim on a page about how a measured number was captured - its statistic, its sample
+count, its spread, which clock timed each engine - that the checked-in record the page renders
+does not itself carry is a defect - render the claim from the record, state only what
+`doc/reference/dasllama_methodology.html` carries (its source is
+`doc/source/reference/dasllama_methodology.rst`, repo root) and link that page, or drop the
+claim.**
 
 **A second record file for data a dasProfile record already holds is a defect - read the
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the

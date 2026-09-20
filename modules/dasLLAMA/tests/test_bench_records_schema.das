@@ -367,6 +367,26 @@ def test_parse_mtmd_image(t : T?) {
 }
 
 [test]
+def test_parse_llama_batched_bench(t : T?) {
+    t |> run("the batched reference parse: the S_TG cell of the row at npl, the other rows and noise ignored") @(t : T?) {
+        // fixture text from a live llama-batched-bench run (M5, the 1B) - the header, a separator, two rows
+        let out = ("main: n_kv_max = 4096, n_batch = 2048, n_ubatch = 512, flash_attn = 1\n"
+            + "|    PP |     TG |    B |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |      T s |    S t/s |\n"
+            + "|-------|--------|------|--------|----------|----------|----------|----------|----------|----------|\n"
+            + "|   512 |    128 |    1 |    640 |    0.052 |  9846.15 |    0.404 |   316.83 |    0.456 |  1403.51 |\n"
+            + "|   512 |    128 |    4 |   2560 |    0.190 | 10778.95 |    0.497 |  1030.18 |    0.687 |  3726.35 |\n"
+            + "\nllama_perf_context_print: total time = 1234.5 ms\n")
+        t |> numericEqual(float(llama_batched_bench_tg(out, 4l)), 1030.18)
+        t |> numericEqual(float(llama_batched_bench_tg(out, 1l)), 316.83)
+        t |> numericEqual(float(llama_batched_bench_tg(out, 8l)), 0.0, "no row at that npl = no rate, never a neighbour's")
+        t |> numericEqual(float(llama_batched_bench_tg("main: n_kv_max = 4096\nerror: failed to load model\n", 4l)), 0.0, "a run that printed no table reads 0")
+        let garbage = "|   512 |    128 |    4 |   2560 |    0.190 | 10778.95 |    0.497 |     n/a |    0.687 |  3726.35 |\n"
+        t |> numericEqual(float(llama_batched_bench_tg(garbage, 4l)), 0.0, "a cell that is not a number reads 0")
+        t |> equal(llama_batched_bench_sibling("/no/such/dir/llama-bench"), "", "no sibling beside a missing reference = no batched exe")
+    }
+}
+
+[test]
 def test_mtmd_versions_bin_param(t : T?) {
     t |> run("the version stamp follows the bin argument - the stock build stamps its own checkout") @(tt : T?) {
         // a non-git dir has no commit, so only the patch tag survives - the stamp's shape is

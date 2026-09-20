@@ -37,7 +37,6 @@ namespace das {
     void collectInvokeIndVariables ( const ProgramPtr & program, const TypeDeclPtr & inv, IndirectSources & sources ) {
         das_hash_set<Function *> accessed;
         program->library.foreach([&](Module * mod){
-            ExpressionSources globSrc;
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;
@@ -65,7 +64,6 @@ namespace das {
     void collectInvokeIndLambdaVariables ( const ProgramPtr & program, const TypeDeclPtr & inv, IndirectSources & sources ) {
         das_hash_set<Function *> accessed;
         program->library.foreach([&](Module * mod){
-            ExpressionSources globSrc;
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;

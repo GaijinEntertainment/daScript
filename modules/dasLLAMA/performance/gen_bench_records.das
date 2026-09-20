@@ -70,6 +70,9 @@ struct Args {
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK); its sibling llama-mtmd-cli serves as the metal/amx image-chat reference"
     ref_stock : string
 
+    @clarg_doc = "Streams of the metal leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through llama-batched-bench beside --ref-stock; 0 = no batched row (default: 4)"
+    npl : int = 4
+
     @clarg_name = "ref-no-affinity"
     @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
     ref_no_affinity : bool
@@ -159,6 +162,10 @@ def private rig_exe_path() : string {
 def private rig_build_line() : string {
     return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
 }
+
+//! the codegen form the rig build line produces (no `--jit-split-modules` / `--jit-lto`): every das
+//! row names it, so a rate built one way is never compared with one built another
+let RIG_CODEGEN_FORM = "exe one unit"
 
 var private g_jit_bench = false
 
@@ -344,6 +351,9 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             if (!empty(parity) && r.engine == "das") {
                 r.parity = parity   // the model's pregate verdict — cells only run after it passed
             }
+            if (r.engine == "das" && !g_jit_bench) {
+                r.versions = RIG_CODEGEN_FORM
+            }
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
             unstamped ||= das_run_unstamped(r)
         }
@@ -434,6 +444,9 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
                                "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (be == "metal") {
         args |> push_from(["--ngl", "99"])
+        if (cfg.npl > 1) {   //! the batched row rides the metal leg's own child: on Metal --npl reshapes nothing, so the flat rows stay the board's
+            args |> push_from(["--npl", "{cfg.npl}"])
+        }
     }
     if (accel) {
         args |> push("--accel")
@@ -966,6 +979,21 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     for (row in rows) {
         let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
         rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
+    }
+    if (ngl != 0 && cfg.npl > 1) {   //! the metal leg's batched row: the das child measured tg@npl, the batched exe answers it
+        let batched_bin = llama_batched_bench_sibling(bin)
+        if (empty(batched_bin)) {
+            to_log(LOG_WARNING, "gen_bench_records: no llama-batched-bench beside {bin} - {file} ref {flavor} {backend} carries no tg{cfg.ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
+        } else {
+            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(cfg.plen), int64(cfg.ngen), int64(cfg.npl), cfg.reps)
+            if (empty(br.why)) {
+                rr.tests |> insert("tg{cfg.ngen}@{cfg.npl}", br.row)
+                rr.cmd = "{cmd} ; {br.cmd}"
+            } else {
+                to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} tg{cfg.ngen}@{cfg.npl} - {br.why}\n")
+                failed |> push("{file} ref {flavor} {backend} tg{cfg.ngen}@{cfg.npl}")
+            }
+        }
     }
     var bm = BenchModel(gguf = file, params_b = double(rows[0].model_n_params) / 1.0e9lf, note = note)
     bm.runs |> emplace(rr)

@@ -6,6 +6,8 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_scheduler   // the scheduler under test
 require _scheduler_rig   // make_req, drain, toks_of, finished_of
+require _ids   // same_ids
+require dasllama/dasllama_batch   // batch_step_census: how the speculative ticks were served
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe
@@ -45,18 +47,6 @@ def private load_capped_cpu(cap : int64) : Model {
     m.config.seq_len = min(m.config.seq_len, cap)
     moe_gpu_drop_model()
     return <- m
-}
-
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
 }
 
 // One stream's reference: generate() with the wiring's stop protocol (stop token ends the stream
@@ -159,8 +149,8 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             var sb <- toks_of(events1, 11l)
             to_log(LOG_INFO, "one-stream scheduler A: \"{text_of(pieces_of(events1, 10l))}\" | generate A: \"{text_of(refs[0].pieces)}\"\n")
             to_log(LOG_INFO, "one-stream scheduler B: \"{text_of(pieces_of(events1, 11l))}\" | generate B: \"{text_of(refs[1].pieces)}\"\n")
-            t |> success(same(sa, refs[0].toks), "stream A through a one-stream scheduler matches generate ({sa} vs {refs[0].toks})")
-            t |> success(same(sb, refs[1].toks), "stream B through a one-stream scheduler matches generate ({sb} vs {refs[1].toks})")
+            t |> success(same_ids(sa, refs[0].toks), "stream A through a one-stream scheduler matches generate ({sa} vs {refs[0].toks})")
+            t |> success(same_ids(sb, refs[1].toks), "stream B through a one-stream scheduler matches generate ({sb} vs {refs[1].toks})")
             var sch <- create_scheduler(m, 2l, 2l, 64l)
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "stream A queued")
@@ -170,8 +160,8 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             var gb <- toks_of(events, 21l)
             to_log(LOG_INFO, "two-stream A: \"{text_of(pieces_of(events, 20l))}\" | solo A: \"{text_of(refs[0].pieces)}\"\n")
             to_log(LOG_INFO, "two-stream B: \"{text_of(pieces_of(events, 21l))}\" | solo B: \"{text_of(refs[1].pieces)}\"\n")
-            t |> success(same(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
-            t |> success(same(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
+            t |> success(same_ids(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
+            t |> success(same_ids(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
             t |> success(sch.sum_batch >= 2l * 2l, "the two streams shared decode steps (sum batch {sch.sum_batch})")
             delete sa
             delete sb
@@ -213,7 +203,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
             drain(m, sch, events)
             var got <- toks_of(events, 1l)
             var gotp <- pieces_of(events, 1l)
-            t |> success(same(got, ref.toks), "greedy tokens == generate() bit-exact")
+            t |> success(same_ids(got, ref.toks), "greedy tokens == generate() bit-exact")
             t |> equal(length(gotp), length(ref.pieces))
             for (i in range(length(gotp))) {
                 t |> equal(gotp[i], ref.pieces[i])
@@ -233,7 +223,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
             t |> success(submit(m, sch, make_req(2l, prompt, sp, 10l, none, 4242)), "seeded stream queued")
             drain(m, sch, events)
             var got2 <- toks_of(events, 2l)
-            t |> success(same(got2, ref2.toks), "seeded sampled tokens == generate()")
+            t |> success(same_ids(got2, ref2.toks), "seeded sampled tokens == generate()")
             // stop finish: pick the first greedy token that did not occur earlier in the stream,
             // declare it a stop id — the scheduler must end there, stop token unemitted
             var kstop = -1
@@ -255,7 +245,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
                 drain(m, sch, events)
                 var got3 <- toks_of(events, 3l)
                 t |> equal(length(got3), kstop)
-                t |> success(same(got3, ref3.toks), "stop-bounded tokens == generate()")
+                t |> success(same_ids(got3, ref3.toks), "stop-bounded tokens == generate()")
                 let fin3 = finished_of(events, 3l)
                 t |> equal(fin3.finish, "stop")
                 t |> equal(fin3.n_gen, int64(kstop))
@@ -314,7 +304,7 @@ def test_scheduler_chunk_sizes(t : T?) {
             t |> success(first[0] >= 0l, "chunked runs produced tokens")
             for (ci in range(1, 4)) {
                 t |> equal(first[ci], first[0])
-                t |> success(same(streams[ci], streams[0]), "K arm {ci}: full stream identical to K=1")
+                t |> success(same_ids(streams[ci], streams[0]), "K arm {ci}: full stream identical to K=1")
             }
             set_prefill_attn_mode(saved_mode)
             delete first
@@ -370,9 +360,9 @@ def test_scheduler_batching(t : T?) {
             to_log(LOG_INFO, "batched A: \"{text_of(pieces_of(events, 10l))}\" {ga} | solo A: \"{text_of(refs[0].pieces)}\" {refs[0].toks}\n")
             to_log(LOG_INFO, "batched B: \"{text_of(pieces_of(events, 11l))}\" {gb} | solo B: \"{text_of(refs[1].pieces)}\" {refs[1].toks}\n")
             to_log(LOG_INFO, "batched C: \"{text_of(pieces_of(events, 12l))}\" {gc} | solo C: \"{text_of(refs[2].pieces)}\" {refs[2].toks}\n")
-            t |> success(same(ga, refs[0].toks), "stream A (batched) matches its solo reference")
-            t |> success(same(gb, refs[1].toks), "stream B (batched) matches its solo reference")
-            t |> success(same(gc, refs[2].toks), "stream C (admitted after a slot freed) matches its solo reference")
+            t |> success(same_ids(ga, refs[0].toks), "stream A (batched) matches its solo reference")
+            t |> success(same_ids(gb, refs[1].toks), "stream B (batched) matches its solo reference")
+            t |> success(same_ids(gc, refs[2].toks), "stream C (admitted after a slot freed) matches its solo reference")
             t |> equal(finished_of(events, 12l).finish, "length")
             t |> equal(length(toks_of(events, 13l)), 0)
             t |> equal(sch.peak_active, 2l)
@@ -428,7 +418,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
             var warm <- toks_of(events, 2l)
             let fin2 = finished_of(events, 2l)
             t |> equal(fin2.n_cached, (np - 1l) / 16l * 16l)   // whole pages, capped below np
-            t |> success(same(warm, cold), "warm stream identical to cold")
+            t |> success(same_ids(warm, cold), "warm stream identical to cold")
             t |> equal(sch.cached_tokens, fin2.n_cached)
             // idle scheduler: the only live page holds are the cache's
             t |> equal(int64(length(sch.pool.free_groups)),
@@ -483,7 +473,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
                 t |> success(submit(m, sch3, make_req(52l, prompt4, greedy, 6l, none)), "cold continuation queued")
                 drain(m, sch3, events)
                 var cold4 <- toks_of(events, 52l)
-                t |> success(same(warm4, cold4), "continuation attach bit-exact vs cold - donated rows aligned")
+                t |> success(same_ids(warm4, cold4), "continuation attach bit-exact vs cold - donated rows aligned")
                 delete cold4
                 delete sch3
                 delete warm4
@@ -541,7 +531,7 @@ def test_scheduler_evict_and_context_length(t : T?) {
             t |> equal(length(toks_of(events, 21l)), b_before)
             var ga <- toks_of(events, 20l)
             to_log(LOG_INFO, "survivor: \"{text_of(pieces_of(events, 20l))}\" {ga} | solo: \"{text_of(ref_a.pieces)}\" {ref_a.toks}\n")
-            t |> success(same(ga, ref_a.toks), "survivor stream unaffected by the eviction")
+            t |> success(same_ids(ga, ref_a.toks), "survivor stream unaffected by the eviction")
             t |> equal(finished_of(events, 20l).finish, "length")
             // context exhaustion: budget far beyond the capped seq_len — the decode pre-check must
             // finish "length" (n_gen = seq_len - n_prompt + 1) instead of reaching the engine panic
@@ -608,11 +598,16 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "spec stream queued")
+            let census0 = batch_step_census()
             drain(m, sch, events)
+            let census1 = batch_step_census()
             set_mtp_spec(prev_spec)
+            //! the planar carrier has no joint-verify seat: every speculative tick steps its stream alone, and the census says so - the batched row's refusal reads it
+            t |> success(census1.per_row - census0.per_row > 0l, "a speculative tick no joint verify carried counts as per-row ({census1.per_row - census0.per_row} per-row ticks)")
+            t |> equal(census1.device, census0.device, "... and never as a device step")
             var got <- toks_of(events, 2l)
             to_log(LOG_INFO, "spec: \"{text_of(pieces_of(events, 2l))}\" {got} | plain: \"{text_of(pieces_of(events0, 1l))}\" {ref_toks}\n")
-            t |> success(same(got, ref_toks), "spec stream tokens == plain scheduler")
+            t |> success(same_ids(got, ref_toks), "spec stream tokens == plain scheduler")
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)
@@ -632,7 +627,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             set_mtp_spec(prev_spec)
             var got_s <- toks_of(events2, 4l)
             log_streams("sampled plain", events1, 3l, "sampled spec", events2, 4l)
-            t |> success(same(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
+            t |> success(same_ids(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
             t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
             t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
             t |> equal(finished_of(events2, 4l).n_gen, 24l)
@@ -654,7 +649,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             set_mtp_spec(prev_spec)
             var got_p <- toks_of(events4, 6l)
             log_streams("penalized-greedy plain", events3, 5l, "penalized-greedy spec", events4, 6l)
-            t |> success(same(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
+            t |> success(same_ids(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
             t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
             delete got_p
             delete ref_p
@@ -706,14 +701,14 @@ def test_scheduler_paged_sampled(t : T?) {
             drain(m, sch, events)
             var cold <- toks_of(events, 1l)
             t |> equal(finished_of(events, 1l).n_cached, 0l)
-            t |> success(same(cold, ref.toks), "paged cold sampled stream == generate()")
+            t |> success(same_ids(cold, ref.toks), "paged cold sampled stream == generate()")
             // and again over a WARM cache: the attach must not perturb the sampler either
             events |> clear()
             t |> success(submit(m, sch, make_req(2l, prompt, sp, 12l, none, 4242)), "warm sampled stream queued")
             drain(m, sch, events)
             var warm <- toks_of(events, 2l)
             t |> success(finished_of(events, 2l).n_cached > 0l, "the warm run attached cached pages")
-            t |> success(same(warm, ref.toks), "paged WARM sampled stream == generate()")
+            t |> success(same_ids(warm, ref.toks), "paged WARM sampled stream == generate()")
             set_prefill_attn_mode(saved_mode)
             delete cold
             delete warm
@@ -794,7 +789,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
                 t |> success(submit(m, sch, req), "media stream queued (arm {arm}: rows [{lo},{hi}))")
                 drain(m, sch, events)
                 var got <- toks_of(events, 1l)
-                t |> success(same(got, base.toks), "arm {arm}: media stream == the all-token stream")
+                t |> success(same_ids(got, base.toks), "arm {arm}: media stream == the all-token stream")
                 t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
                 delete got
                 delete events
@@ -807,14 +802,14 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             let hi = np
             var causal_ref <- embd_span_generate(m, prompt, 0l, 0l, greedy, 8l)
             var span_ref <- embd_span_generate(m, prompt, lo, hi, greedy, 8l)
-            t |> success(!same(span_ref, causal_ref), "the span moves the stream (the flag is load-bearing here)")
+            t |> success(!same_ids(span_ref, causal_ref), "the span moves the stream (the flag is load-bearing here)")
             var sch_nc <- create_scheduler(m, 1l, 4l, 64l)
             var events_nc : array<SchedEvent>
             var req_nc <- media_req(m, 7l, prompt, lo, hi, true, greedy, 8l)
             t |> success(submit(m, sch_nc, req_nc), "non-causal media stream queued")
             drain(m, sch_nc, events_nc)
             var got_nc <- toks_of(events_nc, 7l)
-            t |> success(same(got_nc, span_ref), "non-causal arm == generate_embd's span form")
+            t |> success(same_ids(got_nc, span_ref), "non-causal arm == generate_embd's span form")
             delete causal_ref
             delete got_nc
             delete events_nc
@@ -842,7 +837,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             t |> equal(finished_of(ev, 10l).n_cached, 0l)   // no attach: those ids are not this KV
             t |> equal(schp.cached_tokens, 0l)
             var paged_toks <- toks_of(ev, 10l)
-            t |> success(same(paged_toks, base.toks), "paged media stream == the all-token stream")
+            t |> success(same_ids(paged_toks, base.toks), "paged media stream == the all-token stream")
             t |> equal(prefix_held_groups(schp.prefix), primed)   // and no donate on the way out
             delete paged_toks
             delete text_only
@@ -1051,7 +1046,7 @@ def test_scheduler_mrope(t : T?) {
             var none : array<int64>
             var mref <- embd_mrope_generate(m, prompt, lo, hi, grid, greedy, 8l)
             var sref <- embd_span_generate(m, prompt, lo, hi, greedy, 8l)
-            t |> success(!same(mref, sref), "grid angles move the stream (the mrope walk is load-bearing here)")
+            t |> success(!same_ids(mref, sref), "grid angles move the stream (the mrope walk is load-bearing here)")
             // (1) the grid reaches the quantum: scheduler stream == generate_embd's grid form
             var sch <- create_scheduler(m, 1l, 4l, 64l)
             var events : array<SchedEvent>
@@ -1059,7 +1054,7 @@ def test_scheduler_mrope(t : T?) {
             t |> success(submit(m, sch, req), "mrope media stream queued")
             drain(m, sch, events)
             var got <- toks_of(events, 1l)
-            t |> success(same(got, mref), "scheduler mrope stream == generate_embd's grid form")
+            t |> success(same_ids(got, mref), "scheduler mrope stream == generate_embd's grid form")
             t |> equal(finished_of(events, 1l).n_prompt, np)
             t |> equal(sch.mrope_streams, 1l)   // the telemetry counter the server stats surface reads
             // (2) batched decode: the mrope stream and a text stream decode as one 2-row batch —
@@ -1073,8 +1068,8 @@ def test_scheduler_mrope(t : T?) {
             drain(m, schb, eb)
             var g1 <- toks_of(eb, 21l)
             var g2 <- toks_of(eb, 22l)
-            t |> success(same(g1, mref), "batched mrope stream == its solo grid reference")
-            t |> success(same(g2, tref.toks), "batched text stream == its solo reference")
+            t |> success(same_ids(g1, mref), "batched mrope stream == its solo grid reference")
+            t |> success(same_ids(g2, tref.toks), "batched text stream == its solo reference")
             t |> success(schb.sum_batch >= 4l, "decode steps actually batched (sum batch {schb.sum_batch})")
             set_fused_decode(prev_fused)
             set_prefill_attn_mode(saved_mode)

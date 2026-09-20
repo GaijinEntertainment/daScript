@@ -8,12 +8,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -23,24 +23,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":9074.3052485156186,
-            "stddev":45.637462615966797
+            "tok_s":9094.5998731660075,
+            "stddev":57.083290100097656
           },
           "tg128":{
-            "tok_s":161.29051694478639,
-            "stddev":0.29714569449424744
+            "tok_s":159.88990703706887,
+            "stddev":0.26639094948768616
+          },
+          "tg128@4":{
+            "tok_s":453.39641588874036,
+            "stddev":1.7840683460235596
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -56,12 +60,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-20",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -71,12 +75,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":7413.405377,
-            "stddev":19.497814000000002
+            "tok_s":7555.9522370000004,
+            "stddev":14.574376000000001
           },
           "tg128":{
-            "tok_s":137.04832500000001,
-            "stddev":0.14505699999999999
+            "tok_s":136.49394799999999,
+            "stddev":0.51778599999999997
+          },
+          "tg128@4":{
+            "tok_s":477.48000488281252,
+            "stddev":2.5273985862731934
           }
         },
         "source":"official",
@@ -275,12 +283,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -290,27 +298,27 @@
         },
         "tests":{
           "img:enc":{
-            "ms":37.649999999999999
+            "ms":37.587000000000003
           },
           "img:pp":{
-            "tok_s":5796.2398751579103
+            "tok_s":5752.212389380531
           },
           "img:tg":{
-            "tok_s":155.08524518977265,
+            "tok_s":153.81933406482972,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -519,12 +527,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 6 --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 1",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -534,40 +542,40 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":229.541,
+            "ms":230.518,
             "audio_s":11,
-            "encode_ms":34.915999999999997,
+            "encode_ms":34.838999999999999,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":618.63599999999997,
+            "ms":622.53300000000002,
             "audio_s":33,
-            "encode_ms":97.418999999999997,
+            "encode_ms":97.405000000000001,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:gb1.wav":{
-            "ms":4241.6840000000002,
+            "ms":4264.2269999999999,
             "audio_s":198.734375,
-            "encode_ms":542.18299999999999,
+            "encode_ms":540.35199999999998,
             "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens, who created space, he who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":5431.3490000000002,
+            "ms":5497.7939999999999,
             "audio_s":273.28724999999997,
-            "encode_ms":792.80399999999997,
+            "encode_ms":789.49800000000005,
             "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number 2,46343, US patents 2,46837 to 2,46840. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American Screw Company went on to devise the Pozidrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption: Phillips screw head. The following is an infobox which accompanies this article. Infobox: Part of the series on screw drive types. Slotted, commonly erroneously flathead, Phillips, crosshead, Pozidrive, superdrive, torques, hex, Allen, Robertson, triwing, torque set, spanner head, triple square, XZN, others, polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the 9th of April, 2008 at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered 501(c)3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/copyleft/fdl.html."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
         "noise":"ok",
         "exec_fmt":"f32/q8",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -613,12 +621,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 6",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -628,19 +636,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":7665.6000000000004,
-            "encode_ms":7293.6000000000004,
-            "text":"0.00.001.911 I common_init_result: fitting params to device memory ... 0.00.001.912 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.244.841 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.439.014 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.440.937 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.446.072 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.726.254 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.766.479 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.934.431 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.934.480 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.934.637 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.934.638 W       For normal use cases, please use the standard llama-cli 0.01.962.985 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.08.432.179 I mtmd batch encoding done in 6469 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
+            "ms":7656.1999999999998,
+            "encode_ms":7283.8999999999996,
+            "text":"0.00.001.818 I common_init_result: fitting params to device memory ... 0.00.001.819 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.242.947 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.440.385 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.442.212 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.447.235 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.682.723 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.723.819 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.891.310 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.891.357 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.891.511 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.891.512 W       For normal use cases, please use the standard llama-cli 0.01.920.185 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.08.386.525 I mtmd batch encoding done in 6466 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:jfk3.wav":{
-            "ms":22981.5,
-            "encode_ms":21865.599999999999,
-            "text":"0.00.001.811 I common_init_result: fitting params to device memory ... 0.00.001.815 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.244.264 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.441.386 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.443.350 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.448.614 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.727.787 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.768.148 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.935.732 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.935.779 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.935.936 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.935.937 W       For normal use cases, please use the standard llama-cli 0.01.971.339 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.19.596.135 I mtmd batch encoding done in 17624 ms 0.21.672.069 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.23.466.215 I mtmd batch encoding done in 1795 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
+            "ms":23028.700000000001,
+            "encode_ms":21903.099999999999,
+            "text":"0.00.001.781 I common_init_result: fitting params to device memory ... 0.00.001.785 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.240.471 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.434.549 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.436.379 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.441.238 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.678.221 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.718.315 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.886.894 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.886.942 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.887.091 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.887.092 W       For normal use cases, please use the standard llama-cli 0.01.921.639 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.19.546.046 I mtmd batch encoding done in 17624 ms 0.21.663.841 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.23.449.922 I mtmd batch encoding done in 1786 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:gb1.wav":{
-            "ms":142898.70000000001,
-            "encode_ms":134845,
-            "text":"0.00.001.770 I common_init_result: fitting params to device memory ... 0.00.001.774 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.240.580 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.434.527 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.436.386 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.441.357 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.714.417 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.755.141 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.923.490 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.923.539 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.923.689 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.923.689 W       For normal use cases, please use the standard llama-cli 0.02.004.292 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.19.621.280 I mtmd batch encoding done in 17617 ms 0.21.674.324 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.39.280.594 I mtmd batch encoding done in 17607 ms 0.41.623.704 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 0.59.330.519 I mtmd batch encoding done in 17707 ms 1.01.882.612 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 1.19.483.455 I mtmd batch encoding done in 17601 ms 1.22.243.872 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 1.39.859.879 I mtmd batch encoding done in 17616 ms 1.42.834.122 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 2.00.447.647 I mtmd batch encoding done in 17614 ms 2.03.627.301 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 2.14.634.052 I mtmd batch encoding done in 11007 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 236761 8468 529 914 1822 2066 532 45478 6332 236764 711 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
+            "ms":142822.60000000001,
+            "encode_ms":134847.79999999999,
+            "text":"0.00.001.833 I common_init_result: fitting params to device memory ... 0.00.001.834 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.243.452 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 131072 MiB of total host memory 0.00.435.627 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.437.451 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.442.456 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.01.679.725 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.01.719.884 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.01.889.037 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.01.889.087 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.01.889.246 W WARN: This is an experimental CLI for testing multimodal capability. 0.01.889.247 W       For normal use cases, please use the standard llama-cli 0.01.969.547 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.19.596.301 I mtmd batch encoding done in 17627 ms 0.21.705.802 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.39.323.166 I mtmd batch encoding done in 17617 ms 0.41.720.246 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 0.59.327.107 I mtmd batch encoding done in 17607 ms 1.01.904.031 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 1.19.504.212 I mtmd batch encoding done in 17600 ms 1.22.275.403 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 1.39.878.219 I mtmd batch encoding done in 17603 ms 1.42.845.246 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 2.00.444.258 I mtmd batch encoding done in 17599 ms 2.03.620.339 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 2.14.619.296 I mtmd batch encoding done in 10999 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 236761 8468 529 914 1822 2066 532 45478 6332 236764 711 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
           }
         },
         "workload":"audio-chat",
@@ -686,12 +694,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"../llama.cpp-mtmd-ref/build-metal/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 99 -t 6",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -701,19 +709,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":291.60000000000002,
-            "encode_ms":98.5,
-            "text":"0.00.022.839 I common_init_result: fitting params to device memory ... 0.00.022.842 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.457.218 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.459.031 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.463.963 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.616.707 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.640.223 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.831.501 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.831.546 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.831.705 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.831.706 W       For normal use cases, please use the standard llama-cli 0.00.836.914 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.00.875.673 I mtmd batch encoding done in 39 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
+            "ms":288,
+            "encode_ms":94.5,
+            "text":"0.00.023.033 I common_init_result: fitting params to device memory ... 0.00.023.036 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.447.996 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.449.786 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.454.559 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.625.519 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.649.297 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.840.827 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.840.877 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.841.035 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.841.036 W       For normal use cases, please use the standard llama-cli 0.00.846.306 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.00.881.115 I mtmd batch encoding done in 34 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:jfk3.wav":{
-            "ms":721.39999999999998,
-            "encode_ms":212.59999999999999,
-            "text":"0.00.027.886 I common_init_result: fitting params to device memory ... 0.00.027.890 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.468.945 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.470.789 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.476.235 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.632.073 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.656.004 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.848.742 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.848.789 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.848.951 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.848.951 W       For normal use cases, please use the standard llama-cli 0.00.860.453 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.00.912.833 I mtmd batch encoding done in 52 ms 0.00.979.798 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.01.027.521 I mtmd batch encoding done in 48 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 107 106"
+            "ms":725.70000000000005,
+            "encode_ms":216.80000000000001,
+            "text":"0.00.023.039 I common_init_result: fitting params to device memory ... 0.00.023.045 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.458.055 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.459.853 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.464.715 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.636.383 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.659.782 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.852.079 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.852.133 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.852.292 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.852.294 W       For normal use cases, please use the standard llama-cli 0.00.863.722 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.00.920.699 I mtmd batch encoding done in 57 ms 0.00.987.348 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.01.034.912 I mtmd batch encoding done in 48 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 107 106"
           },
           "asr:gb1.wav":{
-            "ms":4274.3000000000002,
-            "encode_ms":1081.0999999999999,
-            "text":"0.00.023.642 I common_init_result: fitting params to device memory ... 0.00.023.644 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.463.170 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.465.061 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.470.063 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.624.427 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.648.222 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.842.829 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.842.877 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.843.036 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.843.037 W       For normal use cases, please use the standard llama-cli 0.00.899.817 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.00.956.606 I mtmd batch encoding done in 57 ms 0.01.023.495 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.01.085.254 I mtmd batch encoding done in 62 ms 0.01.159.147 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 0.01.223.969 I mtmd batch encoding done in 65 ms 0.01.302.155 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 0.01.368.919 I mtmd batch encoding done in 66 ms 0.01.451.298 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 0.01.520.715 I mtmd batch encoding done in 69 ms 0.01.607.597 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 0.01.678.850 I mtmd batch encoding done in 71 ms 0.01.770.823 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 0.01.838.313 I mtmd batch encoding done in 68 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name because of his great power and mighty strength. Not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 1547 529 914 1822 2066 532 45478 6332 236761 3790 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
+            "ms":4275.3000000000002,
+            "encode_ms":1083.9000000000001,
+            "text":"0.00.023.722 I common_init_result: fitting params to device memory ... 0.00.023.727 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.461.691 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.463.502 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.468.340 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.00.642.943 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.00.666.927 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.00.866.173 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.00.866.219 I main: loading model: ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.00.866.377 W WARN: This is an experimental CLI for testing multimodal capability. 0.00.866.378 W       For normal use cases, please use the standard llama-cli 0.00.923.159 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.00.983.089 I mtmd batch encoding done in 60 ms 0.01.049.754 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.01.111.557 I mtmd batch encoding done in 62 ms 0.01.185.468 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 0.01.250.069 I mtmd batch encoding done in 65 ms 0.01.328.170 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 0.01.395.245 I mtmd batch encoding done in 67 ms 0.01.477.594 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 0.01.546.458 I mtmd batch encoding done in 68 ms 0.01.633.552 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 0.01.704.702 I mtmd batch encoding done in 71 ms 0.01.796.510 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 0.01.864.731 I mtmd batch encoding done in 69 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name because of his great power and mighty strength. Not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 1547 529 914 1822 2066 532 45478 6332 236761 3790 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
           }
         },
         "workload":"audio-chat",
@@ -759,12 +767,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -777,10 +785,10 @@
             "ms":52
           },
           "img:pp":{
-            "tok_s":2362.5557206537892
+            "tok_s":2334.8017621145377
           },
           "img:tg":{
-            "tok_s":122.55840674071236
+            "tok_s":122.04424103737605
           }
         },
         "workload":"image-chat",
@@ -869,12 +877,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 6 --json-path modules/dasLLAMA/performance/records/_cell_m5.json",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -884,40 +892,40 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1197.835,
+            "ms":1170.1659999999999,
             "audio_s":11,
-            "encode_ms":253.62200000000001,
+            "encode_ms":253.922,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":3596.4560000000001,
+            "ms":3537.7660000000001,
             "audio_s":33,
-            "encode_ms":716.04499999999996,
+            "encode_ms":722.05899999999997,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:gb1.wav":{
-            "ms":28601.455000000002,
+            "ms":28185.688999999998,
             "audio_s":198.734375,
-            "encode_ms":4418.3800000000001,
-            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity, in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens, who created space, he who brings out the starry hosts one by one and calls them each by name, because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America."
+            "encode_ms":4411.5050000000001,
+            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Culptna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity, in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens, who created space, he who brings out the starry hosts one by one and calls them each by name, because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":40530.589,
+            "ms":40888.631999999998,
             "audio_s":273.28724999999997,
-            "encode_ms":5921.6099999999997,
-            "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number 2,46343, US patents 2,46837 to 2,46840. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American Screw Company went on to devise the Pozidrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption: Phillips screw head. The following is an infobox which accompanies this article. Infobox: Part of the series on screw drive types. Slotted, commonly erroneously flathead, Phillips, crosshead, Pozidrive, superdrive, torques, hex, Allen, Robertson, trywing, torque set, spanner head, triple square, XZN, others, polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the 9th of April, 2008 at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered 501(c)3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/copyleft/fdl.html."
+            "encode_ms":6046.5990000000002,
+            "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number 2,463,433, US patents 2,468,377 to 2,468,440. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American Screw Company went on to devise the Pozidrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption: Phillips screw head. The following is an infobox which accompanies this article. Infobox: Part of the series on screw drive types. Slotted, commonly erroneously flathead, Phillips, crosshead, Pozidrive, superdrive, torques, hex, Allen, Robertson, trywing, torque set, spanner head, triple square, XZN, others, polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the 9th of April, 2008 at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered 501(c)3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/copyleft/fdl.html."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
         "noise":"ok",
         "exec_fmt":"q8/q8",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -963,12 +971,12 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 6 --json-path modules/dasLLAMA/performance/records/_cell_m5.json --accel",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -978,40 +986,40 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1171.615,
+            "ms":1130.3130000000001,
             "audio_s":11,
-            "encode_ms":242.10499999999999,
+            "encode_ms":255.45400000000001,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":3506.8780000000002,
+            "ms":3498.1759999999999,
             "audio_s":33,
-            "encode_ms":704.21699999999998,
+            "encode_ms":714.80100000000004,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:gb1.wav":{
-            "ms":27479.187999999998,
+            "ms":27403.396000000001,
             "audio_s":198.734375,
-            "encode_ms":4291.4830000000002,
-            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity, in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens, who created space, he who brings out the starry hosts one by one and calls them each by name, because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America."
+            "encode_ms":4352.2240000000002,
+            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Culptna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity, in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens, who created space, he who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":39693.042000000001,
+            "ms":40180.684999999998,
             "audio_s":273.28724999999997,
-            "encode_ms":5884.8800000000001,
-            "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number 2,46343, US patents 2,46837 to 2,46840. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American Screw Company went on to devise the Pozidrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption: Phillips screw head. The following is an infobox which accompanies this article. Infobox: Part of the series on screw drive types. Slotted, commonly erroneously flathead, Phillips, crosshead, Pozidrive, superdrive, torques, hex, Allen, Robertson, trywing, torque set, spanner head, triple square, XZN, others, polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the 9th of April, 2008 at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered 501(c)3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/copyleft/fdl.html."
+            "encode_ms":5988.2569999999996,
+            "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number 2,463,433, US patents 2,468,377 to 2,468,440. It was so widely copied that by 1949, Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screwmakers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American Screw Company went on to devise the Pozidrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption: Phillips screw head. The following is an infobox which accompanies this article. Infobox: Part of the series on screw drive types. Slotted, commonly erroneously flathead, Phillips, crosshead, Pozidrive, superdrive, torques, hex, Allen, Robertson, trywing, torque set, spanner head, triple square, XZN, others, polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the 9th of April, 2008 at 17:04. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered 501(c)3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org/copyleft/fdl.html."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"d65032612",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
         "noise":"ok",
         "exec_fmt":"q8/q8",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",

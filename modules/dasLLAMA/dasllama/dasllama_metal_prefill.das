@@ -6951,15 +6951,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             memcpy(addr < void? >(s.x_b[0]), metal_buffer_contents(warm ? bwm_res : bx), npos * dim * 4l)
             if (gpu_logits) {
                 memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(blog), c.vocab_size * 4l)
-                if (c.n_layer_nextn > 0l) {
-                    //! forward_prefill's mtp_h contract — bxf holds the last row's post-final-norm hidden
-                    memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(bxf), dim * 4l)
-                }
             }
         }
         if (gpu_logits) {
             if (c.n_layer_nextn > 0l) {
-                s.mtp_h_pos1 = start_pos + npos
+                //! forward_prefill's mtp_h contract - bxf holds the last row's post-final-norm hidden
+                stash_mtp_carry(s, metal_buffer_contents(bxf), uint64(dim * 4l), start_pos + npos)
             }
             prefill_override_logits_done()
         }

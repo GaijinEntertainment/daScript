@@ -4,6 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _ids   // same_ids
 require dasllama/dasllama_spm
 require dasllama/dasllama_gguf
 require dasllama/dasllama_pocket
@@ -75,14 +76,6 @@ def private load_tokens_fixture(path : string = tokens_fixture_path()) : TokFixt
         panic("pocket tokens fixture does not parse: {path}")
     }
     return <- fx
-}
-
-def private same_ids(a, b : array<int64>) : bool {
-    return false if (length(a) != length(b))
-    for (x, y in a, b) {
-        return false if (x != y)
-    }
-    return true
 }
 
 def private ids_text(a : array<int64>) : string {

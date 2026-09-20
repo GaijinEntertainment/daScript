@@ -1849,6 +1849,8 @@ var g_lp_xb_bytes = 0l
 var g_lp_err = false            // sticky per-step dispatch-error signal for sync callers
 var @scratch g_lp_sessions : array<Session?>
 var @scratch g_lp_positions : array<int64>
+var @scratch g_lp_dn_uids : array<uint64>   // the pending step's recurrent rows: each session's DnMirror advances when the step lands
+var @scratch g_lp_dn_pos : array<int64>
 var @scratch g_lp_koffs : array<uint64>
 var @scratch g_lp_voffs : array<uint64>
 var @scratch g_lp_caps : array<int64>
@@ -1892,6 +1894,29 @@ def private land_sameslab_rows(lgp : uint8?) {
                 g_sameslab_arg[i] = int64(ap[i])
             }
         }
+    }
+}
+
+//! The speculative carry: a session's post-norm hidden (`bytes` of it from `src`) becomes
+//! `mtp_h` and the watermark `mtp_h_pos1` moves to `pos1` - the prefill's last row, the single-row
+//! step's row and a plain batched step's row all land it here.
+def stash_mtp_carry(var s : Session; src : void?; bytes : uint64; pos1 : int64) {
+    if (uint64(long_length(s.mtp_h)) * 4ul < bytes) {
+        s.mtp_h |> reserve_resize(int64(bytes / 4ul))   // nolint:PERF026,LINT019 — once per session on a NextN-headed model; the hot-path walk fires from the drivers' compiles
+    }
+    unsafe {
+        memcpy(addr < void? >(s.mtp_h[0]), src, bytes)
+    }
+    s.mtp_h_pos1 = pos1
+}
+
+//! A plain step's row on a NextN-headed (or carry-armed) model lands its carry; a same-slab verify
+//! lands its rows into `mtp_hrows` instead.
+def private land_row_carry(var s : Session; i, pos : int64) {
+    return if (g_lp_bxf == null || g_lp_sameslab)
+    let hb = g_lp_bxf_bytes / g_lp_nrows
+    unsafe {
+        stash_mtp_carry(s, reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(g_lp_bxf)) + i * hb), uint64(hb), pos + 1l)
     }
 }
 
@@ -1952,6 +1977,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                     memcpy(addr < void? >(sp.logits[0]),
                         reinterpret<void?>(lgp + i * g_lp_vocab * 4l), g_lp_vocab * 4l)
                 }
+                land_row_carry(*sp, i, pos)
                 if (key_exists(g_mirrors, sp.uid)) {   // never regress the optimistic commit-time mark
                     let wm0 = g_mirrors[sp.uid].watermark
                     g_mirrors[sp.uid].watermark = max(wm0, pos + 1l)
@@ -1962,6 +1988,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
             }
         }
         g_us_breadback += int64(get_time_usec(ts_rb))
+        for (u, p in g_lp_dn_uids, g_lp_dn_pos) {   // the GPU state now holds each recurrent row's update
+            dn_mirror_advance(u, p)
+        }
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
@@ -1994,6 +2023,8 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
     g_lp_xb = null
     g_lp_xb_dst = null
     g_lp_sessions |> clear()   // borrowed handles — clear, never delete
+    g_lp_dn_uids |> clear()
+    g_lp_dn_pos |> clear()
     g_lp_active = false
 }
 

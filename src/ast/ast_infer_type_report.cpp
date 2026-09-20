@@ -581,7 +581,6 @@ namespace das {
             }
             string moduleName, funcName;
             splitTypeName(expr->target, moduleName, funcName);
-            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach ([&](Module *mod) -> bool {

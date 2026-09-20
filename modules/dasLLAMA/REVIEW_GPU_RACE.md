@@ -1,7 +1,7 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
+docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned work: `followup_metal.md` for Metal,
 `followup_vulkan.md` for Vulkan.
 
@@ -15,8 +15,8 @@ serving correct output - is not an arm; the knob is production code under `REVIE
 or `REVIEW_TOWER.md`. An arm's chain is the dispatches it times. An arm's ranking is decided when
 a checked-in document, box profile or sidecar records the arm's figure or names the arm as the
 shipped form. A retained-reference arm is one ledgered as a retained reference in
-`ARCHITECTURE_GPU.md` sec.2.2b (Metal) or the Vulkan arm ledger - the GEMM probe's arms in
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a, the decode rulers' in
+`ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b (Metal) or the Vulkan arm ledger - the GEMM probe's
+arms in `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a, the decode rulers' in
 `ARCHITECTURE_MEASUREMENT.md`'s decode-ruler paragraph.
 
 **A hand-binding arm that binds a field at a position the class does not declare for that field
@@ -50,6 +50,10 @@ deletes, in the same change, every arm that mirrors that kernel's binding order 
 ordered setter list and every retained-reference arm of that kernel.** An arm left dispatching stale
 geometry measures the wrong kernel silently.
 
+**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
+arm that carries that body as a hand-written twin, and every retained-reference arm of that
+kernel.** An arm timing a body the shipped kernel no longer runs measures the wrong kernel silently.
+
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
 
@@ -70,13 +74,19 @@ dispatches.**
 a batch width, a row count, a lane split, a tile's own width - at a value on each side of the
 branch.** A ranking timed at one value alone is applied at values it was never ranked at.
 
+**A diff that widens the gate admitting shapes to a kernel whose ranking is decided - a head
+width, a batch width, a row count, a lane split or a tile width the gate now admits - times the
+ranked arms at a value the gate now admits and did not before - at each end when the new
+admission spans a range - in the same change.** The widened gate otherwise applies the ranking
+at values it was never ranked at.
+
 **A timing arm for a prefill tile over a variable region, with a decided ranking, times its
 kernel at one region whose token count is a whole multiple of that tile's token column - the
 token extent one tile covers - and at one where it is not.** A token count that is not a whole
 multiple is what makes the tile take its partial-tile store path.
 
-**An `ARCHITECTURE_GPU.md` sec.2.2b or Vulkan arm ledger entry for a kernel ranked only at
-power-of-two batch widths names those widths.**
+**An `ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b or Vulkan arm ledger entry for a kernel ranked
+only at power-of-two batch widths names those widths.**
 
 **When production runs a kernel's dispatches independently of each other, each consecutive
 dispatch in a race arm with a decided ranking binds its own output buffer.** One shared output

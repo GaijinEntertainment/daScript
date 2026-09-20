@@ -83,7 +83,7 @@ Two activation quant forms ride the Vulkan rail, and they differ in the SCALE LA
 int8 payload: the Q8_0 form scales per 32 values, the superblock form per 256 (with per-32
 sub-scales inside). A compiled kernel indexes ONE lattice - the q8 GEMV/GEMM rail reads per-32
 scales; the k-quant (k4/k5/k6/q40) kernels index the per-256 lattice. `kq_sb(fmt)` is the
-predicate (`ARCHITECTURE_ENGINE.md` sec.1.2), and it answers for the WEIGHT plane the dispatch
+predicate (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2), and it answers for the WEIGHT plane the dispatch
 consumes.
 
 Three consequences the code is shaped around:

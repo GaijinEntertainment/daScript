@@ -886,8 +886,8 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
 // A bundle carries no daslang to spawn and no llama-bench to compare against, so /bench runs the
 // llama-bench rows itself on the served model: pp512 and tg128, an untimed warmup then three
 // timed reps each - one pp prefill, or one tg token, per tick, so the HTTP surface stays live
-// between them - and, on a slot whose device homes streams, tg128@N: N device-home streams through
-// the scheduler's device mode, the summed rate, one rep a tick. Every route that reaches the model or the cores holds for the run's duration
+// between them - and, on a slot serving two streams or more, tg128@N: N streams through the
+// scheduler (device-home where the device homes them), the summed rate, one rep a tick. Every route that reaches the model or the cores holds for the run's duration
 // (the text, audio and speech routes with a 503, the model-switching, bake and download routes
 // with a 409): work admitted mid-row would share the cores with it and the numbers would
 // measure the contention. The rows run llama-bench's flat session, sized to the rows, under the
@@ -915,7 +915,7 @@ var private g_ibench_full_seq = 0l   // the benched model's served seq_len, rest
 var private g_ibench_pp : array<double>
 var private g_ibench_tg : array<double>
 var private g_ibench_tgb : array<double>   //! the batched row's reps, the summed rate each
-var private g_ibench_npl = 0l              //! ... its streams; 0 = the slot homes too few for the row
+var private g_ibench_npl = 0l              //! ... its streams; 0 = the slot serves too few for the row
 var private g_ibench_kv = ""               //! the codec the rows ran, and the device that served them, read before the flat session goes
 var private g_ibench_backend = ""
 var private g_ibench_session : Session
@@ -949,9 +949,14 @@ def private reject_while_benching(srv : WebSocketServer; var writer : HttpRespon
 //! the llama-bench line that measures the same GGUF with the same shapes on the same device,
 //! for the comparison a bundle cannot run itself: `-ngl 99` where a GPU served the rows (Metal,
 //! or the Vulkan tier's `gpu:*` words), `-ngl 0` where the CPU did (lcpp_bench's own --ref spelling)
-def private ibench_ref_cmd(gguf : string; threads : int; backend : string) : string {
+def private ibench_ref_cmd(gguf : string; threads : int; backend : string; npl : int64) : string {
     let ngl = (backend == "metal" || (backend |> starts_with("gpu"))) ? 99 : 0
-    return "llama-bench -m \"{gguf}\" -ngl {ngl} -p {BENCH_PP_TOKENS} -n {BENCH_TG_TOKENS} -r {IBENCH_REPS} -t {threads}"
+    let flat = "llama-bench -m \"{gguf}\" -ngl {ngl} -p {BENCH_PP_TOKENS} -n {BENCH_TG_TOKENS} -r {IBENCH_REPS} -t {threads}"
+    if (npl <= 0l) {
+        return flat
+    }
+    let batched <- llama_batched_bench_args("llama-batched-bench", "\"{gguf}\"", ngl, threads, BENCH_PP_TOKENS, BENCH_TG_TOKENS, npl)
+    return "{flat} ; {join(batched, " ")}"
 }
 
 //! what served the rows, read from the session after they ran: `metal` when the slot maps the
@@ -1079,7 +1084,7 @@ def private ibench_finish() {
         tgb_json = ",\"ours_tgb\":{tgb.mean},\"tgb_sd\":{tgb.sd},\"npl\":{g_ibench_npl}"
     }
     ibench_log("ours: pp{BENCH_PP_TOKENS} {pp.mean:.1f} ± {pp.sd:.1f} tok/s · tg{BENCH_TG_TOKENS} {tg.mean:.1f} ± {tg.sd:.1f} tok/s{tgb_text} ({IBENCH_REPS} reps, {elapsed:.1f}s, {backend}, kv {kv}, {exec}, tune {tune})")
-    g_bench_result_json = "\{\"mode\":\"inprocess\",\"ours_pp\":{pp.mean},\"ours_tg\":{tg.mean},\"pp_sd\":{pp.sd},\"tg_sd\":{tg.sd}{tgb_json},\"reps\":{IBENCH_REPS},\"model\":{json_str(name)},\"gguf\":{json_str(base_name(path))},\"backend\":{json_str(backend)},\"kv\":{json_str(kv)},\"exec\":{json_str(exec)},\"tune\":{json_str(tune)},\"threads\":{g_ibench_threads},\"elapsed_s\":{elapsed:.1f},\"ts\":{created_ts()},\"ref_cmd\":{json_str(ibench_ref_cmd(path, g_ibench_threads, backend))}}"
+    g_bench_result_json = "\{\"mode\":\"inprocess\",\"ours_pp\":{pp.mean},\"ours_tg\":{tg.mean},\"pp_sd\":{pp.sd},\"tg_sd\":{tg.sd}{tgb_json},\"reps\":{IBENCH_REPS},\"model\":{json_str(name)},\"gguf\":{json_str(base_name(path))},\"backend\":{json_str(backend)},\"kv\":{json_str(kv)},\"exec\":{json_str(exec)},\"tune\":{json_str(tune)},\"threads\":{g_ibench_threads},\"elapsed_s\":{elapsed:.1f},\"ts\":{created_ts()},\"ref_cmd\":{json_str(ibench_ref_cmd(path, g_ibench_threads, backend, g_ibench_npl))}}"
     ibench_stop("done", "")
     to_log(LOG_INFO, "dasllama-server: bench complete\n")
 }
@@ -1109,19 +1114,19 @@ def private ibench_step() {
         let device = slot_flavor(g_slots[si]) == "metal" ? "metal" : g_slots[si].backend_effective   // the tier's word speaks only of Vulkan and reads `cpu` under Metal
         ibench_log("in-process: pp{BENCH_PP_TOKENS}/tg{BENCH_TG_TOKENS} x {IBENCH_REPS} reps on {g_slots[si].name} ({device}, kv {g_slots[si].opts.kv_dtype}, {g_ibench_threads} lanes), llama-bench shape - the text, audio and speech routes hold until it finishes")
         let device_home = slot_wants_device_kv(g_slots[si])
+        let served_ctx = g_slots[si].model.config.seq_len   //! read before the flat rows' session narrows it
         if (!device_home) {   // a device-home run takes its region's context, which the slot's seq_len already is: nothing to put back
-            g_ibench_full_seq = g_slots[si].model.config.seq_len
+            g_ibench_full_seq = served_ctx
         }
         ibench_park_session()
         delete g_ibench_session   // the previous run's cache, when a run ended without its stop
         g_ibench_session <- (device_home ? create_device_session(g_slots[si].model, gpu_device_session_dtype())
             : bench_session(g_slots[si].model, BENCH_PP_TOKENS, BENCH_TG_TOKENS, g_slots[si].opts.kv_dtype, g_slots[si].opts.kv_dtype))
         g_ibench_kv = device_home ? "{gpu_device_session_dtype()}" : "{g_slots[si].opts.kv_dtype}"
-        g_ibench_npl = device_home ? min(IBENCH_NPL, gpu_device_sessions()) : 0l   //! the batched row needs a region a stream
+        g_ibench_npl = min(IBENCH_NPL, device_home ? gpu_device_sessions() : g_slots[si].sched.max_streams)   //! the batched row's streams: a region each where the device homes them, else the slot's served count
         if (g_ibench_npl < 2l) {
             g_ibench_npl = 0l
         }
-        let served_ctx = g_slots[si].model.config.seq_len
         let row_needs_ctx = BENCH_PP_TOKENS + BENCH_TG_TOKENS + g_ibench_npl
         if (g_ibench_npl > 0l && served_ctx < row_needs_ctx) {
             ibench_log("no tg{BENCH_TG_TOKENS}@{g_ibench_npl} row: the served context is {served_ctx} tokens and the row's streams need {row_needs_ctx}")
@@ -1183,6 +1188,9 @@ def private ibench_tg_token(m : Model; si : int) {
     if (g_ibench_npl > 0l) {
         ibench_park_session()   //! the flat row's region goes back: the batched row's streams take every region
         delete g_ibench_session
+        if (g_ibench_full_seq != 0l) {   //! the flat rows' session narrowed the context; the batched row's streams need the served one
+            g_slots[si].model.config.seq_len = g_ibench_full_seq
+        }
         g_ibench_phase = IBENCH_PHASE_BATCHED
         g_ibench_rep = 0
     } else {
@@ -1193,7 +1201,7 @@ def private ibench_tg_token(m : Model; si : int) {
 //! one batched rep per tick: the streams' prefills and 128 batched steps, a second or so on a small model;
 //! a refused rep omits the batched row and the flat rows already measured stand as the result
 def private ibench_batched_rep(m : Model) {
-    let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep))
+    let br = bench_tg_batched_rep(m, g_ibench_npl, BENCH_PP_TOKENS, BENCH_TG_TOKENS, int64(g_ibench_rep), g_slots[g_ibench_slot].sched.mtp)   //! a slot serving self-speculative streams benches them as it serves them
     if (!empty(br.why)) {
         ibench_log("REFUSED (tg{BENCH_TG_TOKENS}@{g_ibench_npl}): {br.why} - the batched row is omitted")
         g_ibench_npl = 0l

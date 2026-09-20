@@ -24,10 +24,10 @@ def private ident_a : BoxIdentity {
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 2)
+            t |> equal(current_schema_version(db), 3)
         }
     }
-    t |> run("migration 2 backfills the cells of rows inserted before the columns existed") @(tt : T?) {
+    t |> run("migrations 2 and 3 backfill the cells of rows inserted before the columns existed") @(tt : T?) {
         with_sqlite(":memory:") $(db) {
             // a v1 store: the shipped first migration, stamped applied, with a submission and its
             // two run rows inserted in the v1 shape (no cell columns to fill)
@@ -43,14 +43,16 @@ def test_migration(t : T?) {
                         sid, ri, ri == 0 ? "das" : "llama.cpp")
                 }
             }
-            tt |> equal(migrate_to_latest(db), 1, "one pending migration applied")
-            tt |> equal(current_schema_version(db), 2)
+            tt |> equal(migrate_to_latest(db), 2, "two pending migrations applied")
+            tt |> equal(current_schema_version(db), 3)
             let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.Id))
             tt |> equal(length(rows), 4)
             tt |> equal(rows[0].Pp512, 100.0lf)
             tt |> equal(rows[0].Tg128, 25.0lf)
+            tt |> equal(rows[0].Tg128b4, 60.0lf, "the batched cell is filled by migration 3")
             tt |> equal(rows[1].Pp512, 80.0lf)
             tt |> equal(rows[1].Tg128, 0.0lf, "a cell the run did not measure stays 0")
+            tt |> equal(rows[1].Tg128b4, 0.0lf, "... the batched cell too")
             tt |> equal(rows[0].Cpu, "Test CPU 9000")
             tt |> equal(rows[2].Pp512, 259.6lf, "the official submission's rows are filled too")
             tt |> equal(rows[3].Pp512, 145.0lf)
@@ -236,6 +238,7 @@ def test_put_records(t : T?) {
             tt |> equal(das_rows[0].Threads, 8)
             tt |> equal(das_rows[0].Pp512, 100.0lf)
             tt |> equal(das_rows[0].Tg128, 25.0lf)
+            tt |> equal(das_rows[0].Tg128b4, 60.0lf, "the insert path fills the batched cell like the migration does")
             tt |> equal(das_rows[0].Cpu, "Test CPU 9000")
             // the reference row carries its own cells: the board pairs from this table alone
             for (r in rows) {

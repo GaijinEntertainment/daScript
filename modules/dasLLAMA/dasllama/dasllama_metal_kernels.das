@@ -1108,7 +1108,7 @@ class template MetalArgmaxT {
     @workgroup redi : uint[32]
     @template_constant PER_ROW : bool = false
 
-    [arch(at="../ARCHITECTURE_GPU_MTP.md#greedy-chain")]
+    [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain")]
     def argmax_row {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
@@ -2824,6 +2824,7 @@ struct DnArgs {
     qscale : float
     mid : uint
     split : uint
+    row : uint   // the first row of the [npos x ...] planes this dispatch reads and writes - a batched step dispatches each session's row against its own state
 }
 
 // The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
@@ -2863,7 +2864,7 @@ def dn_args(c : Config; npos : int64; mid : bool) : DnArgs {
     return DnArgs(cd = uint(dn_conv_dim(c)), dconv = uint(c.ssm_d_conv), npos = uint(npos),
         kd = uint(dn_key_dim(c)), ds = uint(c.ssm_d_state), nvh = uint(c.ssm_dt_rank),
         nkh = uint(c.ssm_n_group), di = uint(c.ssm_d_inner), eps = c.norm_eps,
-        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u)
+        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u, row = 0u)
 }
 
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
@@ -3014,10 +3015,12 @@ def private sqd_merge(var wacc : float[512]; wo : uint; bacc : float4; bm, btot 
 def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl, hs : uint;
                       mm, tot : float) {
     let po = pbase + sl * 4u
-    part[po] = wacc[wo]
-    part[po + 1u] = wacc[wo + 1u]
-    part[po + 2u] = wacc[wo + 2u]
-    part[po + 3u] = wacc[wo + 3u]
+    if (sl * 4u < hs) {   // a head narrower than the 32 lanes' quads: the lanes past it own no dims
+        part[po] = wacc[wo]
+        part[po + 1u] = wacc[wo + 1u]
+        part[po + 2u] = wacc[wo + 2u]
+        part[po + 3u] = wacc[wo + 3u]
+    }
     if (sl == 0u) {
         part[pbase + hs] = mm
         part[pbase + hs + 1u] = tot
@@ -3025,8 +3028,8 @@ def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl,
 }
 
 // Fused single-pass batched attention: beats the upstream vector form at every depth 512-16K. One
-// simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
-// accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
+// simdgroup per (row, head, 32-slice-group), scores in-register, V lane-private; a lane owns one quad
+// of the head (hs 128 fills the simdgroup, hs 64 idles the lanes past it); grid is HEAD-FASTEST for SLC locality.
 [ |> template_struct_instance]
 class template MetalSqAttnDKvT {
     @ssbo @binding = 0 @role = "read" kc : array<KT>
@@ -3061,7 +3064,11 @@ class template MetalSqAttnDKvT {
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * hs
         let kv4 = kv_dim / 4u
-        let q4 = float4(q[qoff / 4u + sl])
+        // a lane owns one quad of the head; a head narrower than 32 quads leaves the lanes past it
+        // re-reading a valid quad with a zero q, so they score nothing and their sums are never stored
+        let ld = hs / 4u
+        let slc = sl % ld
+        let q4 = sl < ld ? float4(q[qoff / 4u + slc]) : float4(0.0)
         let wo = gl_SubgroupID * 128u + sl * 4u
         sqd_zero(wacc, wo)
         var mm = -3.0e38
@@ -3070,8 +3077,8 @@ class template MetalSqAttnDKvT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + sl]))
-            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + sl]))
+            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + slc]))
+            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + slc]))
             // invalid tail lanes keep the -inf seed -> weight 0
             let keep = sqd_score_blk(kp, q4, -3.0e38, nrows, kv4, sl) * scale
             let bm = sqd_block_max(keep)
@@ -3099,7 +3106,7 @@ class MetalSqAttnDF32 : MetalSqAttnDKvT {
 
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
-[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = "head_size", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64")]
 class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
@@ -3122,6 +3129,7 @@ class MetalSqAttnCombD {
         let nch = min((cnt + 31u) / 32u, nchmax)
         let s4 = (hs + 4u) / 4u
         let base4 = (bb * nheads + h) * nchmax * s4
+        let ld = hs / 4u   // the lanes that own a quad of this head; the 128-thread group merges four subgroups whatever the head
         var mm = -3.0e38
         var tot = 0.0
         var acc4 = float4(0.0)
@@ -3129,7 +3137,7 @@ class MetalSqAttnCombD {
         while (e < nch) {
             let eb = base4 + e * s4
             let ml = float4(part[eb + hs / 4u])
-            let av = float4(part[eb + sl])
+            let av = sl < ld ? float4(part[eb + sl]) : float4(0.0)
             let nm = max(mm, ml.x)
             let r1 = exp(mm - nm)
             let r2 = exp(ml.x - nm)
@@ -3160,7 +3168,9 @@ class MetalSqAttnCombD {
         let r3 = exp(m3 - gm)
         let l = wml[1] * r0 + wml[3] * r1 + wml[5] * r2 + wml[7] * r3
         let acc = wacc[lid] * r0 + wacc[128u + lid] * r1 + wacc[256u + lid] * r2 + wacc[384u + lid] * r3
-        yo[bb * (nheads * hs) + h * hs + lid] = acc / l
+        if (lid < hs) {
+            yo[bb * (nheads * hs) + h * hs + lid] = acc / l
+        }
     }
 }
 
@@ -3756,7 +3766,7 @@ def enc_gemv_sg(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx
     enc_gemv_sg_c(enc, bw, boff, bw, bx, xoff, by, yoff, bn, bd, d)
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-layer-enc")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc")]
 def enc_q8_site_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, by, bn, bd : MetalBuffer?; d, n : int64; yoff : uint64 = 0ul) {
     if (n <= GEMV_SG_MAX_N) {
         enc_gemv_sg(enc, bw, boff, bx, by, bn, bd, d, yoff)
@@ -3992,7 +4002,7 @@ var private g_kq_k4_r2_crowned : bool
 
 //! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; an unpadded
 //! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight
-[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
                   bn, bd, bys : MetalBuffer?; nrows, mp : int64) {
@@ -4026,7 +4036,7 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
                         bx, by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n, ystride, nlive : int64) {
     var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = 2u)
@@ -4263,7 +4273,7 @@ def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; live : int64
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#verify-row-pad")]
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
     enc_rows_tiles(nrows, n, ys) $(four; _live; xo, yo) {
@@ -10325,11 +10335,11 @@ class MetalDnConv {
         var k = 0u
         while (k < dconv) {
             let sp = int(p + k) - int(taps)
-            let xv = sp >= 0 ? x[uint(sp) * cd + ch] : hist[ch * taps + (p + k)]
+            let xv = sp >= 0 ? x[(ka.row + uint(sp)) * cd + ch] : hist[ch * taps + (p + k)]
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[p * cd + ch] = acc / (1.0 + exp(-acc))
+        y[(ka.row + p) * cd + ch] = acc / (1.0 + exp(-acc))
     }
 }
 
@@ -10358,14 +10368,14 @@ class MetalDnConvHist {
         var k = 0u
         while (k < taps) {
             let src = int(npos + k) - int(taps)
-            nh[k] = src >= 0 ? x[uint(src) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+            nh[k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
             k++
         }
         if (mid != 0u) {                    // every hist read precedes the in-place write below
             k = 0u
             while (k < taps) {
                 let src = int(npos - 1u + k) - int(taps)
-                histm[ch * taps + k] = src >= 0 ? x[uint(src) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+                histm[ch * taps + k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
                 k++
             }
         }
@@ -10403,7 +10413,7 @@ class MetalDnL2Norm {
             return
         }
         let lane = gl_SubgroupInvocationID
-        let base = p * cd + blk * ds + lane * 4u
+        let base = (ka.row + p) * cd + blk * ds + lane * 4u
         var v : float[4]
         var ss = 0.0
         for [unroll_full] (c in range(4)) {
@@ -10462,10 +10472,10 @@ class MetalDnScan {
         }
         var p = 0u
         while (p < npos) {
-            let gr = graw[p * nvh + h] + dt_h
+            let gr = graw[(ka.row + p) * nvh + h] + dt_h
             let dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            let beta = 1.0 / (1.0 + exp(-braw[p * nvh + h]))
-            let cb = p * cd
+            let beta = 1.0 / (1.0 + exp(-braw[(ka.row + p) * nvh + h]))
+            let cb = (ka.row + p) * cd
             var kv4 : float[4]
             var sk = 0.0
             for [unroll_full] (c in range(4)) {
@@ -10482,7 +10492,7 @@ class MetalDnScan {
             }
             yy = simd_sum(yy)
             if (lane == 0u) {
-                o[p * di + h * ds + j] = yy
+                o[(ka.row + p) * di + h * ds + j] = yy
             }
             if (mid != 0u && p + 2u == npos) {
                 for [unroll_full] (c in range(4)) {
@@ -10521,7 +10531,7 @@ class MetalDnGate {
             return
         }
         let lane = gl_SubgroupInvocationID
-        let base = p * di + h * ds + lane * 4u
+        let base = (ka.row + p) * di + h * ds + lane * 4u
         var v : float[4]
         var ss = 0.0
         for [unroll_full] (c in range(4)) {

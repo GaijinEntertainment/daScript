@@ -103,8 +103,8 @@ seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the 
 and the stream stays deterministic; on a verify tag it rides the assistant round inside the
 `mtp-count-<tag>` attach). The same
 file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
-g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - the hybrid graph the rail
-declines, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
+g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - one recurrent session's
+rows the rail declines as `dn_state`, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
 at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -
 the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
@@ -157,10 +157,11 @@ fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
 CPU differs from any float implementation by ~2.5 logits/step by construction;
-fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-row FALLBACK
-shape - metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
-batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch arm, and a
-blob twin's CPU batch fallback would trip the blob-only panic).
+fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
+and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
+twin's batched step against the CPU batched stack on the planar model - the two arms the
+batched driver gained, deltanet rows against per-session mirrors and the shared expert's rows
+site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - runs with no model stocked; also the layout fingerprint; the split-scale
@@ -383,7 +384,9 @@ store lister admitting `records/{box}.json` alone) and the record rig's shared s
 `-w` workload scope; the stored-row->rig-leg map, `backend`/`flavor` => `metal` | plain cpu |
 `accel`, else refused; the tune-stamp gate; the oracle compare's ok/warn/fail bands; the
 upstream image-reference parser `parse_mtmd_image` - encode summing, the MTMD_TIMING split,
-its refusal arms); plus the committed-records sweeps: image-chat receipts match their
+its refusal arms; the batched reference parser `llama_batched_bench_tg` - the `S_TG` cell of
+the row at `npl` alone, 0 on a missing row, a missing table or a cell that is not a number -
+and `llama_batched_bench_sibling` reading "" beside a missing reference); plus the committed-records sweeps: image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
 resolves to its committed generation archive.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
@@ -525,6 +528,17 @@ also runs the batched bench row (`bench_tg_batched_rep`): a row asking more stre
 device homes refuses by name and reads 0, and a row it homes serves at a rate with every stream
 parked after it and no call passed to the CPU chain. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
+stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
+E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
+hybrid Qwen3.5-0.8B Q8 and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
+a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
+runs the joint-verify invariance cell: three speculative streams admitted together emit,
+token for token, what each emits alone on a one-stream speculative scheduler (the verify's
+rows forms are per row, so the joint pass and the solo pass round alike). Stocked suite; skips
+off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
+name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
+off, where every step is per-row by construction.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
 `test_gpu_resident_regions_hybrid.das`, `test_gpu_resident_regions_llama_k.das` and `test_gpu_resident_regions_qwen3.das` (`_resident_regions.das` carries the cells; one model a file; the qwen3 file is Qwen3-0.6B Q8_0, six cells on a q/k-norm carrier: the interleaved single steps, the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope + store or the split pair - bit for bit and served by the N-row command (`vk_rdec_token_n_rows` at two or more, asserted by every batched cell), the batched-first cell (a batched step before any one-row step, a one-row step, a batched step again: the unsplit twin's availability is the device's, never the one-row record's), the wide single steps (both prompts past RD_WIDE_POS, so the one-row command's wide twin records and serves, bit for bit against the session alone), and the fuse bisect (`DASLLAMA_VK_FUSE_BISECT` a bit at a time, one model load a bit: the one-row steps within the split bar of the fused run with the one-token-off control, and under the fused q/k norm's bit the batched rows bit for bit on the split pair); the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through

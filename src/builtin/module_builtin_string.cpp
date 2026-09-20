@@ -634,7 +634,6 @@ namespace das
     }
 
     DAS_API vector<string> split ( const char * str, const char * delim ) {
-        vector<const char *> tokens;
         vector<string> words;
         const char * ch = str;
         auto delimLen = strlen(delim);

@@ -112,8 +112,10 @@
         submissionId: fr.submission_id,
         pp_das: fr.pp512 || 0, pp_ref: ref ? ref.pp512 || 0 : 0,
         tg_das: fr.tg128 || 0, tg_ref: ref ? ref.tg128 || 0 : 0,
+        tgb_das: fr.tg128b4 || 0, tgb_ref: ref ? ref.tg128b4 || 0 : 0,
         pp_ratio: ref ? ratio(fr.pp512, ref.pp512) : null,
         tg_ratio: ref ? ratio(fr.tg128, ref.tg128) : null,
+        tgb_ratio: ref ? ratio(fr.tg128b4, ref.tg128b4) : null,
         das: fr, ref: ref
       });
     });
@@ -421,6 +423,12 @@
           get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
         { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
           get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } },
+        { key: 'tgb_das', label: 'tg128@4 das', num: true, grp: true, grpStart: true,
+          get: function (r) { return r.tgb_das; }, cell: function (r) { return tps(r.tgb_das); } },
+        { key: 'tgb_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r.tgb_ref; }, cell: function (r) { return tps(r.tgb_ref); } },
+        { key: 'tgb_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r.tgb_ratio; }, cell: function (r) { return ratioCell(r.tgb_ratio); } },
         { key: 'source', label: 'source', grpStart: true,
           get: function (r) { return r.source + (r.verified ? '' : ' unverified'); },
           cell: sourceCell },

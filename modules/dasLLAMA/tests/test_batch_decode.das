@@ -6,16 +6,21 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
+require dasllama/dasllama_load   // load_model_: the engine load the batched row's scheduler streams need
 require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_env
+require _model_tier   // model_available: the stocked-carrier gate (shards, the large tier)
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
 // token-for-token greedy, per-step logits, and the final KV caches. Needs llama2.c's
 // stories15M.bin (gitignored); skips cleanly when absent, same contract as test_forward.
 // The reference pins the fused decode chain OFF (the std path is what the batch worker mirrors).
+// The batched bench row's refusal cell needs SmolLM2-135M-Instruct-Q8_0.gguf under models_dir()
+// (a tokenizer for the scheduler's streams) and the JIT; it skips without either.
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
@@ -338,6 +343,87 @@ def test_batch_decode_q4_fallback(t : T?) {
             setup_dasllama_jobque_()
             batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")   // fallback IS forward(): bit-exact
         }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}
+
+[test]
+def test_batch_decode_step_census(t : T?) {
+    t |> run("the step census: a B-row step counts on the CPU batched stack, a one-row step as per-row (needs stories15M.bin)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        quantize_weights(tr)
+        let c = tr.config
+        let vocab = c.vocab_size
+        let prev_fused = get_fused_decode()
+        set_fused_decode(false)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var sa <- make_run_state(c)
+            var sb <- make_run_state(c)
+            eval_(tr, sa, pa)
+            eval_(tr, sb, pb)
+            var ws <- create_batch_workspace_(tr)
+            var both <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var one <- [unsafe(addr(sa))]
+            let toks <- [greedy_top(sa.logits, vocab), greedy_top(sb.logits, vocab)]
+            let tok <- [greedy_top(sa.logits, vocab)]
+            let c0 = batch_step_census()
+            eval_batch_(tr, ws, both, toks)
+            eval_batch_(tr, ws, both, toks)
+            let c1 = batch_step_census()
+            t |> equal(c1.cpu_stack - c0.cpu_stack, 2l, "two B=2 steps ran on the CPU batched stack")
+            t |> equal(c1.per_row - c0.per_row, 0l, "... none of them a row at a time")
+            t |> equal(c1.device - c0.device, 0l, "... none on a device driver")
+            eval_batch_(tr, ws, one, tok)
+            let c2 = batch_step_census()
+            t |> equal(c2.per_row - c1.per_row, 1l, "a B=1 step counts as per-row")
+            t |> equal(c2.cpu_stack - c1.cpu_stack, 0l, "... not on the batched stack")
+            delete ws
+            delete sa
+            delete sb
+        }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}
+
+[test]
+def test_batch_decode_row_refuses_per_row(t : T?) {
+    t |> run("the batched bench row refuses by name when a timed step ran its rows one at a time (needs SmolLM2-135M)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        // the scheduler's streams need a vocabulary (the stop-token walk), which the llama2.c checkpoint lacks
+        let env = g_env_harness.models_dir
+        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        if (!model_available(t, path)) return
+        var tr <- load_model_(path, QuantMode.q8)   //! the engine load: the scheduler's streams detokenize through the model's own tokenizer
+        tr.config.seq_len = min(tr.config.seq_len, 64l)
+        let prev_fused = get_fused_decode()
+        let prev_rope = get_rope_table_mode()
+        set_fused_decode(false)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let served = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
+            t |> equal(served.why, "", "the CPU batched stack serves the row: {served.why}")
+            t |> success(served.tps > 0.0lf, "... at a rate")
+            set_rope_table_mode(false)   //! the classic rope path has no per-row positions: every step runs a row at a time
+            let census0 = batch_step_census()
+            let refused = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
+            t |> equal(refused.why, "4 of the 4 timed steps ran their rows one at a time", "the row names the per-row steps")
+            t |> equal(refused.tps, 0.0lf, "... and reads 0")
+            let census1 = batch_step_census()
+            t |> success(census1.per_row - census0.per_row >= 4l, "the census counted the per-row steps ({census1.per_row - census0.per_row})")
+        }
+        set_rope_table_mode(prev_rope)
         set_fused_decode(prev_fused)
         delete tr
     }

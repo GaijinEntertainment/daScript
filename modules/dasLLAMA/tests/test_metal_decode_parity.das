@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the cache-row dequant oracles
-require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
+require _metal_blob_twin   // blob_twin - the blob-flavor carrier
 require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
 require ?das_metal dasllama/dasllama_metal_common  // the greedy chain's stats and mode (arm 15)
 require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
@@ -82,13 +82,6 @@ def private greedy_steps(tr : Model; var s : Session; n : int) : array<int64> {
 // GPU form — the drivers are blob-only, and CPU inference on a blob model panics, so every
 // CPU/GPU arm pair runs a planar model for CPU stages and its twin for GPU stages (configs are
 // identical, sessions are geometry-bound — one session spans both).
-def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
-    var tg <- load_model_(path, QuantMode.q8)
-    t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
-    tg.config.seq_len = min(tg.config.seq_len, seq_cap)
-    return <- tg
-}
-
 // prompt-to-continuation: prefill on trp, then n_gen greedy decode steps on trd (forward(), where
 // the decode override hooks). The drivers are blob-only, so callers pass the planar model for CPU
 // stages and the blob twin for GPU stages — sessions are geometry-bound, one session spans both.
@@ -282,9 +275,7 @@ def private batch_greedy(tr, trg : Model; prompts : array<array<int64>>; nsteps 
         var cur : array<int64>
         var live : array<int>
         for (i in range(nb)) {
-            unsafe {
-                sess |> push(addr(ss[i]))
-            }
+            sess |> push(unsafe(addr(ss[i])))
             cur |> push(greedy_top(ss[i].logits, vocab))
             live |> push(i)
         }
@@ -446,9 +437,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
             var sessb : array<Session?>
             var cur : array<int64>
             for (i in range(nb)) {
-                unsafe {
-                    sessb |> push(addr(sb[i]))
-                }
+                sessb |> push(unsafe(addr(sb[i])))
                 cur |> push(greedy_top(sa[i].logits, vocab))
             }
             select_decode_override("metal")
@@ -527,9 +516,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
         var sess : array<Session?>
         var cur : array<int64>
         for (i in range(nb)) {
-            unsafe {
-                sess |> push(addr(ss[i]))
-            }
+            sess |> push(unsafe(addr(ss[i])))
             cur |> push(greedy_top(ss[i].logits, vocab))
         }
         select_decode_override(gpu ? "metal" : "")

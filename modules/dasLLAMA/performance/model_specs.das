@@ -364,6 +364,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the qwen35 hybrid: 18 Gated-DeltaNet recurrent + 6 gated-attention layers
             // (2x-wide Q with sigmoid out-gate, partial NEOX rope 64/256, QK-norm)
             parity <- ev_qwen_count([dn_chunked = true])),
+        // the NextN-headed twin of the hybrid: the small MTP carrier the joint speculative tick,
+        // the batched row's --npl-mtp arm and the scheduler's self-speculative cells drive; the
+        // local name carries the MTP tag the release's file name does not
+        ModelSpec(file = "Qwen3.5-0.8B-MTP-Q8_0.gguf",
+            url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
+            bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
         // the K-quant twin of the hybrid for the resident driver's native-plane cells
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant

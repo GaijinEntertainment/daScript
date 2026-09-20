@@ -19,7 +19,7 @@ Three questions decide which existing family the format rides; answer them from
 1. **Block geometry.** 256-weight superblock (every K-quant, every i-quant) or 32-weight block
    (`Q4_0`, `Q5_1`, `IQ4_NL`)? A superblock format joins the `kq_sb` lattice (Q8_K activations,
    `% 256` rows, the grp<mr> repack, the stamped kq kernels); a 32-block format rides per-32
-   planes like `q51`. `ARCHITECTURE_ENGINE.md` sec.1.2 owns the lattice split.
+   planes like `q51`. `ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2 owns the lattice split.
 2. **Weight reconstruction.** Shift/mask nibbles (`q4_0`, K-quants), a 16-entry codebook on the
    nibble (`IQ4_XS`, `IQ4_NL`), or a grid gather (`IQ2_*`, `IQ3_*`)? Shift/mask and codebook
    formats keep the k4 nibble tiling and add an unpack step; grid formats decode to bytes first

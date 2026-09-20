@@ -488,17 +488,6 @@
     per-clip `cmd` (schema addition) or a receipt template with the `-f` slot marked; the das
     rows are unaffected (one process serves the whole ladder).
 
-40. **Batched PLE on the GPU - the E-series multi-stream Metal arm (long-term).** The Metal
-    batch-decode path clears `MetalNeed.ple` from its implemented set (`BATCH_NEEDS_OK` in
-    `dasllama/dasllama_metal_shapes.das`), so E-series models decline `feature` on batched
-    steps and the scheduler falls back to per-row decode - correct, but the multi-stream
-    serving tier loses its batching win exactly on the edge models built for it. The prefill
-    driver already carries batched PLE kernels (gather + finish, `dasllama_metal_prefill.das`),
-    so the shape exists; the batch-decode arm needs the per-stream token-id gather plumbed
-    through the batch kargs. Upstream has no batched-PLE serving path either, so this is
-    differentiation, not parity catch-up. Done = `BATCH_NEEDS_OK` carries `ple`, a batch-decode
-    E-series cell in the support matrix, and a scheduler-level A/B showing the batched step
-    beats N per-row steps on an E-series carrier.
 
 - **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
     machine-check the two records-provenance rules - every `runs[]` row's
