@@ -27,19 +27,18 @@ with the C header written beside it), **install** (resolve externs, instrument s
 Every phase above reports its wall time in the `LLVM JIT time:` breakdown printed under
 `options log_compile_time` / `policies.log_compile_time` - the same option the front end uses
 for its `compiler took` line. The contract exists because an untimed phase is invisible exactly
-when someone is hunting where compile time went: a phase outside the breakdown makes the
-printed numbers sum short of the always-on total, and the gap has no name. Nested totals are
-allowed - a parent entry (emit+link) may cover steps a callee reports separately (emit-obj,
-link) - provided both levels print. When a phase is split into finer steps, each step reports
-its own number; an aggregate label silently absorbing new sub-steps breaks the contract the
-same way an untimed phase does.
+when someone is hunting where compile time went: a phase outside the breakdown makes the printed
+numbers sum short of the always-on total, and the gap has no name. Nested totals are allowed - a
+parent entry (emit+link) may cover steps a callee reports separately (emit-obj, link) - provided both
+levels print. When a phase is split into finer steps, each step reports its own number; an aggregate
+label silently absorbing new sub-steps breaks the contract the same way an untimed phase does.
 
 Under `--jit-split-modules` (`run_split_codegen` in `llvm_jit_run.das`) the same labels map
 differently: **declare** reads ~zero (declaration moves inside the partition loop), **irgen**
 covers partitioning plus every partition's declare/irgen/ctor work, **optimize** carries the
 `jit_par_emit_run` pool wall - per-job passes AND object emission interleave on the workers -
 plus the post-optimize verifies and the partition teardown, and **emit+link** is the
-`link_dll_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
+`link_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
 one `LLVM JIT time: job {obj} passes ... emit ...` line per partition (from the pool, under the
 same log option) and the `link ... (N objects)` line under emit+link. With the obj cache on
 (`--jit-obj-cache`, default under split), cached partitions skip declare/irgen/optimize
@@ -47,16 +46,25 @@ entirely: the key fold and probe cost lands in **irgen**, the `obj cache - K/N p
 cached` line prints unconditionally beside the split announce, and per-partition
 `obj cache hit` lines print under the log option.
 
+An `-exe` takes the same driver when its build passes `--jit-split-modules` (its default stays
+one unit): the entry rides a partition of its own (`exe_main`), the partitions link once with no
+obj cache, and the objects and the response file go with the link. Under `--jit-lto` the
+partitions leave as bitcode, every function stamped with the cpu and features the target machine
+would carry (`default_target_cpu_features` - lld's LTO backend builds its subtarget from the
+module, not from a machine), and the link runs LTO (`lto_linker_args`: `/opt:lldlto=3` on
+lld-link, `-flto` on a POSIX driver, where the plan links through `clang++` unless
+`--jit-path-to-linker` names another - a GNU driver handles no bitcode). `DAS_JIT_PROBE_LTO` is
+the DLL path's dev twin of that rail; the slots the partitions own and the LTO link's needs are `ARCHITECTURE_EXE.md` sec.3 and 4.
+
 ### 1.2 The codegen tier
 
 Code that EMITS machine code - the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` -
 is IR generation, target-machine setup, the `[llvm_code]` generator bodies, and the jit call
 ABI: the generated function signatures, name scheme, prologue, and the externs the install
 phase binds. The file set that carries this surface is `EMITTER_FILES` in
-`tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); the pin test makes every text change to
-one of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owed when the
-emitted code for identical inputs can differ - a comment, a nolint, or a same-value rewrite
-inside an emitter file re-pins without a bump.
+`tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); the pin test makes every text change to one
+of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owed when the emitted code for
+identical inputs can differ - a comment, a nolint, or a same-value rewrite inside an emitter file re-pins without a bump.
 
 The per-artifact entry emitters are OUTSIDE that surface: `llvm_exe.das` (a standalone exe's
 `main`) and its `-lib` half (the C entry points and thunks) emit startup glue for artifacts
@@ -69,6 +77,15 @@ process-global half behind a once guard and the per-context half behind its own 
 
 `daslang -lib` emits an artifact that loads into a process it does not own; its runtime,
 environment and shutdown rules are `ARCHITECTURE_LIB.md` sec. 1.3.
+
+### 1.4 A constant make-array literal is constant data {#const-data-literal}
+
+A make-array literal of four elements or more (`MIN_CONST_DATA_ELEMS`) whose elements are all numeric or
+vector constants (`is_const_data_literal`: the scalar and two- or four-wide vector element types; a
+three-wide vector's padding, a string's runtime pointer and a fixed-array element - told apart by its size -
+stay on the store path) lowers to a private constant array and one `memcpy`, not a store per element; an
+element the builder did not fold to a constant of the element type sends the whole literal to a store loop over the collected values. A SPIR-V kernel blob is a thousand `uint4`, and the per-element form put a
+620k-line initializer in front of the optimizer and the backend: most of the one-unit exe's codegen wall.
 
 ## 2. Codegen identity - the DLL cache
 
@@ -84,11 +101,10 @@ merely re-selects which perm gets stamped - the `[tune]` machinery - self-invali
 bump. "The jit call ABI" is the contract between the
 generated code and the engine: the generated function signatures and name scheme
 (`create_uid_nodes` / `get_dll_fn_name`), the prologue shape (`jit_emit_prologue`), the
-`LlvmJitFlags`/`LlvmJitMode` inputs to the emitter, and the extern-resolution surface the
-install phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A pinned
-`jit_output_path` bypasses the content-addressed name entirely; its probe compares function
-hashes only, which is why the summary line asserts the opt-level tag only when the tier is
-actually known.
+`LlvmJitFlags`/`LlvmJitMode` inputs to the emitter, and the extern-resolution surface the install
+phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A pinned `jit_output_path`
+bypasses the content-addressed name entirely; its probe compares function hashes only, which is why
+the summary line asserts the opt-level tag only when the tier is actually known.
 
 ### 2.1 The split obj cache - positional invalidation
 
@@ -121,23 +137,22 @@ fat exe runs at startup), `DAS_TUNE_MANIFEST` (pins the sidecar),
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),
 `DAS_TUNE_CONTROL` (a supervisor's stop request - tuners abort between families), `--jit-obj-cache=0` (forces every split
-partition to re-emit, bypassing the obj cache), `DAS_JIT_PROBE_LTO` (split partitions emit
+partition to re-emit, bypassing the obj cache), `--jit-lto` (a split `-exe`'s partitions emit
+bitcode and its link runs LTO), `DAS_JIT_PROBE_LTO` (the DLL path's twin: split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
 and `cpu_supports`-based tune eligibility all follow), `DAS_JIT_BASELINE` (build for a CPU class
 instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
 `ARCHITECTURE_TARGET_FEATURES.md` sec.10), `--jit-debug` / `-g` (emit DWARF or CodeView debug
-info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12),
-and the runtime escape API
-`tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
-passes the knob name it acts for). The announce contract: an override announces at the point
-it CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the
-caller-supplied knob name for `tune_suppress_mint`); a set-but-inert override may stay silent,
-and per-scope or per-site repeats are correct. A library that only exposes the override bit
-(a `*_overridden` query such as `tune_noise_threshold_overridden`) discharges the contract
-when the announce lands at the consumer in the same change. Verbosity knobs
-(`DAS_TUNE_VERBOSITY`) shape only how much is printed, not what runs - they are not overrides
-under this contract.
+info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), and the
+runtime escape API `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the
+caller passes the knob name it acts for). The announce contract: an override announces at the point it
+CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the caller-supplied knob
+name for `tune_suppress_mint`); a set-but-inert override may stay silent, and per-scope or per-site
+repeats are correct. A library that only exposes the override bit (a `*_overridden` query such as
+`tune_noise_threshold_overridden`) discharges the contract when the announce lands at the consumer in
+the same change. Verbosity knobs (`DAS_TUNE_VERBOSITY`) shape only how much is printed, not what runs -
+they are not overrides under this contract.
 
 Environment knobs load ONCE, at context init, into the `[EnvConfig]` structs `g_env_jit` /
 `g_env_tune` (`llvm_env.das`) - a mid-process `setenv` changes nothing the backend reads.
@@ -156,9 +171,8 @@ and the module cache stores the stamped AST. A re-mint therefore has to invalida
 record, or a later run serves stamps minted against the old sidecar until some source file
 changes. The stamping paths (`tune_apply`, `tune_kernel_pick`) register the sidecar path with
 `add_module_cache_dependency` through `pin_module_cache_dependency` before they read it; the
-record carries the path with the file's byte size and content hash, and the reader re-validates
-both before it trusts the payload. Content, not mtime: an app that rewrites its sidecar
-byte-identically on exit must not churn the cache.
+record carries the path with the file's byte size and content hash, and the reader re-validates both
+before it trusts the payload. Content, not mtime: an app that rewrites its sidecar byte-identically on exit must not churn the cache.
 
 The registration runs before the staleness gate, and for a path that does not exist yet,
 because the mints that matter most produce no successful read - the first mint has no sidecar,
@@ -223,11 +237,10 @@ with the interpreter and AOT: measured over 200k lanes, unfused is identical and
 Cody-Waite reduction rounds `x - qf*KC1` into noise at |x| ~ 1e5 without it.
 
 The interpreter side of that bit-exactness is a precondition the emitters cannot enforce: it holds
-while the host compiler does not contract vecmath's POLY macros itself. clang's default
-`-ffp-contract=on` contracts only inside one source expression, so the inlined `v_add(v_mul(..))`
-pair stays two instructions; GCC's default `fast` contracts across statements and would fuse them.
-CMake pins neither flag, so on a GCC-built interpreter it is the vecmath rail that moves, not the
-emitted one.
+while the host compiler does not contract vecmath's POLY macros itself. clang's default `-ffp-contract=on`
+contracts only inside one source expression, so the inlined `v_add(v_mul(..))` pair stays two instructions;
+GCC's default `fast` contracts across statements and would fuse them. CMake pins neither flag, so on a
+GCC-built interpreter it is the vecmath rail that moves, not the emitted one.
 
 NaN carries lane for lane on this rail, and that has to be built in: a clamp or a float-to-int
 conversion written with ordered compares replaces a NaN lane with a number, and no accuracy bound
