@@ -147,6 +147,7 @@ struct Scheduler {
     @do_not_delete batch_rows : array<Session?>
     batch_toks : array<int64>
     batch_idx : array<int64>                // batch row -> streams index
+    mtp_acc : array<int64>                  // the joint speculative tick's answer per batch row: the accepted draft, or -1
     chunk : array<int64>                    // the current prefill chunk
     donate_toks : array<int64>              // reap-time scratch: tail eval + the insert token list
     // counters (/v1/stats and server_bench read these)
@@ -166,6 +167,7 @@ struct Scheduler {
     last_ttft_us : int64                    // most recently reaped stream's ttft
     mtp_drafted : int64                     // self-spec telemetry across streams (drafts attempted / accepted)
     mtp_accepted : int64
+    mtp_joined_max : int64                  // the most streams one joint verify carried in a tick (0 = every tick stepped its streams alone)
 }
 
 //! Create a scheduler over `model`: `max_streams` concurrent sessions, `max_queue` waiting
@@ -204,6 +206,17 @@ def set_device_kv(var sch : Scheduler; on : bool) : bool {
 
 //! Active stream count (prefilling + decoding).
 def n_active(sch : Scheduler) : int64 => long_length(sch.streams)
+
+//! the streams' own speculative telemetry summed, read around a joint tick for the scheduler's totals
+def private mtp_totals(sch : Scheduler) : tuple<drafted : int64; accepted : int64> {
+    var d = 0l
+    var a = 0l
+    for (st in sch.streams) {
+        d += st.session.mtp_drafted
+        a += st.session.mtp_accepted
+    }
+    return (drafted = d, accepted = a)
+}
 
 //! Queued (not yet admitted) request count.
 def n_queued(sch : Scheduler) : int64 => long_length(sch.queue)
@@ -464,36 +477,46 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             continue
         }
         if (sch.mtp) {
-            // self-spec tick: the stream trades its cross-stream batch row for up to two positions per tick.
-            // Donation-side note: an accepted token is already evaled, so a "length" finish here
-            // makes donate_stream's pending-eval redundant — harmless, and unreachable anyway:
-            // every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
-            let d0 = sch.streams[i].session.mtp_drafted
-            let a0 = sch.streams[i].session.mtp_accepted
-            var acc = 0l
+            // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
+            // tick, every stream's round verified together below. Donation-side note: an accepted token
+            // is already evaled, so a "length" finish makes donate_stream's pending-eval redundant -
+            // harmless, and unreachable: every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
-            if (mtp_spec_eval(m, sch.streams[i].session, sch.streams[i].cur_tok, acc)) {
-                if (advance_with(m, sch.streams[i], acc, events)) {
-                    sch.gen_tokens ++
-                }
-            }
-            sch.mtp_drafted += sch.streams[i].session.mtp_drafted - d0
-            sch.mtp_accepted += sch.streams[i].session.mtp_accepted - a0
-            if (sch.streams[i].state == StreamState.decoding) {
-                if (sample_advance(m, sch.streams[i], events)) {
-                    sch.gen_tokens ++
-                }
-            }
-            sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
-            sch.decode_steps ++
-            sch.sum_batch ++
+            sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
+            sch.batch_toks |> push(sch.streams[i].cur_tok)
+            sch.batch_idx |> push(i)
             continue
         }
         sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
         sch.batch_toks |> push(sch.streams[i].cur_tok)
         sch.batch_idx |> push(i)
     }
-    if (!empty(sch.batch_rows)) {
+    if (sch.mtp && !empty(sch.batch_rows)) {
+        let ts_step = prof_ticks()
+        let before = mtp_totals(sch)
+        let joined = mtp_spec_eval_batch(m, sch.batch_rows, sch.batch_toks, sch.mtp_acc)
+        note_batch_step(joined == long_length(sch.batch_rows))   //! the census: one device step when every stream's rows rode the joint verify
+        sch.mtp_joined_max = max(sch.mtp_joined_max, joined)
+        prof_add("sched_eval_batch", ts_step)
+        for (i, acc in sch.batch_idx, sch.mtp_acc) {
+            if (acc >= 0l) {
+                if (advance_with(m, sch.streams[i], acc, events)) {
+                    sch.gen_tokens ++
+                }
+            }
+            if (sch.streams[i].state == StreamState.decoding) {
+                if (sample_advance(m, sch.streams[i], events)) {
+                    sch.gen_tokens ++
+                }
+            }
+            sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
+        }
+        let after = mtp_totals(sch)
+        sch.mtp_drafted += after.drafted - before.drafted
+        sch.mtp_accepted += after.accepted - before.accepted
+        sch.decode_steps ++
+        sch.sum_batch += long_length(sch.batch_rows)
+    } elif (!empty(sch.batch_rows)) {
         let ts_step = prof_ticks()
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
         prof_add("sched_eval_batch", ts_step)

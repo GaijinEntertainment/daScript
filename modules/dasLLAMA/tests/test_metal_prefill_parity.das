@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — pulls the engine + arch registrations + (on Apple) the metal prefill override
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
-require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
+require _metal_blob_twin   // blob_twin - the blob-flavor carrier
 require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats + the shutdown/leak rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
 require ?das_metal dasllama/dasllama_metal_common   // g_dev + residency_* — the pin witness probes the API directly
@@ -16,7 +16,7 @@ require ?das_metal metal/das_metal_boost  // metal_live_object_count for the lea
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require strings
-require math
+require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
 require _model_tier
 
 // End-to-end gate for the dasMetal whole-prefill override (Phase 6): greedy continuation of a
@@ -393,13 +393,6 @@ def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int) :
 
 // the blob twin of a planar fixture (see test_metal_decode_parity's twin): an OWNED engine
 // load transformed to the GPU form — the drivers are blob-only
-def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
-    var tg <- load_model_(path, QuantMode.q8)
-    t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
-    tg.config.seq_len = min(tg.config.seq_len, seq_cap)
-    return <- tg
-}
-
 [test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {

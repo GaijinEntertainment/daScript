@@ -118,8 +118,8 @@ with the decision it settles.**
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
-stay f32 for another reason is ledgered on its own file's sec.1 charter line in an
-`ARCHITECTURE_*.md` companion, not commented into compliance.
+stay f32 for another reason is ledgered on its own file's sec.1 charter line - the line naming
+what that file holds - in an `ARCHITECTURE_*.md` companion, not commented into compliance.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy.**
 
@@ -141,18 +141,16 @@ apart from the ad-hoc profiling an engine file may not carry.
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
 by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
-contracts, or `[cold_path]` on its only reaching entry.** An annotation binds every function
-below the entry that carries no annotation of its own; an unreached loop has no contract
-(`ARCHITECTURE_RUNTIME.md` sec.2.11).
+contracts, or `[cold_path]` on its only reaching entry.** The region entry is the OUTERMOST such
+function - interior means every caller is itself re-entered that way, so a function reached only
+through a registered function value is an entry (`ARCHITECTURE_RUNTIME.md` sec.2.11).
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` / `[no_env]` /
 `[no_io]` contract moves that annotation to the new name in the same change** - it is no new entry.
 
 **A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function below the
-region entry - the outermost function the runtime re-enters per token, per frame, or per prefill
-quantum: a kernel `*_encode` / `*_decode`, a step driver, the CPU decoder's `forward_*` entries,
-or a function reached only through a registered function value - is a defect - move it to the
-entry; an interior function carries only a `[cold_path]` on a rarely-taken branch.**
+region entry is a defect - move it to the entry; an interior function carries only a
+`[cold_path]` on a rarely-taken branch.**
 
 **Never put `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a loop reached
 only from a load, stage, bake, or convert path - it is no region entry; it carries `[cold_path]`
@@ -164,10 +162,9 @@ benchmark row, a rig's loop - and never by a served request carries `[cold_path]
 **A change to `encode`/`bpe_encode`, or to a function they call, in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
 ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) at two or more
-input sizes, for a model using the affected tokenizer.** A change confined to the load path -
-a metadata default the encode reads as a value - does not fire this rule.
-
-**A tokenizer wall-clock time that grows faster than linearly with input size is a defect.**
+input sizes, for a model using the affected tokenizer; a time growing faster than linearly
+with input size is a defect.** A change confined to the load path - a metadata default the
+encode reads as a value - does not fire this rule.
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
@@ -261,21 +258,24 @@ registry does not, `tests/test_env_registry.das` catches.
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter's
-holds column does not cover, keeps the charters true in the same change - in an
-`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.** `ARCHITECTURE.md`'s sec.1 routing
-block names the companion holding each file's charter line.
+**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter
+line does not cover, keeps the charters true in the same change - in an `ARCHITECTURE_*.md`
+companion, never `ARCHITECTURE.md`.** `ARCHITECTURE.md`'s sec.1 routing block names the
+companion holding each file's charter line.
 
-**A `followup_*.md` row whose work landed in this change is deleted and no other row is
-renumbered - text cites rows by number - an item that landed leaves a row that lists several,
-and every checked-in citation of what was deleted is repointed or dropped.**
+**A `followup_*.md` row whose work landed in this change is deleted and every checked-in
+citation of it repointed or dropped; no other row is renumbered (text cites rows by number),
+and a row listing several items keeps its number and strikes the one that landed.**
+
+**A row a diff adds to a `followup_*.md` takes a number higher than every number that file
+carries - a deleted row's number is never reused.**
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
 companion's own opening (its range and the sections it names), and every repointed prose
 `sec.N` / file citation of the moved sections, in the same change; a new section takes a
-number `ARCHITECTURE.md`'s index does not list.** Prose citations are not LINT026-gated, so one
-naming a section that left its file sends the reader to nothing.
+number no other section in this folder's `ARCHITECTURE*.md` set uses.** Prose citations are
+not LINT026-gated, so one naming a section that left its file sends the reader to nothing.
 
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.

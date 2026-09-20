@@ -2281,7 +2281,7 @@ def test_lens_call_macro_gates(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_MTP.md#kq-rows-crown")]
+[test, arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def test_kq_rows_race_verdicts(t : T?) {
     t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

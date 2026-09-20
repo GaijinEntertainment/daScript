@@ -207,7 +207,7 @@ def private run_to_jv(r : Run) : JsonValue? {
         version = r.Version, dasllama_version = r.DasllamaVersion,
         engine_sha = r.EngineSha, tune_sha = r.TuneSha,
         source = r.Source, verified = r.Verified != 0,
-        pp512 = r.Pp512, tg128 = r.Tg128, cpu = r.Cpu))
+        pp512 = r.Pp512, tg128 = r.Tg128, tg128b4 = r.Tg128b4, cpu = r.Cpu))
 }
 
 def private handle_runs(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

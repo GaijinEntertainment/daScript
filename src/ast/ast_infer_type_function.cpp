@@ -1143,7 +1143,6 @@ namespace das {
         return findMatchingFunctions(thisModule->name, thisModule, sna, argDummy); // "__::sna"
     }
     bool InferTypes::hasDefaultUserConstructor(const string &sna) const {
-        vector<TypeDeclPtr> argDummy;
         auto fnlist = findDefaultConstructor(sna);
         for (auto &fn : fnlist) {
             if (fn->arguments.size() == 0) {

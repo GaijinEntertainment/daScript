@@ -213,7 +213,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them."
     wdec_step : bool = true
 
-    @clarg_doc = "Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair."
+    @clarg_doc = "Fused single-pass decode attention (a head of 128 on every KV codec, a head of 64 on the f16/f32 mirrors); 0 is the A/B rail to the chunked pair."
     attn_d : bool = true
 
     @clarg_doc = "Row count below which attention uses the single-chunk kernel; clamped to 128."

@@ -431,6 +431,16 @@ def register_mtp_spec_override(name : string; fn : MtpSpecOverrideFn) {
     g_mtp_spec_overrides[name] = fn
 }
 
+//! the depth-1 speculative step over every stream at once - a driver that verifies every stream's
+//! rows in one weight pass registers here; `accepted[i]` is stream i's accepted draft or -1, and the
+//! call returns how many streams' rows the joint verify carried (0 = each stream stepped alone)
+typedef MtpSpecBatchOverrideFn = function<(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64>
+var private g_mtp_spec_batch_overrides : table<string; MtpSpecBatchOverrideFn>
+
+def register_mtp_spec_batch_override(name : string; fn : MtpSpecBatchOverrideFn) {
+    g_mtp_spec_batch_overrides[name] = fn
+}
+
 // The MTP seam-row override: writes the draft head's row pos-1 on a blob model BEFORE a
 // continuation window's trunk body (forward_mtp(..., false)'s GPU twin) — the body's own
 // tail overwrites mtp_h, so the seam must consume the pre-window handoff first
@@ -4908,6 +4918,22 @@ def private mtp_prefill_warm(t : Model; var s : Session; tokens : array<int64>; 
         copy_floats(s.mtp_xb_save, 0l, s.x_b, 0l, npos * dim)
     }
     // SEAM row start_pos-1 is written by forward_prefill BEFORE the trunk body, so it can't be done here
+}
+
+//! the depth-1 speculative step over every stream at once: a registered batch override verifies every
+//! stream's rows in one pass; without one each stream steps alone through `mtp_spec_eval`. `accepted[i]`
+//! is stream i's accepted draft or -1; returns how many streams' rows a joint verify carried (0 = none)
+def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
+    if (t.metal_blob && !empty(g_decode_override_name) && key_exists(g_mtp_spec_batch_overrides, g_decode_override_name)) {
+        return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)
+    }
+    let n = long_length(sessions)
+    accepted |> resize(n)
+    for (i in range64(n)) {
+        var a = 0l
+        accepted[i] = mtp_spec_eval(t, *sessions[i], toks[i], a) ? a : -1l
+    }
+    return 0l
 }
 
 //! One greedy self-speculative eval step: evals `tok`, drafting one token ahead with the NextN

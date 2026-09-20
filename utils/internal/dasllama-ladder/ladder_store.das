@@ -68,6 +68,7 @@ struct Run {
     Pp512 : double = 0.0lf      // tests.pp512.tok_s; 0 = the run did not measure it
     Tg128 : double = 0.0lf      // tests.tg128.tok_s; 0 = the run did not measure it
     Cpu : string = ""           // hardware.cpu, the board's machine label
+    Tg128b4 : double = 0.0lf    // tests.tg128@4.tok_s, the four-stream batched row; 0 = the run did not measure it
 }
 
 //! One tune sidecar, content-addressed by its own sha256; the identity columns are
@@ -160,7 +161,13 @@ def ladder_migration_002(db : SqlRunner) {
     db |> exec("ALTER TABLE runs ADD COLUMN Pp512 REAL NOT NULL DEFAULT 0")
     db |> exec("ALTER TABLE runs ADD COLUMN Tg128 REAL NOT NULL DEFAULT 0")
     db |> exec("ALTER TABLE runs ADD COLUMN Cpu TEXT NOT NULL DEFAULT ''")
-    backfill_run_cells(db)
+    backfill_run_cells(db, false)
+}
+
+[sql_migration(version = 3, description = "runs carry the tg128@4 cell, the four-stream batched row; backfilled from the documents")]
+def ladder_migration_003(db : SqlRunner) {
+    db |> exec("ALTER TABLE runs ADD COLUMN Tg128b4 REAL NOT NULL DEFAULT 0")
+    backfill_run_cells(db, true)
 }
 
 //! Every run of a record document in order, with its model and the (ModelIdx, RunIdx) the
@@ -186,17 +193,19 @@ def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : 
     delete_json(doc)
 }
 
-//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Cpu` hold.
-def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; cpu : string> {
+//! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Tg128b4`/`Cpu` hold.
+def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; tg128b4 : double; cpu : string> {
     return (
         pp512 = r?["tests"]?["pp512"]?["tok_s"] ?? 0.0lf,
         tg128 = r?["tests"]?["tg128"]?["tok_s"] ?? 0.0lf,
+        tg128b4 = r?["tests"]?["tg128@4"]?["tok_s"] ?? 0.0lf,
         cpu = r?["hardware"]?["cpu"] ?? "")
 }
 
 //! Every run row of every record submission re-reads its cells from the document it came
-//! from — the one-time fill behind migration 2, for rows inserted before the columns existed.
-def private backfill_run_cells(db : SqlRunner) {
+//! from — the one-time fill behind a migration that added cell columns, for rows inserted
+//! before they existed: migration 2's flat cells and the cpu label, or migration 3's batched cell
+def private backfill_run_cells(db : SqlRunner; batched : bool) {
     let subs <- _sql(db |> select_from(type<Submission>)
         |> _where(_.Kind == "records" || _.Kind == "official"))
     var filled = 0
@@ -205,8 +214,14 @@ def private backfill_run_cells(db : SqlRunner) {
         let sid = s.Id
         each_record_run(s.Doc) $(_m, r, mi, ri) {
             let cells = run_cells(r)
-            let n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
-                (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
+            var n = 0
+            if (batched) {
+                n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (Tg128b4 = cells.tg128b4))
+            } else {
+                n = db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                    (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
+            }
             // one document run is one row; anything else is a row an admin delete removed, or
             // a duplicate - the board would show a default cell there with no other signal
             if (n != 1) {
@@ -400,6 +415,7 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 CreatedAt = now,
                 Pp512 = cells.pp512,
                 Tg128 = cells.tg128,
+                Tg128b4 = cells.tg128b4,
                 Cpu = cells.cpu))
     }
     if (!empty(rows)) {

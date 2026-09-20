@@ -85,8 +85,11 @@ struct Args {
     @clarg_doc = "GPU layers, llama-bench spelling: 0 = CPU, anything else = Metal, required (default: 0)"
     ngl : int = 0
 
-    @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many device-home streams through the scheduler's device mode, the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
+    @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many streams through the scheduler - device-home where a whole-model driver homes them, host-cached otherwise - the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
     npl : int = 0
+    @clarg_name = "npl-mtp"
+    @clarg_doc = "The batched tg row's streams tick through the self-speculative round (a NextN model), every stream's verify rows in one joint pass; the reference row stays plain decode"
+    npl_mtp : bool
 
     @clarg_doc = "Arm the accelerate (+AMX/SME) float-batch tier for the das run — the 'cpu + AMX' board row (records flavor 'accel'; CPU only, fails where das_accelerate is not built)"
     accel : bool
@@ -1362,8 +1365,8 @@ def main() : int {
         print("error: --submit refused - this build carries no sidecar exchange client (no tune framework)\n")
         return 1
     }
-    if (cfg.submit && cfg.npl > 1) {
-        print("error: --npl reshapes the model (N mirror regions): its flat rows are not the board's, so --submit is refused with --npl\n")
+    if (cfg.submit && cfg.npl > 1 && cfg.ngl == 0) {
+        print("error: --npl reshapes the model on the whole-model Vulkan driver (N mirror regions): its flat rows are not the board's, so --submit is refused with --npl off Metal\n")
         return 1
     }
     if (cfg.npl == 1) {
@@ -1512,7 +1515,9 @@ def main() : int {
             }
             t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
         } else {
-            let rows_ctx = cfg.npl > 1 ? bplen + ngen + int64(cfg.npl) : max(plen, ngen)
+            //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
+            let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
+            let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)
             t.config.seq_len = min(t.config.seq_len, rows_ctx + 8l)   // cap the KV allocation
             sched_ctx = t.config.seq_len
         }
@@ -1736,8 +1741,16 @@ def main() : int {
                 var tps : array<double>
                 tps |> reserve(reps)
                 var refused = ""
+                let prev_spec = get_mtp_spec()
+                if (cfg.npl_mtp) {   //! the streams draft and verify together; a model with no NextN head refuses the row below
+                    set_mtp_spec(true)
+                    if (t.config.n_layer_nextn <= 0l) {
+                        refused = "--npl-mtp asks the speculative round of a model with no NextN head"
+                    }
+                }
                 for (rep in range(reps)) {
-                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep))
+                    break if (!empty(refused))
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep), cfg.npl_mtp)
                     if (!empty(br.why)) {
                         refused = br.why
                         break
@@ -1746,17 +1759,25 @@ def main() : int {
                 }
                 if (cfg.prof && empty(refused)) {   //! one untimed rep under the buckets: the step's host phases beside the device's
                     forward_profile_reset()
-                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps))
+                    static_if (typeinfo builtin_module_exists(das_metal)) {
+                        metal_decode_stage_reset()
+                    }
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps), cfg.npl_mtp)
                     if (empty(br.why)) {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
                         forward_profile_report()
+                        static_if (typeinfo builtin_module_exists(das_metal)) {
+                            metal_decode_stage_report()   //! the batched steps' setup / encode / wait / gpu / readback phases
+                        }
                     } else {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} REFUSED - {br.why} ---\n")
                     }
                 }
+                set_mtp_spec(prev_spec)
                 t.config.seq_len = flat_len
                 if (empty(refused)) {
-                    say_row(fmt, "tg{ngen}@{npl}{dtag}", " summed over {npl} streams", tps, results)
+                    //! the self-speculative row counts accepted drafts, so it records under its own key - never the plain row's
+                    say_row(fmt, "tg{ngen}@{npl}{cfg.npl_mtp ? "-mtp" : ""}{dtag}", " summed over {npl} streams{cfg.npl_mtp ? ", self-speculative" : ""}", tps, results)
                 } else {
                     say(fmt, "REFUSED tg{ngen}@{npl}{dtag} - {refused}\n")
                     g_refused_rows++
@@ -1773,6 +1794,7 @@ def main() : int {
         }
         // the reference runs AFTER our model is freed — one model in memory at a time
         var refRows : array<LlamaBenchRow>
+        var refBatched = BenchTest()   //! the batched reference row; a 0 rate is none
         var refCmd = ""
         if (!empty(cfg.ref)) {
             var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
@@ -1790,6 +1812,22 @@ def main() : int {
             for (rr in refRows) {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
                 say(fmt, "ref {tag}: {rr.avg_ts:.2f} tok/s\n")
+            }
+            if (ngen > 0l && cfg.npl > 1) {   //! the batched row's reference: the batched exe beside llama-bench, at the row's parallel count
+                let batched_bin = llama_batched_bench_sibling(cfg.ref)
+                if (empty(batched_bin)) {
+                    say(fmt, "warning: no llama-batched-bench beside {cfg.ref} - no ref tg{ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
+                } else {
+                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), reps)
+                    say(fmt, "ref: {br.cmd}\n")
+                    if (empty(br.why)) {
+                        refBatched = br.row
+                        refCmd = "{refCmd} ; {br.cmd}"
+                        say(fmt, "ref tg{ngen}@{cfg.npl}: {br.row.tok_s:.2f} ± {br.row.stddev:.2f} tok/s\n")
+                    } else {
+                        say(fmt, "warning: {br.why}\n")
+                    }
+                }
             }
         }
         if (fmt == OutFmt.txt) {
@@ -1812,6 +1850,10 @@ def main() : int {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
                 let sd = rr.stddev_ts
                 var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
+                mdRows |> emplace(row)
+            }
+            if (refBatched.tok_s > 0.0lf) {
+                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", "tg{ngen}@{cfg.npl}", "{refBatched.tok_s:.2f} ± {refBatched.stddev:.2f}"]
                 mdRows |> emplace(row)
             }
             delete results
@@ -1867,6 +1909,9 @@ def main() : int {
         for (row in refRows) {
             let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
             rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
+        }
+        if (refBatched.tok_s > 0.0lf) {
+            rr.tests |> insert("tg{ngen}@{cfg.npl}", refBatched)
         }
         m.runs |> emplace(rr)
     }

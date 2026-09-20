@@ -410,7 +410,7 @@ buffer already queued, the blocking `waitUntilCompleted` returning about a step 
 that locks per process and that the M5 never enters; the bench process pays it on every
 unchained step too (IQ2_XXS 235.7 against 256.5 t/s). A spin on the command buffer's GPU end
 time removes it (5.66 ms per token, three runs alike; the M5 unchanged), shipped on by default
-as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP.md` 2.38): decode 0.94 -> 1.03 (0.5B),
+as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.94 -> 1.03 (0.5B),
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
@@ -616,19 +616,6 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 16. Three model classes have no batched decode arm and step per row under the server
-
-`batch_decode_decline` (`dasllama/dasllama_metal_decode.das`) declines `graph` for a
-non-standard attention block - the deltanet hybrids, Qwen3.5 / 3.6 / 3.8 / Coder-Next - and for
-a MoE with a shared expert - Qwen1.5-MoE, Qwen3.5-35B-A3B, Qwen3.6-35B-A3B, GLM-4.5-Air - and
-`feature` for the per-layer-embedding E-series (gemma-4 E2B, E4B). Each such step falls to the
-per-row single decode: every stream reads the weights once per token, so N streams cost N
-weight passes where one batched step costs one. `REVIEW_GPU.md` rules a missing batched arm a
-defect. The work, one arm per class: the deltanet step and gated Q batched over rows (the
-recurrent state is per session, the GEMMs are not), the shared expert's triple as one batched
-site beside the routed experts (the CPU batch stack already runs it), and the PLE side input
-gathered per row into the batch step (item 13 is its CPU half).
-
 ## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
 
 `ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
@@ -672,3 +659,30 @@ lowers a fixed-array parameter to `thread T*` when every argument at every call 
 thread-local (the cheaper path, and a lens diagnostic at the call site for the mixed case), or
 the two shells merge into one template on a `B8` axis with the panel gated, so a format class
 becomes the ancestor of both its stamps. ~200 lines behind either.
+
+## 21. The joint speculative tick drafts one stream at a time
+
+`metal_mtp_spec_rounds` (`dasllama/dasllama_metal_decode.das`) verifies every stream's rows in
+one pass but drafts per stream: each warm stream runs its own NextN chain - the draft layer and
+the classifier over the whole vocabulary - as a command buffer of its own before the joint
+verify, so a four-stream tick pays four draft passes where the verify paid one. On Qwen3.6-27B
+the classifier plane alone is most of a draft, and the `--npl-mtp` bench row reads below the
+plain batched row on both NextN carriers (`PERF_LEDGER.md`, the Metal batched-decode arc). The
+work: the drafts as rows of one dispatch - the streams' carry hiddens as a rows form through the
+draft layer (the same `rows_tier` shapes the verify uses), one classifier pass over N rows, the
+argmax per row - landing per group into the same `MtpVerifyGroup` slots the per-stream draft
+fills today. The single-stream round keeps its chain; the multi-draft chain (depth above one)
+becomes k rows-form steps, each seeded by the previous step's per-row argmax.
+
+## 22. The batched recurrent step scans its rows one dispatch at a time
+
+`recurrent_batch` (`dasllama/dasllama_metal_decode.das`) runs the deltanet projections as rows
+GEMVs - one weight pass - and then the conv, the history update, the l2 norm, the scan and the
+gate once PER ROW, five dispatches a row a recurrent layer, because each session's state lives in
+its own `DnMirror` buffer and one dispatch binds one. At four rows on a 24-layer hybrid that is
+~360 small dispatches a step beside the weight pass; the 0.8B reads it as dispatch latency, the
+35B hybrids amortize it. The work: a shared state arena so every session's state slice sits in
+one buffer, a per-row table like the KV route table (`brt`) naming each row's slice, and the
+five kernels taking the row from that table - one dispatch a stage over every row. The CPU
+batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
+is armed); the same rows shape applies there.

@@ -40,7 +40,11 @@ A box without an accelerated tier simply shows fewer categories.
 - **LLM**: llama-bench semantics and naming exactly - `pp512` (prompt processing, tok/s) and
   `tg128` (128-token greedy generation, tok/s), mean +/- sample stdev over 5 timed repetitions
   after one untimed full-size warmup. das mirrors this protocol in
-  `benchmarks/lcpp_bench.das`; the reference rows are llama-bench's own `-o json` output.
+  `benchmarks/lcpp_bench.das`; the reference rows are llama-bench's own `-o json` output. The
+  third LLM cell, `tg128@4`, is the batched decode row: four streams, each a 512-token prompt
+  then 128 generated tokens, served together and read as the summed rate; das runs the streams
+  through its scheduler and the batched step, the reference row is `llama-batched-bench`'s
+  `-npl 4` row (`-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on`), `S_TG` summed the same way.
 - **Speech-to-text / audio-in**: wall time to transcribe a clip, best of the timed repetitions,
   **engine-internal and load-excluded on every path** - das times `transcribe()` from a warmed
   process; whisper.cpp rows are its own `total time - load time`; the patched multimodal CLI
