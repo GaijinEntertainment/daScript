@@ -136,12 +136,7 @@ def private kq_row_dot(fmt : int; kq : array<uint8>; ks : array<uint8>; row, nsb
         let xqp = addr<int8 const?>(xq[xoff])
         let xsp = addr<float const?>(xs[soff])
         let xbp = addr<int const?>(xbs[boff])
-        if (fmt == 4) {
-            return dot_kq(KqTag_k4(), kqr, ksr, xqp, xsp, xbp, n)
-        } elif (fmt == 40) {
-            return dot_kq(KqTag_q40(), kqr, ksr, xqp, xsp, xbp, n)
-        }
-        return dot_kq(KqTag_k6(), kqr, ksr, xqp, xsp, xbp, n)
+        return dot_kq(kqr, ksr, xqp, xsp, xbp, n, kq_fmt_of_id(fmt, "disk_dot"))
     }
 }
 

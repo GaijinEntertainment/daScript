@@ -593,8 +593,8 @@ def private kq_leaf_rows(kq, ks : array<uint8>; x : array<float>; t, nin, nout :
         for (p in range64(t)) {
             quantize_q8_k_into_ptr(addr<float const?>(x[p * nin]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
             for (o in range64(nout)) {
-                let d = dot_kq(KqTag_k4(), addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
-                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin)
+                let d = dot_kq(addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
+                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin, KqTag_k4())
                 want[p * nout + o] = d + b[o]
             }
         }

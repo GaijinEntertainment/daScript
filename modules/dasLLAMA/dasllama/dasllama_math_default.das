@@ -467,7 +467,7 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
 // Int sums are exact, so this is bit-exact vs the grp walk regardless of sub-block order.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select"),
  hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_k4; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k4) : float {
     var acc = 0.0
     let nibble_mask = byte16(15)
     unsafe {
@@ -503,7 +503,7 @@ def dot_kq(_f : KqTag_k4; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8
 // kq v2: same Q8_K-form contract and integer folds as the k4 dot_kq (k5 shares the Q4_K scale-block
 // form) — only the quant reconstruction differs (nibble | high-bit << 4).
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_k5; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k5) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -545,7 +545,7 @@ def dot_kq(_f : KqTag_k5; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8
 // accumulators — isum = Σ sc·dot, bsum = Σ sc·Σa16 (the -32 offset term) — combined exactly in
 // int32 (|isum| < 2^28, |32·bsum| < 2^28), then ONE d·d8 float fold per superblock.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_k6; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k6) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -590,7 +590,7 @@ def dot_kq(_f : KqTag_k6; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8
 // accumulates float(ilo+ihi−8·Σa32)·d over the superblock's 8 blocks, closed by ONE ·d8.
 // This per-block/per-superblock fma order is the contract every q40 kernel must reproduce.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_q40; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_q40) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -622,7 +622,7 @@ def dot_kq(_f : KqTag_q40; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int
 //! exact int), folded as sum sc_blk * idot_blk over the superblock, then * (d * xs). No bsum
 //! term — the codebook carries the sign, so xbsp is unused.
 [unused_argument(xbsp)]
-def dot_kq(_f : KqTag_iq4xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq4xs) : float {
     var acc = 0.0
     let lut = iq4nl_lut()
     unsafe {
@@ -652,7 +652,7 @@ def dot_kq(_f : KqTag_iq4xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : i
 //! h*32 + l at shift 2j plus hmask bit b of byte l (q in 0..7); k6's fold with the -4 offset:
 //! isum = sum sc16 * dot, bsum = sum sc16 * sum a16, then (isum - 4 * bsum) * d * xs per superblock.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_k3; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k3) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -692,7 +692,7 @@ def dot_kq(_f : KqTag_k3; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8
 //! (qh[b] bit << 8) yields four magnitudes, the block's sign bytes flip them, sub-scale
 //! (1 + 2s) folds per block; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_iq3s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3s) : float {
     var acc = 0.0
     let grid = iq3s_grid()
     unsafe {
@@ -723,7 +723,7 @@ def dot_kq(_f : KqTag_iq3s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : in
 //! EIGHT magnitudes (two uint words), the block's sign bytes flip them, per-16 strips (1 + 2s)
 //! fold on the eighth-ed d; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_iq2s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq2s) : float {
     var acc = 0.0
     let grid = iq2s_grid2()
     unsafe {
@@ -754,7 +754,7 @@ def dot_kq(_f : KqTag_iq2s; kqrow : uint8 const?; ksrow : uint8 const?; xqp : in
 //! entry (EIGHT magnitudes, two uint words), its high 7 bits pick the ksigns sign byte; per-16
 //! strips (1 + 2s) fold on the eighth-ed d; signed weights, so no activation block-sum term.
 [unused_argument(xbsp), hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_iq2xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq2xs) : float {
     var acc = 0.0
     let grid = iq2xs_grid2()
     let ksg = ksigns_iq2xs()
@@ -786,7 +786,7 @@ def dot_kq(_f : KqTag_iq2xs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : i
 //! entries (two words each), the aux32[1]'s 7-bit ksigns indices flip signs, its top nibble
 //! is the per-32 strip (1 + 2s) on the eighth-ed d - decoded to the strip byte at transcode.
 [unused_argument(xbsp)]
-def dot_kq(_f : KqTag_iq2xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq2xxs) : float {
     var acc = 0.0
     let grid = iq2xxs_grid2()
     let signs = ksigns_iq2xs()
@@ -818,19 +818,29 @@ def dot_kq(_f : KqTag_iq2xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : 
 // The per-format dots above are one overload family on the format tag (q8, q51 and mx4 have no
 // kq plane and panic); the row-range core is generic on that tag, so kq_fmt_stamp picks the dot
 // at compile time and the row strides come off the descriptor row.
-def dot_kq(_f : KqTag_q8; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8) : float {
     panic("q8 has no kq plane dot")
     return 0.0
 }
 
-def dot_kq(_f : KqTag_q51; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q51) : float {
     panic("q51 rides the per-32 planes, not the kq lattice dot")
     return 0.0
 }
 
-def dot_kq(_f : KqTag_mx4; _kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64) : float {
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_mx4) : float {
     panic("mx4 rides the expert nibble planes, not the kq lattice dot")
     return 0.0
+}
+
+//! The runtime pick of the tag family: one row's dot for a format decided at run time (the
+//! test gates and the one-row callers); the stamp binds the tag, the kernels never pay it.
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; fmt : KqFmt) : float {
+    var r = 0.0
+    kq_fmt_stamp(fmt) $(F) {
+        r = dot_kq(kqrow, ksrow, xqp, xsp, xbsp, n, F)
+    }
+    return r
 }
 
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
@@ -842,13 +852,13 @@ def kq_rows_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8 const
     let ssb = kq_ssb(fmt)
     unsafe {
         for (i in range64(rb, re)) {
-            yp[i] = dot_kq(f, kqp + i * nsb * qsb, ksp + i * nsb * ssb, xqp, xsp, xbsp, n)
+            yp[i] = dot_kq(kqp + i * nsb * qsb, ksp + i * nsb * ssb, xqp, xsp, xbsp, n, f)
         }
     }
 }
 
 [unused_argument(xbsp)]
-def dot_kq(_f : KqTag_iq3xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3xxs) : float {
     var acc = 0.0
     let grid = iq3xxs_grid()
     let signs = ksigns_iq2xs()
@@ -877,7 +887,7 @@ def dot_kq(_f : KqTag_iq3xxs; kqrow : uint8 const?; ksrow : uint8 const?; xqp : 
 }
 
 [unused_argument(xbsp)]
-def dot_kq(_f : KqTag_iq4nl; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq4nl) : float {
     var acc = 0.0
     let lut = iq4nl_lut()
     unsafe {
@@ -906,7 +916,7 @@ def dot_kq(_f : KqTag_iq4nl; kqrow : uint8 const?; ksrow : uint8 const?; xqp : i
 //! pair, q = the unsigned 2-bit lane; the k4/k5 fold - isum on d*sc, the min term through the
 //! activation 16-sums (bsum on dmin*mn).
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
-def dot_kq(_f : KqTag_k2; kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_k2) : float {
     var acc = 0.0
     unsafe {
         for (sb in range64(n / 256l)) {
@@ -1342,7 +1352,7 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
                         let row = ii % d
                         let sb = offp[r * 2l] / 256l + row * nsb
                         let xoff = offp[r * 2l + 1l]
-                        myp[ii] = dot_kq(F, kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+                        myp[ii] = dot_kq(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n, F)
                     }
                 }
             }

@@ -1058,35 +1058,9 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     for (i in range64(n)) {
         ref += double(w[i]) * double(xq[i]) * double(xs[i / sdiv])
     }
-    var got = 0.0
+    var got : float
     unsafe {
-        if (fmt == 4) {
-            got = dot_kq(KqTag_k4(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 5) {
-            got = dot_kq(KqTag_k5(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 40) {
-            got = dot_kq(KqTag_q40(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 44) {
-            got = dot_kq(KqTag_iq4xs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 3) {
-            got = dot_kq(KqTag_k3(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 33) {
-            got = dot_kq(KqTag_iq3s(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 34) {
-            got = dot_kq(KqTag_iq3xxs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 45) {
-            got = dot_kq(KqTag_iq4nl(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 2) {
-            got = dot_kq(KqTag_k2(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 24) {
-            got = dot_kq(KqTag_iq2xs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 25) {
-            got = dot_kq(KqTag_iq2xxs(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 23) {
-            got = dot_kq(KqTag_iq2s(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } else {
-            got = dot_kq(KqTag_k6(), addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        }
+        got = dot_kq(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kq_fmt_of_id(fmt, "kq_dot_gate"))
     }
     let denom = max(abs(float(ref)), 1.0e-6)
     t |> success(abs(got - float(ref)) / denom < 1.0e-4, "kernel dot must match the fp64 plane-dequant reference")
@@ -1193,39 +1167,13 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     var y : array<float>
     y |> resize(d)
     matmul_kq(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d)
+    let kf = kq_fmt_of_id(fmt, "kq_gemv_gate")
     unsafe {
         var bad = 0
         for (r in range64(d)) {
             let kqr = addr(kq[r * nsb * qsb])
             let ksr = addr(ks[r * nsb * ssb])
-            var want = 0.0
-            if (fmt == 4) {
-                want = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 5) {
-                want = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 40) {
-                want = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 44) {
-                want = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 3) {
-                want = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 33) {
-                want = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 34) {
-                want = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 45) {
-                want = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 2) {
-                want = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 24) {
-                want = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 25) {
-                want = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 23) {
-                want = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } else {
-                want = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            }
+            let want = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
             if (y[r] != want) {
                 bad++
             }
@@ -1279,7 +1227,7 @@ def test_kq_gemv_rows(t : T?) {
 // grp<mr> scalar reference (kq_grp_row_dot — the stamped cores' decline body) and the grp row
 // dequant to reproduce them BIT-EXACTLY (same block order, exact integer sub-sums — only the
 // plane layout moved).
-def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     let d = 32l
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1342,37 +1290,12 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
     var wrow : array<float>
     want |> resize(d)
     wrow |> resize(d * n)
+    let kf = kq_fmt_of_id(fmt, "kq_rows_gate")
     unsafe {
         for (r in range64(d)) {
             let kqr = addr(kq[r * nsb * qsb])
             let ksr = addr(ks[r * nsb * ssb])
-            if (fmt == 4) {
-                want[r] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 5) {
-                want[r] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 40) {
-                want[r] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 44) {
-                want[r] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 3) {
-                want[r] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 33) {
-                want[r] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 34) {
-                want[r] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 45) {
-                want[r] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 2) {
-                want[r] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 24) {
-                want[r] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 25) {
-                want[r] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 23) {
-                want[r] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } else {
-                want[r] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            }
+            want[r] = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
             for (s in range64(nsb)) {
                 if (fmt == 4) {
                     dequant_k4_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
@@ -1734,7 +1657,7 @@ def test_kq_tile(t : T?) {
 // per-region grp slices, the per-expert-slice repack shape). Regions carry distinct LCG
 // payloads; both offs forms run — the shared activation image (gate/up, xoff 0) and
 // per-region activation rows (down, xoff = r*n).
-def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l; nreg : int64 = 3l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l; nreg : int64 = 3l) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -1811,52 +1734,15 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     var want_pr : array<float>
     want_sh |> resize(nreg * d)
     want_pr |> resize(nreg * d)
+    let kf = kq_fmt_of_id(fmt, "kq_groupn_gate")
     unsafe {
         for (r in range64(nreg)) {
             for (row in range64(d)) {
                 let sb = (r * d + row) * nsb
                 let kqr = addr(kq[sb * qsb])
                 let ksr = addr(ks[sb * ssb])
-                if (fmt == 4) {
-                    want_sh[r * d + row] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_k4(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 5) {
-                    want_sh[r * d + row] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_k5(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 40) {
-                    want_sh[r * d + row] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_q40(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 44) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq4xs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 3) {
-                    want_sh[r * d + row] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_k3(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 33) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq3s(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 34) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq3xxs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 45) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq4nl(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 2) {
-                    want_sh[r * d + row] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_k2(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 24) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq2xs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 25) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq2xxs(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 23) {
-                    want_sh[r * d + row] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_iq2s(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } else {
-                    want_sh[r * d + row] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_kq(KqTag_k6(), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                }
+                want_sh[r * d + row] = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
+                want_pr[r * d + row] = dot_kq(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n, kf)
             }
         }
     }

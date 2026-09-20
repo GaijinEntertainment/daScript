@@ -154,11 +154,11 @@ def private unit_fields(width, count : int64) : array<RepackField> => [RepackFie
 //! format's kernels read, in place - the format's `repack_grp` overload through the stamp.
 def repack_kq_grp(fmt : KqFmt; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     kq_fmt_stamp(fmt) $(F) {
-        repack_grp(F, kq, ks, n, d, mr)
+        repack_grp(kq, ks, n, d, mr, F)
     }
 }
 
-def repack_grp(_f : KqTag_q8; var _kq : uint8?; var _ks : uint8?; _n, _d, _mr : int64) {
+def repack_grp(var _kq : uint8?; var _ks : uint8?; _n, _d, _mr : int64; _f : KqTag_q8) {
     panic("q8 planes repack through repack_q8q8_grp (int8 quants, f32 scales, the bias and k-group axes)")
 }
 
@@ -192,7 +192,7 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
 //! mr-generalized MXFP4 plane repack (mr=4 reproduces the old hand arm64-laneq mx interleave
 //! byte-for-byte): the nibble bytes as four-byte columns per block, mapping byte-for-byte onto
 //! the grp<mr> Q8 order (see expand_mx4_region_q8); the e8m0 scale one byte per block.
-def repack_grp(_f : KqTag_mx4; var np : uint8?; var ep : uint8?; n, d, mr : int64) {
+def repack_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64; _f : KqTag_mx4) {
     let nbb = n / 32l
     repack_in_place(np, ep, d * nbb * 16l, d * nbb) $(tnp, tep) {
         repack_columns(np, tnp, nbb, 16l, 4l, d, mr)
@@ -203,7 +203,7 @@ def repack_grp(_f : KqTag_mx4; var np : uint8?; var ep : uint8?; n, d, mr : int6
 //! mr-generalized q51 plane repack: per block the 20 quant bytes as five four-byte columns (the
 //! nibble dwords in mx4 order, then the qh dword), the 4-byte f16 (d, m) scale per block.
 //! grp1 == disk order.
-def repack_grp(_f : KqTag_q51; var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q51) {
     let nb = n / 32l
     repack_in_place(qp, sp, d * nb * Q51_QB, d * nb * Q51_SB) $(tqp, tsp) {
         repack_columns(qp, tqp, nb, Q51_QB, 4l, d, mr)
@@ -270,7 +270,7 @@ def private repack_k45_quants(var kq : uint8?; tqp : uint8 const?; nsb, d, mr : 
 //! mr-generalized K-quant plane repack, one overload per format. k4/k5 (kq v2) also DECODE the
 //! 6-bit scale packing into the u8 sc/mn planes — the padded-disk 20B rows and the decoded
 //! 20B/row grp regions share one stride.
-def repack_grp(_f : KqTag_k4; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k4) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * K4_QSB, d * nsb * K4_SSB) $(tqp, tsp) {
         repack_k45_quants(kq, tqp, nsb, d, mr, K4_QSB)
@@ -278,7 +278,7 @@ def repack_grp(_f : KqTag_k4; var kq : uint8?; var ks : uint8?; n, d, mr : int64
     }
 }
 
-def repack_grp(_f : KqTag_k5; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k5) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * K5_QSB, d * nsb * K5_SSB) $(tqp, tsp) {
         repack_k45_quants(kq, tqp, nsb, d, mr, K5_QSB)
@@ -289,7 +289,7 @@ def repack_grp(_f : KqTag_k5; var kq : uint8?; var ks : uint8?; n, d, mr : int64
 //! k6: the disk ql nibbles re-paired into four-byte columns of (blk, j), the qh two-bit tops
 //! re-packed per sub-block into the high plane; the k6 scale row verbatim.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
-def repack_grp(_f : KqTag_k6; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k6) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * K6_QSB, d * nsb * K6_SSB) $(tqp, tsp) {
         repack_k6_quants(kq, tqp, nsb, d, mr)
@@ -337,7 +337,7 @@ def private repack_k6_quants(var kq : uint8?; tqp : uint8 const?; nsb, d, mr : i
 
 //! q40: the disk bytes already carry the k / k+16 nibble pairing, so the quants are a pure
 //! column gather; scales interleave per block: [blk 0..7][mr x f16 d].
-def repack_grp(_f : KqTag_q40; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_q40) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * Q40_QSB, d * nsb * Q40_SSB) $(tqp, tsp) {
         repack_columns(kq, tqp, nsb, Q40_QSB, 4l, d, mr)
@@ -346,13 +346,13 @@ def repack_grp(_f : KqTag_q40; var kq : uint8?; var ks : uint8?; n, d, mr : int6
 }
 
 //! iq4nl: q40's plane shapes byte for byte.
-def repack_grp(_f : KqTag_iq4nl; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
-    repack_grp(KqTag_q40(), kq, ks, n, d, mr)
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq4nl) {
+    repack_grp(kq, ks, n, d, mr, KqTag_q40())
 }
 
 //! iq4xs: the q40 quant gather (the disk k/k+16 pairing IS the k4 tiling) and the k4 row over
 //! the DECODED 20B scale row (its pad bytes are zero on the plane, so verbatim lands them).
-def repack_grp(_f : KqTag_iq4xs; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq4xs) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * IQ4XS_QSB, d * nsb * IQ4XS_SSB) $(tqp, tsp) {
         repack_columns(kq, tqp, nsb, IQ4XS_QSB, 4l, d, mr)
@@ -363,7 +363,7 @@ def repack_grp(_f : KqTag_iq4xs; var kq : uint8?; var ks : uint8?; n, d, mr : in
 //! k3: qs and hmask re-packed per sub-block into four-byte columns (the 2-bit lanes and the
 //! high bits gathered per column); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
-def repack_grp(_f : KqTag_k3; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k3) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * K3_QSB, d * nsb * K3_SSB) $(tqp, tsp) {
         repack_k3_quants(kq, tqp, nsb, d, mr)
@@ -415,14 +415,14 @@ def private repack_column_form(var kq : uint8?; var ks : uint8?; n, d, mr, qsb, 
 }
 
 //! iq3s: 26 four-byte columns of [qs 64][qh 8][signs 32], the k4 scale row.
-def repack_grp(_f : KqTag_iq3s; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq3s) {
     repack_column_form(kq, ks, n, d, mr, IQ3S_QSB, IQ3S_SSB)
 }
 
 //! k2: the qs bytes as 16 four-byte columns (the 2-bit lanes stay in place - the kernels shift
 //! per group); the scale row interleaves FIELD-MAJOR as [16 sc/min bytes x mr][mr x f16 d]
 //! [mr x f16 dmin] (contiguous d rows for the emitter's f16 vector loads).
-def repack_grp(_f : KqTag_k2; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k2) {
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * K2_QSB, d * nsb * K2_SSB) $(tqp, tsp) {
         repack_columns(kq, tqp, nsb, K2_QSB, 4l, d, mr)
@@ -431,18 +431,18 @@ def repack_grp(_f : KqTag_k2; var kq : uint8?; var ks : uint8?; n, d, mr : int64
 }
 
 //! iq2s: 18 four-byte columns of [idx 32][signs 32][qh 8], the k4 row with 16 strips.
-def repack_grp(_f : KqTag_iq2s; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq2s) {
     repack_column_form(kq, ks, n, d, mr, IQ2S_QSB, IQ2S_SSB)
 }
 
 //! iq2xs: 16 four-byte columns of the u16 qs words (a word's two bytes share a column), the
 //! k4 row with 16 strips.
-def repack_grp(_f : KqTag_iq2xs; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq2xs) {
     repack_column_form(kq, ks, n, d, mr, IQ2XS_QSB, IQ2XS_SSB)
 }
 
 //! iq2xxs: 16 four-byte columns of [grid bytes][aux32] per block, the k4 row with 16 strips.
-def repack_grp(_f : KqTag_iq2xxs; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq2xxs) {
     repack_column_form(kq, ks, n, d, mr, IQ2XXS_QSB, IQ2XXS_SSB)
 }
 
@@ -482,7 +482,7 @@ def unpack_iq3s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64)
 }
 
 //! iq3xxs: 24 four-byte columns of [qs][aux] per block, the k4 scale row (d halved, strips, pads).
-def repack_grp(_f : KqTag_iq3xxs; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq3xxs) {
     repack_column_form(kq, ks, n, d, mr, IQ3XXS_QSB, IQ3XXS_SSB)
 }
 

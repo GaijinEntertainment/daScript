@@ -232,7 +232,7 @@ def dequant_q6k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
 }
 
 // ===== K-quant native-plane transcode: one codec per format, overloaded on the format's tag =====
-// kq_transcode_p(KqTag_<fmt>(), src, kq, ks) moves ONE stride unit from its disk bytes into the two
+// kq_transcode_p(src, kq, ks, KqTag_<fmt>()) moves ONE stride unit from its disk bytes into the two
 // planes; scale planes keep the DISK scale block verbatim (kq v2), so every plane dequant is bit-exact.
 
 //! a span under 64 bytes copies inline as uint64 moves; 64 and up go through memcpy - measured:
@@ -309,24 +309,24 @@ def kq_transcode_units(fmt : KqFmt; srcp : uint8 const?; var kqp : uint8?; var k
     kq_fmt_stamp(fmt) <| $(F) {
         unsafe {
             for (blk in range64(b0, b1)) {
-                kq_transcode_p(F, srcp + blk * disk, kqp + blk * qsb, ksp + blk * ssb)
+                kq_transcode_p(srcp + blk * disk, kqp + blk * qsb, ksp + blk * ssb, F)
             }
         }
     }
 }
 
-def kq_transcode_p(_f : KqTag_q8; _src : uint8 const?; var _kq : uint8?; var _ks : uint8?) {
+def kq_transcode_p(_src : uint8 const?; var _kq : uint8?; var _ks : uint8?; _f : KqTag_q8) {
     panic("q8 has no plane transcode - the q8 tensors ride gguf_transcode_q8_0")
 }
 
-def kq_transcode_p(_f : KqTag_mx4; _src : uint8 const?; var _kq : uint8?; var _ks : uint8?) {
+def kq_transcode_p(_src : uint8 const?; var _kq : uint8?; var _ks : uint8?; _f : KqTag_mx4) {
     panic("mx4 has no plane transcode - the expert stacks ride gguf_transcode_mx4")
 }
 
 //! Transcode one Q4_K superblock (144 bytes at `src`) into the k4 planes: nibbles verbatim to
 //! kq[0..128), the disk scale block verbatim to ks[0..16) (f16 d, f16 dmin, 12 bytes of 6-bit
 //! sub-scales/mins) + 4 zero pad bytes (stride 20 — see the plane-layout comment above).
-def kq_transcode_p(_f : KqTag_k4; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_k4) {
     unsafe {
         bcopy(ks, src, 16l)
         zero_bytes(ks + 16l, 4l)
@@ -337,7 +337,7 @@ def kq_transcode_p(_f : KqTag_k4; src : uint8 const?; var kq : uint8?; var ks : 
 //! Transcode one Q5_K superblock (176 bytes at `src`) into the k5 planes: [nibbles][high-bits]
 //! to kq[0..160), the disk scale block verbatim to ks[0..16) (f16 d, f16 dmin, 12 bytes of
 //! 6-bit sub-scales/mins) + 4 zero pad bytes (the k4 form — stride 20).
-def kq_transcode_p(_f : KqTag_k5; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_k5) {
     unsafe {
         bcopy(ks, src, 16l)
         zero_bytes(ks + 16l, 4l)
@@ -348,7 +348,7 @@ def kq_transcode_p(_f : KqTag_k5; src : uint8 const?; var kq : uint8?; var ks : 
 
 //! Transcode one Q6_K superblock (210 bytes at `src`) into the k6 planes: [ql][qh] to
 //! kq[0..192), the native int8 sub-scales + f16 d to ks[0..18) — all verbatim (exact).
-def kq_transcode_p(_f : KqTag_k6; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_k6) {
     unsafe {
         memcpy(kq, src, 192l)
         bcopy(ks, src + 192l, 18l)
@@ -710,7 +710,7 @@ def dequant_k6_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : arra
 
 //! Transcode one Q4_0 superblock (8 x 18-byte disk blocks at `src`) into the q40 planes: per
 //! block the f16 d halfword to ks[2*blk), the 16 nibble bytes verbatim to kq (exact).
-def kq_transcode_p(_f : KqTag_q40; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q40) {
     unsafe {
         for (blk in range64(8l)) {
             let b = src + blk * 18l
@@ -724,8 +724,8 @@ def kq_transcode_p(_f : KqTag_q40; src : uint8 const?; var kq : uint8?; var ks :
 //! Transcode one IQ4_NL superblock into the iq4nl planes: the disk bytes ARE q40's shape - per
 //! 32-block f16 d + 16 nibble bytes, split verbatim; only the nibble semantics differ (IQ4NL_LUT
 //! at decode, no -8 offset, no bsum term).
-def kq_transcode_p(_f : KqTag_iq4nl; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
-    kq_transcode_p(KqTag_q40(), src, kq, ks)
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq4nl) {
+    kq_transcode_p(src, kq, ks, KqTag_q40())
 }
 
 //! Reference dequant of one q40-plane superblock: w = d * (q - 8) per 32-block, q = nibble
@@ -744,7 +744,7 @@ def dequant_q40_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<
 //! Transcode one IQ4_XS superblock (136 bytes at `src`: f16 d, u16 scales_h, 4 scales_l bytes,
 //! 128 nibble bytes) into the iq4xs planes: nibbles verbatim (the disk k/k+16 pairing IS the
 //! q40 tiling), the scale row DECODED — f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad (exact).
-def kq_transcode_p(_f : KqTag_iq4xs; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq4xs) {
     unsafe {
         d_header(ks, src)
         let sh = uint(src[2]) | (uint(src[3]) << 8u)
@@ -787,7 +787,7 @@ def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : a
 //! Transcode one Q2_K superblock (84 bytes at `src`: 16 sc/min nibble-pair bytes, 64 qs, f16 d,
 //! f16 dmin) into the k2 planes: qs verbatim to kq[0..64), the scale row REORDERED to
 //! [f16 d][f16 dmin][16 sc/min bytes] at ks[0..20) - all bytes verbatim (exact).
-def kq_transcode_p(_f : KqTag_k2; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_k2) {
     unsafe {
         bcopy(ks, src + 80l, 4l)
         bcopy(ks + 4l, src, 16l)
@@ -831,7 +831,7 @@ def q3k_scale6(bytes : array<uint8> | #; so, i : int64) : int {
 //! Transcode one Q3_K superblock (110 bytes at `src`: 32 hmask, 64 qs, 12 packed 6-bit scales,
 //! f16 d) into the k3 planes: [qs 64][hmask 32] verbatim to kq[0..96), the 16 sub-scales
 //! DECODED to int8 (scale - 32) + the f16 d to ks[0..18) — the k6 row shape (exact).
-def kq_transcode_p(_f : KqTag_k3; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_k3) {
     unsafe {
         memcpy(kq, src + 32l, 64l)
         bcopy(kq + 64l, src, 32l)
@@ -886,7 +886,7 @@ def dequant_iq4nl_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : arra
 //! Transcode one IQ3_XXS superblock (98 bytes at `src`) into the iq3xxs planes: qs+aux copy
 //! verbatim, the iq3s-shaped scale row carries d HALVED (f16_half_bits) and strips (2*ls + 1) -
 //! with the halved grid this absorbs upstream's 0.25 exactly.
-def kq_transcode_p(_f : KqTag_iq3xxs; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq3xxs) {
     unsafe {
         memcpy(kq, src + 2l, 96l)
         let dh = f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))
@@ -929,7 +929,7 @@ def dequant_iq3xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
 //! Transcode one IQ3_S superblock (110 bytes at `src`: f16 d, 64 qs, 8 qh, 32 signs, 4 packed
 //! 4-bit scales) into the iq3s planes: [qs][qh][signs] verbatim to kq[0..104), the 8
 //! sub-scales DECODED to int8 (1 + 2s) + the f16 d to ks[0..20) — the k4 row shape (exact).
-def kq_transcode_p(_f : KqTag_iq3s; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq3s) {
     unsafe {
         memcpy(kq, src + 2l, 104l)
         d_header(ks, src)
@@ -965,7 +965,7 @@ def dequant_iq3s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : ar
 //! Transcode one IQ2_S superblock (82 B at `src`: f16 d, 32 idx + 32 sign bytes, 8 qh, 8 packed
 //! scale nibbles): [idx][signs][qh] verbatim to kq[0..72), d EIGHTH-ed (d8_header) + 16 strips
 //! (1+2s) to ks[0..20).
-def kq_transcode_p(_f : KqTag_iq2s; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq2s) {
     unsafe {
         memcpy(kq, src + 2l, 72l)
         d8_header(ks, src)
@@ -1000,7 +1000,7 @@ def dequant_iq2s_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : ar
 //! Transcode one IQ2_XS superblock (74 bytes at `src`: f16 d, 32 u16 qs words, 8 packed scale
 //! nibbles) into the iq2xs planes: the 64B qs region verbatim to kq[0..64), d EIGHTH-ed
 //! (d8_header) + the 16 strips (1 + 2s) to ks[0..20).
-def kq_transcode_p(_f : KqTag_iq2xs; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq2xs) {
     unsafe {
         memcpy(kq, src + 2l, 64l)
         d8_header(ks, src)
@@ -1037,7 +1037,7 @@ def dequant_iq2xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : a
 //! Transcode one IQ2_XXS superblock (66 bytes at `src`: f16 d, 8 x [4 grid bytes][aux32]) into
 //! the iq2xxs planes: the 64B qs region verbatim to kq[0..64), d EIGHTH-ed (d8_header) + the 8
 //! per-32 strips (1 + 2s) to ks[0..20).
-def kq_transcode_p(_f : KqTag_iq2xxs; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq2xxs) {
     unsafe {
         memcpy(kq, src + 2l, 64l)
         d8_header(ks, src)
@@ -1075,7 +1075,7 @@ def dequant_iq2xxs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : 
 
 //! Transcode one Q5_1 disk block (24 bytes at `src`: d f16, m f16, qh u32, 16 nibble bytes) into
 //! the q51 planes — verbatim splits, exact: the 4 scale bytes to ks, the nibbles then qh to kq.
-def kq_transcode_p(_f : KqTag_q51; src : uint8 const?; var kq : uint8?; var ks : uint8?) {
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q51) {
     unsafe {
         bcopy(ks, src, 4l)
         bcopy(kq, src + 8l, 16l)
