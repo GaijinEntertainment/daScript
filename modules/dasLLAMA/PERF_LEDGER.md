@@ -2181,18 +2181,23 @@ two commits in two processes [direction-grade - two commits].
   gemma-4-31B Q4_K_M 103 / 103 / 90 (1.14), flat 36.6 / 32.9. The KHR arm reads the cm2 arm's rows:
   the decode kernels are one set on both. The reference's pp512 column on gemma-2-2b and gemma-3-1b
   reads 87 to 4395 tok/s across its runs (`external`) and is no prefill reference on those two.
-- **The RTX 5060 Ti (driver 616.56, cm2 with decode-vector, the desktop holding 1.3 GB of the
-  16 GB, `DAS_JOBQUE_THREADS=16`), tg128@4 ours / llama.cpp Vulkan / llama.cpp CUDA (the same
-  b10660 checkout built with CUDA 13.4, every reference figure `external` from `llama-batched-bench`
-  under the section's command line the same hour; then flat tg128 ours / theirs Vulkan / CUDA):**
-  gemma-2-2b Q8_0 405 / 353 / 409 (1.15 against Vulkan, 0.99 against CUDA), flat 122 / 110 /
-  120; gemma-3-1b Q8_0 726 / 529 / 812 (1.37 / 0.89), flat 240 / 182 / 238; gemma-3-4b Q8_0 291 /
-  254 / 290 (1.15 / 1.00), flat 84 / 77 / 84. The gemma-4-12B files fit no four-region plan on
-  this card - the resident driver declines the Q4_K_M at 15.6 GB of 13.0 asked (item 80 carries
-  the message's unit) and the Q8_0 outright, and the reference pages: its Vulkan rows read 105
-  (Q4_K_M) and 5 (Q8_0) at four streams, its CUDA rows 141 and 108 - so the 12B's board is the
-  pod's above. Ours reads at or above CUDA's four-stream rate on the two carriers CUDA does not
-  win outright, and 0.89 of it on the 1B.
+- **The RTX 5060 Ti at the section's tip (driver 616.56, the desktop holding 0.9 to 2.1 GB of the
+  16 GB, `DAS_JOBQUE_THREADS=16`), tg128@4 ours cm2 (with decode-vector) / ours KHR
+  (`DASLLAMA_COOPMAT=mm`) / llama.cpp Vulkan / llama.cpp CUDA (the same b10660 checkout built with
+  CUDA 13.4, every reference figure `external` from `llama-batched-bench` under the section's
+  command line the same hour; then flat tg128 ours cm2 / theirs Vulkan / CUDA):** gemma-2-2b
+  Q8_0 411 / 414 / 363 / 412 (1.13 against Vulkan, 1.00 against CUDA), flat 124 / 115 / 123;
+  gemma-3-1b Q8_0 734 / 738 / 564 / 810 (1.30 / 0.91), flat 246 / 208 / 236; gemma-3-4b Q8_0 294
+  / 292 / 258 / 291 (1.14 / 1.01), flat 84 / 78 / 84. The 4B's first pass ran in the paging class
+  (3.2 flat on both arms) with the desktop holding 2.1 GB beside its 11 GB plan; the rows above are
+  its repeat on the cleared card (0.9 GB held), the plan the same 8187 MB mirror at ctx 15412 that
+  served at 1.4 GB held. The gemma-4-12B files fit no four-region plan on this card - the resident
+  driver declines the Q4_K_M at 15.6 GB of 12.2 to 13.3 asked (item 80 carries the message's unit)
+  and the Q8_0 outright (12.1 GB of weights against the 9 GB cap), the per-op rails serve them a
+  row at a time at 15 to 16 (Q4_K_M) and 14 to 15 (Q8_0) summed - and the reference pages: its
+  Vulkan rows read 106 (Q4_K_M) and 46 (Q8_0) at four streams, its CUDA rows 141 and 88 - so the
+  12B's board is the pod's above. Ours reads at or above CUDA's four-stream rate on the two
+  carriers CUDA does not win outright, and 0.91 of it on the 1B.
 - **Our gemma-2-2b pp512 on the pod reads 6468 to 19388 across runs (three-rep cv up to 38%)
   while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
   hold within 2% on pp512.
