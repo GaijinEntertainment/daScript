@@ -18,8 +18,7 @@ require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_
 // byte geometry, so a layout change can never span modules. These run per token per layer
 // (store) and per token per cached position (dot/axpy) — [tuned] hot kernels, not load-time
 // converters. Codec dispatch (KVDtype -> family) lives at dasllama_common's kv_store_row /
-// kv_load_row / kv_dot / kv_axpy seam; the attention workers' K x V pointer matrix is the
-// kv_codec_side stamp of dasllama_kv_dtype. The f16 family's row converts are the generic pair in
+// kv_load_row / kv_dot / kv_axpy seam. The f16 family's row converts are the generic pair in
 // dasllama_convert (cvt_f32_to_f16 / cvt_f16_to_f32 — dual-use: weight/scale planes at load,
 // activation prep, and this codec).
 

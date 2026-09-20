@@ -53,9 +53,7 @@ def feq(a, b : array<uint8>) : bool {
     return true
 }
 
-// forward_batch over the whole prompt (one batched pass from position 0) == N× forward. Only the
-// bit-exact-by-design mode (classic) is checked here; flash is online-softmax (tolerance, not
-// bit-exact) and has its own oracle test.
+// forward_batch over the whole prompt (one batched pass from position 0) == N× forward.
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)

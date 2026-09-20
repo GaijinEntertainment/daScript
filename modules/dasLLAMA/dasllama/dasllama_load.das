@@ -1267,8 +1267,6 @@ def private log_load_report(t : Model) {
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
-// a weight's plane tag off its disk type: the superblock i-quants and Q2_K/Q3_K as gguf's own
-// map says, the K-quant trio, then the three native-knob gates
 def private kq_fmt_of(gt : int) : KqFmt {
     let native = gguf_kq_fmt_of_type(gt)
     if (native != KqFmt.q8) {

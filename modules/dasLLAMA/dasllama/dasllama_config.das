@@ -135,8 +135,7 @@ def public dlim_config_current(quant : string = "q8") : DlimConfiguration {
 
 // ===== pure formatters (identity, tags, JSON) =====
 
-// the lattice interleaves in enum order (`4/4/4/...`): one slot per lattice format, so a format
-// added without its interleave cannot key two interleaves identically
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-kq-mr-identity")]
 def private kq_mr_identity(c : DlimCpuConfig) : string {
     let parts <- [for (f in type<KqFmt>); "{int(f) < length(c.kq_mr) ? c.kq_mr[int(f)] : 0l}"; where kq_sb(f)]
     return join(parts, "/")

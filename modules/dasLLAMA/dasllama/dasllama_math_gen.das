@@ -1670,10 +1670,6 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     delete bs
 }
 
-// ===== the three slot walks over the generated rows core, written once each over a Q8GEMV (the
-// stamped rows core) and a Q8DOT (the row-major tail dot), stamped for the f32 plane and again
-// for the binary16 plane (the wscale_f16 rail: the s16 companions and dot_q8q8_f16s) =====
-
 // mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows core —
 // ONE core call per chunk. Strides come off the layout companion, so the same wrapper serves
 // both stamped layouts; the row tail (d % mr) stays row-major and rides the tail dot.
@@ -1989,8 +1985,6 @@ def private kq_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : 
     }
 }
 
-// The stamped kq cores are one overload family per role on the format tag, so the slot walkers
-// pick a format's core through kq_fmt_stamp; q8, q51 and mx4 carry no kq stamp.
 def private kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_q8) {
     panic("q8 has no kq gemv stamp")
 }
@@ -2389,9 +2383,8 @@ def kq_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 co
     }
 }
 
-// ===== the batch walk's f16-scale twin (wscale_f16 rail): the s16 companions' cells and driver -
-// its own bodies, because the f32 cell's tail rides the kgroup-aware laneq / generic token forms
-// while the s16 cell's rides the stamped GEMV =====
+// the batch walk's f16-scale twin (wscale_f16 rail) keeps its own bodies: the f32 cell's tail rides
+// the kgroup-aware laneq / generic token forms while the s16 cell's rides the stamped GEMV.
 
 def private q8q8_batch_cell_s16_gen(var myp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, te : int64) {
     unsafe {

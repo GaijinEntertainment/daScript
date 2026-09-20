@@ -229,8 +229,6 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> success(!kq_fmt_of_id(99, none), "an id no format carries")
     }
     t |> run("kq_bytes_per_weight is the stride table's arithmetic on every superblock format") @(t : T?) {
-        // the MoE split estimate prices an expert stack by this number; a hand-copied row drifts
-        // from the table it restates (the k6 row read 212 where K6_QSB + K6_SSB is 210)
         for (f in type<KqFmt>) {
             if (kq_sb(f)) {
                 let want = float(kq_qsb(f) + kq_ssb(f)) / float(kq_elems(f))
@@ -302,7 +300,6 @@ def test_kq_fmt_row_demotion(t : T?) {
     }
 }
 
-// a per-format family with two named overloads and a generic fallback - what the stamp resolves
 def private stamp_family(_f : KqTag_k4) : string => "k4"
 def private stamp_family(_f : KqTag_q51) : string => "q51"
 def private stamp_family(_f : auto(TT)) : string => "other:{typeinfo typename(type<TT>)}"

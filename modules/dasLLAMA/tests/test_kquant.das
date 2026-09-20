@@ -2579,9 +2579,6 @@ def test_iq4nl_planes(t : T?) {
         delete dst
     }
     t |> run("iq4nl plane dequant reads its codebook on a team lane: lane values == main-thread values") @(t : T?) {
-        // embed_rows runs embed_row -> dequant_iq4nl_plane_superblock under maybe_parallel_for; the
-        // codebook is read as the per-call local every worker-run kernel takes (kqformat.das), and
-        // this cell holds the lane's rows to the main thread's
         let blkb <- build_iq4nl_block()
         var kq : array<uint8>
         var ks : array<uint8>

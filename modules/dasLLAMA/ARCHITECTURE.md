@@ -25,7 +25,9 @@ When placement charters disagree on one function, the sec.1 charter line decides
 - `ARCHITECTURE_ENGINE.md` - sec.1.1, 1.6, 1.8, 1.9: the engine, arch-registration, support and
   serving charters.
 - `ARCHITECTURE_ENGINE_FORMATS.md` - sec.1.2-1.4: the format, load-rail and CPU-kernel-tier
-  charters.
+  charters, plus the shapes they key off - the bigram merge heap both tokenizer backends run
+  (sec.1.2a), the one RoPE fill over a position source (sec.1.2b), and the Model's per-format
+  plane table, its only `dim` field (sec.1.2c).
 - `ARCHITECTURE_GPU.md` - sec.1.5: the GPU backend role table and the backend asymmetries.
 - `ARCHITECTURE_MEDIA.md` - sec.1.7, 1.7b: the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - sec.1.7c: the text-to-speech charters - the front end, the block home,
@@ -41,9 +43,10 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 ## 2. Mechanisms
 
-- `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1n: the prepared-image rail, the baked dev-W f16 plane,
+- `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1o: the prepared-image rail, the baked dev-W f16 plane,
   the baked tower twin-W plane, the layout stamp `REVIEW.das` keeps over the byte-placing code,
-  the meta-field tripwire every struct serializer opens with, and the planar-vs-blob flavor rebake.
+  the meta-field tripwire every struct serializer opens with, the planar-vs-blob flavor rebake,
+  and the per-format slots the interleave identity prints.
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that
   measured out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the tower attention routes, and the tower driver's
@@ -98,9 +101,11 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - sec.2.21, 2.26-2.27: the instruments that time a
   kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, and the
   CPU kernel bench's fixture conditions.
-- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42: the sub-block-packed k3/k6 planes, the grid
-  formats' panel and row-group decodes, the VBMI symbol lattice, and the tier that selects on the
-  target rather than the host.
+- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42, 2.54-2.57: the sub-block-packed k3/k6
+  planes, the grid formats' panel and row-group decodes, the VBMI symbol lattice, the tier that
+  selects on the target rather than the host, the score dot classic prefill shares with decode,
+  the module-scope visibility a lifted worker lambda needs of its kernel, the two interleaves a
+  grp<mr> repack is made of, and the JIT partition a hot leaf instantiates in.
 - `ARCHITECTURE_TTS.md` - sec.2.28-2.30, 2.32-2.35, 2.43: the TTS block home's two layouts, tap
   stacking, the padded concat width, the served carrier on the image rail, the sine source's
   operation order, the heteronym context, the rig's scoring, and the two-tier phoneme pack.

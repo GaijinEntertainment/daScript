@@ -40,10 +40,6 @@ def k6_nib(rowq : uint8 const?; k : int64) : uint {
     return g < 2l ? b & 15u : b >> 4u
 }
 
-// ===== grp<mr> weight repacks: two interleaves every format's repack is made of =====
-// A row layout is units (a 256-weight superblock, or a 32-block) of `ubytes`; the grp<mr> form
-// stacks mr rows per group and interleaves inside each unit. Tail rows (d % mr) stay disk-order.
-
 struct private RepackField {
     src : int64     //!< byte offset of the field in the unit's disk-order scale row
     width : int64   //!< bytes per element
@@ -70,6 +66,7 @@ def private repack_in_place(var kq : uint8?; var ks : uint8?; qbytes, sbytes : i
 
 //! The quant-plane interleave of a unit made of `colw`-byte columns: column c of unit u in row r
 //! lands at [g][u][c][r][colw] - the form the column kernels read, mr rows' columns adjacent.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#grp-repack-interleaves")]
 def private repack_columns(var dst : uint8?; src : uint8 const?; nunits, ubytes, colw, d, mr : int64) {
     let row = nunits * ubytes
     let cols = ubytes / colw
@@ -140,15 +137,13 @@ def private repack_fields(var dst : uint8?; src : uint8 const?; nunits, ssb, d, 
     }
 }
 
-// the k4 row: [f16 d x mr][f16 dmin (or pad) x mr][8 sub-scales x mr][8 mins (or pad) x mr] - the
-// 20-byte rows of iq4xs, iq3s, iq3xxs and, as 16 strips, iq2s/iq2xs/iq2xxs interleave verbatim
+//! the k4 row: [f16 d x mr][f16 dmin (or pad) x mr][8 sub-scales x mr][8 mins (or pad) x mr]
 def private k4_row_fields() : array<RepackField> => [RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l), RepackField(src = 4l, width = 1l, count = 16l)]
 
 // the k6 row: [16 int8 sub-scales x mr][f16 d x mr] - k6 and k3
 def private k6_row_fields() : array<RepackField> => [RepackField(src = 0l, width = 1l, count = 16l), RepackField(src = 16l, width = 2l, count = 1l)]
 
-// one verbatim field of `width` bytes per unit - the per-32 scale planes (q8q8's f32, q51's d|m, mx4's e8m0) and q40's per-block f16 d
-def private unit_fields(width, count : int64) : array<RepackField> => [RepackField(src = 0l, width = width, count = count)]
+def private verbatim_unit_field(width, count : int64) : array<RepackField> => [RepackField(src = 0l, width = width, count = count)]
 
 //! One weight tensor's planes ([d rows x n cols] at the pointers) into the grp<mr> interleave the
 //! format's kernels read, in place - the format's `repack_grp` overload through the stamp.
@@ -177,7 +172,7 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
         var sb = reinterpret<uint8?>(sp)
         repack_in_place(wb, sb, d * n, d * nb * 4l) $(twp, tsp) {
             repack_columns(wb, twp, 1l, n, kgroup, d, mr)
-            repack_fields(sb, tsp, nb, 4l, d, mr, unit_fields(4l, 1l))
+            repack_fields(sb, tsp, nb, 4l, d, mr, verbatim_unit_field(4l, 1l))
         }
         if (wbias != 0l) {
             // bias128: one pass over the GROUP region only (tails stay plain s8);
@@ -196,7 +191,7 @@ def repack_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64; _f : KqTag_mx
     let nbb = n / 32l
     repack_in_place(np, ep, d * nbb * 16l, d * nbb) $(tnp, tep) {
         repack_columns(np, tnp, nbb, 16l, 4l, d, mr)
-        repack_fields(ep, tep, nbb, 1l, d, mr, unit_fields(1l, 1l))
+        repack_fields(ep, tep, nbb, 1l, d, mr, verbatim_unit_field(1l, 1l))
     }
 }
 
@@ -207,12 +202,11 @@ def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q5
     let nb = n / 32l
     repack_in_place(qp, sp, d * nb * Q51_QB, d * nb * Q51_SB) $(tqp, tsp) {
         repack_columns(qp, tqp, nb, Q51_QB, 4l, d, mr)
-        repack_fields(sp, tsp, nb, Q51_SB, d, mr, unit_fields(Q51_SB, 1l))
+        repack_fields(sp, tsp, nb, Q51_SB, d, mr, verbatim_unit_field(Q51_SB, 1l))
     }
 }
 
-// the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the
-// two 8-strip fields (kq v2 keeps the disk block on the plane and decodes here)
+//! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields
 def private repack_k45_scales(var ks : uint8?; tsp : uint8 const?; nsb, d, mr : int64) {
     repack_fields(ks, tsp, nsb, K4_SSB, d, mr, [RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l)])
     let srow = nsb * K4_SSB
@@ -297,8 +291,7 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_k6
     }
 }
 
-// a hand loop takes its operands as arguments: a block body reads its captures through the
-// frame after every byte store, and that reload is measurable on a plane-sized loop
+//! a hand loop takes its operands as arguments: a block body reloads its captures through the frame after every byte store, measurable on a plane-sized loop
 def private repack_k6_quants(var kq : uint8?; tqp : uint8 const?; nsb, d, mr : int64) {
     let qrow = nsb * K6_QSB
     unsafe {
@@ -341,7 +334,7 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_q4
     let nsb = n / 256l
     repack_in_place(kq, ks, d * nsb * Q40_QSB, d * nsb * Q40_SSB) $(tqp, tsp) {
         repack_columns(kq, tqp, nsb, Q40_QSB, 4l, d, mr)
-        repack_fields(ks, tsp, nsb, Q40_SSB, d, mr, unit_fields(2l, 8l))
+        repack_fields(ks, tsp, nsb, Q40_SSB, d, mr, verbatim_unit_field(2l, 8l))
     }
 }
 

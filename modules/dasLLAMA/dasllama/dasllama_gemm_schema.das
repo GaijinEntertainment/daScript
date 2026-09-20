@@ -73,8 +73,6 @@ def kq_dev_ssb_i(fmt : int) : int64 {
 let Q51_QPB = 20l
 let Q51_SPB = 4l
 
-// the kernel/IR id space's format, or a panic naming the id - the ONE stride source for every
-// fmt-branched kq walker/kernel/repack must refuse an unknown id, never walk another format's stride
 //! Quant-plane bytes per stride unit for a kernel/IR format id (`kq_schema_id`'s space).
 def kq_qsb(fmt : int) : int64 => kq_qsb(kq_fmt_of_id(fmt, "kq_qsb"))
 

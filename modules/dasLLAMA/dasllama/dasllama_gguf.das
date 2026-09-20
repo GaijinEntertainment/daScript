@@ -666,8 +666,7 @@ def private transcode_jobs(blocks, disk_sb : int64) : int {
     return int(clamp(blocks * disk_sb / 1048576l, 1l, 64l))
 }
 
-// the tensor index (the caller resolves its view/base through with_tensor_view); `align` is the
-// block the slice must tile - 256 for the superblock formats, 32 for the per-32 ones
+//! `align` is the block the slice must tile - 256 for the superblock formats, 32 for the per-32 ones.
 def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; type_name : string; src_off, expect_n : int64; align : int64 = 256l) : int {
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
@@ -784,7 +783,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         unsafe {
             let src = temp_array(addr<uint16?>(bytes[base + src_off * 2l]), expect_n, type<uint16>)
             for (i in range64(expect_n)) {
-                dst[dst_off + i] = bf16_to_f32(uint(src[i]))
+                dst[dst_off + i] = reinterpret<float>(uint(src[i]) << 16u)
             }
         }
     } elif (gtype == GGML_TYPE_Q8_0) {

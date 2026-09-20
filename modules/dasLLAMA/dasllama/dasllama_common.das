@@ -968,9 +968,7 @@ struct Model {
     // expand bit-for-bit. ple_model_off indexes bf16blob when set, fblob otherwise.
     bf16blob : array<uint16>
     ple_model_bf16 : bool = false
-    // Native K-quant planes (valid when kquant_native): one plane pair per lattice format, by int(KqFmt),
-    // packed per 256-weight superblock at the format's kq_qsb/kq_ssb strides; the matching *_fmt tag
-    // says which pair a weight indexes. The q8/q51/mx4 slots stay empty (qblob, q51q/q51s, mxq/mxs).
+    // Native K-quant planes, by int(KqFmt), valid when kquant_native; the matching *_fmt tag says which pair a weight indexes.
     @safe_when_uninitialized kq : KqPlanes[KQ_FMT_COUNT]
     // the q51 tier's plane pair, per 32-BLOCK: 20B nibbles+qh / 4B f16 d+m (never repacked)
     q51q : array<uint8>
@@ -1184,11 +1182,12 @@ def private release_plane(var a : array<auto(TT)>) {
 // Model's finalizer (every `delete model` lowers to _::finalize and lands here): image-backed
 // models hold locked BORROWED views over the image — those must be forgotten (reset without
 // freeing) before the backing goes; everything owned deletes as usual.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def finalize(var t : Model) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
             release_plane(field)
-        } static_elif (typeinfo is_dim(field)) {   // the per-format plane table
+        } static_elif (typeinfo is_dim(field)) {
             for (el in field) {
                 apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
@@ -1211,7 +1210,6 @@ def finalize(var t : Model) {
 
 //! Resident weight bytes across every plane family (only the loaded quant's planes are
 //! non-empty; a mapped .dlim's borrowed views count their mapped extent).
-//! Bytes of the lattice planes: the quant planes and, separately, the scale planes.
 def kq_plane_bytes(t : Model) : tuple<q : int64; s : int64> {
     var q = 0l
     var s = 0l
@@ -3050,8 +3048,6 @@ def private kv_slice_av(var flop : float?; attp : float const?; vcp : auto const
 }
 
 // ===== codec dispatch wrappers =====
-// Byte-base cache pointers + session dtypes in, ONE monomorphized worker call out - the K x V
-// matrix is kv_codec_side's stamp; a new codec = one arm there, zero call-site changes.
 
 def attn_head_decode_d(var arow : float?; var xbp : float?; qp : float const?;
                        qq : int8 const?; qsp : float const?;
@@ -3187,7 +3183,6 @@ def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : floa
     delete vout
 }
 
-// The witness' codec dispatch - the same K x V stamp as the worker wrappers.
 [cold_path]   // reference-check path, armed by g_flash_decode_check
 def flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?;
                          kcl, vcl : uint8 const?; kdt, vdt : KVDtype; xbv : float const?;
@@ -3594,9 +3589,7 @@ def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff :
     }
 }
 
-// The expert-stack routers: the stack's format tag picks the kernel and the activation image it
-// reads - kq stacks the Q8_K form (kxq/kxs/kxbs), q51 and q8 the Q8_0 form (xq/xs), the mx4
-// expert stacks (t.experts_mx4 - a stack property, never a per-tensor tag) their nibble planes.
+// mx4 expert stacks key off t.experts_mx4 - a stack property, never a per-tensor tag.
 
 //! Region-list GEMV router (the MoE decode dispatch, every routed expert in one fork/join); `biased`
 //! folds each region's fblob bias at `boffs` into the store where the kernel carries a bias form

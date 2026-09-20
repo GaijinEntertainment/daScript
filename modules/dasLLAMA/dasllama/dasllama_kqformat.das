@@ -431,8 +431,7 @@ def ksigns_iq2xs() : uint8[128] {
 let KSIGNS_IQ2XS = ksigns_iq2xs()
 
 //! The signed-grid octet the grid formats share (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs): two grid
-//! words carry eight magnitudes and `sgn`'s bit j flips element j. Generic in the operand so each
-//! calling module instantiates its own copy - the split-module JIT inlines within a partition only.
+//! words carry eight magnitudes and `sgn`'s bit j flips element j. Generic in the operand.
 def grid_octet_dot(g1, g2 : uint; sgn : int; a : auto(TA) const?; ab : int64) : int {
     var acc = 0
     unsafe {

@@ -14,9 +14,6 @@ require daslib/f16_cvt  // f16_to_f32 — the wscale_f16 laneq stamp widens the 
 require daslib/jobque_boost public  // kernels expand parallel_for; consumers need its symbols
 
 // arm64 SDOT backend for the Q8·Q8 matmuls. dasllama_math owns the public matmul wrappers + the
-// kernel-backend registry; dasllama_math_default owns every kernel this backend registers - the
-// idot4x4 stamps of the shared kernel shapes (the idot4 builtin lowers to one SDOT per call on an
-// arm64 JIT host). Only the lane-indexed SDOT composers (sdot4_laneq / tbl16) live here.
 // Registration stays gated on `jit_enabled()` + arm64: off-JIT the idot externs are correct but not
 // fast, so the portable backend stays selected there, as it does on every non-arm64 host.
 
@@ -99,7 +96,7 @@ def template dot_q8q8_laneq4_template(wg : int8 const ?; sg : float const ?; xq 
 
 //! Lane-indexed SDOT over one 4-row interleaved group vs one token: 8 sdot4_laneq per 32-block,
 //! accumulator lane L is output row L, flushed to a float4 via block scales × token scale — no
-//! horizontal reduce. Not `private`: called from lifted parallel_for worker lambdas.
+//! horizontal reduce.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs), from_template(src = "dot_q8q8_laneq4_template", WSCALE4 = "wscale4_f32")]
 def dot_q8q8_laneq4(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {}
 

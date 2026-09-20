@@ -11,12 +11,6 @@ require dasllama/dasllama_par
 require dasllama/dasllama_convert   // quantize_q8_0_into — the prefill activation quant
 require math
 
-// Prefill attention, threaded over heads. prefill_attention is the only entry point; the two
-// head kernels below it (classic / flash) and their KV-codec dispatch ladders are its
-// implementation. Nothing in the hub names any of them -- the block kernels call in from outside.
-
-// g_attn_prefill_mode: classic is the bit-exact form (one score row per query, the decode FMA
-// order); flash tiles with online softmax and is NOT bit-exact (online reorder).
 def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp : float?; // nolint:STYLE037,STYLE038 — online-softmax tiling: the KV-format arms and the running max/sum state are one register-coupled loop nest
                             var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
                             nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd, kdim, khoff, vdim, vhoff, qoff : int64;
@@ -147,10 +141,8 @@ def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp :
     }
 }
 
-// One head of CLASSIC prefill attention (see prefill_attention) — codec-generic + run-walking.
-// attp_h = this head's private score row (maxctx wide, window-relative); each query's window
-// [kstart, ap] intersects the layer's physical runs. Scores go through kv_score (q8_0 K: the
-// same dot decode runs, keeping prefill == decode bit-exact under the block codec).
+//! attp_h is this head's private score row: maxctx wide, window-relative.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#prefill-decode-same-score-dot")]
 def private attn_head_classic(var attp_h : float?; var xbp : float?; qp : float const?;
                               qq : int8 const?; qsp : float const?;
                               kcp, vcp : auto const?; runs : KVRun const?;
@@ -197,9 +189,7 @@ def private attn_head_classic(var attp_h : float?; var xbp : float?; qp : float 
     }
 }
 
-// Prefill codec dispatch (same contract as attn_head_decode_d): one wrapper per prefill worker,
-// the K x V matrix stamped by kv_codec_side. Prefill is compute-bound, so dequant-in-dot is
-// fine - no query quantize needed.
+//! Prefill is compute-bound, so the workers dequant in the dot - no query quantize.
 def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, vdt : KVDtype; var xbp : float?;
                               var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
                               nrun, npos, start_pos, uniform_lo, uniform_end, head_size, qd, kv_dim, kvhoff, qoff : int64;

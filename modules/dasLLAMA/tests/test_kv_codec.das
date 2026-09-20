@@ -737,7 +737,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.classic)   // the bit-exact prefill mode (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)
             var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -887,7 +887,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.classic)   // the bit-exact prefill mode (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 64l)
             let c = tr.config
@@ -901,8 +901,6 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
                 forward(tr, sd, tok, pos)
                 pos++
             }
-            // classic prefill quantizes its queries and runs the SAME int8×int8 score dot as
-            // decode — the prefill==decode contract stays bit-exact under the block codec
             var lg_bad = 0
             for (i in range64(c.vocab_size)) {
                 if (sp.logits[i] != sd.logits[i]) {

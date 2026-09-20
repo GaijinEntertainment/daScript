@@ -76,9 +76,8 @@ def template axpy_template(var d : float ?; s : float const ?; scale : float; n 
 def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 
 //! Dot of an f32 row against a bfloat16 (bf16-in-uint16) row: the widen is the exact high-half
-//! shift, bit-identical to pre-expanding the weight to fp32 at half the bandwidth. The shift stays
-//! spelled out - a bf16_to_f32 call inside the tuned loop blocked its vectorization (PLE ran 5x slower).
-[hint(unsafe_range_check, noalias = a, noalias = b)]
+//! shift, bit-identical to pre-expanding the weight to fp32 at half the bandwidth.
+[hint(unsafe_range_check, noalias = a, noalias = b), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining")]
 def template dot_bf16_template(a : float const ?; b : uint16 const ?; n : int64) : float {
     var acc = 0.0
     for [tune = 1] (j in range64(n)) {
@@ -157,10 +156,6 @@ def template copy_floats_template(var d : float ?; s : float const ?; n : int64)
 }
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def copy_floats(var d : float?; s : float const?; n : int64) {}
-
-// ===== scratch sizing =====
-// Four jobs, four helpers. Each reserves before it resizes, so a grow past max_unreserved_size
-// never panics; the difference is what happens to capacity and to the grown tail.
 
 //! Exact capacity, then size: the buffer sized once and never regrown.
 def reserve_resize(var a : array<auto(numT)>; n : int | int64) {

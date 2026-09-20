@@ -64,11 +64,10 @@ an ASR family file - one `dasllama/dasllama_<family>.das` holding a single speec
 family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
-`dasllama/dasllama_vision_embedder.das`, a vision family file - one
-`dasllama/dasllama_<family>.das` holding a single vision projector family - or an in-process
-path (one that runs inside the program under review, not a spawned child process) that
-splices a stream carrying decoded media - pixels or audio samples - into a prompt or
-schedules such a stream, applies `REVIEW_VISION.md`.**
+`dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
+holding a single vision projector family - or an in-process path (one that runs inside the program
+under review, not a spawned child process) that splices a stream carrying decoded media - pixels or
+audio samples - into a prompt or schedules such a stream, applies `REVIEW_VISION.md`.**
 
 **A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
@@ -85,6 +84,8 @@ file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_t
 
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
 global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
+
+**A diff that resolves a weight format id or reads a per-format byte count applies `REVIEW_KQ_FORMATS.md`.**
 
 **A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
 outside `tests/` (beside this file) is a defect - move it into `tests/`.**

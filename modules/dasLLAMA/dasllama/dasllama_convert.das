@@ -46,8 +46,7 @@ def private rd_i8(b : array<uint8> | #; o : int64) : int {
     return u < 128 ? u : u - 256
 }
 
-// the 6-bit sub-scale/min pair j of the 12-byte scale block at b[so..]: k4_sc_mn on the array carrier
-def private q4k_scale_min(b : array<uint8> | #; so, j : int64) : int2 => k4_sc_mn(unsafe(addr<uint8 const?>(b[so])), j)
+def private k4_sc_mn(b : array<uint8> | #; so, j : int64) : int2 => k4_sc_mn(unsafe(addr<uint8 const?>(b[so])), j)
 
 //! Dequantize one Q4_K superblock (144B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
 //! q the RAW nibble (min term absorbs offset); 32 quant bytes carry weights 0..31 low nibble, 32..63
@@ -59,8 +58,8 @@ def dequant_q4k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
     var qo = bo + 16l   // 128 quant bytes
     var dsto = doff
     for (js in range64(4l)) {   // 4 chunks of 64 weights = sub-blocks 2js, 2js+1
-        let s0 = q4k_scale_min(bytes, so, 2l * js)
-        let s1 = q4k_scale_min(bytes, so, 2l * js + 1l)
+        let s0 = k4_sc_mn(bytes, so, 2l * js)
+        let s1 = k4_sc_mn(bytes, so, 2l * js + 1l)
         let d1 = d * float(s0.x)
         let m1 = dmin * float(s0.y)
         let d2 = d * float(s1.x)
@@ -86,8 +85,8 @@ def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
     var qo = bo + 48l    // 128 nibble bytes
     var dsto = doff
     for (js in range64(4l)) {
-        let s0 = q4k_scale_min(bytes, so, 2l * js)
-        let s1 = q4k_scale_min(bytes, so, 2l * js + 1l)
+        let s0 = k4_sc_mn(bytes, so, 2l * js)
+        let s1 = k4_sc_mn(bytes, so, 2l * js + 1l)
         let d1 = d * float(s0.x)
         let m1 = dmin * float(s0.y)
         let d2 = d * float(s1.x)
@@ -231,10 +230,6 @@ def dequant_q6k_superblock_p(sp : uint8 const?; bo : int64; var dp : float?; dof
     }
 }
 
-// ===== K-quant native-plane transcode: one codec per format, overloaded on the format's tag =====
-// kq_transcode_p(src, kq, ks, KqTag_<fmt>()) moves ONE stride unit from its disk bytes into the two
-// planes; scale planes keep the DISK scale block verbatim (kq v2), so every plane dequant is bit-exact.
-
 //! a span under 64 bytes copies inline as uint64 moves; 64 and up go through memcpy - measured:
 //! an inlined 192-byte copy runs 30% slower than the libc call, a 32-byte memcpy call 30% slower
 //! than the inline moves (uint8 source and destination regions never overlap)
@@ -257,7 +252,6 @@ def private zero_bytes(var d : uint8?; n : int64) {
     }
 }
 
-// the scale row's header: the f16 d halfword verbatim, then two zero bytes
 def private d_header(var ks : uint8?; src : uint8 const?) {
     unsafe {
         ks[0] = src[0]
@@ -267,8 +261,7 @@ def private d_header(var ks : uint8?; src : uint8 const?) {
     }
 }
 
-// the grid formats' header: d EIGHTH-ed (three exact exponent decrements - ggml's
-// (0.5+ls)*0.25 becomes (2ls+1) x d/8), then two zero bytes
+//! d EIGHTH-ed: three exact exponent decrements, so ggml's (0.5+ls)*0.25 becomes (2ls+1) x d/8; then two zero bytes.
 def private d8_header(var ks : uint8?; src : uint8 const?) {
     unsafe {
         let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))))
@@ -303,8 +296,8 @@ def kq_transcode_superblock(fmt : KqFmt; bytes : array<uint8> | #; bo : int64; v
 }
 
 //! Units [b0, b1) of a tensor's stride-unit stream through the format's codec - a plain function
-//! beside the codecs, stamped here, so the per-unit codec and byte-copy calls inline: the
-//! split-module JIT inlines within one partition only, and a generic instantiates in its caller's.
+//! beside the codecs, stamped here, so the per-unit codec and byte-copy calls inline.
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining")]
 def kq_transcode_units(fmt : KqFmt; srcp : uint8 const?; var kqp : uint8?; var ksp : uint8?; b0, b1, disk, qsb, ssb : int64) {
     kq_fmt_stamp(fmt) <| $(F) {
         unsafe {
@@ -363,8 +356,8 @@ def dequant_k4_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     let dmin = f16_to_f32(rd_u16(ks, kso + 2l))
     var dsto = doff
     for (js in range64(4l)) {
-        let s0 = q4k_scale_min(ks, kso + 4l, 2l * js)
-        let s1 = q4k_scale_min(ks, kso + 4l, 2l * js + 1l)
+        let s0 = k4_sc_mn(ks, kso + 4l, 2l * js)
+        let s1 = k4_sc_mn(ks, kso + 4l, 2l * js + 1l)
         let d1 = d * float(s0.x)
         let m1 = dmin * float(s0.y)
         let d2 = d * float(s1.x)
@@ -385,8 +378,8 @@ def dequant_k5_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     let dmin = f16_to_f32(rd_u16(ks, kso + 2l))
     var dsto = doff
     for (js in range64(4l)) {
-        let s0 = q4k_scale_min(ks, kso + 4l, 2l * js)
-        let s1 = q4k_scale_min(ks, kso + 4l, 2l * js + 1l)
+        let s0 = k4_sc_mn(ks, kso + 4l, 2l * js)
+        let s1 = k4_sc_mn(ks, kso + 4l, 2l * js + 1l)
         let d1 = d * float(s0.x)
         let m1 = dmin * float(s0.y)
         let d2 = d * float(s1.x)

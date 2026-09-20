@@ -1766,7 +1766,6 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {
-            // one batched region-list GEMM per projection; gpt-oss folds the gate/up biases into the stores before the act
             mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
             mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
             prof_add("mm_gemm", ts_g1)
@@ -1775,7 +1774,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             prof_add("act", ts_act)
             requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
             let ts_g3 = prof_ticks()
-            // ... and the down biases, added before the routed weight scales them
+            // the down biases add before the routed weight scales the row
             mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, c.moe_exps_bias, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             prof_add("mm_gemm", ts_g3)
         }
@@ -1818,7 +1817,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         if (!t.experts_mx4 || g_active_mx4_native_batch) {   // the stack's native batch tiles, per-kind fmt (down may differ)
             mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
             mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } else {   // exact Q8 expansion of this mx4 expert, then the proven batch GEMMs
+        } else {
             let ts_ex = prof_ticks()
             expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex)

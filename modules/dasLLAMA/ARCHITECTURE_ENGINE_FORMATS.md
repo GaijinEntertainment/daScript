@@ -59,7 +59,7 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
-  share no state; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
+  share the merge heap of sec.1.2a and nothing else; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
   live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
   gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
   metadata defaults are the third and last. A GGUF without `tokenizer.ggml.add_bos_token` takes
@@ -74,6 +74,18 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   vs. algorithm work). Every arm with an on-disk upstream corpus vocab is gated by its case in
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
   pinned by frozen ids in `test_parity.das` only.
+
+### 1.2a The bigram merge heap is one body for both tokenizer backends {#bpe-merge-heap}
+
+`bigram_merge_heap` (`dasllama_bpe.das`) merges a whole symbol run for BPE and for SPM alike: a max-heap over candidate pairs, O(n log n) where the sequential rescan it replaces is O(n^2). BPE passes an empty `scores` and the priority is the negated merge rank (lowest rank first); SPM passes its piece scores and the priority is the score. An entry whose endpoint merged since it was pushed fails the adjacency+id guard and is skipped, so the ids the heap produces are the rescan's exactly; `-2` dead slots compact out and SPM's `-1` survives.
+
+### 1.2b The RoPE table builders are one fill over a position source {#rope-one-fill}
+
+Every materialized cos/sin table is the same fill; the position source is what differs. A source answers two questions - which axis half-dim j reads (`rope_axis`, once per j) and what position row pi sits at on that axis (`rope_pos`) - and the vision grid adds a third, its restarted frequency ladder (`rope_freq_of`). `freq[j]` and the axis hoist out of the row loop and `mscale` folds in at the fill, for NORM and NEOX alike.
+
+### 1.2c The per-format plane table is the Model's only fixed-size array {#model-plane-table-dim}
+
+`Model.kq : KqPlanes[KQ_FMT_COUNT]` is the one `dim` field a `Model` carries, so every `apply` walk over it - the finalizer, the image build, the image parse, the layout describe - spells its plane-table arm as the `typeinfo is_dim(field)` branch and reaches each element's arrays from there. The table's interleaves serialize in enum order, so an appended `KqFmt` member lands last and no earlier slot moves.
 
 ### 1.3 The load and image rail
 

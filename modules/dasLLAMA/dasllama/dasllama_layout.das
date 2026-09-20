@@ -171,7 +171,6 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 //! which is the only point where that plane's fills are done and its bytes are not yet written.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
-    // the name is a lattice scale plane's (`k4s`); q40/iq4nl rows are already the device form
     var f = KqFmt.q8
     if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl) {
         return false
@@ -180,8 +179,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         return true
     }
     if (f == KqFmt.k4 || f == KqFmt.k5) {
-        // the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack scratch
-        // (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
+        // the 16B verbatim disk scale block per superblock; the 4B pad is repack scratch a blob model never uses
         compact_kq_scale_strip(t.kq[int(f)].s)
         return true
     }

@@ -136,8 +136,6 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
     return <- tk
 }
 
-// the merge heap is dasllama_bpe's bigram_merge_heap: with the piece scores passed, the pair
-// probe reads the merged id and orders by its score, highest first, then leftmost
 def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
     bigram_merge_heap(tk.pair_merge, tk.scores, toks)
 }

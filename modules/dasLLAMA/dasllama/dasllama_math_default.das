@@ -64,10 +64,6 @@ def template dot_q8q8_f16s_template(wq : int8 const ?; ws : uint16 const ?; xq :
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), tuned(fallback = "vec16")]
 def dot_q8q8_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-// ===== the wscale_f16 rail: each Q8·Q8 dot and kernel is ONE body, stamped per scale plane through
-// [from_template] - WSCALE = wscale_f32 reads the f32 block scale, wscale_f16 widens the binary16
-// halfword in-loop (vcvtph2ps / fcvtl under the JIT); bit-identical over the widened plane =====
-
 def wscale_f32(ws : float const?; bi : int64) : float {
     unsafe {
         return ws[bi]
@@ -124,7 +120,6 @@ def template dot_q8q8_idot4x4_template(wq : int8 const ?; ws : float const ?; xq
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f32")]
 def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-//! Not `private`: called from lifted parallel_for worker lambdas.
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f16")]
 def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
@@ -164,7 +159,7 @@ def template dot_q8q8_idot4_ps_template(wq : int8 const ?; ws : float const ?; x
 
 //! The vector-epilogue idot4 dot: per 32-block one idot4 pair, then float4 accumulate under the block's
 //! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form
-//! (dot_q8q8_idot4x4's per-block hsum is four lane extracts there). Called from lifted lambdas.
+//! (dot_q8q8_idot4x4's per-block hsum is four lane extracts there).
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template", WSCALE = "wscale_f32")]
 def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
@@ -214,10 +209,6 @@ def pf_prof_report() {
     to_log(LOG_INFO, "  avg parallel_for wall  = {g_pf_wall_sum / g_pf_n} us\n")
     to_log(LOG_INFO, "  last-start as % of wall = {100l * g_pf_last_sum / max(g_pf_wall_sum, 1l)}% (high = workers trickle in / pool wake-up stall)\n")
 }
-
-// ===== the Q8·Q8 kernel shapes, written ONCE each over a Q8DOT and a Q8SPLIT the stamps bind: the
-// portable tier binds the autovectorized dot with one chunk per hw job (1N measured fastest for the
-// compute-light dot, ~52 vs ~51 tok/s at 2N), the idot4 tier its dot with the batch-chunks oversplit =====
 
 //! The chunk oversplit the idot4 stamps bind: the batch-chunks knob, group3 only under team
 //! dispatch (x4 costs the fifo path ~20% but wins ~19% under team: 1B mm_qkv 86.6k -> 108k us).
@@ -330,9 +321,8 @@ def template q8q8_group3_kernel_template(var y0p : float ?; var y1p : float ?; v
     }
 }
 
-// region-list (groupN) kernel — the MoE decode dispatch fuse: one parallel_for over nregions*d
-// rows fans out all routed experts in one fork/join; bit-exact vs the single-region kernel,
-// only scheduling differs
+// region-list (groupN) kernel - the MoE decode dispatch fuse: one parallel_for over nregions*d
+// rows fans out all routed experts in one fork/join, bit-exact vs the single-region kernel.
 def template q8q8_groupn_kernel_template(var yp : float ?; wp : int8 const ?; sp : float const ?; offs : int64 const ?; nregions : int64; xqp : int8 const ?; xsp : float const ?; bp : float const ?; boffs : int64 const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
@@ -354,9 +344,6 @@ def template q8q8_groupn_kernel_template(var yp : float ?; wp : int8 const ?; sp
     }
 }
 
-// The portable stamps. q8q8_rows_kernel / q8q8_groupn_kernel (and the s16 pair) are NOT private:
-// invoked through the kernel pointer from lifted worker lambdas, and backends without a native
-// groupn tier register the portable groupn to satisfy the every-backend-supplies-one contract.
 [from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable")]
 def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
 
@@ -370,7 +357,7 @@ def q8q8_rows_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp :
 def private q8q8_group3_kernel(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : float const?;
                                woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
 
-[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable")]
+[from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_p", Q8SPLIT = "q8_split_portable"), arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kernel-visibility-lifted-workers")]
 def q8q8_groupn_kernel(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
 
 [from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
@@ -389,9 +376,6 @@ def private q8q8_group3_kernel_s16(var y0p : float?; var y1p : float?; var y2p :
 [from_template(src = "q8q8_groupn_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
 def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {}
 
-// The idot4 stamps: the "arm64-sdot" backend dasllama_math_aarch64_neon registers (the idot4
-// builtin lowers to one SDOT per call on an arm64 JIT host; off the JIT its extern is correct but
-// not fast, so that backend registers only under the JIT). Not private: registered from that module.
 [from_template(src = "q8q8_kernel_template", Q8DOT = "dot_q8q8_idot4x4", Q8SPLIT = "q8_split_idot4x4")]
 def q8q8_kernel_idot4x4(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
 
@@ -781,9 +765,6 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
     return acc
 }
 
-// The per-format dots above are one overload family on the format tag (q8, q51 and mx4 have no
-// kq plane and panic); the row-range core is generic on that tag, so kq_fmt_stamp picks the dot
-// at compile time and the row strides come off the descriptor row.
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8) : float {
     panic("q8 has no kq plane dot")
     return 0.0
@@ -800,8 +781,8 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
 }
 
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
-//! dot of row i, the row strides off the descriptor. Generic in the tag so a caller's partition
-//! instantiates its own copy; the gen tier's row tails and the fused chains thread it.
+//! dot of row i, the row strides off the descriptor. Generic in the tag; the gen tier's row tails
+//! and the fused chains thread it.
 def kq_rows_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1359,13 +1340,10 @@ def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uin
 
 //! MXFP4·Q8 dot in plain das: one nibble load, two shuffle LUT
 //! lookups (low via the &15 mask, high via the per-byte >> 4), each idot4'd against the Q8
-//! activation (one TBL + one SDOT each on arm64 JIT). Not `private`: called from lifted workers.
+//! activation (one TBL + one SDOT each on arm64 JIT).
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
 def dot_mx4q8(lut : int8 const?; wn : uint8 const?; we : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-// The mx4 kernel shapes, written once over an MX4DOT and a Q8SPLIT (portable: the scalar reference
-// dot, one chunk per job; idot4: dot_mx4q8 with the batch-chunks oversplit). NOT private: the x64
-// family registers the portable forms (every-backend-supplies-one), the neon module the idot4 forms.
 def template mx4q8_kernel_template(var yp : float ?; wn : uint8 const ?; we : uint8 const ?; xqp : int8 const ?; xsp : float const ?; n, d : int64) : void {
     let nb = n / 32l
     var myp = yp
@@ -1390,7 +1368,7 @@ def mx4q8_kernel(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : in
 def mx4q8_kernel_idot4x4(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64) {}
 
 //! The idot4 mx4 row-range core (mx4_rows slot): rows [rb, re) over dot_mx4q8, no dispatch - the
-//! fused MoE expert chain threads it. Not `private`: invoked through the kernel pointer from lifted workers.
+//! fused MoE expert chain threads it.
 def mx4q8_rows_kernel_idot4x4(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {
     let nb = n / 32l
     var lut : int8[16]

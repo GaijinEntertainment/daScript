@@ -4,10 +4,6 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tune
 
-// [from_template]: the stub's body is the template's with every placeholder call renamed to the
-// annotation's target, and the stub's own signature types the clone - the same template stamps a
-// float-plane and a halfword-plane overload.
-
 def template twice_template(x : int) : int {
     return PH(x) + PH(x)
 }

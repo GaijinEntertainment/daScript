@@ -648,9 +648,8 @@ def public remove_deref(varname : string; var expr : Expression?) {
 }
 
 def public bind_block_argument(blk : ExprBlock?; argname : string; var bound : Expression?; at : LineInfo) : Expression? {
-    //! Clones the body of a block literal with its argument `argname` replaced by the expression `bound`,
-    //! and returns it as a plain (argument-less) block. This is the stamping primitive of a call macro that
-    //! expands `macro(...) <| $(x) { ... }` into one copy of the body per case, each binding `x` differently.
+    //! Clones the body of a block literal with its argument `argname` replaced by the expression
+    //! `bound`, and returns it as a plain (argument-less) block.
     var body = clone_expression(blk)
     var bblk = body as ExprBlock
     while (!empty(bblk.arguments)) {

@@ -92,7 +92,7 @@ def private f16_plane_mint(key : uint64; wp : uint16 const?; total : int64; fpv 
         maybe_parallel_for(0, int(total), 32) $(cb, ce) {
             unsafe {
                 for (i in range64(int64(cb), int64(ce))) {
-                    hp[i] = uint16(f32_to_f16(clamp(bf16_to_f32(uint(wp[i])), -65504.0, 65504.0)))
+                    hp[i] = uint16(f32_to_f16(clamp(reinterpret<float>(uint(wp[i]) << 16u), -65504.0, 65504.0)))
                 }
             }
         }

@@ -33,10 +33,6 @@ def f16_to_f32(h : uint) : float {
     return unsafe(reinterpret<float>(bits))
 }
 
-//! Convert a bfloat16 (held in the low 16 bits) to fp32: bf16 is the top half of an fp32, so
-//! the shift up is exact.
-def bf16_to_f32(h : uint) : float => unsafe(reinterpret<float>(h << 16u))
-
 //! Convert fp32 to IEEE-754 binary16 bits, round-to-nearest-even (matches ARM fcvt / x86
 //! F16C hardware conversion — what ggml's FP32_TO_FP16 compiles to on both oracles).
 def f32_to_f16(f : float) : uint {

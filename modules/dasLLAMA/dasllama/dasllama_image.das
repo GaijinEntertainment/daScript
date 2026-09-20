@@ -493,7 +493,6 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
                 cur = plane_end(cur, field)
             }
         } static_elif (typeinfo is_dim(field)) {
-            // the per-format plane table: every element's arrays are planes
             for (el in field) {
                 apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
@@ -693,7 +692,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.kquant_native)
     arch |> serialize_raw(t.kq_repacked)
     arch |> serialize_raw(t.mx4_repacked)
-    for (f in type<KqFmt>) {   // the plane table's interleaves, one per lattice format in enum order
+    for (f in type<KqFmt>) {
         if (kq_sb(f)) {
             arch |> serialize_raw(t.kq[int(f)].mr)
         }
@@ -737,8 +736,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as
-// ONE field (its interleaves ride the loop above)
+//! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
 let IMAGE_META_FIELDS = 64 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
@@ -838,7 +836,8 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
-    arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness"),
+    arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
@@ -876,7 +875,6 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                     }
                 }
             } static_elif (typeinfo is_dim(field)) {
-                // the per-format plane table: each element's arrays are planes named by the format (`k4q`, `k4s`)
                 for (el, i in field, count()) {
                     let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
                     apply(el) $(iname : string; var ifield) {
@@ -1165,7 +1163,8 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 //! process just built alike: plane fields borrow `base` in place, the archive blob restores
 //! everything else. false = decline (the caller owns `base` and releases it either way).
 [arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"), arch(at = "../ARCHITECTURE_RUNTIME.md#weights-epoch-on-load"),
-    arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"),
+    arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
@@ -1263,7 +1262,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
                 borrow_plane(bp, msize, path, by_name, ok, name, field)
             }
         } static_elif (typeinfo is_dim(field)) {
-            for (el, i in field, count()) {   // the per-format plane table, sections named by the format
+            for (el, i in field, count()) {
                 let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
                 apply(el) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {

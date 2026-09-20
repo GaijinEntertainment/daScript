@@ -28,10 +28,6 @@ def private rope_freq_j(j, head_size : int64; theta : float; ffp : float const?)
     return freq
 }
 
-// ===== the two-table builders are ONE fill over a position source: the source answers which axis
-// half-dim j reads (rope_axis, once per j) and row pi's position on it (rope_pos); the vision grid
-// also owns its restarted frequency ladder (rope_freq_of). Every builder keeps the same float order.
-
 //! Positions [start, start + nrows): row pi is at start + pi.
 struct private RopeSeq {
     start : int64
@@ -140,6 +136,7 @@ def private rope_tabs_fill(@scratch var cos_tab : array<float>; @scratch var sin
 def private rope_ffp(rope_freqs : array<float>; use_ff : bool) : float const? => use_ff && !empty(rope_freqs) ? unsafe(addr<float const?>(rope_freqs[0])) : null
 
 //! Positions [start_pos, start_pos+npos) as two cos/sin tables.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#rope-one-fill")]
 def build_rope_tabs(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                     theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                     start_pos, npos, head_size : int64) {

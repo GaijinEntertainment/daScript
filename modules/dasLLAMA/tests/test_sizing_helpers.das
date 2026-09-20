@@ -4,12 +4,6 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 
-// The sizing helpers' own contract, fed directly: reserve_resize is exact at any element
-// width, grow_resize keeps a reused buffer amortized across shrink-then-grow with a zeroed
-// re-added tail, ensure_length never shrinks, and overwrite_resize is grow-only no-init — and
-// all four stay panic-free past the max_unreserved_size guard (64 MB default), which is the
-// reason they exist.
-
 [test]
 def test_reserve_resize(t : T?) {
     t |> run("exact capacity, both widths, any element type") @(t : T?) {

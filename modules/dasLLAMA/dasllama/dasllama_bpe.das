@@ -164,10 +164,10 @@ struct private Bigram {
     mid : int64
 }
 
-// max-heap priority: highest pri, then leftmost — exactly the sequential rescan's selection order
+//! Max-heap order: highest pri, then leftmost - the sequential rescan's selection order.
 def private bigram_before(a, b : Bigram) : bool => a.pri > b.pri || (a.pri == b.pri && a.li < b.li)
 
-// hand-rolled sift so the comparator inlines: a block-comparator sort pays an invoke per compare on this per-merge path
+//! Hand-rolled sift so the comparator inlines: a block comparator pays an invoke per compare on this per-merge path.
 def private bigram_push(var h : array<Bigram>; bg : Bigram) {
     h |> push(bg)
     var i = length(h) - 1
@@ -203,8 +203,7 @@ def private bigram_pop(var h : array<Bigram>) : Bigram {
     return top
 }
 
-// the pair probe: BPE (no scores) packs rank << 32 | merged id, lowest rank first; SPM's value
-// is the merged piece's id and its priority is that piece's score, highest first
+//! Pair probe: BPE packs rank << 32 | merged id (lowest rank first); SPM's value is the merged id, its priority that piece's score.
 def private bigram_try_push(pair_merge : table<int64; int64>; scores : array<float>; var h : array<Bigram>; syms : array<int64>; li, ri : int) {
     let pm = pair_merge?[(syms[li] << 32l) | syms[ri]] ?? -1l
     return if (pm < 0l)
@@ -217,9 +216,8 @@ def private bigram_try_push(pair_merge : table<int64; int64>; scores : array<flo
     }
 }
 
-//! Heap merge over a whole symbol run for BOTH backends (BPE passes an empty `scores`, SPM its piece
-//! scores): O(n log n) where the rescan is O(n^2); stale entries (an endpoint merged since push) skip on
-//! the adjacency+id guard, so the ids match the rescan exactly; -2 dead slots compact out (SPM's -1 survives).
+//! Heap merge over a whole symbol run for BOTH backends: BPE passes an empty `scores`, SPM its piece scores.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap")]
 def bigram_merge_heap(pair_merge : table<int64; int64>; scores : array<float>; var syms : array<int64>) {
     let n = length(syms)
     return if (n < 2)
