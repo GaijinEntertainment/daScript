@@ -354,6 +354,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
             && (kv16 ? ensure_da_attn_f16_cls() : ensure_da_attn_cls())
+            && (!da_slab_g2(L.kv_mul) || (kv16 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_g2_cls()))
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
@@ -1305,6 +1306,28 @@ def private rd_attn_rqk(L : RLayer) : uint {
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
 }
 
+//! the layer's decode attention stamp over `awgs` workgroups: the sink twins on a model with sinks, the two-head slab on a
+//! group of one or two heads, else the four-head slab - each on the mirror codec's plane loads
+def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; var pca : DaAttnArgs; awgs : int64) {
+    if (g_rd.has_sinks) {
+        if (g_rd.kv16) {
+            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
+        } else {
+            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
+        }
+    } elif (da_slab_g2(L.kv_mul)) {
+        if (g_rd.kv16) {
+            enc_da_attn_f16_g2_cls(raw, h, L.s_attn, pca, awgs)
+        } else {
+            enc_da_attn_g2_cls(raw, h, L.s_attn, pca, awgs)
+        }
+    } elif (g_rd.kv16) {
+        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, awgs)
+    } else {
+        enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
+    }
+}
+
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit : int64) {
     let dim = g_rd.dim
     let qd = L.qd
@@ -1382,18 +1405,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         cntoff = uint(g_rd.attn_cnt_off))
-    let awgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)
-    if (g_rd.has_sinks) {
-        if (g_rd.kv16) {
-            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
-        } else {
-            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
-        }
-    } elif (g_rd.kv16) {
-        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, awgs)
-    } else {
-        enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
-    }
+    rd_enc_da_attn(raw, h, L, pca, da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit))
     rd_ts(raw, "a:attn")
     if (rqk == DA_RQ_NONE) {   //! a head the fold cannot block (a K-quant wo plane under a head off 256): the separate requant
         if (kq_sb(L.fo)) {
@@ -2222,18 +2234,8 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
         kbase = uint(L.mir_base), vbase = uint(L.mir_base), scale = g_rd.scale, qstride = hs, gated = 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
-    let awgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit) * nrows
-    if ((g_rd_nrow_bisect & 1) != 0) {   // the bisect knob: no attention
-    } elif (g_rd.has_sinks) {
-        if (g_rd.kv16) {
-            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
-        } else {
-            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
-        }
-    } elif (g_rd.kv16) {
-        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, awgs)
-    } else {
-        enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
+    if ((g_rd_nrow_bisect & 1) == 0) {   // the bisect knob's bit 1: no attention
+        rd_enc_da_attn(raw, h, L, pca, da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit) * nrows)
     }
     rd_ts(raw, "a:attn")
     if (rqk == DA_RQ_NONE) {

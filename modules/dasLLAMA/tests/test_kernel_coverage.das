@@ -762,6 +762,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
+    // the two-head slab decode attention and its f16 twin (a GQA group of one or two heads: gemma-2-2b and the gemma-4
+    // dense files, no zoo row); their coverage is test_vkd_da_attn_rqk's two-head arms in test_vulkan_kernels.das
+    "da_attn_g2_cls_spv", "da_attn_f16_g2_cls_spv",
     // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
     "q51_gemv_sum_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight

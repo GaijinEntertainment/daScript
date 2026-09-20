@@ -4088,7 +4088,10 @@ struct DaAttnArgs {
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
 def da_attn_part_stride(hs : uint) : uint => hs + 2u
 
-let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four
+let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four (the G2 stamps take a group of one or two heads in a slab of two, the same workgroup count)
+
+//! a group of one or two q heads takes the two-head slab stamps: the four-head slab's other lanes would score and accumulate dead heads
+def da_slab_g2(kv_mul : int64) : bool => kv_mul <= 2l
 
 //! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
 def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 => n_heads / kv_mul * ((kv_mul + int64(DA_G) - 1l) / int64(DA_G)) * nsplit
@@ -4104,6 +4107,7 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
     @template_constant SINK : bool = false   //! the sink stamps (gpt-oss): the head's sink logit joins the softmax's max and denominator at the unsplit store; a split piece leaves it to the combine
+    @template_constant G : int = 4           //!< the slab's q heads, DA_G or two: every score and V loop unrolls over them
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
     @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
@@ -4276,10 +4280,10 @@ class template DaAttnT {
         let cnt = tok[row].cnt
         let sp = wg % nsplit
         let kvslab = wg / nsplit
-        let nslab = (pa.kv_mul + DA_G - 1u) / DA_G
+        let nslab = (pa.kv_mul + uint(G) - 1u) / uint(G)
         let kvh = kvslab / nslab
-        let h0 = kvh * pa.kv_mul + (kvslab % nslab) * DA_G   //! the slab's first q head
-        let live = min(DA_G, pa.kv_mul - (kvslab % nslab) * DA_G)   //! its heads: a group's last slab may be short
+        let h0 = kvh * pa.kv_mul + (kvslab % nslab) * uint(G)   //! the slab's first q head
+        let live = min(uint(G), pa.kv_mul - (kvslab % nslab) * uint(G))   //! its heads: a group's last slab may be short
         let hflat0 = row * (pa.kvd / hs * pa.kv_mul) + h0   //! the slab's first head in the attention-out and partial planes, whose row stride is the heads' width
         let qb = row * pa.qrow
         let kbase = pa.kbase + tok[row].mirbase
@@ -4290,13 +4294,13 @@ class template DaAttnT {
         let lane = gl_SubgroupInvocationID
         var i = tid
         while (i < hs) {
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 qrow[hj * 512u + i] = hj < live ? q[qb + (h0 + hj) * qstride + i] : 0.0
             }
             i += 256u
         }
-        if (tid < DA_G) {
+        if (tid < uint(G)) {
             ml[tid * 4u] = -3.0e38
             ml[tid * 4u + 1u] = 0.0
         }
@@ -4333,7 +4337,7 @@ class template DaAttnT {
             }
             if (tid < clen) {
                 var pv : float[4]
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     pv[j] = 0.0
                 }
                 static_if (KV16) {
@@ -4348,7 +4352,7 @@ class template DaAttnT {
                             for [unroll] (b in range(8)) {
                                 let wb = wi + uint(b)
                                 if (wb < vrow_words) {
-                                    for [unroll] (j in range(4)) {
+                                    for [unroll] (j in range(G)) {
                                         pv[j] += kdot8(kw[b], uint(j) * 512u + wb * 8u)
                                     }
                                 }
@@ -4361,19 +4365,19 @@ class template DaAttnT {
                     var di = 0u
                     while (di < hs) {
                         let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                        for [unroll] (j in range(4)) {
+                        for [unroll] (j in range(G)) {
                             pv[j] += qrow[uint(j) * 512u + di] * kv0
                         }
                         di++
                     }
                 }
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     sc[uint(j) * 256u + tid] = attn_softcap(pv[j] * pa.scale, pa.cap)
                 }
             }
             barrier()
             var s : float[4]
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 s[j] = tid < clen && hj < live ? sc[hj * 256u + tid] : -3.0e38
                 let tmax = subgroupMax(s[j])
@@ -4383,7 +4387,7 @@ class template DaAttnT {
             }
             barrier()
             var alpha : float[4]
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 var mnew = ml[hj * 4u]
                 var sgi = 0u
@@ -4400,7 +4404,7 @@ class template DaAttnT {
                 }
             }
             barrier()
-            if (tid < DA_G) {   //! a thread a head carries the running max and denominator forward
+            if (tid < uint(G)) {   //! a thread a head carries the running max and denominator forward
                 var mnew = ml[tid * 4u]
                 var lsum = 0.0
                 var sgi = 0u
@@ -4412,7 +4416,7 @@ class template DaAttnT {
                 ml[tid * 4u + 1u] = ml[tid * 4u + 1u] * exp(ml[tid * 4u] - mnew) + lsum
                 ml[tid * 4u] = mnew
             }
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 for [unroll] (e in range(8)) {
                     acc[j * 8 + e] *= alpha[j]
                 }
@@ -4433,7 +4437,7 @@ class template DaAttnT {
                                 let bb = unpackHalf2x16(vw[b].y)
                                 let cc = unpackHalf2x16(vw[b].z)
                                 let d = unpackHalf2x16(vw[b].w)
-                                for [unroll] (j in range(4)) {
+                                for [unroll] (j in range(G)) {
                                     let sj = sc[uint(j) * 256u + kb]
                                     acc[j * 8] += sj * a.x
                                     acc[j * 8 + 1] += sj * a.y
@@ -4452,7 +4456,7 @@ class template DaAttnT {
                     let vrow = vb + (c0 + jj) * pa.kvd
                     for [unroll] (e in range(8)) {
                         let v = vld(vrow + uint(e))
-                        for [unroll] (j in range(4)) {
+                        for [unroll] (j in range(G)) {
                             acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
                         }
                     }
@@ -4478,7 +4482,7 @@ class template DaAttnT {
         let slot = folded ? gl_SubgroupID : my_kgroup
         var hr0 = 0u
         while (hr0 < live) {
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 if (hj >= hr0 && hj < hr0 + heads_per_round && hj < live && has_sum) {
                     for [unroll] (e in range(8)) {
@@ -4532,7 +4536,7 @@ class template DaAttnT {
             barrier()
             if (arrived[0] + 1u == nsplit) {
                 memoryBarrierBuffer()
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     let hj = uint(j)
                     if (hj < live) {
                         combine_head(h0 + hj, hflat0 + hj, hs, nsplit, stride, qb, qstride, tid, wide)
@@ -4556,6 +4560,20 @@ class DaAttn : DaAttnT {
 class DaAttnF16 : DaAttnT {
     typedef KT = float16
     override KV16 = true
+}
+
+// the two-head slab twins: a group of one or two q heads (gemma-2, gemma-4 dense) scores and accumulates no dead heads
+[vk_dispatch(name = "da_attn_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnG2 : DaAttnT {
+    typedef KT = float
+    override G = 2
+}
+
+[vk_dispatch(name = "da_attn_f16_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnF16G2 : DaAttnT {
+    typedef KT = float16
+    override KV16 = true
+    override G = 2
 }
 
 [vk_dispatch(name = "da_attn_sink_cls", grid = "wgs", params = "wgs : int64")]

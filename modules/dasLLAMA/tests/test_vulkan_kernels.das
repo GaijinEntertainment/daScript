@@ -3801,7 +3801,7 @@ def test_vkd_cm2l_split(t0 : T?) {
 //! stores - Q8_0 blocks of 32 (`DA_RQ_Q8`) or Q8_K superblocks of 256 (`DA_RQ_Q8K`, a head of 256 or 512) - against the
 //! CPU oracle's row quantized the same way: every scale within a hair, every quant within one step (the row itself
 //! carries the f32 noise the plain arms allow), on a sentinel fill; the row store itself is held to the oracle too
-def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk : uint) {
+def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk : uint; g2 : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let kvd = (nheads / kv_mul) * hs
         let qdim = nheads * hs
@@ -3839,7 +3839,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         y_cls |> resize(qdim)
         q_cls |> resize(qdim)
         s_cls |> resize(qdim / blk)
-        verify(ensure_da_attn_cls(), "the decode attention class rail must engage on a live device")
+        verify(ensure_da_attn_cls() && (!g2 || ensure_da_attn_g2_cls()), "the decode attention class rail must engage on a live device")
         unsafe {
             upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
             upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
@@ -3862,7 +3862,11 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             var h : VkHaz
             var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
                 scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
-            enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
+            if (g2) {   //! the two-head slab stamp: the same workgroup count on a group of one or two heads
+                enc_da_attn_g2_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
+            } else {
+                enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
+            }
             vhz_dep(raw, h, 16u | 64u, 0u, true)
             cmd_copy_range(raw, yd, 0l, host.buf, 0l, q_bytes)
             cmd_copy_range(raw, aqd, 0l, host.buf, q_bytes, int64(qdim))
@@ -3878,7 +3882,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         for (hh in range(nheads)) {
             attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
         }
-        let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}"
+        let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}{g2 ? ", the two-head slab" : ""}"
         let bad = mismatch_approx(y_cls, y_ref)
         t |> success(bad == 0, "folded-requant attention ({arm}): the row matches the CPU oracle ({bad} of {qdim} off)")
         // the oracle's own quantization of its row: the block's amax over 127, the quants rounded against it
@@ -3927,6 +3931,12 @@ def test_vkd_da_attn_rqk(t0 : T?) {
             da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K)    //! ... the last piece's combine
             da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K)    //! the wide head: two superblocks, the last piece's combine
             da_attn_rqk_arm(t, 512, 2, 2, 70, 1, DA_RQ_Q8)     //! the wide head's Q8_0 blocks, the pass
+            //! the two-head slab stamp on the groups it serves: two heads a group (gemma-4's shape at 256 and 512), one head a group
+            da_attn_rqk_arm(t, 64, 4, 2, 300, 1, DA_RQ_Q8, true)
+            da_attn_rqk_arm(t, 64, 4, 2, 300, 8, DA_RQ_Q8, true)
+            da_attn_rqk_arm(t, 256, 2, 2, 70, 1, DA_RQ_Q8K, true)
+            da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K, true)
+            da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K, true)
         } else {
             t |> skip("dasVulkan not present")
         }
