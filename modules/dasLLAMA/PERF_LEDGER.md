@@ -2096,6 +2096,18 @@ the recorder fills - no plane grows with them, so the ladder's footprint half is
   16 GB card holds 3.5 GB of desktop and the four-region mirror otherwise pages), Phi-3.5-mini
   Q4_K_M 348 against 183 (1.90); the desktop box reads three percent apart run to run on the
   0.5B (1246 the run before). The flat rows did not move.
+- **llama.cpp's CUDA build beside the Vulkan reference on the 5060 Ti (every figure `external`;
+  the same b10660 checkout built with CUDA 13.4 for sm_120, `llama-bench -ngl 99 -fa 1 -r 3` for
+  pp512 / tg128 and `llama-batched-bench` under the section's command line for tg128@4; ours the
+  rows above, not re-run) [direction-grade - two processes]:** pp512 / tg128 / tg128@4 - Llama-3.2-1B
+  Q8_0 21185 / 262 / 857, Llama-3.2-3B Q8_0 8628 / 108 / 371, Llama-3.1-8B Q4_K_M 3630 / 82 / 245,
+  Qwen2.5-0.5B Q8_0 34230 / 488 / 1412, Qwen2.5-1.5B Q8_0 14831 / 202 / 652, Qwen3-0.6B Q8_0
+  26458 / 403 / 1034, Qwen3-4B Q8_0 6361 / 86 / 294, Phi-3.5-mini Q4_K_M 6503 / 144 / 312. Against
+  ours at four streams: 0.5B 0.86, 1.5B 0.96, 0.6B 0.89, 4B 0.93, phi 1.12; the llama family's
+  local rows are the section above's (1B 724, 3B 351, 8B 250: 0.84, 0.95, 1.02); flat, ours reads
+  0.93 to 0.99 of CUDA on every carrier. CUDA's batched rows beat its own Vulkan rows by 1.16 to
+  1.70 on this card, so the Vulkan-reference ratios above overstate ours by that much against
+  the card's best engine.
 
 ### From the M4 Metal pass (2026-09-13)
 
