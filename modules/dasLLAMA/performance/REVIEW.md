@@ -1,18 +1,16 @@
 # dasLLAMA performance Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_ENGINE.md`, `../ARCHITECTURE_MEASUREMENT.md`.
-Planned work: `../followup_general.md`.
+doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
 
-**A diff that narrows this folder's `REVIEW.das` check - the files it walks, the names it does
-not flag - or lands one carrying a name license, ledgers the excluded scope in
-`../ARCHITECTURE_MEASUREMENT.md` in the same change.**
+**A diff that narrows what this folder's `REVIEW.das` walks - a file or folder the gate stops
+reading - ledgers the excluded scope in `../ARCHITECTURE_MEASUREMENT.md` in the same change.**
 
-**A diff that weakens any `REVIEW.das` check in any other way - the conditions it fires on - is
-a defect.**
+**A diff that weakens this folder's `REVIEW.das` in any other way - the conditions a check fires
+on - is a defect.**
 
 **A diff that answers a `REVIEW.das` red on the conditions a `records/` row, an archived
 sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured under - box
@@ -20,13 +18,13 @@ noise, a remote-desktop session, the release it was minted at - by hand-editing 
 is a defect: re-mint it on a quiet, session-free box instead.**
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
-under review cannot reach is a defect - re-mint, or re-stamp to the commit the exe that timed
-the cells was built at.** A commit stamp is any field in a checked-in JSON under this folder that
-names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a ruler
-record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
+under review cannot reach is a defect - re-mint, or re-stamp to the commit the exe that produced
+the stamped artifact was built at.** A commit stamp is any field in a checked-in JSON under this
+folder that names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a
+ruler record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
 
-**A diff that hand-edits a commit stamp in `records/<box>.json` names, in the PR body, the rows,
-their old stamps, and the build commit of the exe that timed them it re-stamps to.**
+**A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
+field, its old stamp, and the build commit of the exe it re-stamps to.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -51,12 +49,12 @@ build - names both exes in its `cmd`.**
 in that row's provenance, the checkout that built the binary it timed; a python leg names
 `../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a `records/<box>.json` row, sidecar archive, or `defaults/` profile under
-this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
-(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is a `das` records row's
+**A diff that writes a `das` `records/<box>.json` row, a sidecar archive, or a `defaults/`
+profile under this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
+(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is the row's
 `dasllama_version`, and `provenance.dasllama_version` in a sidecar archive or a `defaults/`
 profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
-profile compares against the branch under review; a reference-engine row carries no pin.
+profile compares against the branch under review.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell

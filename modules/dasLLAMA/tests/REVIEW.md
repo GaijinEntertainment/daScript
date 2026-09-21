@@ -8,9 +8,8 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**
 
-**A diff that adds a test cell whose expected value a person wrote down rather than the code
-under test computing it, or touches one, applies `REVIEW_PINNED_GATES.md` (beside this file)
-together with this list.**
+**A diff that adds a pinned test cell, or touches one, applies `REVIEW_PINNED_GATES.md` (beside
+this file) together with this list** - that checklist defines the kind.
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -201,9 +200,8 @@ gate.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
-(`_model_tier.das`) is a defect unless no carrier below the tier takes the arm the cell holds;
-such a cell gates on the large tier and names the arm.** The batched code paths get their
-parity on small models, through pins.
+(`_model_tier.das`) is a defect.** The batched code paths get their parity on small models,
+through pins.
 
 **A cell sets an environment-read knob - one the running config reads once, at context init -
 before the process that reads it starts: the child the cell spawns, or the runner's own.** A set

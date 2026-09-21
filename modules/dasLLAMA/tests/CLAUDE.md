@@ -1308,10 +1308,12 @@ model-loading block is `REVIEW.md`'s obligation.
 
 `model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
 `DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
-large tier. A run reporting SKIPPED for those arms is correct, not a failure. The large tier's
-no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming a 70B's
-40GB on the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
-that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
+large tier. A run reporting SKIPPED for those arms is correct, not a failure. `REVIEW.md` bans a
+batched-vs-sequential parity cell on a carrier above the tier: streaming a 70B's 40GB on the CPU
+while the GPU has the same bytes wired OOM-kills a 64GB box, so small-model pins carry that
+coverage instead (e.g. `set_metal_batch_addrms_unfused`). The one ledgered cell above the tier is
+`test_batch_decode.das`'s Qwen3.6-35B-A3B cell: no stocked carrier under the tier takes the
+f32-on-disk beta/alpha arm of the CPU deltanet batch, and the cell gates on `DASLLAMA_PARITY_FULL=1`.
 
 ## Log discipline
 

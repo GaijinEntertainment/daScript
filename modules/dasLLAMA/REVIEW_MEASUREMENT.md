@@ -66,9 +66,9 @@ measured against.**
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A figure this change writes outside `PERF_LEDGER.md` that states a `--for-debug-purposes`
-reading covered by a committed board row - one matching on all three of model, served-turn leg
-and backend - cites that row and marks the reading `debug-jit`.**
+**A `--for-debug-purposes` reading written outside `PERF_LEDGER.md` and covered by a committed
+board row - one matching on all three of model, served-turn leg and backend - cites that row and
+marks the reading `debug-jit`.**
 A `--for-debug-purposes` reading is the `-jit` script's own output.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure

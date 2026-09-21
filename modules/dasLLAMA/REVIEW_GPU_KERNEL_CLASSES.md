@@ -1,8 +1,8 @@
 # dasLLAMA GPU Kernel Class Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_metal.md`
-for Metal, `followup_vulkan.md` for Vulkan.
+doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
+for Vulkan.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -36,8 +36,9 @@ the class fixes is, a dimension the model sets is not - never reaches that kerne
 kargs field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
-a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
-`@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
+a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
+`static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site
+reads is a defect -
 move it to the template whose body reads it, or make the body read it.
 
 **A diff that changes a stamp's generated source - through the class's own body, the template or
@@ -90,10 +91,13 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 
 **Weakening any refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time, or
 any `test_lens_*` / `test_vkd_lens_*` cell that holds one (`modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
-`modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a defect; a new refusal lands with the
-cell that holds it.** A refusal replaced by a derivation that leaves no such configuration
-compiling unbound - the `stamp =` form's threadgroup-memory global - is not a weakening, and the
-cell then holds the derived path.
+`modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a defect; a new refusal lands with the cell
+that holds it, in the same change.**
+
+**A diff that replaces a refusal with a derivation - the lens computing the value it used to
+demand, so no class can compile with that value missing - points that refusal's cell at the
+derived path in the same change.** Deriving the value is not a weakening; leaving the cell on
+the removed refusal is.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row would leave the rest of each row outside the tracked
@@ -101,13 +105,14 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
-state why the generated builder cannot serve that site is a defect.** A body that only picks,
+builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body
+does not state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
-and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
-`grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
+and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value consumed
+only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` - never reaches
+the device, so it does not count.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

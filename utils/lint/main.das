@@ -282,6 +282,8 @@ let RULE_DOC_PATH_EXTS <- [".das", ".md", ".rst", ".py", ".sh", ".cpp", ".h", ".
 // citing a rule by number, position or nickname, since rules are order-independent.
 let POSITIONAL_HEADS <- ["the rule", "the gate list", "the list", "the clause", "the definition", "see"]   //! "the rules below" scopes a block; "the rule below" points at one
 
+def is_word_byte(ch : int) : bool => is_alpha(ch) || is_number(ch) || ch == '_'
+
 def line_cites_by_position(line : string) : bool {
     let low = to_lower(line)
     var hit = false
@@ -292,12 +294,21 @@ def line_cites_by_position(line : string) : bool {
                 let at = find(d, h, from)
                 break if (at < 0)
                 let after = at + length(h)
-                hit = starts_with(d, after, " above") || starts_with(d, after, " below")
+                let word_start = at == 0 || !is_word_byte(int(d[at - 1]))   //! "foresee below" is not "see below"
+                hit = word_start && (starts_with(d, after, " above") || starts_with(d, after, " below"))
                 from = at + 1
             }
         }
     }
     return hit
+}
+
+//! the scan root that holds `folder` (the folder itself, or an ancestor), else the working directory
+def owning_root(folder : string; roots : array<string>) : string {
+    for (root in roots) {
+        return root if (folder == root || folder |> starts_with("{root}/"))
+    }
+    return "."
 }
 
 // A path a rule document cites resolves against the document's folder, then each ancestor up
@@ -327,7 +338,7 @@ def token_is_test_cell(tok : string) : bool {
     return false if (!(tok |> starts_with("test_")))
     var underscores = 0
     for (ch in tok) {
-        return false if (!(is_alpha(ch) || is_number(ch) || ch == '_'))
+        return false if (!is_word_byte(ch))
         underscores += ch == '_' ? 1 : 0
     }
     return underscores >= 2   //! `test_aot` is a binary; a cell is test_<subject>_<claim>
@@ -369,10 +380,16 @@ def collect_test_cells(path : string; var out : table<string; void?>) {
                 var end = at + 4
                 while (end < length(d)) {
                     let ch = int(d[end])
-                    break if (!(is_alpha(ch) || is_number(ch) || ch == '_'))
+                    break if (!is_word_byte(ch))
                     end ++
                 }
-                out |> insert(slice(d, at + 4, end), null)
+                var line_start = at   //! a `def` only counts at the head of its line - `// def test_gone` is a comment
+                while (line_start > 0 && (int(d[line_start - 1]) == ' ' || int(d[line_start - 1]) == '\t')) {
+                    line_start --
+                }
+                if (line_start == 0 || int(d[line_start - 1]) == '\n') {
+                    out |> insert(slice(d, at + 4, end), null)
+                }
                 from = end
             }
         }
@@ -423,11 +440,12 @@ def backticked_tokens(line : string; var out : array<string>) {
 // resolving turns the rule into noise nobody can apply. LINT032 reports a checklist citing a
 // rule by position; LINT033 a rule document naming a path or a test cell the tree no longer has.
 // Returns the finding count.
-def run_rule_doc_text_pass(folders : array<string>; root : string; want_pos, want_names : bool) : int {
+def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_pos, want_names : bool) : int {
     var found = 0
     var names : table<string; void?>
     var names_indexed = false
     for (folder in folders) {
+        let root = owning_root(folder, roots)
         var docs : array<string>
         collect_folder_mds(folder, true, docs)
         docs |> sort
@@ -450,7 +468,12 @@ def run_rule_doc_text_pass(folders : array<string>; root : string; want_pos, wan
                         continue if (rule_doc_path_resolves(folder, root, tok))
                         if (find(tok, "/") < 0) {
                             if (!names_indexed) {
-                                collect_basenames(root, names)
+                                if (empty(roots)) {
+                                    collect_basenames(".", names)
+                                }
+                                for (r in roots) {
+                                    collect_basenames(r, names)
+                                }
                                 names_indexed = true
                             }
                             continue if (names |> key_exists(tok))
@@ -1083,7 +1106,7 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
         found += run_doc_lines_pass(line_folders)
     }
     if (want_pos || want_names) {
-        found += run_rule_doc_text_pass(line_folders, empty(docs_roots) ? "." : docs_roots[0], want_pos, want_names)
+        found += run_rule_doc_text_pass(line_folders, docs_roots, want_pos, want_names)
     }
     return found
 }
