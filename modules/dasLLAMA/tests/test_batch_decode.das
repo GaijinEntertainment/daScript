@@ -22,7 +22,8 @@ require _model_tier   // model_available: the stocked-carrier gate (shards, the 
 // The reference pins the fused decode chain OFF (the std path is what the batch worker mirrors).
 // The batched bench row's refusal cell needs SmolLM2-135M-Instruct-Q8_0.gguf under models_dir()
 // (a tokenizer for the scheduler's streams) and the JIT; it skips without either. The deltanet
-// hybrid cells need Qwen3.5-0.8B-Q8_0.gguf under models_dir() and the JIT; they skip without either.
+// hybrid cells need Qwen3.5-0.8B-Q8_0.gguf under models_dir() and the JIT, and the MoE hybrid's
+// cell Qwen3.6-35B-A3B-UD-Q4_K_M.gguf under the large tier; they skip without either.
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
@@ -292,18 +293,20 @@ def test_batch_decode_q8(t : T?) {
 }
 
 //! the deltanet hybrid: batched == sequential on the CPU stack - the arch's own batched layer,
-//! recurrent rows against per-session state, gated partial-rope attention rows
-def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
+//! recurrent rows against per-session state, gated partial-rope attention rows; `ba_f32` names
+//! the beta/alpha arm the carrier takes (f32 rows on disk, or q8 planes)
+def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 : bool) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
     }
-    let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+    let path = path_join(models_dir(), file)
     if (!model_available(t, path)) return
     pin_kernel_backend("portable")   // same-dot parity — see test_batch_decode_q8
     set_gpu_resident_route(false)   //! the claim is the CPU batched stack: an armed whole-model driver would take the hybrid, and three host-cached sessions prefilled on one region supersede each other's rows
     var tr <- load_model_(path, QuantMode.q8)
     set_gpu_resident_route(true)   //! the lever reads at the load alone
+    t |> equal(tr.dn_ba_f32, ba_f32, "{tag}: the carrier takes the {ba_f32 ? "f32-on-disk" : "q8-plane"} beta/alpha arm")
     tr.config.seq_len = min(tr.config.seq_len, 64l)
     let prev_fused = get_fused_decode()
     set_fused_decode(false)
@@ -336,10 +339,15 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
 [test]
 def test_batch_decode_hybrid(t : T?) {
     t |> run("batched decode == sequential on the deltanet hybrid, f32 KV (needs Qwen3.5-0.8B-Q8_0)") @(t : T?) {
-        hybrid_batch_cell(t, KVDtype.f32, "qwen35")
+        hybrid_batch_cell(t, KVDtype.f32, "qwen35", "Qwen3.5-0.8B-Q8_0.gguf", false)
     }
     t |> run("batched decode == sequential on the deltanet hybrid, f16 KV (needs Qwen3.5-0.8B-Q8_0)") @(t : T?) {
-        hybrid_batch_cell(t, KVDtype.f16, "qwen35 f16kv")
+        hybrid_batch_cell(t, KVDtype.f16, "qwen35 f16kv", "Qwen3.5-0.8B-Q8_0.gguf", false)
+    }
+    //! the MoE hybrid's beta/alpha rows come as f32 on disk - the other arm of the batched layer's
+    //! projection prologue (large tier: DASLLAMA_PARITY_FULL=1)
+    t |> run("batched decode == sequential on the deltanet hybrid MoE, f32-on-disk beta/alpha, f16 KV (needs Qwen3.6-35B-A3B-UD-Q4_K_M)") @(t : T?) {
+        hybrid_batch_cell(t, KVDtype.f16, "qwen35moe", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", true)
     }
 }
 

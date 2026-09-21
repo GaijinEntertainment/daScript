@@ -100,3 +100,15 @@ a program whose reload design tears audio down drops the require instead.
 `strudel_play`; `strudel_play` ends in the PCM wait; `done_status` is notified only after all of
 that returns. So an ungrabbed buffer wedges the worker, and a wedged worker wedges
 `strudel_shutdown` on the main thread. This is why the worker-exit budget must exceed the PCM one.
+
+PCM stream status includes exact queued frames, consumed frames, and cumulative
+zero-fill frames/read requests. Initial empty reads count too; compare snapshots
+around the event under investigation rather than treating any nonzero total as a
+new fault. AudioSystemStats also reports mixer callback count and peak mix/gap
+times for the current stats-box registration. Replacing a stats box starts a fresh
+measurement session. Gaps include intentional device suspension during that registration.
+
+strudel_get_diagnostics exposes consumer counts alongside generated frames and
+refill timing. Threaded playback publishes a separate 64-byte SeqBox snapshot;
+readers never inspect worker-owned arrays. Main-thread playback reads the ordinary
+stream status. The counters observe buffering without changing queue policy.

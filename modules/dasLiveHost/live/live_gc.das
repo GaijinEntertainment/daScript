@@ -6,9 +6,9 @@ module live_gc shared public
 //! Standalone-loop GC boundary, UI-neutral. The canonical application shape
 //! (``init``/``update``/``shutdown`` + a standalone ``main`` loop) calls
 //! :func:`maybe_collect_gc` once per iteration; under the daslang-live host it
-//! self-disables (the host collects each frame). In the browser the ``main``
+//! self-disables (the host checks each frame). In the browser the ``main``
 //! loop never runs - the lifecycle drives ``update`` per frame from C++ - and
-//! that driver applies the same thresholds itself
+//! that driver applies the same allocation-pressure policy itself
 //! (``Context::collectHeapIfMostlyFree``), so a program needs no per-platform
 //! edit. Lives beside the live_host module so windowless applications
 //! (servers, tools) get the boundary without a GLFW dependency;
@@ -17,22 +17,8 @@ module live_gc shared public
 require live_host
 
 def public maybe_collect_gc() {
-    //! Standalone-loop GC. Call once per iteration after your update/render: the daslang-live host
-    //! collects the heap for you, but a standalone `def main` loop must do it itself. Collects a heap
-    //! only when it is mostly FREE (cheap compaction — little live data to walk), so it is fine to
-    //! call every frame. The string heap fills faster, so it gets the lower threshold and is checked
-    //! first. Requires `options gc` + `options persistent_heap` on the program (heap_collect throws
-    //! otherwise).
-    return if (is_live_mode())       // host already collects each frame — only a standalone loop needs this
-    let s_used = string_heap_bytes_allocated()
-    let s_total = string_heap_total_allocated()
-    if (s_total > 0ul && s_used * 3ul < s_total * 2ul) {        // string heap > 1/3 unused
-        unsafe(heap_collect(true, false))
-        return
-    }
-    let h_used = heap_bytes_allocated()
-    let h_total = heap_total_allocated()
-    if (h_total > 0ul && h_used * 3ul < h_total) {              // heap > 2/3 unused
-        unsafe(heap_collect(true, false))                      // both heaps — the GC walk is shared, so reclaiming the string heap too is near-free
-    }
+    //! The shared runtime policy requires fresh allocation pressure after collecting.
+    //! The live host and browser lifecycle invoke this policy outside update().
+    return if (is_live_mode())
+    unsafe(heap_collect_if_needed())
 }

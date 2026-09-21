@@ -8,9 +8,8 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**
 
-**A diff that adds a test cell whose expected value a person wrote down rather than the code
-under test computing it, or touches one, applies `REVIEW_PINNED_GATES.md` (beside this file)
-together with this list.**
+**A diff that adds a pinned test cell, or touches one, applies `REVIEW_PINNED_GATES.md` (beside
+this file) together with this list** - that checklist defines the kind.
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -108,7 +107,8 @@ other stocked fixture gates on its own presence.
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
 or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`.**
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; the exact name
+`load_model_`, the plain GGUF load, bakes nothing.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -198,8 +198,10 @@ model and its blob twin share one shape, so one session serves both.
 `family_on(t, name)` (`_model_tier.das`). An untagged block silently joins every family's
 gate.
 
-**No CPU-control batch parity runs against a large-tier carrier (`LARGE_TIER_BYTES`,
-`_model_tier.das`).** The batched code paths get their parity on small models, through pins.
+**A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
+stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
+(`_model_tier.das`) is a defect.** The batched code paths get their parity on small models,
+through pins.
 
 **A cell sets an environment-read knob - one the running config reads once, at context init -
 before the process that reads it starts: the child the cell spawns, or the runner's own.** A set
@@ -209,9 +211,10 @@ after that process starts is invisible to a config already read.
 value in the text a red prints - the cell label or the assert.**
 
 **A cell asserting the UNPINNED default lane never compares against a hardcoded lane - it
-compares against the predicates the lane policy itself consults, `float_batch_override_active()`
-and the family's `<family>_gpu_would_serve()` where one exists.** The default lane differs
-per box, so the assert is on the lane the policy selects, not on one predicate's own value.
+compares against the same predicates the family's own `*_serves_q8` accessor reads for its
+unpinned default: `float_batch_override_active()` and the family's would-the-GPU-serve call.**
+The default lane differs per box, so the assert is on the lane the policy selects, not on one
+predicate's own value.
 
 **A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
 an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture

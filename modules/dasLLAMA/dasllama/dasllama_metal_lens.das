@@ -11,6 +11,7 @@ require daslib/templates_boost
 require daslib/rtti
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
+require daslib/ast_cursor   // name_column - the whole-identifier read of a params= name in the grid/tg/requires/@span specs
 require das_metal   // nolint:STYLE030 — MetalBuffer/MetalComputeEncoder are referenced only inside qmacro_type(type<...>), which STYLE030 can't see; the require is load-bearing for macro-time type resolution
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — @role's read/write axis is DERIVED
 
@@ -346,6 +347,7 @@ class MetalDispatch : AstStructureAnnotation {
         var requires = find_arg(args, "requires") ?as tString ?? ""
         var kern = find_arg(args, "kernel") ?as tString ?? ""
         var kprefix = ""
+        var params_from_stamp = false
 
         let stamp = find_arg(args, "stamp") ?as tString ?? ""
         if (!empty(stamp)) {
@@ -362,6 +364,7 @@ class MetalDispatch : AstStructureAnnotation {
             fn_name = empty(fn_name) ? spec.name : fn_name
             pso = empty(pso) ? spec.pso : pso
             grid = empty(grid) ? spec.grid : grid
+            params_from_stamp = empty(params)
             params = empty(params) ? spec.params : params
             requires = empty(requires) ? spec.requires : requires
             kprefix = spec.kernel_prefix
@@ -657,6 +660,21 @@ class MetalDispatch : AstStructureAnnotation {
                     return false
                 }
                 fn.arguments |> emplace_new <| new Variable(at = at, name := "{strip(nt[0])}", _type = const_t(pt))
+            }
+            if (!params_from_stamp) {   //! a stamp's params are its family's shared builder signature - a form reading fewer is not refused
+                let readers = build_string() $(var w) {
+                    w |> write("{grid} {tgs} {requires}")
+                    for (bf in bufs) {
+                        w |> write(" {bf.rng}")
+                    }
+                }
+                for (p in split(params, ",")) {
+                    let pname = strip(split(p, ":")[0])
+                    if (name_column(readers, pname, -1) < 0) {
+                        errors := "[metal_dispatch] {fn_name}: param '{pname}' is read by no grid=, tg=, requires= or @span - drop it from params= and from every call site"
+                        return false
+                    }
+                }
             }
         }
         fn.body = make_expression_block(body)

@@ -8,6 +8,7 @@ module gltf_gl shared
 
 require gltf/gltf_types
 require opengl/opengl_boost public
+require opengl/gl_binding_cache
 require daslib/safe_addr
 require stbimage
 require math
@@ -261,18 +262,27 @@ def gltf_gl_resolve_tex(model : GltfGlModel; texIndex : int; fallback : uint) : 
     return h != 0u ? h : fallback
 }
 
+var private gltf_primitive_draw_count = 0ul
+def gltf_gl_draw_count() : uint64 {
+    //! Cumulative indexed primitive submissions; compare snapshots around a render scope.
+    //! Shared meshes count on every submission; filtered primitives do not count.
+    return gltf_primitive_draw_count
+}
+
 //! Bind a primitive's VAO and issue its indexed draw. The caller binds the program, uniforms and
 //! textures first (gltf_pbr does this per node/material).
 def gltf_gl_draw_primitive(glp : GltfGlPrimitive) {
-    glBindVertexArray(glp.vao)
-    if ((glp.missingAttributes & GLTF_GL_ATTR_TANGENT) != 0u) { glVertexAttrib4f(2u, 0.0, 0.0, 0.0, 1.0) }
-    if ((glp.missingAttributes & GLTF_GL_ATTR_UV0) != 0u) { glVertexAttrib4f(3u, 0.0, 0.0, 0.0, 1.0) }
-    if ((glp.missingAttributes & GLTF_GL_ATTR_UV1) != 0u) { glVertexAttrib4f(4u, 0.0, 0.0, 0.0, 1.0) }
-    if ((glp.missingAttributes & GLTF_GL_ATTR_COLOR0) != 0u) { glVertexAttrib4f(5u, 1.0, 1.0, 1.0, 1.0) }
-    if ((glp.missingAttributes & GLTF_GL_ATTR_JOINTS0) != 0u) { glVertexAttrib4f(6u, 0.0, 0.0, 0.0, 0.0) }
-    if ((glp.missingAttributes & GLTF_GL_ATTR_WEIGHTS0) != 0u) { glVertexAttrib4f(7u, 0.0, 0.0, 0.0, 0.0) }
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glp.ebo)
+    gl_bind_vertex_array_filtered(glp.vao)
+    if ((glp.missingAttributes & GLTF_GL_ATTR_TANGENT) != 0u) { gl_vertex_constant_filtered(2u, float4(0.0, 0.0, 0.0, 1.0)) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_UV0) != 0u) { gl_vertex_constant_filtered(3u, float4(0.0, 0.0, 0.0, 1.0)) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_UV1) != 0u) { gl_vertex_constant_filtered(4u, float4(0.0, 0.0, 0.0, 1.0)) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_COLOR0) != 0u) { gl_vertex_constant_filtered(5u, float4(1.0, 1.0, 1.0, 1.0)) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_JOINTS0) != 0u) { gl_vertex_constant_filtered(6u, float4(0.0, 0.0, 0.0, 0.0)) }
+    if ((glp.missingAttributes & GLTF_GL_ATTR_WEIGHTS0) != 0u) { gl_vertex_constant_filtered(7u, float4(0.0, 0.0, 0.0, 0.0)) }
+    gl_bind_element_buffer_filtered(glp.ebo)
     glDrawElements(glp.mode, glp.indexCount, glp.indexType == 0u ? GL_UNSIGNED_INT : glp.indexType, null)
+    gl_binding_vertex_arrays_drawn(~glp.missingAttributes)
+    gltf_primitive_draw_count++
 }
 
 def finalize(var model : GltfGlModel) {

@@ -9,7 +9,7 @@ options no_unused_function_arguments = false
 // textureCompare(), which has NO GL builtin -- the emitter rewrites it to texture(s, vec3(uv, ref))).
 //
 // A sampler emission test needs @uniform samplers, whose generated <shader>_bind_uniform calls
-// bind_sampler_* / glGetUniformLocation / glUniformAny. The GL bind codegen emits those by BARE
+// bind_sampler_* / glUniformBound. The GL bind codegen emits those by BARE
 // (unqualified) name, so the local dummy stubs below resolve them -- keeping this suite free of
 // opengl/opengl_boost and its GL-runtime AOT module surface, exactly like the rest of tests/glsl.
 // The test asserts only the emitted GLSL string (not the host bind), so the dummies are inert
@@ -24,8 +24,7 @@ require strings
 [unused_argument(unit, tex)] def bind_sampler_cube(unit : int; tex : uint) {}
 [unused_argument(unit, tex)] def bind_sampler_2d_array(unit : int; tex : uint) {}
 [unused_argument(unit, tex)] def bind_sampler_2d_shadow(unit : int; tex : uint) {}
-[unused_argument(program, name)] def glGetUniformLocation(program : uint; name : string) : int { return 0 }
-[unused_argument(location, value)] def glUniformAny(location : int; value : int) {}
+[unused_argument(program, name, value)] def glUniformBound(program : uint; name : string; value : int) {}
 
 var @in @location tx_pos : float2
 var @inout tx_uv : float2

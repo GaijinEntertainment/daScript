@@ -343,7 +343,9 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `heap_allocation_stats` - Returns heap allocation statistics as a `urange64`, where the `x` component is total bytes allocated and the `y` component is total bytes freed.
 - `heap_bytes_allocated` - Returns the number of bytes currently in use on the heap (allocated minus freed), not counting reserved but unused memory.
 - `heap_collect` - Triggers garbage collection on the context heap; when `string_heap` is `true` the string heap is also collected, and when `validate` is `true` additional validation checks are performed.
+- `heap_collect_if_needed` - Runs the current context's pressure-based collection policy and returns `true` when it performs a collection.
 - `heap_depth` - Returns the number of generations (depth of the allocation chain) in the context's regular heap.
+- `heap_operation_counts` - Returns explicit free and reallocation counts as `urange64(frees, reallocations)`.
 - `heap_report` - Prints a diagnostic report of current heap usage and allocation statistics to the output log.
 - `heap_total_allocated` - Total bytes the context's value heap has reserved from the OS (aligned), including currently-free space.
 - `max_unreserved_size` - Returns the context's `max_unreserved_size` limit in bytes: an array `resize` that has to grow past this many bytes without a prior `reserve` panics.
@@ -559,10 +561,16 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 ### GC
 
 - `gc_active_root_count` - Returns the number of active GC roots across all threads.
+- `gc_allocation_budget` - Returns the current per-context collection pressure budgets as `urange64(heap_bytes, string_bytes)`.
+- `gc_collection_stats` - Returns completed collection count and cumulative collection time as `urange64(collections, microseconds)` for the current context.
+- `gc_last_collection_tick` - Returns the monotonic tick recorded when the current context's last collection finished, or zero before its first collection.
+- `gc_pause_stats` - Returns the last and longest collection durations as `urange64(last_microseconds, peak_microseconds)` for the current context.
+- `gc_reclaimed_stats` - Returns cumulative reclaimed bytes as `urange64(heap_bytes, string_bytes)` for the current context.
 - `gc_thread_root_count` - Returns the number of GC roots on the current thread.
 - `gc_thread_root_report` - Prints a summary report of GC roots on the current thread to the log.
 - `gc_thread_root_report_detailed` - Prints a detailed report of GC roots and their nodes on the current thread to the log.
 - `gc_total_id` - Returns the total number of GC node IDs allocated since program start.
+- `set_gc_allocation_budget` - Sets positive per-context allocation-growth budgets for pressure-based heap and string-heap collection without resetting the current baselines.
 
 ## math
 
@@ -2380,6 +2388,7 @@ Module strudel_player
 ### Structures
 
 - `AudioChunk`
+- `StrudelDiagnostics`
 
 ### Lifecycle
 
@@ -2447,6 +2456,7 @@ Module strudel_player
 - `strudel_debug_output_peak` - Log the peak amplitude of each track's scheduler output (debug helper).
 - `strudel_debug_sample_peaks` - Log the peak amplitude of every loaded sample in the bank (debug helper).
 - `strudel_debug_voices` - Log the number of active sample/oscillator voices on each track (debug helper).
+- `strudel_get_diagnostics` - Returns a read-only producer/consumer telemetry snapshot; threaded playback reads it from the separate diagnostics `SeqBox`.
 - `strudel_get_worker_heap_bytes` - The playback worker's heap, as of its last tick; 0 in main-thread mode, where the caller's own heap is the one in play.
 - `strudel_reset_memory_baseline` - Reset memory-tracking baseline to the current heap state.
 
@@ -3030,6 +3040,7 @@ Backend-neutral glTF preprocessing that packs and optionally encodes geometry, c
 
 - `load_and_process_gltf` - Load an existing processed file by extension, otherwise parse and process a source glTF.
 - `load_processed` - Load and validate a `.das_glb` binary or split `.das_gltf` manifest.
+- `prepare_processed_catalog` - Reject partial updates across format versions; a full source-tree conversion starts a fresh catalog.
 - `processed_valid` - Check serialized version, size limits, packed strides and raw byte counts, compressed textures, and scene references.
 - `save_processed` - Save a validated asset as one `.das_glb` binary or as a `.das_gltf` manifest plus geometry and texture files.
 
@@ -3211,6 +3222,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `gpu_device_session_ctx` - The positions one device-home session holds - the armed driver's per-region context.
 - `gpu_device_session_dtype` - The K/V codec a device-home session must carry: the armed driver's.
 - `gpu_device_sessions` - How many DEVICE-HOME sessions (`create_device_session`) the installed model serves at once: the armed driver's region count, 0 when the model is not served whole from the device.
+- `gpu_dn_room` - Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once: a scheduler names its stream count before the first prefill, so no stream's deltanet state evicts under the batched step it rides.
 - `gpu_resident_decline` - Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with the remedy where one exists), or why it was never attempted.
 - `set_gpu_ctx_max` - Cap the whole-model GPU driver's K/V context at `n` positions per region for the models loaded next (0 lifts it): a server's `ctx`.
 - `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.

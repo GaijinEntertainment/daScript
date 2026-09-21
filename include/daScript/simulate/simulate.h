@@ -839,6 +839,12 @@ namespace das
         bool                            showArgumentsOnException = false;
         bool                            instrumentAllocations = false;
         bool                            gcEnabled = false;
+        uint64_t gcCollections = 0, gcTotalUsec = 0, gcLastUsec = 0, gcPeakUsec = 0;
+        uint64_t gcHeapReclaimed = 0, gcStringReclaimed = 0;
+        int64_t gcLastTick = 0;
+        bool gcPressureInitialized = false;
+        uint64_t gcHeapBaseline = 0, gcStringBaseline = 0;
+        uint64_t gcHeapBudget = 8ull << 20, gcStringBudget = 8ull << 20;
         bool                            gcLogTime = false;          // log per-phase heap GC timing
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory (unless the container's scratch flag or a scratch_* one-shot opts out)

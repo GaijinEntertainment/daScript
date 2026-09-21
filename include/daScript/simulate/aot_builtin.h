@@ -57,6 +57,14 @@ namespace das {
     DAS_API void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API void heap_stats ( Context & context, uint64_t * bytes );
+    DAS_API bool heap_collect_if_needed(Context * context, LineInfoArg * at);
+    DAS_API urange64 heap_operation_counts(bool strings, Context * context);
+    DAS_API urange64 gc_collection_stats(Context * context);
+    DAS_API urange64 gc_pause_stats(Context * context);
+    DAS_API urange64 gc_reclaimed_stats(Context * context);
+    DAS_API int64_t gc_last_collection_tick(Context * context);
+    DAS_API urange64 gc_allocation_budget(Context * context);
+    DAS_API void set_gc_allocation_budget(uint64_t heapBytes, uint64_t stringBytes, Context * context, LineInfoArg * at);
     DAS_API urange64 heap_allocation_stats ( Context * context );
     DAS_API uint64_t heap_allocation_count ( Context * context );
     DAS_API urange64 string_heap_allocation_stats ( Context * context );

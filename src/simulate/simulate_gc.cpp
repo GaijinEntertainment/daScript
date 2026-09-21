@@ -934,15 +934,21 @@ namespace das
 
     bool Context::collectHeapIfMostlyFree ( LineInfo * at ) {
         if ( !persistent || !gcEnabled ) return false;
-        uint64_t sUsed = stringHeap->bytesAllocated();
-        uint64_t sTotal = stringHeap->totalAlignedMemoryAllocated();
-        if ( sTotal > 0 && sUsed * 3 < sTotal * 2 ) {
-            collectHeap(at, true, false);
-            return true;
+        const uint64_t sUsed = stringHeap->bytesAllocated();
+        const uint64_t hUsed = heap->bytesAllocated();
+        const bool collectStrings = !stringHeap->isTrackingAllocations();
+        bool collect = false;
+        if (!gcPressureInitialized) {
+            const uint64_t sTotal = stringHeap->totalAlignedMemoryAllocated();
+            const uint64_t hTotal = heap->totalAlignedMemoryAllocated();
+            collect = (collectStrings && sTotal && sUsed < sTotal - sTotal / 3)
+                || (hTotal && hUsed < hTotal / 3);
+            gcPressureInitialized = true;
+            gcHeapBaseline = hUsed; gcStringBaseline = sUsed;
         }
-        uint64_t hUsed = heap->bytesAllocated();
-        uint64_t hTotal = heap->totalAlignedMemoryAllocated();
-        if ( hTotal > 0 && hUsed * 3 < hTotal ) {
+        collect |= (hUsed > gcHeapBaseline && hUsed - gcHeapBaseline >= gcHeapBudget)
+            || (collectStrings && sUsed > gcStringBaseline && sUsed - gcStringBaseline >= gcStringBudget);
+        if (collect) {
             collectHeap(at, true, false);
             return true;
         }
@@ -978,6 +984,9 @@ namespace das
             }
         }
         GcGuard guard(this);
+        const int64_t collectionStarted = ref_time_ticks();
+        const uint64_t heapBefore = heap->bytesAllocated();
+        const uint64_t stringsBefore = stringHeap->bytesAllocated();
         // clean up, so that all small allocations are marked as 'free'
         stringDisposeQue = nullptr;
         // When allocation tracking is on, entries in MemoryModel::bigStuffComment
@@ -1085,6 +1094,17 @@ namespace das
                 (unsigned long long) heap->bytesAllocated());
             fflush(stdout);
         }
+        const uint64_t heapAfter = heap->bytesAllocated();
+        const uint64_t stringsAfter = stringHeap->bytesAllocated();
+        ++gcCollections;
+        gcLastUsec = uint64_t(get_time_usec(collectionStarted));
+        gcTotalUsec += gcLastUsec; gcPeakUsec = max(gcPeakUsec, gcLastUsec);
+        gcLastTick = ref_time_ticks();
+        gcHeapReclaimed += heapBefore > heapAfter ? heapBefore - heapAfter : 0;
+        gcStringReclaimed += stringsBefore > stringsAfter ? stringsBefore - stringsAfter : 0;
+        gcPressureInitialized = true;
+        gcHeapBaseline = heapAfter;
+        if (sheap) gcStringBaseline = stringsAfter;
         if ( !walker.failed.empty() ) {
             reportAnyHeap(at, sheap, true, true, true);
             TextWriter tw;

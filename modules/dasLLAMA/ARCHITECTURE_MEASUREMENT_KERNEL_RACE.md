@@ -37,7 +37,9 @@ Even a race meeting all three can be structurally blind. `kq_gemv_iq2xxs_f4` is 
 case: every isolated regime crowns the twin and the served decode graph loses 8.6% with it,
 because the effect is mixed-stream occupancy - it exists only when the GEMV runs beside the
 rest of the token step. That crown is therefore NOT auto-raced. It is minted on the real shapes
-by `harness/tune_kernels.das`'s serving confirm: two temporary manifests differing only in
+by `harness/tune_kernels.das`'s serving confirm (its `benches` list keeps `dot_q8q8_laneq4x4`
+last, since that bench pins one matmul backend for the rest of the process - `harness/REVIEW.das`'s
+`check_last_bench_row` holds the order, licensing no names): two temporary manifests differing only in
 `runtime.metal_tensor` membership, each served to
 `benchmarks/lcpp_bench.das --for-debug-purposes --ngl 99 -p 32 -n 128 -r 3` under
 `DAS_TUNE_MANIFEST`, the tg128 line the verdict. Both arms carry an EMPTY `kernels` section, so

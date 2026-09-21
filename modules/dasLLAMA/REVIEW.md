@@ -94,11 +94,6 @@ global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-l
 kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
 count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
-**A `[test]` file that requires any `dasllama/*` module, sits under `modules/dasLLAMA/` outside
-`tests/` (beside this file), and requires no file of its own folder by bare same-dir name is a
-defect - move it into `tests/`.** One that does require a same-folder file stays, and
-`tests/REVIEW.md`'s ledger rule owns it.
-
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
@@ -213,15 +208,17 @@ lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
 `require ... public` that re-exports an engine module OUT of a file carrying this option,
 beyond what that consumer's ruled charter grants, breaks this rule too.
 
-**An edit that stops a `REVIEW.das` (beside this file) check firing without fixing what it flagged
-is a defect:** dropping a check, rewriting a finding text so it no longer names what failed, adding
-a name to a check's licensed set - the names that check does not flag - or re-stamping a pinned
+**An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
+flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
+reading - rewriting a finding text so it no longer names what failed, adding a name to a check's licensed
+set - the names that check does not flag - or re-stamping a pinned
 hash, count or list, where that check's own finding text does not sanction the addition or the
 re-stamp; the gate itself says what it enforces.
 
-**A new `REVIEW.das` check, or a check whose licensed set gains a name, names in its finding text
-the rule it enforces and ships its line in the companion section that owns the mechanism the check
-guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The
+**A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
+names in its finding text the rule it enforces and ships its line in the `ARCHITECTURE_*.md`
+companion section carrying the charter of the feature the check guards - not the file its sites
+sit in; never `ARCHITECTURE.md` - in the same change.** The
 line names the check and the names it licenses; when the check licenses no names, the line says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language - that
@@ -252,9 +249,6 @@ adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
 the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it emits but the
 registry does not, `tests/test_env_registry.das` catches.
-
-**Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
-by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
 **A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter
 line does not cover, keeps the charters true in the same change - in an `ARCHITECTURE_*.md`

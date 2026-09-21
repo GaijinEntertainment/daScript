@@ -157,3 +157,11 @@ def test_shadow_receiver_plane_pcf(t : T?) {
     t |> success(old_shadowed > 0, "fixture exposes the old constant-reference acne")
     t |> equal(gltf_shadow_receiver_gradient(float3(0.0), float3(0.0)), float2(0.0))
 }
+
+[test]
+def test_shadow_edge_filter_energy(t : T?) {
+    t |> equal(gltf_shadow_edge_blend(1.0, 1.0, 1.0), 1.0)
+    t |> equal(gltf_shadow_edge_blend(0.0, 0.0, 0.0), 0.0)
+    t |> equal(gltf_shadow_edge_blend(1.0, 0.0, 0.0), 0.5)
+    t |> equal(gltf_shadow_edge_blend(0.0, 1.0, 1.0), 0.5)
+}

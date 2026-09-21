@@ -349,3 +349,52 @@ See also
 * ``skills/memory_leak_detection.md`` --- the compact version of this
   guide intended as a Claude reference.
 * ``skills/jobque_debugging.md`` --- full workflow for mechanism #5.
+
+Frame-boundary collection and lightweight counters
+==================================================
+
+Collection is a safety net for unreachable data, not a substitute for explicit
+ownership. Use ``delete`` / ``inscope`` for owned containers and reuse storage
+where appropriate. Fixed-size loop inputs can use ``fixed_array(...)`` rather
+than allocating an anonymous dynamic array.
+
+``Context::collectHeapIfMostlyFree`` retains an initial opportunistic cleanup,
+then requires fresh pressure above the live-plus-uncollected byte counts recorded
+at the last collection. Reserved capacity alone cannot repeatedly trigger it.
+Growth in either heap can trigger collection even when the old free-space ratio
+is not met. Defaults are 8 MiB additional heap data or 8 MiB additional strings.
+Explicitly freed storage does not accumulate pressure. This is not a timer:
+applications with little garbage need not collect at all between scene changes.
+
+The browser lifecycle calls the policy after ``update()``; it does not run the
+script's ``main``. The native live host and standalone ``maybe_collect_gc`` use
+the same policy. Explicit ``heap_collect`` remains unconditional and refreshes
+the pressure baselines for the heaps actually collected. Heap-only collection
+does not discard pending string pressure. Allocation-tracking mode suppresses
+automatic string pressure triggers because that mode intentionally retains strings
+used by diagnostic metadata. ``set_gc_allocation_budget(heap_bytes, string_bytes)``
+sets positive per-context byte budgets without resetting those baselines;
+``gc_allocation_budget()`` returns them as ``urange64(heap, strings)``.
+
+These reads allocate no script data and describe the current context only:
+
+* ``heap_allocation_count()`` / ``string_heap_allocation_count()``: cumulative
+  allocation operations, including reallocations.
+* ``heap_allocation_stats()`` / ``string_heap_allocation_stats()``: requested
+  bytes added and explicitly released. Resizes add only positive growth to the
+  first counter; shrinking adds released bytes to the second. GC is separate.
+* ``heap_operation_counts(strings)``: explicit free calls and reallocations,
+  as ``urange64(frees, reallocations)``. Reallocating a null pointer counts as
+  an allocation, not a resize. Subtract resizes from total operations for the
+  allocation count. These counters do not include allocator-internal OS calls.
+* ``gc_collection_stats()``: completed sweep count and cumulative microseconds.
+* ``gc_pause_stats()``: last and maximum collection duration in microseconds.
+* ``gc_reclaimed_stats()``: cumulative reclaimed heap and string bytes.
+* ``gc_last_collection_tick()``: monotonic tick at the last collection's end,
+  or zero before any collection; use ``get_time_usec(tick)`` for its age.
+
+Snapshot counters at scope boundaries to obtain exclusive or inclusive deltas.
+Keep heap and string measurements separate; live-byte changes include alignment
+and GC, so they need not equal requested allocations minus explicit releases.
+Keep telemetry histories bounded and serialize reports only on request.
+Worker contexts have independent heaps and must be sampled on their own threads.

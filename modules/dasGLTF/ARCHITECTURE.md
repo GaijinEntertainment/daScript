@@ -13,6 +13,19 @@ coordinates reconstruct the geometric receiver plane independently of shading no
 Filtering interpolates depth-comparison results, rather than raw depths: a 4-by-4
 nearest-sample footprint combines the weights of a 3-by-3 bilinear comparison kernel.
 
+Shadow declarations, receiver correction and directional/local filtering live in
+`gltf_shadows.das`, re-exported by `gltf_pbr`. The default remains weighted PCF.
+`GltfPbrRenderer.shadowFilter = 1` selects seven hardware bilinear comparison
+queries: four diagonal edge estimates, the center, and two edge-directed samples.
+The result weights center by one half and each directional sample by one quarter,
+preserving fully lit and fully shadowed regions.
+
+Comparison samplers use texture units 10 and 11, separately from raw depth units
+6 and 9. Each renderer owns a comparison sampler and a one-pixel lit fallback;
+these keep sampler types valid when a shadow source is disabled. The renderer owns
+sampler bindings on those two units during its draw and clears them afterward.
+Local samples clamp within each atlas face before atlas-coordinate conversion.
+
 ## 3. Processed vertex portability {#processed-vertex-portability}
 
 UV packing uses scalar float16 conversion so CPU processing does not depend on
@@ -42,3 +55,20 @@ stage reconstructs the first weight as one minus the other three and skips trail
 zero influences with nested branches. Bone matrices retain their existing precision
 and the renderer's existing palette-size limit. Other backends' float skinning math
 is unchanged. Old processed files must be regenerated rather than reinterpreted.
+
+## Optional surface motion output
+
+`gltf_motion.das` captures a compact previous rendered pose (node matrices and skin
+palettes), independent of mesh/material ownership. `gltf_pbr_render_normals` can
+optionally write a third MRT attachment containing unjittered previous-minus-current
+UV motion, suitable for RG16F. `motion_kind` selects static/camera reconstruction
+(sentinel 4), valid dynamic pose (1), or invalid history (sentinel 2). The caller owns
+history lifetime, jitter convention, framebuffer setup and capability checks. Missing
+node/skin history and incomplete palettes emit the invalid-history sentinel per node.
+
+The motion vertex variant reuses current-pose skinning and adds previous-pose
+skinning with the same byte-weight reconstruction. Ordinary surface/depth/colour
+variants have no previous-pose uniforms or binding work. Optional shader creation is
+lazy. Retain at least 544 vertex-uniform vectors for the two 64-joint palettes and
+remaining transforms. Tests cover rigid/root and skeletal pose independence as well
+as the existing packed-skin attribute contracts.

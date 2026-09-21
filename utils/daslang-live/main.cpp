@@ -165,20 +165,7 @@ static double get_time_sec() {
 // --- GC ---
 
 static void maybe_collect_gc(Context * ctx) {
-    // collectHeap with stringHeap=true marks both heaps.
-    // Check string heap first (fills faster, lower threshold).
-    auto sUsed = ctx->stringHeap->bytesAllocated();
-    auto sTotal = ctx->stringHeap->totalAlignedMemoryAllocated();
-    if (sTotal > 0 && sUsed * 3 < sTotal * 2) {  // >1/3 unused
-        ctx->collectHeap(nullptr, /*stringHeap*/true, /*validate*/false);
-        return;
-    }
-    // Regular heap — higher threshold
-    auto hUsed = ctx->heap->bytesAllocated();
-    auto hTotal = ctx->heap->totalAlignedMemoryAllocated();
-    if (hTotal > 0 && hUsed * 3 < hTotal) {  // >2/3 unused
-        ctx->collectHeap(nullptr, /*stringHeap*/true, /*validate*/false);
-    }
+    ctx->collectHeapIfMostlyFree();
 }
 
 // --- Agent ticking ---

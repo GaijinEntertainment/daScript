@@ -672,3 +672,26 @@ one buffer, a per-row table like the KV route table (`brt`) naming each row's sl
 five kernels taking the row from that table - one dispatch a stage over every row. The CPU
 batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
 is armed); the same rows shape applies there.
+
+## 23. The E4B batched row reads 0.90 of llama-batched-bench where the E2B reads 0.95
+
+The M5 board (`performance/records/m5.json`, the `tg128@4` cells of the Metal leg - the E4B das
+row at engine sha cc969d961, the E2B das row at 60b736faa): gemma-4-E4B Q8 259.6 against the
+reference's 290.1 tok/s, while the E2B - the same
+E-series batch arm, PLE rows form, shared-KV layers Q-only - reads 454.2 against 479.7 (0.95). The
+flat rows hold on both files (E4B tg128 90.0 vs 81.2). Whatever the E4B pays per step it pays
+only at four rows: the E4B is the deeper and wider of the two, so the candidates are the PLE
+gather's per-row cost and the attention split's head-width gate, both readable off
+`lcpp_bench --prof`'s stage report after the batched row. The pass rule for a batched arm is
+0.95 of `llama-batched-bench` (`ARCHITECTURE_MEASUREMENT.md`); the E2B sits on the bar and the
+E4B under it.
+
+## 24. The dense 24B batched row loses at four rows what its flat row wins
+
+The same board: Mistral-Small-3.1-24B Q4_K_M flat tg128 38.3 against llama.cpp's 36.6 (1.05),
+batched tg128@4 72.4 against 77.2 (0.94). A dense K-quant file at 24B is weight-bound at one row
+and every step is one weight pass at four, so a batched deficit beside a flat lead is per-row
+work that does not amortize: the K-quant rows GEMM's tile at ntok 4, or the four-row attention
+over the deepest dense KV on the board. Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07
+and 1.09) clears the 0.95 bar, so the width or the depth of this one is the axis to bisect with
+`lcpp_bench --prof` on the batched row.

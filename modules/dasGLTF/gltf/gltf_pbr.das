@@ -7,6 +7,8 @@ module gltf_pbr shared
 
 require gltf/gltf_types
 require gltf/gltf_scene
+require gltf/gltf_motion public
+require gltf/gltf_shadows public
 require gltf/gltf_pbr_common public
 require gltf/gltf_gl public
 require opengl/opengl_boost public
@@ -34,20 +36,25 @@ var @in @location = 3 a_uv0      : float2
 var @in @location = 6 a_joints0  : float4   // joint indices (decoded to float at parse time)
 var @in @location = 7 a_weights0 : float4   // per-joint blend weights (sum to 1)
 
-var @uniform u_model    : float4x4
+var @uniform u_model : float4x4
 var @uniform u_viewProj : float4x4
 var @uniform u_skinned  : float                    // 1 = blend the joint palette, 0 = rigid (use u_model)
 var @uniform u_joints   : float4x4[GLTF_MAX_JOINTS] // world-space skinning palette (joint.world * inverseBind)
 var @uniform u_normal_matrix : float3x3            // inverse-transpose of u_model's 3x3 (rigid-path normals)
 
-var @inout v_world_pos     : float3
-var @inout v_world_normal  : float3
+var @inout v_world_pos : float3
+var @inout v_world_normal : float3
 var @inout v_world_tangent : float3
-var @inout v_tangent_w     : float
-var @inout v_uv0           : float2
-
-[vertex_program]
-def gltf_pbr_vs {
+var @inout v_tangent_w : float
+var @inout v_uv0 : float2
+var @uniform u_previous_model : float4x4
+var @uniform u_previous_vp : float4x4
+var @uniform u_previous_joints : float4x4[GLTF_MAX_JOINTS]
+var @uniform u_motion_jitter : float2
+var @uniform u_motion_kind : int
+var @inout v_motion_current : float4
+var @inout v_motion_previous : float4
+def private gltf_pbr_vertex {
     var world = float4(0.0, 0.0, 0.0, 1.0)
     var wnormal = float3(0.0, 0.0, 0.0)
     var wtangent = float3(0.0, 0.0, 0.0)
@@ -93,28 +100,47 @@ def gltf_pbr_vs {
     v_uv0 = a_uv0
     gl_Position = u_viewProj * world
 }
+[vertex_program]
+def gltf_pbr_vs {gltf_pbr_vertex()}
+[vertex_program]
+def gltf_pbr_motion_vs {
+    gltf_pbr_vertex()
+    v_motion_current = gl_Position; v_motion_current.xy -= u_motion_jitter * gl_Position.w
+    var old_world = u_previous_model * float4(a_position, 1.0)
+    if (u_skinned > .5 && u_motion_kind == 1){
+        let w = float4(1.0 - a_weights0.y - a_weights0.z - a_weights0.w, a_weights0.yzw)
+        let p = float4(a_position, 1.0)
+        old_world = u_previous_joints[clamp(int(a_joints0.x), 0, GLTF_MAX_JOINTS - 1)] * p * w.x
+        if (w.y > 0.0){old_world += u_previous_joints[clamp(int(a_joints0.y), 0, GLTF_MAX_JOINTS - 1)] * p * w.y
+            if (w.z > 0.0){old_world += u_previous_joints[clamp(int(a_joints0.z), 0, GLTF_MAX_JOINTS - 1)] * p * w.z
+                if (w.w > 0.0){old_world += u_previous_joints[clamp(int(a_joints0.w), 0, GLTF_MAX_JOINTS - 1)] * p * w.w}
+            }
+        }
+    }
+    v_motion_previous = u_previous_vp * old_world
+}
 
 // ===== fragment stage =====
 var @uniform u_fog_color : float3
 var @uniform u_fog_params : float4
 var @uniform u_fog_falloff : float
 var @uniform u_background_tint : float4
-var @uniform u_cam_pos     : float3
+var @uniform u_cam_pos : float3
 var @uniform u_light_dir   : float3   // direction TOWARD the light, normalized
 var @uniform u_light_color : float3   // radiance (color * intensity)
 var @uniform u_ambient     : float3   // constant ambient irradiance
 
-var @uniform u_base_color_factor  : float4
-var @uniform u_metallic_factor    : float
+var @uniform u_base_color_factor : float4
+var @uniform u_metallic_factor : float
 var @uniform u_material_scale : float2
 var @uniform u_material_wetness : float
 var @uniform u_normal_roughness : float
 var @uniform u_reflection_amount : float
-var @uniform u_roughness_factor   : float
-var @uniform u_emissive_factor    : float3
-var @uniform u_normal_scale       : float
+var @uniform u_roughness_factor : float
+var @uniform u_emissive_factor : float3
+var @uniform u_normal_scale : float
 var @uniform u_occlusion_strength : float
-var @uniform u_alpha_cutoff       : float
+var @uniform u_alpha_cutoff : float
 var @uniform u_alpha_mode         : float   // 0 OPAQUE, 1 MASK, 2 BLEND
 
 // base-color / emissive are sRGB textures (hardware decode -> linear); the rest are linear.
@@ -125,78 +151,10 @@ var @uniform @stage = 3 u_occlusion_tex   : sampler2D
 var @uniform @stage = 4 u_emissive_tex    : sampler2D
 // equirect HDR environment (linear radiance, mipmapped); u_env_amount = 0 -> flat ambient
 var @uniform @stage = 5 u_env_tex         : sampler2D
-var @uniform u_env_amount  : float
+var @uniform u_env_amount : float
 var @uniform u_env_max_lod : float
-
-//! Regular depth sampling permits a color fallback while shadows are disabled.
-var @uniform @stage = 6 u_shadow_tex : sampler2D
-var @uniform u_shadow_vp : float4x4
-var @uniform u_shadow_texel : float2
-var @uniform u_shadow_bias : float
-var @uniform u_shadow_strength : float
-
-let GLTF_MAX_POINT_LIGHTS = 8
-var @uniform @stage = 9 u_local_shadow_tex : sampler2D
-var @uniform u_local_shadow_size : float2
-var @uniform u_point_shadow : float4[GLTF_MAX_POINT_LIGHTS]
-var @uniform u_point_count : int
-var @uniform u_point_position : float4[GLTF_MAX_POINT_LIGHTS]
-var @uniform u_point_color : float4[GLTF_MAX_POINT_LIGHTS]
-
-var @out o_color : float4
-
-[arch(at="../ARCHITECTURE.md#directional-shadow-filtering")]
-def private shadow_visibility(world : float3; normal : float3) : float {
-    if (u_shadow_strength <= 0.0) { return 1.0 }
-    let light_pos = u_shadow_vp * float4(world, 1.0)
-    let p = light_pos.xyz / light_pos.w * 0.5 + float3(0.5)
-    let gradient = gltf_shadow_receiver_gradient(dFdx(p), dFdy(p))
-    if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z <= 0.0 || p.z >= 1.0) { return 1.0 }
-    let bias = u_shadow_bias * (1.0 + 3.0 * (1.0 - max(dot(normal, normalize(u_light_dir)), 0.0)))
-    let texel_pos = p.xy / u_shadow_texel - float2(0.5)
-    let base = floor(texel_pos)
-    let fraction = texel_pos - base
-    let wx = gltf_shadow_pcf_weights(fraction.x)
-    let wy = gltf_shadow_pcf_weights(fraction.y)
-    var visible = 0.0
-    for (y in range(4)) {
-        for (x in range(4)) {
-            let uv = (base + float2(float(x), float(y)) - float2(0.5)) * u_shadow_texel
-            let depth = texture(u_shadow_tex, uv).x
-            visible += (gltf_shadow_receiver_depth(p, uv, gradient, bias) <= depth ? 1.0 : 0.0) * wx[x] * wy[y]
-        }
-    }
-    return 1.0 - u_shadow_strength * (1.0 - visible)
-}
-
-def private point_shadow_visibility(index : int; world, normal : float3) : float {
-    let settings = u_point_shadow[index]
-    if (settings.x < 0.5 || settings.y <= 0.0){return 1.0}
-    let delta = world + normal * 0.008 - u_point_position[index].xyz
-    let a = abs(delta); var face = 0; var xy = float2(0.0); var distance = a.x
-    if (a.x >= a.y && a.x >= a.z){
-        face = delta.x >= 0.0 ? 0 : 1; xy = float2(delta.x >= 0.0 ? -delta.z : delta.z, -delta.y)
-    }elif (a.y >= a.z){
-        face = delta.y >= 0.0 ? 2 : 3; distance = a.y; xy = float2(delta.x, delta.y >= 0.0 ? delta.z : -delta.z)
-    }else{
-        face = delta.z >= 0.0 ? 4 : 5; distance = a.z; xy = float2(delta.z >= 0.0 ? delta.x : -delta.x, -delta.y)
-    }
-    let near = settings.z; let far = settings.w
-    let safe_distance = max(distance, 0.000001)
-    let p = float3(xy / safe_distance * 0.5 + float2(0.5), far / (far - near) - far * near / ((far - near) * safe_distance))
-    let gradient = gltf_shadow_receiver_gradient(dFdx(p), dFdy(p))
-    if (distance <= near || distance >= far){return 1.0}
-    let size = u_local_shadow_size.x; let base = floor(p.xy * size - float2(0.5)); let f = p.xy * size - float2(0.5) - base
-    let wx = gltf_shadow_pcf_weights(f.x); let wy = gltf_shadow_pcf_weights(f.y)
-    var visible = 0.0
-    for (y in range(4)){for (x in range(4)){
-        let uv = clamp((base + float2(float(x), float(y)) - float2(0.5)) / size, float2(0.5 / size), float2(1.0 - 0.5 / size))
-        let atlas = (uv + float2(float(face), settings.x - 1.0)) / float2(6.0, u_local_shadow_size.y)
-        let depth = texture(u_local_shadow_tex, atlas).x
-        visible += (gltf_shadow_receiver_depth(p, uv, gradient, 0.00015) <= depth ? 1.0 : 0.0) * wx[x] * wy[y]
-    }}
-    return 1.0 - settings.y * (1.0 - visible)
-}
+var @out @location = 0 o_color : float4
+var @out @location = 1 o_surface_material : float4
 
 [fragment_program]
 def gltf_pbr_depth_fs {
@@ -226,6 +184,26 @@ def gltf_pbr_normal_fs {
     o_color = float4(shade_normal(v_uv0) * 0.5 + float3(0.5), u_normal_roughness > .5 ? roughness : 1.0)
 }
 
+//! Combined opaque surface outputs: normals/roughness and albedo/metallic.
+[fragment_program]
+def gltf_pbr_surface_fs {
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
+    let mr = texture(u_metal_rough_tex, v_uv0)
+    o_color = float4(shade_normal(v_uv0) * .5 + float3(.5), gltf_surface_roughness(mr))
+    o_surface_material = float4(base.xyz, clamp(mr.z * u_metallic_factor * u_material_scale.y, 0.0, 1.0))
+}
+var @out @location = 2 o_surface_motion : float2
+//! Surface MRT with previous-minus-current, unjittered UV motion (RG16F).
+[fragment_program]
+def gltf_pbr_surface_motion_fs {
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
+    let mr = texture(u_metal_rough_tex, v_uv0)
+    o_color = float4(shade_normal(v_uv0) * .5 + float3(.5), u_normal_roughness > .5 ? gltf_surface_roughness(mr) : 1.0)
+    o_surface_material = float4(base.xyz, clamp(mr.z * u_metallic_factor * u_material_scale.y, 0.0, 1.0))
+    o_surface_motion = u_motion_kind == 0 ? float2(4.0) : (u_motion_kind == 1 && v_motion_previous.w > 0.0 ? (v_motion_previous.xy / v_motion_previous.w - v_motion_current.xy / v_motion_current.w) * .5 : float2(2.0))
+}
 [fragment_program]
 def gltf_pbr_material_fs {
     let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
@@ -272,7 +250,7 @@ def gltf_pbr_fs {
         if (i < u_point_count) {
             let delta = u_point_position[i].xyz - v_world_pos
             let distance = max(length(delta), 0.001)
-            let visibility = point_shadow_visibility(i, v_world_pos, n)
+            let visibility = gltf_point_shadow_visibility(i, v_world_pos, n)
             if (distance < u_point_position[i].w){
             let falloff = max(0.0, 1.0 - distance / max(u_point_position[i].w, 0.001))
             let radiance = u_point_color[i].xyz * (falloff * falloff / (1.0 + distance * distance)) * visibility
@@ -281,7 +259,7 @@ def gltf_pbr_fs {
         }
     }
     if (u_ssao_enabled > 0.5){ambient *= texture(u_ssao_tex, gl_FragCoord.xy * u_ssao_inverse_size).x}
-    let linear = ambient + direct * shadow_visibility(v_world_pos, n) + local_light + emissive
+    let linear = ambient + direct * gltf_shadow_visibility(v_world_pos, n, u_light_dir) + local_light + emissive
     // no sRGB default framebuffer -> encode linear -> sRGB (approximate 2.2 gamma)
     var out_rgb = gltf_srgb_encode(linear)
     let grey = dot(out_rgb, float3(0.299, 0.587, 0.114))
@@ -304,16 +282,19 @@ def gltf_pbr_silhouette_fs {
 
 [safe_when_uninitialized]
 struct GltfPbrRenderer {
+    shadowFilter : int
+    shadowComparison : GltfShadowComparison
     materialWetness : float
     materialScale : float2 = float2(1.0)
     reflectionAmount : float
-    materialProgram : uint
+    materialProgram, surfaceProgram : uint
     atmosphere : Atmosphere
     backgroundTint : float4
     program   : uint
     envTex    : uint     // mipmapped equirect HDR environment, 0 = none (flat ambient)
     envMaxLod : float
     silhouetteProgram : uint
+    motionProgram : uint
     normalProgram : uint
     aoTex : uint
     aoInverseSize : float2
@@ -371,17 +352,19 @@ def gltf_pbr_set_environment(var r : GltfPbrRenderer; tex : uint; max_lod : floa
 
 //! Compile + link the PBR program. Call with a current GL context; `delete` the renderer to release it.
 def gltf_pbr_create : GltfPbrRenderer {
-    var r = GltfPbrRenderer()
-    r.program = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_fs)
-    return r
+    return GltfPbrRenderer(program = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_fs), shadowComparison = gltf_shadow_comparison_create())
 }
 
 def finalize(var r : GltfPbrRenderer) {
+    delete r.shadowComparison
+    for (program in [r.program, r.depthProgram, r.silhouetteProgram, r.materialProgram, r.surfaceProgram, r.normalProgram, r.motionProgram]){gl_binding_forget_program(program)}
     if (r.program != 0u) {
         glDeleteProgram(r.program)
     }
     if (r.depthProgram != 0u) { glDeleteProgram(r.depthProgram) }
     if (r.silhouetteProgram != 0u) { glDeleteProgram(r.silhouetteProgram) }
+    if (r.motionProgram != 0u){glDeleteProgram(r.motionProgram)}
+    if (r.surfaceProgram != 0u){glDeleteProgram(r.surfaceProgram)}
     if (r.materialProgram != 0u){glDeleteProgram(r.materialProgram)}
     if (r.normalProgram != 0u) { glDeleteProgram(r.normalProgram) }
 }
@@ -401,18 +384,7 @@ def private bind_material(model : GltfGlModel; mat : GltfMaterial) {
     u_normal_tex := gltf_gl_resolve_tex(model, mat.normalTex, model.flatNormalTex)
     u_occlusion_tex := gltf_gl_resolve_tex(model, mat.occlusionTex, model.whiteTex)
     u_emissive_tex := gltf_gl_resolve_tex(model, mat.emissiveTex, model.whiteTex)
-    if (mat.doubleSided) {
-        glDisable(GL_CULL_FACE)
-    } else {
-        glEnable(GL_CULL_FACE)
-        glCullFace(GL_BACK)
-    }
-    if (mat.alphaMode == GltfAlphaMode.blend) {
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    } else {
-        glDisable(GL_BLEND)
-    }
+    gl_material_state_filtered(mat.doubleSided, mat.alphaMode == GltfAlphaMode.blend)
 }
 
 // Fill the joint-palette uniform for a skin (clamped to GLTF_MAX_JOINTS), pre-multiplied by the world-
@@ -430,9 +402,9 @@ def private bind_skin_palette(scene : GltfScene; skinIndex : int; root : float4x
     }
 }
 
-def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4) {
+def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4; var palette : int&) {
     if (node.skin >= 0 && node.skin < length(scene.skins)) {
-        bind_skin_palette(scene, node.skin, root)
+        if (!gl_binding_filter_active || palette != node.skin){bind_skin_palette(scene, node.skin, root); palette = node.skin}
         u_skinned = 1.0
         u_model = identity4x4()   // skinned path blends the (root-baked) palette; u_model is unused
         u_normal_matrix = identity3x3()   // unused in the skinned branch
@@ -449,11 +421,12 @@ def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4) {
 def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
                           root, light_vp : float4x4) {
     if (r.depthProgram == 0u) { r.depthProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_depth_fs) }
-    glUseProgram(r.depthProgram)
+    gl_use_program_filtered(r.depthProgram)
     u_viewProj = light_vp
+    var palette = -1
     for (node in scene.nodes) {
         if (node.mesh < 0 || node.mesh >= length(model.meshes)) { continue }
-        bind_node(scene, node, root)
+        bind_node(scene, node, root, palette)
         for (glp in model.meshes[node.mesh].primitives) {
             if (glp.material >= 0 && glp.material < length(scene.materials)) {
                 let mat = scene.materials[glp.material]
@@ -465,29 +438,58 @@ def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : 
             gltf_gl_draw_primitive(glp)
         }
     }
-    glUseProgram(0u)
+    gl_release_program()
+}
+
+def private bind_previous_pose(scene : GltfScene; node : GltfNode; node_index : int; previous : GltfMotionPose){
+    u_previous_model = node_index < length(previous.nodes) ? previous.nodes[node_index] : u_model
+    if (node.skin < 0 || node.skin >= length(previous.offsets) || node.skin >= length(scene.skins)){return }
+    let count = min(length(scene.skins[node.skin].joints), GLTF_MAX_JOINTS)
+    for (j in range(GLTF_MAX_JOINTS)){let index = previous.offsets[node.skin] + j; u_previous_joints[j] = j < count && index < length(previous.joints) ? previous.joints[index] : identity4x4()}
+}
+
+def private gltf_surface_program(var r : GltfPbrRenderer; material, surface, motion : bool) : uint {
+    if (motion){
+        if (r.motionProgram == 0u){r.motionProgram = create_shader_program(@@gltf_pbr_motion_vs, @@gltf_pbr_surface_motion_fs)}
+        return r.motionProgram
+    }
+    if (surface){
+        if (r.surfaceProgram == 0u){r.surfaceProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_surface_fs)}
+        return r.surfaceProgram
+    }
+    if (material){
+        if (r.materialProgram == 0u){r.materialProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_material_fs)}
+        return r.materialProgram
+    }
+    if (r.normalProgram == 0u){r.normalProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_normal_fs)}
+    return r.normalProgram
 }
 
 //! Opaque depth/normal prepass using the same skinning, material normals and alpha masks.
-def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root, vp : float4x4; pack_roughness : bool = false; material_buffer : bool = false) {
-    if (r.normalProgram == 0u){r.normalProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_normal_fs)}
-    if (material_buffer && r.materialProgram == 0u){r.materialProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_material_fs)}
-    let program = material_buffer ? r.materialProgram : r.normalProgram
-    glUseProgram(program); u_viewProj = vp; u_material_scale = r.materialScale; u_material_wetness = r.materialWetness; u_normal_roughness = pack_roughness ? 1.0 : 0.0
-    for (node in scene.nodes){
+def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root, vp : float4x4; pack_roughness : bool = false; material_buffer : bool = false; surface_buffer : bool = false; motion_buffer : bool = false; previous : GltfMotionPose const? = null; previous_vp : float4x4 = identity4x4(); jitter : float2 = float2(0.0); motion_kind : int = 0) {
+    let program = gltf_surface_program(r, material_buffer, surface_buffer, motion_buffer)
+    gl_use_program_filtered(program); u_viewProj = vp; u_material_scale = r.materialScale; u_material_wetness = r.materialWetness; u_normal_roughness = pack_roughness ? 1.0 : 0.0
+    var palette = -1
+    if (motion_buffer){u_motion_kind = motion_kind; u_previous_vp = previous_vp; u_motion_jitter = jitter}
+    for (node, node_index in scene.nodes, count()){
         if (node.mesh < 0 || node.mesh >= length(model.meshes)){continue}
-        bind_node(scene, node, root)
+        bind_node(scene, node, root, palette)
+        if (motion_buffer){
+            let valid = previous != null && gltf_motion_has_node(*previous, scene, node_index)
+            u_motion_kind = motion_kind == 1 && !valid ? 2 : motion_kind
+            if (u_motion_kind == 1){bind_previous_pose(scene, node, node_index, *previous)}
+        }
         for (glp in model.meshes[node.mesh].primitives){
             if (glp.material >= 0 && glp.material < length(scene.materials)){
                 let mat = scene.materials[glp.material]
                 if (mat.alphaMode == GltfAlphaMode.blend){continue}
                 bind_material(model, mat)
             }else{bind_material(model, GltfMaterial())}
-            gltf_pbr_vs_bind_uniform(program); if (material_buffer){gltf_pbr_material_fs_bind_uniform(program)}else{gltf_pbr_normal_fs_bind_uniform(program)}
+            if (motion_buffer){gltf_pbr_motion_vs_bind_uniform(program); gltf_pbr_surface_motion_fs_bind_uniform(program)}else{gltf_pbr_vs_bind_uniform(program); if (surface_buffer){gltf_pbr_surface_fs_bind_uniform(program)}elif (material_buffer){gltf_pbr_material_fs_bind_uniform(program)}else{gltf_pbr_normal_fs_bind_uniform(program)}}
             gltf_gl_draw_primitive(glp)
         }
     }
-    glUseProgram(0u)
+    gl_release_program()
 }
 
 //! Draw opaque/masked geometry with a flat color and the ordinary skinning path.
@@ -495,10 +497,11 @@ def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene 
 def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
                                root, vp : float4x4; color : float4) {
     if (r.silhouetteProgram == 0u){r.silhouetteProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_silhouette_fs)}
-    glUseProgram(r.silhouetteProgram); u_viewProj = vp; u_silhouette_color = color
+    gl_use_program_filtered(r.silhouetteProgram); u_viewProj = vp; u_silhouette_color = color
+    var palette = -1
     for (node in scene.nodes){
         if (node.mesh < 0 || node.mesh >= length(model.meshes)){continue}
-        bind_node(scene, node, root)
+        bind_node(scene, node, root, palette)
         for (glp in model.meshes[node.mesh].primitives){
             if (glp.material >= 0 && glp.material < length(scene.materials)){
                 let mat = scene.materials[glp.material]
@@ -509,7 +512,7 @@ def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; sce
             gltf_gl_draw_primitive(glp)
         }
     }
-    glUseProgram(0u)
+    gl_release_program()
 }
 
 //! Render every mesh instance in `scene` with the PBR shader, using the GL objects in `model`. A node
@@ -527,7 +530,8 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
 //! (root reaches the world-space normals). The plain overload passes `identity4x4()`, so it is unchanged.
 def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root : float4x4;
                     view, proj : float4x4; camPos : float3; light : GltfPbrLight) {
-    glUseProgram(r.program)
+    gltf_shadow_comparison_bind(r.shadowComparison, r.shadowTex, r.localShadowTex); u_shadow_filter = r.shadowFilter
+    gl_use_program_filtered(r.program)
     u_viewProj = proj * view
     u_cam_pos = camPos
     u_light_dir = normalize(light.direction)
@@ -557,11 +561,12 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
         u_point_position[i] = r.pointPosition[i]
         u_point_color[i] = r.pointColor[i]
     }
+    var palette = -1
     for (node in scene.nodes) {
         if (node.mesh < 0 || node.mesh >= length(model.meshes)) {
             continue
         }
-        bind_node(scene, node, root)
+        bind_node(scene, node, root, palette)
         for (glp in model.meshes[node.mesh].primitives) {
             if (glp.material >= 0 && glp.material < length(scene.materials)) {
                 bind_material(model, scene.materials[glp.material])
@@ -573,5 +578,5 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
             gltf_gl_draw_primitive(glp)
         }
     }
-    glUseProgram(0u)
+    gl_release_program(); gltf_shadow_comparison_unbind()
 }
