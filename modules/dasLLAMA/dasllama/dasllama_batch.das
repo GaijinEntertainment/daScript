@@ -292,7 +292,9 @@ def verify_batch_step(t : Model; var ws : BatchWorkspace; var s : Session; token
             ws.vbase[i] = null
         }
     }
-    batch_rows_prep_(t, ws, tokens, nrows)
+    let ple_on_device = has_ple(c) && ple_gpu_decode_gate(t, s, nrows, pos)
+    batch_rows_prep_(t, ws, tokens, nrows, ple_on_device)
+    ws.scr.ple_gpu_pending = ple_on_device
     batch_decode_logits_reset()
     set_batch_same_slab(true)
     let done = batch_decode_override_invoke(t, ws, g_verify_sessions, nrows)
@@ -376,6 +378,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     }
     let ple_on_device = has_ple(c) && batch_decode_override_armed() && ple_gpu_decode_gate(t, *sessions[0], nrows, ws.positions[0])
     batch_rows_prep_(t, ws, tokens, nrows, ple_on_device)
+    ws.scr.ple_gpu_pending = ple_on_device   //! the CPU stack's tripwire: a skipped pre-step that reaches it panics instead of reading stale rows
     let dim = c.dim
     // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may
     // claim the whole stack (false = declined, fall back to the per-layer loop below).
@@ -384,12 +387,15 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (batch_decode_override_armed()) {
         stack_done = batch_decode_override_invoke(t, ws, sessions, nrows)
     }
-    if (!stack_done && ple_on_device) {   //! the override declined the step: the CPU pre-step runs late for the stacks below
-        ple_pre_prefill(t, ws.scr, tokens, nrows)
-    }
     if (!stack_done && (t.metal_blob || !t.blocks.attn_is_std)) {   //! the device driver declined a blob-only or non-standard-graph step: the single-row forward serves what the batched stacks have no form for
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
+    }
+    if (!stack_done && ple_on_device) {   //! the override declined the step: the CPU pre-step runs late for the stacks below
+        let ts_ple = prof_ticks()
+        ple_pre_prefill(t, ws.scr, tokens, nrows)
+        prof_add("ple", ts_ple)
+        ws.scr.ple_gpu_pending = false
     }
     if (stack_done) {
         note_batch_step(true)

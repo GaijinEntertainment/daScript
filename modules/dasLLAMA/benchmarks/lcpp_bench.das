@@ -1281,7 +1281,7 @@ def private flavor_stamp(base : string) : string {
     return g_debug_run ? "debug-jit:{b}" : b
 }
 
-[export]
+[cold_path, export]
 def main() : int {
     if (!jit_enabled()) {
         print("This benchmark is JIT-only - run with: daslang -jit <file>\n")
@@ -1484,15 +1484,16 @@ def main() : int {
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
-        //! the batched row's context, a stream: its prompt, its window, a slot a stream for the admits, and the margin
-        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or llama-bench's -p default when the pp row is off
+        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or the flat reference exe's -p default when the pp row is off
         //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
         let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
-        let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)
+        let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)   //! a stream's context: its prompt, its window, a slot a stream for the admits, and the margin
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
             if (!real_row) {
                 set_gpu_ctx_max(rows_ctx + 8l)   //! the mirror sized to the row's own context before the load plans it
+            } else {
+                to_log(LOG_INFO, "lcpp_bench: the real batched row plans the mirror at the model's context - its prompt length is known only after the load\n")
             }
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 g_rd_nrow_bisect = int(g_env_vulkan.vk_nrow_bisect)   //! a probe's bisect of the N-row command; 0 = the served command

@@ -723,8 +723,8 @@ def set_gpu_ctx_max_(n : int64) {
     g_rdec_ctx_max = max(n, 0l)
 }
 
-// the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
-// model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
+// the arming floor: DASLLAMA_GPU_MIN_CTX lowers it for a short-context session (a 3B on an 8GB card fits at 3429), and a
+// context pin under it (set_gpu_ctx_max in process, else DASLLAMA_GPU_CTX_MAX) lowers it to the pin, never under 256
 def private rdec_min_ctx : int64 {
     let pin = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
     return resident_arm_floor(g_env_gpu.gpu_min_ctx, pin)
@@ -1588,7 +1588,6 @@ var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the 
 // the N-row command's gathered rows: the residuals, the rope rows, each row's position, count and region, and where its logits land
 var private @scratch @exact_size g_rdec_x_n : array<float>
 var private @scratch @exact_size g_rdec_cos_n : array<float>
-var private @scratch g_rdec_toks_n : array<int64>   //! the rows' token ids as the side-input gather's list
 var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
@@ -1990,14 +1989,10 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let dim = c.dim
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
-    let ple = c.n_embd_per_layer > 0l
-    if (ple) {
-        if (rdec_ple_proj_on()) {
-            g_rdec_toks_n |> resize(nrows)
-            for (i in range64(nrows)) {
-                g_rdec_toks_n[i] = ws.row_tokens[i]
-            }
-            resident_prefill_ple_rows(t, g_rdec_toks_n, nrows)
+    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs, position-major: the table rows the device projects, else the pre-step's finished rows as the workspace holds them
+    if (has_ple(c)) {
+        if (ple_raw) {
+            resident_prefill_ple_rows(t, ws.row_tokens, nrows)
         } else {
             let all = c.n_layers * c.n_embd_per_layer
             g_rdec_ple_rows |> reserve(all * nrows)
@@ -2037,7 +2032,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     }
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {

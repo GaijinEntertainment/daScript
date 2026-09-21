@@ -46,6 +46,8 @@ def private prompt_a() : array<int64> => <- ramp_ids(40l, 0l, 1000l, 37l, 5000l)
 def private prompt_b() : array<int64> => <- ramp_ids(57l, 0l, 3000l, 91l, 6000l)
 def private feed_a() : array<int64> => <- ramp_ids(STEPS, 0l, 2000l, 53l, 4000l)
 def private feed_b() : array<int64> => <- ramp_ids(STEPS, 0l, 2500l, 71l, 4500l)
+def private prompt_c() : array<int64> => <- ramp_ids(48l, 0l, 1500l, 59l, 5500l)
+def private feed_c() : array<int64> => <- ramp_ids(STEPS, 0l, 2200l, 67l, 4200l)
 
 def private logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
 
@@ -97,14 +99,16 @@ def private hold_within(t : T?; got, want, control : array<float>; what : string
     t |> success(off > bar, "{what} control: logits one token off read past the bar (maxdiff {off} vs {bar})")
 }
 
-def private load_two_regions(t : T?; file : string) : Model {
-    set_gpu_resident_regions_(2l)
+def private load_regions(t : T?; file : string; regions : int64) : Model {
+    set_gpu_resident_regions_(regions)
     var tr <- load_model_(path_join(models_dir(), file), QuantMode.q8)
     set_gpu_resident_regions_(1l)
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed at two regions (the load log names any decline)")
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
     return <- tr
 }
+
+def private load_two_regions(t : T?; file : string) : Model => <- load_regions(t, file, 2l)
 
 def private regions_ready(t : T?; file : string) : bool {
     if (!jit_enabled()) {
@@ -315,6 +319,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     let gen_a = sa.rdec_gen
     let gen_b = sb.rdec_gen
+    let steps0 = rdec_nrow_steps()
     for (st in range64(STEPS)) {
         var toks <- [fa[st], fb[st]]
         eval_batch(tr, ws, sess, toks)
@@ -337,6 +342,8 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
         let nrows = vk_rdec_token_n_rows()
         t |> success(served ? nrows >= 2l : nrows == 0l, served ? "the N-row token command serves the two rows at once ({nrows} rows)" : "the N-row token command declines this carrier by design ({nrows} rows)")
     }
+    let stepped = rdec_nrow_steps() - steps0
+    t |> success(served ? stepped == STEPS : stepped == 0l, served ? "every batched step went through the N-row command ({stepped} of {STEPS})" : "no batched step went through the N-row command ({stepped})")
     sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
     unsafe {
         delete ws
@@ -940,6 +947,129 @@ def cell_regions_stamp_served(t : T?; file : string; stamp_f16, stamp_f32 : stri
             delete s
             delete pa
             delete fa
+        }
+        delete tr
+    }
+}
+
+//! the batched cell over the split one-row forms: the fuse knob pinned off for the load and unpinned after, so the rows
+//! hold to the split forms where the fused one-row forms round apart (a K-quant MoE's folded down, a PLE carrier's
+//! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
+def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        g_vk_fuse = 0
+        cell_regions_batched_steps(t, file, bar)
+        g_vk_fuse = -1
+    } else {
+        t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
+            t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
+        }
+    }
+}
+
+//! step `st` of the widening order: the two rows batched, then each alone, then all three batched
+def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session; var two, three : array<Session?>; fa, fb, fc : array<int64>; st : int64) {
+    if (st == 0l) {
+        var toks <- [fa[st], fb[st]]
+        eval_batch(tr, ws, two, toks)
+        delete toks
+    } elif (st == 1l) {
+        var one_a <- [fa[st]]
+        var one_b <- [fb[st]]
+        eval(tr, sa, one_a)
+        eval(tr, sb, one_b)
+        delete one_a
+        delete one_b
+    } else {
+        var toks <- [fa[st], fb[st], fc[st - 2l]]
+        eval_batch(tr, ws, three, toks)
+        delete toks
+    }
+}
+
+//! a row's stepped logits against its session alone, from the step it joined at
+def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
+    for (st in range64(long_length(got))) {
+        if (bar == LogitsBar.bit_exact) {
+            hold_equal(t, got[st], ref[st + 1l], "widened step {st + first}, {row}")
+        } else {
+            let rel = bar == LogitsBar.wide_bar ? WIDE_BAR_REL : SPLIT_BAR_REL
+            hold_within(t, got[st], ref[st + 1l], ref[st], "widened step {st + first}, {row}", rel)
+        }
+    }
+}
+
+//! three sessions over three regions: a batched step over two, one of them alone, then a batched step over all three -
+//! the command records at a row count it had not recorded, after a one-row step, and every row still reads what its
+//! session reads alone (the N-row sets decide their own forms at the first record, never off the one-row command's)
+def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+    t |> run("a batched step over two rows, one row alone, then a batched step over three: the rows read what each session reads alone") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_regions(t, file, 3l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var pc <- prompt_c()
+            var fa <- feed_a()
+            var fb <- feed_b()
+            var fc <- feed_c()
+            var sa <- create_session(tr, mirror_kv_dtype())
+            var sb <- create_session(tr, mirror_kv_dtype())
+            var sc <- create_session(tr, mirror_kv_dtype())
+            eval(tr, sa, pa)
+            eval(tr, sb, pb)
+            eval(tr, sc, pc)
+            var ws <- create_batch_workspace(tr)
+            var two <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var three <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
+            var got_a : array<array<float>>
+            var got_b : array<array<float>>
+            var got_c : array<array<float>>
+            let steps0 = rdec_nrow_steps()
+            for (st in range64(STEPS)) {
+                widen_step(tr, ws, sa, sb, two, three, fa, fb, fc, st)
+                if (st >= 2l) {
+                    got_c |> emplace <| logits_of(sc, tr.config.vocab_size)
+                }
+                got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+                got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
+            }
+            let stepped = rdec_nrow_steps() - steps0
+            t |> equal(STEPS - 1l, stepped, "the two-row step and every three-row step went through the N-row command")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+            var ra <- logits_alone(tr, pa, fa)
+            var rb <- logits_alone(tr, pb, fb)
+            var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]
+            var rc <- logits_alone(tr, pc, fc_short)
+            widen_hold(t, got_a, ra, bar, "row A", 0l)
+            widen_hold(t, got_b, rb, bar, "row B", 0l)
+            widen_hold(t, got_c, rc, bar, "row C", 2l)
+            two |> clear()
+            three |> clear()
+            unsafe {
+                delete ws
+                delete two
+                delete three
+            }
+            delete sa
+            delete sb
+            delete sc
+            delete got_a
+            delete got_b
+            delete got_c
+            delete ra
+            delete rb
+            delete rc
+            delete pa
+            delete pb
+            delete pc
+            delete fa
+            delete fb
+            delete fc
+            delete fc_short
         }
         delete tr
     }

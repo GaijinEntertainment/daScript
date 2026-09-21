@@ -1260,7 +1260,7 @@ struct RouterArgs {
     norm_on : uint      //! the row read as its weightless rms under the norm row at `nwoff` (the gemma-4 router's input: the norm hop folded into the GEMV)
     nwoff : uint
     eps : float
-    ncols : uint        //! the rows of x the dispatch serves, each its own column of logits at `obase + c * ne` (the N-row command), the row's weights read once for all; 0 or 1 = one row
+    ncols : uint        //! the rows of x the dispatch serves, at most eight (the per-row planes' extent): each its own column of logits at `obase + c * ne`, or past `ne_split` at `obase_split + c * (ne - ne_split)`; the row's weights read once for all; 0 or 1 = one row
     ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
     obase_split : uint
 }
@@ -1274,7 +1274,7 @@ class template RouterGemvT {
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @ssbo @binding = 3 wn : array<float>      //! the norms plane: the row at `nwoff` scales x under `norm_on`
     @push_constant pa : RouterArgs
-    @workgroup part : float[128]   //! slots 0..63 the dot's subgroup partials (a subgroup's eight columns), 64..127 the norm's
+    @workgroup part : float[256]   //! a subgroup's eight column partials at `sg * 8`: the dot's in 0..127, the norm's in 128..255 - sixteen subgroups, the 256-thread workgroup at a 16-lane subgroup (the tier's floor is 32, dasllama_vulkan_common's subgroup gate)
 
     //! the row element at `i` of the row at `xb` as the dot reads it: under the norm row when `norm_on`
     def xn(xb, i : uint) : float => pa.norm_on != 0u ? x[xb + i] * wn[pa.nwoff + i] : x[xb + i]
@@ -1283,7 +1283,7 @@ class template RouterGemvT {
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {   // nolint:STYLE038 — one row pass over the columns: the per-column rms, the dot, the per-column reduce and store
         let e = gl_WorkGroupID.x
-        let nc = max(pa.ncols, 1u)
+        let nc = clamp(pa.ncols, 1u, 8u)
         let base = pa.woff + e * pa.dim
         let tid = gl_LocalInvocationID.x
         var inv : float[8]
@@ -1311,7 +1311,7 @@ class template RouterGemvT {
             while (c2 < nc) {
                 let s0 = subgroupAdd(ss[c2])
                 if (gl_SubgroupInvocationID == 0u) {
-                    part[64u + gl_SubgroupID * 8u + c2] = s0
+                    part[128u + gl_SubgroupID * 8u + c2] = s0
                 }
                 c2++
             }
@@ -1321,7 +1321,7 @@ class template RouterGemvT {
                 var tot0 = 0.0
                 var sg0 = 0u
                 while (sg0 < gl_NumSubgroups) {
-                    tot0 += part[64u + sg0 * 8u + c3]
+                    tot0 += part[128u + sg0 * 8u + c3]
                     sg0++
                 }
                 inv[c3] = 1.0 / sqrt(tot0 / float(pa.dim) + pa.eps)
@@ -1379,7 +1379,7 @@ class template RouterGemvT {
                 }
                 var o = pa.obase + c8 * pa.ne + e
                 if (pa.ne_split != 0u && e >= pa.ne_split) {
-                    o = pa.obase_split + (e - pa.ne_split)
+                    o = pa.obase_split + c8 * (pa.ne - pa.ne_split) + (e - pa.ne_split)
                 }
                 logits[o] = tot * inv[c8]
                 c8++
@@ -1488,7 +1488,7 @@ struct TopkArgs {
     xnb2 : uint      // the down feed's blocks per hidden row: slot s reads row s (gate/up read their row's feed)
     dsoff : uint     //! this layer's row base in the per-expert down-scale plane (gemma-4: ffn_down_exps.scale folds into the routing weight); NO_DSCALE = none
     lstride : uint   //! the logits row stride (elements): row p's logits sit at p * lstride (the one-row dispatch reads row 0 whatever it holds)
-    xnb1 : uint      //! the gate and up feed's blocks per row: row p's slots read the feed at p * xnb1 (0 on the one-row dispatch: the one feed row)
+    xnb1 : uint      //! the feed's blocks per row - one feed row serves the gate and the up (their formats share the block unit by the load's decline): row p's slots read it at p * xnb1 (0 on the one-row dispatch: the one feed row)
     rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
     rboff : uint     //! ... this layer's row base in the router-bias plane ([ne] a layer)
 }
@@ -10444,13 +10444,13 @@ class Q8GemvPleAct {
     @ssbo @binding = 3 side : array<float>    // the side plane (every layer's row)
     @ssbo @binding = 4 y : array<float>       // the proj row out
     @push_constant pa : PleActArgs
-    @workgroup xw : uint[512]   //! the built x's Q8_0 quant words, a column's 64 at `c * 64`
+    @workgroup xw : uint[512]   //! the built x's Q8_0 quant words, a column's 64 at `c * 64` (eight columns, the per-row planes' extent)
     @workgroup xs : float[64]   //! ... and its block scales, a column's eight at `c * 8`
 
     [spirv_kernel(local_size_x = 256, name = "q8_gemv_pleact_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let tid = gl_LocalInvocationID.x
-        let nc = max(pa.ncols, 1u)
+        let nc = clamp(pa.ncols, 1u, 8u)
         var k0 = tid
         while (k0 < 64u * nc) {
             xw[k0] = 0u
@@ -10489,7 +10489,7 @@ class Q8GemvPleAct {
                 let inb = b < nb
                 let wv = inb ? wq4[(wb0 + bi0) * 2u + lane] : uint4(0u)
                 let ws = inb ? float(wsh[wb0 + min(b, nb - 1u)]) : 0.0
-                let xbase = bi0 * 8u + lane * 4u
+                let xbase = inb ? bi0 * 8u + lane * 4u : 0u   //! a dead lane's index stays inside the words whatever the emitter makes of the ternaries below
                 var c2 = 0u
                 while (c2 < nc) {
                     let xb = c2 * 64u + xbase

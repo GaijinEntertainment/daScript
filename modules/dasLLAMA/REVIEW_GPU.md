@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GPU_MTP.md`,
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work: `followup_metal.md` for Metal,
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal,
 `followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
@@ -56,10 +56,10 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A bounds or tail guard that branches per iteration in a kernel's main loop, where the guard's
-answer is the same for every thread of the dispatch and the host fixes the value before it
-records the dispatch, is a defect - stamp the guard, or clamp the index so the guarded work runs
-on a live value and its result is never stored.**
+**A per-iteration branch in a kernel's main loop - a bounds or tail guard, or a nested loop's own
+bound - whose answer is the same for every thread of the dispatch and whose value the host fixes
+before it records the dispatch, is a defect - stamp the guard, or clamp the index so the guarded
+work runs on a live value and its result is never stored.**
 Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global or its SPIR-V dump.
@@ -113,11 +113,6 @@ bytes, not the sentinel, and an equality test sends their token index out of bou
 simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
 threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
 complete the op.
-
-**Never put a cross-lane op in a kernel body - a subgroup shuffle, vote, ballot or reduction -
-under a loop or branch whose trip count or condition a per-lane value decides; bound the loop
-with a value every lane of the subgroup shares (a push-constant count) or hoist the op out.**
-Lanes that reach the op a different number of times exchange with lanes that are not there.
 
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
 without one, or generated from a template instance that has none - shows that every address

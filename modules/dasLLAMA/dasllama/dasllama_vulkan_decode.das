@@ -930,6 +930,7 @@ def vk_rdec_set_ple(ple : int64) : bool {
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.n_sets_made = false
     rd_invalidate_token()
     return true
 }
@@ -2074,6 +2075,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
 
 //! the N-row command answers 0 rows for `why`, said once per armed model: the batched step runs a row at a time from here on
+//! the routed planes hold `MAX_ROUTED_SLOTS` slots a step: every row's k picks must fit
+def rd_routed_slots_fit(nb, k : int64) : bool => nb * k <= MAX_ROUTED_SLOTS
+
 def private rd_n_decline(why : string) : int64 {
     if (!g_rd.n_decline_said) {
         g_rd.n_decline_said = true
@@ -2090,7 +2094,8 @@ def vk_rdec_token_n_rows : int64 {
     if (g_rd.q_gated) return rd_n_decline("a gated q")
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
-        if (L.moe && MAX_ROUTED_SLOTS < g_rd.nb * g_rd.k) return rd_n_decline("more routed slots than the block's slot planes hold")
+        if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rd_n_decline("more routed slots than the block's slot planes hold")
+        if (L.moe && L.ple) return rd_n_decline("a per-layer-embedding layer with a routed block")
         if (!(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo))
                 || (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2)))
                 || (L.ple && !gemv_cls_has_n(L.fpg))) return rd_n_decline("a weight format with no N-column GEMV leaf")
@@ -2115,7 +2120,7 @@ def private rd_ensure_n_rail : bool {
             && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
     }
     if (!ok) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: an N-column GEMV class or the N-row fused add+rms+requant class declined on this device - the batched step runs a row at a time\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: a class of the N-row command declined on this device (an N-column GEMV leaf, the fused add+rms+requant rows stamp, the fused gate-up N form, the per-row top-k, or the per-layer-embedding gate's N leaf) - the batched step runs a row at a time\n")
     }
     return ok
 }
@@ -2152,7 +2157,7 @@ def private rd_ensure_n_sets {
                 fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
         }
         if (L.moe) {
-            rd_moe_sets_n(L)
+            rd_moe_sets_n(L, l)
         }
         if (L.ple) {
             rd_ple_sets_n(L)
@@ -2162,7 +2167,9 @@ def private rd_ensure_n_sets {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def private rd_moe_sets_n(var L : RLayer) {
+def private rd_moe_sets_n(var L : RLayer; l : int64) {
+    let fn = l + 1l < g_rd.n_layers ? rd_head_feed(g_rd.layers[l + 1l]) : (fmt = g_rd.cls_fmt_marker, storex = false)
+    L.comb_rq_n = vk_fuse_on() && fn.fmt == int(KqFmt.q8) && !fn.storex && (L.moe_g4 ? ensure_cls_ar_comb_g4_rq() : ensure_cls_ar_comb_rq())
     let dim = g_rd.dim
     let nb = g_rd.nb
     let nfe = g_rd.nfe
@@ -2205,7 +2212,7 @@ def private rd_moe_sets_n(var L : RLayer) {
         L.s_comb_n = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
             fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes),
             fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN))
-        if (L.comb_rq) {
+        if (L.comb_rq_n) {
             L.s_comb_rq_n = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
                 fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, xq_bytes, slots_bytes, slots_bytes, edn_bytes, xs_bytes),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
@@ -2216,7 +2223,7 @@ def private rd_moe_sets_n(var L : RLayer) {
             g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
         fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes),
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT))
-    if (L.comb_rq) {
+    if (L.comb_rq_n) {
         L.s_comb_rq_n = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
                 g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
             fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, xq_bytes, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, xs_bytes),
@@ -2439,11 +2446,12 @@ def private rd_encode_moe_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     gemv_enc(L.fe3, raw, h, L.s_eup_n, pcg, k * nfe * nrows)
     rd_ts(raw, "a:m_e_up")
     let dkq = kq_sb(L.fe2)
-    let nslot = k * nfe * nrows
-    var pca = ActArgs(nelem = uint(nslot), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nslot / (dkq ? 256l : 32l)),
+    let slot_elems = k * nfe * nrows
+    var pca = ActArgs(nelem = uint(slot_elems), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(slot_elems / (dkq ? 256l : 32l)),
         bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
-    let awgs = (nslot / (dkq ? 8l : 4l) + 255l) / 256l
+    let awgs = (slot_elems / (dkq ? 8l : 4l) + 255l) / 256l
     if (g_rd.exps_bias) {
+        verify(!dkq, "vk decode: biased expert stacks feed a Q8_K down plane - the biased act has no Q8_K twin")
         enc_q8_actrq_b_cls(raw, h, L.s_eact_n, pca, awgs)
     } elif (dkq) {
         enc_q8k_actrq_cls(raw, h, L.s_eact_n, pca, awgs)
@@ -2591,10 +2599,10 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
                 rd_encode_moe_n(raw, h, L, l, nrows)
                 var pc14c = rd_ar_comb_args(L, l, int64(nxt))
                 pc14c.presummed = 0u
-                xq_ready = L.comb_rq
-                if (L.comb_rq && L.moe_g4) {
+                xq_ready = L.comb_rq_n
+                if (L.comb_rq_n && L.moe_g4) {
                     enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq_n, pc14c, nrows)
-                } elif (L.comb_rq) {
+                } elif (L.comb_rq_n) {
                     enc_cls_ar_comb_rq(raw, h, L.s_comb_rq_n, pc14c, nrows)
                 } elif (L.moe_g4) {
                     enc_cls_ar_comb_g4(raw, h, L.s_comb_n, pc14c, nrows)
@@ -2655,7 +2663,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
 }
 
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     let row_bytes = g_rd.vocab * 4l
     var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
@@ -2672,11 +2680,12 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
     verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
+    assert(g_rd.ple <= 0l || ple_raw == g_rd.ple_gpu, "vk_rdec_token_n: raw per-layer-embedding rows without the projection on device, or finished rows with it")
     let nsplit = rd_split_pieces()
     if (!g_rd.tok_n_recorded[nrows]) {
         rd_fill_gemv_regions_all()
@@ -3198,7 +3207,7 @@ def private ffn_fill(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 c
     assert(nrows * max(nfe, n) * 4l <= Y_BYTES, "dasLLAMA vulkan tier: FFN dispatch exceeds output capacity")
     // gate/up share one activation image (same xqp below) so forms must agree; down's is its own
     let kq_in = !kq_block32(f1)
-    assert(!kq_block32(f3) == kq_in,
+    verify(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     ensure_gemv_scratch(s1)

@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
-`ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work:
+`ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
+`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
 `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
@@ -196,9 +197,9 @@ missing timestamp reports every later stamp under the wrong role name.
 
 **A descriptor set the N-row token command - the resident decode command that runs `RDec.nb`
 rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its plane's whole
-`RDec.nb`-row extent, never one row's.** A per-row plane is a buffer `vk_rdec_prepare` sizes to
-one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read past its
-binding on every row but the first.
+`RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the driver sizes to one slot
+per batched row (`* RDec.nb`), wherever the sizing sits; a one-row binding makes the N-row
+command read past its binding on every row but the first.
 
 **Every `TokMeta` block a diff fills - in the resident driver, a seam, or a test - writes
 `mirbase`, the row's mirror base in elements; a site with one mirror region writes 0.** The

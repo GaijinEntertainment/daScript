@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
+require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
@@ -431,5 +432,19 @@ def test_resident_arm_floor(t : T?) {
         t |> equal(4096l, resident_arm_floor(0l, 8192l), "a pin over the floor leaves the floor alone")
         t |> equal(512l, resident_arm_floor(1024l, 512l), "a pin under the env floor wins over it too")
         t |> equal(256l, resident_arm_floor(0l, 64l), "a pin under 256 reads 256")
+    }
+}
+
+[test]
+def test_routed_slots_fit(t : T?) {
+    t |> run("the routed planes' slot cap: every row's picks fit the 64 slots or the N-row command declines the model") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> success(rd_routed_slots_fit(8l, 8l), "eight rows of eight picks fill the slots")
+            t |> success(!rd_routed_slots_fit(8l, 9l), "eight rows of nine picks pass them")
+            t |> success(rd_routed_slots_fit(2l, 32l), "two rows of thirty-two picks fit")
+            t |> success(!rd_routed_slots_fit(3l, 32l), "three rows of thirty-two pass them")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }

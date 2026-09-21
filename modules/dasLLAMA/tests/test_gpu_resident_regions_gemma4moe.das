@@ -5,7 +5,6 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _resident_regions
-require ?vulkan dasllama/dasllama_vulkan_common   // g_vk_fuse, where the module exists: the cells skip without it
 
 // gemma-4-26B-A4B Q4_K_M (large tier, DASLLAMA_PARITY_FULL=1): the two batched-step cells of the rig on the gemma-4 MoE
 // form - the routed feed and the router off their own norms of x, the parallel dense shared expert as the layer's own
@@ -17,27 +16,16 @@ require ?vulkan dasllama/dasllama_vulkan_common   // g_vk_fuse, where the module
 // folds the slots inside the GEMV - and on this carrier the two sums' rounding turns router near-ties into whole-position
 // flips (five of thirty-two compares off by up to 0.13 of the peak, the argmax with them), as its CPU-vs-resident
 // compares do (`CLAUDE.md`); the fused forms are held to the split ones by their own cells, and `../followup_vulkan.md`
-// item 82 names the rows' own folded down. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or
+// item 83 names the rows' own folded down. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or
 // without the file under models_dir().
 let private REGIONS_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 
-//! the cell over the split one-row forms, the fuse knob pinned off for the load and unpinned after
-def private split_forms_cell(t : T?; cell : function<(t : T?; file : string; bar : LogitsBar; served : bool) : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        g_vk_fuse = 0
-        invoke(cell, t, REGIONS_FILE, LogitsBar.wide_bar, true)
-        g_vk_fuse = -1
-    } else {
-        t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
-    }
-}
-
 [test]
 def test_regions_batched_steps_g4moe(t : T?) {
-    split_forms_cell(t, @@cell_regions_batched_steps)
+    cell_regions_batched_steps_split_forms(t, REGIONS_FILE, LogitsBar.wide_bar)
 }
 
 [test]
-def test_regions_batched_steps_split_g4moe(t : T?) {
-    split_forms_cell(t, @@cell_regions_batched_steps_split)
+def test_regions_batched_widen_g4moe(t : T?) {
+    cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.wide_bar)
 }

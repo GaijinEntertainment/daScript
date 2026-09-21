@@ -76,8 +76,14 @@ routed planes hold `nb` rows (`moe_dlog_dev`, `moe_xq_dev` and `moe_xs_dev`, `eg
 `eup_dev`, `edown_dev`), the one-row sets binding their first row, and the rail declines a
 model whose `nb * k` slots pass `MAX_ROUTED_SLOTS`, the slot planes' extent. The rows share no
 expert weights - every slot reads its expert whole, as the reference's decode does below its
-grouped-GEMM threshold of eight tokens - so the batched step's gain on a MoE carrier is the
-attention, the router, the shared expert and the submit, not the experts' bytes.
+grouped-GEMM threshold (`mul_mat_vec_max_cols` on its Vulkan backend, `MMVQ_MAX_BATCH_SIZE` on
+CUDA) - so the batched step's gain on a MoE carrier is the attention, the router, the shared
+expert and the submit, not the experts' bytes. The rows' combine quantizes the next head's feed
+under the N path's own decision (`RLayer.comb_rq_n`, made when its sets build), never the
+one-row command's `comb_rq`, which only a one-row record sets: the two commands record in any
+order, and a set the N record binds always exists. The router and the fused per-layer-embedding
+kernels hold at most eight columns in their register and workgroup arrays (`RD_NB_MAX`), clamped
+in the kernel; the router's partial plane holds sixteen subgroups' worth, twice the tier's floor.
 
 **An E-series row carries its own per-layer-embedding side input, and a shared-KV layer projects
 q alone.** The command takes the rows' side inputs position-major (`RdecTokenNFn`'s `ple` rows:
@@ -99,7 +105,9 @@ shared-KV layer's head projects q as the N-column GEMV alone: the rope and store
 pairs and no k-head groups, and the attention reads the donor layer's rows from the mirror.
 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
-`rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+`rdec_nrow_steps` counts the steps the command served, so a cell holds that its batched steps
+went through the command and not the row-at-a-time loop the two silent declines (no region, two
+rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
 the lanes idle while the device owns the step) and copies in order without one: a lane copies
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the

@@ -2231,9 +2231,10 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   served shape.
 - **The reference at decode size groups nothing by expert.** The local llama.cpp clone
   (`D:/Work/llama.cpp`, the research report in the arc's notes): Vulkan takes its mat-vec path
-  for up to 8 tokens and loops one dispatch a token on the host, CUDA one launch with a warp per
-  token-slot pair - both read N x k expert planes a step; the grouped form (a counting sort into
-  per-expert buckets, one GEMM with a grid axis per expert) sits past 8 tokens. So the batched
+  for up to 8 tokens (`mul_mat_vec_max_cols` in `ggml-vulkan.cpp`) and loops one dispatch a
+  token on the host, CUDA one launch with a warp per token-slot pair (`MMVQ_MAX_BATCH_SIZE` in
+  `ggml-cuda.cu`) - both read N x k expert planes a step; the grouped form (a counting sort into
+  per-expert buckets, one GEMM with a grid axis per expert) sits past those thresholds. So the batched
   step's gain on a MoE carrier is the attention, the router, the shared expert and the submit,
   never the experts' bytes - and the one-row block's regions form (the k experts as regions of
   one slot-mapped dispatch a plane) is already the shape the reference's Vulkan loops per token.
@@ -2255,22 +2256,28 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
   the served weights alone to 15.4 GB; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
-  0.66 and 0.84: the room the expert-bucket form (`followup_vulkan.md` item 82's neighbour, the
-  N-column expert GEMV a bucket, which decodes a weight block once for every row that picked its
-  expert) would take, worth a fifth of gpt-oss's slots at four rows and a tenth of the 30B's.
+  0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
+  expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
+  is the lever that room names; it would serve a fifth of gpt-oss's slots at four rows and a
+  tenth of the 30B's.
 - **The rows against the sessions alone:** gpt-oss bit for bit (the regions file's six cells);
   Qwen3-30B Q4_K_M within 0.062 of the peak, past the K-quant dense carrier's 0.06 bar and under
   the wide bar's 0.10 (item 75's rounding through twenty-four K-quant expert planes a token over
-  forty-eight layers); gemma-4-26B Q4_K_M within the wide bar against the split one-row command
-  and off by up to 0.13 of the peak on five of thirty-two compares against the fused one - the
-  folded down sum's rounding through the 26B's router near-ties, item 82.
+  forty-eight layers; the regions cells' own maxdiff lines on the pod, cm2 arm); gemma-4-26B
+  Q4_K_M within the wide bar against the split one-row command and off by up to 0.13 of the peak
+  on five of thirty-two compares against the fused one (the same cells run before the file pinned
+  the fused forms off, the pod, cm2 arm) - the folded down sum's rounding through the 26B's
+  router near-ties, item 83. The routed planes at `nb` rows cost the resident image nothing a
+  reader sees: gpt-oss-20b's image reads 10914 MB with a 123 MB mirror at 660 x 4 and 220 MB of
+  scratch on the pod, the planes' growth inside the scratch's rounding.
 
 ### From the Vulkan batched-decode arc, the E-series carriers (2026-09-21)
 
 Instruments as the MoE section above (the pod's cm2 arm and the 5060 Ti, `lcpp_bench.das --npl 4`
 three reps, llama.cpp b10660's `llama-batched-bench` the same hour, `external`; every ratio
-`tg128@4` against the reference's `S_TG` at `-npl 4` [direction-grade - two processes]); both
-carriers Q8_0, `DASLLAMA_PARITY_FULL=1` for the E4B. The one-row rates did not move through the
+`tg128@4` against the reference's `S_TG` at `-npl 4` [direction-grade - two processes]; every
+lever's pair is two commits in two processes [direction-grade - two commits]); both carriers
+Q8_0, `DASLLAMA_PARITY_FULL=1` for the E4B. The one-row rates did not move through the
 section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 121.5, 66.1 -> 66.2).
 
 - **The rows form alone (commit e43ace31d: the side input a row, the pre-step projection a row a
@@ -2297,6 +2304,13 @@ section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 
   E2B batched row reads 185 on the pod against its own flat 111.5 (1.66x, where its E4B row scales
   3.3x over 108.9) and 113 on the 5060 Ti against 64.4: the reference's four-stream E2B shape is its
   own question, and the E2B ratios stand as measured.
+- **The rows at the admission's ends (the pod, the cm2 arm, three reps):** E4B at two streams 195.8
+  +/- 0.2 fused against 185.8 +/- 0.1 split (`DASLLAMA_VK_FUSE=0`), the reference 120.3 (1.63); at eight
+  streams 614.2 +/- 0.5 fused against 597.6 +/- 0.3 split, no reference row (its `-c 4096` holds no
+  eight streams of 640). gpt-oss at two streams 304.9 +/- 2.8 against 186.3 (1.64), at eight 520.4
+  +/- 4.9. The fused branch wins at both ends, so the pick does not branch on the column count.
+  The E4B's footprint on the 5060 Ti: the image 7533 MB, the mirror 144 MB at 660 x 4, 167 MB of
+  scratch; the E2B's 4675 + 46 + 166.
 - **The rows against the sessions alone:** the E2B regions file's nine cells bit for bit on both
   boxes at every commit, the batched cells served (`test_gpu_resident_regions_e2b.das`); the fused
   branch's columns held to the one-row dispatches bit for bit (`test_vkd_q8_gemv_pleact`'s columns

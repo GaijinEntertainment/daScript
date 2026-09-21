@@ -2152,7 +2152,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
+    verify(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
@@ -2575,7 +2575,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !kq_block32(f1)
-    assert(!kq_block32(f3) == kq_in,
+    verify(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     let xunit_mid = fmt_unit(f2)

@@ -2047,8 +2047,8 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
 def arena_rows_ok(n : int64; fmt : int) : bool => n % fmt_unit(fmt) == 0l
 
 def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
-    assert(kq_block32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
-    assert(!kq_block32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
+    verify(kq_block32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
+    verify(!kq_block32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
     return rows * (n / (kq_block32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
@@ -2360,6 +2360,7 @@ struct RLayer {
     s_comb_rq : VkDescriptorSet
     s_ple_gate_n, s_ple_act_n, s_ple_proj_n : VkDescriptorSet   //! the N-row command's per-layer-embedding branch over the rows' planes: the gate's columns, the act over the rows' slices, the proj's columns
     s_ple_ar_rq_n, s_ple_pa_n : VkDescriptorSet   //! ... its fused forms where the one-row branch fuses: the FFN step quantizing the rows as they are, the act + requant + proj over the columns
+    comb_rq_n : bool   //! the N-row command's combine quantizes the next head's feed (decided with its sets, never off the one-row command's `comb_rq`)
     s_router_n, s_topk_n : VkDescriptorSet   //! the N-row command's routed block over the rows' planes: the router's columns, the per-row top-k
     s_egate_n, s_eup_n, s_eact_n, s_edown_n : VkDescriptorSet   //! ... the expert GEMVs over the rows' slots (the split gate and up: every stamp's twin, byte for byte), the act, the down
     s_comb_n, s_comb_rq_n : VkDescriptorSet   //! ... the combine over the rows, and its twin that quantizes the next feed

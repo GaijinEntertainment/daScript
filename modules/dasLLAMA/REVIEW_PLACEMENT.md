@@ -115,9 +115,10 @@ requiring the engine back would close.
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**
 
-**A function in `dasllama/dasllama_common.das` that calls through a hook another module
-registers panics on the unset hook with a message naming the module to require.** A forwarder
-that returns quietly hides which registration a program root forgot.
+**A function in `dasllama/dasllama_common.das` that performs work through a hook another module
+registers panics on the unset hook with a message naming the module to require; a gate that only
+reports whether such a hook is installed answers false.** A forwarder that returns quietly hides
+which registration a program root forgot; a gate's false is its answer.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
 side-effect require in the same change that adds it** - a registration no engine file reaches

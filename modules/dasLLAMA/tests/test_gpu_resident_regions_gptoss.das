@@ -25,6 +25,11 @@ def test_regions_batched_steps_split_gptoss(t : T?) {
 }
 
 [test]
+def test_regions_batched_widen_gptoss(t : T?) {
+    cell_regions_batched_widen(t, REGIONS_FILE)
+}
+
+[test]
 def test_regions_batched_first_gptoss(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }

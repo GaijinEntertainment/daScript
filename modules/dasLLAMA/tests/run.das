@@ -207,6 +207,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gptoss.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen3moe.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen2moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_llama_k.das",

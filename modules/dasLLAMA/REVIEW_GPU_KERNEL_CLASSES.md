@@ -21,8 +21,16 @@ twin ignores that field.**
 stamp one `class template` or derive from one base shell.** Body divergence is carried by a
 `@template_constant`, or by an overridden method spliced flat at emission.
 
-**Two kernel classes a cell or a regions file holds bit for bit against each other spell every
-multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
+**Never put an op every lane must reach together - a `barrier()`, a subgroup shuffle, vote,
+ballot or reduction - under a loop or branch whose trip count or condition a per-lane value
+decides, unless every lane the op exchanges with shares the deciding value; bound the loop with
+a value every lane of the subgroup shares, or hoist the op out.** Lanes that reach the op a
+different number of times exchange with lanes that are not there; a shuffle between the two
+lanes of one pair, both under one guard, reaches a lane that is.
+
+**Two kernel bodies that compile to separate shader modules and that a cell or a regions file
+holds bit for bit against each other spell every multiply that feeds an add as `mad` in both, on
+the path the compare covers.** A driver decides
 per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
 ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
 definition and leaves the driver nothing to choose.

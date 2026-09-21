@@ -1549,10 +1549,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent layer and a gated q (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao),
-    so a batched step of such a model pays a weight pass a row. The work: each kind's N-row
-    form, the recurrent one behind its own state question (N device state slots a region - a
-    residency change) and the gated q behind the gate's N form.
+    answers 0 on a recurrent layer, a gated q, a layer carrying both a routed block and a
+    per-layer-embedding branch, a weight format with no N-column leaf, and a MoE whose `nb * k`
+    picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), so a
+    batched step of such a model pays a weight pass a row. The work: each kind's N-row form, the
+    recurrent one behind its own state question (N device state slots a region - a residency
+    change), the gated q behind the gate's N form, the slot cap behind larger slot planes.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
     `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
     and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
@@ -1595,7 +1597,7 @@ module) is independent and can land any time - it is pure structure.
     `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
     one-token-off control meanwhile; `test_gpu_resident_regions_qwen3moe.das` (Qwen3-30B-A3B
     Q4_K_M, its projections and experts all Q4_K) holds the same bar for the same reason - its rows
-    read up to 0.63 of a logit apart at the same argmax, where the gpt-oss file's Q8_0 projections
+    read up to 0.63 of a logit apart at the same argmax (the qwen3moe regions cells' maxdiff lines on the pod, cm2 arm), where the gpt-oss file's Q8_0 projections
     read bit for bit. The work: the arm found by pinning each site's N-row form to its one-row twin
     in turn, then the exact bar restored in both files.
 76. **The batched step's rows sample one after another on the calling thread.** The scheduler's
@@ -1650,16 +1652,16 @@ module) is independent and can land any time - it is pure structure.
     regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
     and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
     and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
-    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served
-    weights to 15.4 GB) - a streamed-weights arm, the layers' planes through a device ring the
+    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served weights to 15.4 GB; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
     step refills ahead of the decode, in layer order, the way the MoE block streams its expert
     groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q), which beats the driver's blind paging
     because the order is known and the reads are one pass a token; the rate then reads as PCIe's
     bandwidth over the bytes past the resident set, and a row a step sees no benefit from four
     streams' worth of streaming unless the ring serves all four rows a layer. Measured against
-    llama.cpp's paged rows on the same card; and a server that pins no context still plans at
-    the binding cap's share a region, so a session-count-aware pin from the scheduler is the
-    other half of the first rung.
+    the batched reference exe's paged rows on the same card (b10660 `llama-batched-bench -npl 4
+    -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on -ngl 99`, the same hour); and a server that
+    pins no context still plans at the binding cap's share a region, so a session-count-aware
+    pin from the scheduler is the other half of the first rung.
 82. **The device gather's grouped-row branch is a per-format ladder.** `moe_gpu_gather_stack_kq`
     (`dasllama/dasllama_layout.das`) reads its plane pair off `Model.kq[]` through the descriptor
     row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
