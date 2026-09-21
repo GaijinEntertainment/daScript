@@ -10,8 +10,12 @@ adopt; a knockout skips a stage to measure that stage's cost; an overhead measur
 chain with and without an interposed stage - a timestamp, a barrier, a flush - to measure that
 stage, and is not a race. A timing arm - arm below - is one timed run of a race, a knockout, or
 an overhead measurement: code that dispatches a kernel to measure it rather than to serve a call.
+A ranking input is a value a ranking's selection reads: a shape dimension (a head width, a batch
+width, a row count, a lane split, a tile's own width, the workgroups one row dispatches relative
+to the device's compute-unit count) or a layer kind (dense, MoE, per-layer-embedding).
 A run of the serving code under a stage-drop knob - one whose runs do not serve correct output -
-is a knockout, and the code that knob gates is arm code here, whoever sets the knob. A same-build
+is a knockout; the branch that reads the knob and drops the stage is arm code here, whoever sets
+the knob, and the stage it drops stays production code under its own checklist. A same-build
 knob A/B - two runs of the serving code under an environment override, both serving correct
 output - is not an arm; the knob is production code under `REVIEW_GPU_VULKAN.md`
 or `REVIEW_TOWER.md`. An arm's chain is the dispatches it times. An arm's ranking is decided when
@@ -61,18 +65,14 @@ the slower kernel.
 **A race whose ranking turns on dispatch latency times its kernel at the shape production
 dispatches.**
 
-**A diff that decides a timing arm's ranking times the arm's kernel on every input the
-ranking's selection reads: a shape dimension (a head width, a batch width, a row count, a lane
-split, a tile's own width, the workgroups one row dispatches relative to the device's
-compute-unit count) or a layer kind (dense, MoE, per-layer-embedding) - at a value on each side
-of a shape-dimension branch, and on a layer of each kind the ranking covers - or, in the
-document that records the figure, names the production run whose served rows measure the
-untimed value.** A ranking timed at one value alone is applied at values it was never ranked at.
+**A diff that decides a timing arm's ranking times the arm's kernel at a value on each side of
+every ranking-input branch, and on a layer of each kind the ranking covers - or names, in the
+document that records the figure, the production run whose served rows measure the untimed
+value.** A ranking timed at one value alone is applied at values it was never ranked at.
 
-**A diff that widens the gate admitting inputs to a kernel whose ranking is decided - a shape
-dimension (a head width, a batch width, a row count, a lane split, a tile width) or a layer kind
-(dense, MoE, per-layer-embedding) - times the ranked arms at a newly admitted input, at each end
-when the new admission spans a range, in the same change.** The widened gate otherwise applies
+**A diff that widens the gate admitting ranking inputs to a kernel whose ranking is decided
+times the ranked arms at a newly admitted input, at each end when the new admission spans a
+range, in the same change.** The widened gate otherwise applies
 the ranking at values it was never ranked at.
 
 **A timing arm for a prefill tile over a variable region, with a decided ranking, times its

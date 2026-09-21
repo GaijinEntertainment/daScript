@@ -13,9 +13,10 @@ code lands in which file is the checklist's own.
 
 **A function, a class (a kernel class among them), a module global (`let` or `var`, private or
 not), a named constant or a `require` under `dasllama/` lands in the file whose sec.1 charter
-line - in an `ARCHITECTURE_*.md` companion - names its concern, unless that file's charter carries
-a must-not-hold cell naming the concern; a diff may instead change that charter line in the same
-change. Another file's charter naming the same kind of code does not license the landing.**
+line - in an `ARCHITECTURE_*.md` companion - names its concern, unless that file's charter row
+carries a `must not hold` cell - the concerns that file never holds - naming the concern; a diff
+may instead change that charter line in the same change. Another file's charter naming the same
+kind of code does not license the landing.**
 `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line.
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
@@ -35,8 +36,7 @@ stamp is one class stamped from a kernel class template; a predicate over shape 
 the classes file's, whoever calls it.
 
 **A host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
-`RLayer` field - stays in the backend driver file its charter line names:
-`dasllama/dasllama_vulkan_decode.das` for a decode-time chain,
+`RLayer` field - lands in `dasllama/dasllama_vulkan_decode.das` for a decode-time chain,
 `dasllama/dasllama_vulkan_prefill.das` for a batch one.**
 
 **A host-side ensure/set/encode chain that only switches on a stamp it is handed lands in the
@@ -69,8 +69,10 @@ of, or a function a `register_kernel_backend` call names - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A branch keyed on a `Config` flag only one model architecture sets, or on one backend driver's
-state, lands in that architecture's or that driver's file.**
+**A branch outside a kernel body keyed on a `Config` flag only one model architecture sets, or on
+one backend driver's state, lands in that architecture's or that driver's file; an arm of a
+kernel two or more architectures share lands beside that kernel, and that file's charter line
+names the flag.**
 
 **Logic or a named constant that two files in one folder both use lands in a file both already
 require - a new file of its own when they require none in common - never as a second copy.** Two

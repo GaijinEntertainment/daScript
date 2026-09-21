@@ -42,6 +42,12 @@ files `DASLLAMA_VK_SPV_DUMP=<dir>` writes).** The evidence is one of three: an e
 difference named with the compile-time choice that carries it; or the behaviour change named with
 the test cell that pins it.
 
+**A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
+supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a
+`@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class as a
+`@template_constant`, or - for a class no template instantiates - compile it in as a module
+constant the class reads.**
+
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer with device
 data behind it (not a zero-size placeholder keeping the set layout complete) to a
@@ -104,7 +110,7 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - whose PR body does not
+builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
 state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
@@ -124,5 +130,5 @@ operand or a subscript, but not as the whole right-hand side of a `let` or an as
 returns its value in one statement after compile-time folding: an
 arrow form (`=>`), or a `static_if` whose every arm is one `return`; a method that needs more
 than one statement hands its value back through a `var T&` parameter instead.** The emitter
-splices a value-position method as one expression, so a body that folds to more than one
+splices such a nested call as one expression, so a body that folds to more than one
 statement reaches the kernel as a statement and its value never arrives.

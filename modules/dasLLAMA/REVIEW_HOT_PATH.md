@@ -27,5 +27,5 @@ or nothing.**
 
 **A function that reaches a model serving entry - `forward`, `eval`, `eval_batch`, or a
 `forward_*` entry taking a `Session` - through a call chain of any length, and is reachable only
-from this module's `tests/`, `harness/`, `benchmarks/` or `performance/`, is a defect unless it
-carries `[cold_path]`.**
+from this module's `tests/`, `harness/`, `benchmarks/` or `performance/`, is a defect unless the
+outermost such function carries `[cold_path]`; the functions it reaches need none.**

@@ -99,12 +99,6 @@ a maintainer ruling that bench comparability is broken.** Recorded performance r
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
-supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a
-`@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class as a
-`@template_constant`, or - for a class no template instantiates - compile it in as a module
-constant the class reads.**
-
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
 the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
 a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
@@ -130,9 +124,10 @@ allocation's size, or drops such a factor, wherever it sits, ships the measured 
 peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
 **A diff that adds an allocation whose size carries a model dimension, a row count or a region
-count states that size in bytes, at the largest shape the plan admits, in a `PERF_LEDGER.md` row.**
+count states that size in bytes, at the largest model shape the code path serves, in a
+`PERF_LEDGER.md` row.**
 
-**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
+**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, `mm_fblob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
@@ -180,9 +175,9 @@ change; a CLI flag is never an override.
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
 (none: it says so).**
 
-**A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-outside this folder left showing the old call, flag, or default after a change to user-facing API
-is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
+**A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document -
+all outside this folder - left showing the old call, flag, or default after a change to
+user-facing API is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
 depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
@@ -191,8 +186,6 @@ rig and tool surface: any output another tool parses. A console-only diagnostic 
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
 `[arch]` cites.
-
-**A diff never edits a dated `PERF_LEDGER.md` row - it adds a new dated row that refutes it.**
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

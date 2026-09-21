@@ -20,12 +20,13 @@ subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that dispatch or bind the cla
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
 deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
-by an ordered setter list and every retained-reference arm of that kernel (`REVIEW_GPU_RACE.md`
-defines the arm).** An arm left dispatching stale geometry measures the wrong kernel silently.
+by an ordered setter list and every arm the architecture docs ledger as that kernel's retained
+reference.** An arm left dispatching stale geometry measures the wrong kernel silently.
 
 **A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
-timing arm that carries that body as a hand-written twin, and every retained-reference arm of
-that kernel; a diff that routes a shape to a sibling kernel class resyncs, in the same change, the
+timing arm that carries that body as a hand-written twin, and every arm the architecture docs
+ledger as that kernel's retained reference; a diff that routes a shape to a sibling kernel class
+resyncs, in the same change, the
 arms that dispatch the old class at that shape.** An arm timing a body the shipped kernel no longer
 runs at that shape measures the wrong kernel silently.
 

@@ -4,10 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`.
 
 **Routed from `REVIEW.md` (beside this file): a diff that checklist routes here applies this
-list together with `REVIEW.md`'s.** A pinned test cell is one whose expected value a person wrote
-by hand - in a document, a checked-in table, a generated artifact's committed form, a roster, or
-the cell's own source - to match a contract kept outside the cell. A cell whose expectation the
-run derives from its own inputs is not pinned.
+list together with `REVIEW.md`'s.** A pinned test cell is one whose expected value must be kept
+in step with something maintained outside the cell - a document, a checked-in table, a committed
+artifact's form, a roster, a knob list - wherever the value is written; a value the cell's own
+claim defines is not pinned.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
 axis gained or lost - updates that cell's entry in the pinned set below in the same change.**

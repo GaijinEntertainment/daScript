@@ -11,12 +11,14 @@ its format parameter - into a `KqFmt`, a plane stride, an interleave, or any oth
 number resolves it through `kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`): either the panicking
 overload `kq_fmt_of_id(id, what)`, or the `bool` overload whose false branch panics - or reads the
 answer through a `kq_desc` accessor that takes the id (`kq_sb`, `kq_block32`, the id forms of
-`kq_qsb` / `kq_ssb`), which resolve it once for every caller. A fallback
-branch that returns another format's number for an unknown id is a defect.**
+`kq_qsb` / `kq_ssb`), which resolve it once for every caller. A function that resolves the id
+itself and answers with another format's number for an unknown id is a defect.**
 
-**A per-format count under `modules/dasLLAMA/` outside the `kq_desc` row
-(`dasllama/dasllama_kqformat.das`) and the `ggml_type_bytes` block table
-(`dasllama/dasllama_gguf.das`) is read off the `kq_desc` row through its accessors - `kq_qsb` /
+**A per-format number - any number that differs between `KqFmt` members - under
+`modules/dasLLAMA/` outside the `kq_desc` row and the named stride and stream-tag constants it
+reads (`dasllama/dasllama_kqformat.das`), the `ggml_type_bytes` block table
+(`dasllama/dasllama_gguf.das`) and the pins of `tests/test_kqformat.das`, is read off the
+`kq_desc` row through its accessors - `kq_qsb` /
 `kq_ssb` / `kq_elems` on a `KqFmt` (`dasllama/dasllama_kqformat.das`), `kq_qsb` / `kq_ssb` on a
 format id (`dasllama/dasllama_gemm_schema.das`), `kq_disk_bytes` (`dasllama/dasllama_gguf.das`) -
 never written as a literal.** A hand-copied count drifts from the table it restates.

@@ -22,10 +22,7 @@ the dispatch, and whose deciding value the host fixes before it records the disp
 defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
 guard, clamping the index so the guarded work runs on a live value and its result is never
 stored also conforms.** Stamped means the deciding value is a `@template_constant`, or - for a
-class no template instantiates - a module constant the class reads. Check the emitted shader:
-the Metal class's generated `*_msl` global, or the SPIR-V the Vulkan class emits
-(`DASLLAMA_VK_SPV_DUMP=<dir>` writes it), shows no branch where the guard was and a literal trip
-count where the bound was.
+class no template instantiates - a module constant the class reads.
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value
@@ -43,8 +40,8 @@ dispatches steps nor a multiple of that chunk the site forces by splitting its K
 dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
 a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
 
-**Weakening this folder's `tests/test_metal_float_a_gate.das` - the gate holding the MSL emitter
-to refusing an unlicensed float `matmul2d` A operand, `[metal_kernel(float_a_ok=true)]` being the
+**Weakening this folder's `tests/test_metal_float_a_gate.das` - the gate that checks the MSL
+emitter refuses a float `matmul2d` A operand without the `[metal_kernel(float_a_ok=true)]`
 license - is a defect.** A float operand keeps the op off its native fast path.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set

@@ -21,14 +21,11 @@ harness, flags, box and exe - set before the rows it covers or naming them. A ta
 covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
 of the paragraphs that line sits under or names.
 
-A served-turn leg is prefill, decode, a batched decode row, or the turn end to end. A rig leg is
-a row `performance/gen_bench_records.das` can mint (`stored_row_leg` in
-`performance/profile_common.das` names the backends). A box mints a path when that program mints
-a board row (`performance/records/<box>.json`) for it on that box rather than refusing or
-skipping it.
-
-**A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
-it.**
+A served-turn leg is prefill, decode, a batched decode row, or the turn end to end. A box mints
+a path when `performance/gen_bench_records.das` mints a board row
+(`performance/records/<box>.json`) for it on that box rather than refusing or skipping it; a box
+does not mint a path for a model `performance/gen_bench_records.das --catalog official` does not
+carry.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -50,6 +47,9 @@ rather than as the released exe. A rig leg is the backend arm a board cell runs 
 `stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
+**A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
+it.**
+
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
 or as the `-jit` script - or a board cell did.** The exe and the `-jit` script run the same code
@@ -69,6 +69,8 @@ produced.**
 
 **A ratio the `-jit` script produced, written into `PERF_LEDGER.md`, names the arm it is
 measured against.**
+
+**A diff never edits a dated `PERF_LEDGER.md` row - it adds a new dated row that refutes it.**
 
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
@@ -95,17 +97,16 @@ an entry, not a selection timing: it records what was tried and why the tree sta
 mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
 including the path a run with no flags and no environment overrides takes.
 
-**A change that owes a board row for a route or a path no box of the author's mints - or for a
-model `performance/gen_bench_records.das --catalog official` does not carry, so its rows can only
-go to a store outside `records/` - names instead, in the
+**A change that owes a board row for a route or a path no box of the author's mints names
+instead, in the
 same change, the record or gate output that proves the route ran end to end, or the profile
 output that shows the win (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's
 `DASLLAMA_GPU_PROF=1` token ledger) with the flags that run took.**
 
 **A diff that changes what the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
-body, the `tune gate:` verdict line `tune_gate` (`performance/profile_common.das`) printed and
-the `sanity:` lines of its `lcpp_bench` run.**
+body, the `sanity:` lines of its `lcpp_bench` run and any `tune gate:` line (`tune_gate`,
+`performance/profile_common.das`) that run printed.**
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,

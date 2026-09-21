@@ -8,12 +8,10 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 cell loads no model, dispatches one or more kernel classes and asserts on their output; a kernel
 class is a `[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in
 `../dasllama/dasllama_math*.das`; a kernel gate is a cell or probe that dispatches or binds a
-kernel class by hand rather than through the generated builders.
+kernel class by hand rather than through the builders the kernel class generates.
 
-**A diff that touches a pinned test cell - one whose expected value is written down where a
-person edits it, a document, a checked-in table, a generated artifact's committed form, a
-roster, rather than computed by the code under test - or adds one, applies
-`REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
+**A diff that touches or adds a pinned test cell applies `REVIEW_PINNED_GATES.md` (beside this
+file) together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -95,7 +93,7 @@ bare return and never a red; `feint` is a print, not a skip.
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check
 (`typeinfo builtin_module_exists`) - or on a stocked fixture beside the models (a model
-file, an mmproj, an oracle dump - a model condition); never on the existence of an artifact
+file, an mmproj, an oracle dump); never on the existence of an artifact
 this repo's build or a previous test run produced (a minted `.dlim`, a generated binary, a
 dump a test wrote).** An artifact condition goes permanently false when its producer moves.
 
@@ -112,7 +110,8 @@ other stocked fixture gates on its own presence.
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
 or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
-`load_<family>_tower`, `load_<family>_encoder`, `load_<carrier>_model`, `load_tts_model`,
+`load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`,
 `load_styletts2`.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
@@ -173,8 +172,8 @@ file's `[init]`, and a claim that needs the lane unset establishes it with `rese
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 other driver setter it touched back where it found it; the unset call is the family's own,
-returning it to its policy default (`reset_<family>_q8`; whisper's `set_asr_fp32(false)` and
-`set_asr_tower_fp32(false)`).** Why a hook left set changes what the next cell
+returning it to its policy default (`reset_<family>_q8`, canary's `reset_canary_enc_q8`,
+whisper's `set_asr_fp32(false)` and `set_asr_tower_fp32(false)`).** Why a hook left set changes what the next cell
 measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
@@ -206,7 +205,7 @@ gate.
 `_model_tier.das`).** The batched code paths get their parity on small models, through pins.
 
 **Setting a knob a cell can reach only through the environment after the process that reads it
-starts is a defect - set it before that process starts.** That process is a child the cell
+starts is a defect.** That process is a child the cell
 spawns, or the runner's own. An in-cell set is invisible to the running config.
 
 **A cell that cannot set an environment-read knob before its reader starts names that knob's
@@ -236,14 +235,14 @@ dump, with no exact-value generator - one whose values are exactly representable
 every box produces the same bytes - is a defect.** A generator running libm transcendentals is
 not exact-value: it is not float-portable.
 
-**An embedding-parity cell that does not name its fixture, or does not log the measured
+**An embedder-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
 **A diff that adds an assert carrying a bar - a tolerance, a count floor or a ceiling - or loosens
 one, ships in the same change a control that lands outside the bar in every cell that holds it.**
-A bar nothing has exceeded where it is applied is not known to discriminate there. A bar the
-cell derives from a number it measures in the same run, rather than one written into the assert,
-is not a bar.
+A bar nothing has exceeded where it is applied is not known to discriminate there. An assert
+whose threshold the cell computes from a number measured in the same run carries no bar - this
+rule does not reach it.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

@@ -179,12 +179,12 @@ summing the first reduce's partials would read the second's writes out of the sa
 ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
 prepare fails on the path that skipped the ensure.
 
-**A diff that adds a stamp to, or adds, removes or retypes a binding on one stamp of, a
+**A diff that adds a stamp, or adds, removes or retypes a binding on one stamp, of a
 `[vk_dispatch]` class template whose set is picked at dispatch keeps every stamp's binding list
 identical, in the same change; a field a `@template_gate` omits on a stamp is not a binding
 change.** A set is picked at dispatch when a hand-written picker under `dasllama/` returns one
-stamp's set by a stamp argument (for example `gemv_cls_set_n`), or when a driver set is handed
-across stamps (`RLayer.s_attn` to `DaAttnT`'s). The picker asks one stamp's set and the encode
+stamp's set by a stamp argument, or when a driver set is handed across stamps (`RLayer.s_attn`
+handed to `DaAttnT`'s set). The picker asks one stamp's set and the encode
 dispatches another, so the stamp the diff left behind reads the set's buffers in the wrong
 slots, and nothing refuses it.
 
@@ -196,8 +196,7 @@ missing timestamp reports every later stamp under the wrong role name.
 
 **A descriptor set the N-row token command - the resident decode command that runs two to
 `RDec.nb` rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its
-plane's whole
-`RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
+plane's whole `RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
 sizes to one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read
 past its binding on every row but the first.
 
