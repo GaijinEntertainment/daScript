@@ -723,11 +723,18 @@ def set_gpu_ctx_max_(n : int64) {
     g_rdec_ctx_max = max(n, 0l)
 }
 
-// the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
-// model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
+// the arming floor: DASLLAMA_GPU_MIN_CTX lowers it for a short-context session (a 3B on an 8GB card fits at 3429), and a
+// context pin under it (set_gpu_ctx_max in process, else DASLLAMA_GPU_CTX_MAX) lowers it to the pin, never under 256
 def private rdec_min_ctx : int64 {
-    let v = g_env_gpu.gpu_min_ctx   // unset or non-numeric keeps the default floor
-    return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
+    let pin = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
+    return resident_arm_floor(g_env_gpu.gpu_min_ctx, pin)
+}
+
+//! a caller's own context pin (`set_gpu_ctx_max`, DASLLAMA_GPU_CTX_MAX) under the floor wins: the pin IS the shape it serves
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_arm_floor(env_floor, pin : int64) : int64 {
+    let floor = env_floor > 0l ? max(env_floor, 256l) : RDEC_MIN_CTX
+    return pin > 0l && pin < floor ? max(pin, 256l) : floor
 }
 
 // gather one prepared plane into device-layout bytes and place it in its format's arena; returns
@@ -1976,12 +1983,23 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
 }
 
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
+    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs, position-major: the table rows the device projects, else the pre-step's finished rows as the workspace holds them
+    if (has_ple(c)) {
+        if (ple_raw) {
+            resident_prefill_ple_rows(t, ws.row_tokens, nrows)
+        } else {
+            let all = c.n_layers * c.n_embd_per_layer
+            g_rdec_ple_rows |> reserve(all * nrows)
+            g_rdec_ple_rows |> resize(all * nrows)
+            copy_floats(ws.scr.ple_inp, 0l, g_rdec_ple_rows, 0l, all * nrows)
+        }
+    }
     g_rdec_lrows |> resize(nrows)
     g_rdec_poss |> resize(nrows)
     g_rdec_cnts |> resize(nrows)
@@ -2014,7 +2032,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     }
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {

@@ -22,10 +22,11 @@ end-to-end route a run takes from prompt to tokens; its compile tier (interprete
 and its cross target (a build for another platform) are part of it.
 
 **A diff that adds a kernel or loop the runtime re-enters per token, per frame or per prefill
-quantum - one batch of prompt tokens the prefill path processes in a single pass - or adds,
-moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
-annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together
-with this list.**
+quantum - one batch of prompt tokens the prefill path processes in a single pass - adds a call
+path the runtime re-enters that way, adds, moves, renames or removes a `[hot_path]`,
+`[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or changes a measurement driver
+under `benchmarks/`, `harness/` or `performance/`, wherever the diff puts it, applies
+`REVIEW_HOT_PATH.md` (beside this file) together with this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -122,8 +123,8 @@ interleaved in one process under one instrument, and puts that race's rows, each
 in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading across two processes or
 two commits says which way the clock moved, not which form to adopt.
 
-**A change to an allocation whose size scales with a model dimension, a row count or a region
-count, added, grown or removed to move wall-clock, wherever it sits, ships the measured pair -
+**A diff that multiplies an allocation's size by a model dimension, a row count or a region
+count, or drops such a factor, wherever it sits, ships the measured pair -
 peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, `mm_fblob_b`, per-head `gemm_f32` /
@@ -272,7 +273,8 @@ companion's own opening (its range and the sections it names), and every repoint
 number no other section in this folder's `ARCHITECTURE*.md` set uses.** Prose citations are
 not LINT026-gated, so one naming a section that left its file sends the reader to nothing.
 
-**A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
+**A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
+input into embeddings - onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that

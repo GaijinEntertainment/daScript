@@ -18,6 +18,10 @@ change reaches a test when it alters anything the test's result depends on - the
 shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
 asserts on; a comment-only edit reaches none.
 
+**A PR that adds or changes a cell above the large tier also runs the `stocked` suite with
+`DASLLAMA_PARITY_FULL=1` and names the box in its body.** A plain stocked run skips every such
+cell and reads green.
+
 **A PR's `stocked` run carries no `--exclude`** - an excluding run is the iteration form between
 PRs; a PR that ships on it never ran the coverage it dropped.
 
@@ -160,7 +164,8 @@ defect.**
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter - a
 `set_*` / `pin_*` call in `dasllama/` that changes the driver's route, the serving lane or the
 engage mode for the rest of the process - whose value the cell's claim depends on, even when
-the claim needs it at its DEFAULT value.**
+the claim needs it at its DEFAULT value; a family serving-lane pin is the cell's own, never the
+file's `[init]`, and a claim that needs the lane unset establishes it with `reset_<family>_q8`.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 other driver setter it touched back where it found it; the unset call is the family's own -
@@ -261,7 +266,7 @@ untyped, and drop a return type that would name one.** A signature cannot sit in
 `static_if`, so a build without the module fails the compile on it.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
-and that has no untyped parameter, names that module's types or calls its functions only inside a
+and that has no untyped parameter, names anything that module declares only inside a
 `static_if (typeinfo builtin_module_exists(<mod>))` body.** In a build without the module a
 fully typed function is inferred anyway; one with an untyped parameter is inferred only at a call
 site, which its caller has already guarded.

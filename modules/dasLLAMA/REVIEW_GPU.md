@@ -1,9 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GPU_MTP.md`,
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned work: `followup_metal.md` for Metal,
-`followup_vulkan.md` for Vulkan.
+docs: the `ARCHITECTURE_GPU*.md` set beside this file - `ARCHITECTURE.md` routes to each by
+section. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
 `followup_metal.md` or `followup_vulkan.md`.
@@ -48,83 +47,10 @@ the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
 stamps - or a dispatch's bind list, generated or hand-rolled, wherever the diff puts it,
 applies `REVIEW_GPU_KERNEL_CLASSES.md` too.**
 
-**A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
-the choice at compile time instead.** A `class template` / `def abstract` / `def override`
-splice is compile-time and conforms - check the emission, not the das spelling.
-
-**Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
-whether the call carries a uniform attention span - however that parameter is derived; window
-readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
-`decode_decline` instead.**
-
-**A bounds or tail guard that branches per iteration in a kernel's main loop, where the guard's
-answer is the same for every thread of the dispatch and the host fixes the value before it
-records the dispatch, is a defect - stamp the guard, or clamp the index so the guarded work runs
-on a live value and its result is never stored.**
-Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
-select on the constant. The instance stamped without the guard shows no guard in its generated
-`*_msl` global or its SPIR-V dump.
-
-**A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
-a time and never checks for a partial last chunk - declares each alignment it assumes on a value
-the builder receives - a `params=` name or a kargs field - as one
-`<lhs> % N` item in `requires =`, comma-separated.** The generated builder then trips on the
-first misaligned dispatch instead of reading the next row.
-
-**A driver that keeps misaligned shapes off a chunk-stepping kernel - its main loop steps
-fixed-size chunks with no partial-last-chunk check - gates each dispatch site of that kernel on
-that site's own K, the extent that site's loop steps along, never on one gate covering every
-site.**
-
-**A dispatch site's alignment gate whose divisor is neither the chunk the kernel that site
-dispatches steps nor a multiple of that chunk the site forces by splitting its K extent across
-dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
-a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
-
-**Weakening `tests/test_metal_float_a_gate.das` - the gate on the MSL emitter's refusal to
-compile an unlicensed float `matmul2d` A operand, `[metal_kernel(float_a_ok=true)]` being the
-license - is a defect.** A float operand keeps the op off its native fast path.
-
-**A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
-`ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b sanctions extends that section in the same change.**
-A class the section already covers as a property needs no new line.
-
-**Never threadgroup-stage a `matmul2d` operand whose staged form matches its stored form -
-stream it from device instead.** A dequant, a transpose, or a layout or element-type change
-makes the forms differ. A staged pass-through costs the op more than the reads it saves.
-
-**Never fill a `@workgroup` tile with a loop whose per-element address needs a div or mod of
-anything but the lane's own slot index (the index that steps by one from lane to lane); give
-each lane a consecutive run of elements, or a lane-coalesced stride (`i += 32`), instead.** A
-device-to-device copy loop is already coalesced and conforms.
-
-**Never decide a kernel row's validity or owner by scanning the per-bucket base and count
-arrays - a bucket is the run of rows one expert owns in the bucket-ordered buffer - read the
-one per-row entry instead.** The bucket-building kernel writes that per-row entry. The scan
-repeats on every thread of every row's threadgroup, and it grows with the bucket count.
-
-**Never test the validity of a row in the bucket-ordered buffer - where each expert owns one
-run of rows - against the pad sentinel `0xFFFFFFFF`; compare the row's per-row bucket entry,
-the one the bucket-building kernel writes, with the live entry count (positions x experts per
-token, `npos * nk`) instead.** Rows past the last expert's stamped tail hold stale pool
-bytes, not the sentinel, and an equality test sends their token index out of bounds.
-
-**Never gate an early `return` in a kernel body that runs a cooperative op - a `barrier()`, a
-simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
-threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
-complete the op.
-
-**An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
-without one, or generated from a template instance that has none - shows that every address
-the form touches stays inside its buffers' allocations.** A `requires =` contract on the class
-is that showing for the dimension it names; an unchecked claim that an extent divides evenly is
-not. A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
-corrupts real rows.
-
-**Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
-operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
-pool bytes, so a pad row used as B multiplies stale values (NaN included) into every real row
-of the tile.
+**A diff that changes what a kernel body does or the geometry a dispatch hands it - a main
+loop with its guards and bounds, a cooperative op, a staged or padded operand, a workgroup tile
+fill, a chunk step and its alignment gate, a bucket-ordered read - wherever the diff puts it,
+applies `REVIEW_GPU_KERNEL_BODY.md` too.**
 
 **A prefill K/V panel - the per-layer device K/V slab the prefill GEMMs write; the Vulkan
 resident mirror is one - is sized from the padded write extent, never from the live key count.**
@@ -210,7 +136,7 @@ gives the user who selected the GPU a fraction of its speed.
 reads a weight plane once per row rather than once for all the step's rows, for any model it
 serves, is a defect: it ships that plane's batched read - one read serving every row of the
 step - in the same change, or the arm declines that model by name and that backend's
-architecture doc - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao for Vulkan,
+architecture doc - `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao for Vulkan,
 `ARCHITECTURE_GPU_MTP.md` sec.2.37a for Metal - gains the kinds of layer the batched step does
 not serve.** The weight stream is what the batch amortizes.
 
@@ -219,6 +145,10 @@ on (`set_device_kv`), shows at that call site that the live device-home sessions
 session keeps its K/V only in a device K/V region and has no host cache - stay within
 `gpu_device_sessions()`, a scheduler counting as its own `max_streams` of them.** The driver
 panics on a device-home session that finds no region.
+
+**A diff that sets the resident regions (`set_gpu_resident_regions`) or the context cap
+(`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`) sets it before the load it governs.** The loader plans
+the mirror from the regions and the cap, so a value set after the load never reaches the plan.
 
 **A diff that adds an `RdecPass` value gives it its own reader-facing sentence in
 `rdec_pass_words`, in plain words that name no part of the engine - no pass, region, mirror,

@@ -38,7 +38,8 @@ name.** Such a sentence does reference-build work. A constant a weight format's 
 fixes is the format's, not the reference build's.
 
 **A sentence stating what WE will build or change next carries no number measured or read from
-the reference build; that number gets its own sentence.**
+the reference build; that number gets its own sentence.** The unit every rule here judges is
+the independent clause - bounded by a period, a semicolon, a colon or a dash.
 
 **A sentence stating a reference-build run we will make carries that run's exe and model names,
 its command line, and any environment settings the command line does not show.** Such a sentence does

@@ -7,11 +7,13 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned wor
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**Parity evidence - a run comparing what the GPU path computes against what the CPU path
-computes on the same input - counts only when it comes from `harness/parity.das`,
-`benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an
-in-suite parity instrument run through `tests/run.das`, in the compare form `tests/REVIEW.md`
-binds.** A probe that prints a difference and asserts nothing is not parity evidence.
+**Parity evidence - a GPU-served run compared against the CPU chain over the same fixed
+tokens - counts only when it comes from `harness/parity.das`, `benchmarks/lcpp_bench.das
+--parity` (`performance/model_specs.das`'s fixed model list), or an in-suite parity instrument
+run through `tests/run.das` that feeds both sides the same fixed tokens and compares them in the
+form `tests/REVIEW.md` binds - the logits against a tolerance a one-token-off control reads
+past, or a counting prompt's tokens exact.** A probe that prints a difference and asserts
+nothing is not parity evidence.
 
 **A `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md` entry that settles a parity
 fix names the run its evidence came from, and that run is one this checklist admits as parity
@@ -38,3 +40,10 @@ is the default and needs no flag.
 **Vulkan parity evidence whose log carries a `resident override passed a call` line for the
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
+
+**Driver-against-itself evidence - a batched row against the same session stepped alone, both
+on the device, the regions files' shape - is rows evidence, never parity, and the arming, codec
+and pass-through rules above bind it the same.**
+
+**A diff that widens a bar an instrument holds names, in the same change, the reading the new
+bar comes from and the box that read it.**

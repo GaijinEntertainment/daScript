@@ -280,6 +280,10 @@ def register_ple_gpu_decode_gate(fn : PleGpuGateFn) {
     g_ple_gpu_decode_gate_set = true
 }
 
+//! the decode gate's answer for a step's rows: true when the armed driver gathers and projects the side input itself
+def ple_gpu_decode_gate(t : Model; s : Session; npos, pos : int64) : bool
+    => g_ple_gpu_decode_gate_set && invoke(g_ple_gpu_decode_gate, t, s, npos, pos)
+
 typedef EmbedGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
 var private g_embed_gpu_gate : EmbedGpuGateFn
 var private g_embed_gpu_gate_set = false
@@ -4111,7 +4115,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        if (g_ple_gpu_decode_gate_set && invoke(g_ple_gpu_decode_gate, t, s, 1l, pos)) {
+        if (ple_gpu_decode_gate(t, s, 1l, pos)) {
             s.ple_gpu_pending = true   //! the decode override gathers the row off `token` itself and finishes the pre-step on device
         } else {
             ple_pre_decode(t, s, token)

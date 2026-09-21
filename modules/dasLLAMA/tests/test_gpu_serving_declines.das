@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
+require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
@@ -418,5 +419,32 @@ def test_plan_room(t : T?) {
         let pinned = plan_room(8l * gib, true, os)
         t |> equal(8l * gib, pinned.usable, "a pinned cap fills itself and reads no room")
         t |> equal(0l, pinned.others, "a pinned cap counts nobody else")
+    }
+}
+
+[test]
+def test_resident_arm_floor(t : T?) {
+    t |> run("the smallest context a capped mirror arms at: the built-in floor, the env floor, and a caller's pin under either") @(t : T?) {
+        t |> equal(4096l, resident_arm_floor(0l, 0l), "no env floor, no pin: the built-in 4096")
+        t |> equal(1024l, resident_arm_floor(1024l, 0l), "the env floor stands in for the built-in one")
+        t |> equal(256l, resident_arm_floor(100l, 0l), "an env floor under 256 reads 256")
+        t |> equal(648l, resident_arm_floor(0l, 648l), "a pin under the floor is the floor: the pin is the shape the caller serves")
+        t |> equal(4096l, resident_arm_floor(0l, 8192l), "a pin over the floor leaves the floor alone")
+        t |> equal(512l, resident_arm_floor(1024l, 512l), "a pin under the env floor wins over it too")
+        t |> equal(256l, resident_arm_floor(0l, 64l), "a pin under 256 reads 256")
+    }
+}
+
+[test]
+def test_routed_slots_fit(t : T?) {
+    t |> run("the routed planes' slot cap: every row's picks fit the 64 slots or the N-row command declines the model") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> success(rd_routed_slots_fit(8l, 8l), "eight rows of eight picks fill the slots")
+            t |> success(!rd_routed_slots_fit(8l, 9l), "eight rows of nine picks pass them")
+            t |> success(rd_routed_slots_fit(2l, 32l), "two rows of thirty-two picks fit")
+            t |> success(!rd_routed_slots_fit(3l, 32l), "three rows of thirty-two pass them")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }

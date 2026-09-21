@@ -1320,16 +1320,13 @@ module) is independent and can land any time - it is pure structure.
     path sees the drift; the fix is a kernel cell in `tests/test_vulkan_kernels.das` at the 12B's
     widths against the CPU oracle, then the tile that misses. No test reads red today: the gemma
     file's cells skip on a memory decline (`moe_gpu_resident_memory_decline`).
-47. **The E-series' per-layer-embedding pre-step keeps two CPU halves.** The whole-model driver
+47. **The E-series' per-layer-embedding pre-step keeps one CPU half.** The whole-model driver
     takes gemma-4 E2B / E4B with the per-layer-embedding branch, the shared-KV layers and the two
-    dense widths on device, and the prefill's pre-step projection runs on device too (the f16
-    mirror of `per_layer_model_proj`, the `ple_raw` rows of `RdecPrefillFn`); what stays on the
-    CPU: the table gather a prefill (`ple_gather_rows`, across the job threads: 2.3 ms a 512-row
-    window on E2B - the q8 table is 2.35 GB, a device copy is the alternative), and the whole
-    decode pre-step (`ple_pre_decode`: the token's row plus a [dim x layers*ple] GEMV, normed and
-    averaged, copied to the token command as a [layers x ple] row - a GEMV over the f16 mirror and
-    a 35-row norm on device would take it). The batch decode override declines E-series models
-    (its rows carry no side input). Also here: the driver's prefill GEMMs for the branch run the
+    dense widths on device, and the pre-step's projection runs on device for the prefill window,
+    the token and the batched step's rows alike (the f16 mirror of `per_layer_model_proj`, the
+    `ple_raw` rows of `RdecPrefillFn`, the token commands' `pleproj` + `plefin` stamps); what stays
+    on the CPU is the table gather (`ple_gather_rows`, across the job threads: 2.3 ms a 512-row
+    window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
 48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes
@@ -1552,12 +1549,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer and a gated q
-    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched step of such a model pays
-    a weight pass a row. The work: each kind's N-row form, the recurrent and MoE ones behind
-    their own state and schedule questions; the shared-KV form rides with the per-layer
-    embeddings - every carrier that shares K/V (the E-series) carries them too, so it lands
-    with that section and its regions file, where a batched step can reach it.
+    answers 0 on a recurrent layer, a gated q, a layer carrying both a routed block and a
+    per-layer-embedding branch, a weight format with no N-column leaf, and a MoE whose `nb * k`
+    picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), so a
+    batched step of such a model pays a weight pass a row. The work: each kind's N-row form, the
+    recurrent one behind its own state question (N device state slots a region - a residency
+    change), the gated q behind the gate's N form, the slot cap behind larger slot planes.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
     `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
     and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
@@ -1598,8 +1595,11 @@ module) is independent and can land any time - it is pure structure.
     `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
     the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
     `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
-    one-token-off control meanwhile. The work: the arm found by pinning each site's N-row form to
-    its one-row twin in turn, then the exact bar restored in that file.
+    one-token-off control meanwhile; `test_gpu_resident_regions_qwen3moe.das` (Qwen3-30B-A3B
+    Q4_K_M, its projections and experts all Q4_K) holds the same bar for the same reason - its rows
+    read up to 0.63 of a logit apart at the same argmax (the qwen3moe regions cells' maxdiff lines on the pod, cm2 arm), where the gpt-oss file's Q8_0 projections
+    read bit for bit. The work: the arm found by pinning each site's N-row form to its one-row twin
+    in turn, then the exact bar restored in both files.
 76. **The batched step's rows sample one after another on the calling thread.** The scheduler's
     `sample_advance` loop runs each row's `sample` in turn after `eval_batch` (about 40 us a row
     of a 152k vocab at greedy - the pod, `lcpp_bench --npl 4` under `-jit`, the step's host stamps
@@ -1645,25 +1645,36 @@ module) is independent and can land any time - it is pure structure.
     reader cannot act on the line. The work: the message in one unit - the context a region gets
     at the region count that would fit, or the region count that fits at the asked context.
 
-81. **A dense model the resident plan cannot home whole falls to the per-op rails, which read
-    as the CPU chain.** On the RTX 5060 Ti (16 GB, the desktop holding 1 to 2 GB) the 12B
-    Q4_K_M declines at 15.6 GB asked over four regions and serves 7.6 tok/s flat, 15 summed over
-    four streams, against llama.cpp's paged 44 and 106; the 12B Q8_0 (12.1 GB of weights) 4.5
-    and 14 against 21 and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows). Two rungs. The
-    first: the plan sizes its mirror from the room, not from the load - the four-stream run holds
-    640 positions a stream, under 1 GB of K/V, so a plan that shrinks the mirror to the served
-    context before declining homes the Q4_K_M with room to spare and the Q8_0 on a cleared card,
-    at the pod's kind of rate; the decline stays for the weights alone not fitting. The second,
-    for the weights alone not fitting (the Q8_0 on a 12 GB card, the 31B on this one): a
-    streamed-weights arm - the layers' planes through a device ring the step refills ahead of
-    the decode, in layer order, the way the MoE block streams its expert groups
-    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) -
-    which beats the driver's blind paging because the order is known and the reads are one pass
-    a token; the rate then reads as PCIe's bandwidth over the bytes past the resident set, and a
-    row a step sees no benefit from four streams' worth of streaming unless the ring serves all
-    four rows a layer. Both rungs are measured against llama.cpp's paged rows on the same card.
+81. **A dense model whose weights alone pass the card falls to the per-op rails, which read as
+    the CPU chain.** The first rung is in: a caller that pins its context (`set_gpu_ctx_max`,
+    the bench for its batched row) gets the mirror sized to that context and the arming floor
+    lowered to it (`resident_arm_floor`), so on the RTX 5060 Ti the 12B Q4_K_M and Q8_0 home four
+    regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
+    and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
+    and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
+    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served weights to 15.4 GB; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
+    step refills ahead of the decode, in layer order, the way the MoE block streams its expert
+    groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q), which beats the driver's blind paging
+    because the order is known and the reads are one pass a token; the rate then reads as PCIe's
+    bandwidth over the bytes past the resident set, and a row a step sees no benefit from four
+    streams' worth of streaming unless the ring serves all four rows a layer. Measured against
+    the batched reference exe's paged rows on the same card (b10660 `llama-batched-bench -npl 4
+    -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on -ngl 99`, the same hour); and a server that
+    pins no context still plans at the binding cap's share a region, so a session-count-aware
+    pin from the scheduler is the other half of the first rung.
 82. **The device gather's grouped-row branch is a per-format ladder.** `moe_gpu_gather_stack_kq`
     (`dasllama/dasllama_layout.das`) reads its plane pair off `Model.kq[]` through the descriptor
     row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
     where every other lookup walks `kq_desc`. Done looks like: a grouped-row stride column on the
     descriptor row and the branch reading it, the resident MoE files bit for bit before and after.
+
+83. **The N-row command's routed block takes the unfolded down GEMV where the one-row command folds
+    it.** On a gemma-4 MoE with Q5_1 down stacks the one-row command sums the k slots under their
+    routing weights inside the down GEMV (`Q51GemvSum`, `RLayer.edown_sum`) and the combine reads
+    one row; the rows form runs the q51 leaf a slot at a time and the combine sums them, so the two
+    sums round apart, and on gemma-4-26B-A4B Q4_K_M the 26B's router near-ties turn that into
+    whole-position flips - five of thirty-two batched compares off by up to 0.13 of the peak
+    against the fused one-row command, none against the split one (`DASLLAMA_VK_FUSE=0`), which
+    `test_gpu_resident_regions_gemma4moe.das` pins for its load. The work: the folded form over
+    `nb` rows - `Q51GemvSum` summing each row's own k slots into that row's output row - so the
+    file compares against the fused one-row command the server runs.

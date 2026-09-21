@@ -785,7 +785,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
-    "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv"]
+    "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv",
+    // the N-row command's per-row top-k: the census steps every session a row at a time (the batched step needs two sessions
+    // over two regions - the gpt-oss and Qwen3-30B regions files serve it); its coverage is test_vkd_topk_n in test_vulkan_kernels.das
+    "topk_n_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
