@@ -556,7 +556,8 @@ codecs, the mid-run shrink, the B == 1 delegation, the step census) and on the d
 Qwen3.5-0.8B Q8 (f32 and f16 KV at 1e-6: the recurrent rows form per session, the gated
 partial-rope attention rows, the final deltanet state and conv history, every step counted on
 the CPU batched stack by the census, and a decode below the deltanet position panicking - the
-state is forward-only); a cell whose bar is exact free-runs the batched greedy and holds the
+state is forward-only) and, under the large tier, on the MoE hybrid Qwen3.6-35B-A3B UD-Q4_K_M -
+the f32-on-disk beta/alpha arm of the batched layer's projection prologue, f16 KV at 1e-6; a cell whose bar is exact free-runs the batched greedy and holds the
 tokens, a cell whose bar concedes rounding feeds the reference's tokens and holds the logits, and
 every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
 plus the batched bench row's refusal contract on SmolLM2.
