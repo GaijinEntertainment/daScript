@@ -1083,6 +1083,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### WebSocket server lifecycle
 
+- `bound_port` - The port the server listens on: the one passed to `make_web_socket_server`, or, when that was 0, the free port the operating system picked.
 - `destroy_web_socket_server` - Releases the server handle.
 - `make_web_socket_server` - Creates a new low-level WebSocket/HTTP server on the given port, optionally with TLS.
 - `set_bind_host` - Selects the WebSocket server interface to bind before start.
@@ -2297,17 +2298,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd`
-- `render_cowbell`
-- `render_cp`
-- `render_crash`
-- `render_hh`
-- `render_oh`
-- `render_ride`
-- `render_rimshot`
-- `render_sd`
-- `render_tambourine`
-- `render_tom`
+- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
+- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
+- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
+- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
+- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
+- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
+- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
+- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
+- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
+- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
+- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
 
 ### Oscillator type
 
@@ -4602,33 +4603,33 @@ The ALGORITHM module provides array and collection manipulation algorithms inclu
 
 ### Search
 
-- `binary_search`
-- `equal_range`
-- `lower_bound`
-- `upper_bound`
+- `binary_search` - Returns true if val appears within the range [f, last).
+- `equal_range` - Returns a pair of indices [lower, upper) bounding the range of elements equal to val within [f, l).
+- `lower_bound` - Returns the index of the first element in the range [f, l) that is not less than val, or l if no such element is found.
+- `upper_bound` - Returns the index of the first element in the range [f, l) that is greater than val, or l if no such element is found.
 
 ### Array manipulation
 
-- `combine`
-- `erase_all`
-- `fill`
-- `is_sorted`
-- `max_element`
-- `min_element`
-- `reverse`
-- `rotate`
-- `sort_unique`
-- `topological_sort`
-- `unique`
+- `combine` - Returns a new array containing elements from a followed by b.
+- `erase_all` - Erases all elements equal to value from arr in O(n) time.
+- `fill` - Sets all elements of the array to the given value using clone.
+- `is_sorted` - Returns true if the array is sorted in non-descending order.
+- `max_element` - Returns the index of the maximum element in the array, or -1 if the array is empty.
+- `min_element` - Returns the index of the minimum element in the array, or -1 if the array is empty.
+- `reverse` - Reverses the elements of a in place.
+- `rotate` - Rotates the array so that the element at index mid becomes the first element.
+- `sort_unique` - Returns an array of elements from a, sorted and with duplicates removed.
+- `topological_sort` - Topological sort of a graph.
+- `unique` - Returns an array with adjacent duplicate elements removed.
 
 ### Table manipulation
 
-- `difference`
-- `identical`
-- `intersection`
-- `is_subset`
-- `symmetric_difference`
-- `union`
+- `difference` - Returns the difference of two sets.
+- `identical` - Returns true if the two sets are identical.
+- `intersection` - Returns the intersection of two sets.
+- `is_subset` - Returns true if all elements of a are contained in b.
+- `symmetric_difference` - Returns the symmetric difference of two sets (elements in either set but not both).
+- `union` - Returns the union of two sets.
 
 ## ansi_colors
 
@@ -4760,16 +4761,16 @@ The ARRAY_BOOST module extends array operations with temporary array views over 
 
 ### Temporary arrays
 
-- `temp_array`
+- `temp_array` - Creates temporary array from the given object.
 
 ### Empty check
 
-- `empty`
+- `empty` - returns true if 'v' has 0 elements.
 
 ### Sub-array view
 
-- `array_view`
-- `pod_view`
+- `array_view` - creates a subview of an existing borrowed array, valid only within the block
+- `pod_view` - reads one raw POD value from borrowed bytes at an arbitrary, possibly unaligned, byte offset; bounds-checked byte copy — the alignment-free complement of the typed `array_view`
 
 ## assert_once
 
@@ -5307,26 +5308,26 @@ The CONTRACTS module provides compile-time type constraints for generic function
 
 ### Function annotations
 
-- `expect_any_variant`
-- `expect_any_workhorse`
-- `expect_any_function`
-- `expect_any_lambda`
-- `expect_ref`
-- `expect_any_bitfield`
-- `expect_value_handle`
-- `expect_any_struct`
-- `expect_any_enum`
-- `expect_any_tuple`
-- `expect_any_numeric`
-- `expect_any_array`
-- `expect_any_vector_type`
-- `expect_pointer`
-- `expect_class`
-- `expect_any_workhorse_raw`
+- `expect_any_variant` - [expect_any_variant(argname)] contract, which only accepts variants
+- `expect_any_workhorse` - [expect_any_workhorse(argname)] contract, which only accepts workhorse types (int, float, etc) Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and urange64, string,enumeration,and non-smart pointers
+- `expect_any_function` - [expect_any_function(argname)] contract, which only accepts functions
+- `expect_any_lambda` - [expect_any_lambda(argname)] contract, which only accepts lambdas
+- `expect_ref` - [expect_ref(argname)] contract, which only accepts references
+- `expect_any_bitfield` - [expect_any_bitfield(argname)] contract, which only accepts bitfields
+- `expect_value_handle` - [expect_value_handle(argname)] contract, which only accepts value handles
+- `expect_any_struct` - [expect_any_struct(argname)] contract, which only accepts structs (but not classes)
+- `expect_any_enum` - [expect_any_enum(argname)] contract, which only accepts enumerations
+- `expect_any_tuple` - [expect_any_tuple(argname)] contract, which only accepts tuples
+- `expect_any_numeric` - [expect_any_numeric(argname)] contract, which only accepts numeric types (int, float, etc)
+- `expect_any_array` - [expect_any_array(argname)] contract, which only accepts array<T>, T[], or das`vector<T>
+- `expect_any_vector_type` - [expect_any_vector_type(argname)] contract, which only accepts vector types, i.e.
+- `expect_pointer` - [expect_pointer(argname)] contract, which only accepts pointers
+- `expect_class` - [expect_class(argname)] contract, which only accepts class instances
+- `expect_any_workhorse_raw` - [expect_any_workhorse_raw(argname)] contract, which only accepts workhorse types which are raw (not pointer or bool)
 
 ### Type queries
 
-- `isYetAnotherVectorTemplate`
+- `isYetAnotherVectorTemplate` - returns true if the given type declaration is a das::vector template bound on C++ side
 
 ## coroutines
 
@@ -5466,6 +5467,7 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.init_wss` - Initializes an HTTPS/WSS server with TLS.
 - `HvWebServer.cleanup` - Releases the underlying WebSocket server handle.
 - `HvWebServer.start` - Starts the server.
+- `HvWebServer.bound_port` - The port the listening socket actually holds, or -1 before `start` succeeds.
 - `HvWebServer.set_bind_host` - Selects the interface to bind before `start` (for example, `127.0.0.1`).
 - `HvWebServer.stop` - Stops the server.
 - `HvWebServer.tick` - Processes pending HTTP and WebSocket events; must be called periodically.
@@ -5702,24 +5704,24 @@ The ENUM_TRAIT module provides reflection utilities for enumerations: iterating 
 
 ### Typeinfo macros
 
-- `enum_length`
-- `enum_names`
+- `enum_length` - Implements typeinfo enum_length(EnumOrEnumType) which returns total number of elements in enumeration.
+- `enum_names` - Implements typeinfo enum_names(EnumOrEnumType) which returns array of strings with enumValue names.
 
 ### Handled enumerations
 
-- `string_to_enum`
+- `string_to_enum` - Enumeration annotation which implements string constructor for enumeration.
 
 ### Enumeration iteration
 
-- `each`
+- `each` - Returns an iterator over all values of the given enumeration type.
 
 ### Enumeration conversion
 
-- `auto!`
-- `bool`
-- `enum_to_table`
-- `string`
-- `to_enum`
+- `auto!` - True when the enum value's underlying integer is zero.
+- `bool` - True when the enum value's underlying integer is non-zero.
+- `enum_to_table` - converts enum type to a table of name => value pairs usage: let t = enum_to_table(type<EnumType>)
+- `string` - converts enum value to string usage: let s = string(EnumValue)
+- `to_enum` - converts string to enum value, panics if not found usage: let e = to_enum(type<EnumType>,"EnumValueName")
 
 ## faker
 
@@ -6623,25 +6625,25 @@ The MACRO_BOOST module provides utility macros for macro authors, including patt
 
 ### Structures
 
-- `CapturedVariable`
+- `CapturedVariable` - Stored captured variable together with the `ExprVar` which uses it
 
 ### Function annotations
 
-- `MacroVerifyMacro`
+- `MacroVerifyMacro` - Converts `macro_verify(expr, message, prog, at)` to equivalent inline code.
 
 ### Implementation details
 
-- `macro_verify`
+- `macro_verify` - Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
 
 ### Block analysis
 
-- `capture_block`
-- `collect_finally`
-- `collect_labels`
+- `capture_block` - Collect all captured variables in the expression.
+- `collect_finally` - Collect all finally blocks in the expression - array of ExprBlock? with a `finally` section.
+- `collect_labels` - Collect all labels in the expression.
 
 ### Expression analysis
 
-- `has_sideeffects`
+- `has_sideeffects` - Conservative side-effect detection.
 
 ## md_boost
 
@@ -6922,23 +6924,23 @@ The QUOTE module provides quasiquotation support for AST construction. It allows
 
 ### Structures
 
-- `CaptureEntryInitData`
-- `LineInfoInitData`
-- `EnumEntryInitData`
-- `AnnotationArgumentInitData`
-- `FileInfoInitData`
+- `CaptureEntryInitData` - Initialization data for a captured variable entry.
+- `LineInfoInitData` - Initialization data for source line info reconstruction.
+- `EnumEntryInitData` - Initialization data for a quoted enum entry.
+- `AnnotationArgumentInitData` - Initialization data for a quoted annotation argument.
+- `FileInfoInitData` - Initialization data for reconstructing file info.
 
 ### Clone operations
 
-- `clone`
-- `clone_file_info`
-- `clone_line_info`
-- `resolve_file_info`
+- `clone` - Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
+- `clone_file_info` - Creates a FileInfo from a FileInfoInitData struct.
+- `clone_line_info` - Creates a LineInfo from a LineInfoInitData struct.
+- `resolve_file_info` - Stable FileInfo for reconstructed LineInfos: one interned dummy per (file name, tab size) (per context), instead of a fresh allocation per evaluation.
 
 ### Conversion
 
-- `cvt_to_mks`
-- `make_alias_type_decl`
+- `cvt_to_mks` - Converts an array of arguments into a MakeStruct pointer.
+- `make_alias_type_decl` - Reconstruction helper: a by-name alias TypeDecl, resolved by re-infer at the splice site.
 
 ## random
 
@@ -7453,16 +7455,16 @@ The STRINGS_CONVERT module provides soft-failing string-to-numeric conversions t
 
 ### Soft-failing conversions
 
-- `try_to_double`
-- `try_to_float`
-- `try_to_int`
-- `try_to_int16`
-- `try_to_int64`
-- `try_to_int8`
-- `try_to_uint`
-- `try_to_uint16`
-- `try_to_uint64`
-- `try_to_uint8`
+- `try_to_double` - Parse `str` as a 64-bit float.
+- `try_to_float` - Parse `str` as a 32-bit float.
+- `try_to_int` - Parse `str` as a signed 32-bit integer.
+- `try_to_int16` - Parse `str` as a signed 16-bit integer.
+- `try_to_int64` - Parse `str` as a signed 64-bit integer.
+- `try_to_int8` - Parse `str` as a signed 8-bit integer.
+- `try_to_uint` - Parse `str` as an unsigned 32-bit integer.
+- `try_to_uint16` - Parse `str` as an unsigned 16-bit integer.
+- `try_to_uint64` - Parse `str` as an unsigned 64-bit integer.
+- `try_to_uint8` - Parse `str` as an unsigned 8-bit integer.
 
 ## temp_strings
 
@@ -7488,98 +7490,98 @@ The TEMPLATES_BOOST module extends template utilities with high-level macros for
 
 ### Structures
 
-- `Template`
+- `Template` - This structure contains collection of substitution rules for a template.
 
 ### Call macros
 
-- `qmacro_template_function`
-- `qmacro_variable`
-- `qmacro_type`
-- `qmacro_function`
-- `qmacro`
-- `qmacro_template_class`
-- `qmacro_method`
-- `qmacro_block`
-- `qmacro_expr`
-- `qmacro_block_to_array`
+- `qmacro_template_function` - Call macro for quoting named template functions.
+- `qmacro_variable` - This macro implements expression reification for variables.
+- `qmacro_type` - This macro implements type declaration reification 'qmacro_type'
+- `qmacro_function` - This macro implements expression reification for functions.
+- `qmacro` - This macro implements expression reification 'qmacro'
+- `qmacro_template_class` - Call macro for quoting named template class methods.
+- `qmacro_method` - This macro implements expression reification for class methods.
+- `qmacro_block` - This macro implements expression block reification 'qmacro_block'
+- `qmacro_expr` - This macro implements first line of the expression block reification 'qmacro_expr'
+- `qmacro_block_to_array` - This macro implements expression block to array reification 'qmacro_block_to_array'
 
 ### Template rules
 
-- `kaboomVarField`
-- `renameCall`
-- `renameField`
-- `renameVariable`
-- `replaceAnnotationArgument`
-- `replaceArgumentWithList`
-- `replaceBlockArgument`
-- `replaceStructWithTypeDecl`
-- `replaceType`
-- `replaceTypeWithTypeDecl`
-- `replaceVarTag`
-- `replaceVariable`
-- `replaceVariableWithList`
+- `kaboomVarField` - Adds a rule to to the template to replace a variable field access with a prefix and suffix.
+- `renameCall` - Adds a rule to the template to rename a call.
+- `renameField` - Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
+- `renameVariable` - Adds a rule to the template to rename a variable.
+- `replaceAnnotationArgument` - Adds a rule to the template to replace an annotation argument with the result of a callback.
+- `replaceArgumentWithList` - Adds a rule to the template to replace a block argument with a list of variables.
+- `replaceBlockArgument` - Adds a rule to the template to rename a block argument.
+- `replaceStructWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+- `replaceType` - Adds a rule to the template to replace a type alias with another type alias, specified by name.
+- `replaceTypeWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+- `replaceVarTag` - Adds a rule to the template to replace a variable tag with an expression.
+- `replaceVariable` - Adds a rule to the template to replace a variable with an expression.
+- `replaceVariableWithList` - Adds a rule to the template to replace a variable with an expression list.
 
 ### Template application
 
-- `apply_template`
-- `bind_block_argument`
-- `clone_and_rename_var`
+- `apply_template` - Applies the template to the given expression.
+- `bind_block_argument` - Clones the body of a block literal with its argument `argname` replaced by the expression `bound`, and returns it as a plain (argument-less) block.
+- `clone_and_rename_var` - Clones `src` and renames every `ExprVar` named `from_name` to `to_name`.
 
 ### Expression helpers
 
-- `expression_at`
-- `remove_deref`
-- `visit_expression`
+- `expression_at` - Force expression location, then return it.
+- `remove_deref` - Removes dereferences of the variable `varname` from the expression.
+- `visit_expression` - Visits the expression with the given visitor adapter.
 
 ### Expression generation
 
-- `make_expression_block`
+- `make_expression_block` - Create ExprBlock and move all expressions from expr to the list of the block.
 
 ### Block helpers
 
-- `move_unquote_block`
-- `push_block_list`
-- `unquote_block`
+- `move_unquote_block` - Moves the corresponding block subexpression expression from the ExprMakeBlock.
+- `push_block_list` - Splice every statement from a `qmacro_block(...) { ...
+- `unquote_block` - Returns the corresponding block subexpression expression from the ExprMakeBlock.
 
 ### Global variable helpers
 
-- `add_global_let`
-- `add_global_private_let`
-- `add_global_private_var`
-- `add_global_var`
+- `add_global_let` - Add global variable to the module, given name and initial value.
+- `add_global_private_let` - Add global variable to the module, given name and initial value.
+- `add_global_private_var` - Add global variable to the module, given name and initial value.
+- `add_global_var` - Add global variable to the module, given name and type.
 
 ### Hygienic names
 
-- `make_unique_private_name`
+- `make_unique_private_name` - Generates unique private name for the variable, given prefix and line info.
 
 ### Quoting macros
 
-- `apply_qblock`
-- `apply_qblock_expr`
-- `apply_qblock_to_array`
-- `apply_qmacro`
-- `apply_qmacro_function`
-- `apply_qmacro_method`
-- `apply_qmacro_template_class`
-- `apply_qmacro_template_function`
-- `apply_qmacro_variable`
-- `apply_qtype`
+- `apply_qblock` - Implementation details for the expression reification.
+- `apply_qblock_expr` - Implementation details for the expression reification.
+- `apply_qblock_to_array` - Implementation details for the expression reification.
+- `apply_qmacro` - Implementation details for the expression reification.
+- `apply_qmacro_function` - Implementation details for reification.
+- `apply_qmacro_method` - Implementation details for reification.
+- `apply_qmacro_template_class` - Implementation details for the expression reification.
+- `apply_qmacro_template_function` - Applies template rules to a function, cloning it with substituted types.
+- `apply_qmacro_variable` - Implementation details for reification.
+- `apply_qtype` - Implementation details for the expression reification.
 
 ### Type pointer helpers
 
-- `add_array_ptr_ref`
-- `add_type_ptr_ref`
+- `add_array_ptr_ref` - Implementation details for the reification.
+- `add_type_ptr_ref` - Implementation details for the reification.
 
 ### Structure helpers
 
-- `add_structure_field`
+- `add_structure_field` - Adds a field to the structure.
 
 ### Class generation
 
-- `enum_class_type`
-- `make_class`
-- `make_class_constructor`
-- `modify_to_class_member`
+- `enum_class_type` - return underlying type for the enumeration
+- `make_class` - Creates a class structure.
+- `make_class_constructor` - Adds a class constructor from a constructor function.
+- `modify_to_class_member` - Modifies function to be a member of a particular class.
 
 ## templates
 
@@ -7588,12 +7590,12 @@ The TEMPLATES module implements template instantiation utilities for daslang cod
 
 ### Function annotations
 
-- `template`
+- `template` - This macro is used to remove unused (template) arguments from the instantiation of the generic function.
 
 ### Call macros
 
-- `decltype`
-- `decltype_noref`
+- `decltype` - This macro returns `ast::TypeDecl` for the corresponding expression.
+- `decltype_noref` - This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
 
 ## type_traits
 
@@ -7616,51 +7618,51 @@ The TYPEMACRO_BOOST module provides infrastructure for defining type macros — 
 
 ### Structures
 
-- `TypeMacroTemplateArgument`
+- `TypeMacroTemplateArgument` - Holds a type macro template argument with its name and inferred type.
 
 ### Function annotations
 
-- `typemacro_function`
-- `typemacro_template_function`
+- `typemacro_function` - This macro converts function into a type macro.
+- `typemacro_template_function` - This one converts function into a type macro that uses template arguments.
 
 ### Structure macros
 
-- `template_tuple`
-- `template_structure`
-- `typemacro_documentation`
-- `typemacro_template`
-- `tsi_reified`
-- `template_struct_instance`
+- `template_tuple` - Like `[template_structure]`, but produces a typemacro that returns a named tuple instead of cloning a structure.
+- `template_structure` - This macro creates typemacro function and associates it with the structure.
+- `typemacro_documentation` - Structure annotation that stores type macro documentation metadata.
+- `typemacro_template` - Structure annotation that marks a struct as a type macro template instance.
+- `tsi_reified` - Marker the reifier appends to a finished instance: a template CHAIN pipes one reifier copy per ancestor, and the surplus copies no-op on sight of this.
+- `template_struct_instance` - Reifies a `struct template` / `class template` parent into the annotated instance at parse time: instance `typedef`s bind the template's type parameters, `override` inits bind its `@template_constant` fields (erased from the result), `@template_gate` fields exist only in stamps where the named bool `@template_constant` is true (`@template_gate = AXIS`, or the string form `"!AXIS"` to invert; a gated-off field is erased as if never written, and the argument stays inert on kept fields — reference a gated field only from `static_if` arms on its axis: a dead `static_if` arm may name it, a dead ternary arm may not, since infer sees both ternary arms), `@template_call` fields rebind free-function callees by name (`override sdot = @@ssdot` — bare-spelled calls AND `@@` addresses; erased too, while `_::sdot` / `__::sdot` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
 
 ### Enum helpers
 
-- `int64_to_enum`
+- `int64_to_enum` - Converts an int64 value to the specified enum type via reinterpret cast.
 
 ### Template structure instantiation
 
-- `is_typemacro_template_instance`
-- `make_typemacro_template_instance`
-- `template_structure_name`
+- `is_typemacro_template_instance` - template instance is determined by having parent == template.parent
+- `make_typemacro_template_instance` - Annotates a structure as a typemacro template instance of the given template type.
+- `template_structure_name` - Builds a mangled template structure name from its base name and argument types.
 
 ### Type inference helpers
 
-- `add_structure_aliases`
-- `infer_struct_aliases`
-- `infer_template_types`
-- `verify_arguments`
+- `add_structure_aliases` - Adds all template argument type aliases to a structure.
+- `infer_struct_aliases` - Infers structure alias types for all template arguments from a structure definition.
+- `infer_template_types` - Infers and validates template argument types against a pass argument, returning the resolved type.
+- `verify_arguments` - Verifies that all template arguments have been fully inferred (no remaining auto or alias types).
 
 ### String constant access
 
-- `get_string_const`
+- `get_string_const` - Extracts a string constant value or function address name from an expression.
 
 ### Work tracking
 
-- `is_custom_work_done`
-- `mark_custom_work_done`
+- `is_custom_work_done` - Returns true if custom work has already been performed on the template structure.
+- `mark_custom_work_done` - Marks the template structure's custom work as complete in its annotation.
 
 ### Type macro arguments
 
-- `typemacro_argument`
+- `typemacro_argument` - Extracts a string constant or function address argument at the given index from a type macro's dimension expressions.
 
 ## unroll
 
@@ -7711,29 +7713,29 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 ### Encoding and decoding
 
-- `decode_unicode_escape`
-- `utf16_to_utf32`
-- `utf8_decode`
-- `utf8_encode`
+- `decode_unicode_escape` - Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
+- `utf16_to_utf32` - Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
+- `utf8_decode` - Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+- `utf8_encode` - Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
 ### Iteration
 
-- `each_word`
+- `each_word` - Tokenizes UTF-8 into lower-cased word tokens (uses `utf32_is_word_char` for boundaries, `utf32_to_lower` for case fold).
 
 ### Length and measurement
 
-- `utf8_length`
+- `utf8_length` - Returns the number of characters in the UTF-8 string
 
 ### Validation
 
-- `contains_utf8_bom`
-- `is_first_byte_of_utf8_char`
-- `is_utf8_string_valid`
+- `contains_utf8_bom` - Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
+- `is_first_byte_of_utf8_char` - Returns true if the given byte is the first byte of a UTF-8 character.
+- `is_utf8_string_valid` - Returns true if the byte array contains a valid UTF-8 encoded string.
 
 ### Unicode word/case primitives
 
-- `utf32_is_word_char`
-- `utf32_to_lower`
+- `utf32_is_word_char` - ASCII `[A-Za-z0-9_]` fast path; otherwise consults a non-word range table.
+- `utf32_to_lower` - Lowercases a codepoint.
 
 ## validate_code
 
