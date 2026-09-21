@@ -103,9 +103,9 @@ output that shows the win (`benchmarks/lcpp_bench.das`'s `forward_profile` rows,
 row in the PR body.** The board is the module's committed record of what serving costs; a kernel
 win that never lands there is invisible to the next regression check.
 
-**A rate or wall of any served-turn leg written down outside `PERF_LEDGER.md` as a measurement rather than as a
-prediction, is a defect without either a board cell behind it or a naming of harness, flags,
-environment overrides, box, and the exe or script that ran it.**
+**A rate or wall of any served-turn leg written down outside `PERF_LEDGER.md` as a measurement
+rather than as a prediction is a defect unless it cites the committed board row it came from, or
+names harness, flags, environment overrides, box, and the exe or script that ran it.**
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
@@ -133,6 +133,6 @@ winner - outside `harness/`.**
 `DASLLAMA_PIN_BACKEND` - pins it before the load it governs.** The loader repacks weights into
 the pinned backend's layout, so a pin set after the load never reaches them.
 
-**A diff that adds or changes a pin path makes a pin naming a backend the box has not registered
-refuse or skip the run - never fall through to the default.** A misspelled pin that falls through
+**A diff that adds or changes a kernel-backend pin path makes a pin naming a backend the box has
+not registered refuse or skip the run - never fall through to the default.** A misspelled pin that falls through
 measures the default backend under the pinned one's name.

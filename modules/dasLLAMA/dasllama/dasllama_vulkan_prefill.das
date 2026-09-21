@@ -1440,6 +1440,7 @@ def ple_proj_shape_ok(dim, all : int64) : bool
 //! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
 //! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before
 //! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
@@ -1464,11 +1465,12 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     delete half
     // the token command's half: the projected row plane, the f16 row GEMV over the embedded row (no norm: the wn slot binds the norm row unread) and the per-slice finish in place on the gathered row
     verify(ensure_router_gemv_f16_cls() && ensure_cls_ar(), "vk decode: the per-layer-embedding pre-step's rails must engage")
-    g_rd.tok_plep = make_device_buf(all * 4l)
+    let nb = g_rd.nb
+    g_rd.tok_plep = make_device_buf(all * 4l * nb)
     g_rd.s_tok_pleproj = set_router_gemv_f16_cls(fixed_array(g_rd.ple_w16_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
-        fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l, all * 4l, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))
+        fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))
     g_rd.s_tok_ple_ar = set_cls_ar(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.tok_plep),
-        fixed_array(all * 4l, all * 4l, g_rd.ple * 4l, all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
+        fixed_array(all * 4l * nb, all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
     g_rd.ple_gpu = true
     rd_invalidate_token()
     return true
@@ -2150,7 +2152,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
+    verify(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
@@ -2573,7 +2575,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !kq_block32(f1)
-    assert(!kq_block32(f3) == kq_in,
+    verify(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     let xunit_mid = fmt_unit(f2)

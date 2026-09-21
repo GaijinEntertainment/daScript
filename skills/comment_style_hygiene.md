@@ -44,7 +44,8 @@ an existing lint, the lint compels - an unnoted rule is the reviewer's.
 
 ## Comments
 
-**.das in a folder whose `.lint_config` arms `force_clean_comments`: ABSOLUTELY NO comments
+**.das in a folder whose `.lint_config` arms `force_clean_comments` (the nearest `.lint_config`
+walking up from the file): ABSOLUTELY NO comments
 that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on a
 contract a CALLER must know - public API always, a private helper only when callers inside
 the module need the contract (narration of an implementation goes to a name, a test, or the

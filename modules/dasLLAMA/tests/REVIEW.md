@@ -5,8 +5,8 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 
 **A kernel-unit cell, or a kernel gate - a cell or probe that dispatches or binds a kernel
 class by hand rather than through the generated builders - applies `REVIEW_KERNEL_CELLS.md`
-(beside this file) together with this list, wherever the diff puts the file.** A kernel-unit
-cell is a model-less cell - a `t |> run` block, or a helper call that asserts on `t` - that
+(beside this file) together with this list, wherever the diff puts the file.** The companion
+defines the kernel-unit cell; a kernel-unit cell is one that
 dispatches one or more kernel classes and asserts on their output; a kernel class is a
 `[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das`.
 
@@ -20,6 +20,10 @@ the models stocked, plus every test here the change reaches - never the whole di
 change reaches a test when it alters anything the test's result depends on - the test file, a
 shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
 asserts on; a comment-only edit reaches none.
+
+**A PR that adds or changes a cell above the large tier also runs the `stocked` suite with
+`DASLLAMA_PARITY_FULL=1` and names the box in its body.** A plain stocked run skips every such
+cell and reads green.
 
 **A PR's `stocked` run carries no `--exclude`** - an excluding run is the iteration form between
 PRs; a PR that ships on it never ran the coverage it dropped.
@@ -165,7 +169,8 @@ defect.**
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter - a
 `set_*` / `pin_*` call in `dasllama/` that changes the driver's route, the serving lane or the
 engage mode for the rest of the process - whose value the cell's claim depends on, even when
-the claim needs it at its DEFAULT value.**
+the claim needs it at its DEFAULT value; a family serving-lane pin is the cell's own, never the
+file's `[init]`, and a claim that needs the lane unset establishes it with `reset_<family>_q8`.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 other driver setter it touched back where it found it; `reset_<family>_q8` is the unset call,
@@ -267,7 +272,7 @@ untyped, and drop a return type that would name one.** A signature cannot sit in
 `static_if`, so a build without the module fails the compile on it.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
-and that has no untyped parameter, names that module's types or calls its functions only inside a
-`static_if (typeinfo builtin_module_exists(<mod>))` body.** A build without the module infers
-every such body; a function with one untyped parameter is inferred only at a call site, which its
-caller has already guarded.
+and that has no untyped parameter, names anything that module declares only inside a
+`static_if (typeinfo builtin_module_exists(<mod>))` body.** A build without the module still
+infers a fully-typed function's whole body; a function with one untyped parameter is inferred
+only at a call site, which its caller has already guarded.

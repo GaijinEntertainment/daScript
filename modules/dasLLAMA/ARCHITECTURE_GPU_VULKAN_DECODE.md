@@ -10,7 +10,7 @@ window's and the token command's - is `ARCHITECTURE_GPU_VULKAN_MOE.md` sections 
 2.2ag; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq tile and the decode GEMV
 family's lane split are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q, 2.2ae and
 2.2ah; the residency plan and
-the marks swap under them, the token command's logits landing on the transfer queue and the N-row token command are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o and 2.2an-2.2ao.
+the marks swap under them, the token command's logits landing on the transfer queue and the N-row token command are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o and 2.2an, and `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}
 

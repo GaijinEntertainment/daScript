@@ -2198,9 +2198,126 @@ two commits in two processes [direction-grade - two commits].
   Vulkan rows read 106 (Q4_K_M) and 46 (Q8_0) at four streams, its CUDA rows 141 and 88 - so the
   12B's board is the pod's above. Ours reads at or above CUDA's four-stream rate on the two
   carriers CUDA does not win outright, and 0.91 of it on the 1B.
+- **The 12B files homed on the 5060 Ti (2026-09-21, the bench pinning its batched row's context
+  before the load - `followup_vulkan.md` item 81's first rung - so the plan sizes the mirror to
+  the 660 positions a region the row serves instead of the binding cap's 6238):** gemma-4-12B
+  Q4_K_M 151 +/- 0.2 / 106 / 141 (1.42 against Vulkan, 1.07 against CUDA), flat 48 / 44 / 48,
+  the image 7179 MB with an 866 MB mirror; gemma-4-12B Q8_0 104 +/- 0.04 / 46 / 88 (2.25 / 1.18),
+  flat 30 / 21 / 26, the image 12064 MB with the same mirror - 13.2 GB on the 16 GB card, the
+  desktop holding 0.9 GB, no paging flag. The reference pages both files there.
 - **Our gemma-2-2b pp512 on the pod reads 6468 to 19388 across runs (three-rep cv up to 38%)
   while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
   hold within 2% on pp512.
+
+### From the Vulkan batched-decode arc, the MoE carriers (2026-09-21)
+
+Instruments as the sections above - `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod
+(RTX PRO 4500 Blackwell, driver 580.173, cm2 without decode-vector, and the KHR arm under
+`DASLLAMA_COOPMAT=mm`), `DASLLAMA_ALLOW_UNTUNED=1`, `DAS_JOBQUE_THREADS=16`,
+`DASLLAMA_PARITY_FULL=1` (every carrier is large-tier), llama.cpp b10660's `llama-batched-bench`
+under the same command line the same hour (every llama.cpp figure `external`). Every ratio is
+`tg128@4` summed over four device-home streams against the reference's `S_TG` at `-npl 4`
+[direction-grade - two processes]; the lever's pair is two commits in two processes
+[direction-grade - two commits].
+
+- **The baseline (master 1c6ce2d2f, the pod, three reps ours), tg128@4 ours / llama.cpp, then flat
+  ours / theirs:** gpt-oss-20b mxfp4 196 / 234 (0.84), flat 213 / 97; Qwen3-30B-A3B Q4_K_M 159 /
+  312 (0.51), flat 174 / 184; Qwen3-30B-A3B UD-IQ2_XXS 165 / 196 (0.84), flat 184 / 86;
+  gemma-4-26B-A4B Q4_K_M 129 / 264 (0.49), flat 140 / 94; gemma-4-26B-A4B UD-IQ3_XXS 129 / 232
+  (0.55), flat 141 / 94. The N-row command declined every MoE layer, so the four streams stepped a
+  row at a time and read below one stream's rate on every carrier. Qwen3.6-35B-A3B UD-IQ2_XXS
+  (the hybrid) 30 / 236 (0.13), flat 167 / 112: the recurrent layers' one device state slot goes
+  home and back on every stream switch - the hybrid arc's residency change, the board's worst
+  served shape.
+- **The reference at decode size groups nothing by expert.** The local llama.cpp clone
+  (`D:/Work/llama.cpp`, the research report in the arc's notes): Vulkan takes its mat-vec path
+  for up to 8 tokens (`mul_mat_vec_max_cols` in `ggml-vulkan.cpp`) and loops one dispatch a
+  token on the host, CUDA one launch with a warp per token-slot pair (`MMVQ_MAX_BATCH_SIZE` in
+  `ggml-cuda.cu`) - both read N x k expert planes a step; the grouped form (a counting sort into
+  per-expert buckets, one GEMM with a grid axis per expert) sits past those thresholds. So the batched
+  step's gain on a MoE carrier is the attention, the router, the shared expert and the submit,
+  never the experts' bytes - and the one-row block's regions form (the k experts as regions of
+  one slot-mapped dispatch a plane) is already the shape the reference's Vulkan loops per token.
+- **The routed block's rows form (the router's columns, the per-row top-k over the shared record
+  base, the expert GEMVs as the one-row leaves over `nrows x k` regions, the act over every slot,
+  the unfolded down, the combine per row; `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), cm2 /
+  KHR / llama.cpp at tg128@4, three reps ours:** gpt-oss-20b 436 +/- 7 / 434 +/- 8 / 234 (1.86);
+  Qwen3-30B-A3B Q4_K_M 460 +/- 14 / 432 +/- 30 / 312 (1.47); Qwen3-30B-A3B UD-IQ2_XXS 348 +/- 5 /
+  347 +/- 10 / 196 (1.77); gemma-4-26B-A4B Q4_K_M 363 +/- 4 / 366 +/- 5 / 264 (1.38);
+  gemma-4-26B-A4B UD-IQ3_XXS 353 +/- 3 / 355 +/- 3 / 232 (1.52). The flat rows did not move
+  (214, 174, 184, 140, 141). Every carrier reads past the reference on both arms from the one
+  lever; the KHR arm reads the cm2 arm within its spread on every row (the 30B Q4_K_M's KHR
+  spread of 30 is the widest on the board). At the arc's tip - the rows' own combine form on a
+  batched-first run, the router's columns loop - the three cm2 rows read 428 +/- 7, 453 +/- 15 and
+  358 +/- 4, each within its row's spread [direction-grade - two commits].
+- **The 5060 Ti (driver 616.56, the desktop holding about 0.9 GB of the 16 GB), tg128@4 ours cm2
+  / llama.cpp Vulkan / llama.cpp CUDA (the same b10660 checkout built with CUDA 13.4, `external`,
+  the same hour), then flat ours / theirs Vulkan / CUDA:** gpt-oss-20b 245 +/- 7 / 135 / 293
+  (1.82 against Vulkan, 0.84 against CUDA), flat 130 / 61 / 127; Qwen3-30B-A3B UD-IQ2_XXS 237 +/- 1
+  / 91 / 359 (2.61 / 0.66), flat 143 / 59 / 135. gemma-4-26B-A4B UD-IQ3_XXS fits no plan on this
+  card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
+  the served weights alone to 15.4 GB; the per-op rails serve 16 summed) where the reference
+  pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
+  0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
+  expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
+  is the lever that room names; it would serve a fifth of gpt-oss's slots at four rows and a
+  tenth of the 30B's.
+- **The rows against the sessions alone:** gpt-oss bit for bit (the regions file's six cells);
+  Qwen3-30B Q4_K_M within 0.062 of the peak, past the K-quant dense carrier's 0.06 bar and under
+  the wide bar's 0.10 (item 75's rounding through twenty-four K-quant expert planes a token over
+  forty-eight layers; the regions cells' own maxdiff lines on the pod, cm2 arm); gemma-4-26B
+  Q4_K_M within the wide bar against the split one-row command and off by up to 0.13 of the peak
+  on five of thirty-two compares against the fused one (the same cells run before the file pinned
+  the fused forms off, the pod, cm2 arm) - the folded down sum's rounding through the 26B's
+  router near-ties, item 83. The routed planes at `nb` rows cost the resident image nothing a
+  reader sees: gpt-oss-20b's image reads 10914 MB with a 123 MB mirror at 660 x 4 and 220 MB of
+  scratch on the pod, the planes' growth inside the scratch's rounding.
+
+### From the Vulkan batched-decode arc, the E-series carriers (2026-09-21)
+
+Instruments as the MoE section above (the pod's cm2 arm and the 5060 Ti, `lcpp_bench.das --npl 4`
+three reps, llama.cpp b10660's `llama-batched-bench` the same hour, `external`; every ratio
+`tg128@4` against the reference's `S_TG` at `-npl 4` [direction-grade - two processes]; every
+lever's pair is two commits in two processes [direction-grade - two commits]); both carriers
+Q8_0, `DASLLAMA_PARITY_FULL=1` for the E4B. The one-row rates did not move through the
+section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 121.5, 66.1 -> 66.2).
+
+- **The rows form alone (commit e43ace31d: the side input a row, the pre-step projection a row a
+  column, the branch's split forms, q alone on a shared-KV layer), tg128@4 ours / llama.cpp:** the
+  pod E2B 540.7 +/- 1.7 / 185.5 (2.92), E4B 335.8 +/- 0.3 / 360.2 (0.93); the 5060 Ti E2B 371.0 +/- 1.0
+  / 113.1 (3.28), E4B 209.9 +/- 0.5 / 213.0 (0.99). The E4B's four-row step under the profiler read
+  2.4 ms of device idle a step on the pod and 4.4 on the 5060 Ti against a dense carrier's half a
+  millisecond: the batch driver ran the CPU pre-step (`ple_pre_prefill`: the gather and the
+  [dim x layers*ple] host GEMM over the rows) on every step, for rows the device then gathered and
+  projected again.
+- **The pre-step gate (commit 0840fc4a0: the batch step skips the CPU pre-step where the decode
+  gate says the armed driver projects, and runs it late on a declined step):** the pod E2B 567.7
+  +/- 1.6 (3.06), E4B 357.5 +/- 0.2 (0.99); the 5060 Ti E2B 386.3 +/- 2.0 (3.42), E4B 226.5 +/- 0.7
+  (1.06). The E4B's idle a step 2.4 -> 1.7 ms on the pod, 4.4 -> 2.9 on the 5060 Ti.
+- **The router's columns and the fused branch's rows form (commit 00ac50e0b: `RouterGemvT` reads
+  each row once over every column - the pre-step projection had streamed its 55 MB plane once a
+  row - and the branch takes the fused act + requant + proj over the columns where the one-row
+  branch fuses, `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao):** the pod E2B 585.0 +/- 0.2 / 185.5
+  (3.15), E4B 363.4 +/- 0.8 / 360.2 (1.01); the 5060 Ti E2B 394.9 +/- 0.3 / 113.1 (3.49), E4B 234.7
+  +/- 0.6 / 213.0 (1.10). Against llama.cpp CUDA on the 5060 Ti (the same checkout built with CUDA
+  13.4): E2B 449.7 (0.88), E4B 247.6 (0.95). The E4B's four-row step, us, pod / 5060 Ti: pleproj
+  159 -> 120 / 555 -> 233; the branch (the FFN step's rows requant, the gate, the fused act + proj)
+  1465 -> 1122 / 1375 -> 1195; the step whole 10763 -> 10512 / 16647 -> 16138. The reference's
+  E2B batched row reads 185 on the pod against its own flat 111.5 (1.66x, where its E4B row scales
+  3.3x over 108.9) and 113 on the 5060 Ti against 64.4: the reference's four-stream E2B shape is its
+  own question, and the E2B ratios stand as measured.
+- **The rows at the admission's ends (the pod, the cm2 arm, three reps):** E4B at two streams 195.8
+  +/- 0.2 fused against 185.8 +/- 0.1 split (`DASLLAMA_VK_FUSE=0`), the reference 120.3 (1.63); at eight
+  streams 614.2 +/- 0.5 fused against 597.6 +/- 0.3 split, no reference row (its `-c 4096` holds no
+  eight streams of 640). gpt-oss at two streams 304.9 +/- 2.8 against 186.3 (1.64), at eight 520.4
+  +/- 4.9. The fused branch wins at both ends, so the pick does not branch on the column count.
+  The E4B's footprint on the 5060 Ti: the image 7533 MB, the mirror 144 MB at 660 x 4, 167 MB of
+  scratch; the E2B's 4675 + 46 + 166.
+- **The rows against the sessions alone:** the E2B regions file's nine cells bit for bit on both
+  boxes at every commit, the batched cells served (`test_gpu_resident_regions_e2b.das`); the fused
+  branch's columns held to the one-row dispatches bit for bit (`test_vkd_q8_gemv_pleact`'s columns
+  arms), the router's columns likewise (`test_vkd_router_gemv_cols`), and the gpt-oss regions file
+  bit for bit over the router's new form.
 
 ### From the M4 Metal pass (2026-09-13)
 

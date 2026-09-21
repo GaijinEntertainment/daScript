@@ -35,7 +35,8 @@ name.** Such a sentence does reference-build work. A constant a weight format's 
 fixes is the format's, not the reference build's.
 
 **A sentence stating what WE will build or change next carries no reading of the reference
-build; the reading it sits beside gets its own sentence.**
+build; the reading it sits beside gets its own sentence.** The unit every rule here judges is
+the independent clause - bounded by a period, a semicolon, a colon or a dash.
 
 **A sentence stating a reference-build run we will make carries that run's names, knobs and
 commands.** Such a sentence does reference-build work, not a proposal; a sentence that promises a

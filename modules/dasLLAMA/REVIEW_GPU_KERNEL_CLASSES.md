@@ -18,17 +18,20 @@ twin, or shifts a shared field to a different binding number, is a defect - even
 twin ignores that field.**
 
 **A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
-stamp one `class template` or derive from one base shell.** Body divergence is carried by a
+stamp one `class template`, derive from one base shell, or - where the axis is a run-time count -
+share one class whose body reads the count from its kargs.** Body divergence is carried by a
 `@template_constant`, or by an overridden method spliced flat at emission.
 
-**Two kernel classes a cell or a regions file holds bit for bit against each other spell every
-multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
-per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
-ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
-definition and leaves the driver nothing to choose.
+**Two kernel bodies that compile to separate shader modules and that a test cell
+(`tests/test_vulkan_kernels.das`) or a regions file (`tests/test_gpu_resident_regions_*.das`)
+holds bit for bit against each other spell every multiply that feeds an add as `mad` in both, on
+the path the compare covers.** A driver decides per shader module whether to contract a
+multiply-add into one fma, so two bodies spelled alike round a ulp apart on a driver that
+contracts one and not the other; `mad` is the fused instruction by definition and leaves the
+driver nothing to choose.
 
-**A stamp - one instance of a class template, or one class deriving from a base shell - sets
-only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
+**A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
+a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
 `@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
 move it to the template whose body reads it, or make the body read it.
 

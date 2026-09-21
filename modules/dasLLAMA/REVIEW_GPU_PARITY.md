@@ -7,10 +7,11 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. Planned wor
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**Parity evidence counts only when it comes from `harness/parity.das`,
-`benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an
-in-suite parity instrument run through `tests/run.das` that feeds both sides the same fixed
-tokens and compares the logits against a fixed tolerance.**
+**Parity evidence compares a GPU-served run against the CPU chain over the same fixed tokens,
+and counts only when it comes from `harness/parity.das`, `benchmarks/lcpp_bench.das --parity`
+(`performance/model_specs.das`'s fixed model list), or an in-suite parity instrument run through
+`tests/run.das` that feeds both sides the same fixed tokens and compares the logits against a
+tolerance a one-token-off control reads past.**
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
@@ -24,3 +25,10 @@ is the default and needs no flag.
 **Vulkan parity evidence whose log carries a `resident override passed a call` line for the
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
+
+**Driver-against-itself evidence - a batched row against the same session stepped alone, both
+on the device, the regions files' shape - is rows evidence, never parity, and the arming, codec
+and pass-through rules above bind it the same.**
+
+**A diff that widens a bar an instrument holds names, in the same change, the reading the new
+bar comes from and the box that read it.**

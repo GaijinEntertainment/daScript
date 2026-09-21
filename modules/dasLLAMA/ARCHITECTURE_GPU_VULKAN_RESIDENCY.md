@@ -1,9 +1,11 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2n-2.2o, 2.2an and 2.2ao: the residency plan that sizes a whole model
-before a byte uploads, the marks swap that lets one GPU slot serve many models, the token command's
-logits landing on the transfer queue, and the N-row token command a batched step's rows go through. The prefill chain and byte
+document carries sections 2.2n-2.2o and 2.2an: the residency plan that sizes a whole model
+before a byte uploads, the marks swap that lets one GPU slot serve many models, and the token
+command's logits landing on the transfer queue. The N-row token command a batched step's rows go
+through, and the residual step's two forms it holds bit for bit, are `ARCHITECTURE_GPU_VULKAN_NROW.md`
+sections 2.2ao and 2.2ap. The prefill chain and byte
 stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
 2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
 `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
@@ -18,7 +20,14 @@ planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the hea
 arm leaves unfilled (zero when the user pins VRAM). KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
-the remedy that works - a shorter context, because the weights are fixed and the KV is not.
+the remedy that works - a shorter context, because the weights are fixed and the KV is not. The
+plan takes that remedy itself once: a mirror that does not fit is re-planned at seven eighths of
+the room that is left after the weights, as long as that context clears the arming floor - the
+built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own context pin
+(`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`) where that sits under either, since a caller that
+pinned its context named the shape it serves (`resident_arm_floor`). The pin is what lets a
+four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding
+cap's 6238 a region asks for more K/V than the weights leave.
 
 **The mirror's context is capped by the device's single-binding range before any byte is
 counted.** Each K/V side binds as one SSBO range, so `seq_cap` is at most `maxStorageBufferRange`
@@ -213,88 +222,3 @@ us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451. The figures in this section a
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
-
-### 2.2ao The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
-
-**A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
-once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
-rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
-`vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
-standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
-MoE, per-layer-embedding or shared-KV layer, a gated q, or a weight format with no N-column
-leaf - and logs the reason once per armed model. The classifier epilogue (the final softcap
-and the suppressed ids, `ClsEpilogue`) runs once over the rows' logits planes, `ClsEpiArgs.rows`
-planes `vocab` apart, the id a row's own; the one-row command and the prefill's tail pass one
-row. The pins matter on the one-row path alone: the batch driver's host tail pins the
-suppressed ids again on every row after the override (`dasllama_batch.das`), where the one-row
-decode returns before its host tail when the device produced the logits. A q/k norm has one: the rows take whichever form the one-row
-command takes - the fused norm + rope + store (`QknRopeKvT`, a head-row a workgroup with the row
-in the workgroup id, each row at its own token meta) where the one-row command fuses, the split
-pair (`qk_rms_cls`, the per-head rms over every row's projection row before the rope, the
-projection row's width as both strides) where it does not - so the rows' q and k are the one-row
-command's bit for bit. The fused kernel and the split pair round apart, because the compiler
-contracts each kernel on its own, so one command runs one form for every row. Every set over a per-row plane binds the plane's whole `nb`
-extent; the rule guards two shapes - an ungated q row sitting inside the projection row, and a q
-binding sized to one row, which leaves every row but the first reading past its binding. The MoE
-feed planes (`moe_xq_dev` / `moe_xs_dev`) stay one row: the command declines MoE layers, and
-their sets bind one row. Every GEMV goes out as an N-column dispatch
-(`GemvArgs.ncols` activation rows one weight pass apart by `ystride`); the q8 leaf takes its
-two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
-because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
-Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
-requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuNT`, stamped at two, four and eight
-columns like the plain q8 leaf: a workgroup owns 32 output rows for every column, each column's
-half-block one 16-byte load beside the weight word, a column past the live ones re-dotting the
-last live column's row with its block never stored, and a subgroup a column quantizes the
-column's block, so the columns' rows quantize in parallel - the eight-column guarded unroll it
-replaced read a quarter slower than the split gate and up GEMVs at four rows on the 12B,
-`PERF_LEDGER.md`'s gemma section of 2026-09-20); the
-residual epilogues stay separate dispatches over the rows, because an epilogue
-run by the last workgroup would serialize the rows' steps where the separate dispatch runs them
-in parallel workgroups. The
-row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
-run at each row's own position, cached count and mirror region, which ride the shared `TokMeta`
-block a row (`mirbase` an element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into
-the attention, `rowwg` 0 naming a one-row dispatch). The attention's key split is the span's,
-the ladder the one-row command takes below its wide form (`rd_split_pieces` and the layer's
-window cap, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does
-alone while every row sits in one band - the batch's furthest row picks the form, the unsplit
-twin under `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight
-pieces slower than four at four rows, so the rows take no wide twin). A command is recorded
-once per row count and form - the split form and the unsplit twin on first use of the row count,
-the twin's availability decided at prepare with its buffers, never by a one-row record - and
-keeps its own stamp names; the one-row command's list is borrowed for the record and put back.
-The command's N-column leaves and its fused gate-up form are built on the first batched step; a
-stamp that declines on the device logs once, and the command answers 0 rows from then on, so the
-row-at-a-time loop serves.
-
-**The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
-`rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
-the lanes idle while the device owns the step) and copies in order without one: a lane copies
-about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
-a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
-pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026-09-20 section).
-
-**The engine reaches the command through the driver seam, and falls back a row at a time.**
-`install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside
-the resident driver, so a tier with no batch arm answers 0 rows. `rdec_batch_rows_at_once` gathers
-the step's residuals, rope rows, positions, counts and regions, submits once, reads each
-host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
-two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
-(`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
-logits are garbage under any bit.
-
-### 2.2ap The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
-
-The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
-row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
-(`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
-regions cells hold the two commands bit for bit. The forms share their reduce, their four-column
-round and their requant word for word, and a driver still decides per kernel whether a multiply
-feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
-ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
-apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
-spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
-contraction to choose; the plain column carries no multiply before its add.
-`test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
-fed the GEMV's own y row.

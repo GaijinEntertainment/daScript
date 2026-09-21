@@ -106,7 +106,7 @@ struct public GpuTierEnv {
     gpu_min_ctx : int64 = 0l
 
     @clarg_default_doc = "the model's context"
-    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); 0 follows the model's context; a server keeps the model's."
+    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); a cap under the arming floor lowers the floor to the cap (never under 256), since the cap is the shape the caller serves; 0 follows the model's context; a server keeps the model's."
     gpu_ctx_max : int64 = 0l
 
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
@@ -389,7 +389,7 @@ struct public VulkanEnv {
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
 
-    @clarg_doc = "`benchmarks/lcpp_bench.das --npl N` only: drops a class of dispatch from the recorded N-row token command so a profile prices it - bits 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no q/k norm and no rope, 8 = no activation requant; the logits are garbage under any bit."
+    @clarg_doc = "`benchmarks/lcpp_bench.das --npl N` only: drops a class of dispatch from the recorded N-row token command so a profile prices it - bits 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no q/k norm and no rope, 8 = no activation requant; the logits are garbage under any bit. The bits reach the head and the dense triple; the routed block and the per-layer-embedding branch run their one-row leaves and column forms whole."
     vk_nrow_bisect : int64 = 0l
 
     @clarg_doc = "Keeps a fused form of the token command on its split dispatches (a same-build A/B; the logits stay right; the N-row command shares the gate-up and the fused q/k norm through the layer flags read at load) - bits 1 = the wo GEMV's residual epilogue, 2 = the down GEMV's, 4 = the fused gate-up twin, 8 = the prologue's add+rms+requant stamp, 16 = the post-attention one (the wo epilogue too), 32 = the post-FFN one (the down epilogue too), 64 = the fused qk-norm+rope; the load log names each bit as taken or inert on the model"

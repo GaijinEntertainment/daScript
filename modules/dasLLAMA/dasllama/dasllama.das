@@ -639,7 +639,8 @@ def set_gpu_resident_regions(n : int64) {
 
 def set_gpu_ctx_max(n : int64) {
     //! Cap the whole-model GPU driver's K/V context at ``n`` positions per region for the models
-    //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it.
+    //! loaded next (0 lifts it): a server's ``ctx``. The card's room still bounds it; a cap under the arming floor lowers
+    //! the floor to the cap (never under 256): the cap is the shape the caller serves.
     set_gpu_ctx_max_(n)
 }
 
