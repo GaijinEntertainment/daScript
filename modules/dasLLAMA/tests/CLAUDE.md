@@ -1298,9 +1298,9 @@ model-loading block is `REVIEW.md`'s obligation.
 
 `model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
 `DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
-large tier. A run reporting SKIPPED for those arms is correct, not a failure. The 70B's
-no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming 40GB on
-the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
+large tier. A run reporting SKIPPED for those arms is correct, not a failure. The large tier's
+no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming a 70B's
+40GB on the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
 that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
 
 ## Log discipline

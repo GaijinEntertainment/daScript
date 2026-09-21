@@ -193,8 +193,8 @@ model and its blob twin share one shape, so one session serves both.
 `family_on(t, name)` (`_model_tier.das`). An untagged block silently joins every family's
 gate.
 
-**No CPU-control batch parity runs against `Llama-3.3-70B-Instruct-Q4_K_M.gguf`.** The
-batched code paths get their parity on small models, through pins.
+**No CPU-control batch parity runs against a large-tier carrier (`LARGE_TIER_BYTES`,
+`_model_tier.das`).** The batched code paths get their parity on small models, through pins.
 
 **A cell sets an environment-read knob - one the running config reads once, at context init -
 before the process that reads it starts: the child the cell spawns, or the runner's own.** A set
