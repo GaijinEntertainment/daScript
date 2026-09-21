@@ -107,11 +107,12 @@ mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_imag
 class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a kargs
 field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
 
-**A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
-the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
-a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
-stays green; a global another file's `[init]` arms has no initializer, and its null default is
-the declared "no hook".
+**A function-typed global a serialized exe must re-establish, or that a job (a forked context)
+invokes, lands in a `dasllama/` file beside the `[init]` that establishes it at boot, and that
+`[init]` re-establishes it when it reads null.** A serialized exe and a forked context restore
+globals as data, so a declaration initializer alone arrives null and dies at the first invoke
+while every `-jit` gate stays green; a global only the main context invokes, armed by another
+file's `[init]`, may carry its null default as the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
