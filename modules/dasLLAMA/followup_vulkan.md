@@ -1598,8 +1598,11 @@ module) is independent and can land any time - it is pure structure.
     `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
     the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
     `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
-    one-token-off control meanwhile. The work: the arm found by pinning each site's N-row form to
-    its one-row twin in turn, then the exact bar restored in that file.
+    one-token-off control meanwhile; `test_gpu_resident_regions_qwen3moe.das` (Qwen3-30B-A3B
+    Q4_K_M, its projections and experts all Q4_K) holds the same bar for the same reason - its rows
+    read up to 0.63 of a logit apart at the same argmax, where the gpt-oss file's Q8_0 projections
+    read bit for bit. The work: the arm found by pinning each site's N-row form to its one-row twin
+    in turn, then the exact bar restored in both files.
 76. **The batched step's rows sample one after another on the calling thread.** The scheduler's
     `sample_advance` loop runs each row's `sample` in turn after `eval_batch` (about 40 us a row
     of a 152k vocab at greedy - the pod, `lcpp_bench --npl 4` under `-jit`, the step's host stamps
