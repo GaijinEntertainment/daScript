@@ -595,7 +595,7 @@ def gpu_dn_room(n : int64) {
     //! Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once:
     //! a scheduler names its stream count before the first prefill, so no stream's deltanet state
     //! evicts under the batched step it rides. A driver with no such cache ignores it.
-    moe_gpu_dn_room(n)
+    gpu_dn_room_(n)
 }
 
 def gpu_slot_capture(var st : dasllama_gpu_resident::GpuModelMarks) : string {

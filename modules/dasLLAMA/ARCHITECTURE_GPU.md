@@ -93,7 +93,7 @@ that a question answered for one backend has an obvious address in the other. Th
   pick its state, and the mirrors advance when the step lands (`g_lp_dn_uids`); a step whose
   rows have no resident or CPU-synced state declines `dn_state`. The mirror cache (`g_dn_mirrors`,
   an LRU) rests at four sessions and grows to whatever a scheduler names through the tier's
-  `moe_gpu_dn_room` seam at its creation (`create_scheduler` -> `gpu_dn_room`), and the batch
+  `gpu_dn_room_` seam at its creation (`create_scheduler` -> the facade's `gpu_dn_room`), and the batch
   build names its own row count too: a cache narrower than the batch would evict a row of the step
   it prepares, and that stream's next step would decline `dn_state` with no CPU chain to fall to
   on a blob-only model. Every plane a rows GEMV lands in is sized to the rows form's four-row tile

@@ -621,7 +621,7 @@ typedef MoeGpuDnRoomFn = function<(n : int64) : void>
 def private moe_gpu_noop_dn_room(n : int64) {}
 var g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
 
-def public moe_gpu_dn_room(n : int64) {
+def gpu_dn_room_(n : int64) {
     invoke(g_moe_gpu_dn_room, n)
 }
 
