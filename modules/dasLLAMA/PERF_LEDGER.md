@@ -2369,6 +2369,12 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
   +/- 0.6 (its count unchanged). The regions files hold bit for bit through the change (gpt-oss, the 30B on
   its bar, qwen2, E2B, Qwen1.5-MoE), since both commands read one count.
 
+- **The q8 N-column row-pair stamps armed from a reduction of 4096 (`g_q8_n2_min_n`, the E-series' down GEMVs)
+  - DECLINED, measured:** tg128@4 E2B 578.3 -> 525.1 +/- 1.3, E4B 362.3 -> 343.2 +/- 0.1, Llama-3.2-1B 1419.1 ->
+  1312.1 +/- 1.2 (flat rates unmoved); E2B's down stamp 941 -> 1608 us a step. The pair twin halves the activation
+  re-reads and still loses on this card, so the lever stays at its off default; the E-series' down group (1616 us
+  a step against the reference's 1187) waits on another form.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes
