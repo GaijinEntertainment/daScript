@@ -1603,6 +1603,17 @@ def private rdec_land_pick(var s : Session; pick : int64) {
         g_rdec_picks_served++
     }
 }
+
+//! the picks the first `n` rows landed, taken back: the step is declined after them, and the CPU rails' redo lands every row's logits
+def private rdec_unland_picks(var sessions : array<Session?>; n : int64) {
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        if (s.pick_ready) {
+            s.pick_ready = false
+            g_rdec_picks_served--
+        }
+    }
+}
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
 var private @scratch g_rdec_regs : array<int64>
@@ -1800,10 +1811,10 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         g_rdec_one_tok |> resize(1l)
         g_rdec_one_tok[0] = token
         resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
-        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.device_pick, s.logits))
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.pick_asked, s.logits))
         s.ple_gpu_pending = false
     } else {
-        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.device_pick, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
     g_rdec_regions[r].cnt = pos + 1l
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
@@ -2042,7 +2053,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
         g_rdec_lrows[i] = null
-        if (!s.device_pick) {
+        if (!s.pick_asked) {
             g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
         }
     }
@@ -2099,6 +2110,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         let pos = ws.positions[i]
         let r = rdec_bind_region(s)
         if (r < 0l) {
+            rdec_unland_picks(sessions, i)
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
@@ -2122,7 +2134,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         if (ple) {
             rdec_batch_ple_row(t, ws, i)
         }
-        let picked = rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.device_pick, g_rdec_tmp)
+        let picked = rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
         for (l in range64(c.n_layers)) {
             continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)

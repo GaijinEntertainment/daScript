@@ -9,9 +9,9 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
 Two kernel classes are twins when one body serves both: their compiled bodies differ only on an
 axis one value fixes - a template constant, a typedef, which base shell's method they inherit, or
-a run-time count of live entries inside a fixed extent (a column count, a row count). A base
-shell is the dispatch-less base class whose methods the emitter splices flat into each deriving
-class.
+a run-time count of live entries inside a fixed extent (a column count, a row count). Two classes
+with bodies of their own that share a base shell's method are not twins. A base shell is the
+dispatch-less base class whose methods the emitter splices flat into each deriving class.
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
@@ -117,8 +117,9 @@ host nor the device, so nothing reads it.
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
 
-**A kernel-class method a compiled body calls in value position - inside an expression rather
-than as its own statement - returns its value in one statement after compile-time folding: an
+**A kernel-class method a compiled body calls in value position - nested inside a larger
+expression as an argument, an operand or a subscript; a call that is the whole right-hand side of
+a `let` or an assignment is not - returns its value in one statement after compile-time folding: an
 arrow form (`=>`), or a `static_if` whose every arm is one `return`; a method that needs more
 than one statement hands its value back through a `var T&` parameter instead.** The emitter
 splices a value-position method as one expression, so a body that folds to more than one

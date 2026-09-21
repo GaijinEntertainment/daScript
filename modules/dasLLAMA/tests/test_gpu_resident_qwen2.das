@@ -32,14 +32,6 @@ def private allow_cpu_prefill_intent() {
 let private LOGIT_BAR_REL = 0.06
 let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
-//! the served tile arm, so a red names which prefill tile it came from
-def private tile_arm_tag() : string {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
-    } else {
-        return "no vulkan module"
-    }
-}
 
 def private qwen2_forced_feed(t : T?; n : int64) {
     if (!jit_enabled()) {

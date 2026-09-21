@@ -97,8 +97,10 @@ sidecars stay valid across code changes, and per-change invalidation lives in th
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
 **A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width the
-class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a kargs
-field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
+class fixes is, a dimension the model sets is not - never reaches that kernel through a per-dispatch
+argument channel (a uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it
+into the class as a `@template_constant`, or - on a class no template stamps - compile it in as a
+module constant the class reads.**
 
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
 the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
@@ -118,9 +120,10 @@ interleaved in one process under one instrument, and puts that race's rows, each
 in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading across two processes or
 two commits says which way the clock moved, not which form to adopt.
 
-**A diff that multiplies an allocation's size by a model dimension, a row count or a region
-count, or drops such a factor, wherever it sits, ships the measured pair -
-peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
+**A diff that adds a model dimension, a row count or a region count as a factor of an existing
+allocation's size, or drops such a factor, wherever it sits, ships the measured pair -
+peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles; a new
+allocation carrying such a factor states its size in bytes at the served shape in the same row.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is

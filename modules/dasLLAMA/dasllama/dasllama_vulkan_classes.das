@@ -1151,16 +1151,17 @@ class ClsEpilogue {
     }
 }
 
+let CLS_ARGMAX_CHUNKS = 64u   //! the chunks a row's pick splits into, compiled into both passes: a workgroup each over a 4096-wide slice of a 262144 vocab
+
 struct ArgmaxArgs {
-    vocab : uint    // a logits row's width
-    nchunk : uint   // the chunks a row's first pass splits into (`RD_PICK_CHUNKS`): a workgroup each
+    vocab : uint
 }
 
 //! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates - the subgroups'
 //! maxes, then the lowest id among the lanes holding the widest (every thread returns the same answer)
 class ClsArgmaxBase {
-    @workgroup wm : float[32]   // a subgroup's max (256 threads at a subgroup of 8: thirty-two)
-    @workgroup wi : uint[32]    // ... and the lowest id holding it
+    @workgroup wm : float[32]   //! a subgroup's max: 256 threads make eight at the tier's subgroup floor of 32, thirty-two at a subgroup of 8
+    @workgroup wi : uint[32]
 
     def fold(m : float; mi : uint) : uint {
         let sm = subgroupMax(m)
@@ -1185,20 +1186,21 @@ class ClsArgmaxBase {
 }
 
 //! the classifier tail's pick, the first pass: a workgroup a (row, chunk) over its slice of the row's logits, the slice's
-//! first maximum and its id into the partial planes (`part[row * nchunk + chunk]`)
+//! first maximum and its id into the partial planes (`part[row * CLS_ARGMAX_CHUNKS + chunk]`); a thread's first element seeds its
+//! candidate, so a row of equal or non-finite values still lands an id, and an empty slice lands none (`0xFFFFFFFF`)
 [vk_dispatch(name = "cls_argmax_part", grid = "wgs", params = "wgs : int64")]
 class ClsArgmaxPart : ClsArgmaxBase {
     @ssbo @binding = 0 y : array<float>        // the logits rows
-    @ssbo @binding = 1 partm : array<float>    // the chunks' maxes
-    @ssbo @binding = 2 parti : array<uint>     // ... and ids
+    @ssbo @binding = 1 part_max : array<float>
+    @ssbo @binding = 2 part_id : array<uint>
     @push_constant pa : ArgmaxArgs
 
     [spirv_kernel(local_size_x = 256, name = "cls_argmax_part_spv")]
     def run {
         let wg = gl_WorkGroupID.x
-        let row = wg / pa.nchunk
-        let len = (pa.vocab + pa.nchunk - 1u) / pa.nchunk
-        let c0 = (wg % pa.nchunk) * len
+        let row = wg / CLS_ARGMAX_CHUNKS
+        let len = (pa.vocab + CLS_ARGMAX_CHUNKS - 1u) / CLS_ARGMAX_CHUNKS
+        let c0 = (wg % CLS_ARGMAX_CHUNKS) * len
         let c1 = min(pa.vocab, c0 + len)
         let base = row * pa.vocab
         let tid = gl_LocalInvocationID.x
@@ -1207,7 +1209,7 @@ class ClsArgmaxPart : ClsArgmaxBase {
         var i = c0 + tid
         while (i < c1) {
             let v = y[base + i]
-            if (v > m) {
+            if (mi == 0xFFFFFFFFu || v > m) {
                 m = v
                 mi = i
             }
@@ -1215,19 +1217,19 @@ class ClsArgmaxPart : ClsArgmaxBase {
         }
         let bi = fold(m, mi)
         if (tid == 0u) {
-            partm[wg] = bi == 0xFFFFFFFFu ? -3.4e38 : y[base + bi]
-            parti[wg] = bi
+            part_max[wg] = bi == 0xFFFFFFFFu ? -3.4e38 : y[base + bi]
+            part_id[wg] = bi
         }
     }
 }
 
-//! ... the second pass: a workgroup a row over its `nchunk` partials, the row's first maximum's id (the lowest id on a
+//! ... the second pass: a workgroup a row over its `CLS_ARGMAX_CHUNKS` partials, the row's first maximum's id (the lowest id on a
 //! tie, as the host's `parallel_argmax` reads, so a device pick and a host pick agree) into `pick`
 [vk_dispatch(name = "cls_argmax_fin", grid = "rows", params = "rows : int64")]
 class ClsArgmaxFin : ClsArgmaxBase {
-    @ssbo @binding = 0 partm : array<float>
-    @ssbo @binding = 1 parti : array<uint>
-    @ssbo @binding = 2 pick : array<uint>      // the rows' picks
+    @ssbo @binding = 0 part_max : array<float>
+    @ssbo @binding = 1 part_id : array<uint>
+    @ssbo @binding = 2 pick : array<uint>
     @push_constant pa : ArgmaxArgs
 
     [spirv_kernel(local_size_x = 256, name = "cls_argmax_fin_spv")]
@@ -1237,9 +1239,9 @@ class ClsArgmaxFin : ClsArgmaxBase {
         var m = -3.4e38
         var mi = 0xFFFFFFFFu
         var c = tid
-        while (c < pa.nchunk) {
-            let pm = partm[row * pa.nchunk + c]
-            let pi = parti[row * pa.nchunk + c]
+        while (c < CLS_ARGMAX_CHUNKS) {
+            let pm = part_max[row * CLS_ARGMAX_CHUNKS + c]
+            let pi = part_id[row * CLS_ARGMAX_CHUNKS + c]
             if (pm > m || (pm == m && pi < mi)) {
                 m = pm
                 mi = pi

@@ -261,6 +261,11 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
   handoff), so a tier without the seats declines a recurrent layer by name
   (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
   whole-forward driver carries the recurrent branch inside its layer encoder.
+- **The device argmax pick is Vulkan-only.** The resident token command's two argmax passes
+  (`ClsArgmaxPart`, `ClsArgmaxFin`) land a bare-argmax stream's token id in place of its logits row
+  (`RdecTokenFn`'s `pick_only`, `RdecTokenNFn`'s null row pointer, `rdec_land_pick` into
+  `Session.pick_ready`; `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2an). Metal's decode drivers
+  land every row's logits, and `Session.pick_asked` is inert there: the sampler reads the row.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 

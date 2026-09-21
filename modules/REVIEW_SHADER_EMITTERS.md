@@ -47,7 +47,9 @@ statement forms - and its emitted shape values (tile, unroll width, threadgroup 
 is a dispatch argument, read at the encoder call site.
 
 **A diff whose text - a commit message, a PR body, an architecture line - claims an emitted shape
-value states in the PR body what it read in the emitted artifact: the SPIR-V words or the MSL
+value - a value the emitted words or text carry as a constant of the kernel's structure: a tile,
+an unroll width, a threadgroup size, a fixed-extent local or workgroup array - states in the PR
+body what it read in the emitted artifact: the SPIR-V words or the MSL
 text, and the count or value read there.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the

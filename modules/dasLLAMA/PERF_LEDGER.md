@@ -2321,10 +2321,16 @@ section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 
 
 ### The CUDA levers on the pod (2026-09-21)
 
-The reference beside the Vulkan one: llama.cpp b10660 built with CUDA on the pod
-(`/workspace/llama/src-b10660/build-cuda`, nvcc 12.8, `-DCMAKE_CUDA_ARCHITECTURES=120`),
-`llama-bench -ngl 99 -fa 1 -r 3` and `llama-batched-bench -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128
--npl 1,4 -ngl 99 -fa on`, `external` [direction-grade - two processes]; its kernels under nsys
+Provenance of every "ours" figure in this section: `benchmarks/lcpp_bench.das` under `-jit` on the
+pod (RTX PRO 4500 Blackwell, `DASLLAMA_GPU=1`, cm2, the f16 K/V mirror, the box's tuned
+`DAS_TUNE_POLICY`, `--for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4`: the flat row and the
+four-stream row from one process, so the flat row runs on the four-region plan), the shapes from the
+same bench under `DASLLAMA_GPU_PROF=1`; every before -> after pair is two commits [direction-grade -
+two commits]. The references: llama.cpp b10660 built with CUDA on the pod
+(`/workspace/llama/src-b10660/build-cuda`, nvcc 12.8, `-DCMAKE_CUDA_ARCHITECTURES=120`) and the
+prebuilt Vulkan b10660 (`/workspace/llama/b10660/llama-b10660/`, the E-series section's build),
+both under `llama-bench -ngl 99 -fa 1 -r 3` and `llama-batched-bench -c 4096 -b 2048 -ub 512 -npp 512
+-ntg 128 -npl 1,4 -ngl 99 -fa on`, `external` [direction-grade - two processes]; the CUDA kernels under nsys
 2024.6.2 (`-t cuda`, the trace grouped by kernel name and grid over the last 16 steps, a step closed
 by the classifier launch) beside our `DASLLAMA_GPU_PROF=1` stamps. nsys's per-kernel records inflate
 a step of about 1200 launches by about 1.5 ms (the traced step ran a fifth slower), so its sums
@@ -2374,6 +2380,20 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
   1312.1 +/- 1.2 (flat rates unmoved); E2B's down stamp 941 -> 1608 us a step. The pair twin halves the activation
   re-reads and still loses on this card, so the lever stays at its off default; the E-series' down group (1616 us
   a step against the reference's 1187) waits on another form.
+- **The device argmax pick (`ClsArgmaxPart` + `ClsArgmaxFin` after the epilogue, the picks-only transfer twin;
+  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2an), tg128@4 before -> after / CUDA:** E2B 578.3 -> 630.0 +/- 0.7 (745.5:
+  0.78 -> 0.85), E4B 362.3 -> 382.0 +/- 0.1 (440.2: 0.87), gpt-oss 461.1 -> 476.8 +/- 4.6 (523.3: 0.91), Llama-3.2-1B
+  1432.8 -> 1577.4 +/- 3.9, Qwen3-30B-A3B 450.2 -> 467.7 +/- 21.9 (within the spread); flat E2B 198.5 -> 198.8, E4B 112.5 ->
+  112.4, Llama-1B 465.0 -> 464.1, gpt-oss 209.2 -> 207.8 (the two passes over a 201k vocab, on a step the flat row still
+  lands logits for). The E2B four-row step under the profiler: the host's logits copy 266 -> 20 us, the idle between
+  commands 1407 -> 862, the passes' `t:pick` stamp 10 us a step - and 12 on Qwen2.5-0.5B (152k vocab), 9 on Llama-1B
+  (128k): flat across the vocab widths the tier serves, so the split has no width gate. The first form, one
+  workgroup a row over the whole row, cost 140 us on a 262k vocab and the flat rates 2-6% (E2B 198.5 -> 193.1, gpt-oss
+  209.2 -> 199.7), which is why the pass is two. The pick planes take 4 x (2 x 64 + 1) bytes a row of the plan (1 KB at
+  four rows), a footprint the plan's report does not itemize. The scheduler's device-mode cell counts the picks
+  landed against the rows stepped (`test_gpu_resident_regions*.das`), the kernel cell holds the passes to
+  `parallel_argmax` (`test_vkd_cls_argmax`), and the regions files hold bit for bit through the change (qwen2 26/26,
+  E2B 13/13, gpt-oss 8/8, the hybrid 6/6, qwen2 under `DASLLAMA_VK_KV32=1`).
 
 ### From the M4 Metal pass (2026-09-13)
 

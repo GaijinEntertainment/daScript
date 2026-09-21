@@ -369,9 +369,10 @@ kernel run a column at a time, bit for bit, each stamp full and short of its wid
 gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
 suppressed id pinned on every row), `test_vkd_cls_argmax` (the classifier tail's device pick over
-four rows at two vocab widths against the host's first-maximum walk, a tie landing on the lower id,
-a poisoned row reddening the compare; the served witness is the regions files' device-mode
-scheduler cell, which counts the picks the driver landed alone),
+four rows at two vocab widths against the host's `parallel_argmax`, a tie landing on the lower id,
+an all-equal row landing id 0, a poisoned row reddening the compare; the served witness is the
+regions files' device-mode scheduler cell, which counts the picks the driver landed alone against
+the rows it stepped, the sampled fourth request's rows landing logits beside them),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
 the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
 against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and
@@ -576,7 +577,9 @@ against the host-cached scheduler over four requests on two streams (`_scheduler
 with `test_scheduler.das`): token for token where the two sides run one code path - each prompt
 one window-chain call, each step the batched token command, the prefill counter pinning it -
 and for the second turn, which adopts the rows of the turn it continues and so splits its
-prefill, the adopted count alone. Every cell holds `gpu_cpu_passes_()` empty
+prefill, the adopted count alone; the three argmax requests' decode steps land their picks on the
+device (the count held equal to the rows stepped less the second turn's, which samples at top-k 1
+under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of
 `test_gpu_resident_qwen2.das`: one prompt prefilled in one call against two calls, cut at 40
 of 57, 512 of 600 and 300 of 900 (the cuts placed against the engine's `PF_WINDOW`, asserted),

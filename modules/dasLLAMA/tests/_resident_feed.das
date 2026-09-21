@@ -10,7 +10,7 @@ module _resident_feed shared public
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require math
-require dasllama/dasllama_common   // Model, Session, forward_prefill, forward, SUPPRESSED_LOGIT
+require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists

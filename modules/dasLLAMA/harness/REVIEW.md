@@ -26,7 +26,8 @@ alternate in the same change - another row of the same run at the same shape, or
 exe's row for the same shape with the command that produced it.** A number with no alternate
 beside it ranks nothing.
 
-**A reference-engine row a diff records for an instrument in this folder lands in
-`../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a when the row belongs to
-`vk_gemm_probe.das` or `vk_gemv_probe.das`, in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5
-otherwise.**
+**A reference-engine row a diff records as the alternate of a number a `harness/*.das` instrument
+printed lands in `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a when the number is
+`vk_gemm_probe.das`'s or `vk_gemv_probe.das`'s, in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5
+otherwise; a reference row beside an engine rate (`benchmarks/lcpp_bench.das`'s) is
+`../PERF_LEDGER.md`'s under `../REVIEW_MEASUREMENT.md`.**

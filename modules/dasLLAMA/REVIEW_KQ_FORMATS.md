@@ -9,7 +9,9 @@ docs: `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_CPU_KERNELS.md`. Planned w
 **A function in `dasllama/` that turns a kernel/IR format id - the int a generated kernel takes as
 its format parameter - into a `KqFmt`, a plane stride, an interleave, or any other per-format
 number resolves it through `kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`): either the panicking
-overload `kq_fmt_of_id(id, what)`, or the `bool` overload whose false branch panics. A fallback
+overload `kq_fmt_of_id(id, what)`, or the `bool` overload whose false branch panics - or reads the
+answer through a `kq_desc` accessor that takes the id (`kq_sb`, `kq_block32`, the id forms of
+`kq_qsb` / `kq_ssb`), which resolve it once for every caller. A fallback
 branch that returns another format's number for an unknown id is a defect.**
 
 **A per-format byte or stride-unit count under `modules/dasLLAMA/` is read off the `kq_desc` row

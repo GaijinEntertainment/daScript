@@ -2441,9 +2441,9 @@ struct RDec {
     xlog_recorded : array<bool>
     xlog_pick_cmd : array<VkCommandBuffer>   //! ... the picks-only twins, for a step whose every row wants its argmax alone
     xlog_pick_recorded : array<bool>
-    pick_dev : uint64             //! the rows' argmax ids (`ClsArgmax`, after the epilogue), and their host landing
+    pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
-    pick_partm_dev, pick_parti_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
+    pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
@@ -2583,6 +2583,14 @@ def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_elems
 
 //! one mirror side's binding: all `regions` copies end to end
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
+
+//! the decided-once set families (the fused sites', the N-row rail's, the combine's) rebuild on their next ensure: a
+//! set they read was replaced
+def rd_unmake_sets {
+    g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
+    g_rd.comb_sets_made = false
+}
 
 //! every region's token command re-records: the sets or planes it references were replaced
 def rd_invalidate_token {
@@ -3303,10 +3311,6 @@ let FUSE_BX_PROLOGUE_RQ = 8l   //! the prologue's add+rms+requant stamp
 let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, which would add the residual twice)
 let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
 let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
-let NROW_BX_ATTN = 1        //! `DASLLAMA_VK_NROW_BISECT`, the N-row command's probe bits: no attention
-let NROW_BX_NCOL1 = 2       //! the one-column GEMV leaves over row 0
-let NROW_BX_ROPE = 4        //! no rope (and no q/k norm)
-let NROW_BX_ACTRQ = 8       //! no act + requant
 
 def vk_fuse_on : bool {
     if (g_vk_fuse < 0) {

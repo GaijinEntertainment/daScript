@@ -13,8 +13,8 @@ code lands in which file is the checklist's own.
 
 **A function, a module global (`let` or `var`, private or not), a named constant or a `require`
 under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's
-sec.1 - names its concern and whose must-not-hold cell does not, or that charter line changes in
-the same diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1
+sec.1 - names its concern and whose must-not-hold cell, where its charter has one, does not, or
+that charter line changes in the same diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1
 routing block names the companion that holds each file's charter line.
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
@@ -31,6 +31,8 @@ of the coopmat forms a family ships (cm2, KHR).
 **A host-side ensure/set/encode ladder that picks a stamp from its push-constant and shape
 arguments alone lands in `dasllama/dasllama_vulkan_classes.das`; a pick that reads the driver's
 state - `g_rd` or an `RLayer` field - stays in the backend driver file its charter line names,
+and a ladder that only fans out on a stamp argument it is handed lands beside the function that
+decides that argument,
 `dasllama/dasllama_vulkan_decode.das` for a decode-time ladder and
 `dasllama/dasllama_vulkan_prefill.das` for a batch one.** A stamp is one class stamped from a
 kernel class template; a predicate over shape values alone is the classes file's, whoever calls

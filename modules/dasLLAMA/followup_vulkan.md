@@ -1668,3 +1668,28 @@ module) is independent and can land any time - it is pure structure.
     `test_gpu_resident_regions_gemma4moe.das` pins for its load. The work: the folded form over
     `nb` rows - `Q51GemvSum` summing each row's own k slots into that row's output row - so the
     file compares against the fused one-row command the server runs.
+
+84. **The workgroup argmax fold has two kernel-side spellings.** `ClsArgmaxBase.fold`
+    (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `TopKCore.select_row` are the
+    same six lines - `subgroupMax`, the lowest id at the max through `subgroupMin`, a per-subgroup
+    staging pair, a barrier, the walk over `gl_NumSubgroups` - differing on where the candidate id
+    comes from and who reads the answer. The work: one base with `fold(m, mi) : (value, id)`, the
+    staging width a template constant, `TopKCore` calling it with its thread id and keeping its
+    publish-and-mask loop; the top-k cells and the argmax cell hold both bit for bit.
+
+85. **The recorded forms' profile-name triples are three copies of one bookkeeping.**
+    `rd_record_wide_twin`, `rd_record_unsplit_twin` and `rd_record_n_form`
+    (`dasllama_vulkan_decode.das`) each park the current names / count / overflow triple, encode,
+    move the produced triple into the form's globals and restore; the two profile readers walk the
+    same four-way `elif` chains. The work: a `RdqForm { names; n; overflow }` table indexed by the
+    form and the row count, one `rd_record_form(raw, nrows, nsplit, slot)`, the readers indexing
+    it.
+
+86. **`sample_` opens on two identical parked-token latches.** `Session.mtp_pre_drawn` /
+    `mtp_pre_tok` (the speculative round's parked draw) and `pick_ready` / `pick_tok` (the device
+    pick) are the same three fields and the same four-line early return, one under the other; the
+    two setters are `mtp_walk_sampled` and `rdec_land_pick`, and `mtp_round_begin` panics on
+    either latch left set. The work: one `pre_drawn` / `pre_tok` pair, both setters writing it,
+    the six `test_mtp_sampled_walk.das` assertions reading the one name - after saying in one
+    line that a speculative round and a device pick are never live on one session in one step
+    (the scheduler's speculative arm never asks a pick).

@@ -21,7 +21,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, feed_logits, argmax_of
+require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -54,14 +54,6 @@ def assert_pf_window(t : T?) {
     }
 }
 
-//! the served tile arm, so a red names which prefill tile it came from
-def private tile_arm_tag() : string {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
-    } else {
-        return "no vulkan module"
-    }
-}
 
 //! the coverage census's count of a routed-block kernel's dispatches so far; NO_CENSUS with no vulkan module
 def private census(kernel : string) : int64 {
@@ -164,12 +156,6 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         return
     }
     let layers = tr.config.n_layers
-    var nrec = 0l
-    for (l in range64(layers)) {
-        if (layer_is_recurrent(tr.config, l)) {
-            nrec++
-        }
-    }
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
     with_job_que() {
         setup_dasllama_jobque_()

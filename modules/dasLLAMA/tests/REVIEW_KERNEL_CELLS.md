@@ -23,13 +23,13 @@ global for its threadgroup-memory length.**
 struct a bound buffer holds - updates every gate of that kernel the change made stale, in the
 same change.** A stale gate reads the wrong buffer and passes on garbage that happens to compare.
 
+A kernel-unit cell is a model-less cell that dispatches one or more kernel classes and asserts on
+their output; every rule that names one means this.
+
 **A kernel-unit cell that compares a row of floats it indexes by an id - the classifier's logits
 rows by token id, a router's by expert - over synthetic rows and does not log the measured max
 difference with the row and the id it sits at is a defect.** A red, or a suspicious green, must
 say how far and where, not only how many.
-
-A kernel-unit cell is a model-less cell that dispatches one or more kernel classes and asserts on
-their output; every rule below that names one means this.
 
 **A kernel-unit cell missing a compare against a CPU oracle in the cell itself is a defect; where the
 cell compares two kernel forms against each other, the oracle compare targets one of those two

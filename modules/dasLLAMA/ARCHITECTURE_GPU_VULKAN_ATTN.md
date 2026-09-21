@@ -59,7 +59,12 @@ us a layer unsplit and 34.9 at four pieces, Llama-1B's (eight a row) 14.5 and 22
 (eight a row, head 128) 22.6 at one and 20.6 at two, where E4B's (two a row) wants its four
 pieces - 22.7 against 34.4 unsplit - and every shape climbs past about thirty-two
 workgroups a layer. The cap reads the plan's rows for both commands, so a one-row step on a
-plan of four rows takes the four-row count. The ruler (`harness/vk_attn_probe.das`
+plan of four rows takes the four-row count and the two commands' rows sum in one order (the regions
+files' bit-for-bit claim); the flat rows of a `--npl 4` bench run are that shape, and they held
+through the cap (gpt-oss 209.1 -> 209.2, Llama-1B 459.2 -> 465.0, E4B 112.5 unchanged; `PERF_LEDGER.md`'s
+2026-09-21 section). Where the cap reads one, the unsplit and wide twins record the same chain as
+the split command (`unsplit_on` and `wide_on` read `attn_nsplit` alone), a duplicate the form switch
+pays in recording, never in a step. The ruler (`harness/vk_attn_probe.das`
 under `-jit` on the pod, `PERF_LEDGER.md`'s 2026-09-20 section) read the rule at the Qwen2.5-0.5B
 geometry on the RTX PRO 4500, us a layer: one piece 10.4 at 384 positions and 14.5 at 640 against
 four pieces' 16.5 at both, four pieces 16.5 at 1024 against one piece's 18.6 and 18.6 at 1536

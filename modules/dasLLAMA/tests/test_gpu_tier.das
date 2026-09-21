@@ -85,8 +85,8 @@ def private d_dn_prefill_own(l : int64; stp : float?; histp : float?) {
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private d_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
 
-[unused_argument(x, cossin, ple_row, cnt, pick)]
-def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick : bool; var logits : array<float>) : int64 {
+[unused_argument(x, cossin, ple_row, cnt, pick_only)]
+def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     g_token_pos = pos
     g_token_cnt = cnt
     if (!empty(logits)) {

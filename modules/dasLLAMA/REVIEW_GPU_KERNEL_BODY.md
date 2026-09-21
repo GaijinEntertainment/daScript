@@ -1,7 +1,8 @@
 # dasLLAMA GPU Kernel Body Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
+`ARCHITECTURE_GPU_RACE_SHAPES.md`.
 Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
@@ -20,8 +21,10 @@ readiness, whether this window's rope tables are staged, is asked by `prefill_de
 the dispatch, and whose deciding value the host fixes before it records the dispatch, is a
 defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
 guard, clamping the index so the guarded work runs on a live value and its result is never
-stored also conforms.** Stamped means the deciding value is a `@template_constant`; the generated
-`*_msl` global or SPIR-V dump then shows no guard for a guard, a constant trip count for a bound.
+stored also conforms.** Stamped means the deciding value is a `@template_constant` (or a module
+constant a class no template stamps reads): a Metal class's generated `*_msl` global, and a Vulkan
+class's stamp the encoder's selector picks, then carry no guard for a guard, a constant trip
+count for a bound.
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value

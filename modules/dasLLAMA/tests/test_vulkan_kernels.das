@@ -115,12 +115,14 @@ def private tile_fixture_upload(var f : TileFixture) {
 
 //! one q8 fmt-0 host plane of `totblk` blocks: the s8 quant words hashed at `i * wq_mul + wq_add`, the f16 scale pairs at `i * ws_mul + ws_add`
 def private q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh : array<uint>) {
-    wqh |> resize(totblk * 8)
-    wsh |> resize((totblk + 1) / 2)
-    for (i in range(totblk * 8)) {
+    let qwords = totblk * int(kq_qsb(KqFmt.q8) / 4l)
+    let swords = (totblk * int(kq_dev_ssb(KqFmt.q8)) + 3) / 4
+    wqh |> resize(qwords)
+    wsh |> resize(swords)
+    for (i in range(qwords)) {
         wqh[i] = hash_word(uint(i) * wq_mul + wq_add)
     }
-    for (i in range((totblk + 1) / 2)) {
+    for (i in range(swords)) {
         wsh[i] = ws_word(uint(i) * ws_mul + ws_add)
     }
 }
@@ -1112,7 +1114,7 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
     var ids : array<uint>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let bytes = vocab * 4l * rows
-        let nchunk = 64l
+        let nchunk = int64(CLS_ARGMAX_CHUNKS)
         let pbytes = rows * nchunk * 4l
         let yd = make_device_buf(bytes)
         let pmd = make_device_buf(pbytes)
@@ -1122,6 +1124,8 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
         ids |> resize(rows)
         unsafe {
             upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
+            nan_sentinel_upload(pmd, pbytes)   //! the partials the second pass reads: an unwritten slot must be a sentinel, not a stale max
+            nan_sentinel_upload(pid, pbytes)
             nan_sentinel_upload(pd, rows * 4l)
             var sp = set_cls_argmax_part(fixed_array(yd, pmd, pid), fixed_array(bytes, pbytes, pbytes), fixed_array(1u, 2u, 2u))
             var sf = set_cls_argmax_fin(fixed_array(pmd, pid, pd), fixed_array(pbytes, pbytes, rows * 4l), fixed_array(2u, 2u, 4u))
@@ -1129,38 +1133,24 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc = ArgmaxArgs(vocab = uint(vocab), nchunk = uint(nchunk))
+            var pc = ArgmaxArgs(vocab = uint(vocab))
             enc_cls_argmax_part(raw, h, sp, pc, rows * nchunk)
             enc_cls_argmax_fin(raw, h, sf, pc, rows)
-            vhz_dep(raw, h, 4u, 0u, true)
-            cmd_copy_whole(raw, pd, host.buf, rows * 4l)
-            vk_check(vkEndCommandBuffer(raw), null)
-            submit_wait(raw)
+            vkd_run_copy(raw, h, pd, host, rows * 4l, 4u)
             memcpy(addr<void?>(ids[0]), host.mapped, rows * 4l)
         }
     }
     return <- ids
 }
 
-//! the host's reading of the same plane: the first maximum a row
+//! the host's reading of the same plane: `parallel_argmax` a row (the first maximum)
 def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> {
-    var ids : array<uint>
-    ids |> resize(rows)
-    for (r in range64(rows)) {
-        var mi = 0l
-        for (i in range64(1l, vocab)) {
-            if (y[r * vocab + i] > y[r * vocab + mi]) {
-                mi = i
-            }
-        }
-        ids[r] = uint(mi)
-    }
-    return <- ids
+    return <- [for (r in range64(rows)); uint(parallel_argmax(unsafe(addr(y[r * vocab])), vocab))]
 }
 
 [test]
 def test_vkd_cls_argmax(t0 : T?) {
-    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties included") <| @(t : T?) {
+    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties and an all-equal row included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_argmax_part() || !ensure_cls_argmax_fin()) {
                 t |> skip("no Vulkan device")
@@ -1178,6 +1168,9 @@ def test_vkd_cls_argmax(t0 : T?) {
                 y[vocab + 900l] = hi
                 y[vocab + 37l] = hi
                 y[2l * vocab + vocab - 1l] = hi   //! row 2's at the last id
+                for (i in range64(vocab)) {   //! row 0 pinned whole (every id suppressed): the first id wins, as the host's walk reads
+                    y[i] = -1.0e30
+                }
                 var got <- cls_argmax_run(y, vocab, rows)
                 var want <- first_max_rows(y, vocab, rows)
                 var bad = 0
@@ -1188,6 +1181,7 @@ def test_vkd_cls_argmax(t0 : T?) {
                 }
                 t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]})")
                 t |> equal(int64(want[1]), 37l, "vocab {vocab}: the tie lands on the lower id")
+                t |> equal(int64(got[0]), 0l, "vocab {vocab}: the all-equal row lands id 0")
                 want[3] = want[3] == 0u ? 1u : 0u   //! the poison: a wrong id on one row must red the compare
                 var badp = 0
                 for (r in range64(rows)) {
