@@ -147,7 +147,9 @@ namespace das {
     char * PersistentHeapAllocator::impl_reallocate ( char * ptr, uint64_t oldSize, uint64_t newSize ) {
         if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
             totalAllocations ++;
-            totalBytesAllocated += newSize-oldSize;
+            if (ptr) ++totalReallocations;
+            if (newSize >= oldSize) totalBytesAllocated += newSize - oldSize;
+            else totalBytesDeleted += oldSize - newSize;
             return model.reallocate(ptr,oldSize,newSize);
         } else {
             return nullptr;
@@ -186,14 +188,16 @@ namespace das {
     }
 
     void LinearHeapAllocator::impl_free( char * ptr, uint64_t size ) {
-            totalBytesDeleted += size;
+            if (ptr) { ++totalFrees; totalBytesDeleted += size; }
             model.free(ptr,size);
     }
 
     char * LinearHeapAllocator::impl_reallocate ( char * ptr, uint64_t oldSize, uint64_t newSize ) {
         if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
             totalAllocations ++;
-            totalBytesAllocated += newSize-oldSize;
+            if (ptr) ++totalReallocations;
+            if (newSize >= oldSize) totalBytesAllocated += newSize - oldSize;
+            else totalBytesDeleted += oldSize - newSize;
             return model.reallocate(ptr,oldSize,newSize);
         } else {
             return nullptr;
@@ -353,13 +357,15 @@ namespace das {
         }
     }
     void PersistentStringAllocator::impl_free ( char * ptr, uint64_t size ) {
-        totalBytesDeleted += size;
+        if (ptr) { ++totalFrees; totalBytesDeleted += size; }
         model.free(ptr,size);
     }
     char * PersistentStringAllocator::impl_reallocate ( char * ptr, uint64_t oldSize, uint64_t newSize ) {
         if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
             totalAllocations ++;
-            totalBytesAllocated += newSize-oldSize;
+            if (ptr) ++totalReallocations;
+            if (newSize >= oldSize) totalBytesAllocated += newSize - oldSize;
+            else totalBytesDeleted += oldSize - newSize;
             return model.reallocate(ptr,oldSize,newSize);
         } else {
             return nullptr;
@@ -461,14 +467,16 @@ namespace das {
         }
     }
     void LinearStringAllocator::impl_free ( char * ptr, uint64_t size ) {
-        totalBytesDeleted += size;
+        if (ptr) { ++totalFrees; totalBytesDeleted += size; }
         model.free(ptr,size);
     }
 
     char * LinearStringAllocator::impl_reallocate ( char * ptr, uint64_t oldSize, uint64_t newSize ) {
         if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
             totalAllocations ++;
-            totalBytesAllocated += newSize-oldSize;
+            if (ptr) ++totalReallocations;
+            if (newSize >= oldSize) totalBytesAllocated += newSize - oldSize;
+            else totalBytesDeleted += oldSize - newSize;
             return model.reallocate(ptr,oldSize,newSize);
         } else {
             return nullptr;

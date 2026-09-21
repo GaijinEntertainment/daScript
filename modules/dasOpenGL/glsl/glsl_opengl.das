@@ -77,11 +77,9 @@ def private emit_combined_sampler_bind(var blk : ExprBlock?; vv : VariablePtr; f
     cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
     cll_bind.arguments |> emplace(vtex)
     blk.list |> emplace(cll_bind)
-    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
-    cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
-    cll_uni.arguments |> emplace(cll_gul)
+    var cll_uni = new ExprCall(at = vv.at, name := "glUniformBound")
+    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+    cll_uni.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
     cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
     blk.list |> emplace(cll_uni)
 }
@@ -144,11 +142,9 @@ def private emit_loose_struct_bind(var blk : ExprBlock?; st : Structure?; namePr
                 emit_loose_struct_bind(blk, f._type.firstType.structType, "{fieldName}[{i}]", elemAccess)
             }
         } else {
-            var cll_gul = new ExprCall(at = accessExpr.at, name := "glGetUniformLocation")
-            cll_gul.arguments |> emplace_new() <| new ExprVar(at = accessExpr.at, name := "_opengl_program")
-            cll_gul.arguments |> emplace_new() <| new ExprConstString(at = accessExpr.at, value := fieldName)
-            var cll_uni = new ExprCall(at = accessExpr.at, name := "glUniformAny")
-            cll_uni.arguments |> emplace(cll_gul)
+            var cll_uni = new ExprCall(at = accessExpr.at, name := "glUniformBound")
+            cll_uni.arguments |> emplace_new() <| new ExprVar(at = accessExpr.at, name := "_opengl_program")
+            cll_uni.arguments |> emplace_new() <| new ExprConstString(at = accessExpr.at, value := fieldName)
             cll_uni.arguments |> emplace(fieldAccess)
             blk.list |> emplace(cll_uni)
         }
@@ -333,12 +329,9 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr; pa
                             new ExprVar(at = vv.at, name := vv.name))
                     }
                 } else {
-                    // scalar / vector / matrix uniform: glUniformAny(glGetUniformLocation("name"), name)
-                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
-                    cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
-                    cll_uni.arguments |> emplace(cll_gul)
+                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformBound")
+                    cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
+                    cll_uni.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
                     cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := vv.name)
                     blk.list |> emplace(cll_uni)
                 }
