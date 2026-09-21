@@ -116,6 +116,13 @@ win that never lands there is invisible to the next regression check.
 prediction is a defect unless it cites the committed board row it came from, or names harness,
 flags, environment overrides, box, and the exe or script that ran it.**
 
+**A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
+figure computed from one - or changes what such a number measures, ships that number's
+alternate in the same change: another row of the same run at the same shape, or a
+reference-build row - a figure from a run of the third-party engine this module measures against
+- at the same shape, named with the command that produced it.** A number with no alternate
+beside it ranks nothing.
+
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
 exe or script that produced it.** A figure a committed board cell produced, or a committed record
