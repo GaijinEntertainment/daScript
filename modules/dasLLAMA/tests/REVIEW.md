@@ -3,17 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-**A kernel-unit cell, or a kernel gate - a cell or probe that dispatches or binds a kernel
-class by hand rather than through the generated builders - applies `REVIEW_KERNEL_CELLS.md`
-(beside this file) together with this list, wherever the diff puts the file.** A kernel-unit
-cell is a model-less cell - a `t |> run` block, or a helper call that asserts on `t` - that
-dispatches one or more kernel classes and asserts on their output; a kernel class is a
-`[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das`.
+**A cell, probe, or harness that dispatches or binds a kernel class - a `[metal_dispatch]` or
+`[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das` - applies
+`REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
+file.**
 
-**A diff that touches a pinned test cell - one whose expected value is written down where a
-person edits it, a document, a checked-in table, a generated artifact's committed form, a
-roster, rather than computed by the code under test - or adds one, applies
-`REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
+**A diff that adds a test cell whose expected value a person wrote down rather than the code
+under test computing it, or touches one, applies `REVIEW_PINNED_GATES.md` (beside this file)
+together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -51,22 +48,19 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a `[test]` file here, or adds, removes, moves or renames a cell, or changes
-its suite, its skip condition or what it claims, corrects or adds, in the same change, the
-`CLAUDE.md` entry of every `[test]` file running the cell, counts and skip clauses included.** A
-file's entry is the clause that describes the file, named with or without its `.das` suffix; a
-`{a,b}` shorthand or a suite roster owes nothing.
-
-**A diff that changes an axis or a bar a file's own `CLAUDE.md` entry names - a shape, a length,
-a format or a lane the cell sweeps, or a tolerance it holds - corrects that entry in the same
-change.**
+**A diff that adds a test file here, or adds, removes, moves or renames a cell, or changes its
+suite, its skip condition, or what it claims - a shape, a length, a format or a lane the cell
+sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLAUDE.md` entry of
+every test file running the cell, counts and skip clauses included.** A file's entry is the
+clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
+a suite roster owes nothing.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
-header of every `[test]` file that runs the cell, wherever the cell is defined.** A header is the
+header of every test file that runs the cell, wherever the cell is defined.** A header is the
 file's top comment block; it names every fact the cells that file runs skip on.
 
-**A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
+**A diff that adds, moves, or removes a test file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
 lives there, in `CLAUDE.md`'s "Out-of-folder test files" ledger in the same change.** A file
 reaching an engine module through another module's public require is not a row.
@@ -83,7 +77,6 @@ to a flag that no longer does what the text says.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
 claim needs a capability the box may lack (a device, a window server, an audio device, a module
@@ -93,7 +86,7 @@ bare return and never a red; `feint` is a print, not a skip.
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check
 (`typeinfo builtin_module_exists`) - or on a stocked fixture beside the models (a model
-file, an mmproj, an oracle dump - a model condition); never on the existence of an artifact
+file, an mmproj, an oracle dump); never on the existence of an artifact
 this repo's build or a previous test run produced (a minted `.dlim`, a generated binary, a
 dump a test wrote).** An artifact condition goes permanently false when its producer moves.
 
@@ -128,12 +121,12 @@ naming the `ggml-vocab-*.gguf` fixture.**
 **A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
 round-trip is a defect.**
 
-**A test that compares generated tokens, ids, or logits through a model's vocabulary without
-logging a human-readable form of BOTH sides is a defect: for a token or id compare the decoded
-text (`log_gen_texts` in `_model_tier.das`, or one line per side), for a logits compare each
-side's argmax decoded piece and the measured max difference; a compare through a vocabulary the
-test cannot decode (a raw-id fixture with no tokenizer) logs the ids, one line per side.** A red,
-or a suspicious green, must be readable in the log, not only as an id or float difference.
+**A test that compares generated tokens, ids, or logits without logging both sides in the most
+readable form its fixture carries is a defect: with a tokenizer, the decoded text for a token or
+id compare (`log_gen_texts` in `_model_tier.das`, or one line per side) and each side's argmax
+decoded piece plus the measured max difference for a logits compare; with a raw-id fixture and no
+tokenizer, the ids, one line per side.** A red, or a suspicious green, must be readable in the
+log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
@@ -202,14 +195,12 @@ gate.
 **No CPU-control batch parity runs against `Llama-3.3-70B-Instruct-Q4_K_M.gguf`.** The
 batched code paths get their parity on small models, through pins.
 
-**Setting a knob a cell can reach only through the environment after the process that reads it
-starts is a defect - set it before that process starts.** That process is a child the cell
-spawns, or the runner's own. An in-cell set is invisible to the running config, which is read
-once at context init.
+**A cell sets an environment-read knob - one the running config reads once, at context init -
+before the process that reads it starts: the child the cell spawns, or the runner's own.** A set
+after that process starts is invisible to a config already read.
 
 **A cell that cannot set an environment-read knob before its reader starts names that knob's
-value in the text a red prints - the cell label or the assert.** An environment-read knob is
-one the running config reads once, at context init.
+value in the text a red prints - the cell label or the assert.**
 
 **A cell asserting the UNPINNED default lane never compares against a hardcoded lane - it
 compares against the predicates the lane policy itself consults, `float_batch_override_active()`
@@ -270,6 +261,6 @@ untyped, and drop a return type that would name one.** A signature cannot sit in
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
 and that has no untyped parameter, names that module's types or calls its functions only inside a
-`static_if (typeinfo builtin_module_exists(<mod>))` body.** A build without the module infers
-every such body; a function with one untyped parameter is inferred only at a call site, which its
-caller has already guarded.
+`static_if (typeinfo builtin_module_exists(<mod>))` body.** In a build without the module a
+fully typed function is inferred anyway; one with an untyped parameter is inferred only at a call
+site, which its caller has already guarded.
