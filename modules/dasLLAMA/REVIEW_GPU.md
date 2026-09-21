@@ -11,24 +11,25 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GP
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
 
-**A diff changing a property of a kernel class that a timing arm or a gate restates rather than
-reads - a binding number, the kargs (kernel-argument struct) layout, the layout of a struct a
-bound buffer holds, threadgroup memory, a staging shape, the grid or threadgroup geometry - or a
-kernel class's branch selection or the precision it computes a step at, applies the `tests/`
-subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that dispatch or bind the class.**
+**A diff changing a property of a kernel class that a timing arm or a test-side dispatcher
+restates rather than reads - a binding number, the kargs (kernel-argument struct) layout, the
+layout of a struct a bound buffer holds, threadgroup memory, a staging shape, the grid or
+threadgroup geometry - or a kernel class's branch selection or the precision it computes a step
+at, applies the `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` for the test-side dispatchers that
+dispatch or bind the class.**
 
 **A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
 deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
-by an ordered setter list and every retained-reference arm of that kernel.** An arm left
-dispatching stale geometry measures the wrong kernel silently.
+by an ordered setter list and every arm ledgered as that kernel's retained reference.** An arm
+left dispatching stale geometry measures the wrong kernel silently.
 
 **A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
-timing arm that carries that body as a hand-written twin, and every retained-reference arm of
-that kernel; a diff that routes a shape to a sibling stamp resyncs, in the same change, the arms
-that dispatch the old stamp at that shape.** An arm timing a body the shipped kernel no longer
-runs at that shape measures the wrong kernel silently.
+timing arm that carries that body as a hand-written twin, and every arm ledgered as that kernel's
+retained reference; a diff that routes a shape to a sibling kernel class resyncs, in the same
+change, the arms that dispatch the old class at that shape.** An arm timing a body the shipped
+kernel no longer runs at that shape measures the wrong kernel silently.
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
@@ -80,10 +81,9 @@ dispatches steps nor a multiple of that chunk the site forces by splitting its K
 dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
 a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
 
-**Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
-`[metal_kernel(float_a_ok=true)]` is the license - or its gate
-`tests/test_metal_float_a_gate.das`, is a defect.** A float operand keeps the op off its native
-fast path.
+**Weakening `tests/test_metal_float_a_gate.das` - the gate on the MSL emitter's refusal to
+compile an unlicensed float `matmul2d` A operand, `[metal_kernel(float_a_ok=true)]` being the
+license - is a defect.** A float operand keeps the op off its native fast path.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
 `ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b sanctions extends that section in the same change.**
@@ -162,9 +162,9 @@ and the host's count both read one shared function - shows in the same change th
 shape the encoder dispatches that class on, the stamp it picks is the one that function's value
 names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
-**A cache key covers every input the cached result depends on: a host address, an offset, or a
-handle alone is not a key - carry the span and the form, the element type and layout the upload
-produces, in the key too.**
+**A device-upload cache key covers every input the uploaded bytes depend on: a host address, an
+offset, or a handle alone is not a key - carry the span and the form, the element type and
+layout the upload produces, in the key too.**
 
 **A diff that adds code to a `dasllama/` file of a kind that file's `ARCHITECTURE_GPU.md`
 sec.1.5 role row does not hold - a kernel class, a driver arm, a backend capability, a
