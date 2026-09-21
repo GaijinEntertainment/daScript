@@ -2247,7 +2247,9 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   gemma-4-26B-A4B UD-IQ3_XXS 353 +/- 3 / 355 +/- 3 / 232 (1.52). The flat rows did not move
   (214, 174, 184, 140, 141). Every carrier reads past the reference on both arms from the one
   lever; the KHR arm reads the cm2 arm within its spread on every row (the 30B Q4_K_M's KHR
-  spread of 30 is the widest on the board).
+  spread of 30 is the widest on the board). At the arc's tip - the rows' own combine form on a
+  batched-first run, the router's columns loop - the three cm2 rows read 428 +/- 7, 453 +/- 15 and
+  358 +/- 4, each within its row's spread [direction-grade - two commits].
 - **The 5060 Ti (driver 616.56, the desktop holding about 0.9 GB of the 16 GB), tg128@4 ours cm2
   / llama.cpp Vulkan / llama.cpp CUDA (the same b10660 checkout built with CUDA 13.4, `external`,
   the same hour), then flat ours / theirs Vulkan / CUDA:** gpt-oss-20b 245 +/- 7 / 135 / 293
