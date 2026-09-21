@@ -19,11 +19,12 @@ twin ignores that field.**
 
 **A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
 stamp one `class template` or derive from one base shell.** Body divergence is carried by a
-`@template_constant`, or by an overridden method spliced flat at emission.
+`@template_constant`, by an overridden method spliced flat at emission, or by a run-time value
+the builder passes.
 
-**Two kernel classes a cell or a regions file (a `tests/test_gpu_resident_regions*.das` file,
-whose instrument is the driver against itself) holds bit for bit against each other spell every
-multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
+**Where a test cell or a regions file - a `modules/dasLLAMA/tests/test_gpu_resident_regions*.das`
+file - holds two kernel classes bit for bit against each other, both classes spell every
+multiply that feeds an add as `mad`, on the path the compare covers.** A driver decides
 per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
 ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
 definition and leaves the driver nothing to choose.
@@ -41,7 +42,7 @@ difference named with the compile-time choice that carries it; or the behaviour 
 the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
-base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
+base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer to a
 binding whose fields its compiled body, inherited code included, never reads is a defect: gate
 the field with `@template_gate` where a template constant decides it, and where the family
 shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered
@@ -86,7 +87,7 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
 `<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-source off the `_msl` stem, an empty `release_handles` - or weakening any test cell that holds
+naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening any test cell that holds
 such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
 `test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
 `test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
