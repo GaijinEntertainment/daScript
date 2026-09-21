@@ -47,7 +47,7 @@ the same reason.
   becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
   PR names the check showing the shipped build costs no more: its codegen unchanged, a
   measurement of the new code against the code it replaces, or the addition landing its
-  sanctioned-additions entry per the rule below - a diff cannot show optimized codegen. The
+  sanctioned-additions entry per the sanctioned-additions rule - a diff cannot show optimized codegen. The
   baseline is what already answered correctly: a slot that returned a wrong constant costs more
   once it computes the right one, and that is not this defect.
 
