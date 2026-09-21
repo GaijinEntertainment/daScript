@@ -1,18 +1,10 @@
 # dasLLAMA performance Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_ENGINE.md`, `../ARCHITECTURE_MEASUREMENT.md`.
-Planned work: `../followup_general.md`.
+doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
-
-**A diff that narrows any `REVIEW.das` check - the files it walks, the names it does not flag -
-ledgers the excluded scope in `../ARCHITECTURE_ENGINE.md` or `../ARCHITECTURE_MEASUREMENT.md`
-in the same change.**
-
-**A diff that weakens any `REVIEW.das` check in any other way - the conditions it fires on - is
-a defect.**
 
 **A diff that answers a `REVIEW.das` red on the conditions a `records/` row, an archived
 sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured under - box
@@ -20,11 +12,13 @@ noise, a remote-desktop session, the release it was minted at - by hand-editing 
 is a defect: re-mint it on a quiet, session-free box instead.**
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
-under review cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
-`modules/dasLLAMA/` tree is byte-identical to the tree that was measured, with the PR body
-naming the re-stamp.** A commit stamp is any field in a checked-in JSON under this folder that
-names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a ruler
-record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
+under review cannot reach is a defect - re-stamp to the commit the exe that produced the stamped
+artifact was built at when the branch can reach it, re-mint when it cannot.** A commit stamp is any field in a checked-in JSON under this
+folder that names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a
+ruler record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
+
+**A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
+field, its old stamp, and its new value.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -49,9 +43,9 @@ build - names both exes in its `cmd`.**
 in that row's provenance, the checkout that built the binary it timed; a python leg names
 `../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a `records/<box>.json` row, sidecar archive, or `defaults/` profile under
-this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
-(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is a records row's
+**A diff that writes a `das` `records/<box>.json` row, a sidecar archive, or a `defaults/`
+profile under this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
+(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is the row's
 `dasllama_version`, and `provenance.dasllama_version` in a sidecar archive or a `defaults/`
 profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
 profile compares against the branch under review.
@@ -82,9 +76,8 @@ and labels the file's rows `direction-grade` everywhere the change cites them - 
 rows, architecture or profile docs.**
 
 **A diff that writes a `das` row to `records/<box>.json` names on the row the codegen form of the
-exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three
-(`skills/internal/build_and_debug.md`), and a rate that does not name its form cannot be compared
-with one that was built another way.
+exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three, and a rate
+that does not name its form cannot be compared with one that was built another way.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the

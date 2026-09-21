@@ -251,7 +251,10 @@ token, `kernels` (`--suite kernels --arm kernels`), which runs every cell. The
 hand-bound-gate sync obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with
-`@workgroup` members and no `tgmem=`, twin fixture as the must-compile control. Shared fixtures
+`@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
+`test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
+`requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
+`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. Shared fixtures
 (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
 in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
@@ -553,7 +556,8 @@ codecs, the mid-run shrink, the B == 1 delegation, the step census) and on the d
 Qwen3.5-0.8B Q8 (f32 and f16 KV at 1e-6: the recurrent rows form per session, the gated
 partial-rope attention rows, the final deltanet state and conv history, every step counted on
 the CPU batched stack by the census, and a decode below the deltanet position panicking - the
-state is forward-only); a cell whose bar is exact free-runs the batched greedy and holds the
+state is forward-only) and, under the large tier, on the MoE hybrid Qwen3.6-35B-A3B UD-Q4_K_M -
+the f32-on-disk beta/alpha arm of the batched layer's projection prologue, f16 KV at 1e-6; a cell whose bar is exact free-runs the batched greedy and holds the
 tokens, a cell whose bar concedes rounding feeds the reference's tokens and holds the logits, and
 every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
 plus the batched bench row's refusal contract on SmolLM2.
@@ -1304,10 +1308,12 @@ model-loading block is `REVIEW.md`'s obligation.
 
 `model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
 `DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
-large tier. A run reporting SKIPPED for those arms is correct, not a failure. The large tier's
-no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming a 70B's
-40GB on the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
-that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
+large tier. A run reporting SKIPPED for those arms is correct, not a failure. `REVIEW.md` bans a
+batched-vs-sequential parity cell on a carrier above the tier: streaming a 70B's 40GB on the CPU
+while the GPU has the same bytes wired OOM-kills a 64GB box, so small-model pins carry that
+coverage instead (e.g. `set_metal_batch_addrms_unfused`). The one ledgered cell above the tier is
+`test_batch_decode.das`'s Qwen3.6-35B-A3B cell: no stocked carrier under the tier takes the
+f32-on-disk beta/alpha arm of the CPU deltanet batch, and the cell gates on `DASLLAMA_PARITY_FULL=1`.
 
 ## Log discipline
 

@@ -275,6 +275,228 @@ def run_rule_docs_pass(folders : array<string>) : int {
     return found
 }
 
+// The file extensions a backticked token in a rule document is read as a path by.
+let RULE_DOC_PATH_EXTS <- [".das", ".md", ".rst", ".py", ".sh", ".cpp", ".h", ".hpp", ".ypp", ".cmake"]
+
+// The phrases a checklist cites a neighbouring rule by position with; REVIEW_COMMON.md bans
+// citing a rule by number, position or nickname, since rules are order-independent.
+let POSITIONAL_HEADS <- ["the rule", "the gate list", "the list", "the clause", "the definition", "see"]   //! "the rules below" scopes a block; "the rule below" points at one
+
+def is_word_byte(ch : int) : bool => is_alpha(ch) || is_number(ch) || ch == '_'
+
+def line_cites_by_position(line : string) : bool {
+    let low = to_lower(line)
+    var hit = false
+    peek_data(low) $(d) {
+        for (h in POSITIONAL_HEADS) {
+            var from = 0
+            while (!hit) {
+                let at = find(d, h, from)
+                break if (at < 0)
+                let after = at + length(h)
+                let word_start = at == 0 || !is_word_byte(int(d[at - 1]))   //! "foresee below" is not "see below"
+                hit = word_start && (starts_with(d, after, " above") || starts_with(d, after, " below"))
+                from = at + 1
+            }
+        }
+    }
+    return hit
+}
+
+//! the scan root that holds `folder` (the folder itself, or an ancestor), else the working directory
+def owning_root(folder : string; roots : array<string>) : string {
+    for (root in roots) {
+        return root if (folder == root || folder |> starts_with("{root}/"))
+    }
+    return "."
+}
+
+// A path a rule document cites resolves against the document's folder, then each ancestor up
+// to the run's root, then the working directory - a checklist spells its own folder's files
+// bare and the repo's with their root-relative prefix.
+def rule_doc_path_resolves(folder, root, token : string) : bool {
+    var dir = folder
+    while (true) {
+        return true if (stat(path_join(dir, token)).is_valid)
+        break if (dir == root || dir == "." || dir == "/" || empty(dir))
+        let up = dir_name(dir)
+        break if (up == dir)
+        dir = up
+    }
+    return stat(token).is_valid
+}
+
+def token_is_rule_doc_path(tok : string) : bool {
+    return false if (tok |> starts_with(".") || tok |> starts_with("$") || tok |> starts_with("~") || tok |> starts_with("/"))
+    for (ext in RULE_DOC_PATH_EXTS) {
+        return true if (tok |> ends_with(ext))
+    }
+    return false
+}
+
+def token_is_test_cell(tok : string) : bool {
+    return false if (!(tok |> starts_with("test_")))
+    var underscores = 0
+    for (ch in tok) {
+        return false if (!is_word_byte(ch))
+        underscores += ch == '_' ? 1 : 0
+    }
+    return underscores >= 2   //! `test_aot` is a binary; a cell is test_<subject>_<claim>
+}
+
+// Every file basename under `path`, `.github` included: a checklist spells a file of another
+// tree by bare name, and the name resolves anywhere in the repo.
+def collect_basenames(path : string; var out : table<string; void?>) {
+    let st = stat(path)
+    return if (!st.is_valid || !st.is_dir)
+    fio::dir(path) $(name) {
+        return if (name == "." || name == ".." || (is_skip_dir(name) && name != ".github"))
+        let full = "{path}/{name}"
+        let fst = stat(full)
+        return if (!fst.is_valid)
+        if (fst.is_dir) {
+            return if (is_build_tree(full))
+            collect_basenames(full, out)
+        } else {
+            out |> insert(name, null)
+        }
+    }
+}
+
+// Every `def test_*` name under `folder`, `_`-prefixed fixture files included: a checklist may
+// name a cell its folder's shared fixture defines.
+def collect_test_cells(path : string; var out : table<string; void?>) {
+    let st = stat(path)
+    return if (!st.is_valid)
+    if (st.is_reg) {
+        return if (!(path |> ends_with(".das")))
+        let text = fread(path)
+        return if (empty(text))
+        peek_data(text) $(d) {
+            var from = 0
+            while (true) {
+                let at = find(d, "def test_", from)
+                break if (at < 0)
+                var end = at + 4
+                while (end < length(d)) {
+                    let ch = int(d[end])
+                    break if (!is_word_byte(ch))
+                    end ++
+                }
+                var line_start = at   //! a `def` only counts at the head of its line - `// def test_gone` is a comment
+                while (line_start > 0 && (int(d[line_start - 1]) == ' ' || int(d[line_start - 1]) == '\t')) {
+                    line_start --
+                }
+                if (line_start == 0 || int(d[line_start - 1]) == '\n') {
+                    out |> insert(slice(d, at + 4, end), null)
+                }
+                from = end
+            }
+        }
+        return
+    }
+    return if (!st.is_dir)
+    fio::dir(path) $(name) {
+        return if (name == "." || name == ".." || is_skip_dir(name))
+        let full = "{path}/{name}"
+        return if (is_build_tree(full))
+        collect_test_cells(full, out)
+    }
+}
+
+// The backticked tokens of one line: a span's first whitespace-delimited word, spans carrying a
+// wildcard or a placeholder dropped.
+def backticked_tokens(line : string; var out : array<string>) {
+    return if (empty(line))
+    peek_data(line) $(d) {
+        var from = 0
+        while (true) {
+            let open = find(d, "`", from)
+            break if (open < 0)
+            let close = find(d, "`", open + 1)
+            break if (close < 0)
+            from = close + 1
+            var end = close
+            let sp = find(d, " ", open + 1)
+            if (sp > open + 1 && sp < close) {
+                end = sp
+            }
+            continue if (end <= open + 1)
+            var skip = false
+            for (i in range(open + 1, end)) {
+                let c = int(d[i])
+                if (c == '*' || c == '<' || c == '{' || c == '|' || c == '?' || c == '[') {
+                    skip = true
+                    break
+                }
+            }
+            continue if (skip)
+            out |> push(slice(d, open + 1, end))
+        }
+    }
+}
+
+// Rule-document text passes: a checklist cites its neighbours by name, and a cite that stops
+// resolving turns the rule into noise nobody can apply. LINT032 reports a checklist citing a
+// rule by position; LINT033 a rule document naming a path or a test cell the tree no longer has.
+// Returns the finding count.
+def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_pos, want_names : bool) : int {
+    var found = 0
+    var names : table<string; void?>
+    var names_indexed = false
+    for (folder in folders) {
+        let root = owning_root(folder, roots)
+        var docs : array<string>
+        collect_folder_mds(folder, true, docs)
+        docs |> sort
+        var cells : table<string; void?>
+        var cells_indexed = false
+        for (md in docs) {
+            let is_checklist = base_name(md) |> starts_with("REVIEW")
+            continue if (!is_checklist)
+            let lines <- fread(md) |> split("\n")
+            for (line, i in lines, count()) {
+                if (want_pos && line_cites_by_position(line)) {
+                    print("{md}:{i + 1}: LINT032: a checklist cites a rule by position (\"above\" / \"below\") - name what the rule binds instead; rules are order-independent\n")
+                    found ++
+                }
+                continue if (!want_names)
+                var toks : array<string>
+                backticked_tokens(line, toks)
+                for (tok in toks) {
+                    if (token_is_rule_doc_path(tok)) {
+                        continue if (rule_doc_path_resolves(folder, root, tok))
+                        if (find(tok, "/") < 0) {
+                            if (!names_indexed) {
+                                if (empty(roots)) {
+                                    collect_basenames(".", names)
+                                }
+                                for (r in roots) {
+                                    collect_basenames(r, names)
+                                }
+                                names_indexed = true
+                            }
+                            continue if (names |> key_exists(tok))
+                        }
+                        print("{md}:{i + 1}: LINT033: cited path `{tok}` does not resolve from {folder}, its tree, its ancestors or the working directory - the file moved or was renamed; fix the cite or drop it\n")
+                        found ++
+                    } elif (token_is_test_cell(tok)) {
+                        if (!cells_indexed) {
+                            collect_test_cells(folder, cells)
+                            cells_indexed = true
+                        }
+                        if (!(cells |> key_exists(tok))) {
+                            print("{md}:{i + 1}: LINT033: cited test cell `{tok}` is defined by no .das under {folder} - the cell was renamed or removed; fix the cite or drop it\n")
+                            found ++
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return found
+}
+
 // Newline count, plus the last line when the file does not end in one.
 def count_text_lines(text : string) : int {
     return 0 if (empty(text))
@@ -868,9 +1090,11 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     let want_rule_docs = rule_is_on("LINT025", disabled_codes, enabled_codes)
     let want_arch = rule_is_on("LINT026", disabled_codes, enabled_codes)
     let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
+    let want_pos = rule_is_on("LINT032", disabled_codes, enabled_codes)
+    let want_names = rule_is_on("LINT033", disabled_codes, enabled_codes)
     var rule_docs_folders : array<string>
     var line_folders : array<string>
-    collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines, rule_docs_folders, line_folders)
+    collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines || want_pos || want_names, rule_docs_folders, line_folders)
     var found = 0
     if (want_rule_docs) {
         found += run_rule_docs_pass(rule_docs_folders)
@@ -880,6 +1104,9 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     }
     if (want_doc_lines) {
         found += run_doc_lines_pass(line_folders)
+    }
+    if (want_pos || want_names) {
+        found += run_rule_doc_text_pass(line_folders, docs_roots, want_pos, want_names)
     }
     return found
 }

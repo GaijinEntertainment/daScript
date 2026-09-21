@@ -1,8 +1,8 @@
 # dasLLAMA GPU Kernel Class Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_metal.md`
-for Metal, `followup_vulkan.md` for Vulkan.
+doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
+for Vulkan.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -36,9 +36,9 @@ the class fixes is, a dimension the model sets is not - never reaches that kerne
 kargs field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
-a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
-`@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
-move it to the template whose body reads it, or make the body read it.
+a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
+`static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site
+reads is a defect - move it to the template whose body reads it, or make the body read it.
 
 **A diff that changes a stamp's generated source - through the class's own body, the template or
 base shell it stamps, or a helper its body splices - carries in the PR body, for each affected
@@ -88,18 +88,19 @@ asserted: a row that dispatches a listed class reds the census.
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
 
-**Weakening a refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time - an
-`@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
-`[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
-`@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
-`<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening
-any test cell that holds such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
-`test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
-`test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
-defect.** A refusal replaced by a derivation that leaves no such configuration compiling unbound -
-the `stamp =` form's threadgroup-memory global - is not a weakening, and the test cell then holds
-the derived path.
+**Weakening any refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time, or
+any `test_lens_*` / `test_vkd_lens_*` cell that holds one, is a defect** - the cells sit in
+`modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal and
+`modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan.
+
+**A diff that adds a refusal to the `[metal_dispatch]` / `[vk_dispatch]` lens lands the cell that
+holds it in the same change** - a `test_lens_*` cell in
+`modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a `test_vkd_lens_*` cell in
+`modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan.
+
+**A diff that replaces a refusal with a derivation - the lens computing the value it used to
+demand, so no class can compile with that value missing - points that refusal's cell at the
+derived path in the same change.** Deriving the value is not a weakening.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row would leave the rest of each row outside the tracked
@@ -107,17 +108,14 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
-state why the generated builder cannot serve that site is a defect.** A body that only picks,
+builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body
+does not state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
-and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
-`grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
-
-**A `params=` value that no `grid=`/`tg=` spec and no `requires=` item consumes is dropped from
-the `params=` spec and from every call site, in the same change.** The value then reaches neither
-the host nor the device, so nothing reads it.
+and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value consumed
+only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` - never reaches
+the device, so it does not count.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

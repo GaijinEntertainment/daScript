@@ -338,20 +338,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3417.9313900026973
+            "tok_s":3480.5060093242741
           },
           "tg128":{
-            "tok_s":127.08095638626337
+            "tok_s":128.48410397606918
+          },
+          "tg128@4":{
+            "tok_s":269.29740985495994
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -366,16 +369,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3183.6694309999998
+            "tok_s":3173.4596040000001
           },
           "tg128":{
-            "tok_s":95.593917000000005
+            "tok_s":95.481455999999994
+          },
+          "tg128@4":{
+            "tok_s":217.64400329589844
           }
         },
         "source":"official",
@@ -950,20 +956,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":903.96579393769446
+            "tok_s":899.20971106894626
           },
           "tg128":{
-            "tok_s":27.354472188144605
+            "tok_s":27.659432093434038
+          },
+          "tg128@4":{
+            "tok_s":58.170103682590003
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -978,16 +987,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":739.04172000000005
+            "tok_s":738.43908399999998
           },
           "tg128":{
-            "tok_s":27.355868999999998
+            "tok_s":27.730604
+          },
+          "tg128@4":{
+            "tok_s":53.523999786376955
           }
         },
         "source":"official",
@@ -1922,20 +1934,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":2076.9566842879863
+            "tok_s":2086.9697173404857
           },
           "tg128":{
-            "tok_s":63.680067553550863
+            "tok_s":63.970588182699089
+          },
+          "tg128@4":{
+            "tok_s":131.03814679367977
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -1950,16 +1965,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":1692.12301
+            "tok_s":1701.110768
           },
           "tg128":{
-            "tok_s":60.614342999999998
+            "tok_s":60.407877999999997
+          },
+          "tg128@4":{
+            "tok_s":130.70400085449219
           }
         },
         "source":"official",
@@ -1977,24 +1995,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":7.1399999999999997
+            "ms":7.0149999999999997
           },
           "img:pp":{
-            "tok_s":1336.8869387860038
+            "tok_s":1337.4256271325937
           },
           "img:tg":{
-            "tok_s":65.407989443719273
+            "tok_s":65.550409690060562
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -2127,19 +2145,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":95
+            "ms":100
           },
           "img:pp":{
-            "tok_s":836.40189374013664
+            "tok_s":835.52285864424584
           },
           "img:tg":{
-            "tok_s":53.235734486774248
+            "tok_s":53.262316910785621
           }
         },
         "workload":"image-chat",
@@ -3128,20 +3146,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":5303.174039443662
+            "tok_s":5319.237499630256
           },
           "tg128":{
-            "tok_s":90.100203074466052
+            "tok_s":90.001601482192996
+          },
+          "tg128@4":{
+            "tok_s":259.5916657184469
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -3156,16 +3177,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":4338.5063479999999
+            "tok_s":4340.9455269999999
           },
           "tg128":{
-            "tok_s":81.212394000000003
+            "tok_s":81.189370999999994
+          },
+          "tg128@4":{
+            "tok_s":290.05799560546876
           }
         },
         "source":"official",
@@ -3183,24 +3207,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":38.494
+            "ms":38.463999999999999
           },
           "img:pp":{
-            "tok_s":3450.2587694077056
+            "tok_s":3473.9233064623882
           },
           "img:tg":{
-            "tok_s":88.112034451805471
+            "tok_s":88.290232065356847
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -3333,7 +3357,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
@@ -3342,10 +3366,10 @@
             "ms":68
           },
           "img:pp":{
-            "tok_s":1533.2690453230475
+            "tok_s":1517.1755725190837
           },
           "img:tg":{
-            "tok_s":74.557315936626281
+            "tok_s":74.731433909388144
           }
         },
         "workload":"image-chat",
@@ -4058,20 +4082,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3995.0863487375218
+            "tok_s":4013.4469182063317
           },
           "tg128":{
-            "tok_s":162.71038660356945
+            "tok_s":164.53404220454519
+          },
+          "tg128@4":{
+            "tok_s":316.85005132021399
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -4086,16 +4113,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3476.5869210000001
+            "tok_s":3480.4367259999999
           },
           "tg128":{
-            "tok_s":148.974492
+            "tok_s":147.257452
+          },
+          "tg128@4":{
+            "tok_s":303.76799926757815
           }
         },
         "source":"official",
@@ -4670,20 +4700,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3752.852130141313
+            "tok_s":3656.3499098164784
           },
           "tg128":{
-            "tok_s":165.710207762376
+            "tok_s":166.35654975721263
+          },
+          "tg128@4":{
+            "tok_s":313.68994494199086
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -4698,16 +4731,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3422.407815
+            "tok_s":3418.674528
           },
           "tg128":{
-            "tok_s":137.013116
+            "tok_s":137.090622
+          },
+          "tg128@4":{
+            "tok_s":289.14799804687499
           }
         },
         "source":"official",
@@ -5288,20 +5324,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":1163.7076712350488
+            "tok_s":1132.2677973675404
           },
           "tg128":{
-            "tok_s":38.282019019075705
+            "tok_s":38.294665627983647
+          },
+          "tg128@4":{
+            "tok_s":72.409914615656163
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -5316,16 +5355,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":990.93720900000005
+            "tok_s":991.29503699999998
           },
           "tg128":{
-            "tok_s":36.567248999999997
+            "tok_s":36.615456000000002
+          },
+          "tg128@4":{
+            "tok_s":77.152001953124994
           }
         },
         "source":"official",
@@ -5900,20 +5942,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-02",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3869.9968780370496
+            "tok_s":3948.7221362237515
           },
           "tg128":{
-            "tok_s":118.09086016589171
+            "tok_s":118.9053706786198
+          },
+          "tg128@4":{
+            "tok_s":262.82322421902307
           }
         },
         "source":"official",
-        "sha":"fa0b0eac4",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -5928,16 +5973,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-02",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3456.267398
+            "tok_s":3480.1624619999998
           },
           "tg128":{
-            "tok_s":99.662654000000003
+            "tok_s":99.244747000000004
+          },
+          "tg128@4":{
+            "tok_s":257.88200683593749
           }
         },
         "source":"official",
@@ -12646,23 +12694,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":9094.5998731660075
+            "tok_s":9099.2616622723053
           },
           "tg128":{
-            "tok_s":159.88990703706887
+            "tok_s":160.12913614999434
           },
           "tg128@4":{
-            "tok_s":453.39641588874036
+            "tok_s":454.19536866657188
           }
         },
         "source":"official",
-        "sha":"d65032612",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "files":[
           {
@@ -12677,19 +12725,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":7555.9522370000004
+            "tok_s":7531.1143890000003
           },
           "tg128":{
-            "tok_s":136.49394799999999
+            "tok_s":136.68301500000001
           },
           "tg128@4":{
-            "tok_s":477.48000488281252
+            "tok_s":479.69999999999999
           }
         },
         "source":"official",
@@ -12817,24 +12865,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":37.587000000000003
+            "ms":37.502000000000002
           },
           "img:pp":{
-            "tok_s":5752.212389380531
+            "tok_s":5763.2628934535242
           },
           "img:tg":{
-            "tok_s":153.81933406482972
+            "tok_s":153.89192682951852
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"d65032612",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "files":[
           {
@@ -13126,19 +13174,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":52
+            "ms":51
           },
           "img:pp":{
-            "tok_s":2334.8017621145377
+            "tok_s":2373.1343283582091
           },
           "img:tg":{
-            "tok_s":122.04424103737605
+            "tok_s":122.37093690248565
           }
         },
         "workload":"image-chat",
@@ -15172,20 +15220,23 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":913.87787110893373
+            "tok_s":905.04720583700123
           },
           "tg128":{
-            "tok_s":27.837882924443051
+            "tok_s":28.096318645591232
+          },
+          "tg128@4":{
+            "tok_s":58.595989330545443
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -15200,16 +15251,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":752.12047700000005
+            "tok_s":752.40699500000005
           },
           "tg128":{
-            "tok_s":25.360036000000001
+            "tok_s":25.420268
+          },
+          "tg128@4":{
+            "tok_s":55.034000396728516
           }
         },
         "source":"official",
@@ -15867,24 +15921,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":66.233999999999995
+            "ms":65.873000000000005
           },
           "img:pp":{
-            "tok_s":3718.4078349713395
+            "tok_s":3749.2554048845441
           },
           "img:tg":{
-            "tok_s":112.79255569132437
+            "tok_s":111.71187273783458
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "files":[
           {
@@ -15907,19 +15961,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":63
+            "ms":62
           },
           "img:pp":{
-            "tok_s":463.27683615819211
+            "tok_s":465.90909090909093
           },
           "img:tg":{
-            "tok_s":81.300813008130078
+            "tok_s":81.658291457286438
           }
         },
         "workload":"image-chat",
@@ -16094,6 +16148,67 @@
             "name":"coco-val2017-000000039769.jpg"
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "hardware":{
+          "cpu":"Apple M5 Max"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":6743.0798259129024
+          },
+          "tg128":{
+            "tok_s":112.15564051536759
+          },
+          "tg128@4":{
+            "tok_s":356.07716908461032
+          }
+        },
+        "source":"official",
+        "sha":"60b736faa",
+        "version":"0.6.4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "hardware":{
+          "cpu":"Apple M5 Max"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":5170.2027179999995
+          },
+          "tg128":{
+            "tok_s":108.186187
+          },
+          "tg128@4":{
+            "tok_s":363.10800781249998
+          }
+        },
+        "source":"official",
+        "sha":"6fdd0ac89",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf"
+          }
+        ]
       }
     ],
     "arch":"qwen3v",
@@ -16108,24 +16223,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":105.991
+            "ms":107.048
           },
           "img:pp":{
-            "tok_s":6718.1945667416758
+            "tok_s":6143.9351009573802
           },
           "img:tg":{
-            "tok_s":136.54758062513966
+            "tok_s":132.38975544001539
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "files":[
           {
@@ -16148,19 +16263,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "img:enc":{
-            "ms":118
+            "ms":120
           },
           "img:pp":{
-            "tok_s":829.08163265306121
+            "tok_s":831.20204603580578
           },
           "img:tg":{
-            "tok_s":81.967213114754088
+            "tok_s":81.585081585081582
           }
         },
         "workload":"image-chat",
@@ -16333,6 +16448,67 @@
           {
             "role":"image",
             "name":"coco-val2017-000000039769.jpg"
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "hardware":{
+          "cpu":"Apple M5 Max"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":8357.0428042818912
+          },
+          "tg128":{
+            "tok_s":145.09171081958408
+          },
+          "tg128@4":{
+            "tok_s":441.85656542078368
+          }
+        },
+        "source":"official",
+        "sha":"cc969d961",
+        "version":"0.6.4",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "hardware":{
+          "cpu":"Apple M5 Max"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":5361.9533190000002
+          },
+          "tg128":{
+            "tok_s":94.051635000000005
+          },
+          "tg128@4":{
+            "tok_s":309.18400878906249
+          }
+        },
+        "source":"official",
+        "sha":"6fdd0ac89",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf"
           }
         ]
       }

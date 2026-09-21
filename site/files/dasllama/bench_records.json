@@ -503,12 +503,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -518,24 +518,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3417.9313900026973,
-            "stddev":7.5922303199768066
+            "tok_s":3480.5060093242741,
+            "stddev":9.2747097015380859
           },
           "tg128":{
-            "tok_s":127.08095638626337,
-            "stddev":0.34214609861373901
+            "tok_s":128.48410397606918,
+            "stddev":0.20615978538990021
+          },
+          "tg128@4":{
+            "tok_s":269.29740985495994,
+            "stddev":8.3182744979858398
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -551,12 +555,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -566,12 +570,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3183.6694309999998,
-            "stddev":18.630693000000001
+            "tok_s":3173.4596040000001,
+            "stddev":20.434913000000002
           },
           "tg128":{
-            "tok_s":95.593917000000005,
-            "stddev":0.51324599999999998
+            "tok_s":95.481455999999994,
+            "stddev":0.30739
+          },
+          "tg128@4":{
+            "tok_s":217.64400329589844,
+            "stddev":0.31745842099189758
           }
         },
         "source":"official",
@@ -1445,12 +1453,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -1460,24 +1468,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":903.96579393769446,
-            "stddev":11.548336982727051
+            "tok_s":899.20971106894626,
+            "stddev":7.2251291275024414
           },
           "tg128":{
-            "tok_s":27.354472188144605,
-            "stddev":0.32067328691482544
+            "tok_s":27.659432093434038,
+            "stddev":0.028697144240140915
+          },
+          "tg128@4":{
+            "tok_s":58.170103682590003,
+            "stddev":0.65966707468032837
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -1493,12 +1505,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -1508,12 +1520,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":739.04172000000005,
-            "stddev":0.21932099999999999
+            "tok_s":738.43908399999998,
+            "stddev":0.81504399999999999
           },
           "tg128":{
-            "tok_s":27.355868999999998,
-            "stddev":0.78283499999999995
+            "tok_s":27.730604,
+            "stddev":0.46042300000000003
+          },
+          "tg128@4":{
+            "tok_s":53.523999786376955,
+            "stddev":1.0990134477615356
           }
         },
         "source":"official",
@@ -2942,12 +2958,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -2957,24 +2973,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":2076.9566842879863,
-            "stddev":1.2408003807067871
+            "tok_s":2086.9697173404857,
+            "stddev":0.76361232995986938
           },
           "tg128":{
-            "tok_s":63.680067553550863,
-            "stddev":2.6998429298400879
+            "tok_s":63.970588182699089,
+            "stddev":2.7053730487823486
+          },
+          "tg128@4":{
+            "tok_s":131.03814679367977,
+            "stddev":3.5960943698883057
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -2990,12 +3010,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -3005,12 +3025,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1692.12301,
-            "stddev":3.1238350000000001
+            "tok_s":1701.110768,
+            "stddev":0.92175200000000002
           },
           "tg128":{
-            "tok_s":60.614342999999998,
-            "stddev":0.31201600000000002
+            "tok_s":60.407877999999997,
+            "stddev":0.047648999999999997
+          },
+          "tg128@4":{
+            "tok_s":130.70400085449219,
+            "stddev":2.7563800811767578
           }
         },
         "source":"official",
@@ -3031,12 +3055,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -3046,27 +3070,27 @@
         },
         "tests":{
           "img:enc":{
-            "ms":7.1399999999999997
+            "ms":7.0149999999999997
           },
           "img:pp":{
-            "tok_s":1336.8869387860038
+            "tok_s":1337.4256271325937
           },
           "img:tg":{
-            "tok_s":65.407989443719273,
+            "tok_s":65.550409690060562,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -3272,12 +3296,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -3287,13 +3311,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":95
+            "ms":100
           },
           "img:pp":{
-            "tok_s":836.40189374013664
+            "tok_s":835.52285864424584
           },
           "img:tg":{
-            "tok_s":53.235734486774248
+            "tok_s":53.262316910785621
           }
         },
         "workload":"image-chat",
@@ -4796,12 +4820,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -4811,24 +4835,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":5303.174039443662,
-            "stddev":19.52574348449707
+            "tok_s":5319.237499630256,
+            "stddev":19.313394546508789
           },
           "tg128":{
-            "tok_s":90.100203074466052,
-            "stddev":0.069310650229454041
+            "tok_s":90.001601482192996,
+            "stddev":0.46349576115608215
+          },
+          "tg128@4":{
+            "tok_s":259.5916657184469,
+            "stddev":8.5297966003417969
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -4844,12 +4872,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -4859,12 +4887,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":4338.5063479999999,
-            "stddev":21.033147
+            "tok_s":4340.9455269999999,
+            "stddev":8.9033200000000008
           },
           "tg128":{
-            "tok_s":81.212394000000003,
-            "stddev":0.18665499999999999
+            "tok_s":81.189370999999994,
+            "stddev":0.108583
+          },
+          "tg128@4":{
+            "tok_s":290.05799560546876,
+            "stddev":0.63080602884292603
           }
         },
         "source":"official",
@@ -4885,12 +4917,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -4900,27 +4932,27 @@
         },
         "tests":{
           "img:enc":{
-            "ms":38.494
+            "ms":38.463999999999999
           },
           "img:pp":{
-            "tok_s":3450.2587694077056
+            "tok_s":3473.9233064623882
           },
           "img:tg":{
-            "tok_s":88.112034451805471,
+            "tok_s":88.290232065356847,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -5126,12 +5158,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -5144,10 +5176,10 @@
             "ms":68
           },
           "img:pp":{
-            "tok_s":1533.2690453230475
+            "tok_s":1517.1755725190837
           },
           "img:tg":{
-            "tok_s":74.557315936626281
+            "tok_s":74.731433909388144
           }
         },
         "workload":"image-chat",
@@ -6218,12 +6250,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -6233,24 +6265,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3995.0863487375218,
-            "stddev":12.267148971557617
+            "tok_s":4013.4469182063317,
+            "stddev":11.410488128662109
           },
           "tg128":{
-            "tok_s":162.71038660356945,
-            "stddev":0.08905307948589325
+            "tok_s":164.53404220454519,
+            "stddev":0.10588331520557404
+          },
+          "tg128@4":{
+            "tok_s":316.85005132021399,
+            "stddev":14.32806396484375
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"506843b9bcb2b856c2e39dde93d6512b644f56c3f5e6e09d96f61b3cc85182ad",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -6266,12 +6302,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -6281,12 +6317,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3476.5869210000001,
-            "stddev":10.988268
+            "tok_s":3480.4367259999999,
+            "stddev":9.7918369999999992
           },
           "tg128":{
-            "tok_s":148.974492,
-            "stddev":1.0746880000000001
+            "tok_s":147.257452,
+            "stddev":0.25065399999999999
+          },
+          "tg128@4":{
+            "tok_s":303.76799926757815,
+            "stddev":0.13880820572376251
           }
         },
         "source":"official",
@@ -7160,12 +7200,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -7175,24 +7215,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3752.852130141313,
-            "stddev":18.3709716796875
+            "tok_s":3656.3499098164784,
+            "stddev":186.36428833007812
           },
           "tg128":{
-            "tok_s":165.710207762376,
-            "stddev":0.26651418209075928
+            "tok_s":166.35654975721263,
+            "stddev":0.20679953694343567
+          },
+          "tg128@4":{
+            "tok_s":313.68994494199086,
+            "stddev":10.547706604003906
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -7208,12 +7252,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -7223,12 +7267,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3422.407815,
-            "stddev":13.920318999999999
+            "tok_s":3418.674528,
+            "stddev":11.827102999999999
           },
           "tg128":{
-            "tok_s":137.013116,
-            "stddev":0.53181900000000004
+            "tok_s":137.090622,
+            "stddev":0.53789399999999998
+          },
+          "tg128@4":{
+            "tok_s":289.14799804687499,
+            "stddev":0.32729059457778931
           }
         },
         "source":"official",
@@ -8108,12 +8156,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -8123,24 +8171,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1163.7076712350488,
-            "stddev":1.7116338014602661
+            "tok_s":1132.2677973675404,
+            "stddev":12.345097541809082
           },
           "tg128":{
-            "tok_s":38.282019019075705,
-            "stddev":0.062324531376361847
+            "tok_s":38.294665627983647,
+            "stddev":0.054412879049777985
+          },
+          "tg128@4":{
+            "tok_s":72.409914615656163,
+            "stddev":1.0498714447021484
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -8156,12 +8208,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -8171,12 +8223,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":990.93720900000005,
-            "stddev":0.50080800000000003
+            "tok_s":991.29503699999998,
+            "stddev":0.81482699999999997
           },
           "tg128":{
-            "tok_s":36.567248999999997,
-            "stddev":1.0317350000000001
+            "tok_s":36.615456000000002,
+            "stddev":1.022708
+          },
+          "tg128@4":{
+            "tok_s":77.152001953124994,
+            "stddev":1.3546104431152344
           }
         },
         "source":"official",
@@ -9056,12 +9112,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -9071,24 +9127,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3869.9968780370496,
-            "stddev":13.840010643005371
+            "tok_s":3948.7221362237515,
+            "stddev":15.302432060241699
           },
           "tg128":{
-            "tok_s":118.09086016589171,
-            "stddev":5.116732120513916
+            "tok_s":118.9053706786198,
+            "stddev":5.0890111923217773
+          },
+          "tg128@4":{
+            "tok_s":262.82322421902307,
+            "stddev":7.0819454193115234
           }
         },
         "source":"official",
-        "sha":"fa0b0eac4",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
+        "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"97157f4a605fc628815f325b594270ad6d7bfd2680d8a0e27e2a992c34375fff",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -9104,12 +9164,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-02",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -9119,12 +9179,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":3456.267398,
-            "stddev":22.102284999999998
+            "tok_s":3480.1624619999998,
+            "stddev":18.884547000000001
           },
           "tg128":{
-            "tok_s":99.662654000000003,
-            "stddev":0.50851100000000005
+            "tok_s":99.244747000000004,
+            "stddev":0.267538
+          },
+          "tg128@4":{
+            "tok_s":257.88200683593749,
+            "stddev":0.74540209770202637
           }
         },
         "source":"official",
@@ -19104,7 +19168,7 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -19119,25 +19183,25 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":9094.5998731660075,
-            "stddev":57.083290100097656
+            "tok_s":9099.2616622723053,
+            "stddev":45.818679809570312
           },
           "tg128":{
-            "tok_s":159.88990703706887,
-            "stddev":0.26639094948768616
+            "tok_s":160.12913614999434,
+            "stddev":0.032805725932121277
           },
           "tg128@4":{
-            "tok_s":453.39641588874036,
-            "stddev":1.7840683460235596
+            "tok_s":454.19536866657188,
+            "stddev":1.2951443195343018
           }
         },
         "source":"official",
-        "sha":"d65032612",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "dasllama_version":15,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
@@ -19156,7 +19220,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -19171,16 +19235,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":7555.9522370000004,
-            "stddev":14.574376000000001
+            "tok_s":7531.1143890000003,
+            "stddev":33.774718
           },
           "tg128":{
-            "tok_s":136.49394799999999,
-            "stddev":0.51778599999999997
+            "tok_s":136.68301500000001,
+            "stddev":0.41991299999999998
           },
           "tg128@4":{
-            "tok_s":477.48000488281252,
-            "stddev":2.5273985862731934
+            "tok_s":479.69999999999999,
+            "stddev":1.6621929407119751
           }
         },
         "source":"official",
@@ -19379,7 +19443,7 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -19394,24 +19458,24 @@
         },
         "tests":{
           "img:enc":{
-            "ms":37.587000000000003
+            "ms":37.502000000000002
           },
           "img:pp":{
-            "tok_s":5752.212389380531
+            "tok_s":5763.2628934535242
           },
           "img:tg":{
-            "tok_s":153.81933406482972,
+            "tok_s":153.89192682951852,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"d65032612",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "dasllama_version":15,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"1cc15730c6dfa97c64d63838baaf24fbb734739eeb625201f590c3aefab5b602",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
@@ -19863,7 +19927,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-20",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -19878,13 +19942,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":52
+            "ms":51
           },
           "img:pp":{
-            "tok_s":2334.8017621145377
+            "tok_s":2373.1343283582091
           },
           "img:tg":{
-            "tok_s":122.04424103737605
+            "tok_s":122.37093690248565
           }
         },
         "workload":"image-chat",
@@ -23033,12 +23097,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -23048,24 +23112,28 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":913.87787110893373,
-            "stddev":10.144181251525879
+            "tok_s":905.04720583700123,
+            "stddev":5.6301164627075195
           },
           "tg128":{
-            "tok_s":27.837882924443051,
-            "stddev":0.22432254254817963
+            "tok_s":28.096318645591232,
+            "stddev":0.029354678466916084
+          },
+          "tg128@4":{
+            "tok_s":58.595989330545443,
+            "stddev":1.0529556274414062
           }
         },
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -23081,12 +23149,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
-        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen3.8-27B-Q4_K_M.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -23096,12 +23164,16 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":752.12047700000005,
-            "stddev":0.68127599999999999
+            "tok_s":752.40699500000005,
+            "stddev":0.465808
           },
           "tg128":{
-            "tok_s":25.360036000000001,
-            "stddev":0.56916199999999995
+            "tok_s":25.420268,
+            "stddev":0.53212300000000001
+          },
+          "tg128@4":{
+            "tok_s":55.034000396728516,
+            "stddev":1.1671891212463379
           }
         },
         "source":"official",
@@ -24109,12 +24181,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3VL-4B-Instruct-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-Qwen3VL-4B-Instruct-F16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -24124,27 +24196,27 @@
         },
         "tests":{
           "img:enc":{
-            "ms":66.233999999999995
+            "ms":65.873000000000005
           },
           "img:pp":{
-            "tok_s":3718.4078349713395
+            "tok_s":3749.2554048845441
           },
           "img:tg":{
-            "tok_s":112.79255569132437,
-            "text":"assistant\nTwo tabby cats are sleeping on a pink blanket with remote controls nearby."
+            "tok_s":111.71187273783458,
+            "text":"Two tabby cats are sleeping on a pink blanket with remote controls nearby."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"60b736faa",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower qwen3v f32; weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -24172,12 +24244,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/Qwen3VL-4B-Instruct-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-Qwen3VL-4B-Instruct-F16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -24187,13 +24259,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":63
+            "ms":62
           },
           "img:pp":{
-            "tok_s":463.27683615819211
+            "tok_s":465.90909090909093
           },
           "img:tg":{
-            "tok_s":81.300813008130078
+            "tok_s":81.658291457286438
           }
         },
         "workload":"image-chat",
@@ -24456,9 +24528,109 @@
             "bytes":173131
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3VL-4B-Instruct-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "arch":"arm64",
+          "os":"macOS 26.6.2",
+          "perf_cores":6,
+          "total_cores":18,
+          "ram_gb":128,
+          "gpu":"Apple M5 Max (40-core)",
+          "model_id":"Mac17,6",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":6743.0798259129024,
+            "stddev":33.746788024902344
+          },
+          "tg128":{
+            "tok_s":112.15564051536759,
+            "stddev":4.7912626266479492
+          },
+          "tg128@4":{
+            "tok_s":356.07716908461032,
+            "stddev":6.5708174705505371
+          }
+        },
+        "source":"official",
+        "sha":"60b736faa",
+        "version":"0.6.4",
+        "dasllama_version":15,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf",
+            "sha256":"054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            "bytes":4280406144
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen3VL-4B-Instruct-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen3VL-4B-Instruct-Q8_0.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "arch":"arm64",
+          "os":"macOS 26.6.2",
+          "perf_cores":6,
+          "total_cores":18,
+          "ram_gb":128,
+          "gpu":"Apple M5 Max (40-core)",
+          "model_id":"Mac17,6",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":5170.2027179999995,
+            "stddev":3.7796240000000001
+          },
+          "tg128":{
+            "tok_s":108.186187,
+            "stddev":0.28938900000000001
+          },
+          "tg128@4":{
+            "tok_s":363.10800781249998,
+            "stddev":5.1238675117492676
+          }
+        },
+        "source":"official",
+        "sha":"6fdd0ac89",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen3VL-4B-Instruct-Q8_0.gguf",
+            "sha256":"054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1",
+            "bytes":4280406144
+          }
+        ]
       }
     ],
     "arch":"qwen3v",
+    "quant":"q8",
+    "params_b":4.0224680959999999,
+    "active_b":4.0222720000000001,
     "size_bytes":4280406144
   },
   {
@@ -24470,12 +24642,12 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen2.5-Omni-3B-Q8_0.gguf --image-mmproj ~/Work/llama.cpp/models/mmproj-Qwen2.5-Omni-3B-f16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -24485,27 +24657,27 @@
         },
         "tests":{
           "img:enc":{
-            "ms":105.991
+            "ms":107.048
           },
           "img:pp":{
-            "tok_s":6718.1945667416758
+            "tok_s":6143.9351009573802
           },
           "img:tg":{
-            "tok_s":136.54758062513966,
+            "tok_s":132.38975544001539,
             "text":"Two cats laying on a pink blanket with remotes."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"345dcd667",
+        "sha":"cc969d961",
         "version":"0.6.4",
         "dasllama_version":15,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"61f4ee8c1a4b36cb2e230b32ab1cdcb5ed8c536c7ff36964e5d1cf4701ddcfb6",
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower qwen25v f32; weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -24533,12 +24705,12 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-30",
+        "date":"2026-09-21",
         "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-mtmd-cli -m ~/Work/llama.cpp/models/Qwen2.5-Omni-3B-Q8_0.gguf --mmproj ~/Work/llama.cpp/models/mmproj-Qwen2.5-Omni-3B-f16.gguf --image ~/Work/llama.cpp/models/coco-val2017-000000039769.jpg -p \"What is in this picture? Answer in one sentence.\" --temp 0 --jinja -n 32 -t 6 -ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
           "arch":"arm64",
-          "os":"macOS 26.6",
+          "os":"macOS 26.6.2",
           "perf_cores":6,
           "total_cores":18,
           "ram_gb":128,
@@ -24548,13 +24720,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":118
+            "ms":120
           },
           "img:pp":{
-            "tok_s":829.08163265306121
+            "tok_s":831.20204603580578
           },
           "img:tg":{
-            "tok_s":81.967213114754088
+            "tok_s":81.585081585081582
           }
         },
         "workload":"image-chat",
@@ -24817,9 +24989,109 @@
             "bytes":173131
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen2.5-Omni-3B-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99 --npl 4",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "arch":"arm64",
+          "os":"macOS 26.6.2",
+          "perf_cores":6,
+          "total_cores":18,
+          "ram_gb":128,
+          "gpu":"Apple M5 Max (40-core)",
+          "model_id":"Mac17,6",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":8357.0428042818912,
+            "stddev":16.907342910766602
+          },
+          "tg128":{
+            "tok_s":145.09171081958408,
+            "stddev":0.21842266619205475
+          },
+          "tg128@4":{
+            "tok_s":441.85656542078368,
+            "stddev":9.2517299652099609
+          }
+        },
+        "source":"official",
+        "sha":"cc969d961",
+        "version":"0.6.4",
+        "dasllama_version":15,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"290dd609b79f6b56d614bb6a9624f2633b32c00ab56a2832c33b57d7223bde16",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf",
+            "sha256":"c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            "bytes":3616087360
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m5",
+        "threads":6,
+        "date":"2026-09-21",
+        "cmd":"~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-bench -m ~/Work/llama.cpp/models/Qwen2.5-Omni-3B-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json ; ~/Work/llama.cpp-ref-6fdd0ac/build-stock/bin/llama-batched-bench -m ~/Work/llama.cpp/models/Qwen2.5-Omni-3B-Q8_0.gguf -ngl 99 -t 6 -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 4 -fa on",
+        "hardware":{
+          "cpu":"Apple M5 Max",
+          "arch":"arm64",
+          "os":"macOS 26.6.2",
+          "perf_cores":6,
+          "total_cores":18,
+          "ram_gb":128,
+          "gpu":"Apple M5 Max (40-core)",
+          "model_id":"Mac17,6",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":5361.9533190000002,
+            "stddev":864.73718699999995
+          },
+          "tg128":{
+            "tok_s":94.051635000000005,
+            "stddev":7.6581380000000001
+          },
+          "tg128@4":{
+            "tok_s":309.18400878906249,
+            "stddev":11.094335556030273
+          }
+        },
+        "source":"official",
+        "sha":"6fdd0ac89",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"Qwen2.5-Omni-3B-Q8_0.gguf",
+            "sha256":"c7d8b07c8d8d7a9ed1de1b8df7ac821eb4d259a224bd44310baacfaa5a473d4c",
+            "bytes":3616087360
+          }
+        ]
       }
     ],
     "arch":"qwen25v",
+    "quant":"q8",
+    "params_b":3.3971036159999999,
+    "active_b":3.3968619520000001,
     "size_bytes":3616087360
   },
   {

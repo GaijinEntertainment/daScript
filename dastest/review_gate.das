@@ -71,7 +71,8 @@ def find_line(text : string; needle : string) : int {
     return line
 }
 
-//! Module paths from a file's line-level `require` statements (`require a/b public` → "a/b").
+//! Module paths from a file's line-level `require` statements (`require a/b public` → "a/b";
+//! a `?guard` token before the path is the module-exists guard, not the path).
 //! Line-based on purpose: a require inside a block comment is still reported.
 def das_requires(path : string) : array<string> {
     var out : array<string>
@@ -83,6 +84,10 @@ def das_requires(path : string) : array<string> {
         let cut = find(line, "//")
         if (cut >= 0) {
             line = strip(slice(line, 0, cut))
+        }
+        if (starts_with(line, "?")) {
+            let guard_end = find(line, ' ')
+            line = guard_end < 0 ? "" : strip(slice(line, guard_end))
         }
         continue if (empty(line))
         let sp = find(line, ' ')

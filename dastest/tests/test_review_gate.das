@@ -56,15 +56,16 @@ def test_das_requires(t : T?) {
         return
     }
     let fixture = unsafe(fixture_r.value)
-    let src = "options gen2\n\nrequire strings\nrequire daslib/fio public\nrequire utils_common // trailing comment\n// require commented_out\n    require indented/mod\nrequire tight//comment with no space\nrequire //nothing before the comment\n"
+    let src = "options gen2\n\nrequire strings\nrequire daslib/fio public\nrequire utils_common // trailing comment\n// require commented_out\n    require indented/mod\nrequire tight//comment with no space\nrequire //nothing before the comment\nrequire ?das_metal dasllama/dasllama_metal_common   // the module-exists guard is not the path\nrequire ?lonely\n"
     t |> success(fwrite(fixture, src))
     var inscope reqs <- das_requires(fixture)
-    t |> equal(5, length(reqs))
+    t |> equal(6, length(reqs))
     t |> equal("strings", reqs[0])
     t |> equal("daslib/fio", reqs[1])
     t |> equal("utils_common", reqs[2])
     t |> equal("indented/mod", reqs[3])
     t |> equal("tight", reqs[4], "comment cut runs before the space split")
+    t |> equal("dasllama/dasllama_metal_common", reqs[5], "a ?guard token is skipped, the path after it is the require; a guard with no path is nothing")
     t |> success(remove(fixture))
 }
 

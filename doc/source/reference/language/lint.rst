@@ -881,6 +881,26 @@ Like the other two folder rules, the pass runs once per invocation over the
 directories being linted and the folders of the files being linted, and never
 fires in an untagged folder — the tags are folder properties with no cascade.
 
+LINT032 — a checklist cites a rule by position
+===============================================
+
+A ``REVIEW*.md`` line that says "the rule above", "the gate list below",
+"see above" or the like points at a neighbour by its place in the file. Rules
+are order-independent, so the pointer breaks the first time a rule is inserted
+or moved, silently. Name what the cited rule binds instead.
+
+LINT033 — a checklist names a path or a test cell the tree does not have
+=========================================================================
+
+A backticked token in a ``REVIEW*.md`` that ends in a source extension
+(``.das``, ``.md``, ``.rst``, ``.py``, ``.sh``, ``.cpp``, ``.h``, ``.hpp``,
+``.ypp``, ``.cmake``) must resolve: a path against the checklist's folder, its
+ancestors and the working directory; a bare basename anywhere in the repo.
+A backticked ``test_<subject>_<claim>`` must be a ``def test_*`` under the
+checklist's folder. A span carrying a wildcard or a placeholder is skipped, as
+is an absolute or ``$``-prefixed path. A renamed file or cell leaves the rule
+that cited it pointing at nothing, and a rule nobody can follow stops binding.
+
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 

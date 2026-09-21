@@ -36,7 +36,10 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Metal has NO `math_` entry** - the family enters via the transformer's `?das_metal` requires
   plus unconditional shapes. Its below-common piece is **`dasllama_metal_gemm.das`** (the batch
   GEMM donor that common requires `?das_metal`), which owns its device by necessity:
-  metal_common -> dasllama_common -> metal_gemm would cycle.
+  metal_common -> dasllama_common -> metal_gemm would cycle. `REVIEW.das`'s
+  `check_device_creation_sites` walks `dasllama/` for a device or queue creation outside the two
+  `_common` files and licenses `dasllama_metal_gemm.das` plus the two tuner race entries
+  (`metal_tensor_race`, `metal_tensor_race_decode`), which run before the driver inits.
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** - vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
@@ -112,6 +115,9 @@ that a question answered for one backend has an obvious address in the other. Th
   `moe_mm_split`): the lens derives every string the long form spells, an explicit argument wins, and the
   threadgroup-memory global is always `<Class>_<kernel method>_msl_tgmem`. Hosts compile through
   `compile_stamp(<stem>_msl, ok)` - one spelling, so a source never pairs with another kernel's entry.
+  A stamp's `params=` are its family's shared builder signature - the forms are taken by address
+  into one table - so the lens's unread-param refusal (a `params=` name no `grid=`, `tg=`,
+  `requires=` or `@span` reads) exempts stamp-derived params; a long-form class is refused.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no

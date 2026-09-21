@@ -188,9 +188,49 @@ def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float con
     dn_token_epilogue(t, l, z, o)
 }
 
-def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
+//! the recurrent block's beta/alpha projections of `npos` rows: f32 rows on disk run fp32, q8 planes
+//! ride the q8 GEMM
+def private dn_beta_alpha_proj(t : Model; var s : Session; l, npos : int64) {
+    let dim = t.config.dim
+    let nvh = t.config.ssm_dt_rank
+    if (t.dn_ba_f32) {
+        mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
+        mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
+    } else {
+        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
+        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
+    }
+}
+
+//! the recurrent block's rows prologue: the input norm, then the qkv, z, beta and alpha projections of
+//! `npos` rows, timed into the two prof buckets the caller names
+def private dn_in_proj(t : Model; var s : Session; l, npos : int64; norm_bucket, mm_bucket : string) {
     let c = t.config
     let dim = c.dim
+    let ts_norm0 = prof_ticks()
+    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
+    prof_add(norm_bucket, ts_norm0)
+    let ts_qkv = prof_ticks()
+    mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, dn_conv_dim(c), npos)
+    mm_b_f(s, s.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb_b, dim, c.ssm_d_inner, npos)
+    dn_beta_alpha_proj(t, s, l, npos)
+    prof_add(mm_bucket, ts_qkv)
+}
+
+//! the recurrent block's rows epilogue: the out projection of `npos` rows and the residual add, timed
+//! into the two prof buckets the caller names
+def private dn_out_proj(t : Model; var s : Session; l, npos : int64; wo_bucket, resid_bucket : string) {
+    let dim = t.config.dim
+    let ts_wo = prof_ticks()
+    mm_b_f(s, s.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o_b, t.config.ssm_d_inner, dim, npos)
+    prof_add(wo_bucket, ts_wo)
+    let ts_resid = prof_ticks()
+    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    prof_add(resid_bucket, ts_resid)
+}
+
+def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
+    let c = t.config
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
@@ -198,20 +238,7 @@ def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : ar
     for (i in range64(nrows)) {
         dn_flush_layer(*sessions[i], l)   // device state may be dirty from earlier GPU steps (route flip)
     }
-    let ts_norm0 = prof_ticks()
-    rms_batch(ws.scr.xb_b, ws.scr.x_b, t, t.rms_att_off + l * dim, dim, nrows)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = prof_ticks()
-    mm_b_f(ws.scr, ws.scr.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], ws.scr.xb_b, dim, cd, nrows)
-    mm_b_f(ws.scr, ws.scr.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], ws.scr.xb_b, dim, di, nrows)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
-        mm_fblob_b(ws.scr.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, ws.scr.xb_b, dim, nvh, nrows)
-        mm_fblob_b(ws.scr.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, ws.scr.xb_b, dim, nvh, nrows)
-    } else {
-        mm_b_f(ws.scr, ws.scr.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], ws.scr.xb_b, dim, nvh, nrows)
-        mm_b_f(ws.scr, ws.scr.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], ws.scr.xb_b, dim, nvh, nrows)
-    }
-    prof_add("mm_qkv", ts_qkv)
+    dn_in_proj(t, ws.scr, l, nrows, "norm", "mm_qkv")
     let ts_attn = prof_ticks()
     unsafe {
         let tp = addr(t)
@@ -251,12 +278,7 @@ def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : ar
         }
     }
     prof_add("attn", ts_attn)
-    let ts_wo = prof_ticks()
-    mm_b_f(ws.scr, ws.scr.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], ws.scr.dn_o_b, di, dim, nrows)
-    prof_add("mm_wo", ts_wo)
-    let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(ws.scr.x_b[0])), unsafe(addr(ws.scr.xb2_b[0])), nrows * dim)
-    prof_add("act_resid", ts_resid)
+    dn_out_proj(t, ws.scr, l, nrows, "mm_wo", "act_resid")
 }
 
 //! the deltanet state is forward-only: a full reset at 0, a panic on any rewind, and the session
@@ -835,13 +857,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     prof_add("dn_norm", ts_norm0)
     let ts_in = prof_ticks()
-    if (t.dn_ba_f32) {   // raw beta/alpha rows — the transforms run in-kernel
-        mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-        mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-    } else {
-        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
-        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
-    }
+    dn_beta_alpha_proj(t, s, l, npos)   // raw beta/alpha rows - the transforms run in-kernel
     requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)   // one Q8_0 image serves the qkv AND z GEMMs
     prof_add("dn_mm_in", ts_in)
     let ts_gpu = prof_ticks()
@@ -882,24 +898,10 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
         return
     }
     let c = t.config
-    let dim = c.dim
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    let ts_norm0 = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    prof_add("dn_norm", ts_norm0)
-    let ts_qkv = prof_ticks()
-    mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, cd, npos)
-    mm_b_f(s, s.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb_b, dim, di, npos)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
-        mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-        mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-    } else {
-        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
-        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
-    }
-    prof_add("dn_mm_in", ts_qkv)
+    dn_in_proj(t, s, l, npos, "dn_norm", "dn_mm_in")
     if (g_dn_prefill_mode == DnPrefillMode.chunked && npos > 1l) {   // single rows: recurrent is cheaper
         deltanet_prefill_chunked(t, s, l, npos)   // buckets dn_conv + dn_scan inside
     } else {
@@ -916,12 +918,7 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
         }
         prof_add("dn_core", ts_core)
     }
-    let ts_wo = prof_ticks()
-    mm_b_f(s, s.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o_b, di, dim, npos)
-    prof_add("dn_mm_out", ts_wo)
-    let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("dn_resid", ts_resid)
+    dn_out_proj(t, s, l, npos, "dn_mm_out", "dn_resid")
 }
 
 [no_alloc, no_env, no_io]
