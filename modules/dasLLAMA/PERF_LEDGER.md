@@ -2351,6 +2351,24 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
   share few), Qwen1.5-MoE Q8_0 520.1 +/- 35.3 -> 526.3 +/- 39.8 (the same session, within the
   spread). The one-row rates did not move (gpt-oss 209.13 -> 209.13). Under the profiler the expert GEMVs read 5348 -> 4733 us a step (e_gate 1768 -> 1517, e_up 1791 -> 1618, e_down 1789 -> 1598; the step 9235 -> 8672), 830 us above the reference's traced 3903: the walk shares a row between slots that sit within a cache's reach, the reference's block shares it within one warp set.
 
+- **E2B, the pod, tg128@4 summed / tg128:** CUDA 745.5 / 224.3 against ours 578.3 +/- 1.3 / 198.5 (0.78 /
+  0.88; llama.cpp Vulkan 185.5) - the widest of the three. The shapes at four rows, ours stamps / CUDA
+  traced, us a step: gate + up 1527 / 1591, down + wo + proj 1616 / 1187, the classifier 504 / 530, the
+  projections 395 / 593, the attention 1016 / 478 (a head of 256, eight heads a kv head: two workgroups a
+  row, four pieces - the chain itself, 29 us a layer against their 9.5), the glue 1209 / about 1550; the
+  host 0.56 ms a step (the logits copy 266 us) against their device-to-host copy of 148.
+- **The attention pieces capped to one wave (commit ee15d5217: `rd_layer_pieces` bounds a layer's count
+  by the SM count over its (kv head, slab) workgroups times the plan's rows, both commands alike), the
+  ruler's readings at 640 positions and four rows (`harness/vk_attn_probe.das`, us a layer):** gpt-oss's
+  shape (sixteen workgroups a row) 34.9 at four pieces -> 16.4 at one, Llama-1B's (eight a row) 22.6 ->
+  16.5 at two, the 30B's (eight a row, head 128) 27.3 -> 20.6 at two, E4B's (two a row) stays at four
+  (22.7; 34.4 unsplit): the pass costs one workgroup's chain a wave and climbs past about thirty-two
+  workgroups a layer. The rows, tg128@4 before -> after: gpt-oss 450.3 -> 461.1 +/- 4.0 (CUDA 523.3: 0.86 ->
+  0.88), Llama-3.2-1B Q8_0 1369.1 +/- 1.5 -> 1432.8 +/- 2.4 in one session (flat 459.2 -> 465.0: the one-row
+  command takes the plan's count too), Qwen3-30B-A3B 459.0 -> 450.2 +/- 20.5 (within the spread), E4B 362.3
+  +/- 0.6 (its count unchanged). The regions files hold bit for bit through the change (gpt-oss, the 30B on
+  its bar, qwen2, E2B, Qwen1.5-MoE), since both commands read one count.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

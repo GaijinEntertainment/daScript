@@ -45,12 +45,21 @@ last whole key group hold no keys.
 **The split ladder follows the attended span, and the last piece to land finishes.** The pass
 cuts the attended span into `nsplit` 32-aligned pieces, each running the online softmax over its
 piece into an unnormalized piece a head (max, denominator, accumulators; an empty piece weighs
-nothing). The piece count is the span's, never the row count's or the SM count's: one piece under
+nothing). The piece count is the span's: one piece under
 `RD_UNSPLIT_POS` (512), `RD_SPLIT_PIECES` (four) to `RD_WIDE_POS` (3072), `RD_SPLIT_WIDE_PIECES`
 (eight) past it for the one-row command alone, each capped by the partials plane's `attn_nsplit`
 (`da_nsplit`: enough (head, split) workgroups to cover the SM count twice, at most
 `DA_NSPLIT_MAX`); a sliding-window layer attends at most its window, so its count is its
-window's span's under the command's (`rd_layer_pieces`). The ruler (`harness/vk_attn_probe.das`
+window's span's under the command's; and a layer's count is capped so its (kv head, slab)
+workgroups over the plan's rows (`RDec.nb`) fit one wave of the SMs (`rd_layer_pieces`: the
+SM count over the row's workgroups times the rows, one at least) - the pass is a chain of
+latencies a workgroup, and the ruler reads a second wave as a second chain: at 640 positions
+and four rows gpt-oss's shape (64 heads, eight a kv head: sixteen workgroups a row) reads 16.4
+us a layer unsplit and 34.9 at four pieces, Llama-1B's (eight a row) 14.5 and 22.6, the 30B's
+(eight a row, head 128) 22.6 at one and 20.6 at two, where E4B's (two a row) wants its four
+pieces - 22.7 against 34.4 unsplit - and every shape climbs past about thirty-two
+workgroups a layer. The cap reads the plan's rows for both commands, so a one-row step on a
+plan of four rows takes the four-row count. The ruler (`harness/vk_attn_probe.das`
 under `-jit` on the pod, `PERF_LEDGER.md`'s 2026-09-20 section) read the rule at the Qwen2.5-0.5B
 geometry on the RTX PRO 4500, us a layer: one piece 10.4 at 384 positions and 14.5 at 640 against
 four pieces' 16.5 at both, four pieces 16.5 at 1024 against one piece's 18.6 and 18.6 at 1536
