@@ -22,14 +22,16 @@ end-to-end route a run takes from prompt to tokens; its compile tier (interprete
 and its cross target (a build for another platform) are part of it.
 
 **A diff that adds a kernel or loop the runtime re-enters per token, per frame or per prefill
-quantum, or adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
-`[no_env]` or `[no_io]` annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
-(beside this file) together with this list.**
+quantum - one batch of prompt tokens the prefill path processes in a single pass - or adds,
+moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
+annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together
+with this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
 answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
-weight file), or an image or audio fixture. A test or tool merely opening a stocked model file by name does not route.
+weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
+by name does not route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
@@ -56,12 +58,14 @@ binding numbers as literals), wherever the diff puts it - applies `REVIEW_GPU.md
 the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
-`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor (the
-backend-and-layout variant an image is baked for, one part of its identity) - applies `REVIEW_IMAGE.md`.**
+`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor
+(the backend-and-layout variant an image is baked for, one part of its identity) - applies
+`REVIEW_IMAGE.md`.**
 
-**A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`, `dasllama_audio_embedder.das`,
-`dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das` (all under `dasllama/`), or to an
-ASR family file - one `dasllama/dasllama_<family>.das` holding one speech-recognition family - applies `REVIEW_AUDIO.md`.**
+**A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
+`dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
+(all under `dasllama/`), or to an ASR family file - one `dasllama/dasllama_<family>.das` holding
+one speech-recognition family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
@@ -89,8 +93,10 @@ global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-l
 kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
 count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
-**A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
-outside `tests/` (beside this file) is a defect - move it into `tests/`.**
+**A `[test]` file that requires any `dasllama/*` module, sits under `modules/dasLLAMA/` outside
+`tests/` (beside this file), and requires no file of its own folder by bare same-dir name is a
+defect - move it into `tests/`.** One that does require a same-folder file stays, and
+`tests/REVIEW.md`'s ledger rule owns it.
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
@@ -149,8 +155,11 @@ reported wall-clock times - is marked `// clock: control`** - unmarked, it canno
 apart from the ad-hoc profiling an engine file may not carry.
 
 **A change to `encode`/`bpe_encode`, or to a function they call at encode time (not one that only
-supplies a metadata default at load), in `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`
-/ `dasllama/dasllama_pretok.das`, ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) at
+supplies a metadata default at load) in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das`
+or `dasllama/dasllama_pretok.das` - `encode` being `dasllama_spm.das`'s and `bpe_encode`
+`dasllama_bpe.das`'s; the dispatcher in `dasllama/dasllama_tokenizer.das` owes a
+`tests/test_tokenizer.das` run, not rows - ships before/after `--tok` rows
+(`benchmarks/lcpp_bench.das`) at
 two or more input sizes on a model using that tokenizer; a time growing faster than linearly with
 input size is a defect.**
 
@@ -171,13 +180,13 @@ change; a CLI flag is never an override.
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
 (none: it says so).**
 
-**A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-outside this folder left showing the old call, flag, default, or stated behaviour after a change
-to user-facing API is the change's defect, not the docs'.** User-facing is anything a consumer
-outside this repo can depend on - what it calls, types, requires or parses (facade functions, CLI
-flags, environment knobs, file formats, defaults, what the installed SDK lets a program
-`require`) - plus the in-repo
-rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
+**A tutorial source, `.rst` page, docstring, help string, `README.md`, or any other checked-in
+document, all outside this folder, left showing the old call, flag, default, or stated behaviour
+after a change to user-facing API is the change's defect, not the docs'.** User-facing is
+anything a consumer outside this repo can depend on - what it calls, types, requires or parses
+(facade functions, CLI flags, environment knobs, file formats, defaults, what the installed SDK
+lets a program `require`) - plus the in-repo rig and tool surface: any output another tool
+parses. A console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own

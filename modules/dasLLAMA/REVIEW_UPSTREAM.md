@@ -1,8 +1,8 @@
 # dasLLAMA Reference-Build Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_general.md`, `followup_vulkan.md`,
-`followup_metal.md`.
+doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Metal tier,
+`followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
 
 These rules bind checked-in text under `modules/dasLLAMA/` and the commit message or PR body of
 a diff to it.
@@ -17,12 +17,11 @@ work even when it also states what our own code or our own run does.
 
 **A diff that names the reference build - its organization, project, binary, source header,
 symbol, constant, or a label its output prints - outside a sentence doing reference-build work
-is a defect: write "the reference build", or for its binary the qualified "the flat reference
-exe" / "the batched reference exe" / "the media reference exe" (the roster is
-`benchmarks/setup_lcpp_ref.das`), instead.** A
-name this module's own code, files or artifacts carry is its own name, not attribution;
-attributing our code's shape to the reference build ("in the reference build's form") names it
-too.
+is a defect: write "the reference build", or for one of its binaries a "<role> reference exe"
+phrase, never the third party's own binary name.** A name that this module's own code, files or
+artifacts carry is its own name, not attribution; attributing our code's shape to the reference
+build ("in the reference build's form") names it too - state the shape in our own terms, with
+no source named for it.
 
 **A diff that describes what the reference build itself does, outside a sentence doing
 reference-build work, describes it in our own terms - what the mechanism does, never which of its
@@ -38,8 +37,8 @@ fixes is the format's, not the reference build's.
 **A sentence stating what WE will build or change next carries no reading of the reference
 build; the reading it sits beside gets its own sentence.**
 
-**A sentence stating a reference-build run we will make carries that run's names, knobs and
-commands.** Such a sentence does reference-build work, not a proposal; a sentence that promises a
-measurement whose number can only be had by running the reference build - a row of its table, a
-ratio against it - states such a run; a promise priced on this module's own instruments alone is
-not one.
+**A sentence stating a reference-build run we will make carries that run's exe and model names,
+the environment settings and flags it runs with, and its command line.** Such a sentence does
+reference-build work, not a proposal; a sentence that promises a measurement whose number can
+only be had by running the reference build - a row of its table, a ratio against it - states
+such a run; a promise whose number this module's own runs alone can produce is not one.

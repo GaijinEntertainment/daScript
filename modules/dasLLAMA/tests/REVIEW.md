@@ -103,8 +103,8 @@ other stocked fixture gates on its own presence.
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
 or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
-`load_<family>_tower`, `load_<family>_encoder`, `load_<carrier>_model`, `load_tts_model`,
-`load_styletts2`.**
+`load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -115,8 +115,8 @@ registry, and never calls it directly.** A registry is the storage a `register_*
 and a lookup reads at dispatch - a table, a list, or a single hook global - or the `[EnvConfig]`
 env registry.
 
-**A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
-naming the `ggml-vocab-*.gguf` fixture.**
+**A new pre-tokenizer family, or a new tokenizer backend (byte-level BPE or SPM), ships its
+`corpus_case` arm in `test_tokenizer.das`, naming the `ggml-vocab-*.gguf` fixture.**
 
 **A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
 round-trip is a defect.**
@@ -163,8 +163,9 @@ engage mode for the rest of the process - whose value the cell's claim depends o
 the claim needs it at its DEFAULT value.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
-other driver setter it touched back where it found it; `reset_<family>_q8` is the unset call,
-returning the family to its policy default.** Why a hook left set changes what the next cell
+other driver setter it touched back where it found it; the unset call is the family's own -
+`reset_<family>_q8`, canary's `reset_canary_enc_q8`, whisper's `set_asr_fp32(false)` and
+`set_asr_tower_fp32(false)` - returning the family to its policy default.** Why a hook left set changes what the next cell
 measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
@@ -174,8 +175,8 @@ runtime decline standing in for a pin measures whichever lane the box's policy p
 
 **A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
-knob itself mints in memory through the family's `stage_*` + `mint_*` pair, never through a
-`.dlim`-baking loader.** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
+knob itself mints in memory from the family's `stage_*` staging - its `mint_*` twin, or
+`cache_via_image_staged` with an empty image path - never through a `.dlim`-baking loader.** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
 beside the model, and the next direct-image load in another suite panics on the wrong identity.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
@@ -225,7 +226,7 @@ dump, with no exact-value generator - one whose values are exactly representable
 every box produces the same bytes - is a defect.** A generator running libm transcendentals is
 not exact-value: it is not float-portable.
 
-**An embedding-parity cell that does not name its fixture, or does not log the measured
+**An embedder-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
 **A diff that adds an assert carrying a tolerance bar, or loosens one, ships in the same change a
