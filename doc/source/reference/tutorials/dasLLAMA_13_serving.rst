@@ -35,6 +35,7 @@ which is where the throughput comes from:
 
    var pool <- create_kv_pool(m, 16l)
    var ws <- create_batch_workspace(m)
+   gpu_dn_room(2l)                 // a GPU-served deltanet hybrid: this many streams' recurrent state stays resident
    var s0 = create_session(m, pool)
    var s1 = create_session(m, pool)
    var rows <- [unsafe(addr(s0)), unsafe(addr(s1))]
@@ -42,6 +43,12 @@ which is where the throughput comes from:
    eval_batch(m, ws, rows, toks)   // ONE weight pass advances every stream
    release_kv_pages(s0)            // pages go back to the pool before the session dies
    release_kv_pages(s1)
+
+A hand-rolled batch over a GPU-served deltanet hybrid names its stream count
+first: ``gpu_dn_room`` tells the driver how many sessions' recurrent state it
+keeps device-resident at once, so no stream's state evicts under the batched
+step it rides. Call it before the first prefill; ``create_scheduler`` does it
+for its own streams, and a driver with no such cache ignores the call.
 
 The scheduler
 =============

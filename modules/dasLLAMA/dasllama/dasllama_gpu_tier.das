@@ -1929,6 +1929,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     if (g_moe_gpu_dn_release == null) {
         g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
     }
+    if (g_moe_gpu_dn_room == null) {
+        g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
+    }
     if (g_moe_gpu_heat_query == null) {
         g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query
     }

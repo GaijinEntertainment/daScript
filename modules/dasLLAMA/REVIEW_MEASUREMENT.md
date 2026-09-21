@@ -46,7 +46,8 @@ a harness run drives; a harness is the `harness/` script that drove a run, where
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
 or as the `-jit` script, the two serving one code path and reading alike - or a board cell did.**
 A served turn is one whole request an engine serves, whatever the modality; a turn wall is its
-wall.
+wall. A rate an instrument under `harness/` prints stays in that run's log: the ledger entry
+carries what the instrument decided - served, declined, the census counts - never its rate.
 
 **A `-jit` A/B pair's arms keep their absolute rates in the commit message or PR body that states
 the pair.**
@@ -90,9 +91,10 @@ including the path a run with no flags and no environment overrides takes.
 **A change that owes a board row for a route or a path no box of the author's mints - no rig leg
 drives it, the box refuses or skips the leg that would, or the model is one `--catalog official`
 does not carry, so its rows can only go to a store outside `records/` - names instead, in the
-same change, the record or gate output that proves the route ran end to end, or the profile
-output that shows the win (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's
-`DASLLAMA_GPU_PROF=1` token ledger) with the flags that run took.**
+same change, an artifact that shows the route ran end to end - a record, a gate output, an
+instrument's print - or the profile output that shows the win (`benchmarks/lcpp_bench.das`'s
+`forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token ledger), with the flags that
+run took.**
 
 **A diff that makes the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - run end to end names `tune_gate`'s fat-world report

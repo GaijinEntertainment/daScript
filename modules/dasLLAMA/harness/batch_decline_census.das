@@ -16,6 +16,7 @@ require dasllama/dasllama_math    // setup_dasllama_jobque_ + set_metal_mode
 require dasllama/dasllama_common  // batch_step_census, allow_cpu_prefill
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_declines + declines_line
 require daslib/jobque_boost
+require daslib/clargs
 require daslib/fio
 require daslib/rtti   // this_context().last_exception: a dying per-row fallback is read as text
 require math
@@ -29,62 +30,60 @@ def declines_text() : string {
     }
 }
 
+[CommandLineArgs]
+struct Args {
+    @clarg_doc = "Streams per row (2 or more)"
+    npl : int = 4
+
+    @clarg_doc = "The session context the row loads at"
+    ctx : int = 4096
+
+    @clarg_doc = "The KV codec: f16 | f32 | q8_0 | tq4"
+    kv : KVDtype = KVDtype.f16
+
+    @clarg_positional
+    @clarg_doc = "GGUF paths"
+    models : array<string>
+
+    @clarg_short = "?"
+    @clarg_name = "show-help"
+    @clarg_doc = "Show this help and exit"
+    help : bool
+}
+
 [export]
-def main() {
+def main() : int {
     allow_cpu_prefill()
-    let args <- get_command_line_arguments()
-    var paths : array<string>
-    var npl = 4l
-    var ctx = 4096l
-    var kv = KVDtype.f16
-    var seen_sep = false
-    var pending_opt = ""   // the option waiting for its value
-    for (a in args) {
-        if (!seen_sep) {
-            seen_sep = a == "--"
-        } elif (!empty(pending_opt)) {
-            if (pending_opt == "--npl") {
-                npl = to_int64(a, false)
-            } elif (pending_opt == "--ctx") {
-                ctx = to_int64(a, false)
-            } elif (a == "f16") {
-                kv = KVDtype.f16
-            } elif (a == "f32") {
-                kv = KVDtype.f32
-            } elif (a == "q8_0") {
-                kv = KVDtype.q8_0
-            } elif (a == "tq4") {
-                kv = KVDtype.tq4
-            } else {
-                panic("batch_decline_census: --kv takes f16 | f32 | q8_0 | tq4, not '{a}'")
-            }
-            pending_opt = ""
-        } elif (a == "--npl" || a == "--kv" || a == "--ctx") {
-            pending_opt = a
-        } else {
-            paths |> push(a)
-        }
+    var r <- parse_args(type<Args>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<Args>), "batch_decline_census")
+        return 1
     }
-    if (empty(paths) || npl < 2l) {
-        print("usage: batch_decline_census.das -- [--npl N] [--ctx ROWS] [--kv f16|f32|q8_0|tq4] <gguf> [<gguf> ...]\n")
-        return
+    let cfg <- r |> move_unwrap
+    if (cfg.help || empty(cfg.models) || cfg.npl < 2) {
+        print_help(get_command_info(type<Args>), "batch_decline_census")
+        return cfg.help ? 0 : 1
     }
+    let npl = int64(cfg.npl)
+    let kv = cfg.kv
     set_metal_mode(MetalMode.when_available)
     with_job_que() {
         setup_dasllama_jobque_()
-        for (path in paths) {
+        for (path in cfg.models) {
             var t <- load_model_cached(path, QuantMode.q8)
-            t.config.seq_len = min(t.config.seq_len, ctx)
+            t.config.seq_len = min(t.config.seq_len, int64(cfg.ctx))
             let c0 = batch_step_census()
-            var r = (tps = 0.0lf, why = "")
+            var rep = (tps = 0.0lf, why = "")
             try {
-                r = bench_tg_batched_rep(t, npl, 32l, 8l, 1l, false, kv)
+                rep = bench_tg_batched_rep(t, npl, 32l, 8l, 1l, false, kv)
             } recover {
-                r.why = "PANIC {this_context().last_exception |> rtrim}"   //! a declined step's per-row fallback can die on a blob-only model: the census names it beside the declines
+                rep.why = "PANIC {this_context().last_exception |> rtrim}"   //! a declined step's per-row fallback can die on a blob-only model: the census names it beside the declines
             }
             let c1 = batch_step_census()
-            print("CENSUS {base_name(path)} npl={npl} kv={kv} ctx={t.config.seq_len}: tps={r.tps} why='{r.why}' steps device={c1.device - c0.device} cpu_stack={c1.cpu_stack - c0.cpu_stack} per_row={c1.per_row - c0.per_row} declines:{declines_text()}\n")
+            print("CENSUS {base_name(path)} npl={npl} kv={kv} ctx={t.config.seq_len}: tps={rep.tps} why='{rep.why}' steps device={c1.device - c0.device} cpu_stack={c1.cpu_stack - c0.cpu_stack} per_row={c1.per_row - c0.per_row} declines:{declines_text()}\n")
             delete t
         }
     }
+    return 0
 }

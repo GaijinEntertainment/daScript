@@ -14,7 +14,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | role | holds | must not hold |
 |---|---|---|
 | the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the kernel-side quant-decode helpers and codebook tables, the derived-access/PSO census; on Vulkan the one device buffer kernel data fills (`kq_grid_dev`, the grid codebooks) and the host-side ensure/set/enc pick ladders and grid rules over its own class stamps (`gemv_*`, `q8_gemv_gu_n_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*`, `f16_gemm_*`, `da_slab_*`) | device state other than `kq_grid_dev`, engine types |
-| `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler, host-side quant-decode helpers (Metal's `iq4_lut`) | driver policy |
+| `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler, host-side quant-decode helpers (Metal's `iq4_lut`), the family's registrant of a tier seat that names a size the device state keeps (Metal's `dn_mirror_room`) | driver policy |
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
@@ -195,7 +195,12 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
 - **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier
   exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
   Vulkan family alone, and the role row above enumerates the seats; a new seat lands in that
-  row, not as a new entry here.
+  row, not as a new entry here. The one seat outside that rule is the entry below.
+- **The deltanet mirror room seat is Metal-only.** `set_moe_gpu_dn_room_hook` (the engine half
+  `gpu_dn_room_`, the facade's `gpu_dn_room`) carries a scheduler's stream count to whatever
+  keeps sessions' recurrent state device-resident; `_common`'s `dn_mirror_room` is its one
+  registrant, because Metal's per-session `DnMirror` cache evicts by LRU and Vulkan's resident
+  driver homes state per region with no cache to size.
 - **Metal sits ABOVE `dasllama_common`** (typed `Model`/`Session` access, shapes unconditional);
   **Vulkan sits BELOW it** (untyped pointer/array seams - the family never requires common).
   Both tiers ENTER from the transformer umbrella (`?das_metal` requires; the single `?vulkan`

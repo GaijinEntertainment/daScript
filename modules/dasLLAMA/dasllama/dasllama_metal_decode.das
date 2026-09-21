@@ -1270,24 +1270,10 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
     metal_wait_until_completed(r.cb)
     let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
-        let c = t.config
-        let l = c.n_layers
-        let dpos = r.pos
         unsafe {
-            let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
-            let lb = mirror_lbase(t, s.kv_dtype_k, r.cap, l)
-            mirror_row_writeback(s, c.seq_len, l, dpos, kv_phys_row(s, dpos), rowb, lb,
-                reinterpret<uint8?>(metal_buffer_contents(g_arena)), r.koff, r.voff)
-            if (!seam) {
-                if (r.bnc == null) {
-                    memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
-                }
-                // the head's own h_nextn — recursive drafting handoff (forward_mtp's contract)
-                memcpy(addr < void? >(s.mtp_h[0]), metal_buffer_contents(r.bxf), r.bytes_x)
-            }
-        }
-        if (!seam) {
-            s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
+            land_draft_row(t, s, r.pos, r.cap, r.koff, r.voff, reinterpret<uint8?>(metal_buffer_contents(g_arena)),
+                seam ? null : metal_buffer_contents(r.bxf),
+                (seam || r.bnc != null) ? null : metal_buffer_contents(r.blog))
         }
     } else {
         to_log(LOG_ERROR, "dasLLAMA metal MTP draft: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path on a failed draft dispatch
@@ -1615,7 +1601,6 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     let nr = r.nrows   //! every group's rows together
     let ng = long_length(g_v_groups)
     var brt = group_routes(t, r, nr)
-    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
     var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
@@ -1623,44 +1608,71 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     var dnli = 0l
     let pos0 = g_v_groups[0].pos
     for (l in range64(c.n_layers)) {
-        encode_verify_layer(t, r, enc, brt, l, pos0, dnli)
+        encode_verify_layer(t, r, enc, brt.buf, l, pos0, dnli)
     }
-    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[t.rms_final_off])), uint64(dim * 4l))
-    enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
-        r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
-    unsafe {
-        // the head's inputs from committed history: a group's row 0 takes its saved pre-draft hidden (cat row nr + its index), row i the verify's post-norm row i-1
-        let rowb = uint64(dim * 4l)
-        for (gi in range64(ng)) {
-            let g = g_v_groups[gi]
-            enc_copy_row(enc, r.bcat, uint64(nr + gi) * rowb, r.bxb, uint64(g.row0) * rowb, r.u_dim, dim)
-            for (i in range64(1l, g.nr)) {
-                enc_copy_row(enc, r.bxf, uint64(g.row0 + i - 1l) * rowb, r.bxb, uint64(g.row0 + i) * rowb, r.u_dim, dim)
-            }
+    enc_cls_tail_rows(t, r, enc, t.rms_final_off, r.blog, nr)
+    // the head's carry hiddens from committed history: a group's row 0 takes its saved pre-draft hidden (cat row nr + its index), row i the verify's post-norm row i-1
+    let rowb = uint64(dim * 4l)
+    for (gi in range64(ng)) {
+        let g = g_v_groups[gi]
+        enc_copy_row(enc, r.bcat, uint64(nr + gi) * rowb, r.bxb2, uint64(g.row0) * rowb, r.u_dim, dim)
+        for (i in range64(1l, g.nr)) {
+            enc_copy_row(enc, r.bxf, uint64(g.row0 + i - 1l) * rowb, r.bxb2, uint64(g.row0 + i) * rowb, r.u_dim, dim)
         }
-        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bxb, 0ul, bw_hn, r.bxb2, r.u_dim, r.u_eps, nr)
+    }
+    enc_draft_head_rows(t, r, enc, r.bcat, nr)
+    var dnw = 0l
+    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, pos0, dnw)
+    metal_end_encoding(enc)
+    metal_release(enc)
+    metal_commit(cb)
+    r.committed = true
+    r.cb = cb
+    pool_release(g_upool, brt.buf, brt.bytes)
+}
+
+//! the draft head's rows prelude: [enorm(embed) ; hnorm(carry)] -> eh_proj -> the trunk-shaped block's
+//! attention norm. `embed` holds the rows' raw embeds, bxb2 their carry hiddens; bx and bxb leave with the
+//! projected rows and their norm
+def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEncoder?; embed : MetalBuffer?; nr : int64) {
+    let c = t.config
+    let dim = c.dim
+    let rowb = uint64(dim * 4l)
+    unsafe {
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bcat, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
+        enc_rms_b(enc, embed, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
+        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
+        enc_rms_b(enc, r.bxb2, 0ul, bw_hn, r.bxb, r.u_dim, r.u_eps, nr)
         for (i in range64(nr)) {
             enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
-            enc_copy_row(enc, r.bxb2, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
+            enc_copy_row(enc, r.bxb, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
         }
         enc_batch_site(enc, t, rows_tier(nr), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
             r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
         enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
-    var dnw = 0l
-    encode_verify_layer(t, r, enc, brt, c.n_layers, pos0, dnw)
-    metal_end_encoding(enc)
-    metal_release(enc)
-    metal_commit(cb)
-    r.committed = true
-    r.cb = cb
-    pool_release(g_upool, brt, bytes_rt)
+}
+
+//! the rows classifier tail: the final norm at `norm_off` over bx, the classifier GEMM into `bcls`, then
+//! per row the final-logit soft cap and the suppressed ids in the CPU order
+def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEncoder?; norm_off : int64; bcls : MetalBuffer?; nr : int64) {
+    let c = t.config
+    let dim = c.dim
+    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
+    enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
+    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
+        r.bxf, bcls, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
+    let vb = uint64(c.vocab_size * 4l)
+    for (i in range64(nr)) {
+        if (r.u_flcap != null) {
+            enc_softcap_row(enc, bcls, uint64(i) * vb, r.u_vocab, r.u_flcap, c.vocab_size)
+        }
+        if (r.bsupp != null) {
+            enc_suppress_row(enc, bcls, uint64(i) * vb, r.bsupp, r.u_nsupp, int64(r.bytes_supp / 4ul))
+        }
+    }
 }
 
 //! lands every group's KV rows into its stream and its rows' logits into its stream's verify rows;
@@ -1774,7 +1786,9 @@ def private mtp_round_plain(t : Model; var s : Session; tok, pos : int64) {
 }
 
 //! one route entry per (layer, row): (k base, v base, cap, cnt) - the row at g.pos + i lands as row cnt - 1 of its stream's slab
-def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
+//! every group's rows' route entries (k base, v base, cap, position) per layer, the rows past the groups
+//! filled with row 0's; returns the pooled buffer and its byte size for the release
+def private group_routes(t : Model; r : StepRes; nr : int64) : tuple<buf : MetalBuffer?; bytes : uint64> {
     let c = t.config
     let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
     g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
@@ -1809,58 +1823,50 @@ def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
     unsafe {
         memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
     }
-    return brt
+    return (buf = brt, bytes = bytes_rt)
 }
 
 //! the caller poked bx = the rows' raw embeds, bxb2 = their carry hiddens, bcos/bsin = each row's rope row
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
 def private encode_draft_rows_step(t : Model; var r : StepRes) {
     let c = t.config
-    let dim = c.dim
     let nr = r.nrows
-    let rowb = uint64(dim * 4l)
     var brt = group_routes(t, r, nr)
-    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
-    unsafe {
-        var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
-        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bxb2, 0ul, bw_hn, r.bxb, r.u_dim, r.u_eps, nr)
-        for (i in range64(nr)) {
-            enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
-            enc_copy_row(enc, r.bxb, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
-        }
-        enc_batch_site(enc, t, rows_tier(nr), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
-            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
-        var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
-    }
+    enc_draft_head_rows(t, r, enc, r.bx, nr)
     var dnw = 0l
-    encode_verify_layer(t, r, enc, brt, c.n_layers, r.chain_pos, dnw)
+    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, r.chain_pos, dnw)
     let norm_off = t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off
-    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
-    enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     var bcls = r.blog != null ? r.blog : r.bnc   //! one row of a model with no spec classifier lands in the stream's own zero-copy logits
-    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
-        r.bxf, bcls, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
-    let vb = uint64(c.vocab_size * 4l)
-    for (i in range64(nr)) {
-        if (r.u_flcap != null) {   // the final-logit soft cap and the suppressed ids, per row, in the CPU order
-            enc_softcap_row(enc, bcls, uint64(i) * vb, r.u_vocab, r.u_flcap, c.vocab_size)
-        }
-        if (r.bsupp != null) {
-            enc_suppress_row(enc, bcls, uint64(i) * vb, r.bsupp, r.u_nsupp, int64(r.bytes_supp / 4ul))
-        }
-    }
+    enc_cls_tail_rows(t, r, enc, norm_off, bcls, nr)
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
     r.committed = true
     r.cb = cb
-    pool_release(g_upool, brt, bytes_rt)
+    pool_release(g_upool, brt.buf, brt.bytes)
+}
+
+//! lands a draft row: its draft-slab KV row back to the stream's cache, then - when `hx` is given - the
+//! head's own h_nextn as the stream's carry hidden (NOT a trunk hidden: the warm's seam row must not
+//! consume it) and, when `lg` is given, the row's logits
+def private land_draft_row(t : Model; var s : Session; pos : int64; cap : int64; koff, voff : uint64;
+                           ab : uint8?; hx, lg : void?) {
+    let c = t.config
+    let l = c.n_layers
+    unsafe {
+        let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
+        let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
+        mirror_row_writeback(s, c.seq_len, l, pos, kv_phys_row(s, pos), rowb, lb, ab, koff, voff)
+        if (hx != null) {
+            memcpy(addr < void? >(s.mtp_h[0]), hx, c.dim * 4l)
+            s.mtp_h_pos1 = 0l
+        }
+        if (lg != null) {
+            memcpy(addr < void? >(s.logits[0]), lg, c.vocab_size * 4l)
+        }
+    }
 }
 
 //! lands every row's draft-slab KV row and its carry hidden into its stream, and the row's argmax
@@ -1870,19 +1876,14 @@ def private finish_draft_rows_step(t : Model; r : StepRes; slot : int64) : bool 
     let ok = !metal_command_buffer_failed(r.cb)
     if (ok) {
         let c = t.config
-        let l = c.n_layers
         unsafe {
             let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
             let lg = reinterpret<uint8?>(metal_buffer_contents(r.blog != null ? r.blog : r.bnc))
             let hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
             for (g in g_v_groups) {
                 var s & = unsafe(*g.s)
-                let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
-                let lb = mirror_lbase(t, s.kv_dtype_k, g.cap, l)
-                mirror_row_writeback(s, c.seq_len, l, g.pos, kv_phys_row(s, g.pos), rowb, lb, ab, g.koff, g.voff)
-                memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + g.row0 * c.dim * 4l), c.dim * 4l)
-                s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
-                memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + g.row0 * c.vocab_size * 4l), c.vocab_size * 4l)
+                land_draft_row(t, s, g.pos, g.cap, g.koff, g.voff, ab,
+                    reinterpret<void?>(hx + g.row0 * c.dim * 4l), reinterpret<void?>(lg + g.row0 * c.vocab_size * 4l))
                 var d = parallel_argmax(s.logits, c.vocab_size)
                 if (g_env_mtp_debug == "reject") {
                     d = 0l
@@ -3043,7 +3044,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let hid2 = ffn_second_hidden(t)   //! the MatFormer E-series' second FFN width (0 = uniform); the step gate declines a third
     let hid_mx = max(hidden, hid2)
     let qkvd = qd + 2l * kv_dim
-    let half = head_size / 2l
     // the two-class attention geometry (gemma4): config fields = the GLOBAL class, _sw twins =
     // the SLIDING class; buffers size to class maxima, each layer binds its class's uniform set
     let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : head_size
@@ -3200,7 +3200,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let bytes_qkv = uint64(mp * qkvd_mx * 4l)
     let nsh = moe ? c.n_ff_shexp : 0l
     let bytes_h = uint64(max(max(mp * hid_mx, mr * knfe), mr * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
-    let bytes_tab = uint64(nrows * half * 4l)
+    let bytes_tab = uint64(nrows * ((c.rope_dim > 0l ? c.rope_dim : head_size) / 2l) * 4l)   //! the rows are built at the ROTATED width (a partial carrier: rope_dim/2) - the copy below reads exactly them
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
     let bytes_part = uint64(use_attn_d ? nrows * n_heads * d_nsgs * (head_size + 4l) * 4l :

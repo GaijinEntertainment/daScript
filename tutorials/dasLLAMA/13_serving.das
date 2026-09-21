@@ -61,6 +61,7 @@ def model_path() : string {
 def section_raw(m : Model) {
     var pool <- create_kv_pool(m, 16l)
     var ws <- create_batch_workspace(m)
+    gpu_dn_room(3l)   // a GPU-served deltanet hybrid keeps this many streams' recurrent state resident: name the count BEFORE the first prefill (create_scheduler does it for you)
     var s0 = create_session(m, pool)
     var s1 = create_session(m, pool)
     var s2 = create_session(m, pool)

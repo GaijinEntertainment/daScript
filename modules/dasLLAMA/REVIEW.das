@@ -621,7 +621,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 39
-let private IMAGE_LAYOUT_STAMP_HASH = 0x8a1507e88d53d3fful
+let private IMAGE_LAYOUT_STAMP_HASH = 0x5c8989fb70eb6c07ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, and the lattice

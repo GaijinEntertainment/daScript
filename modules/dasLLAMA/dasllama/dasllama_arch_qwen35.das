@@ -259,17 +259,22 @@ def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : ar
     prof_add("act_resid", ts_resid)
 }
 
+//! the deltanet state is forward-only: a full reset at 0, a panic on any rewind, and the session
+//! advances to `next` (the position after the token, or after the prefill span)
+def private dn_forward_only_guard(var s : Session; pos, next : int64) {
+    if (pos == 0l) {
+        dn_reset(s)
+    } elif (pos != s.dn_pos) {
+        panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
+    }
+    s.dn_pos = next
+}
+
 def private attention_qwen35_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
     if (l == 0l) {
         for (i in range64(nrows)) {
-            var sp = sessions[i]
             let pos = ws.positions[i]
-            if (pos == 0l) {
-                dn_reset(*sp)
-            } elif (pos != sp.dn_pos) {
-                panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {sp.dn_pos}); rewinding needs a fresh session")
-            }
-            sp.dn_pos = pos + 1l
+            dn_forward_only_guard(*sessions[i], pos, pos + 1l)
         }
     }
     if (layer_is_recurrent(t.config, l)) {
@@ -522,13 +527,8 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
 // per the layer mask.
 [no_alloc, no_env, no_io]
 def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (pos == 0l) {
-            dn_reset(s)
-        } elif (pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = pos + 1l
+    if (l == 0l) {
+        dn_forward_only_guard(s, pos, pos + 1l)
     }
     if (layer_is_recurrent(t.config, l)) {
         trace_tag(TRACE_TAG_ATTN_STD)
@@ -925,13 +925,8 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
 
 [no_alloc, no_env, no_io]
 def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (start_pos == 0l) {
-            dn_reset(s)
-        } elif (start_pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only - cannot prefill from position {start_pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = start_pos + npos
+    if (l == 0l) {
+        dn_forward_only_guard(s, start_pos, start_pos + npos)
     }
     if (layer_is_recurrent(t.config, l)) {
         deltanet_prefill(t, s, l, npos)

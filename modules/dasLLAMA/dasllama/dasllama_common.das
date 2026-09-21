@@ -44,7 +44,7 @@ require daslib/apply  // the Model finalizer + the image save/load walk both ite
 
 //! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
 //! q8 selects the fast integer rails (K-quant / mxfp4 / Q4_0 files keep their native planes);
-//! q4_0 is the legacy requant tier — weights held as q4_0 blocks, per-row kernels only.
+//! q4_0 is the legacy requant tier — weights held as q4_0 blocks on the portable dot, batched prefill and decode included.
 enum QuantMode {
     fp32
     q8
@@ -5343,8 +5343,8 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     hybrid_rows_alloc(c, s, npos)
     if (c.recr_mask != 0ul && g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
         s.dn_conv_b |> grow_resize(npos * dn_conv_dim(c))
-        s.dn_wtap |> resize(c.ssm_d_conv * dn_conv_dim(c))
-        s.dn_cws |> resize(c.ssm_dt_rank * dn_cws_head_size(c))
+        s.dn_wtap |> grow_resize(c.ssm_d_conv * dn_conv_dim(c))
+        s.dn_cws |> grow_resize(c.ssm_dt_rank * dn_cws_head_size(c))
     }
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
         s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)

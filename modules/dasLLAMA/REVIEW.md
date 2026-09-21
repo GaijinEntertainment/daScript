@@ -9,9 +9,11 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 
 **A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it - a driver reading a child's clock is
-not one), a kernel race (a run timing two kernel variants - arms - against each other in one
-process), or a file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to
-this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+not one), an in-process timing entry point (a function that times a run and returns its rate to
+whichever file calls it - `bench_tg_batched_rep`), a kernel race (a run timing two kernel
+variants - arms - against each other in one process), or a file `benchmarks/lcpp_bench.das`
+requires directly, wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its
+own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
@@ -121,7 +123,7 @@ two commits says which way the clock moved, not which form to adopt.
 count, added, grown or removed to move wall-clock, wherever it sits, ships the measured pair -
 peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
-**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
+**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, `mm_fblob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
@@ -170,8 +172,8 @@ or file key, the setter's name - and, for one on unless turned off, the spelling
 (none: it says so).** A set-but-inert override is silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-outside this folder left showing the old call, flag, or default after a change to user-facing API
-is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
+outside this folder left showing the old call, flag, default, or stated behaviour after a change to
+user-facing API is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
 depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.

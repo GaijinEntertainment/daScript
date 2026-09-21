@@ -63,7 +63,7 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
   A step is served one of three ways, and `batch_step_census` counts each since load: the armed
   device driver claimed the whole stack, the CPU batched stack ran it, or the rows stepped one at
-  a time through the single-row forward - one row, a q4_0 model, a non-standard graph whose arch
+  a time through the single-row forward - one row, a non-standard graph whose arch
   names no batched layer (`ArchBlocks.attn_batch`) with no device driver armed, or a step the
   device driver declined on a blob-only model or on such a graph (the CPU stack has no form for
   either, so the decline falls to the single-row forward). A non-standard graph reaches an armed

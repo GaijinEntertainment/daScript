@@ -146,20 +146,13 @@ def private cache_feq(t : T?; s : Session; ref : RefRun; c : Config; tol : float
     t |> success(vd <= tol, "{tag}: final value cache within {tol} (max diff {vd})")
     if (!empty(ref.dn)) {
         t |> equal(s.n_past, s.dn_pos, "{tag}: the deltanet position advanced with the rows")
-        t |> success(float_rows_max_diff(s.dn_state, ref.dn) <= tol, "{tag}: final deltanet state within {tol} (max diff {float_rows_max_diff(s.dn_state, ref.dn)})")
-        t |> success(float_rows_max_diff(s.dn_conv_state, ref.conv) <= tol, "{tag}: final conv history within {tol} (max diff {float_rows_max_diff(s.dn_conv_state, ref.conv)})")
+        t |> equal(length(s.dn_state), length(ref.dn), "{tag}: deltanet state length")
+        t |> equal(length(s.dn_conv_state), length(ref.conv), "{tag}: conv history length")
+        let dnd = logits_maxdiff(s.dn_state, ref.dn)
+        let cvd = logits_maxdiff(s.dn_conv_state, ref.conv)
+        t |> success(dnd <= tol, "{tag}: final deltanet state within {tol} (max diff {dnd})")
+        t |> success(cvd <= tol, "{tag}: final conv history within {tol} (max diff {cvd})")
     }
-}
-
-def private float_rows_max_diff(a : array<float>; b : array<float>) : float {
-    var maxd = 0.0
-    if (length(a) != length(b)) {
-        return 1.0e30
-    }
-    for (x, y in a, b) {
-        maxd = max(maxd, abs(x - y))
-    }
-    return maxd
 }
 
 // the main harness: 3 ragged prompts, sequential reference vs one batched-decode run
@@ -276,9 +269,7 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
     }
-    let env = g_env_harness.models_dir
-    let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-    let path = path_join(mdir, "Qwen3.5-0.8B-Q8_0.gguf")
+    let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
     if (!model_available(t, path)) return
     pin_kernel_backend("portable")   // same-dot parity — see test_batch_decode_q8
     var tr <- load_model_(path, QuantMode.q8)
