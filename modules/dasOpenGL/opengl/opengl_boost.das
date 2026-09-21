@@ -6,6 +6,7 @@ options no_unused_function_arguments = false
 module opengl_boost shared
 
 require opengl/opengl public
+require opengl/gl_binding_cache public
 
 require daslib/safe_addr
 require daslib/contracts
@@ -62,32 +63,17 @@ def read_ssbo(ssbo : uint; var data : auto(TT)) {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
 }
 
-def bind_sampler_2d(unit : int; tex : uint) {
-    glActiveTexture(GL_TEXTURE0 + uint(unit))
-    glBindTexture(GL_TEXTURE_2D, tex)
-}
+def bind_sampler_2d(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D, tex)}
 
-def bind_sampler_3d(unit : int; tex : uint) {
-    glActiveTexture(GL_TEXTURE0 + uint(unit))
-    glBindTexture(GL_TEXTURE_3D, tex)
-}
+def bind_sampler_3d(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_3D, tex)}
 
-def bind_sampler_cube(unit : int; tex : uint) {
-    glActiveTexture(GL_TEXTURE0 + uint(unit))
-    glBindTexture(GL_TEXTURE_CUBE_MAP, tex)
-}
+def bind_sampler_cube(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_CUBE_MAP, tex)}
 
-def bind_sampler_2d_array(unit : int; tex : uint) {
-    glActiveTexture(GL_TEXTURE0 + uint(unit))
-    glBindTexture(GL_TEXTURE_2D_ARRAY, tex)
-}
+def bind_sampler_2d_array(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D_ARRAY, tex)}
 
 // sampler2DShadow binds an ordinary 2D depth texture; the GL_TEXTURE_COMPARE_MODE / depth format are
 // set when the texture is created (not at bind time), so the bind itself matches bind_sampler_2d.
-def bind_sampler_2d_shadow(unit : int; tex : uint) {
-    glActiveTexture(GL_TEXTURE0 + uint(unit))
-    glBindTexture(GL_TEXTURE_2D, tex)
-}
+def bind_sampler_2d_shadow(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D, tex)}
 
 def bind_image_any(unit : int; tex : uint; format : uint; access : uint = GL_READ_WRITE) {
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
@@ -399,4 +385,16 @@ def load_image_from_file(fname : string implicit; dir1, dir2 : string; can_fail 
     return img
 }
 
-
+[arch(at="../ARCHITECTURE.md#binding-cache")]
+def glUniformBound(program : uint; name : string; value : auto(T) const implicit){
+    if (!gl_binding_filter_active){glUniformAny(glGetUniformLocation(program, name), value); return }
+    let decision = gl_binding_uniform(program, name, unsafe(addr<void?>(value)), typeinfo sizeof(type<T>))
+    if (decision.upload){glUniformAny(decision.location, value)}
+}
+[arch(at="../ARCHITECTURE.md#binding-cache")]
+def glUniformBound(program : uint; name : string; value : array<auto(T)> const implicit){
+    if (empty(value)){return }
+    if (!gl_binding_filter_active){glUniformAny(glGetUniformLocation(program, name), value); return }
+    let decision = gl_binding_uniform(program, name, unsafe(addr<void?>(value[0])), length(value) * typeinfo sizeof(type<T>))
+    if (decision.upload){glUniformAny(decision.location, value)}
+}

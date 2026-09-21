@@ -1052,6 +1052,21 @@ namespace das
         bytes[1] = ctx.stringHeap->bytesAllocated();
     }
 
+    urange64 heap_operation_counts(bool strings, Context * context) {
+        auto * heap = strings ? static_cast<AnyHeapAllocator *>(context->stringHeap.get()) : context->heap.get();
+        return urange64(heap->getTotalFrees(), heap->getTotalReallocations());
+    }
+    bool heap_collect_if_needed(Context * context, LineInfoArg * at) { return context->collectHeapIfMostlyFree(at); }
+    urange64 gc_collection_stats(Context * context) { return urange64(context->gcCollections, context->gcTotalUsec); }
+    urange64 gc_pause_stats(Context * context) { return urange64(context->gcLastUsec, context->gcPeakUsec); }
+    urange64 gc_reclaimed_stats(Context * context) { return urange64(context->gcHeapReclaimed, context->gcStringReclaimed); }
+    int64_t gc_last_collection_tick(Context * context) { return context->gcLastTick; }
+    urange64 gc_allocation_budget(Context * context) { return urange64(context->gcHeapBudget, context->gcStringBudget); }
+    void set_gc_allocation_budget(uint64_t heapBytes, uint64_t stringBytes, Context * context, LineInfoArg * at) {
+        if (!heapBytes || !stringBytes) context->throw_error_at(at, "GC allocation budgets must be positive");
+        context->gcHeapBudget = heapBytes; context->gcStringBudget = stringBytes;
+    }
+
     urange64 heap_allocation_stats ( Context * context ) {
         return urange64 ( context->heap->getTotalBytesAllocated(), context->heap->getTotalBytesDeleted() );
     }
@@ -2497,6 +2512,17 @@ namespace das
         addExternInline<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
             SideEffects::modifyExternal, "string_heap_depth")
                 ->arg("context");
+        addExternInline<DAS_BIND_FUN(gc_collection_stats)>(*this, lib, "gc_collection_stats", SideEffects::accessExternal, "gc_collection_stats")->arg("context");
+        addExternInline<DAS_BIND_FUN(gc_pause_stats)>(*this, lib, "gc_pause_stats", SideEffects::accessExternal, "gc_pause_stats")->arg("context");
+        addExternInline<DAS_BIND_FUN(gc_reclaimed_stats)>(*this, lib, "gc_reclaimed_stats", SideEffects::accessExternal, "gc_reclaimed_stats")->arg("context");
+        addExternInline<DAS_BIND_FUN(gc_last_collection_tick)>(*this, lib, "gc_last_collection_tick", SideEffects::accessExternal, "gc_last_collection_tick")->arg("context");
+        addExternInline<DAS_BIND_FUN(gc_allocation_budget)>(*this, lib, "gc_allocation_budget", SideEffects::accessExternal, "gc_allocation_budget")->arg("context");
+        addExternInline<DAS_BIND_FUN(heap_operation_counts)>(*this, lib, "heap_operation_counts", SideEffects::accessExternal, "heap_operation_counts")->args({"strings", "context"});
+        addExternInline<DAS_BIND_FUN(set_gc_allocation_budget)>(*this, lib, "set_gc_allocation_budget", SideEffects::modifyExternal, "set_gc_allocation_budget")->args({"heap_bytes", "string_bytes", "context", "at"});
+        auto conditionalCollect = addExternInline<DAS_BIND_FUN(heap_collect_if_needed)>(*this, lib, "heap_collect_if_needed", SideEffects::modifyExternal, "heap_collect_if_needed");
+        conditionalCollect->args({"context", "at"});
+        conditionalCollect->unsafeOperation = true;
+        conditionalCollect->needCallerStackFrame = true;
         auto hcol = addExternInline<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
                 SideEffects::modifyExternal, "heap_collect")
                     ->args({"string_heap","validate","context","at"});

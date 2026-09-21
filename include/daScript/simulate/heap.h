@@ -160,6 +160,8 @@ namespace das {
         __forceinline uint64_t getTotalAllocations() const { return totalAllocations; }
         __forceinline uint64_t getTotalBytesAllocated() const { return totalBytesAllocated; }
         __forceinline uint64_t getTotalBytesDeleted() const { return totalBytesDeleted; }
+        __forceinline uint64_t getTotalFrees() const { return totalFrees; }
+        __forceinline uint64_t getTotalReallocations() const { return totalReallocations; }
     public:
         // Non-virtual fast-path dispatcher. When trackAllocations is false (the default),
         // this inlines to a single byte-load + always-predicted-false branch at every call
@@ -203,6 +205,8 @@ namespace das {
         uint64_t totalAllocations = 0;
         uint64_t totalBytesAllocated = 0;
         uint64_t totalBytesDeleted = 0;
+        uint64_t totalFrees = 0;
+        uint64_t totalReallocations = 0;
         bool     trackAllocations = false;
     };
 
@@ -281,7 +285,7 @@ namespace das {
 #else
     public:
         virtual void impl_free ( char * ptr, uint64_t size ) override {
-            totalBytesDeleted += size;
+            if (ptr) { ++totalFrees; totalBytesDeleted += size; }
             model.free(ptr,size);
         }
         virtual void sweep() override { model.sweep(); }

@@ -82,6 +82,9 @@ IF(NOT DAS_OPENGL_INCLUDED)
         ENDIF()
     ENDIF()
 
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasOpenGL/opengl|modules/dasOpenGL|${DAS_INSTALL_MODULESDIR}/dasOpenGL")
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/opengl
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenGL
         FILES_MATCHING

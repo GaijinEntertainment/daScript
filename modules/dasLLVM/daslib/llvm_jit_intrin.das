@@ -38,7 +38,8 @@ let g_intrin_lookup <- {
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add,
         "$::i_das_ptr_set_sub" => @@intrinsic_das_ptr_set_sub,
         "$::i_das_ptr_sub" => @@intrinsic_das_ptr_sub,
-    // memset
+        "$::memcpy" => @@intrinsic_memcpy,
+        "$::memmove" => @@intrinsic_memmove,
         "$::memset8" => @@intrinsic_memset8,
         "$::memset16" => @@intrinsic_memset16,
         "$::memset32" => @@intrinsic_memset32,
@@ -2026,6 +2027,14 @@ def intrinsic_das_ptr_sub(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     var args := arguments
     args[1] = LLVMBuildNeg(ctx.builder, args[1], "")
     return intrinsic_das_ptr_add(ctx, expr, args)
+}
+
+def intrinsic_memcpy(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? { // nolint:LINT014 - mutable context matches the intrinsic table signature.
+    return LLVMBuildMemCpy(ctx.builder, arguments[0], 1u, arguments[1], 1u, arguments[2])
+}
+
+def intrinsic_memmove(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? { // nolint:LINT014 - mutable context matches the intrinsic table signature.
+    return LLVMBuildMemMove(ctx.builder, arguments[0], 1u, arguments[1], 1u, arguments[2])
 }
 
 def intrinsic_memset8(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup

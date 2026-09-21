@@ -77,12 +77,21 @@ struct public AudioChannelStatus {
     //! Current playback position in PCM frames.
     consumed_position : uint64
     //! Frames of actual audio consumed (excludes silence padding).
+    stream_queued_frames, stream_underrun_frames, stream_underruns : uint64
+    //! Number of PCM frames currently buffered for stream playback.
+    //! Cumulative PCM frames requested after the stream queue ran dry.
+    //! Number of stream reads that could not fill the requested output.
     stream_que_length : int
     //! Number of pending PCM chunks in the stream queue.
 }
 
 //! Snapshot of the audio system's recent CPU utilization and HRTF/simulated routing split, published to a caller-provided ``SeqBox``.
 struct public AudioSystemStats {
+    callbacks : uint64
+    //! Number of audio callbacks observed since the current stats-box registration began.
+    max_mix_ms, max_callback_gap_ms : double
+    //! Longest mixer execution time observed during the current registration, in milliseconds.
+    //! Longest interval between audio callbacks during the current registration, in milliseconds; focus suspension can make this large.
     utilization_pct : float
     //! Mixer CPU utilization over the last ~1 second, in percent (0..100+).
     hrtf_count : int
@@ -351,9 +360,7 @@ class AudioChannel {
             unsafe(addr(channel_data[0])),
             unsafe(addr(samples[0])),
             outputFrames)
-        unsafe {
-            delete samples
-        }
+        delete samples
         // apply volume envelope
         ma_volume_mixer_set_channels(unsafe(addr(volume_mixer)), uint(channels))
         ma_volume_mixer_process_pcm_frames(
@@ -451,15 +458,18 @@ struct StreamChunk {
 class AudioSourcePCMStream : AudioSource {
     chunks : array<StreamChunk>
     consumed : uint64 = 0ul  // frames of actual audio consumed (excludes silence)
+    queued_samples, underrun_frames, underruns : uint64
     def AudioSourcePCMStream(ch, rate : int) {
         bitrate = rate
         channels = ch
     }
     def override append(var data : array<float>) : bool {
+        queued_samples += uint64(long_length(data))
         chunks |> emplace(StreamChunk(samples <- data))
         return true
     }
     def override append_temporary(data : array<float>) : bool {
+        queued_samples += uint64(long_length(data))
         chunks |> emplace(StreamChunk(samples <- clone_to_move(data)))
         return true
     }
@@ -487,10 +497,15 @@ class AudioSourcePCMStream : AudioSource {
                 break
             }
         }
+        queued_samples -= uint64(ofs)
+        if (ofs < nsmp) { underruns++; underrun_frames += uint64((nsmp - ofs) / channels) }
         consumed += uint64(ofs / channels)
         return <- data
     }
     def override update_status(var status : AudioChannelStatus) {
+        status.stream_queued_frames = queued_samples / uint64(channels)
+        status.stream_underrun_frames = underrun_frames
+        status.stream_underruns = underruns
         status.stream_que_length = length(chunks)
         status.consumed_position = consumed
     }
@@ -1012,8 +1027,13 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
             // Reset the rolling window so a re-registered box starts with a clean accumulator
             // instead of inheriting partial data from the previous registration.
+            g_stats_callbacks = 0ul
+            g_stats_last_callback = 0l
+            g_stats_max_mix_ms = 0.0lf
+            g_stats_max_callback_gap_ms = 0.0lf
             g_stats_window_time_ms = 0.0lf
             g_stats_window_samples = 0ul
+            g_stats_recent_util_pct = 0.0
             g_stats_box = unsafe(reinterpret<SeqBox?>(sbox))
         } elif (cmd is stop) {
             let scmd = cmd as stop
@@ -1091,6 +1111,10 @@ var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 
 
 // AudioSystemStats publication state (audio-context-side; main side holds the LockBox handle and read-grabs it).
 var g_stats_box : SeqBox? = null
+var g_stats_callbacks = 0ul
+var g_stats_last_callback = 0l
+var g_stats_max_mix_ms = 0.0lf
+var g_stats_max_callback_gap_ms = 0.0lf
 var g_stats_window_time_ms = 0.0lf      // accumulated mixer wall time over the current window
 var g_stats_window_samples = 0ul        // accumulated audio frames over the current window (flush gate: realTimeMs >= 1000)
 var g_stats_recent_util_pct : float = 0.0
@@ -1141,6 +1165,9 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
 // utilization (= mixer time / real time) and update the caller's stats LockBox so main thread can read it.
 def private publish_audio_stats(dt_ms : double; frames : uint64) {
     return if (g_stats_box == null)
+    if (g_stats_last_callback != 0l) { g_stats_max_callback_gap_ms = max(g_stats_max_callback_gap_ms, double(get_time_nsec(g_stats_last_callback)) / 1000000.lf) }
+    g_stats_last_callback = ref_time_ticks(); g_stats_callbacks++
+    g_stats_max_mix_ms = max(g_stats_max_mix_ms, dt_ms)
     g_stats_window_time_ms += dt_ms
     g_stats_window_samples += frames
     let realTimeMs = double(g_stats_window_samples) * 1000.lf / double(MA_SAMPLE_RATE)
@@ -1152,7 +1179,7 @@ def private publish_audio_stats(dt_ms : double; frames : uint64) {
     let snap = g_stats_recent_util_pct
     let hrtfCount = g_stats_hrtf_count
     let total3D = g_stats_3d_count
-    g_stats_box |> publish(AudioSystemStats(utilization_pct = snap, hrtf_count = hrtfCount, total_3d = total3D))
+    g_stats_box |> publish(AudioSystemStats(callbacks = g_stats_callbacks, max_mix_ms = g_stats_max_mix_ms, max_callback_gap_ms = g_stats_max_callback_gap_ms, utilization_pct = snap, hrtf_count = hrtfCount, total_3d = total3D))
 }
 
 [init]
@@ -1352,9 +1379,7 @@ def public end_batch() {
         panic("no batch")
     }
     g_command_stream |> push_batch(*global_batch)
-    unsafe {
-        delete * global_batch
-    }
+    delete * global_batch
     global_batch = null
 }
 
@@ -1370,9 +1395,7 @@ def public batch(cb : block) {
     global_batch = null
 
     g_command_stream |> push_batch(tempBatch)
-    unsafe {
-        delete tempBatch
-    }
+    delete tempBatch
 }
 
 def push_cmd(var cmd : AudioCommand) {
@@ -1382,9 +1405,7 @@ def push_cmd(var cmd : AudioCommand) {
         *global_batch |> emplace(bytes)
     } else {
         g_command_stream |> push(bytes)
-        unsafe {
-            delete bytes
-        }
+        delete bytes
     }
 }
 
@@ -1522,6 +1543,7 @@ def public set_hrtf_budget(n : int) {
 
 def public set_audio_stats_box(var box : SeqBox?) {
     //! Register a box to receive periodic AudioSystemStats updates from the audio thread.
+    //! Each non-null registration starts a fresh measurement session.
     //! The audio thread publishes one snapshot per ~1-second window; read it on demand with
     //! ``box |> read() $(s : AudioSystemStats) { ... }``. Reading consumes nothing, so the same
     //! box serves any number of reads. Pass null to stop.

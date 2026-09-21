@@ -219,7 +219,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),
         group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%),
         group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name|get_module_file_name)$%%),
-        group_by_regex("GC", mod, %regex~(gc_active_root_count|gc_thread_root_count|gc_thread_root_report|gc_thread_root_report_detailed|gc_total_id)$%%))
+        group_by_regex("GC", mod, %regex~.*(gc_active_root_count|gc_thread_root_count|gc_thread_root_report|gc_thread_root_report_detailed|gc_total_id|gc_collection_stats|gc_pause_stats|gc_reclaimed_stats|gc_last_collection_tick|gc_allocation_budget|set_gc_allocation_budget)$%%))
     documents("Built-in runtime", mod, "builtin.rst", groups);
 }
 
@@ -1817,7 +1817,7 @@ def document_module_strudel_player(_root : string) {
         group_by_regex("One-shots", mod, %regex~strudel_(one_shot|active_tracks)$%%),
         group_by_regex("Orbit levels", mod, %regex~strudel_(fade_orbit|set_orbit_gain|orbit_gain)$%%),
         group_by_regex("State serialization", mod, %regex~strudel_(save_state|restore_state|save_sf2_state|restore_sf2_state)$%%),
-        group_by_regex("Debug and diagnostics", mod, %regex~strudel_(debug_memory|reset_memory_baseline|get_worker_heap_bytes|debug_sample_peaks|debug_master_peak|debug_output_peak|debug_voices)$%%)
+        group_by_regex("Debug and diagnostics", mod, %regex~.*strudel_(debug_memory|reset_memory_baseline|get_worker_heap_bytes|get_diagnostics|debug_sample_peaks|debug_master_peak|debug_output_peak|debug_voices)$%%)
     )
     document("Top-level playback harness: tracks, BPM/CPS, and threaded audio", mod, "strudel_player.rst", groups)
 }
