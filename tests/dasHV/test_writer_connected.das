@@ -46,7 +46,7 @@ def private fetch_status(base_url : string) : string {
 
 [test]
 def test_writer_connected(t : T?) {
-    with_test_server(type<HoldServer>, PORT_WRITER_CONNECTED) $(base_url) {
+    with_test_server(type<HoldServer>) $(base_url) {
         t |> run("null / no held writer reads not-connected") @(t : T?) {
             let st = fetch_status(base_url)
             t |> success(find(st, "now=false") >= 0, "no writer held yet (got '{st}')")

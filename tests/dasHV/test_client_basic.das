@@ -58,7 +58,7 @@ class ClientTestServer : HvWebServer {
 
 [test]
 def test_client_basic(t : T?) {  // nolint:STYLE038 - one request/assert flow per client feature, sharing the test server
-    with_test_server(type<ClientTestServer>, PORT_CLIENT_BASIC) $(base_url) {
+    with_test_server(type<ClientTestServer>) $(base_url) {
         t |> run("PUT request") @(t : T?) {
             PUT("{base_url}/echo", "updated") $(resp) {
                 t |> equal(resp.body, "PUT:updated")

@@ -272,7 +272,7 @@ def document_module_dashv(_root : string) {
     var mod = get_module("dashv")
     var groups <- array<DocGroup>(
         group_by_regex("WebSocket client", mod, %regex~(make_web_socket_client|destroy_web_socket_client|open|close|is_connected|tick|send)$%%),
-        group_by_regex("WebSocket server lifecycle", mod, %regex~(make_web_socket_server|destroy_web_socket_server|set_bind_host|start|stop)$%%),
+        group_by_regex("WebSocket server lifecycle", mod, %regex~(make_web_socket_server|destroy_web_socket_server|set_bind_host|start|stop|bound_port)$%%),
         group_by_regex("WebSocket channel send", mod, %regex~(send)$%%),
         group_by_regex("Handle operations", mod, %regex~(is_alive|==|!=)$%%),
         group_by_regex("HTTP route registration", mod, %regex~(GET|POST|PUT|DELETE|PATCH|HEAD|ANY|SSE|STREAM)$%%),

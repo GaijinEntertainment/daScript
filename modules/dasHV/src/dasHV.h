@@ -42,6 +42,7 @@ int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, in
 int das_wss_close_channel ( Handle<hv::WebSocketChannel> h );
 bool das_wss_set_bind_host ( Handle<hv::WebSocketServer> h, const char * host );
 int das_wss_start ( Handle<hv::WebSocketServer> h );
+int das_wss_bound_port ( Handle<hv::WebSocketServer> h );
 void das_wss_tick ( Handle<hv::WebSocketServer> h );
 int das_wss_stop ( Handle<hv::WebSocketServer> h );
 void das_wss_get ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );

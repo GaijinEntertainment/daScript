@@ -85,7 +85,8 @@ class HvWebServer {
     private http_route_handlers : array<lambda<(var req : HttpRequest?; var resp : HttpResponse?) : http_status>>
     private stream_route_handlers : array<lambda<(var req : HttpRequest?; var writer : HttpResponseWriter?) : void>>
     def init(port : int) {
-        //! Initializes an HTTP/WebSocket server on the specified port.
+        //! Initializes an HTTP/WebSocket server on the specified port. Port ``0`` asks the
+        //! operating system for any free port; ``bound_port`` reports the one it gave.
         server = make_web_socket_server(port, 0, "", unsafe(addr(self)), class_info(self))
         onInit()
     }
@@ -111,6 +112,11 @@ class HvWebServer {
     def start : int {
         //! Starts the server. Returns 0 on success.
         return start(server)
+    }
+    def bound_port : int {
+        //! The port the listening socket actually holds, or -1 before ``start`` succeeds.
+        //! With ``init(0)`` this is the port the operating system picked.
+        return bound_port(server)
     }
     def set_bind_host(host : string) : bool {
         //! Selects the interface to bind before ``start`` (for example, ``127.0.0.1``).

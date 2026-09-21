@@ -101,41 +101,44 @@ class FormTestServer : HvWebServer {
 // Helper: start form test server with upload dir setup
 // ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
-def with_form_test_server(port : int; blk : block<(base_url : string; upload_dir : string) : void>) {
-    let up_dir = "{get_das_root()}/tests/_dasHV/_upload_test"
-    mkdir_rec(up_dir)
-
+def with_form_test_server(blk : block<(base_url : string; upload_dir : string) : void>) {
     with_job_status(1) $(started) {
         with_job_status(1) $(finished) {
+            with_atomic32() $(bound) {
             with_atomic32() $(stop_flag) {
-                new_thread() @() {
-                    var server = new FormTestServer()
-                    server.upload_dir = up_dir
-                    server->init(port)
-                    server->start()
-                    started |> notify_and_release
-                    while (stop_flag |> get == 0) {
-                        server->tick()
-                        sleep(1u)
-                    }
-                    server->stop()
-                    server->cleanup()
-                    unsafe {
-                        delete server
-                    }
-                    finished |> notify_and_release
+            new_thread() @() {
+                var server = new FormTestServer()
+                server->init(0)
+                var port = -1
+                if (server->start() == 0) {
+                    port = server->bound_port()
                 }
-                started |> join
-                let base_url = "http://127.0.0.1:{port}"
-                invoke(blk, base_url, up_dir)
-                stop_flag |> set(1)
-                finished |> join
+                server.upload_dir = "{get_das_root()}/tests/_dasHV/_upload_test_{port}"
+                mkdir_rec(server.upload_dir)
+                bound |> set(port)
+                started |> notify_and_release
+                while (stop_flag |> get == 0) {
+                    server->tick()
+                    sleep(1u)
+                }
+                server->stop()
+                server->cleanup()
+                unsafe {
+                    delete server
+                }
+                finished |> notify_and_release
+            }
+            started |> join
+            let port = bound |> get
+            let up_dir = "{get_das_root()}/tests/_dasHV/_upload_test_{port}"
+            invoke(blk, "http://127.0.0.1:{port}", up_dir)
+            stop_flag |> set(1)
+            finished |> join
+            rmdir_rec(up_dir)
+            }
             }
         }
     }
-
-    // Cleanup upload dir
-    remove(up_dir)
 }
 
 // ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
@@ -144,7 +147,7 @@ def with_form_test_server(port : int; blk : block<(base_url : string; upload_dir
 
 [test]
 def test_set_form_data(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("set_form_data sends text fields") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -161,7 +164,7 @@ def test_set_form_data(t : T?) {
 
 [test]
 def test_each_form_field(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("each_form_field iterates all fields") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -182,9 +185,9 @@ def test_each_form_field(t : T?) {
 
 [test]
 def test_form_file_upload(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, upload_dir) {
+    with_form_test_server() $(base_url, upload_dir) {
         // Create a test file to upload
-        let test_file = "{get_das_root()}/tests/_dasHV/_test_upload_src.txt"
+        let test_file = "{upload_dir}/_test_upload_src.txt"
         write_test_file(test_file, "upload content 12345")
 
         t |> run("set_form_file and each_form_field shows file") @(t : T?) {
@@ -227,7 +230,7 @@ def test_form_file_upload(t : T?) {
 
 [test]
 def test_get_form_data_missing(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("get_form_data returns empty for missing field") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -247,7 +250,7 @@ def test_get_form_data_missing(t : T?) {
 
 [test]
 def test_url_encoded(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("set_url_encoded sends key-value pairs") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -264,7 +267,7 @@ def test_url_encoded(t : T?) {
 
 [test]
 def test_url_encoded_missing(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("get_url_encoded returns empty for missing field") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -280,7 +283,7 @@ def test_url_encoded_missing(t : T?) {
 
 [test]
 def test_url_encoded_special_chars(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("URL-encoded handles special characters") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -303,7 +306,7 @@ def test_url_encoded_special_chars(t : T?) {
 
 [test]
 def test_put_form_data(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("PUT with form data via convenience overload") @(t : T?) {
             var headers <- { "X-Test" => "put-form" }
             var form_data <- { "name" => "Alice", "value" => "42" }
@@ -318,7 +321,7 @@ def test_put_form_data(t : T?) {
 
 [test]
 def test_patch_form_data(t : T?) {
-    with_form_test_server(PORT_FORMS) $(base_url, _upload_dir) {
+    with_form_test_server() $(base_url, _upload_dir) {
         t |> run("PATCH with form data via convenience overload") @(t : T?) {
             var headers <- { "X-Test" => "patch-form" }
             var form_data <- { "name" => "Bob", "value" => "99" }
