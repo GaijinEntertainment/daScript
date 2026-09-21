@@ -1670,3 +1670,14 @@ module) is independent and can land any time - it is pure structure.
     row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
     where every other lookup walks `kq_desc`. Done looks like: a grouped-row stride column on the
     descriptor row and the branch reading it, the resident MoE files bit for bit before and after.
+
+83. **The N-row command's routed block takes the unfolded down GEMV where the one-row command folds
+    it.** On a gemma-4 MoE with Q5_1 down stacks the one-row command sums the k slots under their
+    routing weights inside the down GEMV (`Q51GemvSum`, `RLayer.edown_sum`) and the combine reads
+    one row; the rows form runs the q51 leaf a slot at a time and the combine sums them, so the two
+    sums round apart, and on gemma-4-26B-A4B Q4_K_M the 26B's router near-ties turn that into
+    whole-position flips - five of thirty-two batched compares off by up to 0.13 of the peak
+    against the fused one-row command, none against the split one (`DASLLAMA_VK_FUSE=0`), which
+    `test_gpu_resident_regions_gemma4moe.das` pins for its load. The work: the folded form over
+    `nb` rows - `Q51GemvSum` summing each row's own k slots into that row's output row - so the
+    file compares against the fused one-row command the server runs.
