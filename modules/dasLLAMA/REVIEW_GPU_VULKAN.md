@@ -16,6 +16,11 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 profiler accumulator are not; pipelines are device-lifetime state that survives the drop and
 rebuilds lazily.
 
+**A diff that adds a host-side ensure/set/enc pick ladder for a new family of class stamps -
+the stamps of one `[vk_dispatch]` class template, picked by a shape argument - to
+`dasllama/dasllama_vulkan_classes.das` adds that family's stamp glob to the kernel-home row's
+stamp list in `ARCHITECTURE_GPU.md` sec.1.5, in the same change.**
+
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
 `vk_max_storage_range()` - check the size at the site that computes it, not at the site that
 binds it.** The bind site cannot shrink a buffer that was sized wrong.
@@ -77,7 +82,7 @@ other tile takes the edge path.** A clamped decode-load runs every tile at a thi
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
 **A weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past the
-plane's end.** The edge path holds the whole dispatch to its partial workgroups, and a load past
+plane's end.** The whole dispatch already runs at its partial workgroups' rate, and a load past
 the plane reads memory the plane does not own (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
 **A scale cache a cm2 tile stages indexes a row by its offset from the tile's first row
@@ -108,9 +113,8 @@ rows.**
 **A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
 arm - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`),
 `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never
-from another arm and never from a whole-model sweep; a per-32 format's s and e stamps, which the
-probe admits no arm for (`followup_vulkan.md` item 67), answer with their tile cell's run in
-`tests/test_vulkan_kernels.das` instead.**
+from another arm and never from a whole-model sweep; a stamp the probe admits no arm for answers
+with its tile cell's run in `tests/test_vulkan_kernels.das` instead.**
 
 **A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
 did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
@@ -150,11 +154,11 @@ the format back on the scalar callback.** With `DECV4 = true` the class never re
 `override DECVEC = false` alone leaves the hand-written twin running.
 
 **A GPU timestamp the resident decode's token command records goes through `rd_ts` with the name
-its interval bills - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`; the
-command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`) sums
-intervals by the recorder's own names, so a bare stamp leaves the stamp count past the names and
-the token's roles unaggregated; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks its table, and a
-name shared by two stamps sums them on purpose.
+its interval is reported under - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`;
+the command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`)
+sums intervals by the recorder's own names, so a bare stamp records more stamps than the recorder
+has names and the token's roles are not summed; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks
+its table, and a name shared by two stamps sums them on purpose.
 
 **A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
 stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,
@@ -174,6 +178,15 @@ summing the first reduce's partials would read the second's writes out of the sa
 `ensure_<family>` on every path that reaches it.** A set asked of a class whose pipeline is not
 ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
 prepare fails on the path that skipped the ensure.
+
+**A diff that adds a stamp to, or adds, removes or retypes a binding on one stamp of, a
+`[vk_dispatch]` class template whose stamps are dispatched with a set one stamp's `set_<family>`
+built - through a hand-written picker in `dasllama/dasllama_vulkan_classes.das` (`gemv_cls_set_n`,
+`q8_gemv_gu_n_set`, `fa_stamp_set`) or a driver set handed across stamps (`RLayer.s_attn` to
+`DaAttnT`'s) - keeps every stamp's binding list identical, in the same change; a field a
+`@template_gate` omits on a stamp is not a binding change.** The picker asks one stamp's set and
+the encode dispatches another, so the stamp the diff left behind reads the set's buffers in the
+wrong slots, and nothing refuses it.
 
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
@@ -206,10 +219,11 @@ submits any command that writes the buffer that copy reads.** The host's wait is
 between the copy's read and that write.
 
 **A kernel body in `dasllama/dasllama_vulkan_classes.das` that divides or takes a modulo by a
-value computed from push-constant fields clamps that divisor to at least one before it divides -
-a `?:` select on the field is not a guard.** Some drivers evaluate both arms of a select, and an
-integer division by zero is undefined in SPIR-V, so the selected arm can carry the undefined
-result.
+divisor that is not a literal or a template constant - a push-constant field, bare or computed
+from - clamps it to at least one (`max(1u, ...)`) before it divides, unless an enclosing `if` the
+zero case cannot enter guards the division; a `?:` select on the field is not a guard.** Some
+drivers evaluate both arms of a select, and an integer division by zero is undefined in SPIR-V,
+so the selected arm can carry the undefined result.
 
 **A path under `dasllama/` that re-records the one-row token command's split form - the chain
 recorded with the attention at `RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it
@@ -218,6 +232,6 @@ path.** The wide twin (the same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatch
 so a twin left marked recorded runs sets the new record replaced.
 
 **A twin's availability flag (`RDec.unsplit_on`, `RDec.wide_on`) is written where the twin's
-command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A record path that
-decides availability leaves a command that recorded before it holding an unrecorded buffer the
-form select later submits.
+command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes
+availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
+`rd_form_at` then picks a form whose command buffer nothing recorded.

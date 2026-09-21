@@ -2119,6 +2119,89 @@ the recorder fills - no plane grows with them, so the ladder's footprint half is
   phi's head of 96 runs the chunked pair at thirty times the flash cost - `followup_vulkan.md`
   item 78 [direction-grade - two processes].
 
+### From the Vulkan batched-decode arc, the gemma dense carriers (2026-09-20)
+
+Instruments as the two sections above - `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod
+(RTX PRO 4500 Blackwell, driver 580.173, cm2 without decode-vector, and the KHR arm under
+`DASLLAMA_COOPMAT=mm`), `DASLLAMA_ALLOW_UNTUNED=1`, `DAS_JOBQUE_THREADS=16`, llama.cpp b10660's
+`llama-batched-bench` under the same command line the same hour (every llama.cpp figure `external`),
+`DASLLAMA_GPU_PROF=1` for the stamps. Every ratio is `tg128@4` summed over four device-home streams
+against the reference's `S_TG` at `-npl 4` [direction-grade - two processes]; every lever's pair is
+two commits in two processes [direction-grade - two commits].
+
+- **The baseline (master after the qwen section, the pod, one rep each):** gemma-3-1b Q8_0 1056
+  against 869 and gemma-3-4b Q8_0 499 against 445 - served by the N-row command already (no epilogue,
+  no epilogue); gemma-2-2b Q8_0 195 against 616 (0.32) and gemma-4-12B Q8_0 53 against 186 (0.28) -
+  not batched: the command declined the classifier epilogue (the final softcap, gemma-4's suppressed
+  ids), so the four streams stepped a row at a time, below one stream's rate. The 12B's global
+  layers take V from K, which the command served already; the file shares no K/V across layers
+  (`gemma4.attention.shared_kv_layers` 0 on the 12B and the 31B, 20 and 18 on the E2B and E4B,
+  which carry per-layer embeddings too).
+- **The epilogue's rows form:** gemma-2 195 -> 687 (1.11), the 12B 53 -> 173 (0.93). The 12B's
+  four-row step under the profiler, us: qkv 2440, qknrope 295,
+  attn 1853, wo 1428, arrq_f 592, gu 10153, down 3976, arrq_n 594, cls 1252, epi 10, 22677 whole
+  against the flat step's 20556 (gu 8404, attn 628, down_ar 5143, wo_ar 2133): the fused gate-up's
+  N form and the attention carried the batch's whole overhead, the host between steps under half a
+  millisecond (the wall step 22935 against a 22697 fence). Under `DASLLAMA_VK_FUSE_BISECT=4` the
+  split gate, up and act requant read 3981 + 3921 + 197 = 8099 at four rows against the fused
+  form's 10107, and the row 187.9 (1.01) - the fused N form was the gap.
+- **The fused gate-up's N form as the plain q8 leaf's shape (`Q8GemvGuNT`, stamped at two, four
+  and eight columns, a column's half-block one 16-byte load beside the weight word, a column past
+  the live ones re-dotting the last live column):** the 12B's gu 10153 -> 8553 a step, the row
+  171.5 -> 185.1 +/- 0.07 (0.99, three reps); gemma-2 688 -> 702; Qwen2.5-1.5B 980 -> 1019 against
+  the qwen section's 920 (1.11, that section's 1.07). The eight-column guarded unroll it replaced loaded a column's block as four
+  words under a guard on every column - the clamp alone the qwen section priced kept that shape,
+  which is why it read slower there; the stamp is a different kernel. Against the split pair the
+  stamp still reads 0.45 ms behind at this shape: the remaining room, with the host's half
+  millisecond.
+- **The two-head attention slab (`DaAttnT` at `G = 2` on a group of one or two heads, the same
+  workgroup count):** the 12B's four-row attn 1835 -> 1729 (6%, the lever-2 tip's profile against
+  the lever-3 tip's), the row 185.1 -> 186.15 +/- 0.16
+  against 186.19 (1.00); gemma-2 704 -> 710. The pass is bound by its K/V reads and chunk barriers
+  (the four-row attention at 57% of the mirror's byte roof), not by the dead heads' FMAs -
+  `followup_vulkan.md` item 73 carries the reading. The two slabs raced in one process on the RTX
+  5060 Ti (`harness/vk_attn_probe.das` with its slab arm, four rows at 640 positions, device
+  timestamps a layer, the arms alternated four-head / two-head / four-head / two-head): the 12B's
+  sliding shape (head 256, 16 heads, two a kv head) 40.9 / 40.9 -> 27.5 / 27.5 us a layer at one
+  split and 35.8 / 36.0 -> 26.6 / 26.6 at two; the gemma-2 shape (head 256, 8 heads, two a kv
+  head) 39.0 -> 26.6 at one split and 22.5 -> 18.4 at four, its best split - the two-head slab
+  a quarter to a third faster a layer where the pod's step read 6%, the smaller card's pass
+  nearer its FMA bound. The same race on the pod (82 SMs, the arms alternated the same way, the
+  four-head rows repeating within 0.5 us across the two orders): the 12B's sliding shape 32.9 ->
+  26.8 at one split, 24.7 -> 20.6 at two and 28.8 -> 18.6 at four, its best; gemma-2's shape 32.9
+  -> 26.8 at one split and 18.6 -> 16.5 at three and four - a third at the best split where the
+  served step moved 6%, so the layer's attention is a smaller share of that step than of the
+  smaller card's.
+- **The board at the arc's tip, tg128@4 (ours cm2 / ours KHR / llama.cpp, three reps ours; then flat
+  tg128 ours / theirs - the reference's flat figure is the same `llama-batched-bench` run's
+  `S_TG` at `-npl 1`, ours the `-npl 4` run's flat row):** gemma-2-2b Q8_0 704 / 709 / 618 (1.14 / 1.15), flat 216 / 201; gemma-3-1b
+  Q8_0 1084 / 1089 / 878 (1.23 / 1.24), flat 396 / 320; gemma-3-4b Q8_0 507 / 507 / 446 (1.14), flat
+  149 / 136; gemma-4-12B Q8_0 185 / 185 / 186 (0.99 at the lever-2 tip; 186.15 / - / 186.19 at the
+  arc's tip, 1.00), flat 55.1 / 54.3; gemma-4-12B Q4_K_M 233 / 233 / 184 (1.26), flat 81.9 / 78.1;
+  gemma-4-31B Q4_K_M 103 / 103 / 90 (1.14), flat 36.6 / 32.9. The KHR arm reads the cm2 arm's rows:
+  the decode kernels are one set on both. The reference's pp512 column on gemma-2-2b and gemma-3-1b
+  reads 87 to 4395 tok/s across its runs (`external`) and is no prefill reference on those two.
+- **The RTX 5060 Ti at the section's tip (driver 616.56, the desktop holding 0.9 to 2.1 GB of the
+  16 GB, `DAS_JOBQUE_THREADS=16`), tg128@4 ours cm2 (with decode-vector) / ours KHR
+  (`DASLLAMA_COOPMAT=mm`) / llama.cpp Vulkan / llama.cpp CUDA (the same b10660 checkout built with
+  CUDA 13.4, every reference figure `external` from `llama-batched-bench` under the section's
+  command line the same hour; then flat tg128 ours cm2 / theirs Vulkan / CUDA):** gemma-2-2b
+  Q8_0 411 / 414 / 363 / 412 (1.13 against Vulkan, 1.00 against CUDA), flat 124 / 115 / 123;
+  gemma-3-1b Q8_0 734 / 738 / 564 / 810 (1.30 / 0.91), flat 246 / 208 / 236; gemma-3-4b Q8_0 294
+  / 292 / 258 / 291 (1.14 / 1.01), flat 84 / 78 / 84. The 4B's first pass ran in the paging class
+  (3.2 flat on both arms) with the desktop holding 2.1 GB beside its 11 GB plan; the rows above are
+  its repeat on the cleared card (0.9 GB held), the plan the same 8187 MB mirror at ctx 15412 that
+  served at 1.4 GB held. The gemma-4-12B files fit no four-region plan on this card - the resident
+  driver declines the Q4_K_M at 15.6 GB of 12.2 to 13.3 asked (item 80 carries the message's unit)
+  and the Q8_0 outright (12.1 GB of weights against the 9 GB cap), the per-op rails serve them a
+  row at a time at 15 to 16 (Q4_K_M) and 14 to 15 (Q8_0) summed - and the reference pages: its
+  Vulkan rows read 106 (Q4_K_M) and 46 (Q8_0) at four streams, its CUDA rows 141 and 88 - so the
+  12B's board is the pod's above. Ours reads at or above CUDA's four-stream rate on the two
+  carriers CUDA does not win outright, and 0.91 of it on the 1B.
+- **Our gemma-2-2b pp512 on the pod reads 6468 to 19388 across runs (three-rep cv up to 38%)
+  while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
+  hold within 2% on pp512.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

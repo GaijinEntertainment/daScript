@@ -358,10 +358,17 @@ one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate a
 bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
 its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
-`test_vkd_q8_gemv_gu_n` (its N-column form against the one-row kernel run a column at a time,
-bit for bit at two, four and eight rows over silu and gelu),
+`test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns - against the one-row
+kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
+gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
+against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
+suppressed id pinned on every row),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
-the biased add partner beside the plain step) and
+the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
+against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and
+the quants bit for bit - the sandwich column at gemma-3-1b's and gemma-2's widths and the plain
+column; the N-row command's sites take the row kernel where the one-row command's take the
+epilogue) and
 `test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
 the gpt-oss arc's arms - `test_vkd_ar_class` and `test_vkd_ar_rq_fused` add the biased add
 partner (the output bias row past the norm row) against the seam and the CPU oracle,
@@ -372,7 +379,8 @@ a 40-key window; the token command's f32 and f16 sink twins unsplit and split, t
 combine seeding the sink), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
 the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
-unsplit and split - the pass stores the row either way, its last piece combining), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+unsplit and split - the pass stores the row either way, its last piece combining - and the two-head
+slab stamp on the groups it serves, two heads and one, at 64, 256 and 512), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
@@ -541,7 +549,7 @@ off the JIT, without dasMetal, or without the carrier. The row's refusal contrac
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
 `test_gpu_resident_regions.das`, `test_gpu_resident_regions_e2b.das`,
-`test_gpu_resident_regions_hybrid.das`, `test_gpu_resident_regions_llama_k.das` and `test_gpu_resident_regions_qwen3.das` (`_resident_regions.das` carries the cells; one model a file; the qwen3 file is Qwen3-0.6B Q8_0, six cells on a q/k-norm carrier: the interleaved single steps, the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope + store or the split pair - bit for bit and served by the N-row command (`vk_rdec_token_n_rows` at two or more, asserted by every batched cell), the batched-first cell (a batched step before any one-row step, a one-row step, a batched step again: the unsplit twin's availability is the device's, never the one-row record's), the wide single steps (both prompts past RD_WIDE_POS, so the one-row command's wide twin records and serves, bit for bit against the session alone), and the fuse bisect (`DASLLAMA_VK_FUSE_BISECT` a bit at a time, one model load a bit: the one-row steps within the split bar of the fused run with the one-token-off control, and under the fused q/k norm's bit the batched rows bit for bit on the split pair); the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75) - stocked suite, `-jit` only; the resident driver's mirror
+`test_gpu_resident_regions_hybrid.das`, `test_gpu_resident_regions_llama_k.das`, `test_gpu_resident_regions_qwen3.das`, `test_gpu_resident_regions_gemma2.das` and `test_gpu_resident_regions_gemma4.das` (`_resident_regions.das` carries the cells; one model a file; the qwen3 file is Qwen3-0.6B Q8_0, six cells on a q/k-norm carrier: the interleaved single steps, the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope + store or the split pair - bit for bit and served by the N-row command (`vk_rdec_token_n_rows` at two or more, asserted by every batched cell), the batched-first cell (a batched step before any one-row step, a one-row step, a batched step again: the unsplit twin's availability is the device's, never the one-row record's), the wide single steps (both prompts past RD_WIDE_POS, so the one-row command's wide twin records and serves, bit for bit against the session alone), and the fuse bisect (`DASLLAMA_VK_FUSE_BISECT` a bit at a time, one model load a bit: the one-row steps within the split bar of the fused run with the one-token-off control, and under the fused q/k norm's bit the batched rows bit for bit on the split pair); the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75; `test_gpu_resident_regions_gemma2.das` is gemma-2-2b Q8_0, the two batched-step cells and the batched-first cell on a carrier with the attention softcap and the classifier epilogue - the N-row command's epilogue over every row's logits - plus the stamp witness, a step whose census count shows the two-head attention slab served (a group of two heads); `test_gpu_resident_regions_gemma4.das` is gemma-4-12B Q8_0, large tier (`DASLLAMA_PARITY_FULL=1`), the same three cells on a carrier with the epilogue's suppressed ids, V-from-K global layers at a head of 512 and a per-layer output scale - the pins themselves are `test_vkd_cls_epi_rows`' witness, since the batch driver's host tail re-pins every row) - stocked suite, `-jit` only; the resident driver's mirror
 regions and the device-home sessions over them (a carrier loaded at two regions through
 `set_gpu_resident_regions_`, the rig's context 8192). The instrument is the driver against
 itself, so no CPU reference chain runs. The bit-for-bit cells: a session stepped between another

@@ -266,3 +266,19 @@ could only catch it with `try` / `recover`, and an expected failure is never rou
 panic path.
 `process_pid` answers 0 on Windows for such a child and the real pid on POSIX, the one visible
 difference, and the reason a supervisor that needs "did it start at all" reads the exit code.
+
+## 9. A detached thread leaves the thread count last {#thread-leaves-count-last}
+
+`new_thread` and the debugger thread run on detached `std::thread`s, each over a clone context
+the thread's lambda holds by value, and the job-queue module's teardown waits on one atomic
+count of such threads (`g_jobQueTotalThreads`) rather than joining them. So the count is the
+only thing that orders a thread's end against the process's exit: a `new_thread` thread shuts
+its thread-local debug agent, then releases its clone context, and decrements the count as its
+last statement. A thread that decremented first could still be destroying the clone when the
+main thread, already past the teardown's wait, reached the exit's alive-pointer check - and the
+check would read the dying clone as a pointer alive at refcount zero, or read a count that
+changed between its test and its message. dastest's suite watchdog is such a thread in every
+dastest process. The agent goes before the context because a context's destructor notifies
+every debug agent, the thread-local one included, and an agent installed from that thread runs
+its callbacks in that very clone - a DAP debuggee whose agent outlived its context stopped
+running to its end after a disconnect.

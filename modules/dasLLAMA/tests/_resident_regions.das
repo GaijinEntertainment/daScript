@@ -905,3 +905,36 @@ def cell_passes_with_their_rows(t : T?; file : string) {
         delete tr
     }
 }
+
+//! the kernel census's count over a stamp's two codec twins
+def private stamps_dispatched(stamp_f16, stamp_f32 : string) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_kernel_coverage_of(stamp_f16) + vk_kernel_coverage_of(stamp_f32)
+    } else {
+        return 0l
+    }
+}
+
+//! a session stepped once through the driver dispatches the stamp (either codec twin) the carrier's shape picks -
+//! the pick a logits compare cannot see, the census can
+def cell_regions_stamp_served(t : T?; file : string; stamp_f16, stamp_f32 : string) {
+    t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
+        if (!regions_ready(t, file)) return
+        var tr <- load_two_regions(t, file)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- prompt_a()
+            var fa <- feed_a()
+            var s <- create_session(tr, mirror_kv_dtype())
+            forward_prefill(tr, s, pa, long_length(pa), 0l)
+            let before = stamps_dispatched(stamp_f16, stamp_f32)
+            forward(tr, s, fa[0], long_length(pa))
+            let after = stamps_dispatched(stamp_f16, stamp_f32)
+            t |> success(after > before, "the step dispatched {stamp_f16} or {stamp_f32} ({after - before} dispatches)")
+            delete s
+            delete pa
+            delete fa
+        }
+        delete tr
+    }
+}

@@ -149,6 +149,19 @@ load may read a cached line. It serves the last-arriving-workgroup hand-off: eve
 publishes its rows and bumps an arrival counter, and the workgroup that reads the last count reads
 every row.
 
+### 3.9 Global-rooted arrays: in-range reads and slack
+
+A global-rooted array is a module global, a `@workgroup` array, or a `self.<member>` resource,
+read in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body or in any `def` that body
+calls - the same shape on both emitters, so this section serves dasMetal too. Such a read is in
+range when the index sits inside the region this dispatch's own bound defines. A read happens on
+a dispatch it did not happen on before when a change drops the condition that kept it inside that
+region: a read in both arms of an `if`, a clamp landing outside the region, a bare read where a
+guarded one was, or a fixed-size block loaded whole under a guard on its store alone. Slack is an
+allocation past the in-range end that a read may land in: a module's root `ARCHITECTURE*.md`
+names the slack it allocates, and a read past the in-range end stays inside the named slack, or
+it is out of range. `modules/REVIEW_SHADER_EMITTERS.md` (repo root) binds a diff to this section.
+
 ## 4. Test architecture - "every emitted instruction has a test"
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the
@@ -190,5 +203,5 @@ real-driver layer, which lives in dasVulkan):
 
 ## 5. Cross-backend parity - the kernel-model asymmetry ledger
 
-`modules/REVIEW_SHADER_EMITTERS.md` requires one kernel-model asymmetry ledger for both emitters.
-That list lives in `modules/dasMetal/ARCHITECTURE.md` sec.5.
+The kernel-model asymmetry ledger is one list for both emitters, and it lives in
+`modules/dasMetal/ARCHITECTURE.md` sec.5; `modules/REVIEW_SHADER_EMITTERS.md` routes a diff there.

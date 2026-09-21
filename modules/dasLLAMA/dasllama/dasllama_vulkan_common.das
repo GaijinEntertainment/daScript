@@ -2265,7 +2265,7 @@ struct RLayer {
     s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
-    s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuN`), where `gu_on`
+    s_gu_n : VkDescriptorSet        //! the fused gate-up GEMV's N-row set over the rows' planes (`Q8GemvGuNT`'s stamps), where `gu_on`
     wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
     s_wo_ar : VkDescriptorSet
     down_ar : bool                  //! the down GEMV carries the post-FFN residual step the same way
@@ -2449,6 +2449,7 @@ struct RDec {
     s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
     n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
     n_rail : NRail = NRail.unasked   //! the N-row command's kernel classes on this device; declined = the command answers 0 rows
+    n_decline_said : bool            //! the N-row command's decline reason logged for this model, once
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int

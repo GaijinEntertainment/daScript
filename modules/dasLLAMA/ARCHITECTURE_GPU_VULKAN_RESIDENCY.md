@@ -221,8 +221,13 @@ once for the step instead of once a row.** The driver sizes every per-token plan
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense
 standard-attention layers, and none where a layer or the tail has no N-row form - a recurrent,
-MoE, per-layer-embedding or shared-KV layer, a gated q, a classifier epilogue, or a weight
-format with no N-column leaf. A q/k norm has one: the rows take whichever form the one-row
+MoE, per-layer-embedding or shared-KV layer, a gated q, or a weight format with no N-column
+leaf - and logs the reason once per armed model. The classifier epilogue (the final softcap
+and the suppressed ids, `ClsEpilogue`) runs once over the rows' logits planes, `ClsEpiArgs.rows`
+planes `vocab` apart, the id a row's own; the one-row command and the prefill's tail pass one
+row. The pins matter on the one-row path alone: the batch driver's host tail pins the
+suppressed ids again on every row after the override (`dasllama_batch.das`), where the one-row
+decode returns before its host tail when the device produced the logits. A q/k norm has one: the rows take whichever form the one-row
 command takes - the fused norm + rope + store (`QknRopeKvT`, a head-row a workgroup with the row
 in the workgroup id, each row at its own token meta) where the one-row command fuses, the split
 pair (`qk_rms_cls`, the per-head rms over every row's projection row before the rope, the
@@ -237,9 +242,14 @@ their sets bind one row. Every GEMV goes out as an N-column dispatch
 two-output-rows-a-subgroup twin past `g_q8_n2_min_n` on an even row count, off by default
 because the pod's down GEMV read 750 us a step under the pair against 587 a row a subgroup.
 Where the one-row command fuses the dense FFN's gate and up GEMVs with the activation and its
-requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuN`: a workgroup owns 32 output rows for
-every column, a subgroup a column quantizes the column's block, so the columns' rows quantize in
-parallel); the residual epilogues stay separate dispatches over the rows, because an epilogue
+requant (`RLayer.gu_on`), the rows' do too (`Q8GemvGuNT`, stamped at two, four and eight
+columns like the plain q8 leaf: a workgroup owns 32 output rows for every column, each column's
+half-block one 16-byte load beside the weight word, a column past the live ones re-dotting the
+last live column's row with its block never stored, and a subgroup a column quantizes the
+column's block, so the columns' rows quantize in parallel - the eight-column guarded unroll it
+replaced read a quarter slower than the split gate and up GEMVs at four rows on the 12B,
+`PERF_LEDGER.md`'s gemma section of 2026-09-20); the
+residual epilogues stay separate dispatches over the rows, because an epilogue
 run by the last workgroup would serialize the rows' steps where the separate dispatch runs them
 in parallel workgroups. The
 row-parallel kernels take the rows' planes whole; the rope, the mirror store and the attention
@@ -273,3 +283,18 @@ host-cached row's K/V back and lands its logits; it returns false when a row fin
 two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
+
+### 2.2ap The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
+
+The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
+row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
+(`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
+regions cells hold the two commands bit for bit. The forms share their reduce, their four-column
+round and their requant word for word, and a driver still decides per kernel whether a multiply
+feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
+ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
+apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
+spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
+contraction to choose; the plain column carries no multiply before its add.
+`test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
+fed the GEMV's own y row.

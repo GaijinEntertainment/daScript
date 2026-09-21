@@ -1552,10 +1552,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer, a gated q and a
-    classifier epilogue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched
-    step of such a model pays a weight pass a row. The work: each kind's N-row form, the
-    recurrent and MoE ones behind their own state and schedule questions.
+    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer and a gated q
+    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched step of such a model pays
+    a weight pass a row. The work: each kind's N-row form, the recurrent and MoE ones behind
+    their own state and schedule questions; the shared-KV form rides with the per-layer
+    embeddings - every carrier that shares K/V (the E-series) carries them too, so it lands
+    with that section and its regions file, where a batched step can reach it.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
     `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
     and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
@@ -1566,13 +1568,18 @@ module) is independent and can land any time - it is pure structure.
     taking `nrows` (the one-row form its `nrows == 1` reading, the declined arms guarded by it), one
     GEMV entry taking a column count, a fifth `RqStamp` for the row form, one wait with a spin
     flag, and one shared forced-feed cell parameterized by the family's arm witnesses.
-73. **The decode attention slab runs four heads' arithmetic for every kv head, whatever the
-    group's width.** The score and V loops of `DaAttnT` unroll over `DA_G = 4` slab lanes
-    unconditionally, so a model whose GQA group is one, two or three heads pays two to four times
-    the FMAs a head needs (the shipped scoreboard's llama carriers are all `kv_mul = 4`, the one
-    width where the slab is full). The work: a `kv_mul`-sized stamp family (`DA_G` 1, 2, 4) or the
-    loops bounded by `live`, priced on a `kv_mul = 2` carrier (gemma-2-2b) and a `kv_mul = 1` one
-    through `harness/vk_attn_probe.das`.
+73. **The decode attention slab runs four heads' arithmetic on a GQA group of three.** The score
+    and V loops of `DaAttnT` unroll over the slab's `G` heads - four, or two on a group of one or
+    two heads (`da_slab_is_g2`, the `g2` stamps) - so a three-head group still pays a dead lane,
+    and a one-head group half a slab; the workgroup arrays stay sized for four heads on every
+    stamp, so the two-head stamp buys no occupancy. The two-head stamps read the 12B's four-row
+    attention 1835 -> 1729 us a step (6%; `PERF_LEDGER.md`, the gemma section of 2026-09-20, the
+    pod under `DASLLAMA_GPU_PROF=1`), where the probe's race on the RTX 5060 Ti reads the
+    two-head slab a quarter to a third faster a layer at the gemma shapes (the same section): the
+    pass is bound by its K/V reads and the chunk barriers at the step, and the dead FMAs cost
+    more on the smaller card. The work: a one-head stamp, and the arrays sized by `G`, priced
+    through `harness/vk_attn_probe.das`'s slab arm on a `kv_mul = 1` carrier before either is
+    added.
 74. **A host-cached session that loses its mirror region before hydration loses its rows.** The
     driver steals a region by LRU (`rdec_bind_region`) with no handle on the region's owner, and a
     host-cached session's prompt rows sit on the device alone until a hydration brings them down
@@ -1603,15 +1610,15 @@ module) is independent and can land any time - it is pure structure.
     sampler does (its `s.sampled` write, the penalties over `s.recent`, or the draw). The work:
     the refusal named under `--track-job-status` / a panic hook, then the rows' samples on the
     lanes, priced on the tg128@4 row (about a hundred microseconds a step at four rows).
-77. **The fused gate-up GEMV's N form is a second copy of its one-row class.** `Q8GemvGuN`
-    reproduces `Q8GemvGu`'s weight loads, dots, activation and Q8_0 requant with the column count
-    as its one axis (at one column the N form is the one-row kernel), where the plain GEMV
-    carries the same axis as `Q8GemvNT`'s template constant; the profiler's per-form stamp slots
-    (unsplit, split and wide, one-row and N-row) are likewise six hand-written triples with two
-    sample ladders and a slot fill over them. The work: one class template stamped at one and
-    eight columns (the one-row stamp re-sources, so the record owes the SPIR-V-dump compare
-    against the tree before it) and one `RdqForm` table the reset, the sample ladders and the
-    slot fill index - a dedup pass of its own, not a lever.
+77. **The fused gate-up GEMV's one-row class is a copy of its N template's one-column stamp.**
+    `Q8GemvGu` reproduces `Q8GemvGuNT`'s weight loads, dots, activation and Q8_0 requant at one
+    column (the template at `NC = 1` is the one-row kernel), where the plain GEMV's one-row class
+    stands beside `Q8GemvNT` the same way; the profiler's per-form stamp slots (unsplit, split and
+    wide, one-row and N-row) are likewise six hand-written triples with two sample ladders and a
+    slot fill over them. The work: the one-row form as the template's one-column stamp (the
+    one-row stamp re-sources, so the record owes the SPIR-V-dump compare against the tree before
+    it) and one `RdqForm` table the reset, the sample ladders and the slot fill index - a dedup
+    pass of its own, not a lever.
 78. **A head of 96 takes no flash tile, so phi's prefill attention runs the chunked pair at
     thirty times the reference's.** `fa_hs_ok` (the cm2 arm) and `fa_khr_serves` admit heads of
     64, 128, 256 and 512; Phi-3.5-mini's 32 heads of 96 fall to the chunked pair, which reads
@@ -1622,3 +1629,36 @@ module) is independent and can land any time - it is pure structure.
     blocks; the KHR tile its own row map), the same stamp covering 80 / 112 / 160 / 192 / 224
     where a carrier needs one, gated by the kernel cells at those heads; the decode attention's
     head-96 form is the same question on `DaAttnT`, which declines the non-power-of-two heads.
+79. **gemma-2-2b's pp512 swings threefold between runs on the pod while its decode rows hold.**
+    `lcpp_bench -p 512 -r 3` reads 6468 to 19388 tok/s across runs and a three-rep cv up to 38% on
+    the RTX PRO 4500 (`PERF_LEDGER.md`, the 2026-09-20 gemma section), where gemma-3-1b, gemma-3-4b
+    and the gemma-4 dense files hold within 2% and every tg row within 1%. gemma-2 alone runs the
+    softcap flash tile and the attention softcap on every score. The work: the prefill profiler's
+    role stamps over three runs on that file, the slow run's stamp named, then the cause (a tile
+    class rebuilt per run, a pipeline cache miss, or a clock state the softcap tile's occupancy
+    trips).
+80. **The resident plan's memory decline names a context it would fit at that is larger than the
+    one it declined.** On the RTX 5060 Ti the 12B Q4_K_M at four regions declines with "needs
+    15596 MB of 12953 MB at ctx 6238 - would fit at ctx 16896": `cap_fit` in
+    `dasllama_gpu_resident.das` divides the K/V room by one position's rows over every region,
+    while `seq_cap` is one region's context, so the two contexts are not the same unit and the
+    reader cannot act on the line. The work: the message in one unit - the context a region gets
+    at the region count that would fit, or the region count that fits at the asked context.
+
+81. **A dense model the resident plan cannot home whole falls to the per-op rails, which read
+    as the CPU chain.** On the RTX 5060 Ti (16 GB, the desktop holding 1 to 2 GB) the 12B
+    Q4_K_M declines at 15.6 GB asked over four regions and serves 7.6 tok/s flat, 15 summed over
+    four streams, against llama.cpp's paged 44 and 106; the 12B Q8_0 (12.1 GB of weights) 4.5
+    and 14 against 21 and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows). Two rungs. The
+    first: the plan sizes its mirror from the room, not from the load - the four-stream run holds
+    640 positions a stream, under 1 GB of K/V, so a plan that shrinks the mirror to the served
+    context before declining homes the Q4_K_M with room to spare and the Q8_0 on a cleared card,
+    at the pod's kind of rate; the decline stays for the weights alone not fitting. The second,
+    for the weights alone not fitting (the Q8_0 on a 12 GB card, the 31B on this one): a
+    streamed-weights arm - the layers' planes through a device ring the step refills ahead of
+    the decode, in layer order, the way the MoE block streams its expert groups
+    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) -
+    which beats the driver's blind paging because the order is known and the reads are one pass
+    a token; the rate then reads as PCIe's bandwidth over the bytes past the resident set, and a
+    row a step sees no benefit from four streams' worth of streaming unless the ring serves all
+    four rows a layer. Both rungs are measured against llama.cpp's paged rows on the same card.

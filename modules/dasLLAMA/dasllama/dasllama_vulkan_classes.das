@@ -115,6 +115,7 @@ class ArBase : RmsWgBase {
 
     // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
     // partner is normed first (its own reduce, the row stash holding it meanwhile)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
     def accum_row(base : uint) : float {
         var ainv = 0.0
         if (pa.pre_on != 0u && pa.add_on != 0u) {
@@ -132,8 +133,7 @@ class ArBase : RmsWgBase {
         var k = gl_LocalInvocationID.x
         if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
             while (k < pa.dim) {
-                let a = wn[pa.pwoff + k] * (row[k] * ainv)
-                let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
+                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], row[k] * ainv, xs[base + k]) * pa.ascale : xs[base + k]
                 xs[base + k] = vv
                 row[k] = vv
                 ss += vv * vv
@@ -1116,30 +1116,32 @@ struct ClsEpiArgs {
     vocab : uint
     cap : float     //! the final logit softcap; 0 = none
     nsupp : uint    //! suppressed token ids in `supp`
+    rows : uint     //! logits rows in `y`, `vocab` apart: the N-row command's rows, 1 on the one-row command
 }
 
 //! gemma's logit softcap, cap * tanh(v / cap), in the exp form the CPU's softcap4 takes
 def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
-//! the classifier tail's epilogue in place: the final logit softcap, then the checkpoint's suppressed
-//! ids pinned to -1e30 - after the cap, so the pin survives it
+//! the classifier tail's epilogue in place over `rows` logits rows: the final logit softcap, then the
+//! checkpoint's suppressed ids pinned to -1e30 - after the cap, so the pin survives it
 [vk_dispatch(name = "cls_epi", grid = "wgs", params = "wgs : int64")]
 class ClsEpilogue {
-    @ssbo @binding = 0 y : array<float>      // the logits row
+    @ssbo @binding = 0 y : array<float>      // the logits rows
     @ssbo @binding = 1 @role = "weight" supp : array<uint>    // the suppressed ids (a placeholder when nsupp is 0)
     @push_constant pa : ClsEpiArgs
 
     [spirv_kernel(local_size_x = 256, name = "cls_epi_spv")]
     def run {
         let gid = gl_GlobalInvocationID.x
-        if (gid < pa.vocab) {
+        if (gid < pa.vocab * pa.rows) {
+            let id = pa.nsupp > 0u ? gid % pa.vocab : 0u   // the row's id, wanted by the pins alone
             var v = y[gid]
             if (pa.cap > 0.0) {
                 v = softcap_exp(v, pa.cap)
             }
             var j = 0u
             while (j < pa.nsupp) {
-                if (supp[j] == gid) {
+                if (supp[j] == id) {
                     v = -1.0e30
                 }
                 j++
@@ -4088,8 +4090,17 @@ def da_attn_part_stride(hs : uint) : uint => hs + 2u
 
 let DA_G = 4u   //! the q heads a decode-attention workgroup serves off one K/V read: a GQA group's, in slabs of four
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
+def da_slab_is_g2(kv_mul : int64) : bool => kv_mul <= 2l
+
+//! the slab's q heads at a group width: the kernel's `G` and the host's workgroup count derive from this one expression
+def da_slab_heads(kv_mul : int64) : int64 => da_slab_is_g2(kv_mul) ? 2l : int64(DA_G)
+
 //! the decode attention's workgroups a row: one a (kv head, slab of the group's q heads, key split)
-def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 => n_heads / kv_mul * ((kv_mul + int64(DA_G) - 1l) / int64(DA_G)) * nsplit
+def da_attn_row_wgs(n_heads, kv_mul, nsplit : int64) : int64 {
+    let g = da_slab_heads(kv_mul)
+    return n_heads / kv_mul * ((kv_mul + g - 1l) / g) * nsplit
+}
 
 let DA_RQ_Q8 = 0u    //! `DaAttnArgs.rqk`: the wo plane reads Q8_0 activations
 let DA_RQ_Q8K = 1u   //! ... Q8_K activations
@@ -4102,6 +4113,7 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
     @template_constant SINK : bool = false   //! the sink stamps (gpt-oss): the head's sink logit joins the softmax's max and denominator at the unsplit store; a split piece leaves it to the combine
+    @template_constant G : int = 4           //!< the slab's q heads, DA_G or two (`da_slab_heads`): every score and V loop unrolls over them; the workgroup arrays hold four, so no stamp goes wider
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
     @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
@@ -4274,10 +4286,10 @@ class template DaAttnT {
         let cnt = tok[row].cnt
         let sp = wg % nsplit
         let kvslab = wg / nsplit
-        let nslab = (pa.kv_mul + DA_G - 1u) / DA_G
+        let nslab = (pa.kv_mul + uint(G) - 1u) / uint(G)
         let kvh = kvslab / nslab
-        let h0 = kvh * pa.kv_mul + (kvslab % nslab) * DA_G   //! the slab's first q head
-        let live = min(DA_G, pa.kv_mul - (kvslab % nslab) * DA_G)   //! its heads: a group's last slab may be short
+        let h0 = kvh * pa.kv_mul + (kvslab % nslab) * uint(G)   //! the slab's first q head
+        let live = min(uint(G), pa.kv_mul - (kvslab % nslab) * uint(G))   //! its heads: a group's last slab may be short
         let hflat0 = row * (pa.kvd / hs * pa.kv_mul) + h0   //! the slab's first head in the attention-out and partial planes, whose row stride is the heads' width
         let qb = row * pa.qrow
         let kbase = pa.kbase + tok[row].mirbase
@@ -4288,13 +4300,13 @@ class template DaAttnT {
         let lane = gl_SubgroupInvocationID
         var i = tid
         while (i < hs) {
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 qrow[hj * 512u + i] = hj < live ? q[qb + (h0 + hj) * qstride + i] : 0.0
             }
             i += 256u
         }
-        if (tid < DA_G) {
+        if (tid < uint(G)) {
             ml[tid * 4u] = -3.0e38
             ml[tid * 4u + 1u] = 0.0
         }
@@ -4307,7 +4319,7 @@ class template DaAttnT {
         let my_kgroup = folded ? gl_SubgroupID * kgroups_per_subgroup + lane / vrow_words : tid / vrow_words   //! off the subgroup's own lanes where the fold serves
         let w = folded ? lane % vrow_words : tid % vrow_words
         var acc : float[32]                    // [head * 8 + dim]
-        for [unroll] (j in range(32)) {
+        for [unroll] (j in range(G * 8)) {
             acc[j] = 0.0
         }
         let cstart = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
@@ -4331,7 +4343,7 @@ class template DaAttnT {
             }
             if (tid < clen) {
                 var pv : float[4]
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     pv[j] = 0.0
                 }
                 static_if (KV16) {
@@ -4346,7 +4358,7 @@ class template DaAttnT {
                             for [unroll] (b in range(8)) {
                                 let wb = wi + uint(b)
                                 if (wb < vrow_words) {
-                                    for [unroll] (j in range(4)) {
+                                    for [unroll] (j in range(G)) {
                                         pv[j] += kdot8(kw[b], uint(j) * 512u + wb * 8u)
                                     }
                                 }
@@ -4359,19 +4371,19 @@ class template DaAttnT {
                     var di = 0u
                     while (di < hs) {
                         let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                        for [unroll] (j in range(4)) {
+                        for [unroll] (j in range(G)) {
                             pv[j] += qrow[uint(j) * 512u + di] * kv0
                         }
                         di++
                     }
                 }
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     sc[uint(j) * 256u + tid] = attn_softcap(pv[j] * pa.scale, pa.cap)
                 }
             }
             barrier()
             var s : float[4]
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 s[j] = tid < clen && hj < live ? sc[hj * 256u + tid] : -3.0e38
                 let tmax = subgroupMax(s[j])
@@ -4381,7 +4393,7 @@ class template DaAttnT {
             }
             barrier()
             var alpha : float[4]
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 var mnew = ml[hj * 4u]
                 var sgi = 0u
@@ -4398,7 +4410,7 @@ class template DaAttnT {
                 }
             }
             barrier()
-            if (tid < DA_G) {   //! a thread a head carries the running max and denominator forward
+            if (tid < uint(G)) {   //! a thread a head carries the running max and denominator forward
                 var mnew = ml[tid * 4u]
                 var lsum = 0.0
                 var sgi = 0u
@@ -4410,7 +4422,7 @@ class template DaAttnT {
                 ml[tid * 4u + 1u] = ml[tid * 4u + 1u] * exp(ml[tid * 4u] - mnew) + lsum
                 ml[tid * 4u] = mnew
             }
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 for [unroll] (e in range(8)) {
                     acc[j * 8 + e] *= alpha[j]
                 }
@@ -4431,7 +4443,7 @@ class template DaAttnT {
                                 let bb = unpackHalf2x16(vw[b].y)
                                 let cc = unpackHalf2x16(vw[b].z)
                                 let d = unpackHalf2x16(vw[b].w)
-                                for [unroll] (j in range(4)) {
+                                for [unroll] (j in range(G)) {
                                     let sj = sc[uint(j) * 256u + kb]
                                     acc[j * 8] += sj * a.x
                                     acc[j * 8 + 1] += sj * a.y
@@ -4450,7 +4462,7 @@ class template DaAttnT {
                     let vrow = vb + (c0 + jj) * pa.kvd
                     for [unroll] (e in range(8)) {
                         let v = vld(vrow + uint(e))
-                        for [unroll] (j in range(4)) {
+                        for [unroll] (j in range(G)) {
                             acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
                         }
                     }
@@ -4463,7 +4475,7 @@ class template DaAttnT {
         let stride = da_attn_part_stride(hs)
         var r = 1u
         while (r < kgroups_per_subgroup) {
-            for [unroll] (k in range(32)) {
+            for [unroll] (k in range(G * 8)) {
                 acc[k] += subgroupShuffleXor(acc[k], r * vrow_words)
             }
             r *= 2u
@@ -4476,7 +4488,7 @@ class template DaAttnT {
         let slot = folded ? gl_SubgroupID : my_kgroup
         var hr0 = 0u
         while (hr0 < live) {
-            for [unroll] (j in range(4)) {
+            for [unroll] (j in range(G)) {
                 let hj = uint(j)
                 if (hj >= hr0 && hj < hr0 + heads_per_round && hj < live && has_sum) {
                     for [unroll] (e in range(8)) {
@@ -4530,7 +4542,7 @@ class template DaAttnT {
             barrier()
             if (arrived[0] + 1u == nsplit) {
                 memoryBarrierBuffer()
-                for [unroll] (j in range(4)) {
+                for [unroll] (j in range(G)) {
                     let hj = uint(j)
                     if (hj < live) {
                         combine_head(h0 + hj, hflat0 + hj, hs, nsplit, stride, qb, qstride, tid, wide)
@@ -4554,6 +4566,19 @@ class DaAttn : DaAttnT {
 class DaAttnF16 : DaAttnT {
     typedef KT = float16
     override KV16 = true
+}
+
+[vk_dispatch(name = "da_attn_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnG2 : DaAttnT {
+    typedef KT = float
+    override G = 2
+}
+
+[vk_dispatch(name = "da_attn_f16_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnF16G2 : DaAttnT {
+    typedef KT = float16
+    override KV16 = true
+    override G = 2
 }
 
 [vk_dispatch(name = "da_attn_sink_cls", grid = "wgs", params = "wgs : int64")]
@@ -9826,7 +9851,7 @@ class template Q8GemvNT {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
             }
-            let clast = pa.ncols - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
+            let clast = max(pa.ncols, 1u) - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its sum is never stored
             var bi0 = 0u
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
@@ -9947,6 +9972,7 @@ class Q8GemvAr : RmsWgBase {
     def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
     def epilogue {   // nolint:STYLE038 — one row pass: the sandwich column, the four-column round, the requant
         let tid = gl_LocalInvocationID.x
         var ainv = 0.0
@@ -9964,8 +9990,7 @@ class Q8GemvAr : RmsWgBase {
         var k = tid
         if (pa.pre_on != 0u) {   //! the sandwich form, a column a round
             while (k < pa.d) {
-                let a = wn[pa.pwoff + k] * (ya(k) * ainv)
-                let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
+                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], ya(k) * ainv, xres[k]) * pa.ascale : xres[k]
                 xres[k] = vv
                 ss += vv * vv
                 k += 256u
@@ -10186,21 +10211,21 @@ struct GuNArgs {
     ncols : uint  //! the rows the command steps at once, 1 to GU_N_COLS: column c's activation blocks sit c x (n / 32) past the first, its quants c x d past
 }
 
-let GU_N_COLS = 8u   //! the fused gate-up N form's column slots: its slabs hold this many, and a wider count is clamped to it
+let GU_N_COLS = 8u   //! the widest gate-up N stamp's columns - the width every stamp's slabs and accumulators carry; `q8_gemv_gu_n_ensure` holds the rail's row count to it
 
-//! the fused gate-up GEMV's N-column form: a workgroup owns 32 output rows for every column, its subgroups dot both
-//! planes against each column's row off one weight word, and a subgroup a column activates and quantizes its block
-[vk_dispatch(name = "q8_gemv_gu_n_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvGuN {
+//! the fused gate-up GEMV's N-column forms: `NC` column slots a weight word, `pa.ncols` of them live and stored
+[ |> template_struct_instance]
+class template Q8GemvGuNT {
     @ssbo @binding = 0 @role = "weight" gq4 : array<uint4>     // gate quant words, vec4 view
     @ssbo @binding = 1 @role = "weight" gsh : array<float16>   // gate per-block f16 scales
     @ssbo @binding = 2 @role = "weight" uq4 : array<uint4>     // up quant words, vec4 view
     @ssbo @binding = 3 @role = "weight" ush : array<float16>   // up per-block f16 scales
-    @ssbo @binding = 4 xqw : array<uint>      // the normed rows' Q8_0 quant words, a row a column
+    @ssbo @binding = 4 xq4 : array<uint4>     // the normed rows' Q8_0 quant words, vec4 view, a row a column
     @ssbo @binding = 5 axs : array<float>     // ... and their per-block scales
     @ssbo @binding = 6 outq : array<int8>     // the activated hidden rows' Q8_0 quants (the down GEMV's feed), d apart
     @ssbo @binding = 7 outs : array<float>    // ... and their per-block scales, d / 32 apart
     @push_constant pa : GuNArgs
+    @template_constant NC : int = 4       //!< the columns a lane dots per weight word
     @workgroup wg_g : float[256]   //! the block's gate dots, [column x 32 rows]
     @workgroup wg_u : float[256]   //! ... and up dots
 
@@ -10214,11 +10239,11 @@ class Q8GemvGuN {
         let bpp = gl_SubgroupSize / 2u
         var accg : float[8]
         var accu : float[8]
-        for [unroll] (c in range(8)) {
+        for [unroll] (c in range(NC)) {
             accg[c] = 0.0
             accu[c] = 0.0
         }
-        let ncols = min(pa.ncols, GU_N_COLS)
+        let clast = max(pa.ncols, 1u) - 1u   // a column past the live ones dots column `clast`'s row again: its loads issue beside the live ones and its block is never stored
         var bi0 = 0u
         while (bi0 < nb) {
             let b = bi0 + lane / 2u
@@ -10227,35 +10252,30 @@ class Q8GemvGuN {
                 let uv = uq4[(ub0 + bi0) * 2u + lane]
                 let gs = float(gsh[gb0 + b])
                 let us = float(ush[ub0 + b])
-                for [unroll] (c in range(8)) {
-                    if (uint(c) < ncols) {   // the guard stays: the unroll is eight columns wide whatever the count, and a dead column's two dots cost more than its branch (PERF_LEDGER.md, the 2026-09-20 section)
-                        let xbase = (uint(c) * nb + bi0) * 8u + lane * 4u
-                        let x0 = xqw[xbase]
-                        let x1 = xqw[xbase + 1u]
-                        let x2 = xqw[xbase + 2u]
-                        let x3 = xqw[xbase + 3u]
-                        var gd = sdot4(gv.x, x0)
-                        gd += sdot4(gv.y, x1)
-                        gd += sdot4(gv.z, x2)
-                        gd += sdot4(gv.w, x3)
-                        var ud = sdot4(uv.x, x0)
-                        ud += sdot4(uv.y, x1)
-                        ud += sdot4(uv.z, x2)
-                        ud += sdot4(uv.w, x3)
-                        gd += subgroupShuffleXor(gd, 1u)
-                        ud += subgroupShuffleXor(ud, 1u)
-                        if (lane % 2u == 0u) {
-                            let xs = axs[uint(c) * nb + b]
-                            accg[c] += float(gd) * gs * xs
-                            accu[c] += float(ud) * us * xs
-                        }
+                for [unroll] (c in range(NC)) {
+                    let xb = min(uint(c), clast) * nb
+                    let xv = xq4[(xb + bi0) * 2u + lane]
+                    var gd = sdot4(gv.x, xv.x)
+                    gd += sdot4(gv.y, xv.y)
+                    gd += sdot4(gv.z, xv.z)
+                    gd += sdot4(gv.w, xv.w)
+                    var ud = sdot4(uv.x, xv.x)
+                    ud += sdot4(uv.y, xv.y)
+                    ud += sdot4(uv.z, xv.z)
+                    ud += sdot4(uv.w, xv.w)
+                    gd += subgroupShuffleXor(gd, 1u)
+                    ud += subgroupShuffleXor(ud, 1u)
+                    if (lane % 2u == 0u) {
+                        let xs = axs[xb + b]
+                        accg[c] += float(gd) * gs * xs
+                        accu[c] += float(ud) * us * xs
                     }
                 }
             }
             bi0 += bpp
         }
-        for [unroll] (c in range(8)) {
-            if (uint(c) < ncols) {
+        for [unroll] (c in range(NC)) {
+            if (uint(c) < pa.ncols) {
                 let g = subgroupAdd(accg[c])
                 let u = subgroupAdd(accu[c])
                 if (subgroupElect()) {
@@ -10266,7 +10286,7 @@ class Q8GemvGuN {
         }
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_gemv_gu_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let row0 = gl_WorkGroupID.x * 32u
         let nsg = gl_NumSubgroups
@@ -10277,7 +10297,7 @@ class Q8GemvGuN {
             k++
         }
         barrier()
-        let ncols = min(pa.ncols, GU_N_COLS)
+        let ncols = min(pa.ncols, uint(NC))
         var c = gl_SubgroupID
         while (c < ncols) {
             let lane = gl_SubgroupInvocationID
@@ -10293,6 +10313,49 @@ class Q8GemvGuN {
             }
             c += nsg
         }
+    }
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n2_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN2 : Q8GemvGuNT {
+    override NC = 2
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n4_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN4 : Q8GemvGuNT {
+    override NC = 4
+}
+
+[vk_dispatch(name = "q8_gemv_gu_n8_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGuN8 : Q8GemvGuNT {
+    override NC = 8
+}
+
+//! the fused gate-up N stamps for up to `nb` columns
+def q8_gemv_gu_n_ensure(nb : int64 = 8l) : bool {
+    verify(nb <= int64(GU_N_COLS), "vk decode: the N-row command's row count is past the widest gate-up stamp")
+    var ok = ensure_q8_gemv_gu_n2_cls()
+    if (nb > 2l) {
+        ok = ok && ensure_q8_gemv_gu_n4_cls()
+    }
+    if (nb > 4l) {
+        ok = ok && ensure_q8_gemv_gu_n8_cls()
+    }
+    return ok
+}
+
+//! the gate-up N stamps share one layout, so the narrowest stamp's set binds them all
+def q8_gemv_gu_n_set(bufs : uint64 const[8]; sizes : int64 const[8]; gbits : uint const[8]) : VkDescriptorSet
+    => set_q8_gemv_gu_n2_cls(bufs, sizes, gbits)
+
+//! the stamp for `pc.ncols` columns: the narrowest that holds them
+def q8_gemv_gu_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GuNArgs; wgs : int64) {
+    if (pc.ncols <= 2u) {
+        enc_q8_gemv_gu_n2_cls(raw, h, set_, pc, wgs)
+    } elif (pc.ncols <= 4u) {
+        enc_q8_gemv_gu_n4_cls(raw, h, set_, pc, wgs)
+    } else {
+        enc_q8_gemv_gu_n8_cls(raw, h, set_, pc, wgs)
     }
 }
 
@@ -11088,10 +11151,10 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
     return false
 }
 
-//! the q8 stamps share one layout of their own; a kq leaf shares the family's
+//! the q8 stamps share one layout of their own, so the narrowest stamp's set - the one every row count builds - binds them all; a kq leaf shares the family's
 def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
-        return set_q8_gemv_n4_cls(bufs, sizes, gbits)
+        return set_q8_gemv_n2_cls(bufs, sizes, gbits)
     }
     return gemv_cls_set(fmt, bufs, sizes, gbits)
 }

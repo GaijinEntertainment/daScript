@@ -20,6 +20,11 @@ environment overrides computes, applies `REVIEW_MEASUREMENT.md`.** A serving pat
 end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT)
 and its cross target (a build for another platform) are part of it.
 
+**A diff that adds a kernel or loop the runtime re-enters per token, per frame or per prefill
+quantum, or adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
+`[no_env]` or `[no_io]` annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
+(beside this file) together with this list.**
+
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
 answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
@@ -66,8 +71,7 @@ splices a stream carrying decoded media - pixels or audio samples - into a promp
 schedules such a stream, applies `REVIEW_VISION.md`.**
 
 **A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
-`REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared tower
-function does not thereby pick up the other modality's checklist.
+`REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
 `dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file - one
@@ -104,11 +108,13 @@ the declared "no hook".
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
 token-exact fixtures.
 
-**A diff that changes WHICH kernel form a predicate in `dasllama/` picks - both forms produce the
-right answer - or the VALUE of a constant there that timing two candidates chose, rests on timing
-that ran both candidates interleaved in one process under one instrument, and puts that race's
-rows, each naming its arm, in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading
-across two processes or two commits says which way the clock moved, not which form to adopt.
+**A diff that adds or changes a predicate in `dasllama/` that picks a kernel form because it
+measured faster - every form it picks among produces the right answer for the dispatch, and the
+dispatch's own shape does not single one out as the narrowest form that covers it - or the VALUE
+of a constant there that timing two candidates chose, rests on timing that ran every candidate
+interleaved in one process under one instrument, and puts that race's rows, each naming its arm,
+in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading across two processes or
+two commits says which way the clock moved, not which form to adopt.
 
 **A change to an allocation whose size scales with a model dimension, a row count or a region
 count, added, grown or removed to move wall-clock, wherever it sits, ships the measured pair -
@@ -119,7 +125,8 @@ peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
 stay f32 for another reason is ledgered on its own file's sec.1 charter line - the line naming
-what that file holds - in an `ARCHITECTURE_*.md` companion, not commented into compliance.
+what that file holds - in an `ARCHITECTURE_*.md` companion; a comment at the call site does not
+discharge this.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy.**
 
@@ -138,33 +145,11 @@ flow, eviction, a generated name; not a reported wall-clock time or a best-of re
 reported wall-clock times - is marked `// clock: control`** - unmarked, it cannot be told
 apart from the ad-hoc profiling an engine file may not carry.
 
-**Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
-quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
-by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
-contracts, or `[cold_path]` on its only reaching entry.** The region entry is the OUTERMOST such
-function - interior means every caller is itself re-entered that way, so a function reached only
-through a registered function value is an entry (`ARCHITECTURE_RUNTIME.md` sec.2.11).
-
-**A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` / `[no_env]` /
-`[no_io]` contract moves that annotation to the new name in the same change** - it is no new entry.
-
-**A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function below the
-region entry is a defect - move it to the entry; an interior function carries only a
-`[cold_path]` on a rarely-taken branch.**
-
-**Never put `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a loop reached
-only from a load, stage, bake, or convert path - it is no region entry; it carries `[cold_path]`
-or nothing.**
-
-**A driver that calls the `forward_*` entries and is reached only by a measurement - a
-benchmark row, a rig's loop - and never by a served request carries `[cold_path]`.**
-
-**A change to `encode`/`bpe_encode`, or to a function they call, in
+**A change to `encode`/`bpe_encode`, or to a function either calls at encode time, in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
 ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) at two or more
 input sizes, for a model using the affected tokenizer; a time growing faster than linearly
-with input size is a defect.** A change confined to the load path - a metadata default the
-encode reads as a value - does not fire this rule.
+with input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or

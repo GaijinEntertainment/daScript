@@ -9,6 +9,11 @@ issues asserts on `t`) that dispatches one or more kernel classes and asserts on
 or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
+**A diff that touches a pinned test cell - one whose expected value is written down where a
+person edits it, a document, a checked-in table, a generated artifact's committed form, a
+roster, rather than computed by the code under test - or adds one, applies
+`REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
+
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
 change reaches a test when it alters anything the test's result depends on - the test file, a
@@ -49,12 +54,11 @@ a run of skips is not the coverage the suite owes.
 **A diff that adds a `[test]` file here, or adds, removes or moves a cell, or changes its suite
 or skip condition, corrects or adds, in the same change, the `CLAUDE.md` entry of every `[test]`
 file running the cell, counts and skip clauses included.** A file's entry is the clause naming
-it; a `{a,b}` shorthand or a suite roster owes nothing.
+it by its `.das` file name; a `{a,b}` shorthand or a suite roster owes nothing.
 
-**A diff that changes an axis or a bar a `CLAUDE.md` census entry names corrects it in the same change.**
-
-**A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
-lost - updates that gate's entry in this checklist's pinned set in the same change.**
+**A diff that changes an axis or a bar a file's own `CLAUDE.md` entry names - a shape, a length,
+a format or a lane the cell sweeps, or a tolerance it holds - corrects that entry in the same
+change.**
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
@@ -78,36 +82,6 @@ to a flag that no longer does what the text says.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**A pinned gate's coverage never shrinks: a diff that removes one of its asserts, loosens one of
-its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
-predicate answers on an input the gate already asserts on is not a shrink; dropping the input is.
-A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
-that is not a shrink. The pinned set, each with what it pins:
-`test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
-filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
-intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
-(`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
-softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare of
-`site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
-run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
-wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
-`test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included, the
-llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal);
-`test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
-pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
-(which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
-partial planes, on every input of the prefill's tile-and-split pick; added rows on those inputs
-are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries
-against the arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`,
-`test_pocket_kq_file` and `test_pocket_quiet_floor` cells (the published file's tensor formats
-against the f16 load-time quants, the kq lane against the q8 lane, the served lane's quiet floor
-against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -
-worker-local fork pools, shared queue policy.
-
-**A diff that adds a gate whose expected value is written down where a person edits it - a
-document, a checked-in table, a generated artifact's committed form, a roster - rather than
-computed by the code under test, adds it to the pinned set in the same change** - as a file
-when every cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
@@ -153,11 +127,11 @@ naming the `ggml-vocab-*.gguf` fixture.**
 **A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
 round-trip is a defect.**
 
-**A test that compares generated tokens, ids, or logits without logging a human-readable form
-of BOTH sides is a defect: for a token or id compare the decoded text (`log_gen_texts` in
-`_model_tier.das`, or one line per side), for a logits compare each side's argmax decoded piece
-and the measured max difference.** A red, or a suspicious green, must be readable in the log,
-not only as an id or float difference.
+**A test that compares generated tokens, ids, or logits through a model's vocabulary without
+logging a human-readable form of BOTH sides is a defect: for a token or id compare the decoded
+text (`log_gen_texts` in `_model_tier.das`, or one line per side), for a logits compare each
+side's argmax decoded piece and the measured max difference.** A red, or a suspicious green, must
+be readable in the log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
@@ -201,8 +175,7 @@ measures is `CLAUDE.md`'s "Metal fixtures".
 **A cell claiming a family serving lane that does not pin it through the family's own lane
 knobs - `set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` /
 `set_asr_tower_fp32` - or through a loader parameter that takes the lane, is a defect.** A
-runtime decline standing in for a pin measures
-whichever lane the box's policy picked.
+runtime decline standing in for a pin measures whichever lane the box's policy picked.
 
 **A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
@@ -288,10 +261,10 @@ twins' rounding legitimately flips tokens.
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
 a forced-feed logits compare within a tolerance bar - never to a looser text compare.**
 
-**A function in a file of this folder that requires a module behind an optional `require ?<mod>` never
-names that module's types in its signature - leave a parameter
-that would carry one untyped, and drop a return type that would name one.** A signature cannot
-sit inside a `static_if`, so a build without the module fails the compile on it.
+**A function in a file of this folder that requires a module behind an optional `require ?<mod>`
+never names that module's types in its signature - leave a parameter that would carry one
+untyped, and drop a return type that would name one.** A signature cannot sit inside a
+`static_if`, so a build without the module fails the compile on it.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
 and that has no untyped parameter, names that module's types or calls its functions only inside a

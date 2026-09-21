@@ -740,6 +740,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // test_vkd_fa_cm2, test_vkd_fa_khr and test_vkd_da_attn in test_vulkan_kernels.das
     "fa_cm2_h64_sink_cls_spv", "fa_cm2_h64_sink_f16_cls_spv", "fa_khr_h64_sink_cls_spv", "fa_khr_h64_sink_f16_cls_spv",
     "da_attn_sink_cls_spv", "da_attn_f16_sink_cls_spv",
+    // the token command's f32-mirror attention stamps (the four-head slab and the two-head one): the census steps every
+    // session on the f16 mirror the tier arms, the f32 twin serves under DASLLAMA_VK_KV32=1 (gemma-2-2b Q8_0's f32 parity
+    // run dispatches both); their coverage is test_vkd_da_attn and test_vkd_da_attn_rqk in test_vulkan_kernels.das
+    "da_attn_cls_spv", "da_attn_g2_cls_spv",
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
@@ -778,9 +782,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // in test_vulkan_kernels.das
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv",
-    // the fused gate-up GEMV's N form serves only the N-row token command, which the zoo's one-region load never engages
-    // (the batched rows need a region a row); its coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
-    "q8_gemv_gu_n_cls_spv"]
+    // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
+    // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
+    // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
+    "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {

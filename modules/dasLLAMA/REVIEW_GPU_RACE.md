@@ -43,17 +43,6 @@ statement catches a mis-numbered bind before it decides a ranking.
 `kn_dispatch` it binds, in one function.** The manual-dispatch census fails a function whose
 kargs count differs from its dispatch count.
 
-**A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
-layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
-into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
-deletes, in the same change, every arm that mirrors that kernel's binding order by hand or by an
-ordered setter list and every retained-reference arm of that kernel.** An arm left dispatching stale
-geometry measures the wrong kernel silently.
-
-**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
-arm that carries that body as a hand-written twin, and every retained-reference arm of that
-kernel.** An arm timing a body the shipped kernel no longer runs measures the wrong kernel silently.
-
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
 

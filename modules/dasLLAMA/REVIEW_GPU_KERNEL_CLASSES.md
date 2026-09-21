@@ -7,25 +7,30 @@ for Metal, `followup_vulkan.md` for Vulkan.
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
+Two kernel classes are twins when one body serves both: their compiled bodies differ only on an
+axis one value fixes - a template constant, a typedef, which base shell's method they inherit, or
+a run-time count of live entries inside a fixed extent (a column count, a row count). A base
+shell is the dispatch-less base class whose methods the emitter splices flat into each deriving
+class.
+
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
-twin ignores that field.** Two kernel classes are twins when one body serves both - their
-compiled bodies differ only on an axis one value fixes: a template constant, a typedef, which
-base shell's method they inherit, or a run-time count of live entries inside a fixed extent (a
-column count, a row count); a base shell is the dispatch-less base class whose methods the
-emitter splices flat into each deriving class.
+twin ignores that field.**
 
-**A kernel class whose body differs from a sibling's only on such an axis - a copy-pasted twin, a
-hand instance where a `static_if` on a `@template_constant` serves, a class forked out of a shared
-template, or a new class whose body reproduces an existing class's with a run-time count as its
-one axis - is a defect: twins stamp one `class template` or derive from one base shell.** Body
-divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
-emission.
+**A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
+stamp one `class template` or derive from one base shell.** Body divergence is carried by a
+`@template_constant`, or by an overridden method spliced flat at emission.
 
-**A `@template_constant` a stamp - one instance of a class template, or one class deriving from a
-base shell - sets, that nothing in that stamp resolves at compile time - a `static_if` arm, a
-`@template_gate`, a value select, an array extent - reads, is a defect - move the constant to the
-template whose body reads it, or make the body read it.**
+**Two kernel classes a cell or a regions file holds bit for bit against each other spell every
+multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
+per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
+ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
+definition and leaves the driver nothing to choose.
+
+**A stamp - one instance of a class template, or one class deriving from a base shell - sets
+only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
+`@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
+move it to the template whose body reads it, or make the body read it.
 
 **A diff that changes a stamp's generated source - through the class's own body, the template or
 base shell it stamps, or a helper its body splices - carries in the PR body, for each affected
@@ -39,9 +44,9 @@ base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real
 binding whose fields its compiled body, inherited code included, never reads is a defect: gate
 the field with `@template_gate` where a template constant decides it, and where the family
 shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered
-kernel-binding asymmetries.** A binding counts as read when the compiled
-body reads any field declared on it - fields in the stamp or in the shell may share a binding,
-`@role = "alias"` marks such a view - including a field read only under a run-time flag.
+kernel-binding asymmetries.** A binding counts as read when the compiled body reads any field
+declared on it - fields in the stamp or in the shell may share a binding, `@role = "alias"` marks
+such a view - including a field read only under a run-time flag.
 
 **A forked kernel class carries a `//!` line above its `[metal_dispatch]` / `[vk_dispatch]`
 declaration naming the body difference that keeps it out of its former siblings' template.**
@@ -55,16 +60,22 @@ each encode - is a defect; a per-encode field either omits `@role` or names the 
 performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - that a stocked model -
-one the `stocked` suite runs on a box with the models present - reaches, names in the PR body the
-census row of `modules/dasLLAMA/tests/test_kernel_coverage.das` that dispatches it and that row's
-nonzero count for the new census key from a serving-census run, adding the row or the census model
-when none does.**
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - that a census row of
+`modules/dasLLAMA/tests/test_kernel_coverage.das` dispatches names in the PR body that row and its
+nonzero count for the new census key, from a census run of the class's backend.**
 
-**A diff that adds a GPU kernel class under `dasllama/` that no stocked model reaches names it in
-the blind-spot list of `modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend -
+**A diff that adds a GPU kernel class under `dasllama/` that no census row dispatches, where a
+census row could dispatch it - a model the census file can load, run the way the census runs it -
+adds that row, or that model, to `modules/dasLLAMA/tests/test_kernel_coverage.das` in the same
+change.**
+
+**A diff that adds a GPU kernel class under `dasllama/` that no census row could dispatch - the
+model, the quant or the load shape sits outside what the census runs - names it in the blind-spot
+list of `modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend -
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
-stocked model reaches it and the model-less test cell that dispatches it.**
+census row reaches it, the stocked model that dispatches it where one does - one the `stocked`
+suite runs on a box that has it - and the model-free test cell that dispatches it.** The list is
+asserted: a row that dispatches a listed class reds the census.
 
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
