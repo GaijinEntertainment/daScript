@@ -11321,9 +11321,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
              NformPlane(name = "the w2 slot blocks", words = 2 * k, cmp = false), NformPlane(name = "the weights", words = k), NformPlane(name = "the picks", words = k)],
             2u | 4u | 8u | 16u | 32u,
             $(p : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
-                unsafe {
-                    upload_region_at(ld1, 0l, addr<uint8 const?>(lh[p * lstride]), l1_bytes)
-                }
+                upload_region_at(ld1, 0l, unsafe(addr<uint8 const?>(lh[p * lstride])), l1_bytes)
                 var sc1 = set_topk_cls(fixed_array(ld1, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
                     fixed_array(l1_bytes, o.bytes[0], o.bytes[1], o.bytes[2], o.bytes[3], ds_bytes, rb_bytes, o.bytes[4]), gbits)
                 enc_topk_cls(raw, h, sc1, pc1, 1l)
@@ -11489,9 +11487,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         }
         var planes <- nform_cols_cell(t, form, [ncols], ncol_max, obase, [NformPlane(name = "the logits", words = ne)], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
-                unsafe {
-                    upload_region_at(xd1, 0l, addr<uint8 const?>(xh[c * dim]), x1_bytes)
-                }
+                upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
                 var sc1 = router_set(f16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
                 var pc1 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
                 router_enc(f16, raw, h, sc1, pc1, int64(ne))
