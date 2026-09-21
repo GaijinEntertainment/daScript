@@ -6,9 +6,9 @@ doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 `REVIEW.md`'s.**
 
-**Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
-quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
-by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
+**Every kernel, loop or call path a diff adds that the runtime re-enters per token, per frame,
+or per prefill quantum - one batch of prompt tokens the prefill path processes in a single
+pass - is reached by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
 contracts, or `[cold_path]` on its only reaching entry.** The region entry is the OUTERMOST such
 function - interior means every caller is itself re-entered that way, so a function reached only
 through a registered function value is an entry (`ARCHITECTURE_RUNTIME.md` sec.2.11).

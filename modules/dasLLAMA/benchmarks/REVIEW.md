@@ -3,8 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`. Planned
 work: `../followup_metal.md` for anything about the Metal backend, `../followup_vulkan.md` for
-anything about the Vulkan backend, `../PERF_LEDGER.md` for any other performance followup,
-`../followup_general.md` for everything else.
+anything about the Vulkan backend, `../followup_general.md` for everything else.
 
 **A GPU kernel timing arm - code that dispatches a kernel to measure it rather than to serve a
 call - wherever the diff puts it, applies `../REVIEW_GPU_RACE.md` too.**
@@ -53,9 +52,8 @@ the line a reader takes the mode's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
 instead.** A served turn is one whole request the engine serves - a prefill-plus-decode run, or a
-transcription or synthesis end to end; a board cell is a timed cell of
-the published results board - one `../performance/gen_bench_records.das` spawns, or a manual
-`lcpp_bench.das` cell with its own `../PROFILE.md` section. A second instrument's numbers
+transcription or synthesis end to end; a board cell is a timed cell whose rows land in
+`../performance/records/` or `../PERF_LEDGER.md`. A second instrument's numbers
 cannot be compared to any row the board already carries.
 
 **An out-of-process observer - a script watching a benchmark process from outside - never

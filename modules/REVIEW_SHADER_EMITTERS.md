@@ -20,8 +20,9 @@ reports a compile error that names the construct.**
 
 **Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
 carry it - pass it as a call-site constant.** A shape constant is a value that sizes a
-`@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride; a
-run-time count of live entries inside such a fixed extent is not one.
+`@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride into a
+fixed-extent array (a `@workgroup` or local array, not an ssbo the host sizes); a run-time count
+of live entries inside such a fixed extent is not one.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
@@ -42,7 +43,8 @@ none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 **A claim about emitted shape checked against the das source is a defect - the check reads the
 emitted artifact: the SPIR-V words `dasSpirv` builds, or the MSL text `dasMetal` writes.** Emitted
 shape is the structure of the emitted kernel - its signature, its parameter attributes, its
-statement forms - and its emitted shape values (tile, unroll width, grid, threadgroup size).
+statement forms - and its emitted shape values (tile, unroll width, threadgroup size); a grid
+is a dispatch argument, read at the encoder call site.
 
 **A diff whose text - a commit message, a PR body, an architecture line - claims an emitted shape
 value states in the PR body what it read in the emitted artifact: the SPIR-V words or the MSL

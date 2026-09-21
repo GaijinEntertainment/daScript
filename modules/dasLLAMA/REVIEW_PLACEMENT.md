@@ -14,8 +14,8 @@ code lands in which file is the checklist's own.
 **A function, a module global (`let` or `var`, private or not), a named constant or a `require`
 under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's
 sec.1 - names its concern and whose must-not-hold cell does not, or that charter line changes in
-the same diff.** `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each
-file's charter line.
+the same diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1
+routing block names the companion that holds each file's charter line.
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
 adding a family, format or arm the parenthetical does not name lands it in the file whose
@@ -23,9 +23,6 @@ concern is named, and adds it to that parenthetical in the same change.**
 
 **A file outside `dasllama/` carries no charter line and answers to its own folder's
 checklist.**
-
-**A function landing in a file whose charter line forbids its kind is a defect wherever else the
-kind goes unnamed.**
 
 **The grid rule - the expression that computes a dispatch's workgroup counts - of a class whose
 family ships more than one arm lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one

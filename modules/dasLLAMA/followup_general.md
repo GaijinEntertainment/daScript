@@ -1772,3 +1772,11 @@
     `tests/test_kquant.das` - a different file, where `tests/REVIEW_KERNEL_CELLS.md` wants it in
     the cell or its file. Done looks like: an fp64 dequant-and-dot reference beside each gate, at
     the gate's shapes, so a kernel and its router can no longer be bit-equal and both wrong.
+163. **Two gates the batched-decode review round named and did not build.** A `REVIEW.das` cell
+    over `benchmarks/`, `harness/` and `performance/` that flags a def calling a model serving entry
+    (`forward`, `eval`, `eval_batch`, a `forward_*` entry taking a `Session`) with no `[cold_path]`
+    among its annotations - `REVIEW_HOT_PATH.md`'s measurement-driver rule made text-checkable; and
+    a kernel cell that dumps a stamped instance's SPIR-V (`DASLLAMA_VK_SPV_DUMP`) and asserts its
+    main loop's guard and inner bound read no push-constant or kargs field - `REVIEW_GPU_KERNEL_BODY.md`'s
+    per-iteration-branch rule's stamped half. Done looks like: both cells green on the tree, the two
+    rules' verification sentences retired.
