@@ -5024,8 +5024,7 @@ def hermes_tools(var ct : ChatTemplate) {
 // The prefill/batch entry points and the shared QKV+RoPE prefix; the block kernels themselves
 // live in dasllama_blocks. Bit-for-bit identical to calling forward() per position in sequence.
 
-//! The gated-attention [q | gate] rows split per head: q at 2h*hs, gate at (2h+1)*hs of dn_qg_b
-//! into q_b and dn_qgate_b - threaded, the serial copy was a ~3 ms all-lane hole a layer at pp512.
+//! The gated-attention [q | gate] rows split per head - q at 2h*hs, gate at (2h+1)*hs of dn_qg_b into q_b and dn_qgate_b - threaded: the serial copy is an all-lane hole a layer at prefill widths.
 def deinterleave_qgate_rows(var s : Session; npos, n_heads, head_size : int64) {
     let qd = n_heads * head_size
     unsafe {
@@ -5048,8 +5047,7 @@ def deinterleave_qgate_rows(var s : Session; npos, n_heads, head_size : int64) {
     }
 }
 
-//! The gated-attention out-gate over npos rows: xb_b *= sigmoid(dn_qgate_b), threaded + exp4 (the
-//! serial scalar loop was npos*qd libm exps, ~10 ms an all-lane hole a layer at pp512).
+//! The gated-attention out-gate over npos rows: xb_b *= sigmoid(dn_qgate_b), threaded + exp4 - the serial scalar loop runs npos*qd libm exps, an all-lane hole a layer at prefill widths.
 def sigmoid_gate_rows(var s : Session; npos, qd : int64) {
     unsafe {
         var xbp = addr(s.xb_b[0])
@@ -5091,7 +5089,7 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     prof_add("norm", ts_norm0)
     // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
     let ts_qkv = prof_ticks()
-    if (c.q_gated) {   // gated attention: the 2x-wide [q | gate] projection, deinterleaved per head into q_b / dn_qgate_b
+    if (c.q_gated) {
         mm_b_f(s, s.dn_qg_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, 2l * qd, npos)
         deinterleave_qgate_rows(s, npos, n_heads, head_size)
     } else {
@@ -5153,7 +5151,7 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
 }
 
 // out-proj(+bias, +post-norm) → residual, for npos rows of xb_b back into x_b — the position-free
-// tail of the std attention block, shared by prefill and (later) batched decode.
+// tail of the std attention block, shared by prefill and batched decode.
 def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     let dim = c.dim

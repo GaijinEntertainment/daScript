@@ -1535,15 +1535,12 @@ class MetalRopeStoreHF16 {
 // q pair rope, the 3-arm K/V vals fill (V copy / NEOX per-element / NORM pair), the amax scale,
 // and the 34B-block store. Base offsets parameterize the single (0) vs batched (row) layouts.
 class MetalRopeStoreQ8Base {
-    // rot = 0 is the full head; a partial carrier (qwen35: rope 64 of head 256) rotates the neox
-    // pairs (j, j + rot/2) of the head's first rot dims and leaves [rot, hs) as they are - the
-    // CPU leaf rope_scaled_neox_tab_part's rule, which the pair form takes whatever `neox` says
     def q8_rope_q(var dst : array<float>; tc, ts, bs : array<float>; gid, half, head_size, neox, has_bias, rot, qkb, tb : uint) {
         let j = gid % half
         let hbase = (gid / half) * head_size
         let part = rot != 0u && rot != head_size
         let halfr = part ? rot / 2u : half
-        // threads j < rot/2 rotate the (j, j + rot/2) pair; the rest identity-cover [rot, hs) - and still add the bias
+        // the threads identity-covering [rot, hs) still add the bias
         let rotp = j < halfr
         let pairs = neox != 0u || part
         let i = pairs ? (rotp ? hbase + j : hbase + rot + (j - halfr)) : hbase + 2u * j
@@ -1575,7 +1572,7 @@ class MetalRopeStoreQ8Base {
                 let hp = ge % head_size
                 let mine = src[kbase + ge] + (has_bias != 0u ? bs[qd + ge] : 0.0)
                 if (part && hp >= rot) {
-                    vals[e] = mine   // past the rotated prefix: the dim passes through
+                    vals[e] = mine
                 } else {
                     let isHi = hp >= halfr
                     let j = isHi ? hp - halfr : hp
@@ -1682,9 +1679,6 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
 class MetalRopeStoreTq4Base {
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
-    // one head's element `lid` roped through its pair partner (the whole head is resident in the
-    // threadgroup): full rope by `neox`, a partial carrier (rot < hs) the neox pairs of the first
-    // rot dims with [rot, hs) passing through - the CPU leaf rope_scaled_neox_tab_part's rule
     def tq4_rope_elem(qk, tc, ts, bs : array<float>; base, bbase, tb, lid, hs, neox, has_bias, rot : uint; var v : float&) {
         let half = hs / 2u
         let part = rot != 0u && rot != hs
@@ -3406,7 +3400,7 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         let rrow = rt[bb]
         let qbase = bb * qstride
         let half = head_size / 2u
-        let tcb = bb * ((rot != 0u && rot != head_size) ? rot / 2u : half)   // the per-row rope rows are rot/2 wide
+        let tcb = bb * ((rot != 0u && rot != head_size) ? rot / 2u : half)
         if (gid < npairs_q) {
             q8_rope_q(qk, tcos, tsin, bias, gid, half, head_size, neox, has_bias, rot, qbase, tcb)
             return
@@ -3477,7 +3471,7 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
         // q/k live in the fused QKV row; v is its third region (bbase = the bias-plane index)
         let bbase = isQ ? tgid * hs : (isK ? qd + hh * hs : qd + kv_dim + hh * hs)
         let base = qbase + bbase
-        let tcb = bb * ((rot != 0u && rot != hs) ? rot / 2u : hs / 2u)   // the per-row rope rows are rot/2 wide
+        let tcb = bb * ((rot != 0u && rot != hs) ? rot / 2u : hs / 2u)
         var v = 0.0
         if (isQ || isK) {
             tq4_rope_elem(qk, tcos, tsin, bias, base, bbase, tcb, lid, hs, neox, has_bias, rot, v)

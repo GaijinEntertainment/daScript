@@ -116,13 +116,7 @@ def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float
     }
 }
 
-// The per-token deltanet core in three pieces so one token (decode, prefill per position) and B
-// tokens of B sessions (the batched step) walk the same code: the per-token prelude, the
-// per-(token, v-head) delta rule against that session's state, and the per-token epilogue.
-
-// β = σ(raw); g = ssm_a ⊙ softplus(raw + dt_bias) (ssm_a stores −exp(A_log) precomputed); causal
-// conv over the fused [q;k;v] row against the session's persistent history, SiLU, q/k L2-norm,
-// q pre-scaled by 1/sqrt(ds) - into the session's dn_conv_out.
+//! β = σ(raw); g = ssm_a ⊙ softplus(raw + dt_bias), where ssm_a on disk is −exp(A_log) precomputed; q leaves pre-scaled by 1/sqrt(ds).
 def private dn_token_prelude(t : Model; var s : Session; l : int64; qkv : float const?; var beta : float?; var g : float?) {
     let c = t.config
     let cd = dn_conv_dim(c)
@@ -146,8 +140,7 @@ def private dn_token_prelude(t : Model; var s : Session; l : int64; qkv : float 
     }
 }
 
-// One v-head's delta rule over the session's conv output and state; k-heads repeat cyclically onto
-// v-heads (h % nkh). Heads are independent, so callers lane over (token, head).
+//! One v-head's delta rule; k-heads repeat cyclically onto v-heads (h % nkh), and heads are independent - callers lane over (token, head).
 def private dn_token_head(c : Config; var s : Session; l, h : int64; var o : float?; g, beta : float) {
     let kd = dn_key_dim(c)
     let ds = c.ssm_d_state
@@ -159,7 +152,6 @@ def private dn_token_head(c : Config; var s : Session; l, h : int64; var o : flo
     }
 }
 
-// gated out-norm: per head RMSNorm(o; ssm_norm, shared weights) ⊙ SiLU(z)
 def private dn_token_epilogue(t : Model; l : int64; var z : float?; var o : float?) {
     let c = t.config
     let ds = c.ssm_d_state
@@ -173,8 +165,8 @@ def private dn_token_epilogue(t : Model; l : int64; var z : float?; var o : floa
     }
 }
 
-// One token of one session: `qkv` is its fused [q;k;v] row, z/beta/g its other projections,
-// the output lands in `o`.
+//! `qkv` is one token's FUSED [q;k;v] row - the conv step runs over all three regions at once.
+[arch(at="../ARCHITECTURE_CPU_KERNELS.md#dn-token-core-shared")]
 def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float const?; var z : float?; var beta : float?; var g : float?; var o : float?) {
     let c = t.config
     let nvh = c.ssm_dt_rank
@@ -196,8 +188,6 @@ def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float con
     dn_token_epilogue(t, l, z, o)
 }
 
-// A deltanet layer over B sessions: the projections as B-row GEMMs (one weight pass), the
-// recurrence against each session's own state laned over (row, v-head), the out-projection as one GEMM.
 def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
     let c = t.config
     let dim = c.dim
@@ -269,8 +259,6 @@ def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : ar
     prof_add("act_resid", ts_resid)
 }
 
-// The qwen35 batched decode layer: the per-row forward-only state guard at layer 0, then the
-// deltanet rows form or the std batched attention (its q_gated arms carry the gate).
 def private attention_qwen35_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
     if (l == 0l) {
         for (i in range64(nrows)) {
@@ -935,8 +923,6 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
     prof_add("dn_resid", ts_resid)
 }
 
-// The qwen35 prefill attention block: forward-only state guard, then deltanet or the std
-// attention prefill, whose q_gated arms carry the 2x-wide [q | gate] and the sigmoid out-gate.
 [no_alloc, no_env, no_io]
 def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind

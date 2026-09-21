@@ -2421,8 +2421,7 @@ def matmul_q4(var y : array<float>; wq : array<uint8>; ws : array<float>; woff :
     }
 }
 
-//! Batched Q4_0 GEMM: Y [ntok x d] = X [ntok x n]·Wᵀ, weight-stationary (each nibble row streams
-//! once, reused across the tokens) - the same dot per (row, token) as ntok x matmul_q4, bit for bit.
+//! Batched Q4_0 GEMM (Y [ntok x d] = X [ntok x n]·Wᵀ, weight-stationary): the same dot per (row, token) as ntok x matmul_q4, bit for bit.
 def matmul_q4_batch(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
     let nb = n / 32l
     let nh = n / 2l

@@ -1253,9 +1253,7 @@ let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest 
                             // evicted session declines unless it restarts at pos 0 or off CPU state
 var private g_dn_mirrors_max = int64(DN_MIRRORS_MAX)   // grows to the widest batch served (dn_mirror_room)
 
-//! A batched step over `n` sessions needs every row's mirror live at once: the cache grows to the
-//! batch, or the LRU evicts a row of the step it prepares and that session declines `dn_state` on
-//! its next step (GPU state gone, CPU copy behind) - a blob-only model has no CPU chain to fall to
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dn_mirror_room(n : int64) {
     g_dn_mirrors_max = max(g_dn_mirrors_max, n)
 }
@@ -1583,7 +1581,7 @@ def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
 
 def kn_buffer(enc : MetalComputeEncoder?; b : MetalBuffer?; off : uint64; slot : int) {
     if (b == null) {
-        panic("kn_buffer: null buffer at slot {slot} (offset {off})")   //! the slot names the binding a dispatch left unbuilt
+        panic("kn_buffer: null buffer at slot {slot} (offset {off})")
     }
     if (!g_gr_on) {
         metal_set_buffer(enc, b, off, slot)
@@ -2091,7 +2089,7 @@ def register_reload_prep(f : function<void>) {
 [init]
 def private metal_weights_listener_register {
     register_weights_epoch_listener(@@metal_weights_drop)
-    set_moe_gpu_dn_room_hook(@@dn_mirror_room)   // a scheduler's stream count sizes the deltanet mirror cache
+    set_moe_gpu_dn_room_hook(@@dn_mirror_room)
 }
 
 [cold_path]   // fires only at load/map boundaries (bump_weights_epoch)

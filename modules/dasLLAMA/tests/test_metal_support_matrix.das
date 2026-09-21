@@ -768,7 +768,6 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                 eval_(trg, sb2, oneb)
                 delete onea
                 delete oneb
-                // the batched step over the two rows
                 var ws <- create_batch_workspace_(trg)
                 var sess : array<Session?>
                 unsafe {

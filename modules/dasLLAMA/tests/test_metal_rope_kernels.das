@@ -284,6 +284,7 @@ def private rpst_h16_gate(t : T?; dev, queue; hs, nheads, kv_mul, rot : int; neo
 
 // ===== the q8_0 mirror (MetalRopeStoreQ8): rope -> quantize_q8kv_row, byte-exact =====
 
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-rope-store-rot")]
 def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, hasbias : bool; rot : int = 0) {
     let tag = "rpst_q8 hs={hs} nh={nheads} kvm={kv_mul} neox={neox} bias={hasbias} rot={rot}"
     var err : string
@@ -335,7 +336,7 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
     kwant |> resize(nblk * 34)
     vwant |> resize(nblk * 34)
     unsafe {
-        if (rot > 0) {   // a partial carrier: the neox pairs of the first rot dims, whatever `neox` says (the CPU rule)
+        if (rot > 0) {
             rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } elif (neox) {
@@ -454,7 +455,7 @@ def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, ha
     kwant |> resize(rowb)
     vwant |> resize(rowb)
     unsafe {
-        if (rot > 0) {   // a partial carrier: the neox pairs of the first rot dims, whatever `neox` says (the CPU rule)
+        if (rot > 0) {
             rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } elif (neox) {
@@ -733,7 +734,7 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (rot > 0) {   // a partial carrier: the neox pairs of the first rot dims, whatever `neox` says (the CPU rule)
+            if (rot > 0) {
                 rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } elif (neox) {
@@ -858,7 +859,7 @@ def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neo
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (rot > 0) {   // a partial carrier: the neox pairs of the first rot dims, whatever `neox` says (the CPU rule)
+            if (rot > 0) {
                 rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } elif (neox) {

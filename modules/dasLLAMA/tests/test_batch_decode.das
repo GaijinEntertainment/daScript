@@ -144,7 +144,7 @@ def private cache_feq(t : T?; s : Session; ref : RefRun; c : Config; tol : float
     let vd = kv_blob_max_diff(s.value_cache, ref.vc, s.kv_bprefix_v, s.kv_dtype_v, c, s.n_past)
     t |> success(kd <= tol, "{tag}: final key cache within {tol} (max diff {kd})")
     t |> success(vd <= tol, "{tag}: final value cache within {tol} (max diff {vd})")
-    if (!empty(ref.dn)) {   // a hybrid: the recurrent state and conv history the batched rows advanced per session
+    if (!empty(ref.dn)) {
         t |> equal(s.n_past, s.dn_pos, "{tag}: the deltanet position advanced with the rows")
         t |> success(float_rows_max_diff(s.dn_state, ref.dn) <= tol, "{tag}: final deltanet state within {tol} (max diff {float_rows_max_diff(s.dn_state, ref.dn)})")
         t |> success(float_rows_max_diff(s.dn_conv_state, ref.conv) <= tol, "{tag}: final conv history within {tol} (max diff {float_rows_max_diff(s.dn_conv_state, ref.conv)})")
@@ -269,9 +269,8 @@ def test_batch_decode_q8(t : T?) {
     }
 }
 
-// the deltanet hybrid: batched == sequential on the CPU stack (the arch's own batched layer -
-// recurrent rows against per-session state, gated partial-rope attention rows), with the step
-// census proving every step rode the batched stack and none stepped a row at a time
+//! the deltanet hybrid: batched == sequential on the CPU stack - the arch's own batched layer,
+//! recurrent rows against per-session state, gated partial-rope attention rows
 def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
@@ -402,7 +401,7 @@ def test_batch_decode_q4(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             let c0 = batch_step_census()
-            batch_vs_ref(t, tr, KVDtype.f32, 6l, 1.0e-6, "q4_0")   // the q4 GEMM is the GEMV's dot per (row, token)
+            batch_vs_ref(t, tr, KVDtype.f32, 6l, 1.0e-6, "q4_0")
             let c1 = batch_step_census()
             t |> equal(c1.cpu_stack - c0.cpu_stack, 6l, "q4_0: every step ran on the CPU batched stack")
             t |> equal(c1.per_row - c0.per_row, 0l, "q4_0: ... none of them a row at a time")

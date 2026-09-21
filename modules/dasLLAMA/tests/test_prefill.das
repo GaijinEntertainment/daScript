@@ -154,8 +154,8 @@ def test_prefill_q8(t : T?) {
 }
 
 [test]
-def test_prefill_q4_fallback(t : T?) {
-    t |> run("q4_0 prefill takes the per-token fallback and matches (needs stories15M.bin)") @(t : T?) {
+def test_prefill_q4_batched(t : T?) {
+    t |> run("q4_0 prefill rides the batched stack and matches (needs stories15M.bin)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return

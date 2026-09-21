@@ -43,7 +43,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 ## 2. Mechanisms
 
-- `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1o: the prepared-image rail, the baked dev-W f16 plane,
+- `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1p: the prepared-image rail, the baked dev-W f16 plane, the lattice-only per-format plane table both halves of the rail skip around,
   the baked tower twin-W plane, the layout stamp `REVIEW.das` keeps over the byte-placing code,
   the meta-field tripwire every struct serializer opens with, the planar-vs-blob flavor rebake,
   and the per-format slots the interleave identity prints.
@@ -83,7 +83,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   command - and the gemma-4 form both eras take.
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.29, 2.33-2.37a, 2.39: the Metal speculative round over
   the batch driver's same-slab verify, and the box knob that sets the depth a round drafts.
-- `ARCHITECTURE_GPU_MTP_DECODE.md` - sec.2.30-2.32, 2.38, 2.39a: the kernel argument-alignment
+- `ARCHITECTURE_GPU_MTP_DECODE.md` - sec.2.30-2.32, 2.38, 2.39a-2.39b: the kernel argument-alignment
   contract enforced at every dispatch, the K-quant small-batch crown and the row-buffer pad a
   multi-row verify dispatches under, the single-row driver's greedy chain, and the decode layer
   encoder.
@@ -101,7 +101,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - sec.2.21, 2.26-2.27: the instruments that time a
   kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, and the
   CPU kernel bench's fixture conditions.
-- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42, 2.54-2.57: the sub-block-packed k3/k6
+- `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42, 2.54-2.58: the sub-block-packed k3/k6
   planes, the grid formats' panel and row-group decodes, the VBMI symbol lattice, the tier that
   selects on the target rather than the host, the score dot classic prefill shares with decode,
   the module-scope visibility a lifted worker lambda needs of its kernel, the two interleaves a

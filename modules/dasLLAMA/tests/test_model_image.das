@@ -297,7 +297,7 @@ def test_image_table_slot_names(t : T?) {
         fill_bytes(p.kq[int(KqFmt.k4)].s, 512, 2)
         fill_bytes(p.q51q, 2048, 3)
         fill_bytes(p.q51s, 256, 4)
-        fill_bytes(p.kq[int(KqFmt.q51)].q, 777, 5)   // a slot the table never holds: the writer must skip it, or the section name repeats the pair's
+        fill_bytes(p.kq[int(KqFmt.q51)].q, 777, 5)
         t |> success(save_image(p, path, "img-table"), "save")
         var m = ImgTableProbe()
         t |> success(load_image(path, m, "img-table"), "the image maps back (no two sections share a name)")

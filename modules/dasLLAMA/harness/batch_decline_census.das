@@ -38,14 +38,14 @@ def main() {
     var ctx = 4096l
     var kv = KVDtype.f16
     var seen_sep = false
-    var pending = ""   // the option waiting for its value
+    var pending_opt = ""   // the option waiting for its value
     for (a in args) {
         if (!seen_sep) {
             seen_sep = a == "--"
-        } elif (!empty(pending)) {
-            if (pending == "--npl") {
+        } elif (!empty(pending_opt)) {
+            if (pending_opt == "--npl") {
                 npl = to_int64(a, false)
-            } elif (pending == "--ctx") {
+            } elif (pending_opt == "--ctx") {
                 ctx = to_int64(a, false)
             } elif (a == "f16") {
                 kv = KVDtype.f16
@@ -58,9 +58,9 @@ def main() {
             } else {
                 panic("batch_decline_census: --kv takes f16 | f32 | q8_0 | tq4, not '{a}'")
             }
-            pending = ""
+            pending_opt = ""
         } elif (a == "--npl" || a == "--kv" || a == "--ctx") {
-            pending = a
+            pending_opt = a
         } else {
             paths |> push(a)
         }

@@ -1767,21 +1767,19 @@ def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     return cold
 }
 
-//! one stream's k chained drafts from the committed token; false when a draft declined (the stream is cold)
 //! a stream that leaves the round before its verify: one plain step commits its token
 def private mtp_round_plain(t : Model; var s : Session; tok, pos : int64) {
     forward(t, s, tok, pos)
     s.n_past = pos + 1l
 }
 
-// the per-row KV routes of the groups' rows for every layer: (k base, v base, cap, cnt) with the
-// row at g.pos + i landing as row cnt - 1 of its stream's slab - the verify's rows and the drafts' alike
+//! one route entry per (layer, row): (k base, v base, cap, cnt) - the row at g.pos + i lands as row cnt - 1 of its stream's slab
 def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
     let c = t.config
     let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
     g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        for (g in g_v_groups) {   //! each row routes to its own stream's slab at its own position
+        for (g in g_v_groups) {
             let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
             let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
             for (i in range64(g.nr)) {
@@ -1797,7 +1795,7 @@ def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
     for (g in g_v_groups) {
         covered += g.nr
     }
-    for (l in range64(c.n_layers + c.n_layer_nextn)) {   //! a padded row past the groups clones row 0's route: it recomputes row 0 and lands the same bytes
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
         for (i in range64(covered, nr)) {
             let e = (l * nr + i) * 4l
             let e0 = (l * nr) * 4l
@@ -1814,9 +1812,7 @@ def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
     return brt
 }
 
-// the draft head over the rows: [enorm(embed) ; hnorm(h)] per row -> eh_proj -> the trunk-shaped
-// block at l == n_layers over every row's own slab -> the head norm + one classifier pass; the
-// caller poked bx = the rows' raw embeds, bxb2 = the rows' carry hiddens, bcos/bsin = each row's rope row
+//! the caller poked bx = the rows' raw embeds, bxb2 = their carry hiddens, bcos/bsin = each row's rope row
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
 def private encode_draft_rows_step(t : Model; var r : StepRes) {
     let c = t.config
@@ -1901,9 +1897,7 @@ def private finish_draft_rows_step(t : Model; r : StepRes; slot : int64) : bool 
     return ok
 }
 
-//! draft `i` of every warm stream as ONE rows step: each stream's row is its previous draft (its
-//! token at i == 0) at trunk position pos + i, its draft-slab row landing at pos + i - 1; false
-//! declines the drafts of every stream in the groups (the caller plain-steps them)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
 def private mtp_draft_rows(t : Model; i : int64) : bool {
     let c = t.config
     let ng = long_length(g_v_groups)
@@ -1923,8 +1917,6 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
         mtp_draft_prep(t, s, s.mtp_vbatch[i], g.pos)
     }
     let g0 = g_v_groups[0]
-    //! the rows form's four-row tile at any stream count: a solo stream's draft rounds as it does beside
-    //! others (the two-row tile sums in another order), the rows past the streams recomputing row 0
     let nrows = max(ng, 3l)
     var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows])
     if (!r.gpu_logits) {
@@ -1965,8 +1957,6 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
     g_v_groups |> clear()
     let ts_draft = prof_ticks()
-    // the warm streams draft together: one rows step a draft over every stream (its row at its own
-    // trunk position), the cold ones plain-step now; a declined rows step plain-steps every warm stream
     for (i in range64(n)) {
         var s & = unsafe(*sessions[i])
         acc[i] = 0l
@@ -1999,7 +1989,7 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
         }
         g_v_groups |> clear()
     }
-    for (gi in range64(long_length(g_v_groups))) {   //! the drafted streams become the verify's groups: k + 1 rows each
+    for (gi in range64(long_length(g_v_groups))) {
         var g & = unsafe(g_v_groups[gi])
         var s & = unsafe(*g.s)
         s.mtp_drafted += k
@@ -2828,7 +2818,7 @@ def private w13_fused_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
 
 //! the batch rows' rope + KV store: the codec's batch form over the route table, `lay` the
 //! layer's KV-row prefix (elements; row bytes for a block codec)
-[unused_argument(kvsh, lkoff, lvoff, rowb)]
+[unused_argument(kvsh, lkoff, lvoff, rowb), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-rope-store-rot")]
 def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; het, kvsh : bool;
                              bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
     var r & = unsafe(*e.r)
@@ -3025,7 +3015,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_b_dn_cbases |> clear()
     if (dn) {
         finish_pending_step()
-        dn_mirror_room(nrows)   // every row's mirror live at once - the cache never evicts a row of the step it prepares
+        dn_mirror_room(nrows)
         g_b_dn_bufs |> reserve(nrows)
         g_b_dn_sbases |> reserve(nrows)
         g_b_dn_cbases |> reserve(nrows)
@@ -3204,7 +3194,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let knfe = moe ? c.n_expert_used * c.n_ff_exp : 0l
     // pooled per-step buffers (mp rows: the fixed-B forms read their full B, the GEMM its M pad —
     // stale pad rows only ever land in pad outputs, which nothing reads back)
-    let mr = ((nrows + 3l) / 4l) * 4l   //! the rows form's reach: its four-row tiles read and write whole tiles past the live rows, so a plane a rows GEMV lands in is sized to the tile
+    let mr = ((nrows + 3l) / 4l) * 4l
     let bytes_x = uint64(mp * dim * 4l)
     let bytes_xb = uint64(mp * max(dim, qd_mx) * 4l)   // dim-wide norm outs AND the qd-wide attention out
     let bytes_qkv = uint64(mp * qkvd_mx * 4l)

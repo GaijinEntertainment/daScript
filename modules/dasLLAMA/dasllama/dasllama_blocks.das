@@ -1140,7 +1140,7 @@ def attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int
 [no_alloc, no_env, no_io]
 def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
-        attention_gpu_prefill(t, s, l, npos, t.config.q_gated)   // buckets at_norm / at_gpu / kv_store / at_resid
+        attention_gpu_prefill(t, s, l, npos, t.config.q_gated)
         return
     }
     let c = t.config

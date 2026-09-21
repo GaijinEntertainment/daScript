@@ -78,3 +78,12 @@ Every format's repack is made of the same two moves over a row of units - a 256-
 ### 2.57 A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 
 The split-module JIT inlines within one partition only, so a leaf a hot loop calls is written to instantiate in the caller's: a generic over its operand (`iq_grid_octet`), or a plain function stamped beside the codecs it drives (`kq_transcode_units`). A call into another module's function inside a `[tune]` loop body blocks the loop's vectorization outright - `dot_bf16` spells its bf16 widen as the shift for that reason. The same rule runs the other way for the leaves themselves - the inliner's decisions over a leaf follow its call-site count, which is why the run-time-format `dot_kq` stamp lives in the test fixture `tests/_kq_dot.das` and not beside the sixteen tag overloads in `dasllama_math_default.das`.
+
+### 2.58 The deltanet per-token core is one code path for every caller {#dn-token-core-shared}
+
+The Gated-DeltaNet recurrence is written once per token, in three pieces: the prelude (the β and g
+transforms, the causal conv against the session's history, SiLU, the q/k L2-norm and the q
+pre-scale), the per-(token, v-head) delta rule against that session's state, and the z-gated
+out-norm epilogue. One token of a decode step, one position of a prefill and one row of a
+B-session batched step all walk those same three pieces, so no caller can round apart from
+another; what differs is only the lane split over (token, head) and the projections around them.

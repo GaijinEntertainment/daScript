@@ -537,6 +537,13 @@ row asking more streams than the device homes refuses by name and reads 0, and a
 serves at a rate with every stream parked after it and no call passed to the CPU chain (a
 one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
+per-session sequential forward on llama2.c's stories15M (fp32, Q8 and Q4_0 weights - the Q4_0
+tier rides the batched Q4_0 GEMM, bit for bit the GEMV's dot - and the f16 / q8_0 / tq4 KV
+codecs, the mid-run shrink, the B == 1 delegation, the step census) and on the deltanet hybrid
+Qwen3.5-0.8B Q8 (f32 and f16 KV at 1e-6: the recurrent rows form per session, the gated
+partial-rope attention rows, the final deltanet state and conv history, every step counted on
+the CPU batched stack by the census); plus the batched bench row's refusal contract on SmolLM2.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
 E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
