@@ -115,8 +115,8 @@ def private tile_fixture_upload(var f : TileFixture) {
 
 //! one q8 fmt-0 host plane of `totblk` blocks: the s8 quant words hashed at `i * wq_mul + wq_add`, the f16 scale pairs at `i * ws_mul + ws_add`
 def private q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh : array<uint>) {
-    let qwords = totblk * int(kq_qsb(KqFmt.q8) / 4l)
-    let swords = (totblk * int(kq_dev_ssb(KqFmt.q8)) + 3) / 4
+    let qwords = totblk * int(Q8_BLOCK_ELEMS / 4l)   //! a byte an element: q8 has no `kq_desc` stride row (`kq_qsb` panics on it by design)
+    let swords = (totblk * 2 + 3) / 4   //! an f16 scale a block
     wqh |> resize(qwords)
     wsh |> resize(swords)
     for (i in range(qwords)) {
