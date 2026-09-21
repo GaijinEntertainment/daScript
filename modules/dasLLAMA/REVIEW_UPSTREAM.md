@@ -18,7 +18,8 @@ work even when it also states what our own code or our own run does.
 **A diff that names the reference build - its organization, project, binary, source header,
 symbol, constant, or a label its output prints - outside a sentence doing reference-build work
 is a defect: write "the reference build", or for its binary the qualified "the flat reference
-exe" / "the batched reference exe" (the roster is `benchmarks/setup_lcpp_ref.das`), instead.** A
+exe" / "the batched reference exe" / "the media reference exe" (the roster is
+`benchmarks/setup_lcpp_ref.das`), instead.** A
 name this module's own code, files or artifacts carry is its own name, not attribution;
 attributing our code's shape to the reference build ("in the reference build's form") names it
 too.
