@@ -2202,6 +2202,62 @@ two commits in two processes [direction-grade - two commits].
   while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
   hold within 2% on pp512.
 
+### From the Vulkan batched-decode arc, the MoE carriers (2026-09-21)
+
+Instruments as the sections above - `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod
+(RTX PRO 4500 Blackwell, driver 580.173, cm2 without decode-vector, and the KHR arm under
+`DASLLAMA_COOPMAT=mm`), `DASLLAMA_ALLOW_UNTUNED=1`, `DAS_JOBQUE_THREADS=16`,
+`DASLLAMA_PARITY_FULL=1` (every carrier is large-tier), llama.cpp b10660's `llama-batched-bench`
+under the same command line the same hour (every llama.cpp figure `external`). Every ratio is
+`tg128@4` summed over four device-home streams against the reference's `S_TG` at `-npl 4`
+[direction-grade - two processes]; the lever's pair is two commits in two processes
+[direction-grade - two commits].
+
+- **The baseline (master 1c6ce2d2f, the pod, three reps ours), tg128@4 ours / llama.cpp, then flat
+  ours / theirs:** gpt-oss-20b mxfp4 196 / 234 (0.84), flat 213 / 97; Qwen3-30B-A3B Q4_K_M 159 /
+  312 (0.51), flat 174 / 184; Qwen3-30B-A3B UD-IQ2_XXS 165 / 196 (0.84), flat 184 / 86;
+  gemma-4-26B-A4B Q4_K_M 129 / 264 (0.49), flat 140 / 94; gemma-4-26B-A4B UD-IQ3_XXS 129 / 232
+  (0.55), flat 141 / 94. The N-row command declined every MoE layer, so the four streams stepped a
+  row at a time and read below one stream's rate on every carrier. Qwen3.6-35B-A3B UD-IQ2_XXS
+  (the hybrid) 30 / 236 (0.13), flat 167 / 112: the recurrent layers' one device state slot goes
+  home and back on every stream switch - the hybrid arc's residency change, the board's worst
+  served shape.
+- **The reference at decode size groups nothing by expert.** The local llama.cpp clone
+  (`D:/Work/llama.cpp`, the research report in the arc's notes): Vulkan takes its mat-vec path
+  for up to 8 tokens and loops one dispatch a token on the host, CUDA one launch with a warp per
+  token-slot pair - both read N x k expert planes a step; the grouped form (a counting sort into
+  per-expert buckets, one GEMM with a grid axis per expert) sits past 8 tokens. So the batched
+  step's gain on a MoE carrier is the attention, the router, the shared expert and the submit,
+  never the experts' bytes - and the one-row block's regions form (the k experts as regions of
+  one slot-mapped dispatch a plane) is already the shape the reference's Vulkan loops per token.
+- **The routed block's rows form (the router's columns, the per-row top-k over the shared record
+  base, the expert GEMVs as the one-row leaves over `nrows x k` regions, the act over every slot,
+  the unfolded down, the combine per row; `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), cm2 /
+  KHR / llama.cpp at tg128@4, three reps ours:** gpt-oss-20b 436 +/- 7 / 434 +/- 8 / 234 (1.86);
+  Qwen3-30B-A3B Q4_K_M 460 +/- 14 / 432 +/- 30 / 312 (1.47); Qwen3-30B-A3B UD-IQ2_XXS 348 +/- 5 /
+  347 +/- 10 / 196 (1.77); gemma-4-26B-A4B Q4_K_M 363 +/- 4 / 366 +/- 5 / 264 (1.38);
+  gemma-4-26B-A4B UD-IQ3_XXS 353 +/- 3 / 355 +/- 3 / 232 (1.52). The flat rows did not move
+  (214, 174, 184, 140, 141). Every carrier reads past the reference on both arms from the one
+  lever; the KHR arm reads the cm2 arm within its spread on every row (the 30B Q4_K_M's KHR
+  spread of 30 is the widest on the board).
+- **The 5060 Ti (driver 616.56, the desktop holding about 0.9 GB of the 16 GB), tg128@4 ours cm2
+  / llama.cpp Vulkan / llama.cpp CUDA (the same b10660 checkout built with CUDA 13.4, `external`,
+  the same hour), then flat ours / theirs Vulkan / CUDA:** gpt-oss-20b 245 +/- 7 / 135 / 293
+  (1.82 against Vulkan, 0.84 against CUDA), flat 130 / 61 / 127; Qwen3-30B-A3B UD-IQ2_XXS 237 +/- 1
+  / 91 / 359 (2.61 / 0.66), flat 143 / 59 / 135. gemma-4-26B-A4B UD-IQ3_XXS fits no plan on this
+  card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
+  the served weights alone to 15.4 GB; the per-op rails serve 16 summed) where the reference
+  pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
+  0.66 and 0.84: the room the expert-bucket form (`followup_vulkan.md` item 82's neighbour, the
+  N-column expert GEMV a bucket, which decodes a weight block once for every row that picked its
+  expert) would take, worth a fifth of gpt-oss's slots at four rows and a tenth of the 30B's.
+- **The rows against the sessions alone:** gpt-oss bit for bit (the regions file's six cells);
+  Qwen3-30B Q4_K_M within 0.062 of the peak, past the K-quant dense carrier's 0.06 bar and under
+  the wide bar's 0.10 (item 75's rounding through twenty-four K-quant expert planes a token over
+  forty-eight layers); gemma-4-26B Q4_K_M within the wide bar against the split one-row command
+  and off by up to 0.13 of the peak on five of thirty-two compares against the fused one - the
+  folded down sum's rounding through the 26B's router near-ties, item 82.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes
