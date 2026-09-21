@@ -660,20 +660,6 @@ thread-local (the cheaper path, and a lens diagnostic at the call site for the m
 the two shells merge into one template on a `B8` axis with the panel gated, so a format class
 becomes the ancestor of both its stamps. ~200 lines behind either.
 
-## 21. The joint speculative tick drafts one stream at a time
-
-`metal_mtp_spec_rounds` (`dasllama/dasllama_metal_decode.das`) verifies every stream's rows in
-one pass but drafts per stream: each warm stream runs its own NextN chain - the draft layer and
-the classifier over the whole vocabulary - as a command buffer of its own before the joint
-verify, so a four-stream tick pays four draft passes where the verify paid one. On Qwen3.6-27B
-the classifier plane alone is most of a draft, and the `--npl-mtp` bench row reads below the
-plain batched row on both NextN carriers (`PERF_LEDGER.md`, the Metal batched-decode arc). The
-work: the drafts as rows of one dispatch - the streams' carry hiddens as a rows form through the
-draft layer (the same `rows_tier` shapes the verify uses), one classifier pass over N rows, the
-argmax per row - landing per group into the same `MtpVerifyGroup` slots the per-stream draft
-fills today. The single-stream round keeps its chain; the multi-draft chain (depth above one)
-becomes k rows-form steps, each seeded by the previous step's per-row argmax.
-
 ## 22. The batched recurrent step scans its rows one dispatch at a time
 
 `recurrent_batch` (`dasllama/dasllama_metal_decode.das`) runs the deltanet projections as rows

@@ -166,11 +166,18 @@ landing copies each row's post-norm hidden into that stream's `mtp_h` with the w
 (`land_row_carry`), so a stream that decoded plain - the bench row's plain arm, a server slot
 with speculation off - reaches its next speculative round warm instead of cold-forwarding; the
 same-slab verify lands its rows into `mtp_hrows` instead and the walk sets the carry per group.
-The tick's one per-stream weight read is the ruled exception `REVIEW_GPU.md` sends here: each
-stream's drafts run its own NextN chain - the draft layer and the
-classifier plane read once per stream, not once for the tick - because the draft chain is
-sequential per stream (draft i+1 embeds draft i's argmax) and the rows form of that chain is
-`followup_metal.md` item 21; the verify, where the trunk's weights are, is one pass.
+The drafts are rows steps too: draft i of every warm stream is one rows step (`mtp_draft_rows`)
+whose row is that stream's previous draft at its own trunk position - the same route-table fill
+as the verify (`group_routes`), the draft head's rows form (`encode_draft_rows_step`: the
+enorm/hnorm rows into the cat, one eh_proj pass, the draft layer through the rows-form layer
+encoder at every row's own slab, the head norm and ONE classifier pass) - and the landing writes
+each row's draft-slab K/V row and carry hidden into its stream and takes the row's argmax as its
+next draft, so a k-deep round reads the draft layer and the classifier plane k times for the
+tick, never once per stream. The rows step always takes the four-row tile (`nrows = max(ng, 3)`,
+the rows past the streams cloning row 0's inputs and route), because the two-row tile sums in
+another order and a solo stream's drafts must round as they do beside others - the joint
+invariance cell's claim. A stream whose mirror cannot take the row (its watermark or capacity
+short) declines the whole rows step and every warm stream plain-steps.
 
 ### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
 

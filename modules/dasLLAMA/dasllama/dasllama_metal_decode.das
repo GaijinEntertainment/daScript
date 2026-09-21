@@ -1354,6 +1354,7 @@ struct private MtpVerifyGroup {
     s : Session?
     tok : int64
     pos : int64
+    trunk : int64   // the stream's trunk position through the draft rows steps (a draft row sits at trunk + i - 1)
     nr : int64
     row0 : int64
     koff : uint64
@@ -1613,26 +1614,8 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     let dim = c.dim
     let nr = r.nrows   //! every group's rows together
     let ng = long_length(g_v_groups)
-    let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
-    g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
-    for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        for (g in g_v_groups) {   //! each row routes to its own stream's slab at its own position
-            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
-            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
-            for (i in range64(g.nr)) {
-                let e = (l * nr + g.row0 + i) * 4l
-                g_vrt[e] = lb
-                g_vrt[e + 1l] = vb
-                g_vrt[e + 2l] = uint(g.cap)
-                g_vrt[e + 3l] = uint(g.pos + 1l + i)
-            }
-        }
-    }
+    var brt = group_routes(t, r, nr)
     let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
-    var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
-    unsafe {
-        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
-    }
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
     var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
@@ -1785,34 +1768,189 @@ def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
 }
 
 //! one stream's k chained drafts from the committed token; false when a draft declined (the stream is cold)
-def private mtp_round_drafts(t : Model; var s : Session; pos, k : int64) : bool {
-    let c = t.config
-    s.mtp_xb_save |> overwrite_resize(c.dim)
-    unsafe {
-        memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
-    }
-    for (i in range64(k)) {
-        if (!metal_mtp_draft_forward(t, s, s.mtp_vbatch[i], pos + i, [wm_pos = pos])) {
-            if (g_env_mtp_debug == "cold") {
-                to_log(LOG_INFO, "mtp cold: draft {i} declined at pos={pos + i}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
-            }
-            return false
-        }
-        let ts_amax = prof_ticks()
-        var d = parallel_argmax(s.logits, c.vocab_size)
-        prof_add("mtp.draft.argmax", ts_amax)
-        if (g_env_mtp_debug == "reject") {
-            d = 0l
-        }
-        s.mtp_vbatch[i + 1l] = d
-    }
-    return true
-}
-
 //! a stream that leaves the round before its verify: one plain step commits its token
 def private mtp_round_plain(t : Model; var s : Session; tok, pos : int64) {
     forward(t, s, tok, pos)
     s.n_past = pos + 1l
+}
+
+// the per-row KV routes of the groups' rows for every layer: (k base, v base, cap, cnt) with the
+// row at g.pos + i landing as row cnt - 1 of its stream's slab - the verify's rows and the drafts' alike
+def private group_routes(t : Model; r : StepRes; nr : int64) : MetalBuffer? {
+    let c = t.config
+    let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
+    g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        for (g in g_v_groups) {   //! each row routes to its own stream's slab at its own position
+            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
+            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
+            for (i in range64(g.nr)) {
+                let e = (l * nr + g.row0 + i) * 4l
+                g_vrt[e] = lb
+                g_vrt[e + 1l] = vb
+                g_vrt[e + 2l] = uint(g.cap)
+                g_vrt[e + 3l] = uint(g.pos + 1l + i)
+            }
+        }
+    }
+    var covered = 0l
+    for (g in g_v_groups) {
+        covered += g.nr
+    }
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {   //! a padded row past the groups clones row 0's route: it recomputes row 0 and lands the same bytes
+        for (i in range64(covered, nr)) {
+            let e = (l * nr + i) * 4l
+            let e0 = (l * nr) * 4l
+            for (k in range64(4l)) {
+                g_vrt[e + k] = g_vrt[e0 + k]
+            }
+        }
+    }
+    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
+    var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
+    unsafe {
+        memcpy(metal_buffer_contents(brt), addr < void? >(g_vrt[0]), bytes_rt)
+    }
+    return brt
+}
+
+// the draft head over the rows: [enorm(embed) ; hnorm(h)] per row -> eh_proj -> the trunk-shaped
+// block at l == n_layers over every row's own slab -> the head norm + one classifier pass; the
+// caller poked bx = the rows' raw embeds, bxb2 = the rows' carry hiddens, bcos/bsin = each row's rope row
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
+def private encode_draft_rows_step(t : Model; var r : StepRes) {
+    let c = t.config
+    let dim = c.dim
+    let nr = r.nrows
+    let rowb = uint64(dim * 4l)
+    var brt = group_routes(t, r, nr)
+    let bytes_rt = uint64((c.n_layers + c.n_layer_nextn) * 16l * nr)
+    var cb = metal_new_command_buffer_unretained(g_queue)
+    var enc = metal_new_compute_encoder(cb)
+    unsafe {
+        var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
+        enc_rms_b(enc, r.bx, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
+        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
+        enc_rms_b(enc, r.bxb2, 0ul, bw_hn, r.bxb, r.u_dim, r.u_eps, nr)
+        for (i in range64(nr)) {
+            enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
+            enc_copy_row(enc, r.bxb, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
+        }
+        enc_batch_site(enc, t, rows_tier(nr), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
+            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
+        var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
+        enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
+    }
+    var dnw = 0l
+    encode_verify_layer(t, r, enc, brt, c.n_layers, r.chain_pos, dnw)
+    let norm_off = t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off
+    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
+    enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
+    var bcls = r.blog != null ? r.blog : r.bnc   //! one row of a model with no spec classifier lands in the stream's own zero-copy logits
+    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
+        r.bxf, bcls, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
+    let vb = uint64(c.vocab_size * 4l)
+    for (i in range64(nr)) {
+        if (r.u_flcap != null) {   // the final-logit soft cap and the suppressed ids, per row, in the CPU order
+            enc_softcap_row(enc, bcls, uint64(i) * vb, r.u_vocab, r.u_flcap, c.vocab_size)
+        }
+        if (r.bsupp != null) {
+            enc_suppress_row(enc, bcls, uint64(i) * vb, r.bsupp, r.u_nsupp, int64(r.bytes_supp / 4ul))
+        }
+    }
+    metal_end_encoding(enc)
+    metal_release(enc)
+    metal_commit(cb)
+    r.committed = true
+    r.cb = cb
+    pool_release(g_upool, brt, bytes_rt)
+}
+
+//! lands every row's draft-slab KV row and its carry hidden into its stream, and the row's argmax
+//! as the stream's next draft; a failed dispatch declines the whole rows step
+def private finish_draft_rows_step(t : Model; r : StepRes; slot : int64) : bool {
+    metal_wait_until_completed(r.cb)
+    let ok = !metal_command_buffer_failed(r.cb)
+    if (ok) {
+        let c = t.config
+        let l = c.n_layers
+        unsafe {
+            let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
+            let lg = reinterpret<uint8?>(metal_buffer_contents(r.blog != null ? r.blog : r.bnc))
+            let hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
+            for (g in g_v_groups) {
+                var s & = unsafe(*g.s)
+                let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
+                let lb = mirror_lbase(t, s.kv_dtype_k, g.cap, l)
+                mirror_row_writeback(s, c.seq_len, l, g.pos, kv_phys_row(s, g.pos), rowb, lb, ab, g.koff, g.voff)
+                memcpy(addr < void? >(s.mtp_h[0]), reinterpret<void?>(hx + g.row0 * c.dim * 4l), c.dim * 4l)
+                s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
+                memcpy(addr < void? >(s.logits[0]), reinterpret<void?>(lg + g.row0 * c.vocab_size * 4l), c.vocab_size * 4l)
+                var d = parallel_argmax(s.logits, c.vocab_size)
+                if (g_env_mtp_debug == "reject") {
+                    d = 0l
+                }
+                s.mtp_vbatch[slot] = d
+            }
+        }
+    } else {
+        to_log(LOG_ERROR, "dasLLAMA metal MTP drafts: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path on a failed draft dispatch
+        decline(MetalDecodeDecline.gpu_error)
+    }
+    return ok
+}
+
+//! draft `i` of every warm stream as ONE rows step: each stream's row is its previous draft (its
+//! token at i == 0) at trunk position pos + i, its draft-slab row landing at pos + i - 1; false
+//! declines the drafts of every stream in the groups (the caller plain-steps them)
+def private mtp_draft_rows(t : Model; i : int64) : bool {
+    let c = t.config
+    let ng = long_length(g_v_groups)
+    finish_pending_step()
+    var chain_pos = 0l
+    for (gi in range64(ng)) {
+        var g & = unsafe(g_v_groups[gi])
+        var s & = unsafe(*g.s)
+        let tpos = g.trunk + i
+        let mr = g_mirrors[s.uid]
+        if (mr.watermark < g.trunk || mr.cap_rows < tpos || mr.kdt != s.kv_dtype_k || mr.vdt != s.kv_dtype_v) {
+            return false
+        }
+        g.pos = tpos - 1l
+        g.row0 = gi
+        chain_pos = max(chain_pos, g.pos)
+        mtp_draft_prep(t, s, s.mtp_vbatch[i], g.pos)
+    }
+    let g0 = g_v_groups[0]
+    //! the rows form's four-row tile at any stream count: a solo stream's draft rounds as it does beside
+    //! others (the two-row tile sums in another order), the rows past the streams recomputing row 0
+    let nrows = max(ng, 3l)
+    var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows])
+    if (!r.gpu_logits) {
+        release_step(r)
+        return false
+    }
+    r.chain_pos = chain_pos   //! the deepest row's position sizes the attention's chunks for every row
+    unsafe {
+        let rowb = uint64(c.dim * 4l)
+        let tabb = r.bytes_tab / uint64(nrows)   //! each stream's prep built its one rope row
+        var bx = reinterpret<uint8?>(metal_buffer_contents(r.bx))
+        var bh = reinterpret<uint8?>(metal_buffer_contents(r.bxb2))
+        var bcs = reinterpret<uint8?>(metal_buffer_contents(r.bcos))
+        var bsn = reinterpret<uint8?>(metal_buffer_contents(r.bsin))
+        for (ri in range64(nrows)) {
+            let s & = *g_v_groups[ri < ng ? ri : 0l].s
+            memcpy(reinterpret<void?>(bx + uint64(ri) * rowb), addr < void? >(s.x[0]), rowb)
+            memcpy(reinterpret<void?>(bh + uint64(ri) * rowb), addr < void? >(s.mtp_h[0]), rowb)
+            memcpy(reinterpret<void?>(bcs + uint64(ri) * tabb), addr < void? >(s.rope_cos[0]), tabb)
+            memcpy(reinterpret<void?>(bsn + uint64(ri) * tabb), addr < void? >(s.rope_sin[0]), tabb)
+        }
+    }
+    encode_draft_rows_step(t, r)
+    let ok = finish_draft_rows_step(t, r, i + 1l)
+    release_step(r)
+    return ok
 }
 
 //! The speculative ROUNDS on the metal decode path, every stream at once: each stream's k drafts, ONE
@@ -1827,19 +1965,48 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
     g_v_groups |> clear()
     let ts_draft = prof_ticks()
+    // the warm streams draft together: one rows step a draft over every stream (its row at its own
+    // trunk position), the cold ones plain-step now; a declined rows step plain-steps every warm stream
     for (i in range64(n)) {
         var s & = unsafe(*sessions[i])
         acc[i] = 0l
         let pos = s.n_past
         mtp_round_begin(s)
         s.mtp_vbatch[0] = toks[i]
-        if (mtp_round_cold(t, s, pos, k) || !mtp_round_drafts(t, s, pos, k)) {
+        if (mtp_round_cold(t, s, pos, k)) {
             mtp_round_plain(t, s, toks[i], pos)
             continue
         }
+        s.mtp_xb_save |> overwrite_resize(c.dim)   //! the pre-draft hidden: the verify's row 0 input
+        unsafe {
+            memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
+        }
+        let mr = g_mirrors[s.uid]
+        g_v_groups |> push(MtpVerifyGroup(s = sessions[i], tok = toks[i], pos = pos, trunk = pos, nr = 1l,
+            row0 = long_length(g_v_groups), koff = mr.koff, voff = mr.voff, cap = mr.cap_rows))
+    }
+    var drafted = long_length(g_v_groups) > 0l
+    for (i in range64(k)) {
+        break if (!drafted)
+        drafted = mtp_draft_rows(t, i)
+    }
+    if (!drafted) {
+        for (g in g_v_groups) {
+            if (g_env_mtp_debug == "cold") {
+                to_log(LOG_INFO, "mtp cold: the rows drafts declined at pos={g.trunk}\n")   // nolint:PERF028,PERF026 — behind the DASLLAMA_MTP_DEBUG=cold bring-up gate
+            }
+            mtp_round_plain(t, *g.s, g.tok, g.trunk)
+        }
+        g_v_groups |> clear()
+    }
+    for (gi in range64(long_length(g_v_groups))) {   //! the drafted streams become the verify's groups: k + 1 rows each
+        var g & = unsafe(g_v_groups[gi])
+        var s & = unsafe(*g.s)
         s.mtp_drafted += k
-        mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, pos)
-        g_v_groups |> push(MtpVerifyGroup(s = sessions[i], tok = toks[i], pos = pos, nr = nr, row0 = nr * long_length(g_v_groups)))
+        mtp_verify_prep_n(t, s, s.mtp_vbatch, nr, g.trunk)
+        g.pos = g.trunk
+        g.nr = nr
+        g.row0 = nr * gi
     }
     prof_add("mtp.draft", ts_draft)
     let ng = long_length(g_v_groups)

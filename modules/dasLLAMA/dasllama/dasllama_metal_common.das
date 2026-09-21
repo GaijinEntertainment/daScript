@@ -1582,6 +1582,9 @@ def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
 }
 
 def kn_buffer(enc : MetalComputeEncoder?; b : MetalBuffer?; off : uint64; slot : int) {
+    if (b == null) {
+        panic("kn_buffer: null buffer at slot {slot} (offset {off})")   //! the slot names the binding a dispatch left unbuilt
+    }
     if (!g_gr_on) {
         metal_set_buffer(enc, b, off, slot)
         return
