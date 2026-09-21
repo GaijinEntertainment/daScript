@@ -7,13 +7,12 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
 
-**A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
-result, printed or returned to a caller that prints it - a driver reading a child's clock is
-not one), an in-process timing entry point (a function that times a run and returns its rate to
-whichever file calls it - `bench_tg_batched_rep`), a kernel race (a run timing two kernel
-variants - arms - against each other in one process), or a file `benchmarks/lcpp_bench.das`
-requires directly, wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its
-own folder's checklist.**
+**Code that times a run itself and hands the wall or rate back as its result - a file that
+prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing
+two kernel variants - arms - against each other in one process), or a file
+`benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to this folder's
+`benchmarks/REVIEW.md` beside its own folder's checklist.** A driver reading a child's clock is
+not one.
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
@@ -29,12 +28,13 @@ quantum, or adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
-answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
-fixture. A test or tool merely opening a stocked model file by name does not route.
+answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
+weight file), or an image or audio fixture. A test or tool merely opening a stocked model file by name does not route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
-tune-boot path that reaches it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
+tune-boot path (a startup path that loads a tune sidecar) that reaches it, applies
+`performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose changes reach some of `tests/run.das`'s
 areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODULE_AREAS` row
@@ -69,8 +69,8 @@ holding a single vision projector family - or an in-process path (one that runs 
 under review, not a spawned child process) that splices a stream carrying decoded media - pixels or
 audio samples - into a prompt or schedules such a stream, applies `REVIEW_VISION.md`.**
 
-**A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
-`REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
+**A `dasllama/dasllama_tower.das` change - the backend-independent encoder-tower home, not the
+Metal tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
 `dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file - one
@@ -156,7 +156,7 @@ input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
-template strings any of them look up, records a run of this folder's
+template strings any of them look up, names in the PR body a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.** An
@@ -169,13 +169,14 @@ change; a CLI flag is never an override.
 
 **An announce names the override by the spelling a user would set - the env variable, the sidecar
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
-(none: it says so).** A set-but-inert override is silent.
+(none: it says so).**
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-outside this folder left showing the old call, flag, default, or stated behaviour after a change to
-user-facing API is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
-depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
-knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
+outside this folder left showing the old call, flag, default, or stated behaviour after a change
+to user-facing API is the change's defect, not the docs'.** User-facing is anything a consumer
+outside this repo can depend on - what it calls, types, requires or parses (facade functions, CLI
+flags, environment knobs, file formats, defaults, what the installed SDK lets a program
+`require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
@@ -191,10 +192,10 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**A diff that adds a `followup_*.md` entry saying a function can be shortened or split drops
-that function's STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length` /
-`_cyclomatic_complexity`) or lands the split in the same change; adding such a suppression to
-a function an entry names is a defect.** An entry asking twin bodies onto one template does not fire it.
+**A diff that adds a `followup_*.md` entry saying a function can be shortened or split - other
+than one asking twin bodies onto one template - drops that function's STYLE037/STYLE038
+suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) or lands the
+split in the same change; adding such a suppression to a function an entry names is a defect.**
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -285,4 +286,4 @@ count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_re
 `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
 pair spelled out - however small the count looks.** PERF032 flags a `resize` with no `reserve` or
 `ensure_capacity` earlier in the function and never compares the counts; a bare grow past the
-heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.
+heap's unreserved-size cap panics the load on the first big model, not at the call site.
