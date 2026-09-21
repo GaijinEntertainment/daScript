@@ -1976,7 +1976,7 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
 }
 
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     let dim = c.dim

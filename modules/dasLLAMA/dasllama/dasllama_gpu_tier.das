@@ -1278,13 +1278,13 @@ var private g_rdec_token_n = @@rdec_unset_token_n
 var private g_rdec_token_n_rows = @@rdec_no_token_n_rows
 
 //! Install the N-row token command beside the resident driver: `rows` answers how many rows it steps at once on the armed model (0 = none)
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : function<() : int64>) {
     g_rdec_token_n = token_n
     g_rdec_token_n_rows = rows
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def public rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     invoke(g_rdec_token_n, x, cossin, poss, cnts, regs, nrows, lrows)
 }

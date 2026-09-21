@@ -1,9 +1,11 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2n-2.2o, 2.2an and 2.2ao: the residency plan that sizes a whole model
-before a byte uploads, the marks swap that lets one GPU slot serve many models, the token command's
-logits landing on the transfer queue, and the N-row token command a batched step's rows go through. The prefill chain and byte
+document carries sections 2.2n-2.2o and 2.2an: the residency plan that sizes a whole model
+before a byte uploads, the marks swap that lets one GPU slot serve many models, and the token
+command's logits landing on the transfer queue. The N-row token command a batched step's rows go
+through, and the residual step's two forms it holds bit for bit, are `ARCHITECTURE_GPU_VULKAN_NROW.md`
+sections 2.2ao and 2.2ap. The prefill chain and byte
 stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
 2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
 `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
@@ -274,27 +276,3 @@ the lanes idle while the device owns the step) and copies in order without one: 
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
 pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026-09-20 section).
-
-**The engine reaches the command through the driver seam, and falls back a row at a time.**
-`install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside
-the resident driver, so a tier with no batch arm answers 0 rows. `rdec_batch_rows_at_once` gathers
-the step's residuals, rope rows, positions, counts and regions, submits once, reads each
-host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
-two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
-(`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
-logits are garbage under any bit.
-
-### 2.2ap The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
-
-The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
-row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
-(`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
-regions cells hold the two commands bit for bit. The forms share their reduce, their four-column
-round and their requant word for word, and a driver still decides per kernel whether a multiply
-feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
-ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
-apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
-spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
-contraction to choose; the plain column carries no multiply before its add.
-`test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
-fed the GEMV's own y row.

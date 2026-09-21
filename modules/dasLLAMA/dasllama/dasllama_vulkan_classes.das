@@ -115,7 +115,7 @@ class ArBase : RmsWgBase {
 
     // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
     // partner is normed first (its own reduce, the row stash holding it meanwhile)
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def accum_row(base : uint) : float {
         var ainv = 0.0
         if (pa.pre_on != 0u && pa.add_on != 0u) {
@@ -1611,7 +1611,7 @@ class TopK : TopKRecords {
 //! the N-row command's top-k: a workgroup a row, the rows' slots consecutive
 [vk_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
 class TopKN : TopKRecords {
-    [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+    [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
     def run {
         row_picks(gl_WorkGroupID.x)
     }
@@ -9655,7 +9655,7 @@ class template QknRopeKvT : RmsWgBase {
         }
     }
 
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
         let gwid = gl_WorkGroupID.x
         let rowwg = max(pa.rowwg, 1u)
@@ -9997,7 +9997,7 @@ class Q8GemvAr : RmsWgBase {
     def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#residual-step-fma")]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def epilogue {   // nolint:STYLE038 — one row pass: the sandwich column, the four-column round, the requant
         let tid = gl_LocalInvocationID.x
         var ainv = 0.0
@@ -11185,7 +11185,7 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
 }
 
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     let pair_wanted = q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
     let g2 = (wgs + 1l) / 2l   //! a subgroup a row pair: half the row grid
