@@ -9840,8 +9840,8 @@ class Q8Gemv {
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
+            let r = rg % pa.nreg   //! the regions interleaved a row at a time: a weight row two regions share (two routed slots on one expert) leaves DRAM once and reaches the next from cache
+            let row = rg / pa.nreg
             let nb = pa.n / 32u
             let wb0 = regions[r * 2u] + row * nb
             let xb0 = regions[r * 2u + 1u]
@@ -9867,7 +9867,7 @@ class Q8Gemv {
             }
             let total = subgroupAdd(acc)
             if (subgroupElect()) {
-                y[pa.ybase + rg] = total
+                y[pa.ybase + r * pa.d + row] = total
             }
         }
     }
@@ -10568,12 +10568,12 @@ class Q51Gemv : Q51GemvBase {
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
+            let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+            let row = rg / pa.nreg
             let nb = pa.n / 32u
             let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
             if (subgroupElect()) {
-                y[pa.ybase + rg] = total
+                y[pa.ybase + r * pa.d + row] = total
             }
         }
     }
@@ -10651,12 +10651,12 @@ class Mx4Gemv : Mx4GemvBase {
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
+            let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+            let row = rg / pa.nreg
             let nb = pa.n / 32u
             let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
             if (subgroupElect()) {
-                y[pa.ybase + rg] = total
+                y[pa.ybase + r * pa.d + row] = total
             }
         }
     }
@@ -10863,16 +10863,16 @@ class KqGemvBase {
         let row_lane = lane % lanes_per_row
         let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
         let live = rg < pa.nreg * pa.d
+        let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+        let row = rg / pa.nreg
         var acc = 0.0
         if (live) {
-            let r = rg / pa.d
-            let row = rg % pa.d
             let nsb = pa.n / 256u
             acc = row_acc(regions[r * 2u] + row * nsb, regions[r * 2u + 1u], nsb, lanes_per_row, row_lane)
         }
         let total = fold_lanes(acc, lanes_per_row)
         if (live && row_lane == 0u) {
-            y[pa.ybase + rg] = total
+            y[pa.ybase + r * pa.d + row] = total
         }
     }
 
