@@ -1597,6 +1597,7 @@ def public rdec_picks_served() : int64 => g_rdec_picks_served
 //! a landed pick into the session: the next sample_ returns it (a row that landed its logits, -1, leaves the sampler to them)
 def private rdec_land_pick(var s : Session; pick : int64) {
     if (pick >= 0l) {
+        verify(!s.pick_ready, "dasLLAMA resident: a session's landed pick was never sampled before its next step - engine bug")
         s.pick_tok = pick
         s.pick_ready = true
         g_rdec_picks_served++
@@ -2121,7 +2122,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         if (ple) {
             rdec_batch_ple_row(t, ws, i)
         }
-        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, false, g_rdec_tmp)
+        let picked = rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.device_pick, g_rdec_tmp)
         for (l in range64(c.n_layers)) {
             continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)
@@ -2134,7 +2135,11 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         }
         g_rdec_regions[r].cnt = pos + 1l
         s.rdec_host_current = !s.device_kv
-        copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
+        if (picked >= 0l) {
+            rdec_land_pick(s, picked)
+        } else {
+            copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
+        }
     }
     batch_decode_override_logits_done()
     return true

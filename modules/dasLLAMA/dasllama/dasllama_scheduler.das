@@ -530,6 +530,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
                 sch.gen_tokens ++
             }
+            sch.streams[sch.batch_idx[bi]].session.device_pick = false   //! the ask is a step's
         }
         prof_add("sched_sample", ts_sample)
     }

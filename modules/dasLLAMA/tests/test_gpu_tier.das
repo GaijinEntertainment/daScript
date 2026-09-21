@@ -85,13 +85,14 @@ def private d_dn_prefill_own(l : int64; stp : float?; histp : float?) {
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private d_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
 
-[unused_argument(x, cossin, ple_row, cnt)]
-def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
+[unused_argument(x, cossin, ple_row, cnt, pick)]
+def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick : bool; var logits : array<float>) : int64 {
     g_token_pos = pos
     g_token_cnt = cnt
     if (!empty(logits)) {
         logits[0] = 42.0
     }
+    return -1l
 }
 
 [unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
@@ -183,7 +184,7 @@ def test_gpu_tier_contract(t : T?) {
         var ple : array<float>
         var logits : array<float>
         logits |> resize(4)
-        rdec_token(x, cs, ple, 9l, 10l, logits)
+        rdec_token(x, cs, ple, 9l, 10l, false, logits)
         t |> equal(g_token_pos, 9l)
         t |> equal(g_token_cnt, 10l)
         t |> equal(logits[0], 42.0)

@@ -977,6 +977,7 @@ def vk_rdec_set_ple(ple : int64) : bool {
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
     g_rd.n_sets_made = false
+    g_rd.comb_sets_made = false
     rd_invalidate_token()
     return true
 }
@@ -1066,6 +1067,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
         g_rd.fused_sets_made = false
         g_rd.n_sets_made = false
+        g_rd.comb_sets_made = false
         // quantize final xb
         g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
             fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),

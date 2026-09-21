@@ -1159,8 +1159,8 @@ struct ArgmaxArgs {
 //! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates - the subgroups'
 //! maxes, then the lowest id among the lanes holding the widest (every thread returns the same answer)
 class ClsArgmaxBase {
-    @workgroup wm : float[8]   // a subgroup's max
-    @workgroup wi : uint[8]    // ... and the lowest id holding it
+    @workgroup wm : float[32]   // a subgroup's max (256 threads at a subgroup of 8: thirty-two)
+    @workgroup wi : uint[32]    // ... and the lowest id holding it
 
     def fold(m : float; mi : uint) : uint {
         let sm = subgroupMax(m)
@@ -10965,8 +10965,9 @@ class KqGemvBase {
         let row_lane = lane % lanes_per_row
         let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
         let live = rg < pa.nreg * pa.d
-        let r = rg % pa.nreg
-        let row = rg / pa.nreg
+        let nreg = max(pa.nreg, 1u)   //! the divisor guarded: a dead lane computes it too
+        let r = rg % nreg
+        let row = rg / nreg
         var acc = 0.0
         if (live) {
             let nsb = pa.n / 256u
