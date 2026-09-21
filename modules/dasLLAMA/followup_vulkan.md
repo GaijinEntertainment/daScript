@@ -1648,23 +1648,23 @@ module) is independent and can land any time - it is pure structure.
     reader cannot act on the line. The work: the message in one unit - the context a region gets
     at the region count that would fit, or the region count that fits at the asked context.
 
-81. **A dense model the resident plan cannot home whole falls to the per-op rails, which read
-    as the CPU chain.** On the RTX 5060 Ti (16 GB, the desktop holding 1 to 2 GB) the 12B
-    Q4_K_M declines at 15.6 GB asked over four regions and serves 7.6 tok/s flat, 15 summed over
-    four streams, against llama.cpp's paged 44 and 106; the 12B Q8_0 (12.1 GB of weights) 4.5
-    and 14 against 21 and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows). Two rungs. The
-    first: the plan sizes its mirror from the room, not from the load - the four-stream run holds
-    640 positions a stream, under 1 GB of K/V, so a plan that shrinks the mirror to the served
-    context before declining homes the Q4_K_M with room to spare and the Q8_0 on a cleared card,
-    at the pod's kind of rate; the decline stays for the weights alone not fitting. The second,
-    for the weights alone not fitting (the Q8_0 on a 12 GB card, the 31B on this one): a
-    streamed-weights arm - the layers' planes through a device ring the step refills ahead of
-    the decode, in layer order, the way the MoE block streams its expert groups
-    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) -
-    which beats the driver's blind paging because the order is known and the reads are one pass
-    a token; the rate then reads as PCIe's bandwidth over the bytes past the resident set, and a
-    row a step sees no benefit from four streams' worth of streaming unless the ring serves all
-    four rows a layer. Both rungs are measured against llama.cpp's paged rows on the same card.
+81. **A dense model whose weights alone pass the card falls to the per-op rails, which read as
+    the CPU chain.** The first rung is in: a caller that pins its context (`set_gpu_ctx_max`,
+    the bench for its batched row) gets the mirror sized to that context and the arming floor
+    lowered to it (`resident_arm_floor`), so on the RTX 5060 Ti the 12B Q4_K_M and Q8_0 home four
+    regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
+    and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
+    and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
+    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served
+    weights to 15.4 GB) - a streamed-weights arm, the layers' planes through a device ring the
+    step refills ahead of the decode, in layer order, the way the MoE block streams its expert
+    groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q), which beats the driver's blind paging
+    because the order is known and the reads are one pass a token; the rate then reads as PCIe's
+    bandwidth over the bytes past the resident set, and a row a step sees no benefit from four
+    streams' worth of streaming unless the ring serves all four rows a layer. Measured against
+    llama.cpp's paged rows on the same card; and a server that pins no context still plans at
+    the binding cap's share a region, so a session-count-aware pin from the scheduler is the
+    other half of the first rung.
 82. **The device gather's grouped-row branch is a per-format ladder.** `moe_gpu_gather_stack_kq`
     (`dasllama/dasllama_layout.das`) reads its plane pair off `Model.kq[]` through the descriptor
     row now, but its grouped-row (interleaved) branch still spells each format's stride by hand

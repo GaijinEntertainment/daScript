@@ -2198,6 +2198,13 @@ two commits in two processes [direction-grade - two commits].
   Vulkan rows read 106 (Q4_K_M) and 46 (Q8_0) at four streams, its CUDA rows 141 and 88 - so the
   12B's board is the pod's above. Ours reads at or above CUDA's four-stream rate on the two
   carriers CUDA does not win outright, and 0.91 of it on the 1B.
+- **The 12B files homed on the 5060 Ti (2026-09-21, the bench pinning its batched row's context
+  before the load - `followup_vulkan.md` item 81's first rung - so the plan sizes the mirror to
+  the 660 positions a region the row serves instead of the binding cap's 6238):** gemma-4-12B
+  Q4_K_M 151 +/- 0.2 / 106 / 141 (1.42 against Vulkan, 1.07 against CUDA), flat 48 / 44 / 48,
+  the image 7179 MB with an 866 MB mirror; gemma-4-12B Q8_0 104 +/- 0.04 / 46 / 88 (2.25 / 1.18),
+  flat 30 / 21 / 26, the image 12064 MB with the same mirror - 13.2 GB on the 16 GB card, the
+  desktop holding 0.9 GB, no paging flag. The reference pages both files there.
 - **Our gemma-2-2b pp512 on the pod reads 6468 to 19388 across runs (three-rep cv up to 38%)
   while its tg rows hold within 1%** - `followup_vulkan.md` item 79; the gemma-3 and gemma-4 rows
   hold within 2% on pp512.
