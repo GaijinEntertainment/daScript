@@ -712,8 +712,10 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             let served0 = moe_gpu_resident_prefills()
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
+            let picks0 = rdec_picks_served()
             let served = serve_four(tr, true, dev)
             t |> success(served.on, "an idle scheduler switches to device-home sessions")
+            t |> success(rdec_picks_served() - picks0 >= 32l, "the device landed the streams' argmax picks alone, no logits row ({rdec_picks_served() - picks0} picks over the four requests' steps)")
             // four turns on two stream slots: the first turn's claim is evicted by the third's, the third's is spent by the turn that adopts it
             t |> equal(served.parked, gpu_device_prefill_continues(tr) ? 2 : 0, "parked claims stay within the stream slots, and a model whose prefill cannot continue parks none")
             // one code path on both sides: each prompt enters the window chain once and each step the batched token command;

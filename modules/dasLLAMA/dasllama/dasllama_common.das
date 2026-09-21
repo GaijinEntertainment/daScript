@@ -1955,6 +1955,9 @@ struct Session {
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
+    device_pick : bool             //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
+    pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
+    pick_tok : int64
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)

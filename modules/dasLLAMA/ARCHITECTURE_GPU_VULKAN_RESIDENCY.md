@@ -218,7 +218,22 @@ command's next write of the plane never races its read. `DASLLAMA_VK_XFERQ=0` le
 without a transfer family; there the command carries the copy and the fence as before
 (`rd_submit_land` / `rd_wait_land` choose) - the one in-process switch that puts the copy back
 inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
-us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451. The figures in this section and the next are
+us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451.
+
+**A row whose sampler is a bare argmax lands its pick alone.** After the epilogue the command runs
+`ClsArgmax` over every row (a workgroup a row, the first maximum's id - the lowest on a tie, as the
+host's `parallel_argmax` reads - into `RDec.pick_dev`); the transfer command copies the picks
+behind the logits, and a step whose every row asks for its pick takes the picks-only twin
+(`RDec.xlog_pick_cmd`), so the logits plane never leaves the device and the host copies nothing (a
+device without the transfer family copies both inside the command and skips the host copy alone).
+The seams carry the ask - `RdecTokenFn`'s `pick`, a null `lrows` pointer of `RdecTokenNFn` - and
+answer the id, which the driver hands to the session (`rdec_land_pick`: `Session.pick_ready`,
+`pick_tok`) for the next `sample_` to return. The scheduler asks it a step for every stream whose
+parameters are a bare argmax (`sampler_is_argmax`: temperature at or under zero, penalties off -
+the served default); a temperature or a penalty lands the logits as before, and so does every
+caller that never sets `Session.device_pick` (the tests read the rows). On the pod the host
+side of a four-row step held the logits copy (252-266 us of 4 MB on the E-series) and four pool
+argmaxes; the pick leaves a 16-byte landing. The figures in this section and the next are
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.

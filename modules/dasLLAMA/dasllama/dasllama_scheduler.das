@@ -518,6 +518,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.sum_batch += long_length(sch.batch_rows)
     } elif (!empty(sch.batch_rows)) {
         let ts_step = prof_ticks()
+        for (si in sch.batch_idx) {   //! a bare-argmax stream lets a device driver land its pick alone, no logits row
+            sch.streams[si].session.device_pick = sampler_is_argmax(sch.streams[si].params)
+        }
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
         prof_add("sched_eval_batch", ts_step)
         sch.decode_steps ++

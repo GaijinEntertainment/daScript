@@ -368,7 +368,10 @@ last column standing),
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
 gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
-suppressed id pinned on every row),
+suppressed id pinned on every row), `test_vkd_cls_argmax` (the classifier tail's device pick over
+four rows at two vocab widths against the host's first-maximum walk, a tie landing on the lower id,
+a poisoned row reddening the compare; the served witness is the regions files' device-mode
+scheduler cell, which counts the picks the driver landed alone),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
 the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
 against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and

@@ -2439,6 +2439,11 @@ struct RDec {
     log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
     xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands by row count (index 0 unused; the one-row command lands at 1), recorded on first use
     xlog_recorded : array<bool>
+    xlog_pick_cmd : array<VkCommandBuffer>   //! ... the picks-only twins, for a step whose every row wants its argmax alone
+    xlog_pick_recorded : array<bool>
+    pick_dev : uint64             //! the rows' argmax ids (`ClsArgmax`, after the epilogue), and their host landing
+    pick_host : HostBuf
+    s_pick : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)

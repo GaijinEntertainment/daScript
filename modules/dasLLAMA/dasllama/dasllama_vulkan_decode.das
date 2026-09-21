@@ -177,10 +177,15 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.cos_host = make_host_buf(r.cos_elems * 4l * nb, false, [cached = true])
     r.tok_meta = make_host_buf(16l * nb, true)   // the TokMeta block: a row's pos/cnt/mirbase each, the one-row command's at 0
     r.logits_host = make_host_buf(vocab * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
+    r.pick_dev = make_device_buf(4l * nb, r.log_xfer)
+    r.pick_host = make_host_buf(4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.xlog_recorded |> resize(nb + 1l)
+    r.xlog_pick_recorded |> resize(nb + 1l)
     r.xlog_cmd |> reserve(nb + 1l)
+    r.xlog_pick_cmd |> reserve(nb + 1l)
     for (_i in range64(nb + 1l)) {
         r.xlog_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
+        r.xlog_pick_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
     }
     r.unsplit_on = r.attn_nsplit > 1l   //! the twins' availability is the device's, decided where their buffers are allocated: never a record's side effect
     r.wide_on = r.attn_nsplit > RD_SPLIT_PIECES
@@ -1035,8 +1040,9 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
     unsafe {
         verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
             && (!kq_sb(cls_fmt) || ensure_cls_q8k_rq())
-            && (!rd_cls_epi_on() || ensure_cls_epi()),
+            && (!rd_cls_epi_on() || ensure_cls_epi()) && ensure_cls_argmax(),
             "vk decode: the class rails must engage on a live device")
+        g_rd.s_pick = set_cls_argmax(fixed_array(g_rd.logits_dev, g_rd.pick_dev), fixed_array(vocab * 4l * nb, 4l * nb), fixed_array(VHZ_LOG, VHZ_LOG))
         if (rd_cls_epi_on()) {
             var supp_bytes = 256l
             if (g_rd.nsupp > 0l) {
@@ -1934,9 +1940,13 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             rd_enc_cls_epi(raw, h, nrows)
             rd_ts(raw, "t:epi")
         }
+        var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))   //! every row's pick, after the epilogue: a row whose sampler is a bare argmax lands the id alone
+        enc_cls_argmax(raw, h, g_rd.s_pick, pcp, nrows)
+        rd_ts(raw, "t:pick")
         if (!g_rd.log_xfer) {   //! the transfer queue carries the logits down (`rd_xlog`); without one the command copies them itself
             vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
             cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+            cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
             rd_ts(raw, "t:dma")   //! the logits' trip to host memory, billed apart: on a box whose host-visible memory is slow it is the step's largest interval
         }
         pfq_end(raw)
@@ -2048,15 +2058,24 @@ def private rd_warmup_check(wall_us : int64) {
     }
 }
 
-//! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows, recorded on first use
-def private rd_xlog(nrows : int64) : VkCommandBuffer {
-    var raw = g_rd.xlog_cmd[nrows]
-    if (!g_rd.xlog_recorded[nrows]) {
+//! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows (the rows' picks behind them), or
+//! under `picks_only` the picks alone, each recorded on first use
+def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
+    var raw = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
+    let recorded = picks_only ? g_rd.xlog_pick_recorded[nrows] : g_rd.xlog_recorded[nrows]
+    if (!recorded) {
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+        if (!picks_only) {
+            cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+        }
+        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
         vk_check(vkEndCommandBuffer(raw), null)
-        g_rd.xlog_recorded[nrows] = true
+        if (picks_only) {
+            g_rd.xlog_pick_recorded[nrows] = true
+        } else {
+            g_rd.xlog_recorded[nrows] = true
+        }
     }
     return raw
 }
@@ -2064,10 +2083,10 @@ def private rd_xlog(nrows : int64) : VkCommandBuffer {
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's logits land at (0 = the command carried its own copy, the fence is the wait)
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
-def private rd_submit_land(var cmd : VkCommandBuffer; nrows : int64) {
+def private rd_submit_land(var cmd : VkCommandBuffer; nrows : int64; picks_only : bool) {
     if (g_rd.log_xfer) {
         let cv = submit_signal(cmd)
-        g_rd_xlog_wait = xfer_submit_after(rd_xlog(nrows), cv)
+        g_rd_xlog_wait = xfer_submit_after(rd_xlog(nrows, picks_only), cv)
     } else {
         submit_nowait(cmd)
         g_rd_xlog_wait = 0ul
@@ -2089,7 +2108,7 @@ def private rd_wait_land {
 //! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one; K/V
 //! for `pos` store into the mirror. Recorded once — a step is two memcpys + position words + one submit.
 [hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
-def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
+def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick : bool; var logits : array<float>) : int64 {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded[g_rd.region]) {
         rd_record_token()
@@ -2114,6 +2133,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     if (unsplit) {
         g_rd.unsplit_served++
     }
+    var picked = -1l
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
@@ -2128,24 +2148,32 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         tm.mirbase = 0u   //! the one-row command's region rides its push; an N-row step leaves its row 0 entry here
         if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
             let t1 = ref_time_ticks()
-            rd_submit_land(cmd, 1l)
+            rd_submit_land(cmd, 1l, pick)
             let t2 = ref_time_ticks()
             rd_wait_land()
             let t3 = ref_time_ticks()
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+            if (pick) {
+                picked = int64(reinterpret<uint?>(g_rd.pick_host.mapped)[0])
+            } else {
+                memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+            }
             let t4 = ref_time_ticks()
             g_rdq_host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
             g_rdq_host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
             g_rdq_host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
             g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
         } else {
-            rd_submit_land(cmd, 1l)
+            rd_submit_land(cmd, 1l, pick)
             rd_wait_land()
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+            if (pick) {
+                picked = int64(reinterpret<uint?>(g_rd.pick_host.mapped)[0])
+            } else {
+                memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+            }
         }
     }
     g_rd.tokens_served++
-    if (g_rd.tokens_served <= 4l || (g_rd.tokens_served & 255l) == 0l) {
+    if (!pick && (g_rd.tokens_served <= 4l || (g_rd.tokens_served & 255l) == 0l)) {
         rd_logits_guard(logits)
     }
     if (g_rd.tokens_served == 8l) {
@@ -2183,6 +2211,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             rdq_sample(g_rdq_stamp_names, g_rdq_n, g_rdq_overflow)
         }
     }
+    return picked
 }
 
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
@@ -2304,14 +2333,19 @@ def private rd_record_n_form(raw : VkCommandBuffer; nrows, nsplit : int64; form 
 
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
+def private rd_land_logits_n(lrows : array<float?>; var picks : array<int64>; nrows : int64) {
     let row_bytes = g_rd.vocab * 4l
     var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
     var rowptrs = unsafe(addr<float ??>(lrows[0]))   // the row pointers as a raw pointer: the lanes' lambda captures no array
+    var pk = unsafe(reinterpret<uint?>(g_rd.pick_host.mapped))
+    for (i in range64(nrows)) {   //! a null row pointer takes the row's pick alone
+        picks[i] = lrows[i] == null ? int64(unsafe(pk[i])) : -1l
+    }
     let jobs = min(int(nrows), get_dispatch_lanes())
     maybe_parallel_for(0, int(nrows), jobs) $(rb, re) {
         unsafe {
             for (i in range(rb, re)) {
+                continue if (rowptrs[i] == null)
                 memcpy(reinterpret<void?>(rowptrs[i]), reinterpret<void?>(src + int64(i) * row_bytes), row_bytes)
             }
         }
@@ -2320,8 +2354,13 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
+    verify(long_length(picks) >= nrows, "vk_rdec_token_n: fewer pick slots than rows")
+    var all_pick = true   //! every row wants its argmax alone: the logits never leave the device
+    for (i in range64(nrows)) {
+        all_pick = all_pick && lrows[i] == null
+    }
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
     verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
@@ -2362,20 +2401,20 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
         if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
-            rd_submit_land(cmd, nrows)
+            rd_submit_land(cmd, nrows, all_pick)
             let t2 = ref_time_ticks()
             rd_wait_land()
             let t3 = ref_time_ticks()
-            rd_land_logits_n(lrows, nrows)
+            rd_land_logits_n(lrows, picks, nrows)
             let t4 = ref_time_ticks()
             g_rdq_host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
             g_rdq_host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
             g_rdq_host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
             g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
         } else {
-            rd_submit_land(cmd, nrows)
+            rd_submit_land(cmd, nrows, all_pick)
             rd_wait_land()
-            rd_land_logits_n(lrows, nrows)
+            rd_land_logits_n(lrows, picks, nrows)
         }
     }
     g_rd.tokens_served += nrows

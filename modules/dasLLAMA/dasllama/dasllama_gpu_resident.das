@@ -1589,6 +1589,19 @@ var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the 
 var private @scratch @exact_size g_rdec_x_n : array<float>
 var private @scratch @exact_size g_rdec_cos_n : array<float>
 var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
+var private @scratch g_rdec_picks : array<int64>   //! the rows' device picks (-1 on a row that landed its logits)
+var private g_rdec_picks_served = 0l
+//! the rows whose argmax the device landed alone this process: a cell reads the difference across its steps
+def public rdec_picks_served() : int64 => g_rdec_picks_served
+
+//! a landed pick into the session: the next sample_ returns it (a row that landed its logits, -1, leaves the sampler to them)
+def private rdec_land_pick(var s : Session; pick : int64) {
+    if (pick >= 0l) {
+        s.pick_tok = pick
+        s.pick_ready = true
+        g_rdec_picks_served++
+    }
+}
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
 var private @scratch g_rdec_regs : array<int64>
@@ -1786,10 +1799,10 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         g_rdec_one_tok |> resize(1l)
         g_rdec_one_tok[0] = token
         resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
-        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.logits)
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.device_pick, s.logits))
         s.ple_gpu_pending = false
     } else {
-        rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.device_pick, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
     g_rdec_regions[r].cnt = pos + 1l
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
@@ -2027,15 +2040,20 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_poss[i] = pos
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
-        g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
+        g_rdec_lrows[i] = null   //! a bare-argmax row takes its pick alone
+        if (!s.device_pick) {
+            g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
+        }
     }
+    g_rdec_picks |> resize(nrows)
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
+        rdec_land_pick(s, g_rdec_picks[i])
         let pos = g_rdec_poss[i]
         let r = g_rdec_regs[i]
         if (!s.device_kv) {
@@ -2103,7 +2121,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         if (ple) {
             rdec_batch_ple_row(t, ws, i)
         }
-        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, g_rdec_tmp)
+        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, false, g_rdec_tmp)
         for (l in range64(c.n_layers)) {
             continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)

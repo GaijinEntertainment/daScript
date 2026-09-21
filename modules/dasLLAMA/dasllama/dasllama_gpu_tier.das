@@ -166,7 +166,8 @@ typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) 
 //! the classifier plane, and the epilogue its logits take: the final softcap (0 = none) and the checkpoint's suppressed token ids
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) : void>
 //! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
-typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
+//! `pick`: land the row's argmax id alone (the answer) and leave `logits` unwritten; false lands the logits and answers -1
+typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; pick : bool; var logits : array<float>) : int64>
 //! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) : void>
 typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
@@ -193,9 +194,10 @@ def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
 def private rdec_unset_dn_prefill_own(l : int64; stp : float?; histp : float?) {}
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
-[unused_argument(x, cossin, ple_row, pos, cnt, logits)]
-def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
+[unused_argument(x, cossin, ple_row, pos, cnt, pick, logits)]
+def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick : bool; var logits : array<float>) : int64 {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
+    return -1l
 }
 [unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
 def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) {
@@ -481,7 +483,7 @@ def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, h
 def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec_norms, norms, obias) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
-def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, logits) }
+def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, pick, logits)
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits) }
 def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
 def public rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
@@ -1266,11 +1268,11 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
 }
 
 //! the N-row token command: `nrows` rows of x, cos/sin and the per-layer-embedding side input (empty where the model has none; `ple_raw` says the rows are the gathered table rows the device projects, not the finished pre-step), each row's position, cached count and mirror region, each row's
-//! logits landed at its own `lrows` pointer (a session's logits row)
-typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) : void>
+//! logits landed at its own `lrows` pointer (a session's logits row) - or, where the pointer is null, the row's argmax id alone into `picks` (-1 on a landed row)
+typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) : void>
 
-[unused_argument(x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows)]
-def private rdec_unset_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
+[unused_argument(x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows, picks)]
+def private rdec_unset_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     panic("dasLLAMA: resident N-row token hit without an installed GPU driver")
 }
 def private rdec_no_token_n_rows : int64 => 0l
@@ -1285,8 +1287,8 @@ def public install_moe_gpu_resident_batch(token_n : RdecTokenNFn; rows : functio
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
-    invoke(g_rdec_token_n, x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows)
+def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+    invoke(g_rdec_token_n, x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows, picks)
     g_rdec_nrow_steps++
 }
 

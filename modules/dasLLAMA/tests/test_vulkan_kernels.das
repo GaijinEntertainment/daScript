@@ -1107,6 +1107,99 @@ def test_vkd_cls_epi_rows(t0 : T?) {
     }
 }
 
+//! the device pick of every row of a [rows x vocab] plane: the first maximum's id a row, as the host reads it
+def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> {
+    var ids : array<uint>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let bytes = vocab * 4l * rows
+        let yd = make_device_buf(bytes)
+        let pd = make_device_buf(rows * 4l)
+        var host = make_host_buf(rows * 4l, true, [cached = true])
+        ids |> resize(rows)
+        unsafe {
+            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
+            nan_sentinel_upload(pd, rows * 4l)
+            var s = set_cls_argmax(fixed_array(yd, pd), fixed_array(bytes, rows * 4l), fixed_array(1u, 2u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = ArgmaxArgs(vocab = uint(vocab))
+            enc_cls_argmax(raw, h, s, pc, rows)
+            vhz_dep(raw, h, 2u, 0u, true)
+            cmd_copy_whole(raw, pd, host.buf, rows * 4l)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            memcpy(addr<void?>(ids[0]), host.mapped, rows * 4l)
+        }
+    }
+    return <- ids
+}
+
+//! the host's reading of the same plane: the first maximum a row
+def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> {
+    var ids : array<uint>
+    ids |> resize(rows)
+    for (r in range64(rows)) {
+        var mi = 0l
+        for (i in range64(1l, vocab)) {
+            if (y[r * vocab + i] > y[r * vocab + mi]) {
+                mi = i
+            }
+        }
+        ids[r] = uint(mi)
+    }
+    return <- ids
+}
+
+[test]
+def test_vkd_cls_argmax(t0 : T?) {
+    t0 |> run("cls_argmax: every row's pick is the first maximum's id, at a 262144 and a 1000 vocab, ties included") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_argmax()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (vocab in fixed_array(262144l, 1000l)) {
+                let rows = 4l
+                var y : array<float>
+                y |> resize(vocab * rows)
+                for (i in range64(vocab * rows)) {
+                    y[i] = hash_unit(uint(i) * 7u + 3u) * 20.0
+                }
+                //! row 1's maximum sits twice: the lower id must win, as the host's first-maximum walk reads
+                let hi = 25.0
+                y[vocab + 900l] = hi
+                y[vocab + 37l] = hi
+                y[2l * vocab + vocab - 1l] = hi   //! row 2's at the last id
+                var got <- cls_argmax_run(y, vocab, rows)
+                var want <- first_max_rows(y, vocab, rows)
+                var bad = 0
+                for (r in range64(rows)) {
+                    if (got[r] != want[r]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]})")
+                t |> equal(int64(want[1]), 37l, "vocab {vocab}: the tie lands on the lower id")
+                want[3] = want[3] == 0u ? 1u : 0u   //! the poison: a wrong id on one row must red the compare
+                var badp = 0
+                for (r in range64(rows)) {
+                    if (got[r] != want[r]) {
+                        badp++
+                    }
+                }
+                t |> equal(badp, 1, "vocab {vocab}: the pick compare reds one poisoned row")
+                delete got
+                delete want
+                delete y
+            }
+        } else {
+            t |> skip("no vulkan module")
+        }
+    }
+}
+
 [test]
 def test_vkd_cls_ar_row0(t0 : T?) {
     t0 |> run("cls_ar with a row base lands on the rows from row0 and leaves the rows below untouched") <| @(t : T?) {

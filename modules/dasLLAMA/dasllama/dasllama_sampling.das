@@ -65,6 +65,10 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
         s.mtp_pre_drawn = false
         return s.mtp_pre_tok
     }
+    if (s.pick_ready) {   //! the device landed the argmax alone: `logits` holds no row for this step
+        s.pick_ready = false
+        return s.pick_tok
+    }
     let vocab = long_length(s.logits)
     if (params.temp <= 0.0) {
         apply_penalties_(s, params, s.logits, 0l)

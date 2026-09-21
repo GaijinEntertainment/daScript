@@ -1151,6 +1151,59 @@ class ClsEpilogue {
     }
 }
 
+struct ArgmaxArgs {
+    vocab : uint    // a logits row's width
+}
+
+//! the classifier tail's pick: a workgroup a row over its `vocab` logits, the row's argmax id into `pick` - the FIRST
+//! maximum on ties (the lowest id), as the host's `parallel_argmax` reads, so a device pick and a host pick agree
+[vk_dispatch(name = "cls_argmax", grid = "rows", params = "rows : int64")]
+class ClsArgmax {
+    @ssbo @binding = 0 y : array<float>      // the logits rows
+    @ssbo @binding = 1 pick : array<uint>    // the rows' picks
+    @push_constant pa : ArgmaxArgs
+    @workgroup wm : float[8]   // a subgroup's max
+    @workgroup wi : uint[8]    // ... and the lowest id holding it
+
+    [spirv_kernel(local_size_x = 256, name = "cls_argmax_spv")]
+    def run {
+        let row = gl_WorkGroupID.x
+        let base = row * pa.vocab
+        let tid = gl_LocalInvocationID.x
+        var m = -3.4e38
+        var mi = 0xFFFFFFFFu
+        var i = tid
+        while (i < pa.vocab) {
+            let v = y[base + i]
+            if (v > m) {
+                m = v
+                mi = i
+            }
+            i += 256u
+        }
+        let sm = subgroupMax(m)
+        let si = subgroupMin(m == sm ? mi : 0xFFFFFFFFu)
+        if (gl_SubgroupInvocationID == 0u) {
+            wm[gl_SubgroupID] = sm
+            wi[gl_SubgroupID] = si
+        }
+        barrier()
+        if (tid == 0u) {
+            var bm = wm[0]
+            var bi = wi[0]
+            var s = 1u
+            while (s < gl_NumSubgroups) {
+                if (wm[s] > bm || (wm[s] == bm && wi[s] < bi)) {
+                    bm = wm[s]
+                    bi = wi[s]
+                }
+                s++
+            }
+            pick[row] = bi
+        }
+    }
+}
+
 // ===== the MoE combine =====
 
 struct CombineArgs {
