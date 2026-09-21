@@ -2400,67 +2400,43 @@ def template dot_q4_template(wq : uint8 const ?; ws : float const ?; x : float c
 [hint(unsafe_range_check, noalias = x, noalias = wq, noalias = ws), tuned(fallback = "vec4_u4")]
 def dot_q4(wq : uint8 const?; ws : float const?; x : float const?; n : int64) : float {}
 
-//! Q4_0 matmul: y = W·x, W as 4-bit quants `wq` [d x n/2 bytes] + per-block scales `ws` [d x n/32].
-//! Output rows thread at 4 chunks/job (nibble unpack is compute-bound, so finer splitting balances
-//! better); small matmuls stay single-threaded. n % 32 == 0. Blob+offset: woff in elements.
-def matmul_q4(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d : int64) {
+//! The Q4_0 weight-stationary nest every Q4_0 matmul form runs: Y [ntok x d] = X [ntok x n]·Wᵀ over
+//! `dot_q4`, output rows threaded at `g_q4_chunks_per_job` chunks/job (the nibble unpack is compute-bound,
+//! so finer splitting balances better than the Q8 path's). n % 32 == 0; ntok 1 is the GEMV.
+def private matmul_q4_nest(var yp : float?; wp : uint8 const?; sp : float const?; xp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let nh = n / 2l
-    unsafe {
-        var yp = addr(y[0])
-        let wp = addr<uint8 const?>(wq[woff / 2l])
-        let sp = addr<float const?>(ws[woff / 32l])
-        let xp = addr(x[0])
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), g_q4_chunks_per_job, n * d)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    yp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
+    maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), g_q4_chunks_per_job, n * d * ntok)) $(rb, re) {
+        unsafe {
+            for (i in range(rb, re)) {
+                let wrow = wp + int64(i) * nh
+                let srow = sp + int64(i) * nb
+                for (tk in range64(ntok)) {
+                    yp[tk * d + int64(i)] = dot_q4(wrow, srow, xp + tk * n, n)
                 }
             }
         }
     }
 }
 
-//! Batched Q4_0 GEMM (Y [ntok x d] = X [ntok x n]·Wᵀ, weight-stationary): the same dot per (row, token) as ntok x matmul_q4, bit for bit.
-def matmul_q4_batch(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
-    let nb = n / 32l
-    let nh = n / 2l
+//! Q4_0 matmul: y = W·x, W as 4-bit quants `wq` [d x n/2 bytes] + per-block scales `ws` [d x n/32].
+//! Blob+offset: woff in elements.
+def matmul_q4(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d : int64) {
     unsafe {
-        var yp = addr(y[0])
-        let wp = addr<uint8 const?>(wq[woff / 2l])
-        let sp = addr<float const?>(ws[woff / 32l])
-        let xp = addr<float const?>(x[0])
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), g_q4_chunks_per_job, n * d * ntok)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    let wrow = wp + int64(i) * nh
-                    let srow = sp + int64(i) * nb
-                    for (tk in range64(ntok)) {
-                        yp[tk * d + int64(i)] = dot_q4(wrow, srow, xp + tk * n, n)
-                    }
-                }
-            }
-        }
+        matmul_q4_nest(addr(y[0]), addr<uint8 const?>(wq[woff / 2l]), addr<float const?>(ws[woff / 32l]), addr<float const?>(x[0]), n, d, 1l)
+    }
+}
+
+//! Batched Q4_0 GEMM (Y [ntok x d] = X [ntok x n]·Wᵀ): the same dot per (row, token) as ntok x matmul_q4, bit for bit.
+def matmul_q4_batch(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
+    unsafe {
+        matmul_q4_nest(addr(y[0]), addr<uint8 const?>(wq[woff / 2l]), addr<float const?>(ws[woff / 32l]), addr<float const?>(x[0]), n, d, ntok)
     }
 }
 
 def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
-    let nb = n / 32l
-    let nh = n / 2l
     unsafe {
-        var yp = addr(y[0])
-        let wp = addr<uint8 const?>(wq[0])
-        let sp = addr<float const?>(ws[0])
-        let xp = addr(x[0])
-        // default 4 chunks per hw job (knob): the heavy nibble unpack makes each row compute-bound, so finer
-        // splitting balances better (esp. the classifier) — more than the compute-light Q8 path.
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), g_q4_chunks_per_job, n * d)) $(rb, re) {
-            unsafe {
-                for (i in range(rb, re)) {
-                    yp[i] = dot_q4(wp + int64(i) * nh, sp + int64(i) * nb, xp, n)
-                }
-            }
-        }
+        matmul_q4_nest(addr(y[0]), addr<uint8 const?>(wq[0]), addr<float const?>(ws[0]), addr<float const?>(x[0]), n, d, 1l)
     }
 }
 
