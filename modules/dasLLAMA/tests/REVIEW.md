@@ -3,12 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-**A kernel-unit cell, or a kernel gate - a cell or probe that dispatches or binds a kernel
-class by hand rather than through the generated builders - applies `REVIEW_KERNEL_CELLS.md`
-(beside this file) together with this list, wherever the diff puts the file.** The companion
-defines the kernel-unit cell; a kernel-unit cell is one that
-dispatches one or more kernel classes and asserts on their output; a kernel class is a
-`[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das`.
+**A kernel-unit cell, or a kernel gate, applies `REVIEW_KERNEL_CELLS.md`
+(beside this file) together with this list, wherever the diff puts the file.** A kernel-unit
+cell loads no model, dispatches one or more kernel classes and asserts on their output; a kernel
+class is a `[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in
+`../dasllama/dasllama_math*.das`; a kernel gate is a cell or probe that dispatches or binds a
+kernel class by hand rather than through the generated builders.
 
 **A diff that touches a pinned test cell - one whose expected value is written down where a
 person edits it, a document, a checked-in table, a generated artifact's committed form, a
@@ -86,7 +86,6 @@ to a flag that no longer does what the text says.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
 claim needs a capability the box may lack (a device, a window server, an audio device, a module
@@ -125,8 +124,8 @@ registry, and never calls it directly.** A registry is the storage a `register_*
 and a lookup reads at dispatch - a table, a list, or a single hook global - or the `[EnvConfig]`
 env registry.
 
-**A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
-naming the `ggml-vocab-*.gguf` fixture.**
+**A new pre-tokenizer family, or a new tokenizer backend (byte-level BPE or SPM), ships its
+`corpus_case` arm in `test_tokenizer.das`, naming the `ggml-vocab-*.gguf` fixture.**
 
 **A `corpus_case` arm that does not assert BOTH the exact reference ids and a lossless
 round-trip is a defect.**
@@ -173,8 +172,9 @@ the claim needs it at its DEFAULT value; a family serving-lane pin is the cell's
 file's `[init]`, and a claim that needs the lane unset establishes it with `reset_<family>_q8`.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
-other driver setter it touched back where it found it; `reset_<family>_q8` is the unset call,
-returning the family to its policy default.** Why a hook left set changes what the next cell
+other driver setter it touched back where it found it; the unset call is the family's own,
+returning it to its policy default (`reset_<family>_q8`; whisper's `set_asr_fp32(false)` and
+`set_asr_tower_fp32(false)`).** Why a hook left set changes what the next cell
 measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane that does not pin it through the family's own lane
@@ -202,13 +202,12 @@ model and its blob twin share one shape, so one session serves both.
 `family_on(t, name)` (`_model_tier.das`). An untagged block silently joins every family's
 gate.
 
-**No CPU-control batch parity runs against `Llama-3.3-70B-Instruct-Q4_K_M.gguf`.** The
-batched code paths get their parity on small models, through pins.
+**No CPU-control batch parity runs against a carrier above the large tier (`LARGE_TIER_BYTES`,
+`_model_tier.das`).** The batched code paths get their parity on small models, through pins.
 
 **Setting a knob a cell can reach only through the environment after the process that reads it
 starts is a defect - set it before that process starts.** That process is a child the cell
-spawns, or the runner's own. An in-cell set is invisible to the running config, which is read
-once at context init.
+spawns, or the runner's own. An in-cell set is invisible to the running config.
 
 **A cell that cannot set an environment-read knob before its reader starts names that knob's
 value in the text a red prints - the cell label or the assert.** An environment-read knob is
@@ -241,9 +240,10 @@ not exact-value: it is not float-portable.
 maxdiff on green as well as red, is a defect.**
 
 **A diff that adds an assert carrying a bar - a tolerance, a count floor or a ceiling - or loosens
-one, ships in the same change a control that lands outside the bar in every cell that holds it, or
-derives the bar from a count the cell itself takes.** A bar nothing has exceeded
-where it is applied is not known to discriminate there.
+one, ships in the same change a control that lands outside the bar in every cell that holds it.**
+A bar nothing has exceeded where it is applied is not known to discriminate there. A bar the
+cell derives from a number it measures in the same run, rather than one written into the assert,
+is not a bar.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

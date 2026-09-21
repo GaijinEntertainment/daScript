@@ -14,11 +14,15 @@ answer through a `kq_desc` accessor that takes the id (`kq_sb`, `kq_block32`, th
 `kq_qsb` / `kq_ssb`), which resolve it once for every caller. A fallback
 branch that returns another format's number for an unknown id is a defect.**
 
-**A per-format byte or stride-unit count under `modules/dasLLAMA/` is read off the `kq_desc` row
-through its accessors - `kq_qsb` / `kq_ssb` / `kq_elems` on a `KqFmt`
-(`dasllama/dasllama_kqformat.das`), `kq_qsb` / `kq_ssb` on a format id
-(`dasllama/dasllama_gemm_schema.das`), `kq_disk_bytes` (`dasllama/dasllama_gguf.das`) - never
-written as a literal. The two homes a literal per-format count lives in are the `kq_desc` row
+**A per-format count under `modules/dasLLAMA/` outside the `kq_desc` row
 (`dasllama/dasllama_kqformat.das`) and the `ggml_type_bytes` block table
-(`dasllama/dasllama_gguf.das`), and `tests/test_kqformat.das` pins every row against that
-table.** A hand-copied count drifts from the table it restates.
+(`dasllama/dasllama_gguf.das`) is read off the `kq_desc` row through its accessors - `kq_qsb` /
+`kq_ssb` / `kq_elems` on a `KqFmt` (`dasllama/dasllama_kqformat.das`), `kq_qsb` / `kq_ssb` on a
+format id (`dasllama/dasllama_gemm_schema.das`), `kq_disk_bytes` (`dasllama/dasllama_gguf.das`) -
+never written as a literal.** A hand-copied count drifts from the table it restates.
+
+**A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
+`ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in
+`tests/test_kqformat.das` in the same change - its literal strides, id, stream code and enum
+value, and its disk bytes inside the walk that checks every row against `ggml_type_bytes`.**
+Narrowing a pin is a defect.

@@ -26,6 +26,6 @@ only from a load, stage, bake, or convert path - it is no region entry; it carri
 or nothing.**
 
 **A function that reaches a model serving entry - `forward`, `eval`, `eval_batch`, or a
-`forward_*` entry taking a `Session` - directly or through a helper, and is reachable only from
-`tests/`, `harness/`, `benchmarks/` or `performance/` (a benchmark row, a rig's loop, a cell's
-feed), carries `[cold_path]`.**
+`forward_*` entry taking a `Session` - through a call chain of any length, and is reachable only
+from this module's `tests/`, `harness/`, `benchmarks/` or `performance/`, is a defect unless it
+carries `[cold_path]`.**

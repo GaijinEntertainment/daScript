@@ -21,19 +21,22 @@ end-to-end route a run takes from prompt to tokens; its compile tier (interprete
 and its cross target (a build for another platform) are part of it.
 
 **A diff that adds a kernel or loop the runtime re-enters per token, per frame or per prefill
-quantum, adds a call path the runtime re-enters that way, adds, moves, renames or removes a
+quantum (one batch of prompt tokens the prefill path processes in a single pass), adds a call
+path the runtime re-enters that way, adds, moves, renames or removes a
 `[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or changes a
 measurement driver under `benchmarks/`, `harness/` or `performance/`, wherever the diff puts it,
 applies `REVIEW_HOT_PATH.md` (beside this file) together with this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
-answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
-fixture. A test or tool merely opening a stocked model file by name does not route.
+answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
+weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
+by name does not route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
-tune-boot path that reaches it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
+tune-boot path (a startup path that loads a tune sidecar) that reaches it, applies
+`performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose changes reach some of `tests/run.das`'s
 areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODULE_AREAS` row
@@ -96,17 +99,19 @@ a maintainer ruling that bench comparability is broken.** Recorded performance r
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width the
-class fixes is, a dimension the model sets is not - never reaches that kernel through a per-dispatch
-argument channel (a uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it
-into the class as a `@template_constant`, or - on a class no template stamps - compile it in as a
-module constant the class reads.**
+**A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
+supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a
+`@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class as a
+`@template_constant`, or - for a class no template instantiates - compile it in as a module
+constant the class reads.**
 
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
 the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
 a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
-stays green; a global another file's `[init]` arms has no initializer, and its null default is
-the declared "no hook".
+stays green.
+
+**A function-typed global another file's `[init]` arms carries no declaration initializer - its
+null default is the declared "no hook".**
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
@@ -122,8 +127,10 @@ two commits says which way the clock moved, not which form to adopt.
 
 **A diff that adds a model dimension, a row count or a region count as a factor of an existing
 allocation's size, or drops such a factor, wherever it sits, ships the measured pair -
-peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles; a new
-allocation carrying such a factor states its size in bytes at the served shape in the same row.**
+peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
+
+**A diff that adds an allocation whose size carries a model dimension, a row count or a region
+count states that size in bytes, at the largest shape the plan admits, in a `PERF_LEDGER.md` row.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
@@ -158,7 +165,7 @@ input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
-template strings any of them look up, records a run of this folder's
+template strings any of them look up, names in the PR body a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.** An
@@ -171,7 +178,7 @@ change; a CLI flag is never an override.
 
 **An announce names the override by the spelling a user would set - the env variable, the sidecar
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
-(none: it says so).** A set-but-inert override is silent.
+(none: it says so).**
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
 outside this folder left showing the old call, flag, or default after a change to user-facing API
@@ -183,7 +190,9 @@ rig and tool surface: any output another tool parses. A console-only diagnostic 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites. A dated `PERF_LEDGER.md` row is refuted by a new dated row, never edited.
+`[arch]` cites.
+
+**A diff never edits a dated `PERF_LEDGER.md` row - it adds a new dated row that refutes it.**
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -193,10 +202,11 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**A diff that adds a `followup_*.md` entry saying a function can be shortened or split drops
-that function's STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length` /
+**A diff that adds a `followup_*.md` entry saying a function's own body can be shortened or
+split - an entry asking twin bodies onto one shared template is not one - drops that function's
+STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length` /
 `_cyclomatic_complexity`) or lands the split in the same change; adding such a suppression to
-a function an entry names is a defect.** An entry asking twin bodies onto one template does not fire it.
+a function an entry names is a defect.**
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -288,4 +298,4 @@ count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_re
 `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
 pair spelled out - however small the count looks.** PERF032 flags a `resize` with no `reserve` or
 `ensure_capacity` earlier in the function and never compares the counts; a bare grow past the
-heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.
+heap's unreserved-size cap panics the load on the first big model, not at the call site.

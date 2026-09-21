@@ -22,7 +22,8 @@ reports a compile error that names the construct.**
 carry it - pass it as a call-site constant.** A shape constant is a value that sizes a
 `@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride into a
 fixed-extent array (a `@workgroup` or local array, not an ssbo the host sizes); a run-time count
-of live entries inside such a fixed extent is not one.
+of live entries inside such a fixed extent is not one. A call-site constant is one fixed where
+the kernel's source is generated - a template constant or a typedef - so the emitter bakes it in.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
@@ -43,14 +44,13 @@ none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 **A claim about emitted shape checked against the das source is a defect - the check reads the
 emitted artifact: the SPIR-V words `dasSpirv` builds, or the MSL text `dasMetal` writes.** Emitted
 shape is the structure of the emitted kernel - its signature, its parameter attributes, its
-statement forms - and its emitted shape values (tile, unroll width, threadgroup size); a grid
-is a dispatch argument, read at the encoder call site.
+statement forms - and its emitted shape values, the constants of the kernel's structure the
+emitted words or text carry (a tile, an unroll width, a threadgroup size, a fixed-extent local
+or workgroup array); a grid is a dispatch argument, read at the encoder call site.
 
 **A diff whose text - a commit message, a PR body, an architecture line - claims an emitted shape
-value - a value the emitted words or text carry as a constant of the kernel's structure: a tile,
-an unroll width, a threadgroup size, a fixed-extent local or workgroup array - states in the PR
-body what it read in the emitted artifact: the SPIR-V words or the MSL
-text, and the count or value read there.**
+value states in the PR body what it read in the emitted artifact - the SPIR-V words or the MSL
+text - and the count or value read there.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md` sec.5) naming that capability - covered by the row
@@ -66,11 +66,9 @@ declaration by name.** A declaration in that module is available to both emitter
 
 **A global-rooted-array read - a module global, a `@workgroup` array or a `self.<member>`
 resource read in a kernel body - that a diff adds, makes happen at an index it did not reach
-before, or makes happen on a dispatch it did not happen on before, is in range on every dispatch
-it happens on, or lands inside slack the kernel's module names.** What makes a read new, what
-in range means and what slack is: `dasSpirv/ARCHITECTURE.md` sec.3.9, for both emitters.
-
-**A diff that removes a compile-time gate (`static_if`, `@template_gate`) keeping a
-global-rooted-array read out of a compiled `[spirv_kernel]`, `[compute_shader]` or
-`[metal_kernel]` variant, or widens the constant the gate switches on so the read reaches
-variants it did not reach, is a defect.**
+before, makes happen on a dispatch it did not happen on before, or makes happen in a compiled
+`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it did not appear in before (a
+removed `static_if` or `@template_gate`, or a widened constant the gate switches on), is in
+range on every dispatch it happens on: its index sits inside the region that dispatch's own
+bound defines, or inside slack - an allocation past that region's end that the kernel's
+module-root `ARCHITECTURE*.md` names.**

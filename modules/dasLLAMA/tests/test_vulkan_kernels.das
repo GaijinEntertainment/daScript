@@ -1143,9 +1143,21 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
     return <- ids
 }
 
-//! the host's reading of the same plane: `parallel_argmax` a row (the first maximum)
+//! the host's reading of the same plane: the first maximum a row, the walk `parallel_argmax` runs - which splits a row this
+//! wide across a job queue, and this model-free file opens none
 def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> {
-    return <- [for (r in range64(rows)); uint(parallel_argmax(unsafe(addr(y[r * vocab])), vocab))]
+    var ids : array<uint>
+    ids |> resize(rows)
+    for (r in range64(rows)) {
+        var mi = 0l
+        for (i in range64(1l, vocab)) {
+            if (y[r * vocab + i] > y[r * vocab + mi]) {
+                mi = i
+            }
+        }
+        ids[r] = uint(mi)
+    }
+    return <- ids
 }
 
 [test]

@@ -31,8 +31,8 @@ contracts one and not the other; `mad` is the fused instruction by definition an
 driver nothing to choose.
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
-a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
-`@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
+a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time:
+a `static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -
 move it to the template whose body reads it, or make the body read it.
 
 **A diff that changes a stamp's generated source - through the class's own body, the template or
@@ -43,7 +43,8 @@ difference named with the compile-time choice that carries it; or the behaviour 
 the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
-base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
+base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer with device
+data behind it (not a zero-size placeholder keeping the set layout complete) to a
 binding whose fields its compiled body, inherited code included, never reads is a defect: gate
 the field with `@template_gate` where a template constant decides it, and where the family
 shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered
@@ -88,7 +89,8 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
 `<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-source off the `_msl` stem, an empty `release_handles` - or weakening any test cell that holds
+naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening
+any test cell that holds
 such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
 `test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
 `test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
@@ -110,16 +112,16 @@ defaults or composes generated builders binds nothing.
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
 `grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
 
-**A diff that stops the `grid=`/`tg=` spec consuming a `params=` value drops that value from the
-`params=` spec and from every call site in the same change.** The value then reaches neither the
-host nor the device, so nothing reads it.
+**A diff that leaves a `params=` value consumed by no `grid=`/`tg=` spec and no `requires=` item
+drops that value from the `params=` spec and from every call site in the same change.** The
+value then reaches neither the host nor the device, so nothing reads it.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
 
-**A kernel-class method a compiled body calls in value position - nested inside a larger
-expression as an argument, an operand or a subscript; a call that is the whole right-hand side of
-a `let` or an assignment is not - returns its value in one statement after compile-time folding: an
+**A kernel-class method whose call sits nested inside a larger expression - as an argument, an
+operand or a subscript, but not as the whole right-hand side of a `let` or an assignment -
+returns its value in one statement after compile-time folding: an
 arrow form (`=>`), or a `static_if` whose every arm is one `return`; a method that needs more
 than one statement hands its value back through a `var T&` parameter instead.** The emitter
 splices a value-position method as one expression, so a body that folds to more than one

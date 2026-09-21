@@ -11,11 +11,12 @@ it.**
 `ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
 code lands in which file is the checklist's own.
 
-**A function, a module global (`let` or `var`, private or not), a named constant or a `require`
-under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's
-sec.1 - names its concern and whose must-not-hold cell, where its charter has one, does not, or
-that charter line changes in the same diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1
-routing block names the companion that holds each file's charter line.
+**A function, a class (a kernel class among them), a module global (`let` or `var`, private or
+not), a named constant or a `require` under `dasllama/` lands in the file whose sec.1 charter
+line - in an `ARCHITECTURE_*.md` companion - names its concern, unless that file's charter carries
+a must-not-hold cell naming the concern; a diff may instead change that charter line in the same
+change. Another file's charter naming the same kind of code does not license the landing.**
+`ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line.
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
 adding a family, format or arm the parenthetical does not name lands it in the file whose
@@ -28,15 +29,18 @@ checklist.**
 family ships more than one arm lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one
 of the coopmat forms a family ships (cm2, KHR).
 
-**A host-side ensure/set/encode ladder that picks a stamp from its push-constant and shape
-arguments alone lands in `dasllama/dasllama_vulkan_classes.das`; a pick that reads the driver's
-state - `g_rd` or an `RLayer` field - stays in the backend driver file its charter line names,
-and a ladder that only fans out on a stamp argument it is handed lands beside the function that
-decides that argument,
-`dasllama/dasllama_vulkan_decode.das` for a decode-time ladder and
-`dasllama/dasllama_vulkan_prefill.das` for a batch one.** A stamp is one class stamped from a
-kernel class template; a predicate over shape values alone is the classes file's, whoever calls
-it.
+**A host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from its
+push-constant and shape arguments alone lands in `dasllama/dasllama_vulkan_classes.das`.** A
+stamp is one class stamped from a kernel class template; a predicate over shape values alone is
+the classes file's, whoever calls it.
+
+**A host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
+`RLayer` field - stays in the backend driver file its charter line names:
+`dasllama/dasllama_vulkan_decode.das` for a decode-time chain,
+`dasllama/dasllama_vulkan_prefill.das` for a batch one.**
+
+**A host-side ensure/set/encode chain that only switches on a stamp it is handed lands in the
+file of the function that decides that stamp.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
@@ -65,8 +69,8 @@ of, or a function a `register_kernel_backend` call names - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A quirk of one family - a special case only one model architecture's file, or one backend
-driver's, needs - lands in that file, never in another family's file.**
+**A branch keyed on a `Config` flag only one model architecture sets, or on one backend driver's
+state, lands in that architecture's or that driver's file.**
 
 **Logic or a named constant that two files in one folder both use lands in a file both already
 require - a new file of its own when they require none in common - never as a second copy.** Two

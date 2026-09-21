@@ -10,7 +10,7 @@ section. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for V
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
 
-**A diff changing a property of a kernel class that a timing arm or a gate restates rather than
+**A diff changing a property of a kernel class that a timing arm or a test cell restates rather than
 reads - a binding number, the kargs (kernel-argument struct) layout, the layout of a struct a
 bound buffer holds, threadgroup memory, a staging shape, the grid or threadgroup geometry - or a
 kernel class's branch selection or the precision it computes a step at, applies the `tests/`
@@ -25,8 +25,8 @@ defines the arm).** An arm left dispatching stale geometry measures the wrong ke
 
 **A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
 timing arm that carries that body as a hand-written twin, and every retained-reference arm of
-that kernel; a diff that routes a shape to a sibling stamp resyncs, in the same change, the arms
-that dispatch the old stamp at that shape.** An arm timing a body the shipped kernel no longer
+that kernel; a diff that routes a shape to a sibling kernel class resyncs, in the same change, the
+arms that dispatch the old class at that shape.** An arm timing a body the shipped kernel no longer
 runs at that shape measures the wrong kernel silently.
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
@@ -70,8 +70,8 @@ its write-after-read hazards.
 **A diff that lands an encoder path whose work is split across two or more dispatches - a new
 path, or one dispatch turned into more - also gates that path in the same change - on the extent
 the added dispatch divides (the site's own K, key span or row count), or on the path's work size
-when the split divides no extent - or states the measurement showing the split wins at both ends
-of that extent, so no gate exists to pick; the threshold comes
+when the split divides no extent - or ships no gate, where the measurement shows the split wins
+at both ends of that quantity; either way the threshold, or the no-gate decision, comes
 from a measurement at the smallest and at the largest value the gated quantity takes on the
 path, both measurements in the PR body.** The small-work regression hides behind the big-work
 win.
@@ -91,14 +91,14 @@ same index set, or - where the body's decode and the host's count both read one 
 one that function's value names.** The `grid=` spec carries no number for these classes, so
 nothing else ties the two.
 
-**A cache key covers every input the cached result depends on: a host address, an offset, or a
-handle alone is not a key - carry the span and the form, the element type and layout the upload
-produces, in the key too.**
+**A device-upload cache key covers every input the uploaded bytes depend on: a host address, an
+offset, or a handle alone is not a key - carry the span and the form, the element type and layout
+the upload produces, in the key too.**
 
 **A diff that gives a `dasllama/` file code of a kind its `ARCHITECTURE_GPU.md` sec.1.5 role
 row does not hold - a kernel class, a driver arm, a backend capability, a dispatch-support macro,
-a driver policy - or of a kind the row's must-not-hold cell names, extends that row in the same
-change, or moves the code to the file whose row holds the kind.** A driver arm is host code that
+a driver policy - extends that row in the same change, or moves the code to the file whose row
+holds the kind.** A driver arm is host code that
 ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
 a hook or capability registry.
 

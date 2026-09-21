@@ -180,13 +180,13 @@ ensured is the null handle; `vkd_alloc_set` refuses it by the class's family nam
 prepare fails on the path that skipped the ensure.
 
 **A diff that adds a stamp to, or adds, removes or retypes a binding on one stamp of, a
-`[vk_dispatch]` class template whose stamps are dispatched with a set one stamp's `set_<family>`
-built - through a hand-written picker under `dasllama/` that returns one stamp's set by a stamp
-argument (`gemv_cls_set_n`, `q8_gemv_gu_n_set`, `fa_stamp_set`, `set_ar_rq_stamp`) or a driver
-set handed across stamps (`RLayer.s_attn` to `DaAttnT`'s) - keeps every stamp's binding list identical, in the same change; a field a
-`@template_gate` omits on a stamp is not a binding change.** The picker asks one stamp's set and
-the encode dispatches another, so the stamp the diff left behind reads the set's buffers in the
-wrong slots, and nothing refuses it.
+`[vk_dispatch]` class template whose set is picked at dispatch keeps every stamp's binding list
+identical, in the same change; a field a `@template_gate` omits on a stamp is not a binding
+change.** A set is picked at dispatch when a hand-written picker under `dasllama/` returns one
+stamp's set by a stamp argument (for example `gemv_cls_set_n`), or when a driver set is handed
+across stamps (`RLayer.s_attn` to `DaAttnT`'s). The picker asks one stamp's set and the encode
+dispatches another, so the stamp the diff left behind reads the set's buffers in the wrong
+slots, and nothing refuses it.
 
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
@@ -194,8 +194,9 @@ wrong slots, and nothing refuses it.
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**A descriptor set the N-row token command - the resident decode command that runs two to `RDec.nb`
-rows in one dispatch, one command a row count (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its plane's whole
+**A descriptor set the N-row token command - the resident decode command that runs two to
+`RDec.nb` rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its
+plane's whole
 `RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
 sizes to one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read
 past its binding on every row but the first.
