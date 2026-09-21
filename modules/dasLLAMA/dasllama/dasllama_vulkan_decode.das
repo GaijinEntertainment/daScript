@@ -2082,7 +2082,7 @@ def private rd_n_decline(why : string) : int64 {
 }
 
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_token_n_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     if (g_rd.hybrid) return rd_n_decline("a recurrent layer")
@@ -2161,7 +2161,7 @@ def private rd_ensure_n_sets {
 //! the N-row command's sets over a MoE layer: the one-row block's planes at `nb` rows - the router's columns, the per-row
 //! top-k, the gate and up GEMVs and the down GEMV over `nb * k` regions (the split forms: each fused stamp's twin, byte
 //! for byte), the act over the rows' slots, and the combine per row
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_moe_sets_n(var L : RLayer) {
     let dim = g_rd.dim
     let nb = g_rd.nb
@@ -2235,7 +2235,7 @@ def private rd_gemv_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ 
 
 //! the attention head over `nrows` rows: the projections as N-column GEMVs into the rows of the projection plane, the
 //! rope and store at each row's own position and region, the attention over each row's own history
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows, nsplit : int64; fuse_qkr : bool) {
     let dim = g_rd.dim
     let qd = L.qd
@@ -2339,7 +2339,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
 //! the routed block over `nrows` rows: the router as one dispatch of `nrows` columns (each column the one-row dot), the
 //! per-row top-k writing the rows' slots one after another, the gate, up and down GEMVs over `nrows * k` regions (the
 //! one-row leaves, each region its own expert and feed row), the act over every slot; the combine follows in the tail
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_moe_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
     let dim = g_rd.dim
     let nfe = g_rd.nfe
@@ -2438,7 +2438,7 @@ def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
 
 //! the N-row command over `nrows` rows at `nsplit` key splits a head, recorded once per row count and attention form
 //! (the split form or its unsplit twin: the rows take no wide form, sec.2.2al)
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
     let dim = g_rd.dim
     let nlfin = uint(rd_norm_final())
@@ -2492,14 +2492,12 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             if (kq_sb(L.f1) || L.moe) {   //! a K-quant feed, or a routed block whose router reads the normed rows as floats: the split pair
                 enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
                 rd_ts(raw, "a:ar1")
-                if (has_dense_triple(L)) {   //! the shared expert's feed; a bare routed block requants its own feed inside
-                    if (kq_sb(L.f1)) {
-                        enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
-                    } else {
-                        enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
-                    }
-                    rd_ts(raw, "a:rq_f")
+                if (kq_sb(L.f1)) {   //! the feed's quants: the shared expert's, or on a bare routed block the experts' own (their format is the layer's f1)
+                    enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
+                } else {
+                    enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
                 }
+                rd_ts(raw, "a:rq_f")
             } else {
                 enc_cls_ar_rq_b(raw, h, L.s_addr_ffn_rq_b, pc8, nrows)
                 rd_ts(raw, "a:arrq_f")
@@ -2577,7 +2575,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
 }
 
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
     let row_bytes = g_rd.vocab * 4l
     var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
@@ -2593,7 +2591,7 @@ def private rd_land_logits_n(lrows : array<float?>; nrows : int64) {
 }
 
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_token_n(x : array<float>; cossin : array<float>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
