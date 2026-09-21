@@ -51,6 +51,8 @@ struct private RefRun {
     lg : array<float>     // logits after each step (nsteps x vocab)
     kc : array<uint8>     // final key_cache
     vc : array<uint8>     // final value_cache
+    dn : array<float>     // final deltanet state (a hybrid), else empty
+    conv : array<float>   // final deltanet conv history (a hybrid), else empty
     npast : int64
 }
 
@@ -69,6 +71,8 @@ def private run_ref(tr : Model; kdt : KVDtype; prompt : array<int64>; nsteps, vo
     }
     r.kc := s.key_cache
     r.vc := s.value_cache
+    r.dn := s.dn_state
+    r.conv := s.dn_conv_state
     r.npast = s.n_past
     delete s
     return <- r
@@ -140,6 +144,22 @@ def private cache_feq(t : T?; s : Session; ref : RefRun; c : Config; tol : float
     let vd = kv_blob_max_diff(s.value_cache, ref.vc, s.kv_bprefix_v, s.kv_dtype_v, c, s.n_past)
     t |> success(kd <= tol, "{tag}: final key cache within {tol} (max diff {kd})")
     t |> success(vd <= tol, "{tag}: final value cache within {tol} (max diff {vd})")
+    if (!empty(ref.dn)) {   // a hybrid: the recurrent state and conv history the batched rows advanced per session
+        t |> equal(s.n_past, s.dn_pos, "{tag}: the deltanet position advanced with the rows")
+        t |> success(float_rows_max_diff(s.dn_state, ref.dn) <= tol, "{tag}: final deltanet state within {tol} (max diff {float_rows_max_diff(s.dn_state, ref.dn)})")
+        t |> success(float_rows_max_diff(s.dn_conv_state, ref.conv) <= tol, "{tag}: final conv history within {tol} (max diff {float_rows_max_diff(s.dn_conv_state, ref.conv)})")
+    }
+}
+
+def private float_rows_max_diff(a : array<float>; b : array<float>) : float {
+    var maxd = 0.0
+    if (length(a) != length(b)) {
+        return 1.0e30
+    }
+    for (x, y in a, b) {
+        maxd = max(maxd, abs(x - y))
+    }
+    return maxd
 }
 
 // the main harness: 3 ragged prompts, sequential reference vs one batched-decode run
@@ -249,6 +269,46 @@ def test_batch_decode_q8(t : T?) {
     }
 }
 
+// the deltanet hybrid: batched == sequential on the CPU stack (the arch's own batched layer -
+// recurrent rows against per-session state, gated partial-rope attention rows), with the step
+// census proving every step rode the batched stack and none stepped a row at a time
+def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
+    if (!jit_enabled()) {
+        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+        return
+    }
+    let env = g_env_harness.models_dir
+    let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+    let path = path_join(mdir, "Qwen3.5-0.8B-Q8_0.gguf")
+    if (!model_available(t, path)) return
+    pin_kernel_backend("portable")   // same-dot parity — see test_batch_decode_q8
+    var tr <- load_model_(path, QuantMode.q8)
+    tr.config.seq_len = min(tr.config.seq_len, 64l)
+    let prev_fused = get_fused_decode()
+    set_fused_decode(false)
+    with_job_que() {
+        setup_dasllama_jobque_()
+        let c0 = batch_step_census()
+        batch_vs_ref(t, tr, kdt, 8l, 1.0e-6, tag)
+        let c1 = batch_step_census()
+        t |> equal(c1.cpu_stack - c0.cpu_stack, 8l, "{tag}: every step ran on the CPU batched stack")
+        t |> equal(c1.per_row - c0.per_row, 0l, "{tag}: ... none of them a row at a time")
+    }
+    set_fused_decode(prev_fused)
+    clear_kernel_backend_pin()
+    delete tr
+}
+
+[test]
+def test_batch_decode_hybrid(t : T?) {
+    t |> run("batched decode == sequential on the deltanet hybrid, f32 KV (needs Qwen3.5-0.8B-Q8_0)") @(t : T?) {
+        hybrid_batch_cell(t, KVDtype.f32, "qwen35")
+    }
+    t |> run("batched decode == sequential on the deltanet hybrid, f16 KV (needs Qwen3.5-0.8B-Q8_0)") @(t : T?) {
+        hybrid_batch_cell(t, KVDtype.f16, "qwen35 f16kv")
+    }
+}
+
 [test]
 def test_batch_decode_f16_kv(t : T?) {
     t |> run("batched decode == sequential under the f16 KV codec (needs stories15M.bin)") @(t : T?) {
@@ -330,18 +390,22 @@ def test_batch_decode_tq4_kv(t : T?) {
 }
 
 [test]
-def test_batch_decode_q4_fallback(t : T?) {
-    t |> run("q4 weights take the per-row fallback and still match (needs stories15M.bin)") @(t : T?) {
+def test_batch_decode_q4(t : T?) {
+    t |> run("batched decode == sequential, Q4_0 weights on the CPU batched stack (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
             return
         }
         var tr <- load_checkpoint(MODEL_PATH)
-        quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4_0 => eval_batch_ per-row path
+        quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4_0: the q4 batched GEMM
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
             setup_dasllama_jobque_()
-            batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")   // fallback IS forward(): bit-exact
+            let c0 = batch_step_census()
+            batch_vs_ref(t, tr, KVDtype.f32, 6l, 1.0e-6, "q4_0")   // the q4 GEMM is the GEMV's dot per (row, token)
+            let c1 = batch_step_census()
+            t |> equal(c1.cpu_stack - c0.cpu_stack, 6l, "q4_0: every step ran on the CPU batched stack")
+            t |> equal(c1.per_row - c0.per_row, 0l, "q4_0: ... none of them a row at a time")
         }
         set_fused_decode(prev_fused)
         delete tr

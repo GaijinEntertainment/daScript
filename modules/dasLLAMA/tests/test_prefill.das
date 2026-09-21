@@ -164,9 +164,8 @@ def test_prefill_q4_fallback(t : T?) {
             t |> skip("stories15M.bin not present")
             return
         }
-        // regression: the legacy per-row q4_0 tier has no batched kernels — forward_prefill must
-        // serve it via the per-token forward loop (generate()/eval() route every multi-token
-        // prompt through here), not panic
+        // the q4_0 tier's prefill rides the batched stack through the Q4_0 GEMM - the same dot per
+        // (row, token) as the decode GEMV, so the prefill and the per-token loop agree
         var tr <- load_checkpoint(MODEL_PATH)
         quantize_weights_q4(tr)
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)

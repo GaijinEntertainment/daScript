@@ -63,11 +63,15 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
   A step is served one of three ways, and `batch_step_census` counts each since load: the armed
   device driver claimed the whole stack, the CPU batched stack ran it, or the rows stepped one at
-  a time through the single-row forward - one row, a q4_0 model, a non-standard graph with no
-  device driver armed, or a step the device driver declined on a blob-only or non-standard-graph
-  model (the CPU stack has no form for either, so the decline falls to the single-row forward).
-  A non-standard graph (the deltanet hybrids) reaches an armed device driver before the per-row
-  branch: the CPU stack has no hybrid form, the Metal batch driver does.
+  a time through the single-row forward - one row, a q4_0 model, a non-standard graph whose arch
+  names no batched layer (`ArchBlocks.attn_batch`) with no device driver armed, or a step the
+  device driver declined on a blob-only model or on such a graph (the CPU stack has no form for
+  either, so the decline falls to the single-row forward). A non-standard graph reaches an armed
+  device driver before the CPU stack; the deltanet hybrids name `attention_qwen35_batch` as their
+  batched layer - the recurrent layers as B-row projections and the delta rule laned over (row,
+  v-head) against each session's own state, the attention layers through the std batched
+  attention, whose `q_gated` arms carry the 2x-wide [q | gate] projection and the sigmoid
+  out-gate - so a hybrid step with no device driver rides the CPU stack too.
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the

@@ -1140,7 +1140,7 @@ def attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int
 [no_alloc, no_env, no_io]
 def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
-        attention_gpu_prefill(t, s, l, npos, false)   // buckets at_norm / at_gpu / kv_store / at_resid
+        attention_gpu_prefill(t, s, l, npos, t.config.q_gated)   // buckets at_norm / at_gpu / kv_store / at_resid
         return
     }
     let c = t.config
@@ -1986,9 +1986,6 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
     if (npos <= 0l) {
         return
-    }
-    if (t.quant == QuantMode.q4_0) {
-        panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
     // span_lo/span_hi (chunk-relative): non-causal rows [span_lo, span_hi) inside an otherwise
     // causal call — the fused image turn. non_causal = the whole-call span (span bounds ignored).

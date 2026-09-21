@@ -726,7 +726,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
     // qwen3.5/3.6 hybrid (Wave D): 3-in-4 Gated-DeltaNet layers + gated attention. Prefill,
     // decode and the batched step ENGAGE on the blob twin; the batched step (the recurrent
     // rows form, each row's scan against its own state) is compared row for row against two
-    // single-row GPU steps on twin sessions - the CPU batched stack has no hybrid form.
+    // single-row GPU steps on twin sessions (the CPU stack's hybrid form is test_batch_decode's cell).
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return

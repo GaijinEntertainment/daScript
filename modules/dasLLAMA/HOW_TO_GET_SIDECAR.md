@@ -145,16 +145,20 @@ The vehicle is a public 1B GGUF pulled straight to the box - nothing copies from
 mkdir -p ~/models && cd ~/models
 curl -L -o Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf
 cd ~/daScript
-DAS_JOBQUE_THREADS=16 bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m ~/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf --tune > ~/mint.log 2>&1
+unset DAS_TUNE_MANIFEST
+DASLLAMA_MODELS_DIR=~/models bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out modules/dasLLAMA/performance/_rig > ~/mint.log 2>&1
 ```
 
-808 MB, about a minute to fetch. `--tune` is the full race: every generator family
-(`@tune begin name=<fmt>q8_tile_gen ... @tune end ... winner=<seat> verdict=beats`), then the
-`[tuned]` loop-hint kernels (`axpy`, `dot`, `rope_*`, `quantize_*`...), then
-`confirm_e2e_prefill`; on the c7a.4xlarge the whole walk took 5-6 minutes. It writes
-`modules/dasLLAMA/benchmarks/lcpp_bench.tune.json` beside the app and then re-launches the app to
-apply it. The bench rows the re-launch would print are refused without `--for-debug-purposes` (a `-jit`
-script run is not record-grade) - that refusal is expected here; the mint is done.
+808 MB, about a minute to fetch. The mint is the release: `daspkg release` builds the standalone
+bench exe, races every generator family (`@tune begin name=<fmt>q8_tile_gen ... @tune end ...
+winner=<seat> verdict=beats`), then the `[tuned]` loop-hint kernels (`axpy`, `dot`, `rope_*`,
+`quantize_*`...), then `confirm_e2e_prefill`, and rebuilds the exe with the winners baked in;
+on the M5 Max the race is about 7 minutes and the whole release about 9. It writes
+`modules/dasLLAMA/benchmarks/lcpp_bench.tune.json` beside the app and ships a copy beside the
+exe as `dasllama-bench.tune.json`, which the exe reads on its own - a pinned `DAS_TUNE_MANIFEST`
+in the shell overrides it, so the variable stays unset. A `-jit` script run of `lcpp_bench.das`
+cannot mint: the record-grade gate refuses the script before `--tune` runs, and
+`--for-debug-purposes` keys the winners to the script binary, not the exe.
 
 Read the sidecar's provenance before anything else:
 
