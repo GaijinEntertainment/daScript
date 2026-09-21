@@ -3734,7 +3734,7 @@ def mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>
 
 // Batched big-weight matmul for prefill: Y [npos x d] from X [npos x n], via the slice-1 GEMM
 // kernels. Q8 quantizes each of the npos activation columns into the batched xqb/xsb scratch first;
-// fp32 goes straight through. Q4 has no batched kernel, so forward_prefill never routes it here.
+// fp32 goes straight through; q4_0 rides the weight-stationary nest over the GEMV's dot.
 def mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
     if (t.quant == QuantMode.q8) {
         requant_rows_q8(x, n, npos, xqb, xsb)
