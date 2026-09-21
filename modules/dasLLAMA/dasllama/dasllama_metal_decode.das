@@ -60,12 +60,10 @@ def public metal_decode_shutdown {
 // ... plus the decode-specific gates (uniform f16/f32 KV, attention depth, a real session uid)
 [unused_argument(pos)]   // depth retired (M2.4) — pos stays in the gate signature for future clauses
 def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDecline {
-    // mirror + writeback move raw row bytes, so the session codec must equal the mirror dtype; depth is capacity-bounded by the mirror arena, not gated here. Partial rope has no q8_0/tq4 rope-store arm yet (f16/f32 mirrors only)
-    let partial_rope = t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size
+    // mirror + writeback move raw row bytes, so the session codec must equal the mirror dtype; depth is capacity-bounded by the mirror arena, not gated here
     if (s.kv_dtype_k != s.kv_dtype_v ||
             (s.kv_dtype_k != KVDtype.f16 && s.kv_dtype_k != KVDtype.f32 &&
-             s.kv_dtype_k != KVDtype.q8_0 && s.kv_dtype_k != KVDtype.tq4) ||
-            (partial_rope && s.kv_dtype_k != KVDtype.f16 && s.kv_dtype_k != KVDtype.f32)) {
+             s.kv_dtype_k != KVDtype.q8_0 && s.kv_dtype_k != KVDtype.tq4)) {
         return MetalDecodeDecline.kv_dtype
     }
     if (s.uid == 0ul) {
@@ -669,14 +667,14 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
     unsafe {
         if (r.kdt == KVDtype.q8_0) {
             var qka = RopeStoreQ8Args(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
-                nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb)
+                nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
             enc_rope_store_q8(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, bbias, qka,
                 kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l))
         } elif (r.kdt == KVDtype.tq4) {
             var tka = RopeStoreTq4Args(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
-                kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb)
+                kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
             enc_rope_store_tq4(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, bbias, tka,
@@ -2580,12 +2578,9 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     }
     let c = t.config
     let kdt = ws.scr.kv_dtype_k
-    // the block-codec rope-store arms rotate the whole head: partial rope serves on f16 / f32 only (as the single-row gate)
-    let partial_rope = c.rope_dim > 0l && c.rope_dim != c.head_size
     if (ws.scr.kv_dtype_v != kdt ||
             (kdt != KVDtype.f16 && kdt != KVDtype.f32 &&
-             kdt != KVDtype.q8_0 && kdt != KVDtype.tq4) ||
-            (partial_rope && kdt != KVDtype.f16 && kdt != KVDtype.f32)) {
+             kdt != KVDtype.q8_0 && kdt != KVDtype.tq4)) {
         return MetalDecodeDecline.kv_dtype
     }
     for (i in range64(nrows)) {
@@ -2680,13 +2675,13 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd), head_size = uint(head_size),
             nheads = uint(n_heads), kv_mul = kvm_l, qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
         enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka,
             kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, head_size)
     } elif (blockc) {
         var qka = RopeStoreBQ8Args(lay = lay_l, nblk = uint(kv_dim / 32l), qd = uint(qd),
             head_size = uint(head_size), npairs_q = uint(qd / 2l), qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka,
             kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows)
     } else {

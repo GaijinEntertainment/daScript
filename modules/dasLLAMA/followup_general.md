@@ -1153,9 +1153,7 @@
    the pair-walk gate in `tests/test_metal_gemv_kernels.das`. Done = the rows race times 2 / 4 / 8
    and crowns on all three, a CPU dot over each rig's planes checks the baseline arm, and both boxes
    re-mint (the m4 / m5 sidecars carry crowns from the two-row race).
-98. **Branches the MTP arc left untested (the tdd audit).** (a) the batch rail's `kv_dtype` decline
-   for partial rope on a block-codec KV (`batch_decode_decline`) - no fixture pairs a partial-rope
-   model with q8_0 / tq4 KV; (b) `generate_mtp_greedy`'s multi-accept loop runs only on the CPU rail,
+98. **Branches the MTP arc left untested (the tdd audit).** (b) `generate_mtp_greedy`'s multi-accept loop runs only on the CPU rail,
    where a round returns 0 or 1; (c) `tune_gate_bypassed()` and the `untuned:` flavor stamp; (d) the
    lens tripwire's panic arm (no hook installed) needs a spawned must-panic fixture; (e)
    `site-dasllama/build_news.py`'s stale-page unlink and missing-slot exit; (f) the harness

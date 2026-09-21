@@ -59,7 +59,7 @@ var g_decode_declines : DeclineCounter
 var g_logits_cpu = false
 var g_skip = ""                              // DASLLAMA_METAL_DECODE_SKIP=gemv|attn|ew|moe_rt|moe_sh|qkv|wo knockout rail
 
-var g_signs : MetalBuffer?                  // the tq4 rotation signs (128-float prefix rule)
+var g_signs : MetalBuffer?                  // the tq4 rotation signs, TQ4_SIGNS_MAX_HS floats (a narrower head reads the prefix)
 
 // cumulative per-stage wall (us) since load — decode is per-token, so logging is on-demand
 // (metal_decode_stage_report), never per step
@@ -1331,13 +1331,16 @@ def dn_mirror_flip(uid : uint64; pos : int64) {
     }
 }
 
-[cold_path]   // one-time: fills the 512B FWHT sign table on first touch
+let TQ4_SIGNS_MAX_HS = 512l   //! the widest head the tq4 kernels take (their FWHT buffer); a narrower head reads the prefix
+
+[cold_path]   // one-time: fills the FWHT sign table on first touch
 def private signs_buffer_build() {
     var signs : array<float>
-    tq4_fill_signs(signs, 128l)
-    g_signs = metal_new_buffer(g_dev, 512ul)
+    tq4_fill_signs(signs, TQ4_SIGNS_MAX_HS)
+    let nbytes = uint64(TQ4_SIGNS_MAX_HS * 4l)
+    g_signs = metal_new_buffer(g_dev, nbytes)
     unsafe {
-        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
+        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), nbytes)
     }
     delete signs
 }
