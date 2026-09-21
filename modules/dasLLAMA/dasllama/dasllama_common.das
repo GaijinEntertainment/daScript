@@ -5292,7 +5292,6 @@ def fused_ffn_ok(t : Model; l : int64) : bool {
         && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)
 }
 
-[no_alloc, no_env, no_io]
 //! The hybrid arch's row scratch for npos rows: the deltanet projections (the recurrence itself
 //! reads per-session state) and the gated attention's [q | gate] halves - prefill and batched decode.
 def hybrid_rows_alloc(c : Config; var s : Session; npos : int64) {
@@ -5310,6 +5309,7 @@ def hybrid_rows_alloc(c : Config; var s : Session; npos : int64) {
     }
 }
 
+[no_alloc, no_env, no_io]
 def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let c = t.config
     let dim = c.dim

@@ -336,7 +336,7 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
     kwant |> resize(nblk * 34)
     vwant |> resize(nblk * 34)
     unsafe {
-        if (rot > 0) {
+        if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
             rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } elif (neox) {
@@ -455,7 +455,7 @@ def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, ha
     kwant |> resize(rowb)
     vwant |> resize(rowb)
     unsafe {
-        if (rot > 0) {
+        if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
             rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } elif (neox) {
@@ -734,7 +734,7 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (rot > 0) {
+            if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
                 rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } elif (neox) {
@@ -859,7 +859,7 @@ def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neo
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (rot > 0) {
+            if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
                 rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } elif (neox) {
@@ -1014,6 +1014,9 @@ def test_metal_rope_store_kernels(t : T?) {
                 rpst_q8_gate(t, dev, queue, 256, 2, 2, false, false, 64)
                 rpst_tq4_gate(t, dev, queue, 256, 2, 2, true, false, 64)
                 rpst_tq4_gate(t, dev, queue, 256, 2, 2, false, true, 64)
+                // the whole head named as the prefix (rot == head_size, what every full-rope layer sends): the same bytes as the default
+                rpst_q8_gate(t, dev, queue, 64, 4, 2, true, true, 64)
+                rpst_tq4_gate(t, dev, queue, 64, 4, 2, false, false, 64)
                 // batched twins: row tables + whole-arena sentinel compares
                 rpst_b_gate(t, dev, queue, true, 64, 4, 2, 64, 3, true, true)
                 rpst_b_gate(t, dev, queue, true, 64, 4, 2, 64, 2, false, false)
@@ -1027,6 +1030,8 @@ def test_metal_rope_store_kernels(t : T?) {
                 rpst_bq8_gate(t, dev, queue, 256, 2, 2, 2, false, false, 64)
                 rpst_btq4_gate(t, dev, queue, 256, 2, 2, 2, true, false, 64)
                 rpst_btq4_gate(t, dev, queue, 256, 2, 2, 3, false, true, 64)
+                rpst_bq8_gate(t, dev, queue, 64, 4, 2, 3, true, false, 64)
+                rpst_btq4_gate(t, dev, queue, 64, 4, 2, 2, true, true, 64)
                 // the tq4 un-rotate partner
                 unsign_gate(t, dev, queue, 64, 4, 3, 32)
                 unsign_gate(t, dev, queue, 128, 2, 1, 0)

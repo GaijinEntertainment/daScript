@@ -270,6 +270,7 @@ def private dn_forward_only_guard(var s : Session; pos, next : int64) {
     s.dn_pos = next
 }
 
+[no_alloc, no_env, no_io]
 def private attention_qwen35_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
     if (l == 0l) {
         for (i in range64(nrows)) {
