@@ -23,7 +23,8 @@ carry it - pass it as a call-site constant.** A shape constant is a value that s
 `@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride; a
 run-time count of live entries inside such a fixed extent is not one. A call-site constant is
 fixed where the kernel's source is generated - a template constant or a typedef - so the emitter
-bakes it in; one kernel generated for all models cannot carry a per-model shape that way.
+bakes it in; a kernel whose source is generated once and dispatched for differently shaped
+inputs cannot carry a shape that varies per input that way.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
