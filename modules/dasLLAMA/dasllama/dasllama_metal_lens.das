@@ -679,11 +679,7 @@ class MetalDispatch : AstStructureAnnotation {
                 }
                 fn.arguments |> emplace_new <| new Variable(at = at, name := "{strip(nt[0])}", _type = const_t(pt))
             }
-            // a params= name nothing reads reaches neither the host nor the device: the grid=,
-            // tg=, requires= specs and the @span products are the only readers a builder param has.
-            // A stamp's params are its family's shared builder signature (the forms are taken by
-            // address into one table), so a form that reads fewer of them is not refused.
-            if (!params_from_stamp) {
+            if (!params_from_stamp) {   //! a stamp's params are its family's shared builder signature - a form reading fewer is not refused
                 let readers = build_string() $(var w) {
                     w |> write("{grid} {tgs} {requires}")
                     for (bf in bufs) {
