@@ -548,16 +548,17 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         }
         staged_upload(r.moe_ident_dev, 0l, MAX_ROUTED_SLOTS * 4l)
     }
-    r.moe_dlog_dev = make_device_buf(r.ner * 4l)
+    let nb = r.nb   //! the routed planes hold a row per region the N-row command can step at once: the one-row sets bind the first row, the N-row sets the rows
+    r.moe_dlog_dev = make_device_buf(r.ner * 4l * nb)
     r.moe_dw_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.moe_meta1_dev = make_device_buf(META_BYTES)
     r.moe_meta3_dev = make_device_buf(META_BYTES)
     r.moe_meta2_dev = make_device_buf(META_BYTES)
-    r.moe_xq_dev = make_device_buf(dim)
-    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l)
-    r.egate_dev = make_device_buf(k * nfe * 4l)
-    r.eup_dev = make_device_buf(k * nfe * 4l)
-    r.edown_dev = make_device_buf(k * dim * 4l)
+    r.moe_xq_dev = make_device_buf(dim * nb)
+    r.moe_xs_dev = make_device_buf((dim / 32l) * 4l * nb)
+    r.egate_dev = make_device_buf(k * nfe * 4l * nb)
+    r.eup_dev = make_device_buf(k * nfe * 4l * nb)
+    r.edown_dev = make_device_buf(k * dim * 4l * nb)
     return true
 }
 
@@ -2089,10 +2090,11 @@ def vk_rdec_token_n_rows : int64 {
     if (g_rd.q_gated) return rd_n_decline("a gated q")
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
-        if (L.moe) return rd_n_decline("a MoE layer")
         if (L.kv_shared) return rd_n_decline("a shared-KV layer")
-        if (!(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo)
-                    && gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return rd_n_decline("a weight format with no N-column GEMV leaf")
+        if (L.moe && MAX_ROUTED_SLOTS < g_rd.nb * g_rd.k) return rd_n_decline("more routed slots than the block's slot planes hold")
+        //! a MoE layer's experts step as regions of the one-row leaves (sec.2.2ao); its dense triple, where it has one, takes the N-column leaves
+        if (!(gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)) && gemv_cls_has_n(L.fo))
+                || (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2)))) return rd_n_decline("a weight format with no N-column GEMV leaf")
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
         g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
@@ -2108,8 +2110,9 @@ def private rd_ensure_n_rail : bool {
     for (L in g_rd.layers) {
         break if (!ok)
         ok = (gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)) && gemv_cls_ensure_n(L.fo, nb)
-            && gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)
-            && (!L.gu_on || q8_gemv_gu_n_ensure(nb)))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
+            && (!has_dense_triple(L) || (gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)))
+            && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
+            && (!L.moe || ensure_topk_n_cls()))   //! the routed block's rows: the per-row top-k; its GEMVs are the one-row leaves the layer's sets ensured
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an N-column GEMV class or the N-row fused add+rms+requant class declined on this device - the batched step runs a row at a time\n")
@@ -2148,8 +2151,77 @@ def private rd_ensure_n_sets {
                 fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * g_rd.nb, (dim / 32l) * 4l * g_rd.nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
         }
+        if (L.moe) {
+            rd_moe_sets_n(L)
+        }
     }
     g_rd.n_sets_made = true
+}
+
+//! the N-row command's sets over a MoE layer: the one-row block's planes at `nb` rows - the router's columns, the per-row
+//! top-k, the gate and up GEMVs and the down GEMV over `nb * k` regions (the split forms: each fused stamp's twin, byte
+//! for byte), the act over the rows' slots, and the combine per row
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+def private rd_moe_sets_n(var L : RLayer) {
+    let dim = g_rd.dim
+    let nb = g_rd.nb
+    let nfe = g_rd.nfe
+    let k = g_rd.k
+    let pe1 = arena_planes(L.fe1, L.be1)
+    let pe3 = arena_planes(L.fe3, L.be3)
+    let pe2 = arena_planes(L.fe2, L.be2)
+    let xqb = L.xe_own ? g_rd.moe_xq_dev : g_rd.xq_dev
+    let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
+    let xq_bytes = dim * nb
+    let xs_bytes = (dim / 32l) * 4l * nb
+    let rows_bytes = dim * 4l * nb
+    let egu_bytes = nb * k * nfe * 4l
+    let edn_bytes = nb * k * dim * 4l
+    let slots_bytes = MAX_ROUTED_SLOTS * 4l
+    if (L.xe_own) {
+        L.s_quant_xe_n = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.moe_xq_dev, g_rd.moe_xs_dev),
+            fixed_array(rows_bytes, xq_bytes, xs_bytes), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    }
+    L.s_router_n = set_router_gemv_cls(fixed_array(g_rd.router_dev, L.rtn_fused ? g_rd.x_dev : g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
+        fixed_array(g_rd.router_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.rtn_fused ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
+    L.s_topk_n = set_topk_n_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
+        fixed_array(g_rd.ner * 4l * nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
+        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
+    L.s_egate_n = gemv_cls_set(L.fe1, fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev),
+        fixed_array(pe1.wqb, pe1.wsb, META_BYTES, xq_bytes, xs_bytes, egu_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE))
+    L.s_eup_n = gemv_cls_set(L.fe3, fixed_array(pe3.wq, pe3.ws, g_rd.moe_meta3_dev, xqb, xsb, g_rd.eup_dev),
+        fixed_array(pe3.wqb, pe3.wsb, META_BYTES, xq_bytes, xs_bytes, egu_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_UP))
+    if (g_rd.exps_bias) {
+        L.s_eact_n = set_q8_actrq_b_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev),
+            fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, slots_bytes),
+            fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ, 0u, 0u, VHZ_MRT))
+    } else {
+        L.s_eact_n = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+    }
+    L.s_edown_n = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
+        fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, edn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
+    if (L.moe_g4) {
+        L.s_comb_n = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
+            fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN))
+        if (L.comb_rq) {
+            L.s_comb_rq_n = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
+                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, xq_bytes, slots_bytes, slots_bytes, edn_bytes, xs_bytes),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
+        }
+        return
+    }
+    L.s_comb_n = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
+            g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
+        fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT))
+    if (L.comb_rq) {
+        L.s_comb_rq_n = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
+                g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
+            fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, xq_bytes, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, xs_bytes),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT, VHZ_XQ))
+    }
 }
 
 //! a GEMV of the N-row command: the N-column form, or under the bisect's bit 2 the one-column form over row 0
@@ -2264,6 +2336,71 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     rd_ts(raw, "a:wo")
 }
 
+//! the routed block over `nrows` rows: the router as one dispatch of `nrows` columns (each column the one-row dot), the
+//! per-row top-k writing the rows' slots one after another, the gate, up and down GEMVs over `nrows * k` regions (the
+//! one-row leaves, each region its own expert and feed row), the act over every slot; the combine follows in the tail
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+def private rd_encode_moe_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
+    let dim = g_rd.dim
+    let nfe = g_rd.nfe
+    let k = g_rd.k
+    let nr = uint(nrows)
+    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into the rows of xb
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
+        rd_ts(raw, "a:m_pre2")
+    }
+    if (L.xe_own) {
+        if (kq_sb(L.fe1)) {
+            var pcq = RqArgs(inbase = 0u, nblk = uint(dim / 256l) * nr)
+            enc_cls_q8k_rq(raw, h, L.s_quant_xe_n, pcq, (dim * nrows / 8l + 255l) / 256l)
+        } else {
+            var pcq = RqArgs(inbase = 0u, nblk = uint(dim / 32l) * nr)
+            enc_cls_dn_rq(raw, h, L.s_quant_xe_n, pcq, (dim * nrows / 4l + 255l) / 256l)
+        }
+        rd_ts(raw, "a:m_rq_e")
+    }
+    if (L.moe_g4 && !L.rtn_fused) {
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
+        rd_ts(raw, "a:m_rtn")
+    }
+    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
+        norm_on = L.rtn_fused ? 1u : 0u, nwoff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ncols = nr)
+    enc_router_gemv_cls(raw, h, L.s_router_n, pcr, g_rd.ner * nrows)
+    rd_ts(raw, "a:m_router")
+    var pct = TopkArgs(ne = uint(g_rd.ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, wscale = g_rd.wscale,
+        dsoff = L.moe_g4 ? uint(L.router_slot * g_rd.ne) : NO_DSCALE,
+        rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * g_rd.ne),
+        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
+        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
+        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)),
+        xnb2 = uint(nfe / fmt_unit(L.fe2)), lstride = uint(g_rd.ner), xnb1 = uint(dim / fmt_unit(L.fe1)))
+    enc_topk_n_cls(raw, h, L.s_topk_n, pct, nrows)
+    rd_ts(raw, "a:m_topk")
+    var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k) * nr, ybase = 0u)
+    gemv_enc(L.fe1, raw, h, L.s_egate_n, pcg, k * nfe * nrows)
+    rd_ts(raw, "a:m_e_gate")
+    gemv_enc(L.fe3, raw, h, L.s_eup_n, pcg, k * nfe * nrows)
+    rd_ts(raw, "a:m_e_up")
+    let dkq = kq_sb(L.fe2)
+    let nslot = k * nfe * nrows
+    var pca = ActArgs(nelem = uint(nslot), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nslot / (dkq ? 256l : 32l)),
+        bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
+    let awgs = (nslot / (dkq ? 8l : 4l) + 255l) / 256l
+    if (g_rd.exps_bias) {
+        enc_q8_actrq_b_cls(raw, h, L.s_eact_n, pca, awgs)
+    } elif (dkq) {
+        enc_q8k_actrq_cls(raw, h, L.s_eact_n, pca, awgs)
+    } else {
+        enc_q8_actrq_cls(raw, h, L.s_eact_n, pca, awgs)
+    }
+    rd_ts(raw, "a:m_e_act")
+    var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k) * nr, ybase = 0u)
+    gemv_enc(L.fe2, raw, h, L.s_edown_n, pcd, k * dim * nrows)
+    rd_ts(raw, "a:m_e_down")
+}
+
 //! the dense FFN over `nrows` rows: gate and up as N-column GEMVs, the activation and requant over the rows' hidden plane, the down GEMV
 def private rd_encode_ffn_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64) {
     let dim = g_rd.dim
@@ -2352,18 +2489,43 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            if (kq_sb(L.f1)) {   //! a K-quant feed: the split pair, its requant the Q8_K one
+            if (kq_sb(L.f1) || L.moe) {   //! a K-quant feed, or a routed block whose router reads the normed rows as floats: the split pair
                 enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
                 rd_ts(raw, "a:ar1")
-                enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
-                rd_ts(raw, "a:rq_f")
+                if (has_dense_triple(L)) {   //! the shared expert's feed; a bare routed block requants its own feed inside
+                    if (kq_sb(L.f1)) {
+                        enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
+                    } else {
+                        enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
+                    }
+                    rd_ts(raw, "a:rq_f")
+                }
             } else {
                 enc_cls_ar_rq_b(raw, h, L.s_addr_ffn_rq_b, pc8, nrows)
                 rd_ts(raw, "a:arrq_f")
             }
             let nxt = l + 1l < g_rd.n_layers ? uint(rd_norm_off(l + 1l, RD_NORM_ATT)) : nlfin
             let fn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : g_rd.cls_fmt_marker
-            rd_encode_ffn_n(raw, h, L, nrows)
+            if (has_dense_triple(L)) {
+                rd_encode_ffn_n(raw, h, L, nrows)
+            }
+            if (L.moe) {
+                rd_encode_moe_n(raw, h, L, l, nrows)
+                var pc14c = rd_ar_comb_args(L, l, int64(nxt))
+                pc14c.presummed = 0u   //! the rows' down GEMV writes every slot's row apart; the combine sums them
+                xq_ready = L.comb_rq
+                if (L.comb_rq && L.moe_g4) {
+                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq_n, pc14c, nrows)
+                } elif (L.comb_rq) {
+                    enc_cls_ar_comb_rq(raw, h, L.s_comb_rq_n, pc14c, nrows)
+                } elif (L.moe_g4) {
+                    enc_cls_ar_comb_g4(raw, h, L.s_comb_n, pc14c, nrows)
+                } else {
+                    enc_cls_ar_comb(raw, h, L.s_comb_n, pc14c, nrows)
+                }
+                rd_ts(raw, "a:m_ar2")
+                continue
+            }
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = nxt, eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
             xq_ready = !kq_sb(fn)

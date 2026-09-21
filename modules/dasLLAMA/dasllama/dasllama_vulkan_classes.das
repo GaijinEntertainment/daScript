@@ -1260,7 +1260,8 @@ struct RouterArgs {
     norm_on : uint      //! the row read as its weightless rms under the norm row at `nwoff` (the gemma-4 router's input: the norm hop folded into the GEMV)
     nwoff : uint
     eps : float
-    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
+    ncols : uint        //! the rows of x the dispatch serves, each its own column of logits at `obase + c * ne` (the N-row command); 0 or 1 = one row
+    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0= one base
     obase_split : uint
 }
 
@@ -1275,12 +1276,15 @@ class template RouterGemvT {
     @push_constant pa : RouterArgs
     @workgroup part : float[64]   //! slots 0..31 the dot's subgroup partials, 32..63 the norm's
 
-    //! the row element at `i` as the dot reads it: under the norm row when `norm_on`
-    def xn(i : uint) : float => pa.norm_on != 0u ? x[i] * wn[pa.nwoff + i] : x[i]
+    //! the row element at `i` of the row at `xb` as the dot reads it: under the norm row when `norm_on`
+    def xn(xb, i : uint) : float => pa.norm_on != 0u ? x[xb + i] * wn[pa.nwoff + i] : x[xb + i]
 
+    //! a workgroup an (expert row, x row) pair: the grid is `ne` rows times the columns, column-major, so a one-row dispatch is column 0
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
-        let e = gl_WorkGroupID.x
+        let e = gl_WorkGroupID.x % pa.ne
+        let c = gl_WorkGroupID.x / pa.ne
+        let xb = c * pa.dim
         let base = pa.woff + e * pa.dim
         let tid = gl_LocalInvocationID.x
         var inv = 1.0
@@ -1288,7 +1292,7 @@ class template RouterGemvT {
             var ss = 0.0
             var j = tid
             while (j < pa.dim) {
-                let v = x[j]
+                let v = x[xb + j]
                 ss += v * v
                 j += 256u
             }
@@ -1312,12 +1316,12 @@ class template RouterGemvT {
             let hd = pa.dim >> 1u
             while (i < hd) {
                 let p = unpackHalf2x16(w_pairs[hb + i])
-                acc += p.x * xn(2u * i) + p.y * xn(2u * i + 1u)
+                acc += p.x * xn(xb, 2u * i) + p.y * xn(xb, 2u * i + 1u)
                 i += 256u
             }
         } else {
             while (i < pa.dim) {
-                acc += float(w[base + i]) * xn(i)   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
+                acc += float(w[base + i]) * xn(xb, i)   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
                 i += 256u
             }
         }
@@ -1333,7 +1337,7 @@ class template RouterGemvT {
                 tot += part[sgi]
                 sgi++
             }
-            var o = pa.obase + e
+            var o = pa.obase + c * pa.ne + e
             if (pa.ne_split != 0u && e >= pa.ne_split) {
                 o = pa.obase_split + (e - pa.ne_split)
             }
@@ -1439,8 +1443,10 @@ struct TopkArgs {
     stride3 : uint
     base2 : uint
     stride2 : uint
-    xnb2 : uint      // the down feed's blocks per hidden row: slot j reads row j (gate/up read the one feed row)
+    xnb2 : uint      // the down feed's blocks per hidden row: slot s reads row s (gate/up read their row's feed)
     dsoff : uint     //! this layer's row base in the per-expert down-scale plane (gemma-4: ffn_down_exps.scale folds into the routing weight); NO_DSCALE = none
+    lstride : uint   //! the logits row stride (elements): row p's logits sit at p * lstride (the one-row dispatch reads row 0 whatever it holds)
+    xnb1 : uint      //! the gate and up feed's blocks per row: row p's slots read the feed at p * xnb1 (0 on the one-row dispatch: the one feed row)
     rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
     rboff : uint     //! ... this layer's row base in the router-bias plane ([ne] a layer)
 }
@@ -1547,48 +1553,67 @@ class TopKCore {
     }
 }
 
-[vk_dispatch(name = "topk_cls", grid = "one", params = "one : int64")]
-class TopK : TopKCore {
-    @ssbo @binding = 0 logits : array<float>
+//! the decode top-k's records, the base shell the one-row and the N-row stamps splice: row `p`'s picks land in slots
+//! `p * k + j` - the weight, the expert, and the gate, up and down region records the expert GEMVs read
+class TopKRecords : TopKCore {
+    @ssbo @binding = 0 logits : array<float>  //! [npos x lstride]
     @ssbo @binding = 1 meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
     @ssbo @binding = 2 meta3 : array<uint>
     @ssbo @binding = 3 meta2 : array<uint>
-    @ssbo @binding = 4 w : array<float>      //! the k routing weights
+    @ssbo @binding = 4 w : array<float>      //! the routing weights, a slot each
     @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @ssbo @binding = 6 @role = "weight" rb : array<float>     //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
-    @ssbo @binding = 7 eidx : array<uint>    //! the k picks' experts, the bias rows the act and the combine read
+    @ssbo @binding = 7 eidx : array<uint>    //! the picks' experts, a slot each: the bias rows the act and the combine read
     @push_constant pa : TopkArgs
 
-    [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
-    def run {
+    //! row `p`: its logits selected, its k slots' records written by thread 0
+    def row_picks(p : uint) {
         let tid = gl_LocalInvocationID.x
         let live = tid < pa.ne
         let e = min(tid, pa.ne - 1u)
-        let lv = logits[e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
+        let lv = logits[p * pa.lstride + e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
         select_row(live ? lv : -3.0e38, live, pa.ne, pa.k)
         if (tid == 0u) {
-            write_picks()
+            write_picks(p)
         }
     }
 
-    def write_picks {
+    def write_picks(p : uint) {
         var jj = 0u
         while (jj < pa.k) {
+            let s = p * pa.k + jj
             let ex = min(pick[jj], pa.ne - 1u)   // a NaN row leaves the sentinel: never a wild weight block
             var wj = pick_weight(jj, pa.k, pa.norm, pa.wscale)
             if (pa.dsoff != NO_DSCALE) {
                 wj *= ds[pa.dsoff + ex]
             }
-            w[jj] = wj
-            eidx[jj] = ex
-            meta1[jj * 2u] = pa.base1 + ex * pa.stride1
-            meta1[jj * 2u + 1u] = 0u
-            meta3[jj * 2u] = pa.base3 + ex * pa.stride3
-            meta3[jj * 2u + 1u] = 0u
-            meta2[jj * 2u] = pa.base2 + ex * pa.stride2
-            meta2[jj * 2u + 1u] = jj * pa.xnb2
+            w[s] = wj
+            eidx[s] = ex
+            meta1[s * 2u] = pa.base1 + ex * pa.stride1
+            meta1[s * 2u + 1u] = p * pa.xnb1
+            meta3[s * 2u] = pa.base3 + ex * pa.stride3
+            meta3[s * 2u + 1u] = p * pa.xnb1
+            meta2[s * 2u] = pa.base2 + ex * pa.stride2
+            meta2[s * 2u + 1u] = s * pa.xnb2
             jj++
         }
+    }
+}
+
+[vk_dispatch(name = "topk_cls", grid = "one", params = "one : int64")]
+class TopK : TopKRecords {
+    [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        row_picks(0u)
+    }
+}
+
+//! the N-row command's top-k: a workgroup a row, the rows' slots consecutive
+[vk_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
+class TopKN : TopKRecords {
+    [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#nrow-token-command")]
+    def run {
+        row_picks(gl_WorkGroupID.x)
     }
 }
 

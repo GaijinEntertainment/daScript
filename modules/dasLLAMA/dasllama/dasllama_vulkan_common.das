@@ -2358,6 +2358,10 @@ struct RLayer {
     s_edown_sum : VkDescriptorSet
     comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows
     s_comb_rq : VkDescriptorSet
+    s_router_n, s_topk_n : VkDescriptorSet   //! the N-row command's routed block over the rows' planes: the router's columns, the per-row top-k
+    s_egate_n, s_eup_n, s_eact_n, s_edown_n : VkDescriptorSet   //! ... the expert GEMVs over the rows' slots (the split gate and up: every stamp's twin, byte for byte), the act, the down
+    s_comb_n, s_comb_rq_n : VkDescriptorSet   //! ... the combine over the rows, and its twin that quantizes the next feed
+    s_quant_xe_n : VkDescriptorSet  //! ... the experts' own feed requant over the rows, where `xe_own`
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
