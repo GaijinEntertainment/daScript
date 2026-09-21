@@ -81,7 +81,7 @@ The split-module JIT inlines within one partition only, so a leaf a hot loop cal
 
 ### 2.58 The deltanet per-token core is one code path for every caller {#dn-token-core-shared}
 
-The Gated-DeltaNet recurrence is written once per token, in three pieces: the prelude (the β and g
+The Gated-DeltaNet recurrence is written once per token, in three pieces: the prelude (the beta and g
 transforms, the causal conv against the session's history, SiLU, the q/k L2-norm and the q
 pre-scale), the per-(token, v-head) delta rule against that session's state, and the z-gated
 out-norm epilogue. One token of a decode step, one position of a prefill and one row of a
