@@ -29,6 +29,10 @@ per kernel whether to contract a multiply-add into one fma, so two bodies spelle
 ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by
 definition and leaves the driver nothing to choose.
 
+**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width
+the class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a
+kargs field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
+
 **A stamp - one instance of a class template, or one class deriving from a base shell - sets
 only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
 `@template_gate`, a value select, an array extent.** A constant no such site reads is a defect -

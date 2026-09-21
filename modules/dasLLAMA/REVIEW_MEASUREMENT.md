@@ -78,6 +78,8 @@ and the command line it ran under.**
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
+**A dated `PERF_LEDGER.md` row is never edited to correct it - a new dated row refutes it.**
+
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 recorded to justify adopting code the change does not land.** That timing settles its adoption
 decision in the PR that lands the kernel. A negative result whose winner is the committed path is

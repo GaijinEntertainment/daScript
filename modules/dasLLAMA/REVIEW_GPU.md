@@ -166,13 +166,6 @@ names.** The `grid=` spec carries no number for these classes, so nothing else t
 offset, or a handle alone is not a key - carry the span and the form, the element type and
 layout the upload produces, in the key too.**
 
-**A diff that adds code to a `dasllama/` file of a kind that file's `ARCHITECTURE_GPU.md`
-sec.1.5 role row does not hold - a kernel class, a driver arm, a backend capability, a
-dispatch-support macro, a driver policy - or of a kind the row's must-not-hold cell names,
-extends that row in the same change, or moves the code to the file whose row holds the kind.** A
-driver arm is host code that ensures, binds, or encodes a dispatch; a backend capability is a
-function a driver registers in a hook or capability registry.
-
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
 

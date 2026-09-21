@@ -103,10 +103,6 @@ a maintainer ruling that bench comparability is broken.** Recorded performance r
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width the
-class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a kargs
-field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
-
 **A function-typed global a serialized exe must re-establish, or that a job (a forked context)
 invokes, lands in a `dasllama/` file beside the `[init]` that establishes it at boot, and that
 `[init]` re-establishes it when it reads null.** A serialized exe and a forked context restore
@@ -192,7 +188,7 @@ parses. A console-only diagnostic is not user-facing.
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites. A dated `PERF_LEDGER.md` row is refuted by a new dated row, never edited.
+`[arch]` cites.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
