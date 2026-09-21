@@ -2319,6 +2319,38 @@ section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 
   arms), the router's columns likewise (`test_vkd_router_gemv_cols`), and the gpt-oss regions file
   bit for bit over the router's new form.
 
+### The CUDA levers on the pod (2026-09-21)
+
+The reference beside the Vulkan one: llama.cpp b10660 built with CUDA on the pod
+(`/workspace/llama/src-b10660/build-cuda`, nvcc 12.8, `-DCMAKE_CUDA_ARCHITECTURES=120`),
+`llama-bench -ngl 99 -fa 1 -r 3` and `llama-batched-bench -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128
+-npl 1,4 -ngl 99 -fa on`, `external` [direction-grade - two processes]; its kernels under nsys
+2024.6.2 (`-t cuda`, the trace grouped by kernel name and grid over the last 16 steps, a step closed
+by the classifier launch) beside our `DASLLAMA_GPU_PROF=1` stamps. nsys's per-kernel records inflate
+a step of about 1200 launches by about 1.5 ms (the traced step ran a fifth slower), so its sums
+rank the shapes and bound them from above; the reference's tg steps launch as one CUDA graph each.
+
+- **The rows, the pod (RTX PRO 4500), tg128@4 summed / tg128:** CUDA E4B 440.2 / 125.5 against ours
+  363.0 / 112.6 (0.82 / 0.90; llama.cpp Vulkan 360.2), CUDA gpt-oss 523.3 / 234.4 against ours 425.6 /
+  209.1 (0.81 / 0.89; Vulkan 234). The E4B four-row step: ours 10.5 ms of GPU time and 0.65 ms of
+  host (the logits copy 252 us, four argmaxes, the scheduler tick, the fence wake) against CUDA's
+  9.09 ms wall - on this card the gap is GPU time, where the 5060 Ti's was the host (the E-series
+  section above).
+- **The shapes, E4B at four rows, ours stamps / CUDA traced, us a step:** gate + up 3025 / 3218,
+  down + wo + proj 2619 / 2263, the classifier 837 / 876, the projections 697 / about 1050, the
+  attention 1354 / about 755, the add + rms + requant glue 1394 / about 1850, the per-layer-embedding
+  gate 430 / 226. gpt-oss at four rows: the expert GEMVs 5348 (e_gate 1768, e_up 1791, e_down 1789 -
+  the floor for reading every slot's expert whole: 16 slots x 4.15 MB x 3 planes x 24 layers at
+  896 GB/s) / 3903, the attention 618 / 279, the rest within a tenth. The reference's MoE GEMV reads
+  every slot's expert too; its launch puts every token's dot of one row index in one block, so an
+  expert two slots share leaves DRAM once.
+- **The interleaved region walk (commit 36df5105f: the one-column leaves map a subgroup to
+  `rg % nreg`, `rg / nreg`, so a weight row two slots share reaches the second from cache),
+  tg128@4 ours before -> after / CUDA:** gpt-oss 425.6 +/- 6.8 -> 450.3 +/- 3.9 / 523.3 (0.81 ->
+  0.86), Qwen3-30B-A3B Q4_K_M 453 -> 459.0 +/- 18.9 (within the spread: 128 experts over 32 slots
+  share few), Qwen1.5-MoE Q8_0 520.1 +/- 35.3 -> 526.3 +/- 39.8 (the same session, within the
+  spread). The one-row rates did not move (gpt-oss 209.13 -> 209.13). Under the profiler the expert GEMVs read 5348 -> 4733 us a step (e_gate 1768 -> 1517, e_up 1791 -> 1618, e_down 1789 -> 1598; the step 9235 -> 8672), 830 us above the reference's traced 3903: the walk shares a row between slots that sit within a cache's reach, the reference's block shares it within one warp set.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

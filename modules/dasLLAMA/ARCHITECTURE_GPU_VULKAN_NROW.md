@@ -78,7 +78,11 @@ model whose `nb * k` slots pass `MAX_ROUTED_SLOTS`, the slot planes' extent. The
 expert weights - every slot reads its expert whole, as the reference's decode does below its
 grouped-GEMM threshold (`mul_mat_vec_max_cols` on its Vulkan backend, `MMVQ_MAX_BATCH_SIZE` on
 CUDA) - so the batched step's gain on a MoE carrier is the attention, the router, the shared
-expert and the submit, not the experts' bytes. The rows' combine quantizes the next head's feed
+expert and the submit, not the experts' bytes. The one-column leaves walk their regions
+interleaved a row at a time (`r = rg % nreg`, the y row at `r * d + row`), so an expert two
+slots share leaves DRAM once and the second slot reads it from cache - the reference's MoE
+GEMV puts every token's dot of one row index in one block for the same reason - where a
+region-major walk put the two reads a whole expert stack apart. The rows' combine quantizes the next head's feed
 under a decision both commands share (`RLayer.comb_rq`, made once with the combine sets by
 whichever command records first, `rd_ensure_comb_sets`): the two commands record in any order,
 and a set either record binds always exists. One recorder encodes both commands
