@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 namespace das {
 
     #define DAS_MAX_HW_BREAKPOINTS  16
@@ -23,6 +25,7 @@ namespace das {
     DAS_API void setDasRoot ( const string & dr );
 
     DAS_API string normalizeFileName ( const char * fileName );
+    DAS_API FILE * das_fopen_utf8 ( const char * fileName, const char * mode );
 
     string get_prefix ( const string & req );   // blah.... \ foo.bar - returns blah....
     string get_suffix ( const string & req );   // blah.... \ foo.bar - returns foo.bar

@@ -24,13 +24,13 @@ if(NOT DAS_TOOLS_DISABLED)
     set(_DAS_TEST_DIR ${PROJECT_SOURCE_DIR}/tests)
     set(_DAS_TEST_COMMON --color --failures-only --test ${_DAS_TEST_DIR})
 
-    add_custom_target(run_tests_interpreter
+    add_das_target(run_tests_interpreter
         COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
     )
-    add_custom_target(run_tests_interpreter_isolated
+    add_das_target(run_tests_interpreter_isolated
         COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -87,13 +87,13 @@ if(NOT DAS_TOOLS_DISABLED)
         # (.jitted_scripts/<namespace>/<contenthash>) and each file runs in
         # exactly one batch. The _isolated retry stays batch-1 (one process per
         # test — max crash isolation, and a batch crash re-dispatches per-file).
-        add_custom_target(run_tests_jit
+        add_das_target(run_tests_jit
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --batch 4 --timeout ${DAS_TEST_JIT_TIMEOUT}
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated-parallel)"
         )
-        add_custom_target(run_tests_jit_isolated
+        add_das_target(run_tests_jit_isolated
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --timeout ${DAS_TEST_JIT_TIMEOUT_ISOLATED}
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -106,7 +106,7 @@ endif()
 # The full binary is EXCLUDE_FROM_ALL; this target builds it on demand (nightly CI,
 # preflight --full).
 if(TARGET test_aot)
-    add_custom_target(run_tests_aot
+    add_das_target(run_tests_aot
         COMMAND $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -118,7 +118,7 @@ endif()
 # CI already builds as part of ALL. For local/debug use — PR CI treats the
 # subset build itself as the gate and runs no AOT tests.
 if(TARGET test_aot_subset)
-    add_custom_target(run_tests_aot_subset
+    add_das_target(run_tests_aot_subset
         COMMAND $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language
         DEPENDS test_aot_subset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -129,7 +129,7 @@ endif()
 # LLVM-AOT (LLVM-backend .o) mirror of run_tests_aot: test bodies bound from the
 # statically-linked self-registering objects and run jitted. Opt-in, not in CI.
 if(TARGET test_llvm_aot)
-    add_custom_target(run_tests_llvm_aot
+    add_das_target(run_tests_llvm_aot
         COMMAND $<TARGET_FILE:test_llvm_aot> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -jit -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -188,14 +188,14 @@ if(NOT "${_ci_sweeps_isolated}" STREQUAL "")
     add_dependencies(run_tests_sweeps_isolated ${_ci_sweeps_isolated})
 endif()
 
-add_custom_target(run_tests_static
+add_das_target(run_tests_static
     COMMAND $<TARGET_FILE:daslang_static> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests
     DEPENDS daslang_static
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Running tests (daslang_static)"
 )
 
-add_custom_target(run_tests_serdeser
+add_das_target(run_tests_serdeser
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests --ser ${CMAKE_CURRENT_BINARY_DIR}/serialized.bin --timeout 1200
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests --deser ${CMAKE_CURRENT_BINARY_DIR}/serialized.bin --timeout 1200
     DEPENDS daslang

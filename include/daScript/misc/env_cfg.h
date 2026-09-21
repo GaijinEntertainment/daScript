@@ -38,6 +38,9 @@ namespace das {
     DAS_API const char * get_dasenv_team_prof ();
     DAS_API const char * get_dasenv_trace_module_load ();
     DAS_API const char * get_dasenv_module_cache_limit ();
+    DAS_API const char * get_dasenv_depfile ();
+    DAS_API const char * get_dasenv_depfile_target ();
+    DAS_API const char * get_dasenv_depfile_exclude ();
 
     // ambient variables daslang reads but does not own
     DAS_API const char * get_columns ();

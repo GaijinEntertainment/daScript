@@ -13,7 +13,7 @@ add_custom_target(check_example_games
     COMMENT "Checking the example games stay wired to the site"
 )
 
-add_custom_target(run_tests_boulder_dash
+add_das_target(run_tests_boulder_dash
     COMMAND ${_games_daslang} ${_games_dastest} -- --color --failures-only --test ${_games_root}/examples/games/boulder-dash
     COMMAND ${_games_daslang} ${_games_dastest} -- --color --failures-only --test ${_games_root}/web/examples/ui/samples/examples/boulder-dash
     DEPENDS daslang
@@ -38,7 +38,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_games_sequence_cmds COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/sequence/ci_smoke_test.sh ${_games_root})
 endif()
-add_custom_target(run_sequence_smoke
+add_das_target(run_sequence_smoke
     ${_games_sequence_cmds}
     DEPENDS daslang ${_games_modules}
     WORKING_DIRECTORY ${_games_root}
