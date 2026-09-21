@@ -3198,7 +3198,7 @@ def private rebase_pseudo(si : int; ss : StreamStack const) {
 def private stream_copy_begin : VkCommandBuffer {
     let xfer = g_gpu.xfer_fam >= 0
     if (xfer && g_gpu.xfer_value > 0ul) {
-        xfer_wait(g_gpu.xfer_value, false)   // every prior transfer-queue copy retired
+        xfer_wait(g_gpu.xfer_value, false)
     }
     var raw = xfer ? g_gpu.xfer_cmd : g_gpu.stream_cmd
     let rf : VkCommandBufferResetFlags

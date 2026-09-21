@@ -13,7 +13,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // the forced-feed rig: the two arms, the per-step bar
+require _resident_feed   // resident_then_cpu_feed, feed_steps_within
 
 // The whole-model resident driver on a qwen2 (Qwen2.5-0.5B-Instruct-Q8_0 under DASLLAMA_GPU=1): the
 // q/k/v projection bias folds into the rope stage on the device. The forced-feed logits-tolerance

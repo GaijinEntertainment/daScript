@@ -2008,7 +2008,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let dim = c.dim
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
-    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs: the table rows the device projects, else the pre-step's finished rows
+    let ple_raw = rdec_ple_proj_on()
     if (has_ple(c)) {
         rdec_ple_side_rows(t, ws.row_tokens, nrows, ws, 0l)
     }
@@ -2040,7 +2040,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_poss[i] = pos
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
-        g_rdec_lrows[i] = null   //! a bare-argmax row takes its pick alone
+        g_rdec_lrows[i] = null
         if (!s.device_pick) {
             g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
         }

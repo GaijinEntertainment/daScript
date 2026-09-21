@@ -28,6 +28,7 @@ let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a
 let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane: one fragment at the widest KV row the prepare admits
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 let RD_NB_MAX = 8l   //! the N-row token command's rows, at most
+let RD_PICK_CHUNKS = 64l   //! the chunks a row's pick splits into: a workgroup each over a 4096-wide slice of a 262144 vocab
 var g_rd_nrow_bisect = 0   //! a probe's bisect of the N-row command, bits: 1 = no attention, 2 = the one-column GEMVs (row 0 alone), 4 = no rope, 8 = no activation requant - the logits are garbage under any
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
@@ -178,6 +179,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.tok_meta = make_host_buf(16l * nb, true)   // the TokMeta block: a row's pos/cnt/mirbase each, the one-row command's at 0
     r.logits_host = make_host_buf(vocab * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.pick_dev = make_device_buf(4l * nb, r.log_xfer)
+    r.pick_partm_dev = make_device_buf(4l * nb * RD_PICK_CHUNKS)
+    r.pick_parti_dev = make_device_buf(4l * nb * RD_PICK_CHUNKS)
     r.pick_host = make_host_buf(4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.xlog_recorded |> resize(nb + 1l)
     r.xlog_pick_recorded |> resize(nb + 1l)
@@ -571,7 +574,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private rd_moe_sets(var L : RLayer) {
     let dim = g_rd.dim
-    let nb = g_rd.nb   //! the per-row planes' extent: every set binds the rows the N-row command steps, and the one-row command reads row 0 of them
+    let nb = g_rd.nb
     let nfe = g_rd.nfe
     let k = g_rd.k
     let pe1 = arena_planes(L.fe1, L.be1)
@@ -661,8 +664,7 @@ def private rd_moe_sets(var L : RLayer) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT))
 }
 
-//! a MoE layer's combine form, decided once for both commands (the one-row command's fused sets and the N-row command's
-//! ask alike): the quantizing twin where the next head's feed is Q8_0 under the fuse lever, its set over the rows' planes
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ensure_comb_sets {
     if (g_rd.comb_sets_made) return
     let nl = g_rd.n_layers
@@ -681,7 +683,7 @@ def private rd_ensure_comb_sets {
             L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
                 fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, (dim / 32l) * 4l * nb),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
-        } else {   //! the plain combine's quantizing twin: the combine's planes, the quants at the normed row's binding, the scales past the slot map
+        } else {
             L.s_comb_rq = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
                     g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
                 fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, (dim / 32l) * 4l * nb),
@@ -997,7 +999,6 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     verify(gemv_cls_ensure(fmt) && ensure_q8_actrq_cls() && ensure_cls_dn_rq(), "vk decode: the per-layer-embedding rails must engage on a live device")
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
-    //! every set binds the rows the N-row command steps; the one-row command reads row 0 of them
     // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
     L.s_ple_x = set_rq_cls(fixed_array(g_rd.x_dev, g_rd.xq_dev, g_rd.xs_dev),
         fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
@@ -1040,9 +1041,11 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
     unsafe {
         verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
             && (!kq_sb(cls_fmt) || ensure_cls_q8k_rq())
-            && (!rd_cls_epi_on() || ensure_cls_epi()) && ensure_cls_argmax(),
+            && (!rd_cls_epi_on() || ensure_cls_epi()) && ensure_cls_argmax_part() && ensure_cls_argmax_fin(),
             "vk decode: the class rails must engage on a live device")
-        g_rd.s_pick = set_cls_argmax(fixed_array(g_rd.logits_dev, g_rd.pick_dev), fixed_array(vocab * 4l * nb, 4l * nb), fixed_array(VHZ_LOG, VHZ_LOG))
+        let part_bytes = 4l * nb * RD_PICK_CHUNKS
+        g_rd.s_pick_part = set_cls_argmax_part(fixed_array(g_rd.logits_dev, g_rd.pick_partm_dev, g_rd.pick_parti_dev), fixed_array(vocab * 4l * nb, part_bytes, part_bytes), fixed_array(VHZ_LOG, VHZ_LOG, VHZ_LOG))
+        g_rd.s_pick_fin = set_cls_argmax_fin(fixed_array(g_rd.pick_partm_dev, g_rd.pick_parti_dev, g_rd.pick_dev), fixed_array(part_bytes, part_bytes, 4l * nb), fixed_array(VHZ_LOG, VHZ_LOG, VHZ_LOG))
         if (rd_cls_epi_on()) {
             var supp_bytes = 256l
             if (g_rd.nsupp > 0l) {
@@ -1115,9 +1118,7 @@ def private rd_pieces_for_span(span : int64) : int64 {
     return span < RD_WIDE_POS ? RD_SPLIT_PIECES : RD_SPLIT_WIDE_PIECES
 }
 
-//! a layer's pieces under the command's count: a sliding-window layer's is its window's span's, and the pieces are
-//! capped so the layer's workgroups over the plan's rows fit one wave of the SMs (sec.2.2al) - the one-row and N-row
-//! forms apply both alike, so their rows still sum in one order
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
 def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 {
     let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
     let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * g_rd.nb))
@@ -1380,10 +1381,10 @@ def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
 }
 
 //! the attention head over `nrows` rows: the projections as GEMVs into the rows of the projection plane (the N-column leaves past
-//! one row), the rope and store at each row's own position and region, the attention over each row's own history; `nc` is the
-//! GEMV leaves' column count and `bx` the N-row bisect bits (both the one-row reading at one row)
+//! one row), the rope and store at each row's own position and region, the attention over each row's own history; `ncols` is the
+//! GEMV leaves' column count and `nrow_bx` the N-row bisect bits (both the one-row reading at one row)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; nc : uint; bx : int) {
+def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; ncols : uint; nrow_bx : int) {
     let dim = g_rd.dim
     let qd = L.qd
     let kvd = L.kvd
@@ -1398,31 +1399,31 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let rqwg_qd_k = (qd * nrows / 8l + 255l) / 256l
     if (L.qkv_merged) {   //! q in kvd-row pieces, then k, then v: one dispatch writes the whole projection row
         let nreg = qd / kvd + (L.vfk ? 1l : 2l)
-        var pcqkv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = uint(nreg), ybase = 0u, ncols = nc, ystride = kvrow)
+        var pcqkv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = uint(nreg), ybase = 0u, ncols = ncols, ystride = kvrow)
         gemv_enc(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
         rd_ts(raw, "a:qkv")
     } else {
-        var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u, ncols = nc, ystride = kvrow)
+        var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u, ncols = ncols, ystride = kvrow)
         gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
         rd_ts(raw, "a:q")
     }
     if (L.kv_shared || L.qkv_merged) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
     } elif (L.kv_merged) {
-        var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd), ncols = nc, ystride = kvrow)
+        var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd), ncols = ncols, ystride = kvrow)
         gemv_enc(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
         rd_ts(raw, "a:kv")
     } else {
-        var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd), ncols = nc, ystride = kvrow)
+        var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd), ncols = ncols, ystride = kvrow)
         gemv_enc(L.fk, raw, h, L.s_k, pck, kvd)
         rd_ts(raw, "a:kv")
         if (!L.vfk) {   //! a V-from-K layer has no v plane: the rope store takes V off the k row
-            var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd), ncols = nc, ystride = kvrow)
+            var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd), ncols = ncols, ystride = kvrow)
             gemv_enc(L.fv, raw, h, L.s_v, pcv, kvd)
             rd_ts(raw, "a:kv")   //! the split v stamp folds into the kv slot
         }
     }
-    if ((bx & 5) == 5) {   // the bisect knob: no rope, no attention - the wo GEMV alone
-        var pcw0 = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(dim))
+    if ((nrow_bx & (NROW_BX_ATTN | NROW_BX_ROPE)) == (NROW_BX_ATTN | NROW_BX_ROPE)) {
+        var pcw0 = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
         gemv_enc(L.fo, raw, h, L.s_wo, pcw0, dim)
         rd_ts(raw, "a:wo")
         return
@@ -1431,7 +1432,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let mirbase = uint(one ? rd_mir_base(L) : L.mir_base)   //! the one-row command's region rides its push; an N-row step's rows carry theirs in TokMeta
     let nkh = L.kv_shared ? 0l : kvd / hs   //! the k-head groups also store the mirror row: none on a shared-KV layer
-    if (fuse_qkr && (bx & 4) == 0) {
+    if (fuse_qkr && (nrow_bx & NROW_BX_ROPE) == 0) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
             neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = mirbase,
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
@@ -1444,7 +1445,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, (g_rd.n_heads + nkh) * nrows)
         }
         rd_ts(raw, "a:qknrope")
-    } elif ((bx & 4) == 0) {
+    } elif ((nrow_bx & NROW_BX_ROPE) == 0) {
         if (g_rd.qk_norm) {
             var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkh),
                 qstride = kvrow, kstride = kvrow, kbase = uint(qd),
@@ -1472,7 +1473,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(rowwgs), qrow = kvrow, cntoff = uint(g_rd.attn_cnt_off))
-    if ((bx & 1) == 0) {   // the bisect knob's attention bit clear: the attention runs
+    if ((nrow_bx & NROW_BX_ATTN) == 0) {
         rd_enc_da_attn(raw, h, L, pca, rowwgs * nrows)
     }
     rd_ts(raw, "a:attn")
@@ -1484,7 +1485,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         rd_ts(raw, "a:rq_a")
     }
-    if (one && L.wo_ar) {   //! the epilogue GEMV has a one-row class alone
+    if (one && L.wo_ar) {
         var pcwa = GemvArArgs(n = uint(qd), d = uint(dim), wblk = uint(arena_local_blk(L.bo)), xblk = 0u, add_on = 1u,
             woff = uint(rd_norm_off(l, RD_NORM_FFN)), pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)), pre_on = L.pre_post ? 1u : 0u,
             no_norm = 0u, eps = g_rd.eps, ascale = 1.0, abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
@@ -1492,7 +1493,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "a:wo_ar")
         return
     }
-    var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(dim))
+    var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
     gemv_enc(L.fo, raw, h, L.s_wo, pcw, dim)
     rd_ts(raw, "a:wo")
 }
@@ -1574,16 +1575,14 @@ def private rd_ffn_pfx(L : RLayer) : string => L.moe ? "m:sh_" : rd_head_pfx(L)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_tail_pfx(L : RLayer) : string => L.moe ? "m:" : rd_head_pfx(L)
 
-//! the dense FFN over `nrows` rows: gate and up (the fused slab, or the two GEMVs and the act + requant over the rows' hidden
-//! plane), then the down GEMV - the epilogue forms at one row alone
-def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nxt, nrows : int64; nc : uint; bx : int) {
+def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nxt, nrows : int64; ncols : uint; nrow_bx : int) {
     let dim = g_rd.dim
     let hid = L.hid
     let pfx = rd_ffn_pfx(L)
     let act = L.gelu ? ACT_GELU : ACT_SILU
     let one = nrows == 1l
     let nr = uint(nrows)
-    if (L.gu_on && (bx & 10) == 0) {   //! the fused gate-up: the one-row class, or its N-column stamps over the rows
+    if (L.gu_on && (nrow_bx & (NROW_BX_NCOL1 | NROW_BX_ACTRQ)) == 0) {
         if (one) {
             var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act)
             enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
@@ -1593,12 +1592,12 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         }
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
-        var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(hid))
+        var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(hid))
         gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
         rd_ts(raw, "{pfx}gate")
         gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
         rd_ts(raw, "{pfx}up")
-        if ((bx & 8) == 0) {
+        if ((nrow_bx & NROW_BX_ACTRQ) == 0) {
             if (kq_sb(L.f2)) {
                 var pc_act_k = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 256l) * nr)
                 enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid * nrows / 8l + 255l) / 256l)
@@ -1617,13 +1616,13 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "{pfx}down_ar")
         return
     }
-    var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(dim))
+    var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
     gemv_enc(L.f2, raw, h, L.s_down, pcd, dim)
     rd_ts(raw, "{pfx}down")
 }
 
 //! The per-layer-embedding branch after the FFN residual, over `nrows` rows: gelu(gate . x) x side[l] -> proj -> ffnout (the next-norm step adds it under the ple post norm)
-def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; nc : uint) {
+def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; ncols : uint) {
     let dim = g_rd.dim
     let ple = g_rd.ple
     let nr = uint(nrows)
@@ -1632,7 +1631,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim * nrows / 4l + 255l) / 256l)
         rd_ts(raw, "p:rq_x")
     }
-    var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(ple))
+    var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(ple))
     gemv_enc(L.fpg, raw, h, L.s_ple_gate, pcg, ple)
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
@@ -1646,14 +1645,11 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
     rd_ts(raw, "p:act")
-    var pcp = GemvArgs(n = uint(ple), d = uint(dim), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(dim))
+    var pcp = GemvArgs(n = uint(ple), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
     gemv_enc(L.fpg, raw, h, L.s_ple_proj, pcp, dim)
     rd_ts(raw, "p:proj")
 }
 
-//! the routed block over `nrows` rows: the router over the rows as columns, the top-k a row, the expert GEMVs over every
-//! row's slots, the act and the down; the fused expert forms (the norm+requant stamp, the gate-up slabs, the summing down)
-//! have one-row classes alone
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
@@ -1664,7 +1660,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let nr = uint(nrows)
     if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into xb (the dense triple's requant took the FFN-normed row already)
         var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        if (one && L.pre2_fused) {   //! the norm and the experts' requant in one
+        if (one && L.pre2_fused) {
             enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
             rd_ts(raw, "m:pre2_rq")
         } else {
@@ -1698,7 +1694,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         xnb2 = uint(nfe / fmt_unit(L.fe2)), lstride = uint(g_rd.ner), xnb1 = uint(dim / fmt_unit(L.fe1)))
     if (one) {
         enc_topk_cls(raw, h, L.s_topk, pct, 1l)
-    } else {   //! the per-row form: its own class, a workgroup a row
+    } else {
         enc_topk_n_cls(raw, h, L.s_topk_n, pct, nrows)
     }
     rd_ts(raw, "m:topk")
@@ -1758,17 +1754,14 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
 
-//! the token command over `nrows` rows at `nsplit` key splits a head, encoded over the filled metas and sets: the one-row command
-//! at one (its fused arms under the lever and its bisect, the epilogue GEMVs, the fused expert forms), the N-row command past it
-//! (the N-column leaves, the rows stamp where a site's feed is Q8_0 - the Q8_K twin has no row form, item 70 - and its bisect knob)
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
     let dim = g_rd.dim
     let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     let one = nrows == 1l
     let nr = uint(nrows)
-    let bxn = one ? 0 : g_rd_nrow_bisect   //! the bisect knob reaches the N-row command alone
-    let nc = (bxn & 2) != 0 ? 1u : nr   //! the GEMV leaves' column count: the N-column form, or under bit 2 the one-column form over row 0
+    let nrow_bx = one ? 0 : g_rd_nrow_bisect   //! the bisect knob reaches the N-row command alone
+    let ncols = (nrow_bx & NROW_BX_NCOL1) != 0 ? 1u : nr
     unsafe {
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -1805,8 +1798,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
         let rqwg_dim = (dim * nrows / 4l + 255l) / 256l
         let rqwg_dim_k = (dim * nrows / 8l + 255l) / 256l
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
-        //! the one-row command fuses each site under the lever and its bisect (the bisect keeps one site split, and the requant that
-        //! site's split form owes follows it); the rows form fuses a site wherever its feed is Q8_0, the `rq_b` stamp a row a workgroup
+        //! the rows form fuses a site wherever its feed is Q8_0 (the `rq_b` stamp, a row a workgroup); the one-row form fuses under the lever and its bisect
         let bx = vk_fuse_bisect_bits()
         let pro_fused = one ? fuse && (bx & FUSE_BX_PROLOGUE_RQ) == 0l : !kq_sb(g_rd.layers[0].fq)
         let att_fused = one && fuse && (bx & FUSE_BX_POST_ATT_RQ) == 0l
@@ -1821,8 +1813,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, nrows)   // xb = rms_att[0](x)
         }
         rd_ts(raw, "p:prologue")
-        //! the site before quantized this head's feed: the fused prologue, a fused next site, or a MoE layer's quantizing combine
-        //! (which writes no float row to requant) - a split next site leaves the float row, a quantizing combine never
+        //! the head's feed is quantized already: the fused prologue, a fused next site, or a MoE layer's quantizing combine (which leaves no float row to requant)
         var xq_ready = pro_fused
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
@@ -1839,7 +1830,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit), nrows, nc, bxn)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit), nrows, ncols, nrow_bx)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
@@ -1867,7 +1858,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin   //! rms_att[l+1] | final
             let fn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : g_rd.cls_fmt_marker
             if (has_dense_triple(L)) {
-                rd_encode_ffn(raw, h, L, l, nxt, nrows, nc, bxn)
+                rd_encode_ffn(raw, h, L, l, nxt, nrows, ncols, nrow_bx)
             }
             if (L.moe) {
                 rd_encode_moe(raw, h, L, l, nrows, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
@@ -1889,7 +1880,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
                     enc_cls_ar(raw, h, L.s_addr_next, pc14a, nrows)
                     rd_ts(raw, "{tpfx}ar2a")
                 }
-                rd_encode_ple(raw, h, L, l, nrows, nc)
+                rd_encode_ple(raw, h, L, l, nrows, ncols)
             }
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
@@ -1933,15 +1924,16 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             }
             rd_ts(raw, "t:fin_rq")
         }
-        var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = nc, ystride = uint(g_rd.vocab))
+        var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(g_rd.vocab))
         gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
         rd_ts(raw, "t:cls")
         if (rd_cls_epi_on()) {
             rd_enc_cls_epi(raw, h, nrows)
             rd_ts(raw, "t:epi")
         }
-        var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))   //! every row's pick, after the epilogue: a row whose sampler is a bare argmax lands the id alone
-        enc_cls_argmax(raw, h, g_rd.s_pick, pcp, nrows)
+        var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab), nchunk = uint(RD_PICK_CHUNKS))
+        enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, nrows * RD_PICK_CHUNKS)
+        enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, nrows)
         rd_ts(raw, "t:pick")
         if (!g_rd.log_xfer) {   //! the transfer queue carries the logits down (`rd_xlog`); without one the command copies them itself
             vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
@@ -2267,8 +2259,6 @@ def private rd_ensure_n_rail : bool {
     return ok
 }
 
-//! the N-row command's own sets: the fused Q8_0 sites over the rows (the `rq_b` stamp, where a site's feed is Q8_0), the
-//! fused gate-up's N stamps, the per-row top-k, and the combine form both commands share
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ensure_n_sets {
     if (g_rd.n_sets_made) return
@@ -2307,9 +2297,6 @@ def private rd_ensure_n_sets {
     g_rd.n_sets_made = true
 }
 
-//! the N-row command at `nrows` rows and `nsplit` pieces a head into `raw` - the split form or its unsplit twin (the rows take
-//! no wide form, sec.2.2al), recorded once per row count and form - its stamp names, count and overflow kept by form, apart
-//! from the one-row command's
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_record_n_form(raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
     var one_names <- g_rdq_stamp_names
@@ -2338,7 +2325,7 @@ def private rd_land_logits_n(lrows : array<float?>; var picks : array<int64>; nr
     var src = unsafe(reinterpret<uint8?>(g_rd.logits_host.mapped))
     var rowptrs = unsafe(addr<float ??>(lrows[0]))   // the row pointers as a raw pointer: the lanes' lambda captures no array
     var pk = unsafe(reinterpret<uint?>(g_rd.pick_host.mapped))
-    for (i in range64(nrows)) {   //! a null row pointer takes the row's pick alone
+    for (i in range64(nrows)) {
         picks[i] = lrows[i] == null ? int64(unsafe(pk[i])) : -1l
     }
     let jobs = min(int(nrows), get_dispatch_lanes())

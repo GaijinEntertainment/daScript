@@ -2443,7 +2443,8 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmax`, after the epilogue), and their host landing
     pick_host : HostBuf
-    s_pick : VkDescriptorSet
+    pick_partm_dev, pick_parti_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
+    s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
@@ -3302,6 +3303,10 @@ let FUSE_BX_PROLOGUE_RQ = 8l   //! the prologue's add+rms+requant stamp
 let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, which would add the residual twice)
 let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
 let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
+let NROW_BX_ATTN = 1        //! `DASLLAMA_VK_NROW_BISECT`, the N-row command's probe bits: no attention
+let NROW_BX_NCOL1 = 2       //! the one-column GEMV leaves over row 0
+let NROW_BX_ROPE = 4        //! no rope (and no q/k norm)
+let NROW_BX_ACTRQ = 8       //! no act + requant
 
 def vk_fuse_on : bool {
     if (g_vk_fuse < 0) {
@@ -3470,8 +3475,7 @@ def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     return sig
 }
 
-//! wait until the transfer timeline reaches `v`: spinning on its counter (the logits' landing a step, where a blocking wait
-//! pays the OS wake-up latency), or blocking - the backstop before re-recording the shared xfer cmd, and the cold-miss sync wait
+//! wait until the transfer timeline reaches `v`: spinning on its counter where a blocking wait's OS wake-up would cost more than the wait (the logits' landing a step), else blocking
 def xfer_wait(v : uint64; spin : bool) {
     var sem = g_gpu.xfer_sem
     if (spin) {

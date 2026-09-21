@@ -13,7 +13,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // the forced-feed rig: the two arms, the per-step bar
+require _resident_feed   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
 
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),

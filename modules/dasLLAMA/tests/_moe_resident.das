@@ -21,7 +21,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed public   // the forced-feed rig: the two arms, the per-step bar
+require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, feed_logits, argmax_of
 
 [init]
 def private allow_cpu_prefill_intent() {
