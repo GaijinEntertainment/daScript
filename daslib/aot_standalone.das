@@ -295,17 +295,23 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 class StandaloneContextGen : CppAot {
     //! AOT visitor specialized for standalone context code generation.
 
-    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool) {
+    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool; foreign : array<Function?>) {
         ss <- ss_;
         collector <- coll;
         program := program_;
         cross_platform = cp;
+        emittedForeignHashes <- {for (fn in foreign); fn.getMangledNameHash}
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
         helper.cross_platform = cp;
     }
 
     used_functions : table<string>;
+    emittedForeignHashes : table<uint64>;
+
+    def override emitsForeignBody(func : Function?) : bool {
+        return emittedForeignHashes |> key_exists(func.getMangledNameHash);
+    }
 
     def override preVisitGlobalLet(prog : ProgramPtr) {
         CppAot`preVisitGlobalLet(self, prog);
@@ -439,7 +445,8 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
         build_string() $(tmp_writer) {
-            var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform);
+            var foreign <- foreignUsedFunctions(program, false)
+            var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform, foreign);
             make_visitor(*gen) $(adapter) {
                 gen.adapter := adapter
                 program |> visit_module(adapter, program.getThisModule, true);
@@ -448,7 +455,6 @@ def genStandaloneSrc(var program : ProgramPtr;
                 for (pfun in collectProgramUsedFunctions(program, false, false)) {
                     emitted |> insert(aotFuncName(pfun))
                 }
-                var foreign <- foreignUsedFunctions(program, false)
                 for (fn in foreign) {
                     let name = aotFuncName(fn)
                     if (emitted |> key_exists(name)) continue
