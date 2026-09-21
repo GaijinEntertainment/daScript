@@ -5,6 +5,7 @@ options no_unused_block_arguments = false
 module _live_host_spawn public
 
 require daslib/fio
+require daslib/network
 require daslib/command_line
 require daslib/strings_boost
 require dashv/dashv_boost
@@ -48,11 +49,11 @@ def status_answers(port : int) : bool {
     return !empty(status_body(port))
 }
 
-//! the first port from `from` to the end of the span no host answers on, so a /status answer is
-//! this test's own child and its /shutdown reaches nothing else; -1 when every port has a host
+//! the first port from `from` to the end of the span nothing listens on, so a /status answer is
+//! this test's own child and its /shutdown reaches nothing else; -1 when every port is taken
 def free_port_from(from, last : int) : int {
     for (port in range(from, last)) {
-        if (!status_answers(port)) return port
+        if (probe_local_port("127.0.0.1", port) == port) return port
     }
     return -1
 }
@@ -83,14 +84,10 @@ def with_ready_host(exe, script : string; band : int; extra_args : array<string>
         let ready = wait_ready(host, port, 30.0, lines)
         if (ready >= 0.0 || attempt == 2) {
             invoke(blk, host, port, ready)
-            unsafe {
-                close_process(host)   //! ends a child that never became ready
-            }
+            unsafe(close_process(host))   //! ends a child that never became ready
             return true
         }
-        unsafe {
-            close_process(host)
-        }
+        unsafe(close_process(host))
         from = port + 1
     }
     return false
@@ -118,7 +115,7 @@ def wait_ready(var host : process; port : int; seconds : float; var lines : arra
             lines |> push(line)
         })
         if (unsafe(process_poll(host)) != process_running) return -1.0
-        if (status_answers(port)) return float(get_time_usec(started)) / 1000000.0
+        if (probe_local_port("127.0.0.1", port) < 0 && status_answers(port)) return float(get_time_usec(started)) / 1000000.0
         sleep(250u)
     }
     return -1.0
