@@ -20,8 +20,8 @@ subfolder's `REVIEW_KERNEL_CELLS.md` for the gates that dispatch or bind the cla
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
 deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
-by an ordered setter list and every retained-reference arm of that kernel.** An arm left
-dispatching stale geometry measures the wrong kernel silently.
+by an ordered setter list and every retained-reference arm of that kernel (`REVIEW_GPU_RACE.md`
+defines the arm).** An arm left dispatching stale geometry measures the wrong kernel silently.
 
 **A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
 timing arm that carries that body as a hand-written twin, and every retained-reference arm of
@@ -60,7 +60,7 @@ the dispatch, and whose deciding value the host fixes before it records the disp
 defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
 guard, clamping the index so the guarded work runs on a live value and its result is never
 stored also conforms.** Stamped means the deciding value is a `@template_constant`; the generated
-`*_msl` global or SPIR-V dump then shows no guard and a constant trip count.
+`*_msl` global or SPIR-V dump then shows no guard for a guard, a constant trip count for a bound.
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value

@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned work: `followup_metal.md` for Metal,
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for Metal,
 `followup_vulkan.md` for Vulkan.
 
 A race times two candidates for one computation in one process, either of which the run could
@@ -17,7 +17,7 @@ a checked-in document, box profile or sidecar records the arm's figure or names 
 shipped form. A retained-reference arm is one ledgered as a retained reference in
 `ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b (Metal) or the Vulkan arm ledger - the GEMM probe's
 arms in `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a, the decode rulers' in
-`ARCHITECTURE_MEASUREMENT.md`'s decode-ruler paragraph.
+`ARCHITECTURE_MEASUREMENT.md` sec.2.5.
 
 **A hand-binding arm that binds a field at a position the class does not declare for that field
 is a defect.** A hand-binding arm restates a SHIPPED class's binding numbers instead of naming its
@@ -61,7 +61,9 @@ dispatches.**
 
 **A timing arm with a decided ranking times its kernel on every input the ranking branches on -
 a shape dimension (a head width, a batch width, a row count, a lane split, a tile's own width) or
-a layer kind (dense, MoE, per-layer-embedding) - at a value on each side of the branch.** A ranking timed at one value alone is applied at values it was never ranked at.
+a layer kind (dense, MoE, per-layer-embedding) - at a value on each side of a shape-dimension
+branch, and on a layer of each kind the ranking covers.** A ranking timed at one value alone is
+applied at values it was never ranked at.
 
 **A diff that widens the gate admitting inputs to a kernel whose ranking is decided - a shape
 dimension (a head width, a batch width, a row count, a lane split, a tile width) or a layer kind

@@ -4,7 +4,7 @@
 docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 `ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_vulkan.md`.
+`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
