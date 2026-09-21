@@ -3847,7 +3847,12 @@ class public CppAot : AstVisitor {
             return empty(bif.cppName);
         }
         if (func.flags.noAot || func.flags.aotHybrid || func.moreFlags.requestJit) return true;
-        return func._module != program.getThisModule;
+        return func._module != program.getThisModule && !emitsForeignBody(func);
+    }
+    //! true when this unit emits the C++ body of the foreign function, so a call to it is a plain
+    //! C++ call; the regular -aot and -lib units emit no foreign body and answer false
+    def emitsForeignBody(func : Function?) : bool {
+        return false;
     }
     def needsArgPassType(argType : TypeDeclPtr) {
         return !argType.flags.constant && !argType.isGoodBlockType;

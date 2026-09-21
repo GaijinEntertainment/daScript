@@ -128,6 +128,19 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   global's initializer temporaries collect under the collector's null key, the one
   `__init_script` declares. `UseTypeMarker` walks the foreign functions too, so an extern
   or handled type reached only from one still links its module.
+- **A call into a required module is a direct C++ call.** `genStandaloneSrc` builds
+  `StandaloneContextGen` with the `foreignUsedFunctions` list it then walks to emit the foreign
+  bodies; the generator keeps their mangled-name hashes in `emittedForeignHashes` and answers
+  `CppAot.emitsForeignBody` from them, so `isHybridCall` spells the call in the same-module
+  direct form. One list feeds the table and the emission loop, so a hash in the table is a
+  body in the unit; the prototype the call binds against comes from the declaration list,
+  `collectProgramUsedFunctions(prog, true, false)` in `preVisitProgramBody`, a superset of that
+  list deduplicated by the same `aotFuncName`. The regular `-aot` and `-lib` units answer false and keep the
+  `fnByMangledName` lookup: the callee's body is in another unit. `[hybrid]` and `[jit]`
+  functions keep the lookup in every unit because `isHybridCall` tests those flags before
+  asking, and every Func slot (`@@fn`, class methods, finalizers) keeps it because
+  `preVisitExprAddr` never asks. The dependency dump's second `CppAot` emits no expression
+  and needs no table.
 - **Every used `[init]` is called from the ctor, whatever module declares it.** The TU holds
   every used function of every module (below), so a required module's `[init]` has an AOT body
   like any other and needs no special case; the call order is the simulated context's own, read
