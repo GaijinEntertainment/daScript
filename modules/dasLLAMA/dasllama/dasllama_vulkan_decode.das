@@ -2348,7 +2348,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     for (i in range64(nrows)) {
         all_pick = all_pick && lrows[i] == null
     }
-    verify(nrows >= 1l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes")
+    verify(nrows >= 2l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes (a one-row step is the one-row command's: its region rides the push, the N-row rows' ride TokMeta)")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
     verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
     assert(g_rd.ple <= 0l || ple_raw == g_rd.ple_gpu, "vk_rdec_token_n: raw per-layer-embedding rows without the projection on device, or finished rows with it")

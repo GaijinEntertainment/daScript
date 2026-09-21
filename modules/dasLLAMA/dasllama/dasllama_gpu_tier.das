@@ -1268,7 +1268,7 @@ def public install_rdec_note_weight_bytes(f : function<(bytes : int64) : void>) 
 }
 
 //! the N-row token command: `nrows` rows of x, cos/sin and the per-layer-embedding side input (empty where the model has none; `ple_raw` says the rows are the gathered table rows the device projects, not the finished pre-step), each row's position, cached count and mirror region, each row's
-//! logits landed at its own `lrows` pointer (a session's logits row) - or, where the pointer is null, the row's argmax id alone into `picks` (-1 on a landed row)
+//! logits landed at its own `lrows` pointer (a session's logits row) - or, where the pointer is null, the row's argmax id alone into `picks` (-1 on a landed row); two rows at least - a one-row step is the one-row command's
 typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) : void>
 
 [unused_argument(x, cossin, ple, ple_raw, poss, cnts, regs, nrows, lrows, picks)]
