@@ -30,3 +30,17 @@ and the caller gets trailing garbage.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing the files or
 lines a check scans, or rewriting a finding text so it no longer names what failed.**
+
+**A diff that makes `dep_recorder.cpp` write more than one rule per depfile is a defect** -
+several rules naming one target is ninja's deprecated `depfilemulti`, and a parallel sweep whose
+workers each wrote their own would produce one per worker. A process merges into the rule already
+there, under the lock file beside it.
+
+**A diff that has `dep_recorder.cpp` record anything but a source the compile read is a
+defect** - a file read at runtime, a directory listing, a build artifact. A check's inputs are
+its require graph; an artifact belongs to another edge, so naming one makes ninja build that
+edge, and an artifact the build rewrites leaves the check dirty for good.
+
+**A diff that drops the exists-at-flush filter in `dep_recorder.cpp` is a defect**: a path under
+a temp directory the run removed would be named, and ninja treats a missing dependency as dirty
+forever.

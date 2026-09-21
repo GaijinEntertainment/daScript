@@ -8,6 +8,7 @@
 #include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
+#include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/job_que.h"
 #include "daScript/misc/performance_time.h"
 #ifdef __APPLE__
@@ -31,6 +32,9 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 TextPrinter tout;
 
 static string projectFile;
+static string depFilePath;      // -MF; empty with -MD means DAS_DEPFILE names it
+static string depFileTarget;    // -MT
+static bool depFileArmed = false;
 // aot config
 static bool aotMacros = false;
 static bool isAotLib = false;
@@ -756,6 +760,11 @@ void print_help() {
         << "                when the compile diverged; prints 'deser: clean'/'partial'/'FALLBACK'. Default ON,\n"
         << "                silently, at .jitted_scripts/module_cache/<script>-<hash>.dascache for a run that\n"
         << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation, -use-aot\n"
+        << "    -MD -MF <path> write a Make dependency file naming every source, data file and\n"
+        << "                directory this run read, the way a C compiler's -MD does. -MT <target>\n"
+        << "                names the rule (default: <path> without its trailing .d). DAS_DEPFILE in\n"
+        << "                the environment is the twin a build system sets, and it reaches the\n"
+        << "                processes this one spawns\n"
         << "    -no-module-cache  no AST module cache at all\n"
         << "    -no-optimization  compile every module unoptimized (a debugger then stops on every statement the source has)\n"
         << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
@@ -864,6 +873,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
     hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
     for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
+        if ( int skip = das_dep_flag_argc(argv[i]) ) { i += skip - 1; continue; }
         hostOptions += argv[i];
         hostOptions += '\n';
     }
@@ -983,6 +993,25 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 moduleCacheFile = argv[i+1];
                 moduleCacheExplicit = true;
+                i += 1;
+            } else if ( cmd=="MD" ) {
+                depFileArmed = true;
+            } else if ( cmd=="MF" ) {
+                if ( i+1 >= argc ) {
+                    printf("-MF requires path argument\n");
+                    print_help();
+                    return -1;
+                }
+                depFilePath = argv[i+1];
+                depFileArmed = true;
+                i += 1;
+            } else if ( cmd=="MT" ) {
+                if ( i+1 >= argc ) {
+                    printf("-MT requires target argument\n");
+                    print_help();
+                    return -1;
+                }
+                depFileTarget = argv[i+1];
                 i += 1;
             } else if ( cmd=="no-module-cache" ) {
                 noModuleCache = true;
@@ -1148,6 +1177,13 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( libNeedsOutput && jitOutPath.empty() ) {
         printf("-lib needs -output <path>: a host includes the generated header by name, and the\n"
                "default JIT cache path is hash-named and swept\n");
+        return -1;
+    }
+    if ( depFileArmed && !depFilePath.empty() ) {
+        das_dep_arm(depFilePath.c_str(), depFileTarget.c_str());
+    } else if ( depFileArmed ) {
+        printf("-MD needs -MF <path>, or DAS_DEPFILE in the environment\n");
+        print_help();
         return -1;
     }
     startupPreScanUsec = get_time_usec(startupMain0);

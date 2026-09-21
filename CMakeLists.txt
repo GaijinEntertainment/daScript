@@ -1052,7 +1052,9 @@ include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
 include/daScript/misc/lexer_alloc_track.h
 include/daScript/misc/env_cfg.h
+include/daScript/misc/dep_recorder.h
 src/misc/env_cfg.cpp
+src/misc/dep_recorder.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
 src/misc/globals.cpp
@@ -1709,6 +1711,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/crash_handler.h
     include/daScript/misc/das_common.h
     include/daScript/misc/debug_break.h
+    include/daScript/misc/dep_recorder.h
     include/daScript/misc/enums.h
     include/daScript/misc/env_cfg.h
     include/daScript/misc/fpe.h
