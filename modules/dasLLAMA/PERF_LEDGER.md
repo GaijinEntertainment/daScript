@@ -2033,6 +2033,29 @@ processes throughout].
   the gated attention rows, no device driver):** tg128@4 517 +/- 8 against llama.cpp's 471 +/- 10
   at `-ngl 0` (1.10); the flat tg128 208 +/- 18 / 178 - the batched step reads 2.5x the flat row
   [direction-grade - two processes, the `-jit` script].
+- **The block codecs on the partial-rope carrier (the q8_0 / tq4 rope-store kernels take `rot`):**
+  the census at four streams serves Qwen3.5-0.8B Q8 on q8_0 KV at 965 and on tq4 at 991 summed,
+  Llama-3.2-1B Q8 at 990 / 1037, no decline on either codec [direction-grade - the `-jit` script,
+  the untuned tier, one rep]. The tq4 signs table read past its 128 floats on every 256-wide head:
+  the forced-feed probe (CPU prefill, then six steps fed the CPU chain's tokens on a CPU and a
+  GPU-decode session, per-step logits maxd) read the hybrid at 6.3-13.2 and gemma-2-2b Q4_K_M at
+  8.7-12.1 on tq4 KV with argmax flips, against 0.2-0.3 and 0.7-1.0 on q8_0; with the table at the
+  kernels' 512 ceiling the tq4 rows read 0.24-0.60 and 0.82-1.44, tokens exact [one process].
+- **Nine streams (`--npl 9`):** every non-hybrid K-quant catalog carrier serves batched (gemma-4-12B
+  Q4_K_M 109, Llama-3.2-1B Q4_K_M 747, Qwen3-30B-A3B Q4_K_M 292, Mistral-Small-24B 57, gemma-4-26B-A4B
+  Q4_K_M 250, gemma-4-E2B Q8 474 summed - no off-lattice decline in the catalog); every hybrid
+  declined `dn_state` (the four-mirror LRU evicting the rows of the step it prepared) and the Q8
+  hybrid then faulted on the device (nine rows written into nine-row planes by the rows form's
+  four-row tiles); with the cache grown to the batch and the planes sized to the tile the hybrids
+  read Qwen3.5-4B Q4_K_M 244, Qwen3.6-35B-A3B UD-Q4_K_M 278 at nine and Qwen3.5-0.8B Q8 1018 at nine,
+  1267 at twelve [direction-grade - the `-jit` script, untuned, one rep].
+- **The drafts as rows steps (the self-speculative batched row, `--npl-mtp`, three or five reps,
+  `-p 0`):** Qwen3.5-0.8B-MTP Q8 spec @4 720 -> 881 +/- 10 against the plain row's 987 +/- 47 in the
+  same session; Qwen3.6-27B-MTP Q4_K_M read spec 41.4 +/- 7.0 (cv 17%, void) beside plain 54.4 in
+  one pair and spec 45.3 +/- 2.3 beside plain 41.8 +/- 0.2 in the next, the plain row itself moving
+  54 -> 42 between the pairs - the box's heat under the untuned debug script, so the 27B pair ranks
+  nothing yet; the released exe on the idle box owes both carriers a record-grade read
+  [direction-grade - the `-jit` script, untuned, synthetic ids].
 
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 

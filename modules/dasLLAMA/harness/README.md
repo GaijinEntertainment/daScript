@@ -13,6 +13,7 @@ instruments - each carries its purpose in its header comment.
 | `quant_eval.das` / `quant_eval_q4.das` | Q8 / Q4 reconstruction-error stats vs the fp32 weights. |
 | `bpe_test.das` | BPE tokenizer corpus gate against the in-repo `ggml-vocab-llama-bpe` fixtures (no model needed). |
 | `gguf_dump.das` | Dump a GGUF's metadata + tensor table. |
+| `batch_decline_census.das` | The batched-step decline census: one host-cached N-stream row per GGUF through the Metal batch driver (`--npl`, `--ctx`, `--kv f16|f32|q8_0|tq4`), then the step census (device / cpu_stack / per_row) and both drivers' declines-by-reason tables - names which serving shapes still step a row at a time, and reads a dying per-row fallback as text. |
 | `mem.das` | Resident memory footprint of a loaded model, by region. |
 
 ## Token-for-token parity (the correctness detector)
