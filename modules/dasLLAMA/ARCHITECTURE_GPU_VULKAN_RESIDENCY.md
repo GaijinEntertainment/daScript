@@ -20,7 +20,14 @@ planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the hea
 arm leaves unfilled (zero when the user pins VRAM). KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
-the remedy that works - a shorter context, because the weights are fixed and the KV is not.
+the remedy that works - a shorter context, because the weights are fixed and the KV is not. The
+plan takes that remedy itself once: a mirror that does not fit is re-planned at seven eighths of
+the room that is left after the weights, as long as that context clears the arming floor - the
+built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own context pin
+(`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`) where that sits under either, since a caller that
+pinned its context named the shape it serves (`resident_arm_floor`). The pin is what lets a
+four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding
+cap's 6238 a region asks for more K/V than the weights leave.
 
 **The mirror's context is capped by the device's single-binding range before any byte is
 counted.** Each K/V side binds as one SSBO range, so `seq_cap` is at most `maxStorageBufferRange`

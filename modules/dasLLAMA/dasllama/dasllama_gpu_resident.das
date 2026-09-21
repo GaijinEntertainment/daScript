@@ -726,8 +726,16 @@ def set_gpu_ctx_max_(n : int64) {
 // the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
-    let v = g_env_gpu.gpu_min_ctx   // unset or non-numeric keeps the default floor
-    return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
+    let pin = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
+    return resident_arm_floor(g_env_gpu.gpu_min_ctx, pin)
+}
+
+//! the smallest context a capped mirror arms at: the env floor where set, else the built-in one - and a caller that
+//! pinned its context (`set_gpu_ctx_max`, DASLLAMA_GPU_CTX_MAX) under the floor gets its pin, since the pin IS the shape
+//! it serves; 256 positions the least of any
+def resident_arm_floor(env_floor, pin : int64) : int64 {
+    let floor = env_floor > 0l ? max(env_floor, 256l) : RDEC_MIN_CTX
+    return pin > 0l && pin < floor ? max(pin, 256l) : floor
 }
 
 // gather one prepared plane into device-layout bytes and place it in its format's arena; returns

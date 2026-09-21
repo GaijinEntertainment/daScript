@@ -1484,8 +1484,16 @@ def main() : int {
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
+        //! the batched row's context, a stream: its prompt, its window, a slot a stream for the admits, and the margin
+        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or llama-bench's -p default when the pp row is off
+        //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
+        let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
+        let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
+            if (!real_row) {
+                set_gpu_ctx_max(rows_ctx + 8l)   //! the mirror sized to the row's own context before the load plans it: a 12B homes four regions on a 16 GB card at 648 positions a region where the binding cap's 6238 declines
+            }
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 g_rd_nrow_bisect = int(g_env_vulkan.vk_nrow_bisect)   //! a probe's bisect of the N-row command; 0 = the served command
                 if (g_rd_nrow_bisect != 0) {
@@ -1494,8 +1502,8 @@ def main() : int {
             }
         }
         var t <- load_model_cached(mpath, cfg.quant)
+        set_gpu_ctx_max(0l)   //! the pin served this load; the next model's row sets its own
         var sched_ctx = 0l   //! the batched row's context: the flat rows' session narrows `seq_len` to its own rows, the scheduler's streams need theirs back
-        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or llama-bench's -p default when the pp row is off
         // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
         var inscope toks : array<array<int64>>
         if (real_row) {
@@ -1515,9 +1523,6 @@ def main() : int {
             }
             t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
         } else {
-            //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
-            let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
-            let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)
             t.config.seq_len = min(t.config.seq_len, rows_ctx + 8l)   // cap the KV allocation
             sched_ctx = t.config.seq_len
         }

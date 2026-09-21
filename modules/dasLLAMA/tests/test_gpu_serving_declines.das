@@ -420,3 +420,16 @@ def test_plan_room(t : T?) {
         t |> equal(0l, pinned.others, "a pinned cap counts nobody else")
     }
 }
+
+[test]
+def test_resident_arm_floor(t : T?) {
+    t |> run("the smallest context a capped mirror arms at: the built-in floor, the env floor, and a caller's pin under either") @(t : T?) {
+        t |> equal(4096l, resident_arm_floor(0l, 0l), "no env floor, no pin: the built-in 4096")
+        t |> equal(1024l, resident_arm_floor(1024l, 0l), "the env floor stands in for the built-in one")
+        t |> equal(256l, resident_arm_floor(100l, 0l), "an env floor under 256 reads 256")
+        t |> equal(648l, resident_arm_floor(0l, 648l), "a pin under the floor is the floor: the pin is the shape the caller serves")
+        t |> equal(4096l, resident_arm_floor(0l, 8192l), "a pin over the floor leaves the floor alone")
+        t |> equal(512l, resident_arm_floor(1024l, 512l), "a pin under the env floor wins over it too")
+        t |> equal(256l, resident_arm_floor(0l, 64l), "a pin under 256 reads 256")
+    }
+}
