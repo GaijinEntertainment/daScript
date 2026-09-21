@@ -11349,10 +11349,13 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         }
         t |> success(bad == 0, "{tag}: the rows' weight blocks == the one-row top-k a row at a time ({bad} of {npos * k} slots off)")
         t |> success(badx == 0, "{tag}: every slot's feed blocks are its row's, the one-row form's row zero's ({badx} of {npos * k} slots off)")
-        var gw <- plane_floats(planes.nf[3])
+        let live = npos * k   //! the N plane holds one row past the extent (the sentinel slot): the host select covers the live rows
+        var gw <- [for (i in range(live)); uint_bits_to_float(planes.nf[3][i])]
+        var gidx <- [for (i in range(live)); planes.nf[4][i]]
         var sel <- topk_rows_select(MoeGate.softmax, lh, rb, npos, ne, k, lstride, ne, true, true, 0.0)
-        topk_rows_compare(t, tag, planes.nf[4], gw, sel)
+        topk_rows_compare(t, tag, gidx, gw, sel)
         delete sel
+        delete gidx
         delete gw
         delete planes
         delete lh
