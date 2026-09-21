@@ -781,8 +781,6 @@ jobs:
     # follow-up; we lose master's previous bind_llvm.das CI coverage in
     # the meantime.
     - name: "Run self-binder (bind_clangbind.das)"
-      env:
-        DAS_CLANG_INCLUDE: ${{ env.MSYSTEM_PREFIX }}/include
       run: cmake --build ./build-mingw --config Release --target check_clangbind_fresh
 
     - name: "Run cbind const-gen regression test"
