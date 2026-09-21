@@ -21,10 +21,9 @@ reports a compile error that names the construct.**
 **Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
 carry it - pass it as a call-site constant.** A shape constant is a value that sizes a
 `@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride; a
-run-time count of live entries inside such a fixed extent is not one. A call-site constant is a
-value fixed where the kernel is stamped (a template constant, a typedef), so the emitter bakes it
-into the emitted source; a kernel stamped once for every model takes a per-model shape as an
-argument.
+run-time count of live entries inside such a fixed extent is not one. A call-site constant is
+fixed where the kernel's source is generated - a template constant or a typedef - so the emitter
+bakes it in; one kernel generated for all models cannot carry a per-model shape that way.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
