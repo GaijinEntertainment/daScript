@@ -2053,9 +2053,15 @@ processes throughout].
   `-p 0`):** Qwen3.5-0.8B-MTP Q8 spec @4 720 -> 881 +/- 10 against the plain row's 987 +/- 47 in the
   same session; Qwen3.6-27B-MTP Q4_K_M read spec 41.4 +/- 7.0 (cv 17%, void) beside plain 54.4 in
   one pair and spec 45.3 +/- 2.3 beside plain 41.8 +/- 0.2 in the next, the plain row itself moving
-  54 -> 42 between the pairs - the box's heat under the untuned debug script, so the 27B pair ranks
-  nothing yet; the released exe on the idle box owes both carriers a record-grade read
-  [direction-grade - the `-jit` script, untuned, synthetic ids].
+  54 -> 42 between the pairs - the box's heat under the untuned debug script [direction-grade - the
+  `-jit` script, untuned, synthetic ids]. The released exe on the idle box (five reps, `-p 0`,
+  its own fresh sidecar): Qwen3.5-0.8B-MTP plain 977 +/- 6 against llama.cpp's 811 (1.21), spec
+  890 +/- 9 - 0.91 of the plain row where the per-stream chain read 0.74, and above the
+  reference's plain row (1.10); Qwen3.6-27B-MTP plain 52.2 +/- 2.4 against 38.6 (1.35), spec
+  47.5 +/- 5.8 (cv 12%) - 0.91 of plain against 0.89 before, the bar too wide to rank the two
+  draft forms on this carrier; on synthetic ids every accepted draft is noise, so the spec row's
+  ceiling is the plain row and the served rate is the ruler's question (sec.2.45 of the
+  measurement doc) [direction-grade - two processes].
 
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 
