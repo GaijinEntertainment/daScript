@@ -58,6 +58,48 @@ def private generate_standalone_source(t : T?; fixture, out_dir : string) : stri
     return generate_standalone_files(t, fixture, out_dir).source
 }
 
+//! the emitted C++ name whose prefix is `name_prefix`, read off its prototype
+def private emitted_name(source, name_prefix : string) : string {
+    let at = find(source, " {name_prefix}")
+    return "" if (at < 0)
+    let sp = find(source, " ", at + 1)
+    return sp < 0 ? "" : slice(source, at + 1, sp)
+}
+
+//! the definition of the emitted function whose C++ name starts with `name_prefix`: the header
+//! line that does not end in `;` through the closing brace in column 0
+def private emitted_body(source, name_prefix : string) : string {
+    var body = ""
+    peek_data(source) $(d) {
+        var at = find(d, " {name_prefix}")
+        while (at >= 0) {
+            let eol = find(d, "\n", at)
+            break if (eol < 0)
+            if (int(d[eol - 1]) != ';') {
+                let close = find(d, "\n}\n", eol)
+                body = close < 0 ? "" : slice(d, at, close + 2)
+                break
+            }
+            at = find(d, " {name_prefix}", eol)
+        }
+    }
+    return body
+}
+
+//! the regular (per-module) AOT unit of a fixture under the same policies as the standalone one
+def private generate_aot_source(t : T?; fixture : string) : string {
+    let input = path_join(get_das_root(), "tests/aot/{fixture}.das")
+    var source = ""
+    using() $(var cop : CodeOfPolicies) {
+        standalone_cop(cop)
+        ast_gc_guard() {
+            source = aot(input, false, false, cop)
+        }
+    }
+    t |> success(!empty(source), "aot produced no source for {fixture}")
+    return source
+}
+
 def private expect_emit_failure(t : T?; fixture, out_dir : string) {
     let input = path_join(get_das_root(), "tests/aot/{fixture}.das")
     var ok = true
@@ -221,6 +263,44 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
             t |> success(rows >= 4, "the foreign function, its class's method, ctor and finalizer are rows: {rows}")
         }
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
+    t |> run("a call into a required module is a direct C++ call; [hybrid], [jit] and Func slots still resolve by name") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_foreign_call_fixture", out_dir)
+        let entry = emitted_body(source, "call_foreign_")
+        t |> success(!empty(entry), "the entry function body is found")
+        let probe_name = emitted_name(source, "dep_probe_")
+        t |> success(!empty(probe_name) && find(entry, "{probe_name}(__context__,") >= 0, "the entry body calls the foreign function by its C++ name: {probe_name}")
+        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_probe ") < 0, "no Context lookup for a function this unit defines")
+        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_hybrid ") >= 0, "a [hybrid] foreign function keeps the lookup - its body is patched at run time")
+        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_jit ") >= 0, "a [jit] foreign function keeps the lookup")
+        for (shape in ["dep_pair_", "dep_text_", "dep_fill_"]) {
+            let name = emitted_name(source, shape)
+            t |> success(!empty(name) && find(entry, "{name}(__context__,") >= 0, "a foreign call returning a struct, taking a string, or filling an array by reference is direct: {shape}{name}")
+        }
+        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::DepProbe`method ") >= 0, "a class method slot resolves through fnByMangledName - it needs a SimFunction")
+        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::DepProbe'__finalize ") >= 0, "the finalizer slot resolves through fnByMangledName")
+    }
+
+    t |> run("a generic two modules instantiate has one body, and a foreign body calls it directly") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_shared_generic_fixture", out_dir)
+        let instance = emitted_name(source, "_Func_standalone_gen_modTicktwiceTick")
+        t |> success(!empty(instance), "the generic instance is emitted")
+        var headers = 0
+        var at = find(source, " {instance} ( Context")
+        while (at >= 0) {
+            headers++
+            at = find(source, " {instance} ( Context", at + 1)
+        }
+        t |> equal(headers, 2, "the instance is declared once and defined once, whichever module's copy won")
+        let dep_body = emitted_body(source, "dep_use_")
+        t |> success(find(dep_body, "{instance}(__context__,") >= 0, "the required module's body calls the instance by its C++ name, not through a lookup")
+        t |> success(find(dep_body, "fnByMangledName") < 0, "no Context lookup inside the required module's body")
+    }
+
+    t |> run("a regular AOT unit keeps the Context lookup for a call into another module") @(t : T?) {
+        let source = generate_aot_source(t, "_standalone_foreign_call_fixture")
+        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::dep_probe ") >= 0, "the foreign body lives in another unit, so the call resolves by name")
     }
 
     t |> run("struct and enum signatures put the type definitions in the header") @(t : T?) {
