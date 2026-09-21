@@ -36,7 +36,9 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   override registries (the accept walk's row-sampler seam among them), the runtime knobs,
   `SamplingParams` (the struct a `Session` points at, so a speculative round draws with its
   caller's sampler), and the MTP per-position accept telemetry (`mtp_pos_*`) the round-override
-  registry's rounds feed. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.3) and **not** GPU residency
+  registry's rounds feed. The standard attention's Config-keyed arms live beside it - the gated
+  projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
+  kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.3) and **not** GPU residency
   (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,
   so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
@@ -104,8 +106,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 
 Thirteen files registering eighteen names:
 `dasllama_arch_llama.das` * `dasllama_arch_phi3.das` * `dasllama_arch_qwen2.das` * `dasllama_arch_qwen2moe.das` * `dasllama_arch_qwen3.das` * `dasllama_arch_qwen3moe.das` * `dasllama_arch_qwen35.das` * `dasllama_arch_gemma2.das` * `dasllama_arch_gemma3.das` * `dasllama_arch_gemma4.das` * `dasllama_arch_glm4moe.das` * `dasllama_arch_gptoss.das` * `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
-file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `ChatTemplate` *
-`LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no forward loop.
+file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr set - `attn_decode`,
+`ffn_decode`, `attn_prefill`, `ffn_prefill`, and the optional `attn_batch` a non-standard graph
+names * `ChatTemplate` * `LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no
+forward loop.
 
 ### 1.8 Instrumentation and support
 
