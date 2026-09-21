@@ -1778,3 +1778,12 @@
     main loop's guard and inner bound read no push-constant or kargs field - `REVIEW_GPU_KERNEL_BODY.md`'s
     per-iteration-branch rule's stamped half. Done looks like: both cells green on the tree, the two
     rules' verification sentences retired.
+164. **A board row's `sha` is the run-time HEAD, not the exe that timed it.** `lcpp_bench.das`
+    stamps `git rev-parse HEAD` when the cell runs, so a released rig exe built at one commit
+    stamps every later commit the author makes while the board mints - eleven rows of one M5 mint
+    carried three shas for one binary, and `performance/REVIEW.md`'s build-that-timed-it rule
+    was met by re-stamping them by hand to the sidecar's `engine_sha`. `gen_bench_records` guards
+    only the exe's mtime against its sources. Done looks like: `daspkg release` bakes the build
+    commit and a dirty flag into the bundle, the released exe stamps that and never HEAD (the
+    `-jit` script keeps HEAD), and `gen_bench_records` refuses a mint whose exe carries a dirty
+    stamp or whose HEAD moved since the exe was built.
