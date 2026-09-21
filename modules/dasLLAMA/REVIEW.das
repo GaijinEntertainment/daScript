@@ -1248,6 +1248,7 @@ let private UNICODE_FILE = "modules/dasLLAMA/dasllama/dasllama_unicode.das"
 let private UNICODE_TABLES_HASH = 0x59f112fa8e7f0d9dul
 
 def private check_unicode_tables_stamp {
+    return if (!fexist(UNICODE_FILE))   //! a fixture tree without the tokenizer has no tables to stamp
     let text = read_lf(UNICODE_FILE)
     let from = find(text, "let private RANGES <- [")
     let ws = find(text, "let private WS <- [")
@@ -1323,6 +1324,7 @@ def private set_diff_text(a, b : table<string>) : string {
 }
 
 def private check_ple_gather_sites {
+    return if (!fexist(PREFILL_FILE))   //! a fixture tree without the Metal prefill has no gather sites
     let text = strip_line_comments(read_lf(PREFILL_FILE))
     var psos : table<string>
     for (line in split(text, "\n")) {
