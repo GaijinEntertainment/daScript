@@ -1109,9 +1109,14 @@ def private rd_pieces_for_span(span : int64) : int64 {
     return span < RD_WIDE_POS ? RD_SPLIT_PIECES : RD_SPLIT_WIDE_PIECES
 }
 
-//! a layer's pieces under the command's count: a sliding-window layer attends at most its window, so its count is the
-//! window's span's, never past the command's - the one-row and N-row forms apply it alike, so their rows still sum in one order
-def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 => L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
+//! a layer's pieces under the command's count: a sliding-window layer's is its window's span's, and the pieces are
+//! capped so the layer's workgroups over the plan's rows fit one wave of the SMs (sec.2.2al) - the one-row and N-row
+//! forms apply both alike, so their rows still sum in one order
+def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 {
+    let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
+    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * g_rd.nb))
+    return min(span, wave)
+}
 
 //! the attention form a one-row step at `pos` takes
 def private rd_form_at(pos : int64) : RdForm {
