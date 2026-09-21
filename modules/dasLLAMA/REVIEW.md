@@ -7,11 +7,12 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
 
-**A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
-result, printed or returned to a caller that prints it - a driver reading a child's clock is
-not one), a kernel race (a run timing two kernel variants - arms - against each other in one
-process), or a file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to
-this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+**Code that times a run itself and hands the wall or rate back as its result - a file that
+prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing
+two kernel variants - arms - against each other in one process), or a file
+`benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to this folder's
+`benchmarks/REVIEW.md` beside its own folder's checklist.** A driver reading a child's clock is
+not one.
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
@@ -21,19 +22,22 @@ end-to-end route a run takes from prompt to tokens; its compile tier (interprete
 and its cross target (a build for another platform) are part of it.
 
 **A diff that adds a kernel or loop the runtime re-enters per token, per frame or per prefill
-quantum, adds a call path the runtime re-enters that way, adds, moves, renames or removes a
-`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or changes a
-measurement driver under `benchmarks/`, `harness/` or `performance/`, wherever the diff puts it,
-applies `REVIEW_HOT_PATH.md` (beside this file) together with this list.**
+quantum - one batch of prompt tokens the prefill path processes in a single pass - adds a call
+path the runtime re-enters that way, adds, moves, renames or removes a `[hot_path]`,
+`[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or changes a measurement driver
+under `benchmarks/`, `harness/` or `performance/`, wherever the diff puts it, applies
+`REVIEW_HOT_PATH.md` (beside this file) together with this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
-answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
-fixture. A test or tool merely opening a stocked model file by name does not route.
+answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
+weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
+by name does not route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
-tune-boot path that reaches it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
+tune-boot path (a startup path that loads a tune sidecar) that reaches it, applies
+`performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose changes reach some of `tests/run.das`'s
 areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODULE_AREAS` row
@@ -55,12 +59,14 @@ binding numbers as literals), wherever the diff puts it - applies `REVIEW_GPU.md
 the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
-`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor (the
-backend-and-layout variant an image is baked for, one part of its identity) - applies `REVIEW_IMAGE.md`.**
+`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor
+(the backend-and-layout variant an image is baked for, one part of its identity) - applies
+`REVIEW_IMAGE.md`.**
 
-**A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`, `dasllama_audio_embedder.das`,
-`dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das` (all under `dasllama/`), or to an
-ASR family file - one `dasllama/dasllama_<family>.das` holding one speech-recognition family - applies `REVIEW_AUDIO.md`.**
+**A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
+`dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
+(all under `dasllama/`), or to an ASR family file - one `dasllama/dasllama_<family>.das` holding
+one speech-recognition family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
@@ -68,8 +74,8 @@ holding a single vision projector family - or an in-process path (one that runs 
 under review, not a spawned child process) that splices a stream carrying decoded media - pixels or
 audio samples - into a prompt or schedules such a stream, applies `REVIEW_VISION.md`.**
 
-**A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
-`REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
+**A `dasllama/dasllama_tower.das` change - the backend-independent encoder-tower home, not the
+Metal tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
 `dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file - one
@@ -88,23 +94,22 @@ global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-l
 kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
 count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
-**A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
-outside `tests/` (beside this file) is a defect - move it into `tests/`.**
+**A `[test]` file that requires any `dasllama/*` module, sits under `modules/dasLLAMA/` outside
+`tests/` (beside this file), and requires no file of its own folder by bare same-dir name is a
+defect - move it into `tests/`.** One that does require a same-folder file stays, and
+`tests/REVIEW.md`'s ledger rule owns it.
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width the
-class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a kargs
-field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
-
-**A function-typed global a serialized exe must re-establish lands in a `dasllama/` file beside
-the `[init]` that establishes it at boot.** A serialized exe restores globals as data, so
-a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
-stays green; a global another file's `[init]` arms has no initializer, and its null default is
-the declared "no hook".
+**A function-typed global a serialized exe must re-establish, or that a job (a forked context)
+invokes, lands in a `dasllama/` file beside the `[init]` that establishes it at boot, and that
+`[init]` re-establishes it when it reads null.** A serialized exe and a forked context restore
+globals as data, so a declaration initializer alone arrives null and dies at the first invoke
+while every `-jit` gate stays green; a global only the main context invokes, armed by another
+file's `[init]`, may carry its null default as the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
@@ -122,7 +127,7 @@ two commits says which way the clock moved, not which form to adopt.
 count, or drops such a factor, wherever it sits, ships the measured pair -
 peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
-**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
+**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, `mm_fblob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
 to produce a reference result to check another against), where a faster-format twin already
 serves the same weights and shape, is a defect - call that twin instead.** A site that must
@@ -148,14 +153,17 @@ reported wall-clock times - is marked `// clock: control`** - unmarked, it canno
 apart from the ad-hoc profiling an engine file may not carry.
 
 **A change to `encode`/`bpe_encode`, or to a function they call at encode time (not one that only
-supplies a metadata default at load), in `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`
-/ `dasllama/dasllama_pretok.das`, ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) at
+supplies a metadata default at load) in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das`
+or `dasllama/dasllama_pretok.das` - `encode` being `dasllama_spm.das`'s and `bpe_encode`
+`dasllama_bpe.das`'s; the dispatcher in `dasllama/dasllama_tokenizer.das` owes a
+`tests/test_tokenizer.das` run, not rows - ships before/after `--tok` rows
+(`benchmarks/lcpp_bench.das`) at
 two or more input sizes on a model using that tokenizer; a time growing faster than linearly with
 input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
-template strings any of them look up, records a run of this folder's
+template strings any of them look up, names in the PR body a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.** An
@@ -168,19 +176,20 @@ change; a CLI flag is never an override.
 
 **An announce names the override by the spelling a user would set - the env variable, the sidecar
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
-(none: it says so).** A set-but-inert override is silent.
+(none: it says so).**
 
-**A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-outside this folder left showing the old call, flag, or default after a change to user-facing API
-is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
-depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
-knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
-rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
+**A tutorial source, `.rst` page, docstring, help string, `README.md`, or any other checked-in
+document, all outside this folder, left showing the old call, flag, default, or stated behaviour
+after a change to user-facing API is the change's defect, not the docs'.** User-facing is
+anything a consumer outside this repo can depend on - what it calls, types, requires or parses
+(facade functions, CLI flags, environment knobs, file formats, defaults, what the installed SDK
+lets a program `require`) - plus the in-repo rig and tool surface: any output another tool
+parses. A console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites. A dated `PERF_LEDGER.md` row is refuted by a new dated row, never edited.
+`[arch]` cites.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -190,10 +199,10 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**A diff that adds a `followup_*.md` entry saying a function can be shortened or split drops
-that function's STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length` /
-`_cyclomatic_complexity`) or lands the split in the same change; adding such a suppression to
-a function an entry names is a defect.** An entry asking twin bodies onto one template does not fire it.
+**A diff that adds a `followup_*.md` entry saying a function can be shortened or split - other
+than one asking twin bodies onto one template - drops that function's STYLE037/STYLE038
+suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) or lands the
+split in the same change; adding such a suppression to a function an entry names is a defect.**
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -285,4 +294,4 @@ count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_re
 `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
 pair spelled out - however small the count looks.** PERF032 flags a `resize` with no `reserve` or
 `ensure_capacity` earlier in the function and never compares the counts; a bare grow past the
-heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.
+heap's unreserved-size cap panics the load on the first big model, not at the call site.

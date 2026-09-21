@@ -307,6 +307,12 @@ def test_metal_batched_row_deltanet(t : T?) {
                 let census1 = batch_step_census()
                 t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the hybrid never reached the CPU batched stack")
+                // nine streams: more rows than the mirror cache's resting size
+                let wide = bench_tg_batched_rep(tr, 9l, 32l, 8l, 2l)
+                t |> equal(wide.why, "", "the nine-stream row is served: {wide.why}")
+                t |> success(wide.tps > 0.0lf, "... at a rate ({wide.tps:.1f} tok/s summed over 9 streams)")
+                let census2 = batch_step_census()
+                t |> success(census2.device - census1.device >= 8l, "its timed steps went through the device batched driver ({census2.device - census1.device} device steps)")
             }
             set_metal_mode(prior_mode)
             delete tr

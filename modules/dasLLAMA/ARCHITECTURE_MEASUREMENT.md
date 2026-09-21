@@ -34,9 +34,11 @@ self-speculative round (every stream's verify rows in one joint pass), the accep
 and the reference row stays plain decode - the comparison reads what a served speculative stream
 delivers against the reference's best. The rows' protocol lives in one place,
 `dasllama/dasllama_bench.das` (the synthetic ids, the warmups, the timed reps, the warmup logit
-check, the row statistic), and
-two drivers run it: `lcpp_bench` from its loop, and dasllama-server's in-process `/bench` one
-step per tick on the model it serves. Only `lcpp_bench`'s rows become records: the server's are
+check, the row statistic; the streams' KV codec is a parameter, f16 on the board), and
+three drivers run it: `lcpp_bench` from its loop, dasllama-server's in-process `/bench` one
+step per tick on the model it serves, and `harness/batch_decline_census.das`, which runs one row
+per carrier under a named codec to read whether the step served or declined, never its rate.
+Only `lcpp_bench`'s rows become records: the server's are
 a self-measure the operator reads on the control page, stamped with the device, the KV codec,
 the exec tier and the tune state they ran under, and they enter no board, ledger or exchange.
 The real `llama-bench` runs only when `--ref <path>` is passed; the upstream columns come from

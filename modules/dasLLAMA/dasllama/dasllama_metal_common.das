@@ -11,6 +11,7 @@ require strings
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
+require dasllama/dasllama_gpu_tier   // set_moe_gpu_dn_room_hook: the scheduler's stream count reaches the mirror cache
 require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
@@ -59,7 +60,7 @@ var g_decode_declines : DeclineCounter
 var g_logits_cpu = false
 var g_skip = ""                              // DASLLAMA_METAL_DECODE_SKIP=gemv|attn|ew|moe_rt|moe_sh|qkv|wo knockout rail
 
-var g_signs : MetalBuffer?                  // the tq4 rotation signs (128-float prefix rule)
+var g_signs : MetalBuffer?                  // the tq4 rotation signs, TQ4_SIGNS_MAX_HS floats (a narrower head reads the prefix)
 
 // cumulative per-stage wall (us) since load — decode is per-token, so logging is on-demand
 // (metal_decode_stage_report), never per step
@@ -1250,6 +1251,12 @@ struct DnMirror {
 var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
 let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest evicts; a returning
                             // evicted session declines unless it restarts at pos 0 or off CPU state
+var private g_dn_mirrors_max = int64(DN_MIRRORS_MAX)   // grows to the widest batch served (dn_mirror_room)
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def dn_mirror_room(n : int64) {
+    g_dn_mirrors_max = max(g_dn_mirrors_max, n)
+}
 
 // MTP-capable models verify at B=2 with dual-store — their mirrors carry the shadow region
 def dn_mirror_regions(t : Model) : int64 => t.config.n_layer_nextn > 0l ? 2l : 1l
@@ -1278,7 +1285,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul)
     }
     if (!have) {
-        while (length(g_dn_mirrors) >= DN_MIRRORS_MAX) {
+        while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
             let victim = lru_victim(g_dn_mirrors, 0ul, false)
             dn_mirror_release(g_dn_mirrors[victim])
             g_dn_mirrors |> erase(victim)
@@ -1331,13 +1338,16 @@ def dn_mirror_flip(uid : uint64; pos : int64) {
     }
 }
 
-[cold_path]   // one-time: fills the 512B FWHT sign table on first touch
+let TQ4_SIGNS_MAX_HS = 512l   //! the widest head the tq4 kernels take (their FWHT buffer); a narrower head reads the prefix
+
+[cold_path]   // one-time: fills the FWHT sign table on first touch
 def private signs_buffer_build() {
     var signs : array<float>
-    tq4_fill_signs(signs, 128l)
-    g_signs = metal_new_buffer(g_dev, 512ul)
+    tq4_fill_signs(signs, TQ4_SIGNS_MAX_HS)
+    let nbytes = uint64(TQ4_SIGNS_MAX_HS * 4l)
+    g_signs = metal_new_buffer(g_dev, nbytes)
     unsafe {
-        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), 512)
+        memcpy(metal_buffer_contents(g_signs), addr < void? >(signs[0]), nbytes)
     }
     delete signs
 }
@@ -1570,6 +1580,9 @@ def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
 }
 
 def kn_buffer(enc : MetalComputeEncoder?; b : MetalBuffer?; off : uint64; slot : int) {
+    if (b == null) {
+        panic("kn_buffer: null buffer at slot {slot} (offset {off})")
+    }
     if (!g_gr_on) {
         metal_set_buffer(enc, b, off, slot)
         return
@@ -2076,6 +2089,7 @@ def register_reload_prep(f : function<void>) {
 [init]
 def private metal_weights_listener_register {
     register_weights_epoch_listener(@@metal_weights_drop)
+    set_moe_gpu_dn_room_hook(@@dn_mirror_room)
 }
 
 [cold_path]   // fires only at load/map boundaries (bump_weights_epoch)

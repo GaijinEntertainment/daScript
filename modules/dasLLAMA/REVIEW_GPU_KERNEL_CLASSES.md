@@ -20,7 +20,8 @@ twin ignores that field.**
 **A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
 stamp one `class template`, derive from one base shell, or - where the axis is a run-time count -
 share one class whose body reads the count from its kargs.** Body divergence is carried by a
-`@template_constant`, or by an overridden method spliced flat at emission.
+`@template_constant`, by an overridden method spliced flat at emission, or by a run-time value
+the builder passes.
 
 **Two kernel bodies that compile to separate shader modules and that a test cell
 (`tests/test_vulkan_kernels.das`) or a regions file (`tests/test_gpu_resident_regions_*.das`)
@@ -29,6 +30,10 @@ the path the compare covers.** A driver decides per shader module whether to con
 multiply-add into one fma, so two bodies spelled alike round a ulp apart on a driver that
 contracts one and not the other; `mad` is the fused instruction by definition and leaves the
 driver nothing to choose.
+
+**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width
+the class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a
+kargs field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
 a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a `static_if` arm, a
@@ -43,7 +48,7 @@ difference named with the compile-time choice that carries it; or the behaviour 
 the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
-base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
+base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer to a
 binding whose fields its compiled body, inherited code included, never reads is a defect: gate
 the field with `@template_gate` where a template constant decides it, and where the family
 shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered
@@ -88,8 +93,8 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
 `<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-source off the `_msl` stem, an empty `release_handles` - or weakening any test cell that holds
-such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
+naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening
+any test cell that holds such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
 `test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
 `test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
 defect.** A refusal replaced by a derivation that leaves no such configuration compiling unbound -
@@ -102,7 +107,7 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - whose PR body does not
+builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
 state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
@@ -110,9 +115,9 @@ defaults or composes generated builders binds nothing.
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
 `grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
 
-**A diff that stops the `grid=`/`tg=` spec consuming a `params=` value drops that value from the
-`params=` spec and from every call site in the same change.** The value then reaches neither the
-host nor the device, so nothing reads it.
+**A `params=` value that no `grid=`/`tg=` spec and no `requires=` item consumes is dropped from
+the `params=` spec and from every call site, in the same change.** The value then reaches neither
+the host nor the device, so nothing reads it.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

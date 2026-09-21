@@ -7,7 +7,7 @@ module dasllama_arch_qwen35 shared public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // the gated-attention path shares the std attention + FFN block helpers
-require dasllama/dasllama_attn_prefill   // prefill_attention: the gated-attention prefill drives the shared head kernels
+require dasllama/dasllama_batch   // attention_batch_decode + BatchWorkspace: the hybrid's batched decode layer rides the std batched attention on its attention layers
 require dasllama/dasllama_math   // the moved DeltaNet kernels call silu/softplus/l2_norm_rows/rope_*/get_dispatch_lanes
 require dasllama/dasllama_par    // maybe_parallel_for: the prefill kernels thread over rows
 require math
@@ -116,10 +116,8 @@ def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float
     }
 }
 
-// The per-token deltanet core, shared by decode and (per position) prefill: β/g transforms, causal
-// conv + SiLU, q/k L2-norm + q pre-scale, the per-v-head delta rule, and z-gated out-norm.
-// `qkv` is this token's fused [q;k;v] row; z/beta/g its other projections; output lands in `o`.
-def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float const?; var z : float?; var beta : float?; var g : float?; var o : float?) {
+//! β = σ(raw); g = ssm_a ⊙ softplus(raw + dt_bias), where ssm_a on disk is −exp(A_log) precomputed; q leaves pre-scaled by 1/sqrt(ds).
+def private dn_token_prelude(t : Model; var s : Session; l : int64; qkv : float const?; var beta : float?; var g : float?) {
     let c = t.config
     let cd = dn_conv_dim(c)
     let kd = dn_key_dim(c)
@@ -128,44 +126,162 @@ def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float con
     let ds = c.ssm_d_state
     let taps = c.ssm_d_conv - 1l
     unsafe {
-        // β = σ(raw); g = ssm_a ⊙ softplus(raw + dt_bias) — ssm_a stores −exp(A_log) precomputed
         for (h in range64(nvh)) {
             beta[h] = 1.0 / (1.0 + exp(-beta[h]))
             g[h] = t.fblob[t.dn_a_off + l * nvh + h] * softplus(g[h] + t.fblob[t.dn_dt_off + l * nvh + h])
         }
-        // causal conv over the fused [q;k;v] row (persistent per-layer history), then SiLU
         var cop = addr(s.dn_conv_out[0])
         dn_conv_step(cop, addr(s.dn_conv_state[s.dn_conv_prefix[l]]), qkv,
             addr < float const? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), cd, taps)
         silu(cop, cd)
-        // L2-normalize the q and k heads (v passes through), then pre-scale q by 1/sqrt(ds)
         l2_norm_rows(cop, nkh, ds, c.norm_eps)
         l2_norm_rows(cop + kd, nkh, ds, c.norm_eps)
         scale_inplace(cop, 1.0 / sqrt(float(ds)), kd)
-        // per-v-head delta rule; k-heads repeat cyclically onto v-heads (h % nkh); heads are independent, so lanes over them
-        let qp = reinterpret<float const?>(cop)
-        let kp = reinterpret<float const?>(cop + kd)
-        let vp = reinterpret<float const?>(cop + 2l * kd)
-        var stp = addr(s.dn_state[s.dn_state_prefix[l]])
-        var skp = addr(s.dn_sk[0])
+    }
+}
+
+//! One v-head's delta rule; k-heads repeat cyclically onto v-heads (h % nkh), and heads are independent - callers lane over (token, head).
+def private dn_token_head(c : Config; var s : Session; l, h : int64; var o : float?; g, beta : float) {
+    let kd = dn_key_dim(c)
+    let ds = c.ssm_d_state
+    let kh = h % c.ssm_n_group
+    unsafe {
+        let cop = addr < float const? >(s.dn_conv_out[0])
+        dn_delta_head(addr(s.dn_state[s.dn_state_prefix[l]]) + h * ds * ds, cop + kh * ds, cop + kd + kh * ds,
+            cop + 2l * kd + h * ds, o + h * ds, addr(s.dn_sk[0]) + h * ds, g, beta, ds)
+    }
+}
+
+def private dn_token_epilogue(t : Model; l : int64; var z : float?; var o : float?) {
+    let c = t.config
+    let ds = c.ssm_d_state
+    unsafe {
+        let wnorm = addr < float const? >(t.fblob[t.dn_norm_off + l * ds])
+        for (h in range64(c.ssm_dt_rank)) {
+            rmsnorm(o + h * ds, reinterpret<float const?>(o + h * ds), wnorm, ds, c.norm_eps)
+        }
+        silu(z, c.ssm_d_inner)
+        mul_inplace(o, reinterpret<float const?>(z), c.ssm_d_inner)
+    }
+}
+
+//! `qkv` is one token's FUSED [q;k;v] row - the conv step runs over all three regions at once.
+[arch(at="../ARCHITECTURE_CPU_KERNELS.md#dn-token-core-shared")]
+def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float const?; var z : float?; var beta : float?; var g : float?; var o : float?) {
+    let c = t.config
+    let nvh = c.ssm_dt_rank
+    let ds = c.ssm_d_state
+    dn_token_prelude(t, s, l, qkv, beta, g)
+    unsafe {
+        let cp = addr(c)
+        var sp = addr(s)
         let dn_lanes = min(int(nvh), lanes_for_work(2l * nvh * ds * ds, g_gemv_lane_cap))
         maybe_parallel_for(0, int(nvh), dn_lanes) $(rb, re) {
             unsafe {
                 for (hh in range(rb, re)) {
                     let h = int64(hh)
-                    let kh = h % nkh
-                    dn_delta_head(stp + h * ds * ds, qp + kh * ds, kp + kh * ds, vp + h * ds,
-                        o + h * ds, skp + h * ds, g[h], beta[h], ds)
+                    dn_token_head(*cp, *sp, l, h, o, g[h], beta[h])
                 }
             }
         }
-        // gated out-norm: per head RMSNorm(o; ssm_norm, shared weights) ⊙ SiLU(z)
-        let wnorm = addr < float const? >(t.fblob[t.dn_norm_off + l * ds])
-        for (h in range64(nvh)) {
-            rmsnorm(o + h * ds, reinterpret<float const?>(o + h * ds), wnorm, ds, c.norm_eps)
+    }
+    dn_token_epilogue(t, l, z, o)
+}
+
+def private deltanet_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
+    let c = t.config
+    let dim = c.dim
+    let cd = dn_conv_dim(c)
+    let di = c.ssm_d_inner
+    let nvh = c.ssm_dt_rank
+    let ds = c.ssm_d_state
+    for (i in range64(nrows)) {
+        dn_flush_layer(*sessions[i], l)   // device state may be dirty from earlier GPU steps (route flip)
+    }
+    let ts_norm0 = prof_ticks()
+    rms_batch(ws.scr.xb_b, ws.scr.x_b, t, t.rms_att_off + l * dim, dim, nrows)
+    prof_add("norm", ts_norm0)
+    let ts_qkv = prof_ticks()
+    mm_b_f(ws.scr, ws.scr.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], ws.scr.xb_b, dim, cd, nrows)
+    mm_b_f(ws.scr, ws.scr.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], ws.scr.xb_b, dim, di, nrows)
+    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
+        mm_fblob_b(ws.scr.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, ws.scr.xb_b, dim, nvh, nrows)
+        mm_fblob_b(ws.scr.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, ws.scr.xb_b, dim, nvh, nrows)
+    } else {
+        mm_b_f(ws.scr, ws.scr.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], ws.scr.xb_b, dim, nvh, nrows)
+        mm_b_f(ws.scr, ws.scr.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], ws.scr.xb_b, dim, nvh, nrows)
+    }
+    prof_add("mm_qkv", ts_qkv)
+    let ts_attn = prof_ticks()
+    unsafe {
+        let tp = addr(t)
+        let cp = addr(c)
+        var sessp = addr(sessions[0])
+        let qkvp = addr < float const? >(ws.scr.dn_qkv_b[0])
+        var zp = addr(ws.scr.dn_z_b[0])
+        var bp = addr(ws.scr.dn_beta_b[0])
+        var gp = addr(ws.scr.dn_g_b[0])
+        var op = addr(ws.scr.dn_o_b[0])
+        let row_lanes = min(int(nrows), get_dispatch_lanes())
+        maybe_parallel_for(0, int(nrows), row_lanes) $(rb, re) {
+            unsafe {
+                for (ii in range(rb, re)) {
+                    let i = int64(ii)
+                    dn_token_prelude(*tp, *sessp[i], l, qkvp + i * cd, bp + i * nvh, gp + i * nvh)
+                }
+            }
         }
-        silu(z, c.ssm_d_inner)
-        mul_inplace(o, reinterpret<float const?>(z), c.ssm_d_inner)
+        let dn_lanes = min(int(nrows * nvh), lanes_for_work(2l * nrows * nvh * ds * ds, g_gemv_lane_cap))
+        maybe_parallel_for(0, int(nrows * nvh), dn_lanes) $(rb, re) {
+            unsafe {
+                for (idx in range(rb, re)) {
+                    let i = int64(idx) / nvh
+                    let h = int64(idx) % nvh
+                    dn_token_head(*cp, *sessp[i], l, h, op + i * di, gp[i * nvh + h], bp[i * nvh + h])
+                }
+            }
+        }
+        maybe_parallel_for(0, int(nrows), row_lanes) $(rb, re) {
+            unsafe {
+                for (ii in range(rb, re)) {
+                    let i = int64(ii)
+                    dn_token_epilogue(*tp, l, zp + i * di, op + i * di)
+                }
+            }
+        }
+    }
+    prof_add("attn", ts_attn)
+    let ts_wo = prof_ticks()
+    mm_b_f(ws.scr, ws.scr.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], ws.scr.dn_o_b, di, dim, nrows)
+    prof_add("mm_wo", ts_wo)
+    let ts_resid = prof_ticks()
+    add_inplace(unsafe(addr(ws.scr.x_b[0])), unsafe(addr(ws.scr.xb2_b[0])), nrows * dim)
+    prof_add("act_resid", ts_resid)
+}
+
+//! the deltanet state is forward-only: a full reset at 0, a panic on any rewind, and the session
+//! advances to `next` (the position after the token, or after the prefill span)
+def private dn_forward_only_guard(var s : Session; pos, next : int64) {
+    if (pos == 0l) {
+        dn_reset(s)
+    } elif (pos != s.dn_pos) {
+        panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
+    }
+    s.dn_pos = next
+}
+
+[no_alloc, no_env, no_io]
+def private attention_qwen35_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l, nrows : int64) {
+    if (l == 0l) {
+        for (i in range64(nrows)) {
+            let pos = ws.positions[i]
+            dn_forward_only_guard(*sessions[i], pos, pos + 1l)
+        }
+    }
+    if (layer_is_recurrent(t.config, l)) {
+        deltanet_batch(t, ws, sessions, l, nrows)
+    } else {
+        attention_batch_decode(t, ws, sessions, l, nrows)
     }
 }
 
@@ -412,13 +528,8 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
 // per the layer mask.
 [no_alloc, no_env, no_io]
 def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (pos == 0l) {
-            dn_reset(s)
-        } elif (pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only - cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = pos + 1l
+    if (l == 0l) {
+        dn_forward_only_guard(s, pos, pos + 1l)
     }
     if (layer_is_recurrent(t.config, l)) {
         trace_tag(TRACE_TAG_ATTN_STD)
@@ -813,139 +924,15 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
     prof_add("dn_resid", ts_resid)
 }
 
-// The batched gated-attention twin of attention_std_prefill: 2x-wide [q|gate], partial rope,
-// sigmoid out-gate before the shared out-proj suffix.
-def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) { // nolint:STYLE038 — prefill twin of the decode block above; same register-coupled phase chain over the token batch
-    if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
-        attention_gpu_prefill(t, s, l, npos, true)   // buckets at_norm / at_gpu / kv_store / at_resid
-        return
-    }
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let rot = c.rope_dim > 0l ? c.rope_dim : head_size
-    var kcl = kv_layer_kbase(s, l, c.seq_len)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let ts_norm0 = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = prof_ticks()
-    mm_b_f(s, s.dn_qg_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, 2l * qd, npos)
-    mm_b_f(s, s.k_b, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], s.xb_b, dim, kv_dim, npos)
-    mm_b_f(s, s.v_b, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], s.xb_b, dim, kv_dim, npos)
-    // deinterleave q/gate rows (q at 2h·hs, gate at (2h+1)·hs), threaded: serial copy was a ~3ms all-lane hole per layer
-    unsafe {
-        let qgp = addr < float const? >(s.dn_qg_b[0])
-        var qp = addr(s.q_b[0])
-        var gp = addr(s.dn_qgate_b[0])
-        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (pp in range(rb, re)) {
-                    let p = int64(pp)
-                    for (h in range64(n_heads)) {
-                        let sb = p * 2l * qd + h * 2l * head_size
-                        let db = p * qd + h * head_size
-                        copy_floats(qp + db, qgp + sb, head_size)
-                        copy_floats(gp + db, qgp + sb + head_size, head_size)
-                    }
-                }
-            }
-        }
-    }
-    prof_add("mm_qkv", ts_qkv)
-    let ts_qknorm = prof_ticks()
-    rms_batch(s.q_b, s.q_b, t, t.rms_q_offs[l], head_size, npos * n_heads)
-    rms_batch(s.k_b, s.k_b, t, t.rms_k_offs[l], head_size, npos * n_kv_heads)
-    prof_add("norm", ts_qknorm)
-    let ts_rope = prof_ticks()
-    unsafe {
-        let half = rot / 2l
-        var qbp = addr(s.q_b[0])
-        var kbp = addr(s.k_b[0])
-        if (g_use_rope_table) {
-            let cp = addr < float const? >(s.rope_cos[0])
-            let sp2 = addr < float const? >(s.rope_sin[0])
-            for (p in range64(npos)) {
-                rope_scaled_neox_tab_part(qbp + p * qd, head_size, rot, qd, cp + p * half, sp2 + p * half)
-                rope_scaled_neox_tab_part(kbp + p * kv_dim, head_size, rot, kv_dim, cp + p * half, sp2 + p * half)
-            }
-        } else {
-            for (p in range64(npos)) {
-                rope_scaled_neox_part(qbp + p * qd, start_pos + p, head_size, rot, qd, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-                rope_scaled_neox_part(kbp + p * kv_dim, start_pos + p, head_size, rot, kv_dim, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-            }
-        }
-    }
-    prof_add("rope", ts_rope)
-    let ktq4 = s.kv_dtype_k == KVDtype.tq4
-    let vtq4 = s.kv_dtype_v == KVDtype.tq4
-    if (ktq4 || vtq4) {   // tq4 basis change (attention_std_prefill's twin); xb_b un-rotates below
-        let ts_rot = prof_ticks()
-        let sgp = unsafe(addr < float const? >(s.kv_signs[0]))
-        if (ktq4) {
-            tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-            tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-        }
-        if (vtq4) {
-            tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    let ts_kv = prof_ticks()
-    let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
-    kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-        unsafe(addr < KVRun const? >(s.kv_runs[0])), store_nrun, start_pos, npos, kv_dim)
-    prof_add("kv_store", ts_kv)
-    let ts_attn = prof_ticks()
-    prefill_attention(s, kcl, vcl, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
-                      false, 0l, c.attn_logit_softcap, null)
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // un-rotate every position's xb before the out-gate (gate is in the original basis)
-        tq4_unrotate_batch(s.xb_b, npos, qd, head_size, unsafe(addr < float const? >(s.kv_signs[0])))
-    }
-    // threaded + exp4: serial scalar loop was npos·qd (2.1M @pp512) libm exps, ~10ms all-lane hole/layer
-    let ts_gate = prof_ticks()
-    unsafe {
-        var xbp = addr(s.xb_b[0])
-        let gbp = addr < float const? >(s.dn_qgate_b[0])
-        let vec = g_act_vec
-        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                let off = int64(rb) * qd
-                let cnt = int64(re - rb) * qd
-                if (vec) {
-                    sigmoid_gate4(xbp + off, gbp + off, cnt)
-                } else {
-                    sigmoid_gate(xbp + off, gbp + off, cnt)
-                }
-            }
-        }
-    }
-    prof_add("act", ts_gate)
-    attn_out_suffix(t, s, l, npos)
-}
-
-// The qwen35 prefill attention block: forward-only state guard, then deltanet or gated attention.
 [no_alloc, no_env, no_io]
 def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (start_pos == 0l) {
-            dn_reset(s)
-        } elif (start_pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only - cannot prefill from position {start_pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = start_pos + npos
+    if (l == 0l) {
+        dn_forward_only_guard(s, start_pos, start_pos + npos)
     }
     if (layer_is_recurrent(t.config, l)) {
         deltanet_prefill(t, s, l, npos)
     } else {
-        attention_qwen35_gated_prefill(t, s, l, npos, start_pos)
+        attention_std_prefill(t, s, l, npos, start_pos)
     }
 }
 
@@ -953,12 +940,11 @@ def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos
 [no_alloc, no_env, no_io]
 
 //! qwen35's block set: the hybrid Gated-DeltaNet / gated-attention dispatch + the dense FFN.
-//! attn_is_std = false — batched decode falls back to per-row forward() (recurrent state is
-//! per-session and strictly sequential).
+//! attn_is_std = false (the GPU graph gates read it); attn_batch is the hybrid's CPU batched layer.
 def qwen35_blocks() : ArchBlocks {
     return ArchBlocks(attn_decode = @@attention_qwen35_decode, ffn_decode = @@ffn_dense_decode,
                       attn_prefill = @@attention_qwen35_prefill, ffn_prefill = @@ffn_dense_prefill,
-                      attn_is_std = false)
+                      attn_is_std = false, attn_batch = @@attention_qwen35_batch)
 }
 
 //! qwen35moe's block set: the same hybrid attention dispatch + the routed-experts FFN
@@ -966,5 +952,5 @@ def qwen35_blocks() : ArchBlocks {
 def qwen35moe_blocks() : ArchBlocks {
     return ArchBlocks(attn_decode = @@attention_qwen35_decode, ffn_decode = @@ffn_moe_decode,
                       attn_prefill = @@attention_qwen35_prefill, ffn_prefill = @@ffn_moe_prefill,
-                      attn_is_std = false, ffn_is_dense = false)
+                      attn_is_std = false, ffn_is_dense = false, attn_batch = @@attention_qwen35_batch)
 }

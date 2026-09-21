@@ -19,9 +19,7 @@ provenance covers it. A tag (`external`, `direction-grade`, `out-of-process`, `d
 covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
 of the paragraphs that line sits under or names.
 
-A served-turn leg is prefill, decode, a batched decode row, or the turn end to end. A box mints a
-path when `performance/gen_bench_records.das` mints a board row (`performance/records/<box>.json`)
-for it on that box - a rig leg drives it - rather than refusing or skipping it.
+A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -30,6 +28,7 @@ for a run served on a GPU backend, the device, and on a Vulkan backend the coopm
 (`DASLLAMA_COOPMAT` - which cooperative-matrix path the run compiled). The flags of an instrument
 run are the tier, the `DAS_TUNE_POLICY` value in force, the device, the coopmat mode where the
 backend has one, and the instrument's own arguments.
+
 An environment override is an env variable a run was given that changes what it compiles, tunes,
 or serves, other than that run's own flags named above.
 
@@ -44,9 +43,10 @@ a harness run drives; a harness is the `harness/` script that drove a run, where
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
-or as the `-jit` script, the two serving one code path and reading alike - or a board cell did.**
-A served turn is one whole request an engine serves, whatever the modality; a turn wall is its
-wall.
+or as the `-jit` script - or a board cell did.** A served turn is one whole request an engine
+serves, whatever the modality; a turn wall is its wall. A served-turn rate an instrument under
+`harness/` prints stays in that run's log: the ledger entry carries what the instrument decided -
+served, declined, how many rows it counted - never that rate.
 
 **A `-jit` A/B pair's arms keep their absolute rates in the commit message or PR body that states
 the pair.**
@@ -78,34 +78,38 @@ and the command line it ran under.**
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
+**A dated `PERF_LEDGER.md` row is never edited to correct it - a new dated row refutes it.**
+
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 recorded to justify adopting code the change does not land.** That timing settles its adoption
 decision in the PR that lands the kernel. A negative result whose winner is the committed path is
-an entry, not a selection timing: it records what was tried and why the tree stays as it is.
+an entry, not a selection timing.
 
 **A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
 mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
 including the path a run with no flags and no environment overrides takes.
 
-**A change that owes a board row for a route or a path no box of the author's mints - no rig leg
-drives it, the box refuses or skips the leg that would, or the model is one `--catalog official`
-does not carry, so its rows can only go to a store outside `records/` - names instead, in the
-same change, the record or gate output that proves the route ran end to end, or the profile
-output that shows the win (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's
-`DASLLAMA_GPU_PROF=1` token ledger) with the flags that run took.**
+**A change that owes a board row no box of the author's can mint names instead, in the same
+change, an artifact that shows the route ran end to end - a record, a gate output, an
+instrument's print - or the profile output that shows the change is faster
+(`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
+ledger), with the flags that run took.** A box cannot mint the row when no rig leg drives the
+leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
+official` does not carry the model.
 
-**A diff that makes the fat exe - a shipped exe carrying its tune profile
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - run end to end names `tune_gate`'s fat-world report
-(`performance/profile_common.das`) and the `sanity:` lines of its `lcpp_bench` run.**
+**A diff that changes what the fat exe - a shipped exe carrying its tune profile
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
+body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
+or says the run printed none.**
 
 **A diff that claims to make an already-served path faster re-mints a board row
 (`performance/records/<box>.json`) that exercises that path, in the same change, and names that
 row in the PR body.** The board is the module's committed record of what serving costs; a kernel
 win that never lands there is invisible to the next regression check.
 
-**A rate or wall of any served-turn leg written down outside `PERF_LEDGER.md` as a measurement
-rather than as a prediction is a defect unless it cites the committed board row it came from, or
-names harness, flags, environment overrides, box, and the exe or script that ran it.**
+**A rate or wall of any served-turn leg written down as a measurement rather than as a
+prediction is a defect unless it cites the committed board row it came from, or names harness,
+flags, environment overrides, box, and the exe or script that ran it.**
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
@@ -125,14 +129,14 @@ built from the same shader, raced to set a runtime knob - never a `[tune]` kerne
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the shipped
 exe does not carry.
 
-**A diff never adds a confirm - an end-to-end A/B served on a vehicle model in a spawned
-child, both arms implementations of this engine the run could adopt and the run picking the
-winner - outside `harness/`.**
+**A diff never adds a confirm outside `harness/` - it goes there instead.** A confirm is an
+end-to-end A/B: it serves a vehicle model in a spawned child, runs two implementations of this
+engine the run could adopt, and picks the winner.
 
 **A diff that pins the kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
 `DASLLAMA_PIN_BACKEND` - pins it before the load it governs.** The loader repacks weights into
 the pinned backend's layout, so a pin set after the load never reaches them.
 
-**A diff that adds or changes a kernel-backend pin path makes a pin naming a backend the box has
-not registered refuse or skip the run - never fall through to the default.** A misspelled pin that falls through
-measures the default backend under the pinned one's name.
+**A diff that adds or changes a kernel-backend pin path makes the run refuse or skip when the
+pin names a backend the box has not registered - never fall through to the default.** A
+misspelled pin that falls through measures the default backend under the pinned one's name.

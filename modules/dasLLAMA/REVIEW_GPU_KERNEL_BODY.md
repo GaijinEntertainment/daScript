@@ -39,10 +39,10 @@ dispatches steps nor a multiple of that chunk the site forces by splitting its K
 dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
 a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
 
-**Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
-`[metal_kernel(float_a_ok=true)]` is the license - or its gate
-`tests/test_metal_float_a_gate.das`, is a defect.** A float operand keeps the op off its native
-fast path.
+**Weakening `tests/test_metal_float_a_gate.das` - the gate on the MSL emitter's refusal to
+compile an unlicensed float `matmul2d` A operand, `[metal_kernel(float_a_ok=true)]` being the
+license - is a defect.** A float operand keeps the op off its native fast path; the emitter's
+own refusal is `modules/REVIEW_SHADER_EMITTERS.md`'s (repo root) rule.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
 `ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b sanctions extends that section in the same change.**

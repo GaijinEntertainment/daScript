@@ -284,8 +284,9 @@ def private rpst_h16_gate(t : T?; dev, queue; hs, nheads, kv_mul, rot : int; neo
 
 // ===== the q8_0 mirror (MetalRopeStoreQ8): rope -> quantize_q8kv_row, byte-exact =====
 
-def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, hasbias : bool) {
-    let tag = "rpst_q8 hs={hs} nh={nheads} kvm={kv_mul} neox={neox} bias={hasbias}"
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-rope-store-rot")]
+def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, hasbias : bool; rot : int = 0) {
+    let tag = "rpst_q8 hs={hs} nh={nheads} kvm={kv_mul} neox={neox} bias={hasbias} rot={rot}"
     var err : string
     var pso = pipeline_from_source(dev, metal_rope_store_q8_msl, metal_rope_store_q8_msl_entry, metal_rope_store_q8_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -293,7 +294,7 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
     let nkvh = nheads / kv_mul
     let qd = nheads * hs
     let kvd = nkvh * hs
-    let half = hs / 2
+    let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
     let nblk = kvd / 32
     let npairs_q = qd / 2
     let nthreads = npairs_q + 2 * nblk
@@ -335,7 +336,10 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
     kwant |> resize(nblk * 34)
     vwant |> resize(nblk * 34)
     unsafe {
-        if (neox) {
+        if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
+            rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
+            rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
+        } elif (neox) {
             rope_scaled_neox_tab(addr(qk_exp[0]), int64(hs), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab(addr(qk_exp[qd]), int64(hs), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } else {
@@ -357,7 +361,7 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
     var bts = buf_upload(dev, tsin)
     var bbias = buf_upload(dev, bias)
     var ka = RopeStoreQ8Args(qd = uint(qd), head_size = uint(hs), npairs_q = uint(npairs_q),
-        nblk = uint(nblk), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u)
+        nblk = uint(nblk), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bqk, 0ul, 0)
@@ -400,8 +404,8 @@ def private rpst_q8_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, has
 
 // ===== the tq4 mirror (MetalRopeStoreTq4): rope -> fwht_signs_row -> quantize_tq4kv_row =====
 
-def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, hasbias : bool) {
-    let tag = "rpst_tq4 hs={hs} nh={nheads} kvm={kv_mul} neox={neox} bias={hasbias}"
+def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, hasbias : bool; rot : int = 0) {
+    let tag = "rpst_tq4 hs={hs} nh={nheads} kvm={kv_mul} neox={neox} bias={hasbias} rot={rot}"
     var err : string
     var pso = pipeline_from_source(dev, metal_rope_store_tq4_msl, metal_rope_store_tq4_msl_entry, metal_rope_store_tq4_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -409,7 +413,7 @@ def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, ha
     let nkvh = nheads / kv_mul
     let qd = nheads * hs
     let kvd = nkvh * hs
-    let half = hs / 2
+    let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
     let rowb = (kvd / 32) * 18
     var qk : array<float>
     var vsrc : array<float>
@@ -451,7 +455,10 @@ def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, ha
     kwant |> resize(rowb)
     vwant |> resize(rowb)
     unsafe {
-        if (neox) {
+        if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
+            rope_scaled_neox_tab_part(addr(qk_exp[0]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
+            rope_scaled_neox_tab_part(addr(qk_exp[qd]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
+        } elif (neox) {
             rope_scaled_neox_tab(addr(qk_exp[0]), int64(hs), int64(qd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
             rope_scaled_neox_tab(addr(qk_exp[qd]), int64(hs), int64(kvd), addr<float const?>(tcos[0]), addr<float const?>(tsin[0]))
         } else {
@@ -481,7 +488,7 @@ def private rpst_tq4_gate(t : T?; dev, queue; hs, nheads, kv_mul : int; neox, ha
     var bsg = buf_upload(dev, signs)
     var bbias = buf_upload(dev, bias)
     var ka = RopeStoreTq4Args(qd = uint(qd), head_size = uint(hs), nheads = uint(nheads),
-        kv_mul = uint(kv_mul), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u)
+        kv_mul = uint(kv_mul), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
     let ntg = nheads + 2 * nkvh
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
@@ -664,8 +671,8 @@ def private rpst_b_gate(t : T?; dev, queue; f16dst : bool; hs, nheads, kv_mul, r
 
 // ===== the batched q8_0 mirror (MetalRopeStoreBQ8): byte row table, byte-exact arena =====
 
-def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox, hasbias : bool) {
-    let tag = "rpst_b_q8 hs={hs} nh={nheads} kvm={kv_mul} nb={nb} neox={neox} bias={hasbias}"
+def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox, hasbias : bool; rot : int = 0) {
+    let tag = "rpst_b_q8 hs={hs} nh={nheads} kvm={kv_mul} nb={nb} neox={neox} bias={hasbias} rot={rot}"
     var err : string
     var pso = pipeline_from_source(dev, metal_rope_store_b_q8_msl, metal_rope_store_b_q8_msl_entry, metal_rope_store_b_q8_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -673,7 +680,7 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
     let nkvh = nheads / kv_mul
     let qd = nheads * hs
     let kvd = nkvh * hs
-    let half = hs / 2
+    let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
     let nblk = kvd / 32
     let rowb = nblk * 34
     let npairs_q = qd / 2
@@ -727,7 +734,10 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (neox) {
+            if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
+                rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
+                rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
+            } elif (neox) {
                 rope_scaled_neox_tab(addr(want_qk[qb]), int64(hs), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab(addr(krow[0]), int64(hs), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } else {
@@ -749,7 +759,7 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
     var brt = buf_upload(dev, rt)
     var bbias = buf_upload(dev, bias)
     var ka = RopeStoreBQ8Args(lay = uint(lay), nblk = uint(nblk), qd = uint(qd), head_size = uint(hs),
-        npairs_q = uint(npairs_q), qstride = uint(qstride), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u)
+        npairs_q = uint(npairs_q), qstride = uint(qstride), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bqk, 0ul, 0)
@@ -787,8 +797,8 @@ def private rpst_bq8_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox
 
 // ===== the batched tq4 mirror (MetalRopeStoreBTq4): head-cooperative + byte row table =====
 
-def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox, hasbias : bool) {
-    let tag = "rpst_b_tq4 hs={hs} nh={nheads} kvm={kv_mul} nb={nb} neox={neox} bias={hasbias}"
+def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neox, hasbias : bool; rot : int = 0) {
+    let tag = "rpst_b_tq4 hs={hs} nh={nheads} kvm={kv_mul} nb={nb} neox={neox} bias={hasbias} rot={rot}"
     var err : string
     var pso = pipeline_from_source(dev, metal_rope_store_b_tq4_msl, metal_rope_store_b_tq4_msl_entry, metal_rope_store_b_tq4_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -796,7 +806,7 @@ def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neo
     let nkvh = nheads / kv_mul
     let qd = nheads * hs
     let kvd = nkvh * hs
-    let half = hs / 2
+    let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
     let rowb = (kvd / 32) * 18
     let qstride = qd + 2 * kvd
     let lay = 1
@@ -849,7 +859,10 @@ def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neo
                     want_qk[qb + k] += bias[k]
                 }
             }
-            if (neox) {
+            if (rot > 0 && rot < hs) {   // the whole head named as the prefix is the full rope, the neox flag honored
+                rope_scaled_neox_tab_part(addr(want_qk[qb]), int64(hs), int64(rot), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
+                rope_scaled_neox_tab_part(addr(krow[0]), int64(hs), int64(rot), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
+            } elif (neox) {
                 rope_scaled_neox_tab(addr(want_qk[qb]), int64(hs), int64(qd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
                 rope_scaled_neox_tab(addr(krow[0]), int64(hs), int64(kvd), addr<float const?>(tcos[r * half]), addr<float const?>(tsin[r * half]))
             } else {
@@ -879,7 +892,7 @@ def private rpst_btq4_gate(t : T?; dev, queue; hs, nheads, kv_mul, nb : int; neo
     var brt = buf_upload(dev, rt)
     var bbias = buf_upload(dev, bias)
     var ka = RopeStoreBTq4Args(lay = uint(lay), qd = uint(qd), head_size = uint(hs), nheads = uint(nheads),
-        kv_mul = uint(kv_mul), qstride = uint(qstride), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u)
+        kv_mul = uint(kv_mul), qstride = uint(qstride), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
     let ntg = nheads + 2 * nkvh
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
@@ -996,6 +1009,14 @@ def test_metal_rope_store_kernels(t : T?) {
                 rpst_q8_gate(t, dev, queue, 64, 4, 2, false, false)
                 rpst_tq4_gate(t, dev, queue, 64, 4, 2, true, true)
                 rpst_tq4_gate(t, dev, queue, 64, 4, 2, false, false)
+                // the partial carrier (qwen35: rope 64 of head 256) on both block codecs, the neox flag either way
+                rpst_q8_gate(t, dev, queue, 256, 2, 2, true, true, 64)
+                rpst_q8_gate(t, dev, queue, 256, 2, 2, false, false, 64)
+                rpst_tq4_gate(t, dev, queue, 256, 2, 2, true, false, 64)
+                rpst_tq4_gate(t, dev, queue, 256, 2, 2, false, true, 64)
+                // the whole head named as the prefix (rot == head_size, what every full-rope layer sends): the same bytes as the default
+                rpst_q8_gate(t, dev, queue, 64, 4, 2, true, true, 64)
+                rpst_tq4_gate(t, dev, queue, 64, 4, 2, false, false, 64)
                 // batched twins: row tables + whole-arena sentinel compares
                 rpst_b_gate(t, dev, queue, true, 64, 4, 2, 64, 3, true, true)
                 rpst_b_gate(t, dev, queue, true, 64, 4, 2, 64, 2, false, false)
@@ -1004,6 +1025,13 @@ def test_metal_rope_store_kernels(t : T?) {
                 rpst_bq8_gate(t, dev, queue, 64, 4, 2, 2, false, true)
                 rpst_btq4_gate(t, dev, queue, 64, 4, 2, 2, true, true)
                 rpst_btq4_gate(t, dev, queue, 64, 4, 2, 2, false, false)
+                // the partial carrier's batched twins: per-row rope rows rot/2 wide
+                rpst_bq8_gate(t, dev, queue, 256, 2, 2, 3, true, true, 64)
+                rpst_bq8_gate(t, dev, queue, 256, 2, 2, 2, false, false, 64)
+                rpst_btq4_gate(t, dev, queue, 256, 2, 2, 2, true, false, 64)
+                rpst_btq4_gate(t, dev, queue, 256, 2, 2, 3, false, true, 64)
+                rpst_bq8_gate(t, dev, queue, 64, 4, 2, 3, true, false, 64)
+                rpst_btq4_gate(t, dev, queue, 64, 4, 2, 2, true, true, 64)
                 // the tq4 un-rotate partner
                 unsign_gate(t, dev, queue, 64, 4, 3, 32)
                 unsign_gate(t, dev, queue, 128, 2, 1, 0)

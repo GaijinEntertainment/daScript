@@ -11,11 +11,14 @@ it.**
 `ARCHITECTURE_*.md` companions' sec.1 charters own the per-file list; a rule naming what KIND of
 code lands in which file is the checklist's own.
 
-**A function, a module global (`let` or `var`, private or not), a named constant or a `require`
-under `dasllama/` lands in the file whose charter line - in an `ARCHITECTURE_*.md` companion's
-sec.1 - names its concern and whose must-not-hold cell does not, or that charter line changes in
-the same diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1
-routing block names the companion that holds each file's charter line.
+**A function, a class (a kernel class among them), a module global (`let` or `var`, private or
+not), a named constant or a `require` under `dasllama/` lands in the file whose charter line - in
+an `ARCHITECTURE_*.md` companion's sec.1, or a role row of `ARCHITECTURE_GPU.md` sec.1.5 - names
+its concern and whose must-not-hold cell does not, or that charter line changes in the same
+diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1 routing
+block names the companion that holds each file's charter line. A driver arm is host code that
+ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
+a hook or capability registry.
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
 adding a family, format or arm the parenthetical does not name lands it in the file whose
@@ -63,8 +66,11 @@ of, or a function a `register_kernel_backend` call names - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A quirk of one family - a special case only one model architecture's file, or one backend
-driver's, needs - lands in that file, never in another family's file.**
+**A branch keyed on a `Config` flag only one model architecture sets, or a special case only one
+backend driver needs, lands in that architecture's or driver's file - unless it is one arm of a
+kernel two or more architectures share, in which case the arm lands beside the kernel and the
+flag is named in that file's charter line.** A family arm in another family's file is a defect
+either way.
 
 **Logic or a named constant that two files in one folder both use lands in a file both already
 require - a new file of its own when they require none in common - never as a second copy.** Two

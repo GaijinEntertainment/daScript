@@ -44,7 +44,7 @@ require daslib/apply  // the Model finalizer + the image save/load walk both ite
 
 //! Which weight representation forward routes its 2D matmuls through. fp32 is the default;
 //! q8 selects the fast integer rails (K-quant / mxfp4 / Q4_0 files keep their native planes);
-//! q4_0 is the legacy requant tier — weights held as q4_0 blocks, per-row kernels only.
+//! q4_0 is the legacy requant tier — weights held as q4_0 blocks on the portable dot, batched prefill and decode included.
 enum QuantMode {
     fp32
     q8
@@ -188,6 +188,9 @@ typedef AttnDecodeFn  = function<(t : Model; var s : Session; l : int64; pos : i
 typedef FfnDecodeFn   = function<(t : Model; var s : Session; l : int64) : void>
 typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) : void>
 typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
+//! One layer of the CPU batched decode step over B sessions: the arch's own form where the std
+//! batched attention (`attention_batch_decode`) does not fit its graph - null keeps the std form.
+typedef AttnBatchFn   = function<(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l : int64; nrows : int64) : void>
 
 //! A whole-prefill override: claims the ENTIRE per-layer stack of one prefill. On true the KV
 //! cache is filled for every position; x_b holds the final residual stream at row npos-1 always,
@@ -871,8 +874,9 @@ struct ArchBlocks {
     ffn_prefill : FfnPrefillFn
     // eval_batch gate: attention is the std QKV/RoPE/causal shape (attention_std_prefill), so the
     // batched-decode worker applies. An arch registering custom attention sets this false and
-    // eval_batch falls back to per-row forward().
+    // names its own batched layer in attn_batch, or eval_batch falls back to per-row forward().
     attn_is_std : bool = true
+    attn_batch : AttnBatchFn
     // Metal gate: the FFN is the plain dense gated pair (ffn_dense_*). Block sets that route
     // experts (or MAY, per file — gemma4) set this false and the GPU drivers decline `graph`.
     ffn_is_dense : bool = true
@@ -3730,7 +3734,7 @@ def mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>
 
 // Batched big-weight matmul for prefill: Y [npos x d] from X [npos x n], via the slice-1 GEMM
 // kernels. Q8 quantizes each of the npos activation columns into the batched xqb/xsb scratch first;
-// fp32 goes straight through. Q4 has no batched kernel, so forward_prefill never routes it here.
+// fp32 goes straight through; q4_0 rides the weight-stationary nest over the GEMV's dot.
 def mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
     if (t.quant == QuantMode.q8) {
         requant_rows_q8(x, n, npos, xqb, xsb)
@@ -3739,6 +3743,8 @@ def mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq
         } else {
             mm_b_q8_pre(y, t, woff, xqb, xsb, n, d, npos)
         }
+    } elif (t.quant == QuantMode.q4_0) {
+        matmul_q4_batch(y, t.q4blob, t.q4scales, woff, x, n, d, npos)
     } else {
         matmul_batch(y, t.wblob, woff, x, n, d, npos)
     }
@@ -4532,7 +4538,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     mtp_round_begin(s)
     // pos < 1: nothing evaled yet — the zero-init mtp_h_pos1 sentinel COLLIDES with pos == 0
     // (0 != 0 would pass the cold check and draft at row -1), so gate it explicitly
-    if (c.n_layer_nextn <= 0l || t.quant == QuantMode.q4_0 || pos < 1l || s.mtp_h_pos1 != pos
+    if (c.n_layer_nextn <= 0l || pos < 1l || s.mtp_h_pos1 != pos
             || pos + 2l > c.seq_len) {
         forward(t, s, tok, pos)   // plain step (forward re-stashes the handoff for the next tick)
         s.n_past = pos + 1l
@@ -4605,9 +4611,6 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
                         var n_drafted, n_accepted : int64&) : array<int64> {
     let c = t.config
     assert(c.n_layer_nextn > 0l)
-    if (t.quant == QuantMode.q4_0) {   // no batched prefill rail: the 2-row verify (and the warm) need it
-        panic("dasLLAMA: MTP self-spec decode needs the batched prefill path - load q8 or fp32, not q4_0")
-    }
     let np = long_length(prompt)
     var ids : array<int64>
     if (total <= 0l || np <= 0l) {
@@ -5025,8 +5028,51 @@ def hermes_tools(var ct : ChatTemplate) {
 // The prefill/batch entry points and the shared QKV+RoPE prefix; the block kernels themselves
 // live in dasllama_blocks. Bit-for-bit identical to calling forward() per position in sequence.
 
+//! The gated-attention [q | gate] rows split per head - q at 2h*hs, gate at (2h+1)*hs of dn_qg_b into q_b and dn_qgate_b - threaded: the serial copy is an all-lane hole a layer at prefill widths.
+def deinterleave_qgate_rows(var s : Session; npos, n_heads, head_size : int64) {
+    let qd = n_heads * head_size
+    unsafe {
+        let qgp = addr < float const? >(s.dn_qg_b[0])
+        var qp = addr(s.q_b[0])
+        var gp = addr(s.dn_qgate_b[0])
+        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (pp in range(rb, re)) {
+                    let p = int64(pp)
+                    for (h in range64(n_heads)) {
+                        let sb = p * 2l * qd + h * 2l * head_size
+                        let db = p * qd + h * head_size
+                        copy_floats(qp + db, qgp + sb, head_size)
+                        copy_floats(gp + db, qgp + sb + head_size, head_size)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The gated-attention out-gate over npos rows: xb_b *= sigmoid(dn_qgate_b), threaded + exp4 - the serial scalar loop runs npos*qd libm exps, an all-lane hole a layer at prefill widths.
+def sigmoid_gate_rows(var s : Session; npos, qd : int64) {
+    unsafe {
+        var xbp = addr(s.xb_b[0])
+        let gbp = addr < float const? >(s.dn_qgate_b[0])
+        let vec = g_act_vec
+        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                let off = int64(rb) * qd
+                let cnt = int64(re - rb) * qd
+                if (vec) {
+                    sigmoid_gate4(xbp + off, gbp + off, cnt)
+                } else {
+                    sigmoid_gate(xbp + off, gbp + off, cnt)
+                }
+            }
+        }
+    }
+}
+
 // attn-norm → batched QKV(+bias) → qk/v-norm → RoPE, for npos rows of x_b into q_b/k_b/v_b — the
-// position-free head of the std attention block, shared by prefill and (later) batched decode.
+// position-free head of the std attention block, shared by prefill and batched decode.
 def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -5047,7 +5093,12 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     prof_add("norm", ts_norm0)
     // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
     let ts_qkv = prof_ticks()
-    mm_b_f(s, s.q_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, qd, npos)
+    if (c.q_gated) {
+        mm_b_f(s, s.dn_qg_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, 2l * qd, npos)
+        deinterleave_qgate_rows(s, npos, n_heads, head_size)
+    } else {
+        mm_b_f(s, s.q_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, qd, npos)
+    }
     if (kv_shared) {
         // E-series shared-KV layer: no K/V of its own — the source layer already filled the cache
     } else {
@@ -5104,13 +5155,16 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
 }
 
 // out-proj(+bias, +post-norm) → residual, for npos rows of xb_b back into x_b — the position-free
-// tail of the std attention block, shared by prefill and (later) batched decode.
+// tail of the std attention block, shared by prefill and batched decode.
 def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     let dim = c.dim
     let qd = c.n_heads * layer_head_size(c, l)
     // output projection (batched, qd -> dim) + optional bias + post-attn norm + residual
     let ts_wo = prof_ticks()
+    if (c.q_gated) {   // gated attention: out ⊙ σ(gate) before wo, in the original basis (after any tq4 un-rotate)
+        sigmoid_gate_rows(s, npos, qd)
+    }
     mm_b_f(s, s.xb2_b, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb_b, qd, dim, npos)
     if (c.attn_out_bias) {  // gpt-oss: + bias per position on the projected attention output
         for (p in range64(npos)) {
@@ -5148,12 +5202,6 @@ def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos :
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     if (npos <= 0l) {
-        return
-    }
-    if (t.quant == QuantMode.q4_0) {   // legacy per-row tier, no batched kernels: its prefill IS the decode loop
-        for (p in range64(npos)) {
-            forward(t, s, tokens[p], start_pos + p)
-        }
         return
     }
     if (npos >= 32l) {
@@ -5248,6 +5296,23 @@ def fused_ffn_ok(t : Model; l : int64) : bool {
         && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)
 }
 
+//! The hybrid arch's row scratch for npos rows: the deltanet projections (the recurrence itself
+//! reads per-session state) and the gated attention's [q | gate] halves - prefill and batched decode.
+def hybrid_rows_alloc(c : Config; var s : Session; npos : int64) {
+    if (c.recr_mask != 0ul) {
+        s.dn_qkv_b |> grow_resize(npos * dn_conv_dim(c))
+        s.dn_z_b |> grow_resize(npos * c.ssm_d_inner)
+        s.dn_beta_b |> grow_resize(npos * c.ssm_dt_rank)
+        s.dn_g_b |> grow_resize(npos * c.ssm_dt_rank)
+        s.dn_o_b |> grow_resize(npos * c.ssm_d_inner)
+    }
+    if (c.q_gated) {
+        let qd = c.n_heads * max_head_size(c)
+        s.dn_qg_b |> grow_resize(npos * 2l * qd)
+        s.dn_qgate_b |> grow_resize(npos * qd)
+    }
+}
+
 [no_alloc, no_env, no_io]
 def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let c = t.config
@@ -5279,22 +5344,11 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.ple_proj |> grow_resize(npos * all)
         s.ple_gate |> grow_resize(npos * c.n_embd_per_layer)
     }
-    if (c.recr_mask != 0ul) {   // qwen35 deltanet batched projections (the recurrence itself is per-token)
-        let cd = dn_conv_dim(c)
-        s.dn_qkv_b |> grow_resize(npos * cd)
-        s.dn_z_b |> grow_resize(npos * c.ssm_d_inner)
-        s.dn_beta_b |> grow_resize(npos * c.ssm_dt_rank)
-        s.dn_g_b |> grow_resize(npos * c.ssm_dt_rank)
-        s.dn_o_b |> grow_resize(npos * c.ssm_d_inner)
-        if (g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
-            s.dn_conv_b |> grow_resize(npos * cd)
-            s.dn_wtap |> resize(c.ssm_d_conv * cd)
-            s.dn_cws |> resize(c.ssm_dt_rank * dn_cws_head_size(c))
-        }
-    }
-    if (c.q_gated) {   // gated attention: batched fused [q | gate] projection + gate halves
-        s.dn_qg_b |> grow_resize(npos * 2l * qd)
-        s.dn_qgate_b |> grow_resize(npos * qd)
+    hybrid_rows_alloc(c, s, npos)
+    if (c.recr_mask != 0ul && g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
+        s.dn_conv_b |> grow_resize(npos * dn_conv_dim(c))
+        s.dn_wtap |> grow_resize(c.ssm_d_conv * dn_conv_dim(c))
+        s.dn_cws |> grow_resize(c.ssm_dt_rank * dn_cws_head_size(c))
     }
     if (g_attn_prefill_mode == AttnPrefillMode.flash) {  // per-head flash packing scratch (see Session)
         s.fa_q |> resize(n_heads * ATTN_FLASH_QT * head_size)

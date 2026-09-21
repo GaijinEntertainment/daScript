@@ -591,6 +591,13 @@ def moe_gpu_weight_budget() : int64 {
     return moe_gpu_weight_budget_()
 }
 
+def gpu_dn_room(n : int64) {
+    //! Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once:
+    //! a scheduler names its stream count before the first prefill, so no stream's deltanet state
+    //! evicts under the batched step it rides. A driver with no such cache ignores it.
+    gpu_dn_room_(n)
+}
+
 def gpu_slot_capture(var st : dasllama_gpu_resident::GpuModelMarks) : string {
     //! Capture the INSTALLED model's tier state into ``st`` right after its ``load_model`` and
     //! classify it — "gpu:resident" | "gpu:rails" | "cpu" — from the CAPTURED marks, never the

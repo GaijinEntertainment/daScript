@@ -159,8 +159,8 @@ disables the cache; fp32 and q4_0 requant from the GGUF on the heap.
 
 Generation is bandwidth-bound, so between fp32 and q8 smaller weights are also
 faster. ``q4_0`` is the legacy requant tier — it squeezes *this* f32/q8 load
-down to 4-bit blocks through per-row kernels with no batched prefill, so it is
-the smallest footprint, not the fastest path. For small *and* fast, prefer a
+down to 4-bit blocks on the portable dot, batched prefill and batched decode
+included, so it is the smallest footprint, not the fastest path. For small *and* fast, prefer a
 K-quant / mxfp4 / Q4_0 GGUF (Q4_K_M / Q5_K_M / Q6_K): under ``QuantMode.q8``
 those files keep their native 4-6 bit planes on the same fast rails, so both
 phases stay at full speed with a q4-class footprint.
