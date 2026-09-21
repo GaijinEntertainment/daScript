@@ -87,8 +87,8 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
 `<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening any test cell that holds
-such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
+naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening
+any test cell that holds such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
 `test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
 `test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
 defect.** A refusal replaced by a derivation that leaves no such configuration compiling unbound -
@@ -101,7 +101,7 @@ hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
 diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - whose PR body does not
+builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
 state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
@@ -109,9 +109,9 @@ defaults or composes generated builders binds nothing.
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
 `grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
 
-**A diff that stops the `grid=`/`tg=` spec consuming a `params=` value drops that value from the
-`params=` spec and from every call site in the same change.** The value then reaches neither the
-host nor the device, so nothing reads it.
+**A `params=` value that no `grid=`/`tg=` spec and no `requires=` item consumes is dropped from
+the `params=` spec and from every call site, in the same change.** The value then reaches neither
+the host nor the device, so nothing reads it.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
