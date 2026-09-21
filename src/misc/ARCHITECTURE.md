@@ -7,6 +7,8 @@
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
   through.
+- `dep_recorder.cpp` - what a run read, for a build system deciding whether a check has to run
+  at all; armed by `DAS_DEPFILE` / `-MD`, silent otherwise.
 - `alloc_tracker.cpp` - the RelWithDebInfo C++ heap leak tracker: the live-allocation map, the
   exit-time report, and the per-frame symbolizer. `alloc_tracker_overrides.cpp` beside it carries
   the global `operator new`/`delete` that feed it, compiled into every binary and shared module.
@@ -140,3 +142,35 @@ the same backoff with nothing but wasm in it. What makes either of these worth d
 this loop is where a team worker does its WORK: the pause sits between one `runTeamChunks` call
 and the next, so its price is latency in front of the next chunk, not idle spin. The window is a
 time budget, so a cheaper iteration does not shorten the window - it buys chunks taken sooner.
+
+## 9. A recorded dependency is a source the compile read {#dependency-recording}
+
+`dep_recorder.cpp` answers the question a build system asks before it runs a check: is there any
+point? A C compile answers it by having the compiler report what it opened (`cc -MD -MF x.d`),
+and ninja stats that list instead of compiling again. daslang reports the same way, from the
+same position - it is the process that opens the files, so it is the only thing that knows which
+modules a compile needed.
+
+What it records is exactly that: the files served by the compile's `FileAccess` - the root, every
+module it requires, transitively - plus the compile-time inputs a macro pinned through
+`add_module_cache_dependency`. It is the require graph, written as one Make rule.
+
+What it does NOT record is the point. A file a PROGRAM reads while it runs is not what its
+compile required; a directory listing is not either; and a build artifact is the output of some
+other edge, so naming one makes ninja build that edge to satisfy the check - while an artifact
+the build rewrites, like the jitted object cache, leaves the check dirty for good. Deciding what
+to rebuild is ninja's job, and it does it from this list; the list's only duty is to be the
+compile's own inputs and nothing else.
+
+Two rules survive from the shape of the thing. A path that no longer exists when the rule is
+written is dropped, because ninja treats a missing dependency as dirty and the check would then
+re-run forever. And the file holds exactly one rule - several naming one target is ninja's
+deprecated `depfilemulti`, and an isolated sweep whose workers each wrote their own would
+produce one per worker - so a process merges into the rule already there under a lock file. The
+in-memory set shards by path hash: one lock over it serializes a parallel sweep.
+
+The recorder is armed by `DAS_DEPFILE` or by `-MD -MF`, and unarmed it costs two relaxed atomic
+loads per file. The environment form is the one a build edge uses, and the reason is reach: a
+dastest worker subprocess, a `daslang -compile-only` a gate spawns per file, and a daslang-built
+`.exe` all inherit a variable and none of them would see a flag on the parent's command line.
+That is also why the recorder lives here, in the runtime library, rather than in the daslang CLI.

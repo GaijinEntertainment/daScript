@@ -164,8 +164,9 @@ add_custom_target(dry_run_tutorials)
 
 foreach(tutor ${ALL_TUTORIAL_SOURCES})
     get_filename_component(input_name ${tutor} NAME)
-    add_custom_target(${input_name}_dry
+    add_das_target(${input_name}_dry
         COMMAND daslang -dry-run ${tutor}
+        DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Testing tutorial ${tutor}"
     )

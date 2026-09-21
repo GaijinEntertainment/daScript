@@ -64,7 +64,26 @@ and unknown codes are harmless. The `-no-lint` command-line flag skips the lint 
 
 | Variable | Type | Effect |
 |---|---|---|
-| `DAS_MODULE_CACHE_LIMIT` | number (MB) | Size cap of the default module-cache directory (`.jitted_scripts/module_cache/`, `skills/internal/build_and_debug.md`). After a run writes a record, the oldest records by mtime go until the directory fits; a record a run read counts as fresh. Default 4096; `0` turns eviction off; garbage keeps the default. An explicit `-module-cache <path>` is never pruned. The only `DAS*` variable the record key leaves out. |
+| `DAS_MODULE_CACHE_LIMIT` | number (MB) | Size cap of the default module-cache directory (`.jitted_scripts/module_cache/`, `skills/internal/build_and_debug.md`). After a run writes a record, the oldest records by mtime go until the directory fits; a record a run read counts as fresh. Default 4096; `0` turns eviction off; garbage keeps the default. An explicit `-module-cache <path>` is never pruned. Left out of the record key, with the three `DAS_DEPFILE*` variables below. |
+
+## Build integration
+
+A build system wants to know whether a check still has to run. daslang answers the way a C
+compiler does - `cc -MD -MF x.d` writes the headers it opened, ninja stats them and skips the
+compile when none moved. Armed, daslang writes one Make rule at exit naming the sources a compile
+read - the root, the modules it requires transitively, and the compile-time inputs a macro
+pinned. What a program reads while it RUNS is not in it: a data file is not what the compile
+required, and a build artifact belongs to another ninja edge. The flag form is `-MD -MF <path> [-MT <target>]`; the variables below are the form a build
+edge uses, because they reach the processes it spawns - a dastest worker, a `daslang
+-compile-only` a gate runs per file, a daslang-built `.exe` - and a flag reaches none of those.
+Unset, nothing is recorded. None of them keys the module cache: they say where a record goes,
+never what is compiled.
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_DEPFILE` | path | Write the Make rule here. Every process that has it merges into the one rule, under a lock beside the file, so a parallel sweep still leaves exactly one. |
+| `DAS_DEPFILE_TARGET` | text | The target the rule names. Default: `DAS_DEPFILE` with a trailing `.d` removed, the way `-MD` names the object it is writing. |
+| `DAS_DEPFILE_EXCLUDE` | `;`-separated paths | Directories that contribute nothing. The build directory belongs here: a generated source is another edge's output, and naming one makes ninja build that edge to satisfy the check. |
 
 ## Diagnostics
 

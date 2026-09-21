@@ -1,9 +1,14 @@
 # CI lane targets: verify formatting / regenerated-bindings freshness. Both run
 # daslang interpreted (no LLVM), so define them before the DAS_LLVM_DISABLED
 # early-return below.
-add_custom_target(check_format
+file(GLOB_RECURSE _das_format_inputs
+    ${PROJECT_SOURCE_DIR}/daslib/*.das ${PROJECT_SOURCE_DIR}/dastest/*.das
+    ${PROJECT_SOURCE_DIR}/tests/*.das ${PROJECT_SOURCE_DIR}/utils/*.das
+    ${PROJECT_SOURCE_DIR}/examples/*.das ${PROJECT_SOURCE_DIR}/tutorials/*.das
+    ${PROJECT_SOURCE_DIR}/modules/*.das ${PROJECT_SOURCE_DIR}/benchmarks/*.das)
+add_das_target(check_format
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/das-fmt/dasfmt.das -- --path ${PROJECT_SOURCE_DIR}/ --verify --exclude-mask ${CMAKE_BINARY_DIR}
-    DEPENDS daslang
+    DEPENDS daslang ${_das_format_inputs}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Verifying .das formatting (das-fmt --verify)"
 )
@@ -56,7 +61,7 @@ if(NOT _rc EQUAL 0)
 endif()
 ]==])
 
-add_custom_target(check_lint_changed
+add_das_target(check_lint_changed
     COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang>
             -P ${DAS_LINT_CHANGED_SCRIPT}
     DEPENDS daslang
@@ -176,7 +181,7 @@ foreach(_s test_buildd_config test_buildd_core test_buildd_client test_roll_tool
 endforeach()
 das_lane_dastest_target(run_tests_dasweb_buildd COMMENT "Testing dasweb-buildd" FILES ${_ci_dasweb_buildd})
 
-add_custom_target(run_tests_dasweb_verify
+add_das_target(run_tests_dasweb_verify
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/utils/internal/dasweb-verify/test_verify_core.das
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/dasweb-verify/main.das
     DEPENDS daslang
@@ -191,14 +196,14 @@ add_custom_target(check_review_gates
     COMMENT "Running every REVIEW.das gate"
 )
 
-add_custom_target(check_gated_das
+add_das_target(check_gated_das
     COMMAND $<TARGET_FILE:daslang> utils/internal/preflight/main.das -- --only ci-das
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Compiling the CI-only das surface (ci_only_das.txt)"
 )
 
-add_custom_target(check_ast_verify_changed
+add_das_target(check_ast_verify_changed
     COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --changed
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -366,13 +371,13 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
     )
 ENDFOREACH()
 
-ADD_CUSTOM_TARGET(run_utils_tests
+add_das_target(run_utils_tests
     ${_run_utils_tests}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Running utils tests"
 )
 
-add_custom_target(check_standalone_exes
+add_das_target(check_standalone_exes
     COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-fmt ./utils/das-fmt/dasfmt.das
     COMMAND $<TARGET_FILE:daslang> -exe -output ${PROJECT_SOURCE_DIR}/bin/das-lint ./utils/lint/main.das
     DEPENDS daslang all_utils_exe
@@ -387,7 +392,7 @@ add_custom_target(check_format_exe
 add_dependencies(check_format_exe check_standalone_exes)
 
 if(TARGET dascov_exe)
-    add_custom_target(run_coverage
+    add_das_target(run_coverage
         COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800
         COMMAND ${UTIL_BIN_DIR}/dascov.exe -- ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --exclude tests/language
         DEPENDS daslang dascov_exe

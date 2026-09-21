@@ -1,5 +1,7 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/misc/platform.h"
+
+#include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/performance_time.h"
 
 #include "daScript/ast/ast_serialize_macro.h"
@@ -3863,8 +3865,8 @@ namespace das {
         }
         vector<string> envs;
         for ( char * const * e = das_environ(); e && *e; ++e ) {
-            // the cache's own size cap is a policy on the directory, not a compile input
-            if ( strncmp(*e, "DAS", 3) == 0 && strncmp(*e, "DAS_MODULE_CACHE_LIMIT=", 23) != 0 ) envs.push_back(*e);
+            if ( strncmp(*e, "DAS", 3) == 0 && strncmp(*e, "DAS_MODULE_CACHE_LIMIT=", 23) != 0
+                && !das_dep_is_env_entry(*e) ) envs.push_back(*e);
         }
         sort(envs.begin(), envs.end());
         string key = norm + host + "\n" + hostOptions;
@@ -3885,6 +3887,7 @@ namespace das {
         for ( uint32_t i=1; i<args.size; ++i ) {
             const char * a = argv[i] ? argv[i] : "";
             if ( strcmp(a, "--") == 0 ) break;
+            if ( int skip = das_dep_flag_argc(a) ) { i += uint32_t(skip) - 1; continue; }
             key += a;
             key += '\n';
         }

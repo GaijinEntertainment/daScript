@@ -6,7 +6,7 @@
 # build_doc below; check_docs_fresh holds the guards that run once every
 # generator (das2rst, imgui2rst, vulkan2rst) has written its pages.
 if(NOT DAS_TOOLS_DISABLED)
-    add_custom_target(check_docs_generated
+    add_das_target(check_docs_generated
         COMMAND $<TARGET_FILE:daslang> -documentation ${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -19,7 +19,7 @@ if(NOT DAS_TOOLS_DISABLED)
         COMMENT "Checking generated documentation is fresh"
     )
     if(TARGET libDasModuleImgui)
-        add_custom_target(run_imgui2rst
+        add_das_target(run_imgui2rst
             COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/modules/dasImgui/utils/imgui2rst.das
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -27,7 +27,7 @@ if(NOT DAS_TOOLS_DISABLED)
         )
     endif()
     if(TARGET libDasModuleVulkan)
-        add_custom_target(run_vulkan2rst
+        add_das_target(run_vulkan2rst
             COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/modules/dasVulkan/utils/vulkan2rst.das
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -110,7 +110,7 @@ if(DAS_BUILD_DOCUMENTATION)
 endif()
 
 if(NOT DAS_TOOLS_DISABLED)
-    add_custom_target(check_doc_verify
+    add_das_target(check_doc_verify
         COMMAND $<TARGET_FILE:daslang> ./utils/internal/doc-verify/main.das -- --daslang $<TARGET_FILE:daslang>
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
