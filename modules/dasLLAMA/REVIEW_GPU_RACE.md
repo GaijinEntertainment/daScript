@@ -60,14 +60,14 @@ the slower kernel.
 dispatches.**
 
 **A timing arm with a decided ranking times its kernel on every input the ranking branches on -
-a batch width, a row count, a lane split, a tile's own width - at a value on each side of the
-branch.** A ranking timed at one value alone is applied at values it was never ranked at.
+a shape dimension (a head width, a batch width, a row count, a lane split, a tile's own width) or
+a layer kind (dense, MoE, per-layer-embedding) - at a value on each side of the branch.** A ranking timed at one value alone is applied at values it was never ranked at.
 
 **A diff that widens the gate admitting inputs to a kernel whose ranking is decided - a shape
 dimension (a head width, a batch width, a row count, a lane split, a tile width) or a layer kind
-the gate now admits - times the ranked arms at an input the gate now admits and did not before -
-at each end when the new admission spans a range - in the same change.** The widened gate otherwise applies the ranking
-at values it was never ranked at.
+(dense, MoE, per-layer-embedding) - times the ranked arms at a newly admitted input, at each end
+when the new admission spans a range, in the same change.** The widened gate otherwise applies
+the ranking at values it was never ranked at.
 
 **A timing arm for a prefill tile over a variable region, with a decided ranking, times its
 kernel at one region whose token count is a whole multiple of that tile's token column - the

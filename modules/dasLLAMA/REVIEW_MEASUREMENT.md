@@ -129,12 +129,10 @@ exe does not carry.
 child, both arms implementations of this engine the run could adopt and the run picking the
 winner - outside `harness/`.**
 
-**A diff that sets a pin the loader consumes - the kernel backend (`pin_kernel_backend`,
-`select_kernel_backend`, `DASLLAMA_PIN_BACKEND`), the resident regions (`set_gpu_resident_regions`)
-or the context cap (`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`) - sets it before the load it
-governs.** The loader repacks weights into the pinned backend's layout and plans the mirror from
-the regions and the cap, so a pin set after the load never reaches them.
+**A diff that pins the kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
+`DASLLAMA_PIN_BACKEND` - pins it before the load it governs.** The loader repacks weights into
+the pinned backend's layout, so a pin set after the load never reaches them.
 
-**A diff that adds or changes a pin path makes a pin naming a backend the box has not registered
-refuse or skip the run - never fall through to the default.** A misspelled pin that falls through
+**A diff that adds or changes a kernel-backend pin path makes a pin naming a backend the box has
+not registered refuse or skip the run - never fall through to the default.** A misspelled pin that falls through
 measures the default backend under the pinned one's name.

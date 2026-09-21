@@ -267,7 +267,7 @@ untyped, and drop a return type that would name one.** A signature cannot sit in
 `static_if`, so a build without the module fails the compile on it.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
-and that has no untyped parameter, names anything from that module - a type, a function or a
-global - only inside a `static_if (typeinfo builtin_module_exists(<mod>))` body.** A build without the module infers
-every such body; a function with one untyped parameter is inferred only at a call site, which its
-caller has already guarded.
+and that has no untyped parameter, names anything that module declares only inside a
+`static_if (typeinfo builtin_module_exists(<mod>))` body.** A build without the module still
+infers a fully-typed function's whole body; a function with one untyped parameter is inferred
+only at a call site, which its caller has already guarded.

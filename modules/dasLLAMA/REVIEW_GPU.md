@@ -1,9 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GPU_MTP.md`,
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal,
-`followup_vulkan.md` for Vulkan.
+docs: the `ARCHITECTURE_GPU*.md` set beside this file - `ARCHITECTURE.md` routes to each by
+section. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
 `followup_metal.md` or `followup_vulkan.md`.
@@ -56,13 +55,12 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A per-iteration branch in a kernel's main loop - a bounds or tail guard, or a nested loop's own
-bound - whose answer is the same for every thread of the dispatch and whose value the host fixes
-before it records the dispatch, is a defect - stamp the guard, or clamp the index so the guarded
-work runs on a live value and its result is never stored.**
-Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
-select on the constant. The instance stamped without the guard shows no guard in its generated
-`*_msl` global or its SPIR-V dump.
+**A per-iteration branch in a kernel's main loop whose answer is the same for every thread of
+the dispatch, and whose deciding value the host fixes before it records the dispatch, is a
+defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
+guard, clamping the index so the guarded work runs on a live value and its result is never
+stored also conforms.** Stamped means the deciding value is a `@template_constant`; the generated
+`*_msl` global or SPIR-V dump then shows no guard and a constant trip count.
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value
@@ -109,14 +107,17 @@ the one the bucket-building kernel writes, with the live entry count (positions 
 token, `npos * nk`) instead.** Rows past the last expert's stamped tail hold stale pool
 bytes, not the sentinel, and an equality test sends their token index out of bounds.
 
-**Never gate an early `return` in a kernel body that runs a cooperative op - a `barrier()`, a
-simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
-threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
-complete the op.
+**Never put an op every lane of the group must reach together - a `barrier()`, a simdgroup matrix
+op, or a subgroup shuffle, vote, ballot or reduction - behind an early `return`, a loop or a
+branch that a per-lane value decides, unless that value is equal across every lane the op
+exchanges with (the workgroup for a barrier or matrix op, the subgroup for the rest); gate or
+bound it with such a value, or hoist the op out.** A lane that exits early, or reaches the op a
+different number of times, leaves the group unable to complete it.
 
-**An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
-without one, or generated from a template instance that has none - shows that every address
-the form touches stays inside its buffers' allocations.** A `requires =` contract on the class
+**An encoder that picks a kernel form whose loop carries no bounds or tail guard, or a stamped
+constant bound in place of one - stamped without one, or generated from a template instance
+that has none - shows that every address the form touches stays inside its buffers'
+allocations.** A `requires =` contract on the class
 is that showing for the dimension it names; an unchecked claim that an extent divides evenly is
 not. A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
 corrupts real rows.
