@@ -1320,15 +1320,13 @@ module) is independent and can land any time - it is pure structure.
     path sees the drift; the fix is a kernel cell in `tests/test_vulkan_kernels.das` at the 12B's
     widths against the CPU oracle, then the tile that misses. No test reads red today: the gemma
     file's cells skip on a memory decline (`moe_gpu_resident_memory_decline`).
-47. **The E-series' per-layer-embedding pre-step keeps two CPU halves.** The whole-model driver
+47. **The E-series' per-layer-embedding pre-step keeps one CPU half.** The whole-model driver
     takes gemma-4 E2B / E4B with the per-layer-embedding branch, the shared-KV layers and the two
-    dense widths on device, and the prefill's pre-step projection runs on device too (the f16
-    mirror of `per_layer_model_proj`, the `ple_raw` rows of `RdecPrefillFn`); what stays on the
-    CPU: the table gather a prefill (`ple_gather_rows`, across the job threads: 2.3 ms a 512-row
-    window on E2B - the q8 table is 2.35 GB, a device copy is the alternative), and the whole
-    decode pre-step (`ple_pre_decode`: the token's row plus a [dim x layers*ple] GEMV, normed and
-    averaged, copied to the token command as a [layers x ple] row - a GEMV over the f16 mirror and
-    a 35-row norm on device would take it). Also here: the driver's prefill GEMMs for the branch run the
+    dense widths on device, and the pre-step's projection runs on device for the prefill window,
+    the token and the batched step's rows alike (the f16 mirror of `per_layer_model_proj`, the
+    `ple_raw` rows of `RdecPrefillFn`, the token commands' `pleproj` + `plefin` stamps); what stays
+    on the CPU is the table gather (`ple_gather_rows`, across the job threads: 2.3 ms a 512-row
+    window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
 48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes

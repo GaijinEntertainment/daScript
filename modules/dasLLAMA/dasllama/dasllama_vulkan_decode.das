@@ -2344,20 +2344,29 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     rd_ts(raw, "a:wo")
 }
 
-//! the per-layer-embedding branch over `nrows` rows: the rows' own Q8_0 quants for the gate, the gate as an N-column GEMV
-//! into the rows' gate plane, the act over every row's slice of this layer's side rows, the proj as an N-column GEMV into
-//! the rows of ffnout (the split forms: the fused act + proj has one row)
+//! the per-layer-embedding branch over `nrows` rows, the one-row branch's forms over the rows' planes: the gate as an
+//! N-column GEMV, then the fused act + requant + proj over the columns (its feed the FFN step's own quants), or the split
+//! act over every row's slice of this layer's side rows and the proj as an N-column GEMV, after the rows' own Q8_0 quants
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_ple_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
     let dim = g_rd.dim
     let ple = g_rd.ple
     let nr = uint(nrows)
-    var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l) * nr)
-    enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim * nrows / 4l + 255l) / 256l)
-    rd_ts(raw, "a:p_rq_x")
+    if (!L.ple_fused) {
+        var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l) * nr)
+        enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim * nrows / 4l + 255l) / 256l)
+        rd_ts(raw, "a:p_rq_x")
+    }
     var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = nr, ystride = uint(ple))
     rd_gemv_n(L.fpg, raw, h, L.s_ple_gate_n, pcg, ple)
     rd_ts(raw, "a:p_gate")
+    if (L.ple_fused) {
+        var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
+            ncols = nr, sstride = uint(g_rd.n_layers * ple))
+        enc_q8_gemv_pleact_cls(raw, h, L.s_ple_pa_n, pcf, rd_ar_wgs(dim))
+        rd_ts(raw, "a:p_actproj")
+        return
+    }
     var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, nblk = uint(ple / 32l) * nr,
         ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act_n, pca, (ple * nrows / 4l + 255l) / 256l)
@@ -2385,6 +2394,12 @@ def private rd_ple_sets_n(var L : RLayer) {
     L.s_ple_proj_n = gemv_cls_set(L.fpg, fixed_array(pp.wq, pp.ws, L.m_pp.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev),
         fixed_array(pp.wqb, pp.wsb, META_BYTES, ple * nb, (ple / 32l) * 4l * nb, dim * 4l * nb),
         fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
+    if (L.ple_fused) {
+        L.s_ple_ar_rq_n = set_ar_rq_rows(g_rd.ffnout_dev, VHZ_FFO)
+        L.s_ple_pa_n = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
+            fixed_array(pp.wqb, pp.wsb, ple * 4l * nb, all * 4l * nb, dim * 4l * nb),
+            fixed_array(0u, 0u, VHZ_GATE, VHZ_COS, VHZ_FFO))
+    }
 }
 
 //! the routed block over `nrows` rows: the router as one dispatch of `nrows` columns (each column the one-row dot), the
@@ -2418,7 +2433,7 @@ def private rd_encode_moe_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     }
     var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
         norm_on = L.rtn_fused ? 1u : 0u, nwoff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ncols = nr)
-    enc_router_gemv_cls(raw, h, L.s_router_n, pcr, g_rd.ner * nrows)
+    enc_router_gemv_cls(raw, h, L.s_router_n, pcr, g_rd.ner)
     rd_ts(raw, "a:m_router")
     var pct = TopkArgs(ne = uint(g_rd.ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * g_rd.ne) : NO_DSCALE,
@@ -2518,7 +2533,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish over the rows: the projection a row a column, the per-slice finish over every row's slices
             let all = g_rd.n_layers * g_rd.ple
             var pcr = RouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = nr, ne_split = 0u, obase_split = 0u)
-            enc_router_gemv_f16_cls(raw, h, g_rd.s_tok_pleproj, pcr, all * nrows)
+            enc_router_gemv_f16_cls(raw, h, g_rd.s_tok_pleproj, pcr, all)
             rd_ts(raw, "a:pleproj")
             var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
             enc_cls_ar(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
@@ -2573,8 +2588,14 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             if (L.ple) {   //! the FFN residual first (no scale, the normed rows unused); the branch leaves its projection in ffnout for the step below
                 var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = nxt, eps = g_rd.eps, ascale = 1.0,
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-                enc_cls_ar(raw, h, L.s_addr_next, pc14a, nrows)
-                rd_ts(raw, "a:ar2a")
+                if (L.ple_fused) {   //! the step quantizes the rows it writes, as they are: the gate's feed
+                    pc14a.no_norm = 1u
+                    enc_cls_ar_rq_b(raw, h, L.s_ple_ar_rq_n, pc14a, nrows)
+                    rd_ts(raw, "a:ar2a_rq")
+                } else {
+                    enc_cls_ar(raw, h, L.s_addr_next, pc14a, nrows)
+                    rd_ts(raw, "a:ar2a")
+                }
                 rd_encode_ple_n(raw, h, L, l, nrows)
             }
             if (L.moe) {

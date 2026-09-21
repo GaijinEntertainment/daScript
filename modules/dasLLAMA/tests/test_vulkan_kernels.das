@@ -7099,6 +7099,105 @@ def test_vkd_q8_gemv_gu_n(t0 : T?) {
     }
 }
 
+//! the N-column form against the one-row dispatches, one a column: the same kernel math in the same order, so bit for bit
+def private q8_gemv_pleact_cols_run(t; n, d, ncols : int) {
+    let nb = n / 32
+    let totblk = d * nb
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    let all = 3 * n   // three layers' side rows a column: the cell reads the middle one
+    var wqh : array<uint>
+    var wsh : array<uint>
+    var gh : array<float>
+    var sh : array<float>
+    wqh |> resize(totblk * 8)
+    wsh |> resize(totblk / 2 + 1)
+    gh |> resize(ncols * n)
+    sh |> resize(ncols * all)
+    for (i in range(totblk * 8)) {
+        wqh[i] = hash_word(uint(i) * 5u + 19u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        wsh[i] = ws_word(uint(i) * 3u + 7u)
+    }
+    for (i in range(ncols * n)) {
+        gh[i] = float((i * 37) % 101) * 0.06 - 3.0
+    }
+    for (i in range(ncols * all)) {
+        sh[i] = float((i * 29) % 83) * 0.05 - 2.0
+    }
+    let g_bytes = int64(ncols * n) * 4l
+    let s_bytes = int64(ncols * all) * 4l
+    let y_bytes = int64(ncols * d) * 4l
+    let g1_bytes = int64(n) * 4l
+    let s1_bytes = int64(all) * 4l
+    let y1_bytes = int64(d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let gd = make_device_buf(g_bytes)
+    let sd = make_device_buf(s_bytes)
+    let yd = make_device_buf(y_bytes)
+    let gd1 = make_device_buf(g1_bytes)
+    let sd1 = make_device_buf(s1_bytes)
+    let yd1 = make_device_buf(y1_bytes)
+    var host = make_host_buf(y_bytes * 2l, true, [cached = true])
+    var got : array<float>
+    var got1 : array<float>
+    got |> resize(ncols * d)
+    got1 |> resize(ncols * d)
+    let rpw = 4l * g_gpu.rows_per_wg
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+        upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
+        upload_region_at(sd, 0l, addr<uint8 const?>(sh[0]), s_bytes)
+        nan_sentinel_upload(yd, y_bytes)
+        var s_cls = set_q8_gemv_pleact_cls(fixed_array(wqd, wsd, gd, sd, yd), fixed_array(wq_bytes, ws_bytes, g_bytes, s_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), act = ACT_GELU, ncols = uint(ncols), sstride = uint(all))
+        enc_q8_gemv_pleact_cls(raw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+        vhz_dep(raw, h, 16u, 0u, true)
+        cmd_copy_range(raw, yd, 0l, host.buf, 0l, y_bytes)
+        vk_check(vkEndCommandBuffer(raw), null)
+        submit_wait(raw)
+        memcpy(addr<void?>(got[0]), host.mapped, y_bytes)
+        for (c in range(ncols)) {
+            upload_region_at(gd1, 0l, addr<uint8 const?>(gh[c * n]), g1_bytes)
+            upload_region_at(sd1, 0l, addr<uint8 const?>(sh[c * all]), s1_bytes)
+            nan_sentinel_upload(yd1, y1_bytes)
+            var s1 = set_q8_gemv_pleact_cls(fixed_array(wqd, wsd, gd1, sd1, yd1), fixed_array(wq_bytes, ws_bytes, g1_bytes, s1_bytes, y1_bytes), fixed_array(1u, 2u, 4u, 8u, 16u))
+            var raw1 = alloc_cmd()
+            let begin1 = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw1, begin1), null)
+            var h1 : VkHaz
+            var pc1 = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), act = ACT_GELU)
+            enc_q8_gemv_pleact_cls(raw1, h1, s1, pc1, (int64(d) + rpw - 1l) / rpw)
+            vhz_dep(raw1, h1, 16u, 0u, true)
+            let off = y_bytes + int64(c) * y1_bytes
+            cmd_copy_range(raw1, yd1, 0l, host.buf, off, y1_bytes)
+            vk_check(vkEndCommandBuffer(raw1), null)
+            submit_wait(raw1)
+            memcpy(addr<void?>(got1[c * d]), reinterpret<void?>(intptr(host.mapped) + uint64(off)), y1_bytes)
+        }
+    }
+    var bad = 0
+    for (i in range(ncols * d)) {
+        if (got[i] != got1[i]) {
+            bad++
+        }
+    }
+    t |> success(bad == 0, "q8 pleact n {n} d {d} over {ncols} columns: the columns match the one-row dispatches bit for bit ({bad} of {ncols * d} off)")
+    delete wqh
+    delete wsh
+    delete gh
+    delete sh
+    delete got
+    delete got1
+}
+
 [test]
 def test_vkd_q8_gemv_pleact(t0 : T?) {
     t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
@@ -7109,6 +7208,8 @@ def test_vkd_q8_gemv_pleact(t0 : T?) {
             }
             q8_gemv_pleact_run(t, 256, 200)   // the E-series side row: eight blocks, a partial last workgroup
             q8_gemv_pleact_run(t, 128, 64)    // a narrower row: the idle upper lanes of the build
+            q8_gemv_pleact_cols_run(t, 256, 200, 4)   // the N-row command's columns: four rows, the E-series width
+            q8_gemv_pleact_cols_run(t, 128, 64, 3)    // an odd column count on the narrower row
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -11183,7 +11284,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
 //! the N-row command's top-k against the one-row top-k run a row at a time: the picks, the weights and the region
 //! records bit for bit, the rows' feed blocks where the one-row form writes row zero's - and the picks against the host
 //! select, the same oracle the window's per-row form holds to
-def private topk_n_arm(t : T?; rbias : bool) {   // nolint:STYLE037 -- one linear fixture: the N dispatch, the one-row dispatches, the compares
+def private topk_n_arm(t : T?; rbias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let npos = 4
         let ne = 40
@@ -11450,7 +11551,7 @@ def test_vkd_router_gemv_cols(t0 : T?) {
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 var h : VkHaz
                 var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), ncols = uint(ncols))
-                enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne * ncols))
+                enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
                 vhz_dep(raw, h, 2u, 0u, true)
                 cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
                 vk_check(vkEndCommandBuffer(raw), null)

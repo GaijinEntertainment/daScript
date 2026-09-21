@@ -62,8 +62,8 @@ declines on the device logs once, and the command answers 0 rows from then on, s
 row-at-a-time loop serves.
 
 **A MoE layer's routed block steps the rows as regions of the one-row leaves.** The router GEMV
-takes the rows as columns of one dispatch (`RouterArgs.ncols`: a workgroup an expert row and a
-column, each column the one-row dot, the logits a row at `obase + c * ne`); the per-row top-k
+takes the rows as columns of one dispatch (`RouterArgs.ncols`: a workgroup an expert row, its
+weights read once and dotted against every column, the logits a row at `obase + c * ne`); the per-row top-k
 stamp (`TopKN`, a row a workgroup over the record base `TopKRecords` the one-row stamp `TopK`
 splices too) writes row p's k slots at `p * k` - the gate and up region records reading row p's
 feed blocks (`TopkArgs.xnb1`), the down records each slot's hidden row; and the gate, up and
@@ -84,12 +84,16 @@ q alone.** The command takes the rows' side inputs position-major (`RdecTokenNFn
 the table rows the batch driver gathers from each row's token where the device finishes the
 pre-step, else the pre-step's finished rows as the workspace holds them), uploads them on the
 cos plane's hazard bit, and where the device finishes the pre-step runs the projection as one
-N-column dispatch (`RouterArgs.ncols`, a row a column into `tok_plep`'s rows) and the per-slice
-finish over every row's slices. A layer's branch runs the split forms - the rows' own Q8_0
-quants of the residual, the gate as an N-column GEMV into `pleg_dev`'s rows, the act over every
-row's slice of this layer (`ActArgs.ustride` the side row's width, `ulen` the slice), the proj
-as an N-column GEMV into `ffnout`'s rows - and the two residual steps are the one-row command's
-over `nrows` workgroups; the fused act + proj stamp has one row. The side planes (`ple_host`,
+N-column dispatch (`RouterArgs.ncols`, the rows the columns, into `tok_plep`'s rows) and the per-slice
+finish over every row's slices. A layer's branch takes the one-row branch's forms over the rows:
+the gate as an N-column GEMV into `pleg_dev`'s rows, then where the one-row branch fuses
+(`RLayer.ple_fused`) the FFN step's rows stamp quantizing the rows as they are and the fused act +
+requant + proj over the columns (`Q8GemvPleAct` with `PleActArgs.ncols`: every column's x built
+once in workgroup memory, one proj row a subgroup dotted against all of them from one pass over
+its weights), else the rows' own Q8_0 quants of the residual, the act over every row's slice of
+this layer (`ActArgs.ustride` the side row's width, `ulen` the slice) and the proj as an N-column
+GEMV into `ffnout`'s rows; the two residual steps are the one-row command's over `nrows`
+workgroups. The side planes (`ple_host`,
 `ple_dev`, `pleg_dev`, `tok_plep`) hold `nb` rows, the one-row sets binding the first. A
 shared-KV layer's head projects q as the N-column GEMV alone: the rope and store pass no k
 pairs and no k-head groups, and the attention reads the donor layer's rows from the mirror.
