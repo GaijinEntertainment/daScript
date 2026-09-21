@@ -2236,6 +2236,9 @@ def test_lens_params_gate(t : T?) {
             t |> success(find(unread.out, "is read by no grid=, tg=, requires= or @span") >= 0, "the refusal names the readers: {unread.out}")
             let req_only = spawn_wg_fixture(true, "params_req", "requires = \"zz % 64\", ", "", "", false, "n : int64, zz : int64")
             t |> equal(0, req_only.rc, "a param only a requires= item reads compiles: {req_only.out}")
+            let substr = spawn_wg_fixture(true, "params_substr", "requires = \"rows % 64\", ", "", "", false, "n : int64, row : int64, rows : int64")
+            t |> success(substr.rc != 0, "a param read only as a substring of another name is unread")
+            t |> success(find(substr.out, "param 'row' is read by no") >= 0, "the refusal names the whole-identifier miss, not its longer neighbour: {substr.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }
