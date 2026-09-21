@@ -210,7 +210,7 @@ transfer family armed (`RDec.log_xfer`) records the token command without the co
 signals `g_gpu.cmp_sem`, the compute -> transfer timeline (`submit_signal`), the transfer queue
 takes a recorded copy command a row count (`rd_xlog`, `RDec.xlog_cmd`) that waits for that value
 at the transfer stage and signals the transfer timeline (`xfer_submit_after`), and the host spins
-on the transfer timeline's counter (`xfer_spin_wait`) instead of the fence - a blocking wait
+on the transfer timeline's counter (`xfer_wait` spinning) instead of the fence - a blocking wait
 would pay the OS wake-up a step, as the fence wait's spin already knows. The logits planes are
 CONCURRENT between the two families (`make_device_buf` / `make_host_buf` at `xfer_shared`), so no
 ownership transfer sits on the path; the host orders the next step behind the copy, so the

@@ -7430,8 +7430,9 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw, begin), null)
                     var h : VkHaz
-                    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, ncols = uint(ncols), ystride = uint(d))
-                    gemv_enc_n(fmt, raw, h, s_n, pc, int64(d))
+                    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, ncols = uint(ncols), ystride = uint(d),
+                        lanes_per_row = gemv_lanes_per_row(fmt, int64(n)))
+                    gemv_cls_enc_n(fmt, raw, h, s_n, pc, gemv_wgs(int64(d), pc.lanes_per_row))   //! the class entry: the one-column count still lands on the narrowest N stamp
                     vhz_dep(raw, h, 32u, 0u, true)
                     cmd_copy_whole(raw, yd, host.buf, y_bytes)
                     vk_check(vkEndCommandBuffer(raw), null)

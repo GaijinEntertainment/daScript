@@ -214,7 +214,7 @@ list and stamp count.** The profiler sums intervals by the recorder's own names.
 form that leaves its list installed sends every later one-row profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
-(`dasllama/dasllama_vulkan_common.das`) calls `xfer_spin_wait` on the value it returned before it
+(`dasllama/dasllama_vulkan_common.das`) spins (`xfer_wait`) on the value it returned before it
 submits any command that writes the buffer that copy reads.** The host's wait is the only order
 between the copy's read and that write.
 

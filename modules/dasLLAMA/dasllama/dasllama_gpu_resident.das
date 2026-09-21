@@ -1968,18 +1968,24 @@ def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : ar
     return true
 }
 
-//! row `i`'s side input for the token command: the table row gathered on device, else row `i` of the pre-step `eval_batch` already ran
-def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
+//! the side-input rows of `n` tokens for the token command, into `g_rdec_ple_rows`: the table rows gathered on device where
+//! the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major either way)
+def private rdec_ple_side_rows(t : Model; tokens : array<int64>; n : int64; ws : BatchWorkspace; src_off : int64) {
     if (rdec_ple_proj_on()) {
-        g_rdec_one_tok |> resize(1l)
-        g_rdec_one_tok[0] = ws.row_tokens[i]
-        resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        resident_prefill_ple_rows(t, tokens, n)
         return
     }
-    let all = t.config.n_layers * t.config.n_embd_per_layer
+    let all = t.config.n_layers * t.config.n_embd_per_layer * n
     g_rdec_ple_rows |> reserve(all)
     g_rdec_ple_rows |> resize(all)
-    copy_floats(ws.scr.ple_inp, i * all, g_rdec_ple_rows, 0l, all)
+    copy_floats(ws.scr.ple_inp, src_off, g_rdec_ple_rows, 0l, all)
+}
+
+//! row `i`'s side input for the token command: the table row gathered on device, else row `i` of the pre-step `eval_batch` already ran
+def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
+    g_rdec_one_tok |> resize(1l)
+    g_rdec_one_tok[0] = ws.row_tokens[i]
+    rdec_ple_side_rows(t, g_rdec_one_tok, 1l, ws, i * t.config.n_layers * t.config.n_embd_per_layer)
 }
 
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
@@ -1989,16 +1995,9 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let dim = c.dim
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
-    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs, position-major: the table rows the device projects, else the pre-step's finished rows as the workspace holds them
+    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs: the table rows the device projects, else the pre-step's finished rows
     if (has_ple(c)) {
-        if (ple_raw) {
-            resident_prefill_ple_rows(t, ws.row_tokens, nrows)
-        } else {
-            let all = c.n_layers * c.n_embd_per_layer
-            g_rdec_ple_rows |> reserve(all * nrows)
-            g_rdec_ple_rows |> resize(all * nrows)
-            copy_floats(ws.scr.ple_inp, 0l, g_rdec_ple_rows, 0l, all * nrows)
-        }
+        rdec_ple_side_rows(t, ws.row_tokens, nrows, ws, 0l)
     }
     g_rdec_lrows |> resize(nrows)
     g_rdec_poss |> resize(nrows)

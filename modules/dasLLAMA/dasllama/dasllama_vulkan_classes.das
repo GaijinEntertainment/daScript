@@ -4145,8 +4145,8 @@ struct DaAttnArgs {
     nsplit : uint   //! the key range split across this many workgroups a group, each leaving a (max, denom, acc) piece a head that the group's last piece combines; 0 or 1 = one workgroup a group stores the rows itself
     rqk : uint      //! the row's requant folded into the store: 0 = Q8_0 blocks of 32, 1 = Q8_K superblocks of 256 (a head a multiple of 256), 2 = none (the row alone)
     sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
-    rowwg : uint    //! (kv head, slab, split) workgroups a row - `da_attn_row_wgs`: the dispatch past them is the N-row command's next row, which reads its own `tok` entry; 0 = the whole dispatch is row 0
-    qrow : uint     //! a row's stride in q (the projection row's width); 0 in the one-row command
+    rowwg : uint    //! (kv head, slab, split) workgroups a row - `da_attn_row_wgs`: the dispatch past them is the next row, which reads its own `tok` entry; 0 = the whole dispatch is row 0 (the one-row command passes its row's count: the same reading)
+    qrow : uint     //! a row's stride in q (the projection row's width)
     cntoff : uint   //! the split form's arrival counters, a word a (row, kv head, slab) group, at this word offset of the partials binding: zero between dispatches
 }
 
@@ -9457,8 +9457,8 @@ struct RopeKvArgs {
     boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
     hasb : uint
     cbase : uint    //! this layer's rope class's row base in the cos/sin plane (a second class's row follows the first's)
-    rows : uint     //! the N-row command: rows in the dispatch, `npairs` threads each; 0 = one
-    kvrow : uint    //! ... a row's stride in kvsrc (the projection row's width), in qrows, and in the cos/sin plane; 0 in the one-row command
+    rows : uint     //! rows in the dispatch, `npairs` threads each; 0 = one (the one-row command passes 1: the same reading)
+    kvrow : uint    //! ... a row's stride in kvsrc (the projection row's width), in qrows, and in the cos/sin plane
     qrow : uint
     cosrow : uint
 }
@@ -9654,10 +9654,10 @@ struct QknRopeArgs {
     cbase : uint    //! this layer's rope class's row base in the cos/sin plane
     vfk : uint      //! V is the raw k row scaled by its own rms (a layer with no v plane: gemma-4's global layers)
     vnorm : uint    //! V is its own projection scaled by its rms, no weight (gemma-4's v-norm)
-    rowwg : uint    //! the N-row command: head-row workgroups a row (q heads + k heads); 0 = the one-row command
-    kvrow : uint    //! the N-row command: a row's stride in the projection plane
-    qrow : uint     //! the N-row command: a row's stride in qrows
-    cosrow : uint   //! the N-row command: a row's stride in the cos/sin plane
+    rowwg : uint    //! head-row workgroups a row (q heads + k heads); 0 = the whole dispatch is row 0 (the one-row command passes its count: the same reading)
+    kvrow : uint    //! a row's stride in the projection plane
+    qrow : uint     //! a row's stride in qrows
+    cosrow : uint   //! a row's stride in the cos/sin plane
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models); KT/CLAMP16 as in RopeKvStoreT.
@@ -11195,10 +11195,16 @@ def gemv_lanes_per_row(fmt : int; n : int64) : uint {
     return grid ? 16u : 0u
 }
 
-//! the family's dispatch over `rows` output rows: the lanes per row by the row length, the grid to match
+//! the family's dispatch over `rows` output rows: the lanes per row by the row length, the grid to match; `pc.ncols`
+//! past one takes the N-column leaf over that many activation rows, its y rows `pc.ystride` apart
 def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
     pc.lanes_per_row = gemv_lanes_per_row(fmt, int64(pc.n))
-    gemv_cls_enc(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lanes_per_row))
+    let wgs = gemv_wgs(rows, pc.lanes_per_row)
+    if (pc.ncols > 1u) {
+        gemv_cls_enc_n(fmt, raw, h, set_, pc, wgs)
+    } else {
+        gemv_cls_enc(fmt, raw, h, set_, pc, wgs)
+    }
 }
 
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
@@ -11287,12 +11293,6 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     } else {
         panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
     }
-}
-
-//! the N-column dispatch over `rows` output rows: the one-column lane pick, the grid to match
-def gemv_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
-    pc.lanes_per_row = gemv_lanes_per_row(fmt, int64(pc.n))
-    gemv_cls_enc_n(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lanes_per_row))
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).

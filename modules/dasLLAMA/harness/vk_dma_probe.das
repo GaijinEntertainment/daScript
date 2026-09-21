@@ -35,7 +35,7 @@ def private transfer_copy_us(src, dst : uint64; bytes : int64) : double {
     var raw = g_gpu.xfer_cmd
     var us = 0.0lf
     for (i in range(REPS + 1)) {
-        xfer_host_wait(g_gpu.xfer_value)   //! the shared transfer command re-records only after its last submit retired
+        xfer_wait(g_gpu.xfer_value, false)   //! the shared transfer command re-records only after its last submit retired
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
         let begin = VkCommandBufferBeginInfo()
@@ -59,7 +59,7 @@ def private transfer_copy_us(src, dst : uint64; bytes : int64) : double {
             submit.pSignalSemaphores = addr(sem)
             vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
         }
-        xfer_host_wait(g_gpu.xfer_value)
+        xfer_wait(g_gpu.xfer_value, false)
         if (i > 0) {   //! the first submit is the warm-up
             us += double(get_time_usec(t0))
         }
