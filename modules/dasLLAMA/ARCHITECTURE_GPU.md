@@ -91,9 +91,16 @@ that a question answered for one backend has an obvious address in the other. Th
   norm, scan and gate a row at a time against that session's own `DnMirror` (`recurrent_batch`):
   the `DnArgs.row` field picks the row's slice of the batch planes, the mirror's live-region bases
   pick its state, and the mirrors advance when the step lands (`g_lp_dn_uids`); a step whose
-  rows have no resident or CPU-synced state declines `dn_state`. The CPU batched stack has no
-  hybrid form, so `eval_batch_` hands a hybrid's rows to an armed device driver first and steps
-  them per row only when none is armed or the driver declines. The batch's split single-pass
+  rows have no resident or CPU-synced state declines `dn_state`. The mirror cache (`g_dn_mirrors`,
+  an LRU) rests at four sessions and grows to whatever a scheduler names through the tier's
+  `moe_gpu_dn_room` seam at its creation (`create_scheduler` -> `gpu_dn_room`), and the batch
+  build names its own row count too: a cache narrower than the batch would evict a row of the step
+  it prepares, and that stream's next step would decline `dn_state` with no CPU chain to fall to
+  on a blob-only model. Every plane a rows GEMV lands in is sized to the rows form's four-row tile
+  reach (`mr`), because the tile writes whole tiles past the live rows. `eval_batch_` hands a
+  hybrid's rows to an armed device driver first and to the CPU stack's own hybrid form
+  (`ArchBlocks.attn_batch`) when none is armed or the driver declines on a planar model; only a
+  blob-only model's declined step falls to the single-row forward. The batch's split single-pass
   attention (`MetalSqAttnDKvT` and its combine) takes the head width at run time from one
   compiled variant - a lane owns one quad of the head, a head of 128 fills the simdgroup and a
   head of 64 idles the lanes past it (zero query, no store) - serving both on the f16/f32 mirrors
