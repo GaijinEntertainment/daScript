@@ -4,15 +4,16 @@
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
-with `REVIEW_GPU.md`'s.**
+with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**A change other than a comment-only one to `dasllama/dasllama_metal_tower.das`, to the
-`AttnArgs` kernel-argument struct, to any kernel class the tower dispatches or builder the tower
-borrows, to the `[metal_dispatch]` structure macro in `dasllama/dasllama_metal_lens.das`, or to
-state the whole driver shares (a module-level `g_tw_*` variable, `metal_tower_init`,
-`dasllama_metal_tower_register`) runs every gate this checklist names, or - where the change is
-confined to functions no other file under `dasllama/` names - says so in the PR body in place
-of the run.** The gates are the family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`,
+**A change other than a comment-only one to `dasllama/dasllama_metal_tower.das`, to a
+kernel-argument struct the tower fills for a dispatch (`dasllama/dasllama_metal_prefill.das`), to
+any kernel class the tower dispatches or builder the tower borrows, to the `[metal_dispatch]`
+structure macro in `dasllama/dasllama_metal_lens.das`, or to a module-level `g_tw_*` seat
+outside the tower file (`dasllama/dasllama_audio.das`) runs every gate this checklist names, or -
+where no function the change touches is reachable from a hook `dasllama_metal_tower_register`
+registers or from a function another file under `dasllama/` names - says so in the PR body in
+place of the run.** The gates are the family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`,
 `tests/test_gemma3v.das`, `test_qwen3v_tier1_metal` and `test_qwen3v_tier1_metal_f16` in
 `tests/test_qwen3v.das`, and `test_qwen25v_tier1_gpu` in `tests/test_qwen25v.das`;
 `tests/test_whisper.das`, `tests/test_audio.das` and `tests/test_audio_embedder.das`; plus a
