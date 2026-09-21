@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _resident_regions
-require dasllama/dasllama_vulkan_common
+require ?vulkan dasllama/dasllama_vulkan_common   // g_vk_fuse, where the module exists: the cells skip without it
 
 // gemma-4-26B-A4B Q4_K_M (large tier, DASLLAMA_PARITY_FULL=1): the two batched-step cells of the rig on the gemma-4 MoE
 // form - the routed feed and the router off their own norms of x, the parallel dense shared expert as the layer's own
@@ -23,9 +23,13 @@ let private REGIONS_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 
 //! the cell over the split one-row forms, the fuse knob pinned off for the load and unpinned after
 def private split_forms_cell(t : T?; cell : function<(t : T?; file : string; bar : LogitsBar; served : bool) : void>) {
-    g_vk_fuse = 0
-    invoke(cell, t, REGIONS_FILE, LogitsBar.wide_bar, true)
-    g_vk_fuse = -1
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        g_vk_fuse = 0
+        invoke(cell, t, REGIONS_FILE, LogitsBar.wide_bar, true)
+        g_vk_fuse = -1
+    } else {
+        t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
+    }
 }
 
 [test]
