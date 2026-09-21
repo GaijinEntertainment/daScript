@@ -27,5 +27,5 @@ def test_regions_batched_steps_g4moe(t : T?) {
 
 [test]
 def test_regions_batched_widen_g4moe(t : T?) {
-    cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.wide_bar)
+    cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.wide_bar, split_forms = true)
 }

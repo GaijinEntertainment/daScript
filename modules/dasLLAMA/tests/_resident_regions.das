@@ -952,14 +952,23 @@ def cell_regions_stamp_served(t : T?; file : string; stamp_f16, stamp_f32 : stri
     }
 }
 
+//! the fuse knob's pin where `on`: 0 pins the split one-row forms for the next load, -1 hands the knob back to the environment
+def private fuse_pin(on : bool; value : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (on) {
+            g_vk_fuse = value
+        }
+    }
+}
+
 //! the batched cell over the split one-row forms: the fuse knob pinned off for the load and unpinned after, so the rows
 //! hold to the split forms where the fused one-row forms round apart (a K-quant MoE's folded down, a PLE carrier's
 //! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
 def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        g_vk_fuse = 0
+        fuse_pin(true, 0)
         cell_regions_batched_steps(t, file, bar)
-        g_vk_fuse = -1
+        fuse_pin(true, -1)
     } else {
         t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
             t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
@@ -1001,11 +1010,14 @@ def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; 
 
 //! three sessions over three regions: a batched step over two, one of them alone, then a batched step over all three -
 //! the command records at a row count it had not recorded, after a one-row step, and every row still reads what its
-//! session reads alone (the N-row sets decide their own forms at the first record, never off the one-row command's)
-def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+//! session reads alone (the N-row sets decide their own forms at the first record, never off the one-row command's);
+//! `split_forms` pins the fuse knob off for the load, as the split-forms cell does
+def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("a batched step over two rows, one row alone, then a batched step over three: the rows read what each session reads alone") @(t : T?) {
         if (!regions_ready(t, file)) return
+        fuse_pin(split_forms, 0)
         var tr <- load_regions(t, file, 3l)
+        fuse_pin(split_forms, -1)
         with_job_que() {
             setup_dasllama_jobque_()
             var pa <- prompt_a()
