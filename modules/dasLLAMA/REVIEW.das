@@ -186,13 +186,15 @@ def private family_owned_names(fam : string; fam_path : string; var out : array<
     }
 }
 
-def private collect_das_files(folder : string; var out : array<string>) {
+//! every .das under `folder`; `prune_private` also skips `.`/`_`-prefixed names and build trees
+def private collect_das_files(folder : string; var out : array<string>; prune_private : bool = false) {
     dir(folder) $(fname) {
-        return if (fname == "." || fname == "..")
+        return if (fname == "." || fname == ".." || (prune_private && (fname |> starts_with(".") || fname |> starts_with("_"))))
         let p = "{folder}/{fname}"
         let st = stat(p)
         if (st.is_valid && st.is_dir) {
-            collect_das_files(p, out)
+            return if (prune_private && fexist("{p}/CMakeCache.txt"))
+            collect_das_files(p, out, prune_private)
         } elif (ends_with(fname, ".das")) {
             out |> push(p)
         }
@@ -590,11 +592,7 @@ def private check_image_backing_release {
             line_no++
             if (line |> starts_with("def ")) {
                 report_stray_closes(p, fn, opened, closes)
-                var rest = slice(line, 4)
-                if (rest |> starts_with("private ")) {
-                    rest = slice(rest, length("private "))
-                }
-                fn = ident_prefix(rest)
+                fn = def_name_of(line)
                 opened = false
                 closes |> clear()
             }
@@ -654,11 +652,7 @@ def private is_meta_serializer(header : string) : bool {
 //! the `*_prepare` mints that place image bytes are the TTS block file's (`conv1d_prepare`, `linear_prepare`); a driver's prepare (`vk_rdec_prepare`, `mirror_prepare`) places none
 def private is_layout_function(file : string; header : string) : bool {
     return true if (is_archive_serializer(header))
-    var rest = slice(header, 4)
-    if (rest |> starts_with("private ")) {
-        rest = slice(rest, length("private "))
-    }
-    let name = ident_prefix(rest)
+    let name = def_name_of(header)
     return true if (key_exists(LAYOUT_HELPERS, name))
     return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == TTS_BLOCKS_FILE)
 }
@@ -1128,24 +1122,32 @@ def private vk_boost_probes : array<string> {
     return <- out
 }
 
-// every whole-string `"VK_*"` literal of `text` - an extension read by name, never a name inside prose
-def private vk_ext_literals(text : string) : array<string> {
+//! every identifier of `text` that follows `prefix` (the prefix itself excluded); `quoted` keeps
+//! only those a closing quote ends - a whole-string literal, never a name inside prose
+def private ident_tokens_after(text, prefix : string; quoted : bool) : array<string> {
     var out : array<string>
     peek_data(text) $(d) {
         var from = 0
         while (true) {
-            let at = find(d, "\"VK_", from)
+            let at = find(d, prefix, from)
             break if (at < 0)
-            var n = at + 1
+            let start = at + length(prefix)
+            var n = start
             while (n < length(d) && is_ident_byte(int(d[n]))) {
                 n++
             }
-            if (n < length(d) && int(d[n]) == '"') {
-                out |> push(slice(d, at + 1, n))
+            if (n > start && (!quoted || (n < length(d) && int(d[n]) == '"'))) {
+                out |> push(slice(d, start, n))
             }
             from = n
         }
     }
+    return <- out
+}
+
+// every whole-string `"VK_*"` literal of `text` - an extension read by name, never a name inside prose
+def private vk_ext_literals(text : string) : array<string> {
+    var out <- [for (name in ident_tokens_after(text, "\"", true)); name; where name |> starts_with("VK_")]
     return <- out
 }
 
@@ -1208,21 +1210,6 @@ def private check_no_hand_pipelines {
 // A `[test]` file that requires the engine lives in tests/ - unless it requires a file of its
 // own folder by bare same-dir name (a bench self-check beside its subject), which tests/REVIEW.md's
 // out-of-folder ledger owns instead.
-def private walk_das(folder : string; var out : array<string>) {
-    dir(folder) $(name) {
-        return if (name == "." || name == ".." || name |> starts_with(".") || name |> starts_with("_"))
-        let full = "{folder}/{name}"
-        let st = stat(full)
-        return if (!st.is_valid)
-        if (st.is_dir) {
-            return if (fexist("{full}/CMakeCache.txt"))
-            walk_das(full, out)
-        } elif (name |> ends_with(".das")) {
-            out |> push(full)
-        }
-    }
-}
-
 def private check_test_file_placement {
     var inscope files : array<string>
     dir("modules/dasLLAMA") $(name) {
@@ -1231,28 +1218,21 @@ def private check_test_file_placement {
         let st = stat(full)
         return if (!st.is_valid)
         if (st.is_dir) {
-            walk_das(full, files)
+            collect_das_files(full, files, true)
         } elif (name |> ends_with(".das")) {
             files |> push(full)
         }
     }
     files |> sort()
     for (path in files) {
-        let text = strip_line_comments(read_lf(path))
-        continue if (find(text, "[test]") < 0)
+        continue if (find(strip_line_comments(read_lf(path)), "[test]") < 0)
         var requires_engine = false
         var requires_sibling = false
         let folder = dir_name(path)
-        for (line in split(text, "\n")) {
-            continue if (!(line |> starts_with("require ")))
-            var rest = slice(line, length("require "))
-            if (rest |> starts_with("?")) {
-                rest = slice(rest, 1)
-            }
-            let modname = ident_prefix(rest)
-            if (rest |> starts_with("dasllama/")) {
+        for (modpath in das_requires(path)) {
+            if (modpath |> starts_with("dasllama/")) {
                 requires_engine = true
-            } elif (!empty(modname) && find(rest, "/") < 0 && fexist("{folder}/{modname}.das")) {
+            } elif (find(modpath, "/") < 0 && fexist("{folder}/{modpath}.das")) {
                 requires_sibling = true
             }
         }
@@ -1331,21 +1311,8 @@ def private check_device_creation_sites {
 let private PREFILL_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"
 
 def private kqfmt_tokens(text : string; var out : table<string>) {
-    return if (empty(text))
-    peek_data(text) $(d) {
-        var from = 0
-        while (true) {
-            let at = find(d, "KqFmt.", from)
-            break if (at < 0)
-            var end = at + length("KqFmt.")
-            while (end < length(d) && is_ident_byte(int(d[end]))) {
-                end++
-            }
-            if (end > at + length("KqFmt.")) {
-                out |> insert(slice(d, at + length("KqFmt."), end))
-            }
-            from = end
-        }
+    for (name in ident_tokens_after(text, "KqFmt.", false)) {
+        out |> insert(name)
     }
 }
 

@@ -115,6 +115,9 @@ that a question answered for one backend has an obvious address in the other. Th
   `moe_mm_split`): the lens derives every string the long form spells, an explicit argument wins, and the
   threadgroup-memory global is always `<Class>_<kernel method>_msl_tgmem`. Hosts compile through
   `compile_stamp(<stem>_msl, ok)` - one spelling, so a source never pairs with another kernel's entry.
+  A stamp's `params=` are its family's shared builder signature - the forms are taken by address
+  into one table - so the lens's unread-param refusal (a `params=` name no `grid=`, `tg=`,
+  `requires=` or `@span` reads) exempts stamp-derived params; a long-form class is refused.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no

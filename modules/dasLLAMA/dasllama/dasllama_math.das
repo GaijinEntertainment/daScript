@@ -2422,9 +2422,7 @@ def private matmul_q4_nest(var yp : float?; wp : uint8 const?; sp : float const?
 //! Q4_0 matmul: y = W·x, W as 4-bit quants `wq` [d x n/2 bytes] + per-block scales `ws` [d x n/32].
 //! Blob+offset: woff in elements.
 def matmul_q4(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d : int64) {
-    unsafe {
-        matmul_q4_nest(addr(y[0]), addr<uint8 const?>(wq[woff / 2l]), addr<float const?>(ws[woff / 32l]), addr<float const?>(x[0]), n, d, 1l)
-    }
+    matmul_q4_batch(y, wq, ws, woff, x, n, d, 1l)
 }
 
 //! Batched Q4_0 GEMM (Y [ntok x d] = X [ntok x n]·Wᵀ): the same dot per (row, token) as ntok x matmul_q4, bit for bit.

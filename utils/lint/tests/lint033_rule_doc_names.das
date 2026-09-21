@@ -5,6 +5,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 
 require strings
+require daslib/strings_boost
 require daslib/fio
 
 // LINT032 and LINT033 are FOLDER rules the runner enforces with its own tree walk, not a
@@ -95,18 +96,6 @@ def private run_lint_argv(extra : array<string>; root : string; var output : str
 }
 
 
-def private count_of(text, sub : string) : int {
-    var n = 0
-    var from = 0
-    while (true) {
-        let at = find(text, sub, from)
-        break if (at < 0)
-        n ++
-        from = at + length(sub)
-    }
-    return n
-}
-
 
 [test]
 def test_rule_doc_names(t : T?) {
@@ -114,7 +103,7 @@ def test_rule_doc_names(t : T?) {
         let root = build_tree()
         var out : string
         let rc = run_lint_argv(["--enable", "LINT032,LINT033"], root, out)
-        t |> equal(count_of(out, "LINT033"), 2, "one dead path and one dead cell\n{out}")
+        t |> equal(count(out, "LINT033"), 2, "one dead path and one dead cell\n{out}")
         t |> success(find(out, "REVIEW.md:7: LINT033: cited path `gone.das`") >= 0, "the dead path is named with its line\n{out}")
         t |> success(find(out, "REVIEW.md:7: LINT033: cited test cell `test_thing_vanished`") >= 0, "the dead cell is named with its line\n{out}")
         t |> success(find(out, "test_thing_holds`") < 0, "a cell the folder's tests define is silent\n{out}")
@@ -126,14 +115,14 @@ def test_rule_doc_names(t : T?) {
         let root = build_tree()
         var out : string
         run_lint_argv(["--enable", "LINT032"], root, out)
-        t |> equal(count_of(out, "LINT032"), 1, "the one positional cite\n{out}")
+        t |> equal(count(out, "LINT032"), 1, "the one positional cite\n{out}")
         t |> success(find(out, "REVIEW.md:11: LINT032") >= 0, "named with its line\n{out}")
     }
     t |> run("--enable LINT033 alone arms the folder walk with the other rules off") @(t : T?) {
         let root = build_tree()
         var out : string
         run_lint_argv(["--enable", "LINT033"], root, out)
-        t |> equal(count_of(out, "LINT033"), 2, "the names pass runs alone\n{out}")
-        t |> equal(count_of(out, "LINT032"), 0, "the positional pass stays off\n{out}")
+        t |> equal(count(out, "LINT033"), 2, "the names pass runs alone\n{out}")
+        t |> equal(count(out, "LINT032"), 0, "the positional pass stays off\n{out}")
     }
 }

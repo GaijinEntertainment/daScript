@@ -7,9 +7,9 @@ Planned work: `../followup_general.md`.
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
 
-**A diff that narrows any `REVIEW.das` check - the files it walks, the names it does not flag -
-ledgers the excluded scope in `../ARCHITECTURE_ENGINE.md` or `../ARCHITECTURE_MEASUREMENT.md`
-in the same change.**
+**A diff that narrows this folder's `REVIEW.das` check - the files it walks, the names it does
+not flag - or lands one carrying a name license, ledgers the excluded scope in
+`../ARCHITECTURE_MEASUREMENT.md` in the same change.**
 
 **A diff that weakens any `REVIEW.das` check in any other way - the conditions it fires on - is
 a defect.**
@@ -20,11 +20,13 @@ noise, a remote-desktop session, the release it was minted at - by hand-editing 
 is a defect: re-mint it on a quiet, session-free box instead.**
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
-under review cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
-`modules/dasLLAMA/` tree is byte-identical to the tree that was measured, with the PR body
-naming the re-stamp.** A commit stamp is any field in a checked-in JSON under this folder that
+under review cannot reach is a defect - re-mint, or re-stamp to the commit the exe that timed
+the cells was built at.** A commit stamp is any field in a checked-in JSON under this folder that
 names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a ruler
 record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
+
+**A diff that hand-edits a commit stamp in `records/<box>.json` names, in the PR body, the rows,
+their old stamps, and the build commit of the exe that timed them it re-stamps to.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -51,10 +53,10 @@ in that row's provenance, the checkout that built the binary it timed; a python 
 
 **A diff that writes a `records/<box>.json` row, sidecar archive, or `defaults/` profile under
 this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
-(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is a records row's
+(`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is a `das` records row's
 `dasllama_version`, and `provenance.dasllama_version` in a sidecar archive or a `defaults/`
 profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
-profile compares against the branch under review.
+profile compares against the branch under review; a reference-engine row carries no pin.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell

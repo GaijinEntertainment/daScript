@@ -108,7 +108,8 @@ other stocked fixture gates on its own presence.
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
 or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`.**
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; `load_model_`,
+the plain GGUF load, bakes nothing.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -198,8 +199,11 @@ model and its blob twin share one shape, so one session serves both.
 `family_on(t, name)` (`_model_tier.das`). An untagged block silently joins every family's
 gate.
 
-**No CPU-control batch parity runs against a large-tier carrier (`LARGE_TIER_BYTES`,
-`_model_tier.das`).** The batched code paths get their parity on small models, through pins.
+**A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
+stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
+(`_model_tier.das`) is a defect unless no carrier below the tier takes the arm the cell holds;
+such a cell gates on the large tier and names the arm.** The batched code paths get their
+parity on small models, through pins.
 
 **A cell sets an environment-read knob - one the running config reads once, at context init -
 before the process that reads it starts: the child the cell spawns, or the runner's own.** A set

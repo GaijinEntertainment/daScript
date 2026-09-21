@@ -3,9 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
 work: `../followup_metal.md` for anything about the Metal backend, `../followup_vulkan.md` for
-anything about the Vulkan backend, `../followup_general.md` for everything else. A measured
-performance row of the engine this repository builds lands in `../PERF_LEDGER.md`; a
-reference-build row lands where the last rule of this list says.
+anything about the Vulkan backend, `../followup_general.md` for everything else.
+
+**A measured performance row of the engine this repository builds that a diff records for a
+file in this folder lands in `../PERF_LEDGER.md`.**
 
 **A diff that adds or moves a timing in `tune_kernels.das` adds no CPU timing that runs after
 `dot_q8q8_laneq4x4`, and weakening `REVIEW.das`'s last-row check on the `benches` list is a

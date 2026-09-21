@@ -66,9 +66,9 @@ measured against.**
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A checked-in document other than `PERF_LEDGER.md` that states a `--for-debug-purposes` reading
-covered by a committed board row - one matching on all three of model, served-turn leg and
-backend - cites that row and marks the reading `debug-jit`.**
+**A figure this change writes outside `PERF_LEDGER.md` that states a `--for-debug-purposes`
+reading covered by a committed board row - one matching on all three of model, served-turn leg
+and backend - cites that row and marks the reading `debug-jit`.**
 A `--for-debug-purposes` reading is the `-jit` script's own output.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure
@@ -97,7 +97,7 @@ ledger), with the flags that run took.** A box cannot mint the row when no rig l
 leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
 official` does not carry the model.
 
-**A diff that changes what the fat exe - a shipped exe carrying its tune profile
+**A diff that changes what the fat exe - a `DAS_TUNE_MODE=fat` exe
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
 body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
 or says the run printed none.**

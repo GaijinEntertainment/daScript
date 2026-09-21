@@ -14,7 +14,7 @@ require metal/das_metal_boost
 
 var private g_rf_gb_pso : MetalComputePipeline?
 
-[metal_dispatch(name = "enc_rf_grid_badtok", pso = "g_rf_gb_pso", tg = 64, grid = "4l", params = "n : int64")]
+[metal_dispatch(name = "enc_rf_grid_badtok", pso = "g_rf_gb_pso", tg = 64, grid = "4l")]
 class RfGridBadtok {
     @ssbo @binding = 0 @role = "read" src : array<float>
     @ssbo @binding = 1 @role = "write" dst : array<float>

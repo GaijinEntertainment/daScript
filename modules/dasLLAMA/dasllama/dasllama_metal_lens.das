@@ -11,6 +11,7 @@ require daslib/templates_boost
 require daslib/rtti
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
+require daslib/ast_cursor   // name_column - the whole-identifier read of a params= name in the grid/tg/requires/@span specs
 require das_metal   // nolint:STYLE030 — MetalBuffer/MetalComputeEncoder are referenced only inside qmacro_type(type<...>), which STYLE030 can't see; the require is load-bearing for macro-time type resolution
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — @role's read/write axis is DERIVED
 
@@ -232,25 +233,6 @@ def private mk_kn_dispatch(at : LineInfo; grid : string; tgi : int; tgs : string
     c.arguments |> emplace_new <| mk_grid(at, grid)
     c.arguments |> emplace_new <| mk_tg(at, tgi, tgs)
     return c
-}
-
-// whole-identifier occurrence of `name` in a spec text (grid=, tg=, requires=, @span products)
-def private spec_reads_name(text, name : string) : bool {
-    return false if (empty(text) || empty(name))
-    var found = false
-    peek_data(text) $(d) {
-        let nl = length(name)
-        var from = 0
-        while (!found) {
-            let at = find(d, name, from)
-            break if (at < 0)
-            let okl = at == 0 || !(is_alnum(int(d[at - 1])) || int(d[at - 1]) == '_')
-            let okr = at + nl >= length(d) || !(is_alnum(int(d[at + nl])) || int(d[at + nl]) == '_')
-            found = okl && okr
-            from = at + 1
-        }
-    }
-    return found
 }
 
 // map a params-string type token to the param TypeDecl (the size/offset scalars the grid references)
@@ -688,7 +670,7 @@ class MetalDispatch : AstStructureAnnotation {
                 }
                 for (p in split(params, ",")) {
                     let pname = strip(split(p, ":")[0])
-                    if (!spec_reads_name(readers, pname)) {
+                    if (name_column(readers, pname, -1) < 0) {
                         errors := "[metal_dispatch] {fn_name}: param '{pname}' is read by no grid=, tg=, requires= or @span - drop it from params= and from every call site"
                         return false
                     }

@@ -1,8 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: the `ARCHITECTURE_GPU*.md` set beside this file - `ARCHITECTURE.md` routes to each by
-section. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`.
+Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
 `followup_metal.md` or `followup_vulkan.md`.
@@ -92,11 +92,10 @@ names.** The `grid=` spec carries no number for these classes, so nothing else t
 offset, or a handle alone is not a key - carry the span and the form, the element type and
 layout the upload produces, in the key too.**
 
-**A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
-the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.** `REVIEW.das`
-reports the sites; its exceptions are `dasllama_metal_gemm.das` (sec.1.5's ledgered device) and
-the two tuner race entries, which run before the driver inits - a new exception lands in its
-table with its reason, and weakening the check is a defect.
+**Weakening `REVIEW.das`'s device-creation check is a defect** - a `dasllama/` file creates no GPU
+device or queue of its own (a GPU family shares the one from `dasllama/dasllama_<gpu>_common.das`'s
+init); a new licensed name lands in `DEVICE_CREATION_FILES` / `DEVICE_CREATION_FUNCTIONS` with its
+reason, and `ARCHITECTURE_GPU.md` sec.1.5 carries the ledgered device.
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
