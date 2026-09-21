@@ -92,9 +92,10 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 `@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `[metal_dispatch]`
 `@workgroup` field with no `tgmem=` spec, a `[metal_dispatch]` `requires=` item that is not
-`<lhs> % <int>`, a `stamp =` naming no family and form, a `compile_stamp` / `race_pso_pair_stamp`
-naming a source other than the class's `*_msl` global, an empty `release_handles` - or weakening
-any test cell that holds such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_stamp_gate` and
+`<lhs> % <int>`, a `params=` name no `grid=`, `tg=`, `requires=` or `@span` reads, a `stamp =`
+naming no family and form, a `compile_stamp` / `race_pso_pair_stamp` naming a source other than
+the class's `*_msl` global, an empty `release_handles` - or weakening any test cell that holds
+such a refusal (`test_lens_tgmem_gate`, `test_lens_requires_gate`, `test_lens_params_gate`, `test_lens_stamp_gate` and
 `test_lens_call_macro_gates` in `modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
 `test_vkd_lens_readonly_gate` in `modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a
 defect.** A refusal replaced by a derivation that leaves no such configuration compiling unbound -
@@ -115,9 +116,11 @@ defaults or composes generated builders binds nothing.
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
 `grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
 
-**A `params=` value that no `grid=`/`tg=` spec and no `requires=` item consumes is dropped from
-the `params=` spec and from every call site, in the same change.** The value then reaches neither
-the host nor the device, so nothing reads it.
+**A `params=` value that no `grid=`/`tg=` spec, `requires=` item or `@span` product reads is
+dropped from the `params=` spec and from every call site, in the same change - the lens refuses
+the class otherwise.** The value then reaches neither the host nor the device, so nothing reads
+it. A stamp's params are its family's shared builder signature - the forms are taken by address
+into one table - so a form that reads fewer of them is not refused.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

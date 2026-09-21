@@ -251,7 +251,10 @@ token, `kernels` (`--suite kernels --arm kernels`), which runs every cell. The
 hand-bound-gate sync obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with
-`@workgroup` members and no `tgmem=`, twin fixture as the must-compile control. Shared fixtures
+`@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
+`test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
+`requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
+`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. Shared fixtures
 (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
 in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`

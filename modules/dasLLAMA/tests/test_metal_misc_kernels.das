@@ -2138,10 +2138,10 @@ def private wg_kernel_method(kann, mname : string) : string {
 //! global of that kernel onto the given stem; `twins` gives the class a second kernel method of
 //! the stamp family's prefix.
 def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = ""; stamp : string = "";
-                             kname : string = ""; twins : bool = false) : tuple<rc : int; out : string> {
+                             kname : string = ""; twins : bool = false; params : string = "n : int64") : tuple<rc : int; out : string> {
     let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
     let attr = (empty(stamp)
-        ? "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]"
+        ? "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"{params}\")]"
         : "[metal_dispatch(stamp = \"{stamp}\", pso = \"g_wg_fixture_pso\")]")
     let kernname = !empty(kname) ? kname : (empty(stamp) ? "wg_fixture_msl" : "")
     let kann = empty(kernname) ? "    [metal_kernel]" : "    [metal_kernel(name = \"{kernname}\")]"
@@ -2221,6 +2221,21 @@ def test_lens_requires_gate(t : T?) {
             t |> success(bad2.rc != 0, "an item without '%' must not compile")
             let good = spawn_wg_fixture(true, "req_ok", "requires = \"n % 64\", ")
             t |> equal(0, good.rc, "the well-formed twin compiles: {good.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
+def test_lens_params_gate(t : T?) {
+    t |> run("[metal_dispatch] params= names only values a grid=, tg=, requires= or @span reads") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let unread = spawn_wg_fixture(true, "params_unread", "", "", "", false, "n : int64, zz : int64")
+            t |> success(unread.rc != 0, "a param nothing reads must not compile")
+            t |> success(find(unread.out, "is read by no grid=, tg=, requires= or @span") >= 0, "the refusal names the readers: {unread.out}")
+            let req_only = spawn_wg_fixture(true, "params_req", "requires = \"zz % 64\", ", "", "", false, "n : int64, zz : int64")
+            t |> equal(0, req_only.rc, "a param only a requires= item reads compiles: {req_only.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }
