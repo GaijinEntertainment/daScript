@@ -160,7 +160,8 @@ region: a read in both arms of an `if`, a clamp landing outside the region, a ba
 guarded one was, or a fixed-size block loaded whole under a guard on its store alone. Slack is an
 allocation past the in-range end that a read may land in: a module's root `ARCHITECTURE*.md`
 names the slack it allocates, and a read past the in-range end stays inside the named slack, or
-it is out of range. `modules/REVIEW_SHADER_EMITTERS.md` (repo root) binds a diff to this section.
+it is out of range. The rule over these reads is `modules/REVIEW_SHADER_EMITTERS.md`'s (repo
+root); this section carries the mechanism it names.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 
