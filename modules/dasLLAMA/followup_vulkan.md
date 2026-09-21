@@ -1328,8 +1328,7 @@ module) is independent and can land any time - it is pure structure.
     window on E2B - the q8 table is 2.35 GB, a device copy is the alternative), and the whole
     decode pre-step (`ple_pre_decode`: the token's row plus a [dim x layers*ple] GEMV, normed and
     averaged, copied to the token command as a [layers x ple] row - a GEMV over the f16 mirror and
-    a 35-row norm on device would take it). The batch decode override declines E-series models
-    (its rows carry no side input). Also here: the driver's prefill GEMMs for the branch run the
+    a 35-row norm on device would take it). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
 48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes
@@ -1552,12 +1551,10 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent, MoE, per-layer-embedding or shared-KV layer and a gated q
-    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao), so a batched step of such a model pays
-    a weight pass a row. The work: each kind's N-row form, the recurrent and MoE ones behind
-    their own state and schedule questions; the shared-KV form rides with the per-layer
-    embeddings - every carrier that shares K/V (the E-series) carries them too, so it lands
-    with that section and its regions file, where a batched step can reach it.
+    answers 0 on a recurrent layer and a gated q (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao),
+    so a batched step of such a model pays a weight pass a row. The work: each kind's N-row
+    form, the recurrent one behind its own state question (N device state slots a region - a
+    residency change) and the gated q behind the gate's N form.
 72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
     `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
     and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the

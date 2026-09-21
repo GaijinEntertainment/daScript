@@ -217,7 +217,7 @@ gives the user who selected the GPU a fraction of its speed.
 reads a weight plane once per row rather than once for all the step's rows, for any model it
 serves, is a defect: it ships that plane's batched read - one read serving every row of the
 step - in the same change, or the arm declines that model by name and that backend's
-architecture doc - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2ao for Vulkan,
+architecture doc - `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao for Vulkan,
 `ARCHITECTURE_GPU_MTP.md` sec.2.37a for Metal - gains the kinds of layer the batched step does
 not serve.** The weight stream is what the batch amortizes.
 

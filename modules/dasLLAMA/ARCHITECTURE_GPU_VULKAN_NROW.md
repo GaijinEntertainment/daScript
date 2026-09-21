@@ -13,11 +13,11 @@ sec.2.2al; the per-op tier's decode era, whose routed block the command's rows f
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
-`vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense and
-MoE standard-attention layers, and none where a layer or the tail has no N-row form - a
-recurrent, per-layer-embedding or shared-KV layer, a gated q, a weight format with no N-column
-leaf, or more routed slots than the block's slot planes hold - and logs the reason once per
-armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
+`vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
+MoE, per-layer-embedding and shared-KV standard-attention layers, and none where a layer or the
+tail has no N-row form - a recurrent layer, a gated q, a weight format with no N-column leaf, or
+more routed slots than the block's slot planes hold - and logs the reason once per armed
+model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
 runs once over the rows' logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's
 own; the one-row command and the prefill's tail pass one row. The pins matter on the one-row
 path alone: the batch driver's host tail pins the suppressed ids again on every row after the
@@ -78,6 +78,21 @@ model whose `nb * k` slots pass `MAX_ROUTED_SLOTS`, the slot planes' extent. The
 expert weights - every slot reads its expert whole, as the reference's decode does below its
 grouped-GEMM threshold of eight tokens - so the batched step's gain on a MoE carrier is the
 attention, the router, the shared expert and the submit, not the experts' bytes.
+
+**An E-series row carries its own per-layer-embedding side input, and a shared-KV layer projects
+q alone.** The command takes the rows' side inputs position-major (`RdecTokenNFn`'s `ple` rows:
+the table rows the batch driver gathers from each row's token where the device finishes the
+pre-step, else the pre-step's finished rows as the workspace holds them), uploads them on the
+cos plane's hazard bit, and where the device finishes the pre-step runs the projection as one
+N-column dispatch (`RouterArgs.ncols`, a row a column into `tok_plep`'s rows) and the per-slice
+finish over every row's slices. A layer's branch runs the split forms - the rows' own Q8_0
+quants of the residual, the gate as an N-column GEMV into `pleg_dev`'s rows, the act over every
+row's slice of this layer (`ActArgs.ustride` the side row's width, `ulen` the slice), the proj
+as an N-column GEMV into `ffnout`'s rows - and the two residual steps are the one-row command's
+over `nrows` workgroups; the fused act + proj stamp has one row. The side planes (`ple_host`,
+`ple_dev`, `pleg_dev`, `tok_plep`) hold `nb` rows, the one-row sets binding the first. A
+shared-KV layer's head projects q as the N-column GEMV alone: the rope and store pass no k
+pairs and no k-head groups, and the attention reads the donor layer's rows from the mirror.
 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
 `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,

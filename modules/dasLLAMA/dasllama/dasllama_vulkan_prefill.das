@@ -1464,11 +1464,12 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     delete half
     // the token command's half: the projected row plane, the f16 row GEMV over the embedded row (no norm: the wn slot binds the norm row unread) and the per-slice finish in place on the gathered row
     verify(ensure_router_gemv_f16_cls() && ensure_cls_ar(), "vk decode: the per-layer-embedding pre-step's rails must engage")
-    g_rd.tok_plep = make_device_buf(all * 4l)
+    let nb = g_rd.nb   //! the projected plane and its sets hold a row a region the N-row command can step at once: the one-row dispatch reads the first
+    g_rd.tok_plep = make_device_buf(all * 4l * nb)
     g_rd.s_tok_pleproj = set_router_gemv_f16_cls(fixed_array(g_rd.ple_w16_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
-        fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l, all * 4l, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))
+        fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))
     g_rd.s_tok_ple_ar = set_cls_ar(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.tok_plep),
-        fixed_array(all * 4l, all * 4l, g_rd.ple * 4l, all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
+        fixed_array(all * 4l * nb, all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
     g_rd.ple_gpu = true
     rd_invalidate_token()
     return true

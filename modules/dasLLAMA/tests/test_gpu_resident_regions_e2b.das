@@ -7,7 +7,8 @@ require dastest/testing_boost public
 require _resident_regions
 
 // gemma-4-E2B Q8_0 (the E-series carrier: a per-layer-embedding side input per token, the upper layers reading the K/V
-// of the ones below): the rig's bit-for-bit cells - the batched step hands each row its own side input - and the
+// of the ones below): the rig's bit-for-bit cells - the N-row command hands each row its own side input and projects
+// q alone on a shared-KV layer - and the
 // scheduler's device mode. The tolerance cells stay the qwen2 file's: their bar is calibrated there. Skips off the JIT,
 // without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
@@ -19,7 +20,7 @@ def test_regions_interleaved_single_steps(t : T?) {
 
 [test]
 def test_regions_batched_steps(t : T?) {
-    cell_regions_batched_steps(t, REGIONS_FILE, served = false)   // the N-row command declines a PLE carrier: the rows step one at a time
+    cell_regions_batched_steps(t, REGIONS_FILE)
 }
 
 [test]

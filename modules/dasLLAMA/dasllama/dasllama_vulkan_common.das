@@ -2358,6 +2358,7 @@ struct RLayer {
     s_edown_sum : VkDescriptorSet
     comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows
     s_comb_rq : VkDescriptorSet
+    s_ple_gate_n, s_ple_act_n, s_ple_proj_n : VkDescriptorSet   //! the N-row command's per-layer-embedding branch over the rows' planes: the gate's columns, the act over the rows' slices, the proj's columns
     s_router_n, s_topk_n : VkDescriptorSet   //! the N-row command's routed block over the rows' planes: the router's columns, the per-row top-k
     s_egate_n, s_eup_n, s_eact_n, s_edown_n : VkDescriptorSet   //! ... the expert GEMVs over the rows' slots (the split gate and up: every stamp's twin, byte for byte), the act, the down
     s_comb_n, s_comb_rq_n : VkDescriptorSet   //! ... the combine over the rows, and its twin that quantizes the next feed
