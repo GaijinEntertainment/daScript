@@ -114,6 +114,11 @@ simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it 
 threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
 complete the op.
 
+**Never put a cross-lane op in a kernel body - a subgroup shuffle, vote, ballot or reduction -
+under a loop or branch whose trip count or condition a per-lane value decides; bound the loop
+with a value every lane of the subgroup shares (a push-constant count) or hoist the op out.**
+Lanes that reach the op a different number of times exchange with lanes that are not there.
+
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard - stamped
 without one, or generated from a template instance that has none - shows that every address
 the form touches stays inside its buffers' allocations.** A `requires =` contract on the class

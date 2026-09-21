@@ -1492,7 +1492,7 @@ def main() : int {
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
             if (!real_row) {
-                set_gpu_ctx_max(rows_ctx + 8l)   //! the mirror sized to the row's own context before the load plans it: a 12B homes four regions on a 16 GB card at 648 positions a region where the binding cap's 6238 declines
+                set_gpu_ctx_max(rows_ctx + 8l)   //! the mirror sized to the row's own context before the load plans it
             }
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 g_rd_nrow_bisect = int(g_env_vulkan.vk_nrow_bisect)   //! a probe's bisect of the N-row command; 0 = the served command

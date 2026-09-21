@@ -1261,7 +1261,7 @@ struct RouterArgs {
     nwoff : uint
     eps : float
     ncols : uint        //! the rows of x the dispatch serves, each its own column of logits at `obase + c * ne` (the N-row command), the row's weights read once for all; 0 or 1 = one row
-    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0= one base
+    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
     obase_split : uint
 }
 
@@ -1279,8 +1279,7 @@ class template RouterGemvT {
     //! the row element at `i` of the row at `xb` as the dot reads it: under the norm row when `norm_on`
     def xn(xb, i : uint) : float => pa.norm_on != 0u ? x[xb + i] * wn[pa.nwoff + i] : x[xb + i]
 
-    //! a workgroup an expert row over every column: the grid is `ne` rows, the row's weights read once and dotted against
-    //! each of the `ncols` x rows (at most eight, the per-row planes' extent), so a one-row dispatch is one column
+    //! a workgroup an expert row: the grid is `ne` rows, whatever the column count
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {   // nolint:STYLE038 — one row pass over the columns: the per-column rms, the dot, the per-column reduce and store
         let e = gl_WorkGroupID.x
@@ -1293,7 +1292,7 @@ class template RouterGemvT {
             inv[c0] = 1.0
             c0++
         }
-        if (pa.norm_on != 0u) {   //! every workgroup takes each row's rms itself: a dispatch and a hop fewer than a norm kernel before the GEMV
+        if (pa.norm_on != 0u) {
             var ss : float[8]
             var c1 = 0u
             while (c1 < nc) {
@@ -1596,8 +1595,7 @@ class TopKCore {
     }
 }
 
-//! the decode top-k's records, the base shell the one-row and the N-row stamps splice: row `p`'s picks land in slots
-//! `p * k + j` - the weight, the expert, and the gate, up and down region records the expert GEMVs read
+//! the decode top-k's records: row `p`'s picks land in slots `p * k + j`
 class TopKRecords : TopKCore {
     @ssbo @binding = 0 logits : array<float>  //! [npos x lstride]
     @ssbo @binding = 1 meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
@@ -1651,7 +1649,6 @@ class TopK : TopKRecords {
     }
 }
 
-//! the N-row command's top-k: a workgroup a row, the rows' slots consecutive
 [vk_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
 class TopKN : TopKRecords {
     [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
@@ -10450,8 +10447,6 @@ class Q8GemvPleAct {
     @workgroup xw : uint[512]   //! the built x's Q8_0 quant words, a column's 64 at `c * 64`
     @workgroup xs : float[64]   //! ... and its block scales, a column's eight at `c * 8`
 
-    //! every column's x built once (the activation, the side row's product, the Q8_0 requant), then one proj row a subgroup dotted
-    //! against every column from one pass over its weights
     [spirv_kernel(local_size_x = 256, name = "q8_gemv_pleact_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let tid = gl_LocalInvocationID.x
@@ -10496,7 +10491,7 @@ class Q8GemvPleAct {
                 let ws = inb ? float(wsh[wb0 + min(b, nb - 1u)]) : 0.0
                 let xbase = bi0 * 8u + lane * 4u
                 var c2 = 0u
-                while (c2 < nc) {   //! the shuffle sits in a uniform loop: every lane takes each column's step
+                while (c2 < nc) {
                     let xb = c2 * 64u + xbase
                     var idot = inb ? sdot4(wv.x, xw[xb]) : 0
                     idot += inb ? sdot4(wv.y, xw[xb + 1u]) : 0

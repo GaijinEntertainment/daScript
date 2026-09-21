@@ -548,7 +548,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         }
         staged_upload(r.moe_ident_dev, 0l, MAX_ROUTED_SLOTS * 4l)
     }
-    let nb = r.nb   //! the routed planes hold a row per region the N-row command can step at once: the one-row sets bind the first row, the N-row sets the rows
+    let nb = r.nb
     r.moe_dlog_dev = make_device_buf(r.ner * 4l * nb)
     r.moe_dw_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.moe_meta1_dev = make_device_buf(META_BYTES)
@@ -916,6 +916,7 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
 }
 
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_set_ple(ple : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
@@ -925,7 +926,7 @@ def vk_rdec_set_ple(ple : int64) : bool {
         return false   //! the gate GEMV's output and the act's requant take 32-blocks
     }
     g_rd.ple = ple
-    let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb   //! a side row a region the N-row command can step at once; the one-row sets bind the first
+    let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
@@ -2090,8 +2091,6 @@ def vk_rdec_token_n_rows : int64 {
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
         if (L.moe && MAX_ROUTED_SLOTS < g_rd.nb * g_rd.k) return rd_n_decline("more routed slots than the block's slot planes hold")
-        //! a MoE layer's experts step as regions of the one-row leaves (sec.2.2ao); its dense triple, where it has one, takes the
-        //! N-column leaves; a shared-KV layer projects q alone; a per-layer-embedding branch takes the N-column leaves of its planes
         if (!(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo))
                 || (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2)))
                 || (L.ple && !gemv_cls_has_n(L.fpg))) return rd_n_decline("a weight format with no N-column GEMV leaf")
@@ -2103,7 +2102,7 @@ def vk_rdec_token_n_rows : int64 {
 }
 
 //! the N-column leaves of every plane the command dispatches and its fused Q8_0 site, built on this device; false logs the decline once
-[cold_path]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ensure_n_rail : bool {
     let nb = g_rd.nb
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
@@ -2112,7 +2111,7 @@ def private rd_ensure_n_rail : bool {
         ok = (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)
             && (!has_dense_triple(L) || (gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
-            && (!L.moe || ensure_topk_n_cls())   //! the routed block's rows: the per-row top-k; its GEMVs are the one-row leaves the layer's sets ensured
+            && (!L.moe || ensure_topk_n_cls())
             && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
     }
     if (!ok) {
@@ -2162,9 +2161,6 @@ def private rd_ensure_n_sets {
     g_rd.n_sets_made = true
 }
 
-//! the N-row command's sets over a MoE layer: the one-row block's planes at `nb` rows - the router's columns, the per-row
-//! top-k, the gate and up GEMVs and the down GEMV over `nb * k` regions (the split forms: each fused stamp's twin, byte
-//! for byte), the act over the rows' slots, and the combine per row
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_moe_sets_n(var L : RLayer) {
     let dim = g_rd.dim
@@ -2247,7 +2243,7 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     let hs = uint(L.hs)
     let nr = uint(nrows)
     let kvrow = uint(qd + 2l * kvd)   //! a row's stride in the projection plane, where the ungated q row sits in front of its k and v
-    if (L.kv_shared) {   //! a shared-KV layer projects q only: the donor layer's rows already sit in the mirror
+    if (L.kv_shared) {
         var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u, ncols = nr, ystride = kvrow)
         rd_gemv_n(L.fq, raw, h, L.s_q, pcq, qd)
         rd_ts(raw, "a:q")
@@ -2344,9 +2340,6 @@ def private rd_encode_attn_head_n(raw : VkCommandBuffer; var h : VkHaz; var L : 
     rd_ts(raw, "a:wo")
 }
 
-//! the per-layer-embedding branch over `nrows` rows, the one-row branch's forms over the rows' planes: the gate as an
-//! N-column GEMV, then the fused act + requant + proj over the columns (its feed the FFN step's own quants), or the split
-//! act over every row's slice of this layer's side rows and the proj as an N-column GEMV, after the rows' own Q8_0 quants
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_ple_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
     let dim = g_rd.dim
@@ -2376,7 +2369,6 @@ def private rd_encode_ple_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer
     rd_ts(raw, "a:p_proj")
 }
 
-//! the N-row command's sets over a per-layer-embedding layer: the branch's planes at `nb` rows
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ple_sets_n(var L : RLayer) {
     let dim = g_rd.dim
@@ -2402,16 +2394,13 @@ def private rd_ple_sets_n(var L : RLayer) {
     }
 }
 
-//! the routed block over `nrows` rows: the router as one dispatch of `nrows` columns (each column the one-row dot), the
-//! per-row top-k writing the rows' slots one after another, the gate, up and down GEMVs over `nrows * k` regions (the
-//! one-row leaves, each region its own expert and feed row), the act over every slot; the combine follows in the tail
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_encode_moe_n(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
     let dim = g_rd.dim
     let nfe = g_rd.nfe
     let k = g_rd.k
     let nr = uint(nrows)
-    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into the rows of xb
+    if (L.moe_g4) {
         var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
         rd_ts(raw, "a:m_pre2")
@@ -2526,11 +2515,11 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {   //! the rows' side-input rows ride the cos plane's hazard bit, as the one-row command's does
+        if (g_rd.ple > 0l) {
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         rd_ts(raw, "p:upload")
-        if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish over the rows: the projection a row a column, the per-slice finish over every row's slices
+        if (g_rd.ple > 0l && g_rd.ple_gpu) {
             let all = g_rd.n_layers * g_rd.ple
             var pcr = RouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = nr, ne_split = 0u, obase_split = 0u)
             enc_router_gemv_f16_cls(raw, h, g_rd.s_tok_pleproj, pcr, all)
@@ -2567,7 +2556,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
-            if (kq_sb(L.f1) || L.moe) {   //! a K-quant feed, or a routed block whose router reads the normed rows as floats: the split pair
+            if (kq_sb(L.f1) || L.moe) {
                 enc_cls_ar(raw, h, L.s_addr_ffn, pc8, nrows)
                 rd_ts(raw, "a:ar1")
                 if (kq_sb(L.f1)) {   //! the feed's quants: the shared expert's, or on a bare routed block the experts' own (their format is the layer's f1)
@@ -2585,10 +2574,10 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             if (has_dense_triple(L)) {
                 rd_encode_ffn_n(raw, h, L, nrows)
             }
-            if (L.ple) {   //! the FFN residual first (no scale, the normed rows unused); the branch leaves its projection in ffnout for the step below
+            if (L.ple) {
                 var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = nxt, eps = g_rd.eps, ascale = 1.0,
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-                if (L.ple_fused) {   //! the step quantizes the rows it writes, as they are: the gate's feed
+                if (L.ple_fused) {
                     pc14a.no_norm = 1u
                     enc_cls_ar_rq_b(raw, h, L.s_ple_ar_rq_n, pc14a, nrows)
                     rd_ts(raw, "a:ar2a_rq")
@@ -2601,7 +2590,7 @@ def private rd_encode_token_n(raw : VkCommandBuffer; nrows, nsplit : int64; form
             if (L.moe) {
                 rd_encode_moe_n(raw, h, L, l, nrows)
                 var pc14c = rd_ar_comb_args(L, l, int64(nxt))
-                pc14c.presummed = 0u   //! the rows' down GEMV writes every slot's row apart; the combine sums them
+                pc14c.presummed = 0u
                 xq_ready = L.comb_rq
                 if (L.comb_rq && L.moe_g4) {
                     enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq_n, pc14c, nrows)

@@ -1440,6 +1440,7 @@ def ple_proj_shape_ok(dim, all : int64) : bool
 //! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
 //! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before
 //! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
@@ -1464,7 +1465,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     delete half
     // the token command's half: the projected row plane, the f16 row GEMV over the embedded row (no norm: the wn slot binds the norm row unread) and the per-slice finish in place on the gathered row
     verify(ensure_router_gemv_f16_cls() && ensure_cls_ar(), "vk decode: the per-layer-embedding pre-step's rails must engage")
-    let nb = g_rd.nb   //! the projected plane and its sets hold a row a region the N-row command can step at once: the one-row dispatch reads the first
+    let nb = g_rd.nb
     g_rd.tok_plep = make_device_buf(all * 4l * nb)
     g_rd.s_tok_pleproj = set_router_gemv_f16_cls(fixed_array(g_rd.ple_w16_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
         fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))

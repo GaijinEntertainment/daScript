@@ -87,7 +87,7 @@ def private hold_equal(t : T?; got, want : array<float>; what : string) {
     t |> equal(diff, 0.0, "{what}: bit for bit the session alone (maxdiff {diff})")
 }
 
-//! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it, so every site that holds the bar shows the bar discriminates
+//! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it
 def private hold_within(t : T?; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
     log_peaks(what, got, want)
     let bar = rel * logits_maxabs(want)
@@ -289,10 +289,9 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
 }
 
 //! the bar a batched row holds against its session alone: bit for bit, or a bar with the one-token-off control - the split
-//! bar on a K-quant dense carrier (its N-row Q8_K sites round apart from the one-row command's - `../followup_vulkan.md`
-//! item 75), the wide bar on a K-quant MoE carrier, whose every projection and twenty-four expert planes a token carry
-//! that rounding through the Q8_K requant at every site over four dozen layers (the 30B's rows read 0.062 of the peak at
-//! the split bar's 0.06, the 1B dense carrier's 0.03)
+//! bar on a K-quant dense carrier (its N-row Q8_K sites round apart from the one-row command's, `../followup_vulkan.md`
+//! item 75), the wide bar on a K-quant MoE carrier (the readings each bar was set from: `../PERF_LEDGER.md`, the batched-decode
+//! arc's gemma dense and MoE sections)
 enum LogitsBar {
     bit_exact
     split_bar

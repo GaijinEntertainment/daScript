@@ -11283,8 +11283,8 @@ def private moe_ar_comb_g4_arm(t : T?) {
 
 //! the N-row command's top-k against the one-row top-k run a row at a time: the picks, the weights and the region
 //! records bit for bit, the rows' feed blocks where the one-row form writes row zero's - and the picks against the host
-//! select, the same oracle the window's per-row form holds to
-def private topk_n_arm(t : T?; rbias : bool) {
+//! select, the same oracle the window's per-row form holds to; `gptoss_router_bias` takes the biased pick
+def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let npos = 4
         let ne = 40
@@ -11301,7 +11301,7 @@ def private topk_n_arm(t : T?; rbias : bool) {
         }
         for (e in range(ne)) {
             rb[e] = 7.0
-            rb[ne + e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0
+            rb[ne + e] = gptoss_router_bias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0
         }
         let l_bytes = int64(npos * lstride) * 4l
         let l1_bytes = int64(lstride) * 4l
@@ -11357,7 +11357,7 @@ def private topk_n_arm(t : T?; rbias : bool) {
             nan_sentinel_upload(mN2, m_bytes)
             nan_sentinel_upload(wN, s_bytes)
             nan_sentinel_upload(eN, s_bytes)
-            var pc = TopkArgs(ne = uint(ne), k = uint(k), norm = 1u, wscale = 0.0, dsoff = NO_DSCALE, rbias_on = rbias ? 1u : 0u, rboff = uint(ne),
+            var pc = TopkArgs(ne = uint(ne), k = uint(k), norm = 1u, wscale = 0.0, dsoff = NO_DSCALE, rbias_on = gptoss_router_bias ? 1u : 0u, rboff = uint(ne),
                 base1 = 100u, stride1 = 1000u, base3 = 200u, stride3 = 1000u, base2 = 300u, stride2 = 2000u, xnb2 = xnb2,
                 lstride = uint(lstride), xnb1 = xnb1)
             var scN = set_topk_n_cls(fixed_array(ld, mN1, mN3, mN2, wN, dsd, rbd, eN),
@@ -11382,7 +11382,6 @@ def private topk_n_arm(t : T?; rbias : bool) {
             memcpy(addr<void?>(gm2[0]), reinterpret<void?>(hp + uint64(m_bytes * 2l)), m_bytes)
             memcpy(addr<void?>(gw[0]), reinterpret<void?>(hp + uint64(m_bytes * 3l)), s_bytes)
             memcpy(addr<void?>(ge[0]), reinterpret<void?>(hp + uint64(m_bytes * 3l + s_bytes)), s_bytes)
-            //! the one-row form, a row at a time: its logits buffer holds the row at zero, its records land at slot zero
             var pc1 = pc
             pc1.lstride = 0u
             pc1.xnb1 = 0u
@@ -11432,7 +11431,7 @@ def private topk_n_arm(t : T?; rbias : bool) {
                 }
             }
         }
-        let arm = rbias ? "router bias" : "plain"
+        let arm = gptoss_router_bias ? "router bias" : "plain"
         t |> success(bad == 0, "topk_n ({arm}): the rows' picks, weights and weight blocks == the one-row top-k a row at a time ({bad} of {npos * k} slots off)")
         t |> success(badx == 0, "topk_n ({arm}): every slot's feed blocks are its row's, the one-row form's row zero's ({badx} of {npos * k} slots off)")
         var poison := gw   // the control: one weight pushed off must red the bit compare
@@ -11494,8 +11493,8 @@ def test_vkd_topk_n(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            topk_n_arm(t, false)
-            topk_n_arm(t, true)   //! gpt-oss: the biased pick
+            topk_n_arm(t, gptoss_router_bias = false)
+            topk_n_arm(t, gptoss_router_bias = true)
         } else {
             t |> skip("dasVulkan not present")
         }

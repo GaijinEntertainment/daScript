@@ -210,8 +210,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     attn_out_suffix(t, ws.scr, l, nrows)
 }
 
-// the per-step row prep every batch shape shares (positions already in ws.positions / rope_positions); `ple_on_device` skips the
-// CPU per-layer-embedding pre-step - the armed override gathers and projects the rows itself, and a declined step runs it late
+//! the per-step row prep every batch shape shares: positions already in ws.positions / rope_positions, and `ple_on_device` skips the CPU per-layer-embedding pre-step the armed override runs itself
 def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64; ple_on_device : bool = false) {
     let c = t.config
     batch_decode_alloc(t, ws.scr, nrows)

@@ -730,9 +730,8 @@ def private rdec_min_ctx : int64 {
     return resident_arm_floor(g_env_gpu.gpu_min_ctx, pin)
 }
 
-//! the smallest context a capped mirror arms at: the env floor where set, else the built-in one - and a caller that
-//! pinned its context (`set_gpu_ctx_max`, DASLLAMA_GPU_CTX_MAX) under the floor gets its pin, since the pin IS the shape
-//! it serves; 256 positions the least of any
+//! a caller's own context pin (`set_gpu_ctx_max`, DASLLAMA_GPU_CTX_MAX) under the floor wins: the pin IS the shape it serves
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_arm_floor(env_floor, pin : int64) : int64 {
     let floor = env_floor > 0l ? max(env_floor, 256l) : RDEC_MIN_CTX
     return pin > 0l && pin < floor ? max(pin, 256l) : floor
@@ -1992,7 +1991,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
     let ple = c.n_embd_per_layer > 0l
-    if (ple) {   //! the rows' side inputs, position-major: gathered on device from each row's token, else the pre-step's rows as they sit in the workspace
+    if (ple) {
         if (rdec_ple_proj_on()) {
             g_rdec_toks_n |> resize(nrows)
             for (i in range64(nrows)) {
