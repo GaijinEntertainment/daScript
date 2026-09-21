@@ -13,6 +13,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
+require _resident_feed   // the forced-feed rig: the two arms, the per-step bar
 
 // The whole-model resident driver on a qwen2 (Qwen2.5-0.5B-Instruct-Q8_0 under DASLLAMA_GPU=1): the
 // q/k/v projection bias folds into the rope stage on the device. The forced-feed logits-tolerance
@@ -40,31 +41,6 @@ def private tile_arm_tag() : string {
     }
 }
 
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
-}
-
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    let n = long_length(prompt)
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- out
-}
-
 def private qwen2_forced_feed(t : T?; n : int64) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
@@ -83,31 +59,9 @@ def private qwen2_forced_feed(t : T?; n : int64) {
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
-        var gpu <- feed_logits(tr, sg, prompt, toks)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
-        delete sg
-        moe_gpu_drop_model()   //! every later step is the CPU chain
-        var sc <- create_session(tr, mirror_kv_dtype())
-        var cpu <- feed_logits(tr, sc, prompt, toks)
-        delete sc
-        for (st in range64(long_length(cpu))) {
-            let diff = logits_maxdiff(gpu[st], cpu[st])
-            let bar = LOGIT_BAR_REL * logits_maxabs(cpu[st])
-            let ag = argmax_of(gpu[st])
-            let ac = argmax_of(cpu[st])
-            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-            to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), resident {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
-            if (st > 0l) {   //! the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
-                let off = logits_maxdiff(gpu[st], cpu[st - 1l])
-                t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
-        }
-        delete gpu
-        delete cpu
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
+        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
+        delete fed
         delete prompt
         delete toks
     }

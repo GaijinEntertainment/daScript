@@ -18,6 +18,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the route l
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
 require _model_tier   // models_dir() + model_available() presence/size-tier gate, the logits compares
+require _resident_feed   // feed_logits, the per-step bar
 
 // The shared expert's prefill on the device: a qwen2moe layer's shexp triple rides the routed
 // experts' chain as one region over every position (ARCHITECTURE_GPU_VULKAN_GEMM.md sec.2.2q). The
@@ -37,32 +38,6 @@ let private TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M m
 //! within 1e-4 of the CPU form on the sdot4 feed and 0.5% on the f16 feed - test_vulkan_moe_cm2's cells)
 let private SHEXP_LOGIT_BAR_REL = 0.12
 let private FED_STEPS = 4l
-
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
-}
-
-//! prefill `prompt`, then feed `toks` one per step; the logits after the prefill and after each step
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    let n = long_length(prompt)
-    var rows : array<array<float>>
-    rows |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- rows
-}
 
 //! one prompt of `n` tokens plus the fed steps through both arms of the route lever
 def private shexp_forced_feed(t : T?; n : int64) {
@@ -112,20 +87,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
         set_moe_gpu_shexp_route(true)   //! the tier as found
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
         t |> equal(span_tokens(), span0 + FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
-        for (st in range64(long_length(cpu))) {
-            let diff = logits_maxdiff(dev[st], cpu[st])
-            let bar = SHEXP_LOGIT_BAR_REL * logits_maxabs(cpu[st])
-            let ad = argmax_of(dev[st])
-            let ac = argmax_of(cpu[st])
-            let what = st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})"
-            to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), device {ad} ({dev[st][ad]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{what} logits: the device shared expert within {bar} of the CPU form (maxdiff {diff})")
-            if (st > 0l) {   //! the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
-                let off = logits_maxdiff(dev[st], cpu[st - 1l])
-                to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
-                t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
-        }
+        feed_steps_within(t, "", n, dev, cpu, toks, SHEXP_LOGIT_BAR_REL, "the device shared expert", "the CPU form")
         delete dev
         delete cpu
         delete prompt

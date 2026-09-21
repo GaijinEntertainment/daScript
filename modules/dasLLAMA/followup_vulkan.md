@@ -1555,16 +1555,6 @@ module) is independent and can land any time - it is pure structure.
     batched step of such a model pays a weight pass a row. The work: each kind's N-row form, the
     recurrent one behind its own state question (N device state slots a region - a residency
     change), the gated q behind the gate's N form, the slot cap behind larger slot planes.
-72. **The N-row command is a second copy of the one-row chain.** `rd_encode_token_n`,
-    `rd_encode_attn_head_n` and `rd_encode_ffn_n` restate `rd_encode_token`, `rd_encode_attn_head`
-    and `rd_encode_ffn` with every grid and copy scaled by the row count and the GEMVs on the
-    N-column leaves, and drop the arms the command declines; `gemv_enc_n` and its ensure/set/enc
-    ladders pair `gemv_enc`'s one for one; `set_ar_rq_rows` is `set_ar_rq_stamp`'s Q8_0 arm over
-    `nb` rows; `xfer_spin_wait` and `xfer_host_wait` wait on one semaphore two ways; and the
-    llama resident test's forced feed restates the qwen2 and gemma ones. The work: one recorder
-    taking `nrows` (the one-row form its `nrows == 1` reading, the declined arms guarded by it), one
-    GEMV entry taking a column count, a fifth `RqStamp` for the row form, one wait with a spin
-    flag, and one shared forced-feed cell parameterized by the family's arm witnesses.
 73. **The decode attention slab runs four heads' arithmetic on a GQA group of three.** The score
     and V loops of `DaAttnT` unroll over the slab's `G` heads - four, or two on a group of one or
     two heads (`da_slab_is_g2`, the `g2` stamps) - so a three-head group still pays a dead lane,

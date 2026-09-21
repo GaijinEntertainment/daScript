@@ -21,6 +21,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
+require _resident_feed public   // the forced-feed rig: the two arms, the per-step bar
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -60,18 +61,6 @@ def private tile_arm_tag() : string {
     } else {
         return "no vulkan module"
     }
-}
-
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
 }
 
 //! the coverage census's count of a routed-block kernel's dispatches so far; NO_CENSUS with no vulkan module
@@ -142,23 +131,10 @@ def private device_has_expert_tiles() : bool {
     }
 }
 
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    let n = long_length(prompt)
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- out
-}
-
 //! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it, the routed
 //! block's census growing by the MoE layer count per window and per step
-def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â€” one linear forced-feed rig: the window feed, the census witnesses, the CPU control, the per-step bars
+def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
@@ -199,20 +175,16 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(FED_STEPS)); 2000l + (i * 53l) % 4000l]
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
         let topk0 = census("topk_cls_spv")
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
         let un0 = unsplit_tokens()
-        var gpu <- feed_logits(tr, sg, prompt, toks)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
         if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
             t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
         }
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
         if (sched0 != NO_CENSUS) {
             t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")
             t |> equal(census("topk_rows_cls_spv") - rows0, layers * windows, "the window's per-row select ran once per MoE layer per window")
@@ -227,27 +199,9 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
                 t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the KHR tile at least twice a plane per MoE layer per window ({edelta} over a floor of {ewant})")
             }
         }
-        delete sg
-        moe_gpu_drop_model()   //! every later step is the CPU chain
-        var sc <- create_session(tr, mirror_kv_dtype())
-        var cpu <- feed_logits(tr, sc, prompt, toks)
-        delete sc
-        for (st in range64(long_length(cpu))) {
-            let diff = logits_maxdiff(gpu[st], cpu[st])
-            let bar = fx.bar_rel * logits_maxabs(cpu[st])
-            let ag = argmax_of(gpu[st])
-            let ac = argmax_of(cpu[st])
-            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-            to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), resident {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
-            if (st > 0l) {   //! the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
-                let off = logits_maxdiff(gpu[st], cpu[st - 1l])
-                to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
-                t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
         }
-        delete gpu
-        delete cpu
+        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
+        delete fed
         delete prompt
         delete toks
     }
