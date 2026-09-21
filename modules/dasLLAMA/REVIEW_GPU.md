@@ -93,7 +93,10 @@ offset, or a handle alone is not a key - carry the span and the form, the elemen
 layout the upload produces, in the key too.**
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
-the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
+the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.** `REVIEW.das`
+reports the sites; its exceptions are `dasllama_metal_gemm.das` (sec.1.5's ledgered device) and
+the two tuner race entries, which run before the driver inits - a new exception lands in its
+table with its reason, and weakening the check is a defect.
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's

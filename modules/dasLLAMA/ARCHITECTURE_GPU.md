@@ -36,7 +36,10 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Metal has NO `math_` entry** - the family enters via the transformer's `?das_metal` requires
   plus unconditional shapes. Its below-common piece is **`dasllama_metal_gemm.das`** (the batch
   GEMM donor that common requires `?das_metal`), which owns its device by necessity:
-  metal_common -> dasllama_common -> metal_gemm would cycle.
+  metal_common -> dasllama_common -> metal_gemm would cycle. `REVIEW.das`'s
+  `check_device_creation_sites` walks `dasllama/` for a device or queue creation outside the two
+  `_common` files and licenses `dasllama_metal_gemm.das` plus the two tuner race entries
+  (`metal_tensor_race`, `metal_tensor_race_decode`), which run before the driver inits.
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** - vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,

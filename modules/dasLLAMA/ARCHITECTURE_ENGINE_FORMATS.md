@@ -56,7 +56,10 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   loading.
 - **`dasllama_tokenizer.das`** - the tokenizer facade: backend selection off the GGUF metadata and
   the one encode/decode/piece surface models and the chat layer call. Re-exports both backends, so
-  a consumer requires this file and never picks a backend by hand.
+  a consumer requires this file and never picks a backend by hand. `REVIEW.das`'s
+  `check_unicode_tables_stamp` hashes `dasllama_unicode.das`'s RANGES and WS literals against
+  `UNICODE_TABLES_HASH` and licenses no names: the tables change only through a retranscode of the
+  reference checkout's unicode data, and the re-stamp is the regeneration's receipt.
 - **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma),
   the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the

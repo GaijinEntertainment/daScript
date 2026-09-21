@@ -1205,6 +1205,190 @@ def private check_no_hand_pipelines {
     delete files
 }
 
+// A `[test]` file that requires the engine lives in tests/ - unless it requires a file of its
+// own folder by bare same-dir name (a bench self-check beside its subject), which tests/REVIEW.md's
+// out-of-folder ledger owns instead.
+def private walk_das(folder : string; var out : array<string>) {
+    dir(folder) $(name) {
+        return if (name == "." || name == ".." || name |> starts_with(".") || name |> starts_with("_"))
+        let full = "{folder}/{name}"
+        let st = stat(full)
+        return if (!st.is_valid)
+        if (st.is_dir) {
+            return if (fexist("{full}/CMakeCache.txt"))
+            walk_das(full, out)
+        } elif (name |> ends_with(".das")) {
+            out |> push(full)
+        }
+    }
+}
+
+def private check_test_file_placement {
+    var inscope files : array<string>
+    dir("modules/dasLLAMA") $(name) {
+        return if (name == "." || name == ".." || name == "tests" || name |> starts_with(".") || name |> starts_with("_"))
+        let full = "modules/dasLLAMA/{name}"
+        let st = stat(full)
+        return if (!st.is_valid)
+        if (st.is_dir) {
+            walk_das(full, files)
+        } elif (name |> ends_with(".das")) {
+            files |> push(full)
+        }
+    }
+    files |> sort()
+    for (path in files) {
+        let text = strip_line_comments(read_lf(path))
+        continue if (find(text, "[test]") < 0)
+        var requires_engine = false
+        var requires_sibling = false
+        let folder = dir_name(path)
+        for (line in split(text, "\n")) {
+            continue if (!(line |> starts_with("require ")))
+            var rest = slice(line, length("require "))
+            if (rest |> starts_with("?")) {
+                rest = slice(rest, 1)
+            }
+            let modname = ident_prefix(rest)
+            if (rest |> starts_with("dasllama/")) {
+                requires_engine = true
+            } elif (!empty(modname) && find(rest, "/") < 0 && fexist("{folder}/{modname}.das")) {
+                requires_sibling = true
+            }
+        }
+        if (requires_engine && !requires_sibling) {
+            gate_finding(path, "a [test] file requiring the engine sits outside modules/dasLLAMA/tests/ and requires no file of its own folder by bare name - move it into tests/ (tests/REVIEW.md's out-of-folder ledger owns the ones that must stay beside a same-folder subject)")
+        }
+    }
+}
+
+// The RANGES/WS tables are transcoded from the reference checkout's unicode data; a hand edit
+// drifts from it silently. The stamp changes only through a regeneration.
+let private UNICODE_FILE = "modules/dasLLAMA/dasllama/dasllama_unicode.das"
+let private UNICODE_TABLES_HASH = 0x59f112fa8e7f0d9dul
+
+def private check_unicode_tables_stamp {
+    let text = read_lf(UNICODE_FILE)
+    let from = find(text, "let private RANGES <- [")
+    let ws = find(text, "let private WS <- [")
+    if (from < 0 || ws < 0) {
+        gate_finding(UNICODE_FILE, "the RANGES / WS table literals are not where the stamp gate reads them (`let private RANGES <- [` / `let private WS <- [`)")
+        return
+    }
+    let ws_end = find(text, "\n]", ws)
+    if (ws_end < 0) {
+        gate_finding(UNICODE_FILE, "the WS table literal has no closing `]` line")
+        return
+    }
+    let h = fnv1a(slice(text, from, ws_end + 2), 0xcbf29ce484222325ul)
+    if (h != UNICODE_TABLES_HASH) {
+        gate_finding(UNICODE_FILE, "the RANGES / WS tables changed - a hand edit is a defect: regenerate them by retranscoding the reference checkout's unicode data, then re-stamp UNICODE_TABLES_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
+    }
+}
+
+// One device and queue per GPU family, from its _common file's init. The exceptions the rule
+// names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md sec.1.5), and the two
+// tuner race entries build theirs because the tuner runs before the driver inits.
+let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_metal_gemm.das"}
+let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode"}
+let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue("]
+
+def private def_name_of(body : string) : string {
+    let nl = find(body, "\n")
+    var header = nl < 0 ? body : slice(body, 0, nl)
+    header = slice(header, length("def "))
+    if (header |> starts_with("private ")) {
+        header = slice(header, length("private "))
+    } elif (header |> starts_with("public ")) {
+        header = slice(header, length("public "))
+    }
+    return ident_prefix(header)
+}
+
+def private check_device_creation_sites {
+    dir(DASLLAMA_DIR) $(name) {
+        return if (!ends_with(name, ".das") || DEVICE_CREATION_FILES |> key_exists(name))
+        let path = "{DASLLAMA_DIR}/{name}"
+        var inscope fns <- function_bodies(path) $(_header) {
+            return true
+        }
+        for (f in fns) {
+            var creates = false
+            for (call in DEVICE_CREATION_CALLS) {
+                creates = creates || find(f.body, call) >= 0
+            }
+            continue if (!creates)
+            let fname = def_name_of(f.body)
+            continue if (DEVICE_CREATION_FUNCTIONS |> key_exists(fname))
+            gate_finding(path, f.line, "`{fname}` creates a GPU device or queue of its own - a GPU family shares the one device and queue its _common file's init made; a tuner race entry that must run before the driver inits is named in REVIEW.das's DEVICE_CREATION_FUNCTIONS with its reason")
+        }
+    }
+}
+
+// The PLE token-table gather has one format list in three places: the compiled pipelines, the
+// PSO pick, and the encode ladder. A format in two of them declines or gathers under the wrong
+// layout silently.
+let private PREFILL_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"
+
+def private kqfmt_tokens(text : string; var out : table<string>) {
+    return if (empty(text))
+    peek_data(text) $(d) {
+        var from = 0
+        while (true) {
+            let at = find(d, "KqFmt.", from)
+            break if (at < 0)
+            var end = at + length("KqFmt.")
+            while (end < length(d) && is_ident_byte(int(d[end]))) {
+                end++
+            }
+            if (end > at + length("KqFmt.")) {
+                out |> insert(slice(d, at + length("KqFmt."), end))
+            }
+            from = end
+        }
+    }
+}
+
+def private set_diff_text(a, b : table<string>) : string {
+    var missing <- [for (k in keys(a)); k; where !(b |> key_exists(k))]
+    missing |> sort()
+    return join(missing, ", ")
+}
+
+def private check_ple_gather_sites {
+    let text = strip_line_comments(read_lf(PREFILL_FILE))
+    var psos : table<string>
+    for (line in split(text, "\n")) {
+        continue if (!(line |> starts_with("var private g_pf_pso_ple_gather")))
+        let rest = slice(line, length("var private g_pf_pso_ple_gather"))
+        let suffix = ident_prefix(rest)
+        psos |> insert(empty(suffix) ? "q8" : slice(suffix, 1))
+    }
+    var picks : table<string>
+    var encodes : table<string>
+    var inscope fns <- function_bodies(PREFILL_FILE) $(header) {
+        return find(header, "ple_gather_pso_of(") >= 0 || find(header, "pf_enc_ple_gather_fmt(") >= 0
+    }
+    for (f in fns) {
+        if (find(f.body, "ple_gather_pso_of(") >= 0) {
+            kqfmt_tokens(f.body, picks)
+        } else {
+            kqfmt_tokens(f.body, encodes)
+        }
+    }
+    if (empty(psos) || empty(picks) || empty(encodes)) {
+        gate_finding(PREFILL_FILE, "the PLE gather's three sites are not where the gate reads them (g_pf_pso_ple_gather* globals, ple_gather_pso_of, pf_enc_ple_gather_fmt)")
+        return
+    }
+    let a = set_diff_text(psos, picks)
+    let b = set_diff_text(picks, psos)
+    let c = set_diff_text(picks, encodes)
+    let d = set_diff_text(encodes, picks)
+    if (!empty(a) || !empty(b) || !empty(c) || !empty(d)) {
+        gate_finding(PREFILL_FILE, "the PLE gather's format list differs across its three sites - pipelines not in the pick: [{a}]; pick not in the pipelines: [{b}]; pick not in the encode ladder: [{c}]; encode ladder not in the pick: [{d}] - a format lands in all three in one change")
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -1224,6 +1408,10 @@ def main() : int {
     check_cm2_stamp_tiles()
     check_vk_extension_roster()
     check_no_hand_pipelines()
+    check_test_file_placement()
+    check_unicode_tables_stamp()
+    check_device_creation_sites()
+    check_ple_gather_sites()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>

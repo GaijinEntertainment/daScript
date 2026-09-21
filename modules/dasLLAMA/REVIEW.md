@@ -94,10 +94,11 @@ global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-l
 kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
 count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
-**A `[test]` file that requires any `dasllama/*` module, sits under `modules/dasLLAMA/` outside
-`tests/` (beside this file), and requires no file of its own folder by bare same-dir name is a
-defect - move it into `tests/`.** One that does require a same-folder file stays, and
-`tests/REVIEW.md`'s ledger rule owns it.
+**Weakening `REVIEW.das`'s test-file placement check is a defect.** It reports a `[test]` file
+that requires a `dasllama/*` module, sits under `modules/dasLLAMA/` outside `tests/` (beside this
+file), and requires no file of its own folder by bare same-dir name - move such a file into
+`tests/`; one that does require a same-folder file stays, and `tests/REVIEW.md`'s ledger rule
+owns it.
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
@@ -252,7 +253,8 @@ the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it 
 registry does not, `tests/test_env_registry.das` catches.
 
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
-by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
+by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead, and re-stamp
+`REVIEW.das`'s `UNICODE_TABLES_HASH` with the value the gate prints.**
 
 **A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter
 line does not cover, keeps the charters true in the same change - in an `ARCHITECTURE_*.md`

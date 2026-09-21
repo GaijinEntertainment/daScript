@@ -8,7 +8,10 @@ charters.
 `REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
 names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in
 the same file - a serialized exe restores globals as data, and only a boot-restore `[init]`
-heals the null function value.
+heals the null function value. `check_test_file_placement` walks every folder under
+`modules/dasLLAMA/` but `tests/` and reds a `[test]` file that requires a `dasllama/` module
+without requiring a file of its own folder by bare name, licensing no names - the bench
+self-check beside its subject is the shape the bare require admits.
 
 `REVIEW.das`'s `check_race_bind_numbers` walks every `dasllama/` file: each hand-written
 `kn_buffer`/`kn_kargs` literal in a race or knockout arm lands on a binding number its
@@ -88,7 +91,11 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   (`register_mtp_sample_row`) at init, and that registration is the only way the engine reaches
   this file.
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
-  forward sequence reaches it only through the hooks it registers at init.
+  forward sequence reaches it only through the hooks it registers at init. The Metal token-table
+  gather (`dasllama_metal_prefill.das`) carries one format list in three places - the compiled
+  `g_pf_pso_ple_gather*` pipelines, the `ple_gather_pso_of` pick and the `pf_enc_ple_gather_fmt`
+  encode ladder - and `REVIEW.das`'s `check_ple_gather_sites` holds the three sets equal,
+  licensing no names.
 - **`dasllama_config.das`** - `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
   belong here; a knob that does and is missing is an image-aliasing bug.

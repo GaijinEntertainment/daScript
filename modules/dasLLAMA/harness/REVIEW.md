@@ -7,10 +7,10 @@ anything about the Vulkan backend, `../followup_general.md` for everything else.
 performance row of the engine this repository builds lands in `../PERF_LEDGER.md`; a
 reference-build row lands where the last rule of this list says.
 
-**A diff that adds or moves a timing in `tune_kernels.das` keeps `dot_q8q8_laneq4x4` the LAST
-row of the `benches` list, and adds no CPU timing that runs after it.** Running that bench pins one
-matmul backend for the rest of the process, so a CPU timing after it runs against the pinned
-backend instead of the one it would have picked.
+**A diff that adds or moves a timing in `tune_kernels.das` adds no CPU timing that runs after
+`dot_q8q8_laneq4x4`, and weakening `REVIEW.das`'s last-row check on the `benches` list is a
+defect.** Running that bench pins one matmul backend for the rest of the process, so a CPU
+timing after it runs against the pinned backend instead of the one it would have picked.
 
 **A diff that points a `dashv` call in this folder at the sidecar exchange - dasllama.io's
 tune-sidecar service: sidecar lookup, download, or submit - is a defect; it calls the exchange
