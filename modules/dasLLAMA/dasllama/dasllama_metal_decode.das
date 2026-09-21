@@ -2858,6 +2858,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_b_dn_cbases |> clear()
     if (dn) {
         finish_pending_step()
+        dn_mirror_room(nrows)   // every row's mirror live at once - the cache never evicts a row of the step it prepares
         g_b_dn_bufs |> reserve(nrows)
         g_b_dn_sbases |> reserve(nrows)
         g_b_dn_cbases |> reserve(nrows)
@@ -3036,11 +3037,12 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let knfe = moe ? c.n_expert_used * c.n_ff_exp : 0l
     // pooled per-step buffers (mp rows: the fixed-B forms read their full B, the GEMM its M pad —
     // stale pad rows only ever land in pad outputs, which nothing reads back)
+    let mr = ((nrows + 3l) / 4l) * 4l   //! the rows form's reach: its four-row tiles read and write whole tiles past the live rows, so a plane a rows GEMV lands in is sized to the tile
     let bytes_x = uint64(mp * dim * 4l)
     let bytes_xb = uint64(mp * max(dim, qd_mx) * 4l)   // dim-wide norm outs AND the qd-wide attention out
     let bytes_qkv = uint64(mp * qkvd_mx * 4l)
     let nsh = moe ? c.n_ff_shexp : 0l
-    let bytes_h = uint64(max(max(mp * hid_mx, nrows * knfe), nrows * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
+    let bytes_h = uint64(max(max(mp * hid_mx, mr * knfe), mr * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
     let bytes_tab = uint64(nrows * half * 4l)
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
@@ -3067,14 +3069,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     var bpsk = bytes_sk > 0ul ? pool_acquire(g_pool, g_dev, bytes_sk) : null
     var bt = BatchTier(use_mm = use_mm, use_gemm = use_gemm, mp = mp, nrows = nrows, bpsk = bpsk)
-    let bytes_mlg = uint64(nrows * c.n_expert * 4l)
-    let bytes_msel = uint64(nrows * 2l * c.n_expert_used * 4l)
-    let bytes_mdn = uint64(nrows * c.n_expert_used * dim * 4l)
+    let bytes_mlg = uint64(mr * c.n_expert * 4l)
+    let bytes_msel = uint64(mr * 2l * c.n_expert_used * 4l)
+    let bytes_mdn = uint64(mr * c.n_expert_used * dim * 4l)
     var bmlg = moe ? pool_acquire(g_pool, g_dev, bytes_mlg) : null
     var bmsel = moe ? pool_acquire(g_pool, g_dev, bytes_msel) : null
     var bmdn = moe ? pool_acquire(g_pool, g_dev, bytes_mdn) : null
-    let bytes_mg4x = uint64(nrows * dim * 4l)
-    let bytes_mgh = uint64(nrows * knfe * 4l)
+    let bytes_mg4x = uint64(mr * dim * 4l)
+    let bytes_mgh = uint64(mr * knfe * 4l)
     var bmg4x = g4moe ? pool_acquire(g_pool, g_dev, bytes_mg4x) : null
     var bmg4rt = g4moe ? pool_acquire(g_pool, g_dev, bytes_mg4x) : null
     var bmgh = g4moe ? pool_acquire(g_pool, g_dev, bytes_mgh) : null
@@ -3083,9 +3085,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let cd = dn ? dn_conv_dim(c) : 0l
     let di = dn ? c.ssm_d_inner : 0l
     let nvh = dn ? c.ssm_dt_rank : 0l
-    let bytes_dn_cd = uint64(nrows * cd * 4l)
-    let bytes_dn_di = uint64(nrows * di * 4l)
-    let bytes_dn_h = uint64(nrows * nvh * 4l)
+    let bytes_dn_cd = uint64(mr * cd * 4l)
+    let bytes_dn_di = uint64(mr * di * 4l)
+    let bytes_dn_h = uint64(mr * nvh * 4l)
     var bdn_qkv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
     var bdn_cv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
     var bdn_z = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
@@ -3095,7 +3097,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_cd = dn ? uniform_u32(uint(cd)) : null
     var u_nvh = dn ? uniform_u32(uint(nvh)) : null
     var u_di = dn ? uniform_u32(uint(di)) : null
-    let bytes_qg = uint64(nrows * qd * 4l)
+    let bytes_qg = uint64(mr * qd * 4l)
     var bdn_qg = c.q_gated ? pool_acquire(g_pool, g_dev, 2ul * bytes_qg) : null
     var bdn_gate = c.q_gated ? pool_acquire(g_pool, g_dev, bytes_qg) : null
     var u_dn_qd2 = c.q_gated ? uniform_u32(uint(2l * qd)) : null

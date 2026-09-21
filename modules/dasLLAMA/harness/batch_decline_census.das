@@ -23,7 +23,7 @@ require strings
 
 def declines_text() : string {
     static_if (typeinfo module_exists(dasllama_metal_common)) {
-        return declines_line(metal_batch_decode_declines())
+        return "{declines_line(metal_batch_decode_declines())} single-row:{declines_line(metal_decode_declines())}"
     } else {
         return " (no dasMetal)"
     }
