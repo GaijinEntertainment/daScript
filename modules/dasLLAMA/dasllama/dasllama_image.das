@@ -877,6 +877,9 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
             } static_elif (typeinfo is_dim(field)) {
                 for (el, i in field, count()) {
                     let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                    if (!kq_sb(fmt)) {   // the table holds the 256-lattice formats only; a 32-block format's planes are top-level fields whose section names the slot would repeat
+                        continue
+                    }
                     apply(el) $(iname : string; var ifield) {
                         static_if (typeinfo is_array(ifield)) {
                             let pname = kq_plane_name(fmt, iname)
@@ -1264,6 +1267,9 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         } static_elif (typeinfo is_dim(field)) {
             for (el, i in field, count()) {
                 let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                if (!kq_sb(fmt)) {   // the writer's rule: a 32-block format's slot is empty, its planes are the top-level fields of the same name
+                    continue
+                }
                 apply(el) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
                         borrow_plane(bp, msize, path, by_name, ok, kq_plane_name(fmt, iname), ifield)

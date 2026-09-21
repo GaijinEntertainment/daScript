@@ -232,6 +232,86 @@ def private facade_decline_of(path : string) : string {
     return why
 }
 
+// the per-format plane table beside a 32-block format's top-level pair - the Model's shape
+struct ImgTableProbe {
+    @safe_when_uninitialized kq : KqPlanes[KQ_FMT_COUNT]
+    q51q : array<uint8>
+    q51s : array<uint8>
+    image_map : void?
+    image_bytes : uint64
+}
+
+def finalize(var t : ImgTableProbe) {
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            if (lock_count(field) != 0) {
+                unsafe(_builtin_forget_temp_array(field))
+            } else {
+                delete field
+            }
+        } static_elif (typeinfo is_dim(field)) {
+            for (el in field) {
+                apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        if (lock_count(ifield) != 0) {
+                            unsafe(_builtin_forget_temp_array(ifield))
+                        } else {
+                            delete ifield
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (t.image_map != null) {
+        image_backing_release(t.image_map, t.image_bytes)
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+[unused_argument(arch, t)]
+def private serialize_image_meta(var arch : Archive; var t : ImgTableProbe) {}
+
+[unused_argument(t)]
+def private image_post_load(var t : ImgTableProbe) {}
+
+def private fill_bytes(var a : array<uint8>; n : int; seed : int) {
+    a |> resize(n)
+    for (i in range(n)) {
+        a[i] = uint8((i * 31 + seed) % 251)
+    }
+}
+
+[test]
+def test_image_table_slot_names(t : T?) {
+    t |> run("synthetic carrier: a 32-block format's table slot never writes - its planes are the top-level pair of the same section name") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var terr : string
+        let tmp = temp_directory(terr)
+        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_table_{ref_time_ticks()}.dlim")
+        var p = ImgTableProbe()
+        fill_bytes(p.kq[int(KqFmt.k4)].q, 4096, 1)
+        fill_bytes(p.kq[int(KqFmt.k4)].s, 512, 2)
+        fill_bytes(p.q51q, 2048, 3)
+        fill_bytes(p.q51s, 256, 4)
+        fill_bytes(p.kq[int(KqFmt.q51)].q, 777, 5)   // a slot the table never holds: the writer must skip it, or the section name repeats the pair's
+        t |> success(save_image(p, path, "img-table"), "save")
+        var m = ImgTableProbe()
+        t |> success(load_image(path, m, "img-table"), "the image maps back (no two sections share a name)")
+        t |> equal(count_mismatch(m.q51q, p.q51q), 0l, "q51q element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.q51s, p.q51s), 0l, "q51s element-exact")
+        t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].q, p.kq[int(KqFmt.k4)].q), 0l, "the k4 slot's q plane element-exact")
+        t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].s, p.kq[int(KqFmt.k4)].s), 0l, "the k4 slot's s plane element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.q51)].q), 0l, "the q51 slot rode no section")
+        delete m
+        t |> success(remove(path), "probe image removed")
+        delete p
+    }
+}
+
 [test]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {

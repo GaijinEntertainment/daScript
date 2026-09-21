@@ -2001,6 +2001,39 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The
   amortized weight stream leaves dispatch latency and CPU work as what is left per step, so four rows
   feel the load where one row hides it.
+### From the close-all-gaps arc, the Metal catalog rows and the CPU hybrid step (2026-09-21)
+
+Instruments: the released bench exe (`daspkg release --root modules/dasLLAMA/benchmarks --out
+modules/dasLLAMA/performance/_rig`, its own fresh mint - noise ok, validation ok, 62 kernels - and
+DAS_TUNE_MANIFEST unset) at `-p 0 -n 128 -r 5 --npl 4 --ngl 99 --ref <llama-bench>` on the idle M5
+Max, the reference rows as the Metal batched-decode section's; the CPU row is the `-jit` script under
+`--for-debug-purposes` (the arm's tree, not the released exe) at `--npl 4` with no `--ngl`, its
+reference `llama-batched-bench` at `-ngl 0`. Every ratio is tg128@4 summed over four host-cached
+streams, the step served by the batch driver (the row refuses otherwise) [direction-grade - two
+processes throughout].
+
+- **The Metal rows the E-series, shared-expert and deltanet arms unlocked, all Q8_0 (ours /
+  llama.cpp, tg128@4; then flat tg128 ours / theirs):** Qwen3.5-4B 232 +/- 17 / 220 +/- 2 (1.05)
+  read first, in the mint's heat shadow, then 295 +/- 12 / 248 +/- 10 (1.19) on the settled box -
+  both sides moved, so the first read is the shadow, not the arm; flat 108 / 93. Qwen3-30B-A3B
+  256 +/- 15 / 215 +/- 3 (1.19), flat 123 / 105. Qwen3.6-35B-A3B 232 +/- 7 / 198 +/- 0 (1.17), flat
+  122 / 91. The 4B and 30B rows read a cv past 3% and stand as direction-grade until a re-run.
+- **The batched-step decline census (`harness/batch_decline_census.das`: one four-stream
+  host-cached row per carrier, then `batch_step_census` and the driver's declines-by-reason
+  table):** every official catalog row that loads - gemma-4-E2B and E4B Q8, Qwen3VL-4B Q8,
+  Qwen2.5-Omni-3B Q8, gemma-4-12B Q4_K_M, gpt-oss-20b mxfp4, Mistral-Small-24B Q4_K_M,
+  Qwen3.6-27B-MTP Q4_K_M, Qwen3-30B-A3B Q4_K_M, Qwen3.8-27B Q4_K_M, Qwen3.6-35B-A3B-MTP UD-Q4_K_M -
+  and the Q8 board carriers (Llama-3.2-1B/3B, Llama-3.1-8B, Qwen3.5-0.8B and its MTP twin,
+  Qwen3.5-4B, Qwen3-30B-A3B, Qwen3.6-35B-A3B) served eleven device steps, no CPU-stack step, no
+  decline; the one per-row step each is the row's one-stream tail, per-row by definition. The
+  gemma-4-26B-A4B Q4_K_M row never stepped: its image mint declined on the map-back (two sections
+  named `q51q` - the legacy top-level Q5_1 plane pair beside the per-format table's q51 slot, the
+  streaming writer keyed by name), the defect the arc fixes.
+- **The CPU batched stack's hybrid form (Qwen3.5-0.8B Q8, the deltanet rows form per session +
+  the gated attention rows, no device driver):** tg128@4 517 +/- 8 against llama.cpp's 471 +/- 10
+  at `-ngl 0` (1.10); the flat tg128 208 +/- 18 / 178 - the batched step reads 2.5x the flat row
+  [direction-grade - two processes, the `-jit` script].
+
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 
 Instruments as the section above: `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod (RTX
