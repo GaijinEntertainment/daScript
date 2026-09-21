@@ -726,7 +726,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
     // qwen3.5/3.6 hybrid (Wave D): 3-in-4 Gated-DeltaNet layers + gated attention. Prefill,
     // decode and the batched step ENGAGE on the blob twin; the batched step (the recurrent
     // rows form, each row's scan against its own state) is compared row for row against two
-    // single-row GPU steps on twin sessions - the CPU batched stack has no hybrid form.
+    // single-row GPU steps on twin sessions (the CPU stack's hybrid form is test_batch_decode's cell).
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
@@ -743,95 +743,98 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         let pf0 = metal_prefill_stats().prefills
         let de0 = metal_decode_stats().decodes
         let ba0 = metal_batch_decode_stats().steps
-        with_job_que() {
-            setup_dasllama_jobque()
-            var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            let pa <- encode(trg, counting_prompt(1, 40), true, false)
-            let pb <- encode(trg, counting_prompt(5, 44), true, false)
-            t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
-            t |> success(select_decode_override("metal"), "{tag}: decode override registered")
-            set_metal_prefill_min_npos(1l)
-            eval_(trg, sa, pa)
-            eval_(trg, sb, pb)
-            let cura = greedy_top(sa.logits, vocab)
-            let curb = greedy_top(sb.logits, vocab)
-            // the control: twin sessions through the single-row GPU step, one token each
-            var sa2 = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            var sb2 = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            eval_(trg, sa2, pa)
-            eval_(trg, sb2, pb)
-            var onea <- [cura]
-            var oneb <- [curb]
-            eval_(trg, sa2, onea)
-            eval_(trg, sb2, oneb)
-            delete onea
-            delete oneb
-            // the batched step over the two rows
-            var ws <- create_batch_workspace_(trg)
-            var sess : array<Session?>
-            unsafe {
-                sess |> push(addr(sa))
-                sess |> push(addr(sb))
+        for (kdt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {   //! the f16 mirror and both block codecs - the partial-rope rope-store arms of each
+            with_job_que() {
+                setup_dasllama_jobque()
+                var sa = make_run_state(c, kdt, kdt)
+                var sb = make_run_state(c, kdt, kdt)
+                let pa <- encode(trg, counting_prompt(1, 40), true, false)
+                let pb <- encode(trg, counting_prompt(5, 44), true, false)
+                t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
+                t |> success(select_decode_override("metal"), "{tag}: decode override registered")
+                set_metal_prefill_min_npos(1l)
+                eval_(trg, sa, pa)
+                eval_(trg, sb, pb)
+                let cura = greedy_top(sa.logits, vocab)
+                let curb = greedy_top(sb.logits, vocab)
+                // the control: twin sessions through the single-row GPU step, one token each
+                var sa2 = make_run_state(c, kdt, kdt)
+                var sb2 = make_run_state(c, kdt, kdt)
+                eval_(trg, sa2, pa)
+                eval_(trg, sb2, pb)
+                var onea <- [cura]
+                var oneb <- [curb]
+                eval_(trg, sa2, onea)
+                eval_(trg, sb2, oneb)
+                delete onea
+                delete oneb
+                var ws <- create_batch_workspace_(trg)
+                var sess : array<Session?>
+                unsafe {
+                    sess |> push(addr(sa))
+                    sess |> push(addr(sb))
+                }
+                var cur <- [cura, curb]
+                let ba1 = metal_batch_decode_stats().steps
+                eval_batch_(trg, ws, sess, cur)
+                t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch kv={kdt}: the driver served the step")
+                var bmaxd = 0.0
+                for (i in range64(vocab)) {
+                    bmaxd = max(bmaxd, abs(sa.logits[i] - sa2.logits[i]))
+                    bmaxd = max(bmaxd, abs(sb.logits[i] - sb2.logits[i]))
+                }
+                to_log(LOG_INFO, "{tag} batched step kv={kdt}: single-row next '{eyeball_str(piece_(tr, greedy_top(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, greedy_top(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb.logits, vocab)))}' (maxd {bmaxd})\n")
+                t |> success(bmaxd <= 2.0, "{tag} kv={kdt}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
+                var xmaxd = 0.0   //! the control: row A against row B lands outside the bar, so a step that bound one row's slice to the other would red
+                for (i in range64(vocab)) {
+                    xmaxd = max(xmaxd, abs(sa.logits[i] - sb2.logits[i]))
+                }
+                t |> success(xmaxd > 2.0, "{tag} kv={kdt}: the cross-row compare lands outside the bar (maxd {xmaxd})")
+                select_decode_override("")
+                select_prefill_override("")
+                set_metal_prefill_min_npos(64l)
+                sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+                unsafe {
+                    delete ws
+                    delete sess
+                }
+                delete cur
+                delete sa
+                delete sb
+                delete sa2
+                delete sb2
             }
-            var cur <- [cura, curb]
-            let ba1 = metal_batch_decode_stats().steps
-            eval_batch_(trg, ws, sess, cur)
-            t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
-            var bmaxd = 0.0
-            for (i in range64(vocab)) {
-                bmaxd = max(bmaxd, abs(sa.logits[i] - sa2.logits[i]))
-                bmaxd = max(bmaxd, abs(sb.logits[i] - sb2.logits[i]))
-            }
-            to_log(LOG_INFO, "{tag} batched step: single-row next '{eyeball_str(piece_(tr, greedy_top(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, greedy_top(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb.logits, vocab)))}' (maxd {bmaxd})\n")
-            t |> success(bmaxd <= 2.0, "{tag}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
-            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar, so a step that bound one row's slice to the other would red
-            for (i in range64(vocab)) {
-                xmaxd = max(xmaxd, abs(sa.logits[i] - sb2.logits[i]))
-            }
-            t |> success(xmaxd > 2.0, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
-            select_decode_override("")
-            select_prefill_override("")
-            set_metal_prefill_min_npos(64l)
-            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-            unsafe {
-                delete ws
-                delete sess
-            }
-            delete cur
-            delete sa
-            delete sb
-            delete sa2
-            delete sb2
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "{tag} prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "{tag} decode: ENGAGES on the GPU")
         t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
-        with_job_que() {
-            setup_dasllama_jobque()
-            var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            let ids <- generate(tr, s, prompt, length(prompt) + 8)
-            cpu_ids := ids
-            delete s
-            select_decode_override("metal")
-            select_prefill_override("metal")
-            set_metal_prefill_min_npos(1l)
-            var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
-            gpu_ids := ids2
-            delete s2
-            set_metal_prefill_min_npos(64l)
-            select_decode_override("")
-            select_prefill_override("")
+        for (kdt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {   //! each KV codec's single-row store on the partial-rope carrier against the CPU chain on the same codec
+            var cpu_ids : array<int64>
+            var gpu_ids : array<int64>
+            with_job_que() {
+                setup_dasllama_jobque()
+                var s = make_run_state(tr.config, kdt, kdt)
+                let ids <- generate(tr, s, prompt, length(prompt) + 8)
+                cpu_ids := ids
+                delete s
+                select_decode_override("metal")
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                var s2 = make_run_state(trg.config, kdt, kdt)
+                let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
+                gpu_ids := ids2
+                delete s2
+                set_metal_prefill_min_npos(64l)
+                select_decode_override("")
+                select_prefill_override("")
+            }
+            log_gen_texts(tr, "{tag} kv={kdt}", cpu_ids, gpu_ids)
+            t |> success(same(cpu_ids, gpu_ids),
+                "{tag} kv={kdt}: metal-overrides generate matches the CPU truth token-for-token")
+            delete cpu_ids
+            delete gpu_ids
         }
-        log_gen_texts(tr, tag, cpu_ids, gpu_ids)
-        t |> success(same(cpu_ids, gpu_ids),
-            "{tag}: metal-overrides generate matches the CPU truth token-for-token")
-        delete cpu_ids
-        delete gpu_ids
         if (cont_tol > 0.0) {
             cont_logits_cell(t, tr, trg, tag, cont_tol)
         }
@@ -1902,7 +1905,7 @@ def test_metal_family_matrix(t : T?) {
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state
             // mirror, fused sequential scan) + gated attention (2x-wide Q, partial rope 64/256,
-            // σ out-gate). Decode + prefill serve; batch = per-row fallback (see qwen35_row).
+            // σ out-gate). Decode, prefill and the batched step serve (see qwen35_row).
             qwen35_row(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
                 "qwen35-0.8b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
                     MetalNeed.partial_rope | MetalNeed.q_gated), 4.0)

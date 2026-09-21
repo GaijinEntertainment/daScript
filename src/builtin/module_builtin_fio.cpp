@@ -401,7 +401,7 @@ namespace das {
         return result;
     }
 
-    static FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
+    FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
         auto wideName = utf8_file_path_to_wide(name);
         if ( wideName.empty() ) return nullptr;
         wchar_t wideMode[8] = {};
@@ -413,7 +413,7 @@ namespace das {
         return _wfopen(wideName.c_str(), wideMode);
     }
 #else
-    static FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
+    FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
         return fopen(name, mode);
     }
 #endif

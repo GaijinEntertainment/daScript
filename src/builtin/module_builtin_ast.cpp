@@ -1,5 +1,7 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/misc/dep_recorder.h"
+
 #include "daScript/misc/sysos.h"
 #if !defined(_WIN32)
     #include <unistd.h>
@@ -299,6 +301,9 @@ namespace das {
         int64_t size = -1;
         uint64_t hash = 0;
         statAndHashFileDependency(fullPath, size, hash);
+#if !defined(DAS_NO_FILEIO)
+        if ( !virtualInput ) das_dep_note_read(fullPath.c_str());
+#endif
         for ( auto & dep : program->moduleCacheDependencies ) {
             if ( get<0>(dep) == fullPath ) {
                 get<1>(dep) = size;

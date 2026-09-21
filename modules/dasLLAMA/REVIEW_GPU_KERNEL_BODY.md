@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
-`ARCHITECTURE_GPU_RACE_SHAPES.md`.
-Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+`ARCHITECTURE_GPU_RACE_SHAPES.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**

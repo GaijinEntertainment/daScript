@@ -616,6 +616,22 @@ var g_moe_gpu_dn_flush = @@moe_gpu_noop_dn_flush
 var g_moe_gpu_dn_invalidate = @@moe_gpu_noop_dn_invalidate
 var g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
 
+//! How many sessions' recurrent state a driver keeps device-resident at once: a scheduler names
+//! its stream count before the first prefill, so no stream's state evicts under the batch it rides
+typedef MoeGpuDnRoomFn = function<(n : int64) : void>
+[unused_argument(n)]
+def private moe_gpu_noop_dn_room(n : int64) {}
+var g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
+
+def gpu_dn_room_(n : int64) {
+    invoke(g_moe_gpu_dn_room, n)
+}
+
+//! Tier registration of the room seam (beside set_moe_gpu_dn_state_hooks).
+def public set_moe_gpu_dn_room_hook(room : MoeGpuDnRoomFn) {
+    g_moe_gpu_dn_room = room
+}
+
 def public moe_gpu_dnd_on_gpu(l : int64) : bool {
     return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_moe_gpu_dn_layers, l)
 }
@@ -1919,6 +1935,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_dn_release == null) {
         g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
+    }
+    if (g_moe_gpu_dn_room == null) {
+        g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
     }
     if (g_moe_gpu_heat_query == null) {
         g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query

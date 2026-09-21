@@ -3,6 +3,50 @@ if(NOT DAS_PYTHON)
     set(DAS_PYTHON python3)
 endif()
 
+set(DAS_LANE_STAMP_DIR ${CMAKE_BINARY_DIR}/das_stamps)
+file(MAKE_DIRECTORY ${DAS_LANE_STAMP_DIR})
+
+function(add_das_target name)
+    cmake_policy(SET CMP0116 NEW)
+    if(NOT CMAKE_GENERATOR MATCHES "Ninja" AND CMAKE_VERSION VERSION_LESS 3.21)
+        add_custom_target(${name} ${ARGN})
+        return()
+    endif()
+    set(_stamp ${DAS_LANE_STAMP_DIR}/${name}.stamp)
+    set(_env ${CMAKE_COMMAND} -E env DAS_DEPFILE=${_stamp}.d DAS_DEPFILE_EXCLUDE=${CMAKE_BINARY_DIR})
+    set(_wrapped)
+    set(_exes)
+    set(_head OFF)
+    foreach(_tok IN LISTS ARGN)
+        if(_head AND TARGET ${_tok})
+            get_target_property(_type ${_tok} TYPE)
+            if(_type STREQUAL "EXECUTABLE")
+                list(APPEND _wrapped $<TARGET_FILE:${_tok}>)
+                list(APPEND _exes ${_tok})
+                set(_head OFF)
+                continue()
+            endif()
+        endif()
+        set(_head OFF)
+        list(APPEND _wrapped ${_tok})
+        if(_tok STREQUAL "COMMAND")
+            list(APPEND _wrapped ${_env})
+            set(_head ON)
+        endif()
+    endforeach()
+    add_custom_command(
+        OUTPUT ${_stamp}
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${_stamp}.d ${_stamp}.d.list ${_stamp}.d.lock
+        ${_wrapped}
+        COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
+        DEPFILE ${_stamp}.d
+    )
+    add_custom_target(${name} DEPENDS ${_stamp})
+    if(_exes)
+        add_dependencies(${name} ${_exes})
+    endif()
+endfunction()
+
 function(das_lane_dastest_target name)
     cmake_parse_arguments(A "" "COMMENT" "FILES;JIT_FILES;COMPILE_ONLY_FILES;ARGS;DEPENDS" ${ARGN})
     set(_cmds)
@@ -15,6 +59,6 @@ function(das_lane_dastest_target name)
     foreach(_f IN LISTS A_JIT_FILES)
         list(APPEND _cmds COMMAND $<TARGET_FILE:daslang> -jit ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/${_f} ${A_ARGS})
     endforeach()
-    add_custom_target(${name} ${_cmds} DEPENDS daslang ${A_DEPENDS}
+    add_das_target(${name} ${_cmds} DEPENDS daslang ${A_DEPENDS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMENT "${A_COMMENT}")
 endfunction()

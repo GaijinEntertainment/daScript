@@ -42,7 +42,7 @@ if(TARGET cpp-mcp)
 endif()
 
 if(TARGET daslang_static)
-    add_custom_target(run_eastl_smoke
+    add_das_target(run_eastl_smoke
         COMMAND $<TARGET_FILE:daslang_static> examples/clargs/main.das -- --name ci -r 1
         DEPENDS daslang_static
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

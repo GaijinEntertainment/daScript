@@ -164,7 +164,9 @@ batched driver gained, deltanet rows against per-session mirrors and the shared 
 site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked; also the layout fingerprint; the split-scale
+carrier, model-free - runs with no model stocked; also the layout fingerprint; the per-format
+plane table's slot claim - a `kq_sb` slot's planes ride the image under the slot's section names
+while a non-sb slot rides no section, its planes being the top-level pair; the split-scale
 plane's two arms against hand-built superblocks - k6 and k3 strip-first at `strip_at` 0 / `tail_at` 16,
 iq4xs and k2 d-first at `strip_at` 4 / `tail_at` 0 with k2's four-byte tail, each carrying an
 added-value poison in one tail byte that must move that byte and nothing in the strip, plus the
@@ -430,8 +432,9 @@ synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call sti
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
 `test_mtp.das` - stocked suite, `-jit` only: the NextN loader on the Qwen3.5-0.8B-MTP Q8_0 file
 (the extras load; spec off continues the plain file's fixture), the self-speculative greedy decode
-token-for-token against plain decode on the counting and prose fixtures, the poisoned-verify
-rollback, the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+token-for-token against plain decode on the counting and prose fixtures - and on the counting
+fixture again with the file loaded at `QuantMode.q4_0`, the requant tier the round serves - the
+poisoned-verify rollback, the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
 and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
@@ -547,10 +550,22 @@ row asking more streams than the device homes refuses by name and reads 0, and a
 serves at a rate with every stream parked after it and no call passed to the CPU chain (a
 one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
+per-session sequential forward on llama2.c's stories15M (fp32, Q8 and Q4_0 weights - the Q4_0
+tier rides the batched Q4_0 GEMM, bit for bit the GEMV's dot - and the f16 / q8_0 / tq4 KV
+codecs, the mid-run shrink, the B == 1 delegation, the step census) and on the deltanet hybrid
+Qwen3.5-0.8B Q8 (f32 and f16 KV at 1e-6: the recurrent rows form per session, the gated
+partial-rope attention rows, the final deltanet state and conv history, every step counted on
+the CPU batched stack by the census, and a decode below the deltanet position panicking - the
+state is forward-only); a cell whose bar is exact free-runs the batched greedy and holds the
+tokens, a cell whose bar concedes rounding feeds the reference's tokens and holds the logits, and
+every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
+plus the batched bench row's refusal contract on SmolLM2.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
 E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
-hybrid Qwen3.5-0.8B Q8 and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
+hybrid Qwen3.5-0.8B Q8 (at four streams and at nine - more than the recurrent mirror cache rests
+at, which grows to the batch) and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
 a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
 runs the joint-verify invariance cell: three speculative streams admitted together emit,
 token for token, what each emits alone on a one-stream speculative scheduler (the verify's
@@ -1208,8 +1223,9 @@ through `kq_grp_row_dot` on every tier, then the dispatch seam - byte-identical 
 where the tier carries kq slots, the registered identity where it does not. Every compare ships
 an added-value poison control.
 `test_attn_span.das` - stocked suite; the non-causal image span (`eval_embd_` with `non_causal =
-true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it),
-classic/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span
+true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it;
+the same direction pair again on the q4_0 requant of the fixture - the embedding prefill on the
+q4_0 tier), classic/flash agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span
 (`eval_embd_span_`): splice equivalence via a whole-cache decode-logits witness (classic
 bit-exact, flash tolerance) and the per-query mask direction inside one eval; plus the deepstack
 wide-row rail (stamped `n_deepstack`): zero-tail wide == narrow bit-exact, nonzero tails move the
@@ -1294,9 +1310,9 @@ model-loading block is `REVIEW.md`'s obligation.
 
 `model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
 `DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
-large tier. A run reporting SKIPPED for those arms is correct, not a failure. The 70B's
-no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming 40GB on
-the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
+large tier. A run reporting SKIPPED for those arms is correct, not a failure. The large tier's
+no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming a 70B's
+40GB on the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
 that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
 
 ## Log discipline

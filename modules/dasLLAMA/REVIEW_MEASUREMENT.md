@@ -21,11 +21,7 @@ harness, flags, box and exe - set before the rows it covers or naming them. A ta
 covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
 of the paragraphs that line sits under or names.
 
-A served-turn leg is prefill, decode, a batched decode row, or the turn end to end. A box mints
-a path when `performance/gen_bench_records.das` mints a board row
-(`performance/records/<box>.json`) for it on that box rather than refusing or skipping it; a box
-does not mint a path for a model `performance/gen_bench_records.das --catalog official` does not
-carry.
+A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -52,9 +48,10 @@ it.**
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
-or as the `-jit` script - or a board cell did.** The exe and the `-jit` script run the same code
-path and report the same numbers. A served turn is one whole request an engine serves, whatever
-the modality; a turn wall is its wall.
+or as the `-jit` script - or a board cell did.** A served turn is one whole request an engine
+serves, whatever the modality; a turn wall is its wall. A served-turn rate an instrument under
+`harness/` prints stays in that run's log: the ledger entry carries what the instrument decided -
+served, declined, how many rows it counted - never that rate.
 
 **A `-jit` A/B pair's arms keep their absolute rates in the commit message or PR body that states
 the pair.**
@@ -69,8 +66,6 @@ produced.**
 
 **A ratio the `-jit` script produced, written into `PERF_LEDGER.md`, names the arm it is
 measured against.**
-
-**A diff never edits a dated `PERF_LEDGER.md` row - it adds a new dated row that refutes it.**
 
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
@@ -88,34 +83,38 @@ and the command line it ran under.**
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
+**A dated `PERF_LEDGER.md` row is never edited to correct it - a new dated row refutes it.**
+
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 recorded to justify adopting code the change does not land.** That timing settles its adoption
 decision in the PR that lands the kernel. A negative result whose winner is the committed path is
-an entry, not a selection timing: it records what was tried and why the tree stays as it is.
+an entry, not a selection timing.
 
 **A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
 mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
 including the path a run with no flags and no environment overrides takes.
 
-**A change that owes a board row for a route or a path no box of the author's mints names
-instead, in the
-same change, the record or gate output that proves the route ran end to end, or the profile
-output that shows the win (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's
-`DASLLAMA_GPU_PROF=1` token ledger) with the flags that run took.**
+**A change that owes a board row no box of the author's can mint names instead, in the same
+change, an artifact that shows the route ran end to end - a record, a gate output, an
+instrument's print - or the profile output that shows the change is faster
+(`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
+ledger), with the flags that run took.** A box cannot mint the row when no rig leg drives the
+leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
+official` does not carry the model.
 
 **A diff that changes what the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
-body, the `sanity:` lines of its `lcpp_bench` run and any `tune gate:` line (`tune_gate`,
-`performance/profile_common.das`) that run printed.**
+body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
+or says the run printed none.**
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,
 and names that row in the PR body.** The board is the module's committed record of what serving costs; a kernel
 win that never lands there is invisible to the next regression check.
 
-**A rate or wall of any served-turn leg written down outside `PERF_LEDGER.md` as a measurement
-rather than as a prediction is a defect unless it cites the committed board row it came from, or
-names harness, flags, environment overrides, box, and the exe or script that ran it.**
+**A rate or wall of any served-turn leg written down as a measurement rather than as a
+prediction is a defect unless it cites the committed board row it came from, or names harness,
+flags, environment overrides, box, and the exe or script that ran it.**
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the

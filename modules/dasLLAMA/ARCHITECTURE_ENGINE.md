@@ -36,7 +36,9 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   override registries (the accept walk's row-sampler seam among them), the runtime knobs,
   `SamplingParams` (the struct a `Session` points at, so a speculative round draws with its
   caller's sampler), and the MTP per-position accept telemetry (`mtp_pos_*`) the round-override
-  registry's rounds feed. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.3) and **not** GPU residency
+  registry's rounds feed. The standard attention's Config-keyed arms live beside it - the gated
+  projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
+  kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.3) and **not** GPU residency
   (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,
   so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
@@ -63,11 +65,15 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
   A step is served one of three ways, and `batch_step_census` counts each since load: the armed
   device driver claimed the whole stack, the CPU batched stack ran it, or the rows stepped one at
-  a time through the single-row forward - one row, a q4_0 model, a non-standard graph with no
-  device driver armed, or a step the device driver declined on a blob-only or non-standard-graph
-  model (the CPU stack has no form for either, so the decline falls to the single-row forward).
-  A non-standard graph (the deltanet hybrids) reaches an armed device driver before the per-row
-  branch: the CPU stack has no hybrid form, the Metal batch driver does.
+  a time through the single-row forward - one row, a non-standard graph whose arch
+  names no batched layer (`ArchBlocks.attn_batch`) with no device driver armed, or a step the
+  device driver declined on a blob-only model or on such a graph (the CPU stack has no form for
+  either, so the decline falls to the single-row forward). A non-standard graph reaches an armed
+  device driver before the CPU stack; the deltanet hybrids name `attention_qwen35_batch` as their
+  batched layer - the recurrent layers as B-row projections and the delta rule laned over (row,
+  v-head) against each session's own state, the attention layers through the std batched
+  attention, whose `q_gated` arms carry the 2x-wide [q | gate] projection and the sigmoid
+  out-gate - so a hybrid step with no device driver rides the CPU stack too.
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
@@ -100,8 +106,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 
 Thirteen files registering eighteen names:
 `dasllama_arch_llama.das` * `dasllama_arch_phi3.das` * `dasllama_arch_qwen2.das` * `dasllama_arch_qwen2moe.das` * `dasllama_arch_qwen3.das` * `dasllama_arch_qwen3moe.das` * `dasllama_arch_qwen35.das` * `dasllama_arch_gemma2.das` * `dasllama_arch_gemma3.das` * `dasllama_arch_gemma4.das` * `dasllama_arch_glm4moe.das` * `dasllama_arch_gptoss.das` * `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
-file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `ChatTemplate` *
-`LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no forward loop.
+file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr set - `attn_decode`,
+`ffn_decode`, `attn_prefill`, `ffn_prefill`, and the optional `attn_batch` a non-standard graph
+names * `ChatTemplate` * `LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no
+forward loop.
 
 ### 1.8 Instrumentation and support
 

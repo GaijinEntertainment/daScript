@@ -22,8 +22,10 @@ reports a compile error that names the construct.**
 carry it - pass it as a call-site constant.** A shape constant is a value that sizes a
 `@workgroup` array, fixes an unrolled loop's trip count, or multiplies an index as a stride into a
 fixed-extent array (a `@workgroup` or local array, not an ssbo the host sizes); a run-time count
-of live entries inside such a fixed extent is not one. A call-site constant is one fixed where
-the kernel's source is generated - a template constant or a typedef - so the emitter bakes it in.
+of live entries inside such a fixed extent is not one. A call-site constant is fixed where the
+kernel's source is generated - a template constant or a typedef - so the emitter bakes it in; a
+kernel whose source is generated once and dispatched for differently shaped inputs cannot carry
+a shape that varies per input that way.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
@@ -64,11 +66,16 @@ emitter compiles, where that emitter does not handle it, ships, in the same chan
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
 
+**Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
+`[metal_kernel(float_a_ok=true)]` is the license (`dasMetal/metal/msl_emit.das`) - is a defect.**
+A float operand keeps the op off its native fast path.
+
 **A global-rooted-array read - a module global, a `@workgroup` array or a `self.<member>`
-resource read in a kernel body - that a diff adds, makes happen at an index it did not reach
-before, makes happen on a dispatch it did not happen on before, or makes happen in a compiled
-`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it did not appear in before (a
-removed `static_if` or `@template_gate`, or a widened constant the gate switches on), is in
-range on every dispatch it happens on: its index sits inside the region that dispatch's own
-bound defines, or inside slack - an allocation past that region's end that the kernel's
-module-root `ARCHITECTURE*.md` names.**
+resource read in a kernel body or in a `def` it calls - that a diff adds, makes reach an index it
+did not reach before, makes happen where a condition used to keep it out, or makes happen in a
+compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it did not appear in
+before (a removed `static_if` or `@template_gate`, or a widened constant the gate switches on),
+is in range on every dispatch it happens on: its index sits inside the region that dispatch's
+own bound defines, or inside slack - an allocation past that region's end that the kernel's
+module-root `ARCHITECTURE*.md` names.** A condition keeps a read out when it is a guard on the
+read, a clamp landing inside the region, or a guard on the store of a block the read loads whole.

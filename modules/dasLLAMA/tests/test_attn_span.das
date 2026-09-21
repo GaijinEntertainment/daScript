@@ -14,6 +14,7 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + set_prefill_attn_mode
+require dasllama/dasllama_load   // quantize_weights_q4: the q4_0 requant leg
 require dasllama/dasllama_env
 
 // The non-causal image span (eval_embd_/forward_prefill_embd non_causal=true): every query of
@@ -188,6 +189,17 @@ def test_attn_span(t : T?) {
                 reset_diff = max(reset_diff, row_maxdiff(causal_a, causal_after, r, dim))
             }
             tt |> equal(reset_diff, 0.0, "causal after span == fresh causal, bit-exact")
+            // the q4_0 requant tier takes the embedding prefill too: the same mask direction on q4_0 weights
+            var tq <- load_checkpoint(MODEL_PATH)
+            quantize_weights_q4(tq)
+            let q4_causal_a <- span_prefill(tq, embd_a, false)
+            let q4_causal_b <- span_prefill(tq, embd_b, false)
+            let q4_span_a <- span_prefill(tq, embd_a, true)
+            let q4_span_b <- span_prefill(tq, embd_b, true)
+            tt |> equal(row_maxdiff(q4_causal_a, q4_causal_b, 0l, dim), 0.0, "q4_0 causal: row 0 blind to a last-row perturbation")
+            let q4_d0 = row_maxdiff(q4_span_a, q4_span_b, 0l, dim)
+            tt |> success(q4_d0 > 1e-4, "q4_0 span: row 0 sees the last row (d0 = {q4_d0})")
+            delete tq
         }
         delete tr
     }

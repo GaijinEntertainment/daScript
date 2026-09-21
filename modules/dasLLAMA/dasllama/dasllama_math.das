@@ -2421,6 +2421,29 @@ def matmul_q4(var y : array<float>; wq : array<uint8>; ws : array<float>; woff :
     }
 }
 
+//! Batched Q4_0 GEMM (Y [ntok x d] = X [ntok x n]·Wᵀ, weight-stationary): the same dot per (row, token) as ntok x matmul_q4, bit for bit.
+def matmul_q4_batch(var y : array<float>; wq : array<uint8>; ws : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
+    let nb = n / 32l
+    let nh = n / 2l
+    unsafe {
+        var yp = addr(y[0])
+        let wp = addr<uint8 const?>(wq[woff / 2l])
+        let sp = addr<float const?>(ws[woff / 32l])
+        let xp = addr<float const?>(x[0])
+        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), g_q4_chunks_per_job, n * d * ntok)) $(rb, re) {
+            unsafe {
+                for (i in range(rb, re)) {
+                    let wrow = wp + int64(i) * nh
+                    let srow = sp + int64(i) * nb
+                    for (tk in range64(ntok)) {
+                        yp[tk * d + int64(i)] = dot_q4(wrow, srow, xp + tk * n, n)
+                    }
+                }
+            }
+        }
+    }
+}
+
 def matmul_q4(var y : array<float>; wq : array<uint8> | #; ws : array<float> | #; x : array<float>; n, d : int64) {
     let nb = n / 32l
     let nh = n / 2l

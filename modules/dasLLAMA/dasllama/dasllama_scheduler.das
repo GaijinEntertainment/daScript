@@ -183,6 +183,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
     var sch <- Scheduler(ws <- create_batch_workspace(model), max_streams = max(1l, max_streams),
                          max_queue = max(1l, max_queue), chunk_tokens = max(1l, chunk_tokens),
                          kv_dtype = kv_dtype, mtp = mtp && model.config.n_layer_nextn > 0l)
+    gpu_dn_room(sch.max_streams)   //! every stream's recurrent state device-resident at once, before the first prefill
     if (page_rows > 0l) {
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)

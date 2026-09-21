@@ -178,7 +178,7 @@ def private all_streams_decoding(sch : Scheduler; npl : int64) : bool {
 //! time, a timed step a device-served model ran on the CPU batched stack, or a call the driver handed to the CPU
 //! chain. Every path past `submit` parks the streams' regions for the next rep, a refusal included
 [cold_path, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false) : tuple<tps : double; why : string> {
+def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false; kv_dtype : KVDtype = KVDtype.f16) : tuple<tps : double; why : string> {
     let homes = gpu_device_sessions()
     if (homes > 0l && homes < npl) {
         return (tps = 0.0lf, why = "the device homes {homes} stream(s), the row asks {npl}")
@@ -186,7 +186,7 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : 
     let device_home = homes >= npl
     let device_served = device_home || batch_decode_override_armed()
     let passes0 = cpu_pass_total()
-    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, KVDtype.f16, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify
+    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, kv_dtype, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify; the board's streams take the f16 codec, a census row names its own
     if (device_home) {
         verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
     }

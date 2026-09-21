@@ -2001,6 +2001,71 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   Metal clients, and the step's CPU half (sampler, encode, spin) loses its performance cores. The
   amortized weight stream leaves dispatch latency and CPU work as what is left per step, so four rows
   feel the load where one row hides it.
+### From the close-all-gaps arc, the Metal catalog rows and the CPU hybrid step (2026-09-21)
+
+Instruments: the released bench exe (`daspkg release --root modules/dasLLAMA/benchmarks --out
+modules/dasLLAMA/performance/_rig`, its own fresh mint - noise ok, validation ok, 62 kernels - and
+DAS_TUNE_MANIFEST unset) at `-p 0 -n 128 -r 5 --npl 4 --ngl 99 --ref <llama-bench>` on the idle M5
+Max, the reference rows as the Metal batched-decode section's; the CPU row is the `-jit` script under
+`--for-debug-purposes` (the arm's tree, not the released exe) at `--npl 4` with no `--ngl`, its
+reference `llama-batched-bench` at `-ngl 0`. Every ratio is tg128@4 summed over four host-cached
+streams, the step served by the batch driver (the row refuses otherwise) [direction-grade - two
+processes throughout].
+
+- **The Metal rows the E-series, shared-expert and deltanet arms unlocked, all Q8_0 (ours /
+  llama.cpp, tg128@4; then flat tg128 ours / theirs):** Qwen3.5-4B 232 +/- 17 / 220 +/- 2 (1.05)
+  read first, in the mint's heat shadow, then 295 +/- 12 / 248 +/- 10 (1.19) on the settled box -
+  both sides moved, so the first read is the shadow, not the arm; flat 108 / 93. Qwen3-30B-A3B
+  256 +/- 15 / 215 +/- 3 (1.19), flat 123 / 105. Qwen3.6-35B-A3B 232 +/- 7 / 198 +/- 0 (1.17), flat
+  122 / 91. The 4B and 30B rows read a cv past 3% and stand as direction-grade until a re-run.
+- **The batched-step decline census (`harness/batch_decline_census.das`: one four-stream
+  host-cached row per carrier, then `batch_step_census` and the driver's declines-by-reason
+  table):** every official catalog row that loads - gemma-4-E2B and E4B Q8, Qwen3VL-4B Q8,
+  Qwen2.5-Omni-3B Q8, gemma-4-12B Q4_K_M, gpt-oss-20b mxfp4, Mistral-Small-24B Q4_K_M,
+  Qwen3.6-27B-MTP Q4_K_M, Qwen3-30B-A3B Q4_K_M, Qwen3.8-27B Q4_K_M, Qwen3.6-35B-A3B-MTP UD-Q4_K_M -
+  and the Q8 board carriers (Llama-3.2-1B/3B, Llama-3.1-8B, Qwen3.5-0.8B and its MTP twin,
+  Qwen3.5-4B, Qwen3-30B-A3B, Qwen3.6-35B-A3B) served eleven device steps, no CPU-stack step, no
+  decline; the one per-row step each is the row's one-stream tail, per-row by definition. The
+  gemma-4-26B-A4B Q4_K_M row never stepped: its image mint declined on the map-back (two sections
+  named `q51q` - the legacy top-level Q5_1 plane pair beside the per-format table's q51 slot, the
+  streaming writer keyed by name), the defect the arc fixes.
+- **The CPU batched stack's hybrid form (Qwen3.5-0.8B Q8, the deltanet rows form per session +
+  the gated attention rows, no device driver):** tg128@4 517 +/- 8 against llama.cpp's 471 +/- 10
+  at `-ngl 0` (1.10); the flat tg128 208 +/- 18 / 178 - the batched step reads 2.5x the flat row
+  [direction-grade - two processes, the `-jit` script].
+- **The block codecs on the partial-rope carrier (the q8_0 / tq4 rope-store kernels take `rot`):**
+  the census (`harness/batch_decline_census.das -- --kv q8_0 | tq4 <gguf>`, the `-jit` script,
+  the untuned tier) serves Qwen3.5-0.8B Q8 and Llama-3.2-1B Q8 batched at four streams on both
+  codecs, no decline. The tq4 signs table read past its 128 floats on every 256-wide head: the
+  support matrix's `fam-qwen35` row (`tests/run.das -- --suite matrix --arm fam-qwen35 --family
+  qwen35`, the Metal-override generate against the CPU truth token-for-token, per KV codec) reds
+  on tq4 at master and passes with the table at the kernels' 512 ceiling; the forced-feed probe
+  (`harness/forced_feed_probe.das -- <gguf> --kv tq4 --steps 6` - a CPU prefill, then six steps
+  fed the CPU chain's tokens on a CPU and a GPU-decode session, per-step logits maxd printed)
+  localized it to the tq4 rows of every 256-wide head, gemma-2-2b Q4_K_M included, with argmax
+  flips on the unfixed table and none on q8_0 [one process, the M5 Max].
+- **Nine streams (the census at `--npl 9`):** every non-hybrid K-quant catalog carrier serves
+  batched - gemma-4-12B Q4_K_M, Llama-3.2-1B Q4_K_M, Qwen3-30B-A3B Q4_K_M, Mistral-Small-24B,
+  gemma-4-26B-A4B Q4_K_M, gemma-4-E2B Q8 - no off-lattice decline in the catalog; every hybrid
+  declined `dn_state` (the four-mirror LRU evicting the rows of the step it prepared) and the Q8
+  hybrid then faulted on the device (nine rows written into nine-row planes by the rows form's
+  four-row tiles); with the cache grown to the batch and the planes sized to the tile
+  Qwen3.5-4B Q4_K_M, Qwen3.6-35B-A3B UD-Q4_K_M and Qwen3.5-0.8B Q8 serve at nine, the 0.8B at
+  twelve too.
+- **The drafts as rows steps (the self-speculative batched row, `--npl-mtp`, three or five reps,
+  `-p 0`):** Qwen3.5-0.8B-MTP Q8 spec @4 720 -> 881 +/- 10 against the plain row's 987 +/- 47 in the
+  same session; Qwen3.6-27B-MTP Q4_K_M read spec 41.4 +/- 7.0 (cv 17%, void) beside plain 54.4 in
+  one pair and spec 45.3 +/- 2.3 beside plain 41.8 +/- 0.2 in the next, the plain row itself moving
+  54 -> 42 between the pairs - the box's heat under the untuned debug script [direction-grade - the
+  `-jit` script, untuned, synthetic ids]. The released exe on the idle box (five reps, `-p 0`,
+  its own fresh sidecar): Qwen3.5-0.8B-MTP plain 977 +/- 6 against llama.cpp's 811 (1.21), spec
+  890 +/- 9 - 0.91 of the plain row where the per-stream chain read 0.74, and above the
+  reference's plain row (1.10); Qwen3.6-27B-MTP plain 52.2 +/- 2.4 against 38.6 (1.35), spec
+  47.5 +/- 5.8 (cv 12%) - 0.91 of plain against 0.89 before, the bar too wide to rank the two
+  draft forms on this carrier; on synthetic ids every accepted draft is noise, so the spec row's
+  ceiling is the plain row and the served rate is the ruler's question (sec.2.45 of the
+  measurement doc) [direction-grade - two processes].
+
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 
 Instruments as the section above: `daslang -jit benchmarks/lcpp_bench.das --npl 4` on the pod (RTX

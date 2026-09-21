@@ -837,6 +837,7 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
     arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness"),
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-kq-table-sb-only"),
     arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
@@ -877,6 +878,9 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
             } static_elif (typeinfo is_dim(field)) {
                 for (el, i in field, count()) {
                     let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                    if (!kq_sb(fmt)) {
+                        continue
+                    }
                     apply(el) $(iname : string; var ifield) {
                         static_if (typeinfo is_array(ifield)) {
                             let pname = kq_plane_name(fmt, iname)
@@ -1164,6 +1168,7 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 //! everything else. false = decline (the caller owns `base` and releases it either way).
 [arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"), arch(at = "../ARCHITECTURE_RUNTIME.md#weights-epoch-on-load"),
     arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"),
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-kq-table-sb-only"),
     arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     select_matmul_backend_for_load_()
@@ -1264,6 +1269,9 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         } static_elif (typeinfo is_dim(field)) {
             for (el, i in field, count()) {
                 let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                if (!kq_sb(fmt)) {
+                    continue
+                }
                 apply(el) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
                         borrow_plane(bp, msize, path, by_name, ok, kq_plane_name(fmt, iname), ifield)

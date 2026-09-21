@@ -89,12 +89,13 @@ def private batch_decode_alloc(t : Model; var s : Session; nrows : int64) {
         s.ple_proj |> grow_resize(nrows * all)
         s.ple_gate |> grow_resize(nrows * c.n_embd_per_layer)
     }
+    hybrid_rows_alloc(c, s, nrows)
 }
 
 // One layer's batched-decode attention: shared prefix (norm → QKV GEMM → qk/v-norm → per-row RoPE
 // via the positions table) → scatter-store each row's k/v into ITS session's cache → per-(row, head)
 // decode attention through the codec seam worker → shared suffix (wo GEMM → post-norm → residual).
-def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE037,STYLE038 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
+def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE037,STYLE038 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
     let c = t.config
     let kv_dim = layer_kv_dim(c, l)
     let head_size = layer_head_size(c, l)
@@ -342,10 +343,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
             panic("eval_batch: sessions[{i}] cache size differs from sessions[0] - same model + same seq_len required")
         }
     }
-    // per-row fallback keeps every configuration correct: B == 1 keeps the fused decode chain, q4_0
-    // has no batched kernels, non-std arches have no CPU batch attention worker (an armed device
-    // driver may have one, so their rows reach it first), the classic rope path has no per-row positions
-    if (nrows == 1l || t.quant == QuantMode.q4_0 || (!t.blocks.attn_is_std && !batch_decode_override_armed()) || !g_use_rope_table) {
+    //! the classic rope path has no per-row positions, so its rows step one at a time
+    let no_cpu_form = !t.blocks.attn_is_std && t.blocks.attn_batch == null
+    if (nrows == 1l || (no_cpu_form && !batch_decode_override_armed()) || !g_use_rope_table) {
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
     }
@@ -387,7 +387,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (batch_decode_override_armed()) {
         stack_done = batch_decode_override_invoke(t, ws, sessions, nrows)
     }
-    if (!stack_done && (t.metal_blob || !t.blocks.attn_is_std)) {   //! the device driver declined a blob-only or non-standard-graph step: the single-row forward serves what the batched stacks have no form for
+    if (!stack_done && (t.metal_blob || no_cpu_form)) {
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
     }
@@ -403,7 +403,11 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         g_batch_steps_cpu_stack++
         blob_only_panic(t, "batch-decode stack")
         for (l in range64(c.n_layers)) {
-            attention_batch_decode(t, ws, sessions, l, nrows)
+            if (t.blocks.attn_batch != null) {
+                invoke(t.blocks.attn_batch, t, ws, sessions, l, nrows)
+            } else {
+                attention_batch_decode(t, ws, sessions, l, nrows)
+            }
             t.blocks.ffn_prefill(t, ws.scr, l, nrows)
         }
     }

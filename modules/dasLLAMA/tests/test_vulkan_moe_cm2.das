@@ -9,9 +9,9 @@ require dasllama/dasllama_math
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require daslib/f16_cvt
 require math
-require _vk_kq_fixtures
-require dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard
-require dasllama/dasllama_env   // the split knob the streamed cells name in their tags
+require ?vulkan _vk_kq_fixtures
+require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
+require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
 
 // The cm2 expert chain (dasllama_vulkan_prefill's f16-fed batch arm) against a CPU reference
 // that rounds exactly where the device does: the gathered activation rows to f16, the hidden
