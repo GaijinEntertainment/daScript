@@ -1153,34 +1153,16 @@ class ClsEpilogue {
 
 struct ArgmaxArgs {
     vocab : uint    // a logits row's width
+    nchunk : uint   // the chunks a row's first pass splits into (`RD_PICK_CHUNKS`): a workgroup each
 }
 
-//! the classifier tail's pick: a workgroup a row over its `vocab` logits, the row's argmax id into `pick` - the FIRST
-//! maximum on ties (the lowest id), as the host's `parallel_argmax` reads, so a device pick and a host pick agree
-[vk_dispatch(name = "cls_argmax", grid = "rows", params = "rows : int64")]
-class ClsArgmax {
-    @ssbo @binding = 0 y : array<float>      // the logits rows
-    @ssbo @binding = 1 pick : array<uint>    // the rows' picks
-    @push_constant pa : ArgmaxArgs
+//! the pick's fold, shared by the two passes: a workgroup's first maximum over its threads' candidates - the subgroups'
+//! maxes, then the lowest id among the lanes holding the widest (every thread returns the same answer)
+class ClsArgmaxBase {
     @workgroup wm : float[8]   // a subgroup's max
     @workgroup wi : uint[8]    // ... and the lowest id holding it
 
-    [spirv_kernel(local_size_x = 256, name = "cls_argmax_spv")]
-    def run {
-        let row = gl_WorkGroupID.x
-        let base = row * pa.vocab
-        let tid = gl_LocalInvocationID.x
-        var m = -3.4e38
-        var mi = 0xFFFFFFFFu
-        var i = tid
-        while (i < pa.vocab) {
-            let v = y[base + i]
-            if (v > m) {
-                m = v
-                mi = i
-            }
-            i += 256u
-        }
+    def fold(m : float; mi : uint) : uint {
         let sm = subgroupMax(m)
         let si = subgroupMin(m == sm ? mi : 0xFFFFFFFFu)
         if (gl_SubgroupInvocationID == 0u) {
@@ -1188,17 +1170,84 @@ class ClsArgmax {
             wi[gl_SubgroupID] = si
         }
         barrier()
-        if (tid == 0u) {
-            var bm = wm[0]
-            var bi = wi[0]
-            var s = 1u
-            while (s < gl_NumSubgroups) {
-                if (wm[s] > bm || (wm[s] == bm && wi[s] < bi)) {
-                    bm = wm[s]
-                    bi = wi[s]
-                }
-                s++
+        var bm = wm[0]
+        var bi = wi[0]
+        var sg = 1u
+        while (sg < gl_NumSubgroups) {
+            if (wm[sg] > bm || (wm[sg] == bm && wi[sg] < bi)) {
+                bm = wm[sg]
+                bi = wi[sg]
             }
+            sg++
+        }
+        return bi
+    }
+}
+
+//! the classifier tail's pick, the first pass: a workgroup a (row, chunk) over its slice of the row's logits, the slice's
+//! first maximum and its id into the partial planes (`part[row * nchunk + chunk]`)
+[vk_dispatch(name = "cls_argmax_part", grid = "wgs", params = "wgs : int64")]
+class ClsArgmaxPart : ClsArgmaxBase {
+    @ssbo @binding = 0 y : array<float>        // the logits rows
+    @ssbo @binding = 1 partm : array<float>    // the chunks' maxes
+    @ssbo @binding = 2 parti : array<uint>     // ... and ids
+    @push_constant pa : ArgmaxArgs
+
+    [spirv_kernel(local_size_x = 256, name = "cls_argmax_part_spv")]
+    def run {
+        let wg = gl_WorkGroupID.x
+        let row = wg / pa.nchunk
+        let len = (pa.vocab + pa.nchunk - 1u) / pa.nchunk
+        let c0 = (wg % pa.nchunk) * len
+        let c1 = min(pa.vocab, c0 + len)
+        let base = row * pa.vocab
+        let tid = gl_LocalInvocationID.x
+        var m = -3.4e38
+        var mi = 0xFFFFFFFFu
+        var i = c0 + tid
+        while (i < c1) {
+            let v = y[base + i]
+            if (v > m) {
+                m = v
+                mi = i
+            }
+            i += 256u
+        }
+        let bi = fold(m, mi)
+        if (tid == 0u) {
+            partm[wg] = bi == 0xFFFFFFFFu ? -3.4e38 : y[base + bi]
+            parti[wg] = bi
+        }
+    }
+}
+
+//! ... the second pass: a workgroup a row over its `nchunk` partials, the row's first maximum's id (the lowest id on a
+//! tie, as the host's `parallel_argmax` reads, so a device pick and a host pick agree) into `pick`
+[vk_dispatch(name = "cls_argmax_fin", grid = "rows", params = "rows : int64")]
+class ClsArgmaxFin : ClsArgmaxBase {
+    @ssbo @binding = 0 partm : array<float>
+    @ssbo @binding = 1 parti : array<uint>
+    @ssbo @binding = 2 pick : array<uint>      // the rows' picks
+    @push_constant pa : ArgmaxArgs
+
+    [spirv_kernel(local_size_x = 256, name = "cls_argmax_fin_spv")]
+    def run {
+        let row = gl_WorkGroupID.x
+        let tid = gl_LocalInvocationID.x
+        var m = -3.4e38
+        var mi = 0xFFFFFFFFu
+        var c = tid
+        while (c < pa.nchunk) {
+            let pm = partm[row * pa.nchunk + c]
+            let pi = parti[row * pa.nchunk + c]
+            if (pm > m || (pm == m && pi < mi)) {
+                m = pm
+                mi = pi
+            }
+            c += 256u
+        }
+        let bi = fold(m, mi)
+        if (tid == 0u) {
             pick[row] = bi
         }
     }
@@ -9889,7 +9938,7 @@ class Q8Gemv {
     @ssbo @binding = 5 y : array<float>
     @push_constant pa : GemvArgs
 
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_cls_spv")]
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
@@ -10621,7 +10670,7 @@ class Q51Gemv : Q51GemvBase {
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
-            let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+            let r = rg % pa.nreg
             let row = rg / pa.nreg
             let nb = pa.n / 32u
             let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
@@ -10704,7 +10753,7 @@ class Mx4Gemv : Mx4GemvBase {
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
-            let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+            let r = rg % pa.nreg
             let row = rg / pa.nreg
             let nb = pa.n / 32u
             let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
@@ -10916,7 +10965,7 @@ class KqGemvBase {
         let row_lane = lane % lanes_per_row
         let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
         let live = rg < pa.nreg * pa.d
-        let r = rg % pa.nreg   //! the regions interleaved a row at a time (`Q8Gemv`)
+        let r = rg % pa.nreg
         let row = rg / pa.nreg
         var acc = 0.0
         if (live) {

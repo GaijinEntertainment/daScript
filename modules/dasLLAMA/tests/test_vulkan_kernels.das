@@ -1112,21 +1112,27 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
     var ids : array<uint>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let bytes = vocab * 4l * rows
+        let nchunk = 64l
+        let pbytes = rows * nchunk * 4l
         let yd = make_device_buf(bytes)
+        let pmd = make_device_buf(pbytes)
+        let pid = make_device_buf(pbytes)
         let pd = make_device_buf(rows * 4l)
         var host = make_host_buf(rows * 4l, true, [cached = true])
         ids |> resize(rows)
         unsafe {
             upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
             nan_sentinel_upload(pd, rows * 4l)
-            var s = set_cls_argmax(fixed_array(yd, pd), fixed_array(bytes, rows * 4l), fixed_array(1u, 2u))
+            var sp = set_cls_argmax_part(fixed_array(yd, pmd, pid), fixed_array(bytes, pbytes, pbytes), fixed_array(1u, 2u, 2u))
+            var sf = set_cls_argmax_fin(fixed_array(pmd, pid, pd), fixed_array(pbytes, pbytes, rows * 4l), fixed_array(2u, 2u, 4u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc = ArgmaxArgs(vocab = uint(vocab))
-            enc_cls_argmax(raw, h, s, pc, rows)
-            vhz_dep(raw, h, 2u, 0u, true)
+            var pc = ArgmaxArgs(vocab = uint(vocab), nchunk = uint(nchunk))
+            enc_cls_argmax_part(raw, h, sp, pc, rows * nchunk)
+            enc_cls_argmax_fin(raw, h, sf, pc, rows)
+            vhz_dep(raw, h, 4u, 0u, true)
             cmd_copy_whole(raw, pd, host.buf, rows * 4l)
             vk_check(vkEndCommandBuffer(raw), null)
             submit_wait(raw)
@@ -1154,9 +1160,9 @@ def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> 
 
 [test]
 def test_vkd_cls_argmax(t0 : T?) {
-    t0 |> run("cls_argmax: every row's pick is the first maximum's id, at a 262144 and a 1000 vocab, ties included") <| @(t : T?) {
+    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_cls_argmax()) {
+            if (!ensure_cls_argmax_part() || !ensure_cls_argmax_fin()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -1168,7 +1174,7 @@ def test_vkd_cls_argmax(t0 : T?) {
                     y[i] = hash_unit(uint(i) * 7u + 3u) * 20.0
                 }
                 //! row 1's maximum sits twice: the lower id must win, as the host's first-maximum walk reads
-                let hi = 25.0
+                let hi = 50.0   //! past the plane's range (hash_unit spans [-2, 2), scaled by 20)
                 y[vocab + 900l] = hi
                 y[vocab + 37l] = hi
                 y[2l * vocab + vocab - 1l] = hi   //! row 2's at the last id
@@ -7011,10 +7017,9 @@ def private nform_cols_compare(t : T?; tag : string; ncols, ncol_max, head : int
     t |> success(stale == 0, "{tag}: the words under the base and the slots past the last live column keep the sentinel ({stale} written)")
 }
 
-//! one N-form-vs-one-form cell: `one_col(c, raw, h, outs)` records the one form for column `c` into `outs`, run over every
-//! column of the extent `ncol_max`; `n_form(ncols, raw, h, outs)` records the N form at each count of `counts`; the output
-//! planes are made here - the N form's one slot past the extent - NaN-filled before every run and copied back after it under
-//! the hazard mask `bits`; the compares at each count are `nform_cols_compare`'s; the planes come back for the caller's oracle
+//! one N-form-vs-one-form cell: `one_col(c, raw, h, outs)` records the one form for column `c` of the extent `ncol_max`,
+//! `n_form(ncols, raw, h, outs)` the N form at each count of `counts`; the output planes are made here - one slot past the
+//! extent - NaN-filled before every run, copied back under the hazard mask `bits`, compared by `nform_cols_compare` and returned
 def private nform_cols_cell(t : T?; tag : string; counts : array<int>; ncol_max, head : int; planes : array<NformPlane>; bits : uint; one_col; n_form) : NformPlanes {
     var res : NformPlanes
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -11522,11 +11527,9 @@ def private router_cols_oracle(t : T?; arm : string; got, xh, nh, wdev : array<f
     t |> success(obad == 0, "{arm}: {obad} of {ne * ncols} logits off the CPU oracle (widest {oworst} at row {oworst_c}, expert {oworst_e})")
 }
 
-//! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through
-//! `nform_cols_cell`: one kernel body, the same order; the `obase` words under the base and the slots past the last column
-//! keep the sentinel) and against a CPU oracle of the same dot (the f16 stamp's weights rounded as the device reads them;
-//! under `norm_on` the rms of each row under a norm row, as the gemma-4 MoE router reads its input), the widest miss logged
-//! with its row and expert
+//! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through `nform_cols_cell`:
+//! one kernel body, the same order) and against a CPU oracle of the same dot - the f16 stamp's weights rounded as the device
+//! reads them, and under `norm_on` each row's rms under a norm row, as the gemma-4 MoE router reads its input
 def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let stamp = f16 ? "f16" : "f32"

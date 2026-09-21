@@ -221,8 +221,11 @@ inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row st
 us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451.
 
 **A row whose sampler is a bare argmax lands its pick alone.** After the epilogue the command runs
-`ClsArgmax` over every row (a workgroup a row, the first maximum's id - the lowest on a tie, as the
-host's `parallel_argmax` reads - into `RDec.pick_dev`); the transfer command copies the picks
+the pick's two passes over every row - `ClsArgmaxPart`, a workgroup a (row, chunk) over a slice of
+the row (`RD_PICK_CHUNKS`, 64: a 4096-wide slice of a 262144 vocab, so a row's pass is a wave of
+small workgroups and not one workgroup's walk over a megabyte), then `ClsArgmaxFin`, a workgroup
+a row over the chunks' partials - the first maximum's id, the lowest on a tie, as the host's
+`parallel_argmax` reads, into `RDec.pick_dev`; the transfer command copies the picks
 behind the logits, and a step whose every row asks for its pick takes the picks-only twin
 (`RDec.xlog_pick_cmd`), so the logits plane never leaves the device and the host copies nothing (a
 device without the transfer family copies both inside the command and skips the host copy alone).
