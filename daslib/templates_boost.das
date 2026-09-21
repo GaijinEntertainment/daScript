@@ -647,6 +647,20 @@ def public remove_deref(varname : string; var expr : Expression?) {
     }
 }
 
+def public bind_block_argument(blk : ExprBlock?; argname : string; var bound : Expression?; at : LineInfo) : Expression? {
+    //! Clones the body of a block literal with its argument `argname` replaced by the expression
+    //! `bound`, and returns it as a plain (argument-less) block.
+    var body = clone_expression(blk)
+    var bblk = body as ExprBlock
+    while (!empty(bblk.arguments)) {
+        bblk.arguments |> erase(0)
+    }
+    remove_deref(argname, body)
+    var inscope rules : Template
+    rules |> replaceVariable(argname, bound)
+    return rules |> apply_template(at, body, false)
+}
+
 def public add_array_ptr_ref(var a : array<smart_ptr<auto(TT)>>) : array<smart_ptr<TT>> {
     //! Implementation details for the reification. This adds any array to the rules.
     var q := a

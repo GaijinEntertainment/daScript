@@ -255,3 +255,7 @@ form `arch |> serialize` (which also covers `serialize_raw`), the plain call
 The set the check licenses is the bulk payload forms themselves, recognized by their shape rather
 than their names: a serializer whose header declares an `array` parameter carries a payload, not
 a struct field list, so it has no count to pin. Everything else taking an `Archive` is checked.
+
+### 2.1o The interleave identity lists every lattice format {#dlim-kq-mr-identity}
+
+`DlimCpuConfig`'s interleave tag prints one slot per lattice format in `KqFmt` order (`4/4/4/...`), never only the formats a given model uses, so two configurations with different interleaves can never key to the same identity - and a format added without its interleave shows as its own slot rather than shifting the others.

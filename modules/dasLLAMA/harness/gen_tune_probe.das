@@ -40,7 +40,7 @@ require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_convert
-require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
+require dasllama/dasllama_gguf   // kq_transcode_superblock — the kq fixture pack rail
 require daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this probe races exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_tune
@@ -382,7 +382,7 @@ def build_mx4_fixture(n, d : int64) : Mx4Fixture {
     var lut : int8[16]
     mxfp4_fill_lut(lut)
     unsafe {
-        repack_mx4_grp(addr(n4[0]), addr(e4[0]), n, d, 4l)
+        repack_kq_grp(KqFmt.mx4, addr(n4[0]), addr(e4[0]), n, d, 4l)
         let lutp = addr(lut[0])
         let np = addr(n4[0])
         let ep = addr(e4[0])
@@ -625,33 +625,7 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
 }
 
 def repack_kq_grp_fmt(fmt : int64; var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
-    if (fmt == 4l) {
-        repack_k4_grp(kq, ks, n, d, mr)
-    } elif (fmt == 5l) {
-        repack_k5_grp(kq, ks, n, d, mr)
-    } elif (fmt == 40l) {
-        repack_q40_grp(kq, ks, n, d, mr)
-    } elif (fmt == 44l) {
-        repack_iq4xs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 3l) {
-        repack_k3_grp(kq, ks, n, d, mr)
-    } elif (fmt == 33l) {
-        repack_iq3s_grp(kq, ks, n, d, mr)
-    } elif (fmt == 34l) {
-        repack_iq3xxs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 45l) {
-        repack_q40_grp(kq, ks, n, d, mr)
-    } elif (fmt == 2l) {
-        repack_k2_grp(kq, ks, n, d, mr)
-    } elif (fmt == 23l) {
-        repack_iq2s_grp(kq, ks, n, d, mr)
-    } elif (fmt == 24l) {
-        repack_iq2xs_grp(kq, ks, n, d, mr)
-    } elif (fmt == 25l) {
-        repack_iq2xxs_grp(kq, ks, n, d, mr)
-    } else {
-        repack_k6_grp(kq, ks, n, d, mr)
-    }
+    repack_kq_grp(kq_fmt_of_id(int(fmt), "repack_kq_grp_fmt"), kq, ks, n, d, mr)
 }
 
 def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
@@ -662,38 +636,13 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
     fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
     blkb |> resize(fmt == 2l ? 84l : (fmt == 23l ? 82l : (fmt == 24l ? 74l : (fmt == 25l ? 66l : (fmt == 4l || fmt == 40l || fmt == 45l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l || fmt == 33l ? 110l : (fmt == 34l ? 98l : 210l)))))))))
+    let kf = kq_fmt_of_id(int(fmt), "build_kq_fixture")
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
             pack_kq_disk_block(fmt, blkb, base)
             let sb = r * fx.nsb + s
-            if (fmt == 4l) {
-                transcode_q4k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 5l) {
-                transcode_q5k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 40l) {
-                transcode_q40_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 44l) {
-                transcode_iq4xs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 3l) {
-                transcode_q3k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 33l) {
-                transcode_iq3s_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 34l) {
-                transcode_iq3xxs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 45l) {
-                transcode_iq4nl_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 2l) {
-                transcode_q2k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 23l) {
-                transcode_iq2s_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 24l) {
-                transcode_iq2xs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } elif (fmt == 25l) {
-                transcode_iq2xxs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            } else {
-                transcode_q6k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
-            }
+            kq_transcode_superblock(kf, blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
         }
     }
     delete blkb
@@ -1244,8 +1193,8 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         var hq := hfx.qq
         var hs := hfx.qs
         unsafe {
-            repack_q51_grp(addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
-            repack_q51_grp(addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
+            repack_kq_grp(KqFmt.q51, addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
+            repack_kq_grp(KqFmt.q51, addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
         }
         var maxdiff = 0.0
         run_q51_gemv(v._1, sfx, sq, ss, mr, y)
@@ -1661,7 +1610,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
             var nv := mfx.wn
             var ev := mfx.we
             unsafe {
-                repack_mx4_grp(addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
+                repack_kq_grp(KqFmt.mx4, addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
             }
             var ym : array<float>
             ym |> resize(mfx.d)

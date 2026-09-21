@@ -51,11 +51,7 @@ class UnrollMacro : AstFunctionAnnotation {
         var nblk = new ExprBlock(at = call.at)
         for (i in euc.value) {
             {
-                var iblk = clone_expression(efor.body)
-                remove_deref(van, iblk)
-                var rules : Template
-                rules |> replaceVariable(van) <| new ExprConstInt(at = call.at, value = i, isConstLiteral = true)
-                rules |> apply_template(call.at, iblk, false)
+                var iblk = bind_block_argument(efor.body as ExprBlock, van, new ExprConstInt(at = call.at, value = i, isConstLiteral = true), call.at)
                 nblk.list |> emplace(iblk)
             }
         }

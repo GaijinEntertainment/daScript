@@ -454,7 +454,7 @@
     declaration-site annotation landed on variables, fields and by-ref parameters (locals gained
     `@` metadata grammar for it); it changes nothing at runtime - PERF032 holds every
     `resize`/`resize_no_init` on an annotated array to a `reserve`/`ensure_capacity` earlier in
-    the same function, helpers like `reserve_resize`/`grow_resize`/`zeroed_resize` staying
+    the same function, helpers like `reserve_resize`/`grow_resize` staying
     transparent. Annotated: the deltanet state pair, `moe_gout`/`moe_eout`, every T-scaled
     `EncoderState` buffer, `VisionImage.rgb`, the k6 scale-split staging local, the ASR requant
     helper parameters, and `embq`/`embs`. The runtime exact-growth mode was judged not doable
@@ -1465,21 +1465,6 @@
     on the K-quant path (the f32 dequant `read_linear` hands `linear_take_kq`, released per tensor
     but sized by the largest). The instrument is the resident set sampled per half second with the
     `--limit` one and two forms, and the das leak profiler on the run.
-131. **The format recipe's plane fields and hand ladders.** `Model` holds a plane pair per kq
-    format (`k4q/k4s ... iq4xsq/iq4xss`) and every consumer selects the pair with an
-    `if (fmt == KqFmt.k4) ... elif` chain: 12 ladders in `dasllama_load.das`, 13 in
-    `dasllama_common.das`, 3 in `dasllama_layout.das`, 8 in `dasllama_math_gen.das`, 3 in
-    `dasllama_math_default.das`, 4 in `dasllama_math.das`, one each in `ple`, `gpu_resident`,
-    `blocks`, `config`, `image`; the planes grew one format at a time and each arm carries a
-    different literal stride. Unquirked: one `KqPlanes` (quant, scale, mr) indexed by `KqFmt` on
-    `Model`, `kq_plane_q/s` the only accessors, every ladder one table lookup, a new format the
-    enum member plus its strides. The image's per-format `kq_repack_mr<id>` field and its
-    hand-grown `IMAGE_META_FIELDS` count, the repack-interleave freeze ladder in
-    `dasllama_load.das` (a format missing from it keeps `mr` 4 while its planes sit at the
-    companion's, and every `kq_active_mr` consumer reads the wrong interleave with no diagnostic
-    - caught only end to end), and `moe_gpu_gather_stack_kq`'s two per-format ladders (the
-    grouped and the tail-row branch need a verbatim arm each for a format already in the device
-    form) all collapse into that table.
 132. **The format recipe's test ladders.** `tests/test_kquant.das` builds fixtures, transcodes,
     dequants, dots, repacks and calls the stubs through the same `fmt == 4/5/6/40` chains in five
     gates (28 arms for one format) and raises `_cyclomatic_complexity` / `_function_length` per
@@ -1491,13 +1476,6 @@
     nested ternaries (`kq_gemv_gate`, `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL
     sources, entries, fastmath and tgmem names per format, an `else` that means k6): one
     per-format record per kernel family, indexed by format.
-133. **The format recipe's three int id spaces and the hand-formatted bake identity.**
-    `int(KqFmt)` (device stack tags, image plane ids, `vk_kq_schema_id`'s input), the kernel/IR
-    id (`kq_schema_id`), and the stream/repack region code (`kq_stream_code`: 0/2 for q8/q51,
-    else the kernel id, so k2 streams under 20 and translates back at every dispatch boundary);
-    `dlim_identity` formats `DlimCpuConfig.kq_mr<id>` into the identity string by hand, so a
-    field added without the string keys two interleaves identically. Unquirked: one id, or one
-    table that derives the other two and formats the identity.
 134. **The tune sidecar's identity lacks the generator hash.** A sidecar minted while a family's
     generator stubs declined records `"<fmt>q8_tile_gen" : "reference"`; staleness keys on the
     binary's mtime and the emitter is `.das`, so landing the emitter arm invalidates nothing and
@@ -1746,3 +1724,51 @@
     batched steps with no tick between, seconds of unanswered HTTP on a large model. The work:
     the phase holding the scheduler across ticks - admit on one tick, then one `scheduler_step` a
     tick until the timed steps are done - with the rate read over the timed ticks alone.
+156. **The decode and prefill halves of a block are two bodies over the GEMV and the GEMM
+    families.** `ple_block_decode` / `ple_block_prefill` (`dasllama_ple.das`) and
+    `attention_std_decode`'s inline QKV+RoPE prefix against `attn_qkv_rope_prefix`
+    (`dasllama_blocks.das`, `dasllama_common.das`, the qwen35 gated twins beside them) are
+    statement-for-statement the same walk, but the decode half calls `mm` / `mm_qkv` (the GEMV
+    family, one fused dispatch) and the prefill half `mm_b` (the batch family) - so a single body
+    over npos with decode at npos = 1 changes the decode kernels, not just the source. The gemma4
+    router (`gemma4_router`) folded because its body is plain arithmetic. Done looks like: a
+    ruling on whether the GEMV family gets an npos = 1 entry the batch family forwards to, or the
+    two halves stay; then the fold, with the decode step's tok/s at parity on the M5 and the zen4.
+157. **The KV codec rungs are twins across q8_0 and tq4.** `dasllama_kv_codec.das`'s dot / axpy /
+    cvt / quantize templates differ only in the block geometry (34 B with the f16 scale at
+    `b16[bi*17]` against 18 B at `b16[bi*9]`) and the quant read (a byte against two nibbles);
+    each template's `[tune = 1]` loop and `[tuned]` stub is the per-format sidecar key. Done looks
+    like: one template per rung over a (block bytes, scale stride, nibble) triple stamped per
+    format through `[from_template]`, the `[tuned]` stubs one per stamp, byte-identical
+    `test_kv_codec` and the tuner's per-format winners unchanged.
+158. **The pretokenizer splitters are four ladders over one skeleton.** `pretok_split`,
+    `_gpt2`, `_gpt4o`, `_tekken` (`dasllama_pretok.das`) differ in five compile-time choices
+    (contraction rule, letter-run class, digit grouping, the punctuation tail set, the
+    whitespace tail's `\r\n` rule) over one walk; the 19-line whitespace tail and the 16-line
+    punctuation arm are copied verbatim three times. Done looks like: one body over a per-family
+    rule struct (or a stamp per family), `test_tokenizer`'s corpora byte-identical, and `--tok`
+    rows at two sizes per family at parity - the pretokenizer is the BPE encode's hot loop.
+159. **`range_flags` is `upper_bound` written by hand, and the stdlib form costs a closure per
+    probe.** `dasllama_unicode.das`'s binary search over the 1512-entry range table is
+    `daslib/algorithm`'s `upper_bound(...) - 1` with the key unpacked in the comparator; the
+    block-taking overload pays an invoke per compare, eleven per codepoint, on the pretokenizer's
+    per-codepoint path. Done looks like: a comparator-inlining stdlib form (a generic over a
+    key-extractor, or the block inlined by the JIT) measured at parity under `--tok`, then the
+    fold; until then the hand loop stays.
+160. **The knob accessor rail is ninety hand-written pairs.** Every runtime knob (`dasllama_math.das`
+    :165-544, `dasllama_common.das`'s thresholds, A/B bools and clamps, `dasllama_par.das`,
+    `dasllama_config.das`) is a global, a setter with its clamp and a getter written by hand,
+    and `apply_box_profile_runtime_at` walks the same facts a third time. Done looks like: one
+    knob declaration (name, default, clamp, env name, JSON key) generating the pair and the
+    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md` sec.2.9 uses; the unused
+    `set/get_embed_par_threshold` pair goes with it.
+161. **`kq_fmt_of`'s native-knob gates branch on the format by hand.** Which formats a box's knobs
+    admit natively is an if-ladder over the enum where every other lookup walks `kq_desc`. Done
+    looks like: a native-knob predicate column on the descriptor row and the one site reading it
+    (the device gather's grouped-row branch is `followup_vulkan.md`'s row 82).
+162. **The kq batch gates hold kernels to a kernel.** `tests/test_prefill_cpu_kernels.das`'s
+    `kq_batch_gate` and `tests/test_tts_blocks.das`'s kq rows hold `matmul_kq` / `matmul_kq_batch`
+    to the per-row `dot_kq` of `tests/_kq_dot.das`, and `dot_kq`'s own plain-code oracle sits in
+    `tests/test_kquant.das` - a different file, where `tests/REVIEW_KERNEL_CELLS.md` wants it in
+    the cell or its file. Done looks like: an fp64 dequant-and-dot reference beside each gate, at
+    the gate's shapes, so a kernel and its router can no longer be bit-equal and both wrong.

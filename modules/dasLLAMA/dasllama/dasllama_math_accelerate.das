@@ -12,7 +12,6 @@ require dasllama/dasllama_par
 require das_accelerate
 require daslib/f16_cvt
 require math
-require daslib/math_bits
 
 // The "+AMX" tier: Accelerate BLAS (AMX on M1-M3, SME on M4+) serving the FLOAT-plane batch
 // matmuls only. The AMX arc P0 ceilings put the quant crossover out of reach on M1 (dequant tax
@@ -75,9 +74,7 @@ var private @scratch g_hx_scratch : array<uint16>   // grow-only f16-activation 
 def private plane_fp(wp : uint16 const?; total : int64) : uint64 {
     var h = 0xcbf29ce484222325ul
     for (i in range(16)) {
-        unsafe {
-            h = (h ^ uint64(wp[int64(i) * total / 16l])) * 0x100000001b3ul
-        }
+        h = (h ^ uint64(unsafe(wp[int64(i) * total / 16l]))) * 0x100000001b3ul
     }
     return h ^ uint64(total)
 }
@@ -95,7 +92,7 @@ def private f16_plane_mint(key : uint64; wp : uint16 const?; total : int64; fpv 
         maybe_parallel_for(0, int(total), 32) $(cb, ce) {
             unsafe {
                 for (i in range64(int64(cb), int64(ce))) {
-                    hp[i] = uint16(f32_to_f16(clamp(int_bits_to_float(int(uint(wp[i]) << 16u)), -65504.0, 65504.0)))
+                    hp[i] = uint16(f32_to_f16(clamp(reinterpret<float>(uint(wp[i]) << 16u), -65504.0, 65504.0)))
                 }
             }
         }
@@ -115,24 +112,13 @@ def private f16_plane_ptr(wp : uint16 const?; total : int64) : uint16 const? {
     var hit : uint16 const?
     g_hw_planes |> get(key) $(pl) {
         if (pl.total == total && pl.fp == fpv) {
-            unsafe {
-                hit = addr(pl.data[0])
-            }
+            hit = unsafe(addr(pl.data[0]))
         }
     }
     if (hit != null) {
         return hit
     }
     return f16_plane_mint(key, wp, total, fpv)
-}
-
-// once per larger shape: delete + exact reserve skips the realloc's old-block copy (contents are
-// fully rewritten by every caller) and keeps an over-guard grow from tripping max_unreserved_size
-[cold_path]
-def private scratch_regrow(@scratch var a : array<auto(numT)>; need : int64) {
-    delete a
-    a |> reserve(need)
-    a |> resize(need)
 }
 
 // f16-lane strip count: 0 = the shared accel_strips default. The BNNS f16 kernel saturates the
@@ -197,9 +183,7 @@ def private f16_plane_from_f32(wp : float const?; total : int64) : uint16 const?
     var hit : uint16 const?
     g_f32hw_planes |> get(key) $(pl) {
         if (pl.total == total && pl.fp == fpv) {
-            unsafe {
-                hit = addr(pl.data[0])
-            }
+            hit = unsafe(addr(pl.data[0]))
         }
     }
     if (hit != null) {
@@ -212,9 +196,7 @@ def private f16_plane_from_f32(wp : float const?; total : int64) : uint16 const?
 [hot_path]
 def private accel_f16_serve(var yp : float?; hwp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
     let xcnt = ntok * n
-    if (long_length(g_hx_scratch) < xcnt) {
-        g_hx_scratch |> scratch_regrow(xcnt)
-    }
+    g_hx_scratch |> overwrite_resize(xcnt)
     unsafe {
         var hxp = addr(g_hx_scratch[0])
         maybe_parallel_for(0, int(ntok), int(min(ntok, 8l))) $(tb, te) {
@@ -284,15 +266,13 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     }
     // widen bf16 to grow-only f32 scratch once per call, then strip-sgemm
     let total = d * n
-    if (long_length(g_wf32_scratch) < total) {
-        g_wf32_scratch |> scratch_regrow(total)
-    }
+    g_wf32_scratch |> overwrite_resize(total)
     unsafe {
         var sp = addr(g_wf32_scratch[0])
         maybe_parallel_for(0, int(d), int(min(d, 32l))) $(rb, re) {
             unsafe {
                 for (i in range64(int64(rb) * n, int64(re) * n)) {
-                    sp[i] = int_bits_to_float(int(uint(wp[i]) << 16u))
+                    sp[i] = reinterpret<float>(uint(wp[i]) << 16u)
                 }
             }
         }

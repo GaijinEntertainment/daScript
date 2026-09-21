@@ -81,7 +81,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   `rows_only`, `vec_only`), the unread one dropped - or the file's own K-quant planes
   (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
-  binds them as borrowed views over a served plane (`release_weight` is the one teardown). One
+  binds them as borrowed views over a served plane (`dasllama_common.das`'s `release_plane` is the
+  one teardown). One
   home: the block home holds the operators, and it names no family type.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the

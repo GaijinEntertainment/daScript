@@ -2264,3 +2264,39 @@ Qwen3.8-27B-Q4_K_M carry committed board rows on both boxes (`performance/record
   twin, the double buffer off, the floor at 16, a re-mint and a re-baked image each left Q4_0
   within 0.2% of the never-tall arm. The M5's tall win stands (its Llama-1B Q8 prefill reads
   1.00x either way under the hand crown).
+
+### From the CPU dedup arc (2026-09-20)
+
+Every row here is one process, both arms interleaved, best of six after a warm-up; the M5 Max
+and the zen4 (Ryzen 7 PRO 8700GE) both, `-jit`, `DAS_TUNE_MANIFEST` unset on the zen4 and the
+box's rig sidecar on the M5, no `DAS_TUNE_POLICY` override. The two kernel races ran an
+out-of-tree race script over the engine's own calls (`gemm_f32` / `gemm_f32_jo` fed the same
+operands; `eval_` over the loaded model for the prefill row), so their readings are ratios of
+the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
+
+- **`gemm_f32` (row blocks outer) against `gemm_f32_jo` (column blocks outer), C += A*B at
+  the deltanet chunk and ASR attention shapes, jo / ij:** M5 64x128x64 0.99, 64x64x128 1.00,
+  128x128x128 0.96, 128x64x1000 0.96, 128x128x3000 0.94, 256x64x4000 0.99, 1024x64x1024
+  **1.17**; zen4 the same seven 1.01, 1.01, 1.00, 1.01, 0.97, **0.92**, 1.00. Both forms stay:
+  jo wins where B is wide and streamed once (the ASR scores, its callers today), ij wins the
+  M5's tall square; neither is a default for the other's shapes.
+- **Classic against blocked prefill attention (the two bit-identical CPU forms; flash is the
+  default), the whole CPU prefill of gemma-4-E2B-it-Q8_0 at 2048 tokens, `DASLLAMA_GPU=0`,
+  blocked / classic:** M5 **1.052**, zen4 0.996. The blocked
+  form's K/V reuse across an 8-query block buys nothing the score-row reuse of the classic form
+  does not, so the blocked arm goes and the tests' bit-exact mode is classic.
+- **The BPE encode walk (`lcpp_bench --tok`, every corpus, 1 KB to 1 MB), MB/s master -> arc,
+  best of two interleaved rounds:** the walk appends each codepoint's bytes into one reused
+  buffer instead of building a string per codepoint. M5, Qwen3-0.6B: prose 12.1 -> 16.6, code
+  11.5 -> 15.6, cjk 13.5 -> 16.9 (1.15 to 1.38 at every size); zen4, Qwen3-30B-A3B (the same
+  qwen2 pretokenizer): prose 7.9 -> 12.6, code 7.8 -> 12.0, cjk 10.9 -> 13.9, digits 5.5 -> 7.3,
+  longword 7.0 -> 9.7 (1.13 to 1.58). cv under 2% on every row but the 4 KB ones (8%).
+- **One merge heap for both tokenizer backends - DECLINED, measured:** SPM's own heap
+  (`spm_merge_heap`) and BPE's are the same forty lines, and the fold read gemma-3-1b SPM
+  encode on the M5 24.0 -> 22.8 at 1 KB (prose, cv under 1%), 16.1 -> 13.7 at 4 KB code, parity
+  from 64 KB up; on the zen4 gemma-4-E2B read 0.81 to 0.98 of master on every corpus and size
+  (prose 7.6 -> 6.6 at 4 KB, cjk 28.8 -> 23.3 at 1 MB). A float priority in place of a double
+  took back one to two points; stamping the merge as a generic per backend with the push/pop
+  helpers left in `dasllama_bpe.das` took the M5's 1 KB row to 0.98 and left 4 to 16 KB at 0.93
+  to 0.96. The SPM heap stays its own body, in the partition of the encode that runs it
+  (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2a); the BPE side keeps the unshared form.

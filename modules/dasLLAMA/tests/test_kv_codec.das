@@ -12,6 +12,7 @@ require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
+require strings   // the stamp cell strips a parameter's own const from a typename
 require dasllama/dasllama_env
 
 // KV-cache codec layout invariants — synthetic Configs only (no model files, never skips):
@@ -736,7 +737,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.blocked)   // blocked/classic are the bit-exact modes (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)
             var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
             let n = long_length(prompt)
             var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -877,7 +878,7 @@ def test_kv_q8_decode(t : T?) {
 
 [test]
 def test_kv_q8_prefill_vs_decode(t : T?) {
-    t |> run("q8_0 KV: blocked prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
+    t |> run("q8_0 KV: classic prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
         if (gguf_missing(t)) {
             return
         }
@@ -886,7 +887,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.blocked)   // the bit-exact prefill mode (flash reorders)
+            set_prefill_attn_mode(AttnPrefillMode.classic)
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 64l)
             let c = tr.config
@@ -900,8 +901,6 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
                 forward(tr, sd, tok, pos)
                 pos++
             }
-            // blocked prefill quantizes its queries and runs the SAME int8×int8 score dot as
-            // decode — the prefill==decode contract stays bit-exact under the block codec
             var lg_bad = 0
             for (i in range64(c.vocab_size)) {
                 if (sp.logits[i] != sd.logits[i]) {
@@ -1010,5 +1009,47 @@ def test_kv_capacity_tripwire(t : T?) {
             delete toks
         }
         delete tr
+    }
+}
+
+// the bound pointer's static type, or a mismatch marker when the stamp bound another address
+def private codec_side_type(dt : KVDtype; p : uint8 const?) : string {
+    var r = ""
+    kv_codec_side(dt, p) <| $(tp) {
+        r = unsafe(reinterpret<uint8 const?>(tp)) == p ? typeinfo typename(tp) : "address mismatch"
+    }
+    return r
+}
+
+def private codec_pair_types(kdt, vdt : KVDtype; kp, vp : uint8 const?) : string {
+    var r = ""
+    kv_codec_side(kdt, kp) <| $(kcp) {
+        kv_codec_side(vdt, vp) <| $(vcp) {
+            let same = unsafe(reinterpret<uint8 const?>(kcp)) == kp && unsafe(reinterpret<uint8 const?>(vcp)) == vp
+            r = same ? "{typeinfo typename(kcp)}|{typeinfo typename(vcp)}" : "address mismatch"
+        }
+    }
+    return r
+}
+
+[test]
+def test_kv_codec_side_stamp(t : T?) {
+    t |> run("kv_codec_side binds each codec's cache-pointer type; nested once per side it is the K x V matrix") @(t : T?) {
+        var bytes : array<uint8>
+        bytes |> resize(64)
+        let p = unsafe(addr<uint8 const?>(bytes[0]))
+        let names <- { KVDtype.q8_0 => typeinfo typename(type<uint8 const?>),
+                       KVDtype.tq4 => typeinfo typename(type<TQ4B const?>),
+                       KVDtype.f16 => typeinfo typename(type<uint16 const?>),
+                       KVDtype.f32 => typeinfo typename(type<float const?>) }
+        for (dt in [KVDtype.f32, KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+            let kname = names?[dt] ?? ""
+            t |> equal(kname, codec_side_type(dt, p) |> replace(" const? const", " const?"), "{dt}")
+            for (vdt in [KVDtype.f32, KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+                let pair = codec_pair_types(dt, vdt, p, p) |> replace(" const? const", " const?")
+                t |> equal("{kname}|{names?[vdt] ?? ""}", pair, "{dt} x {vdt}")
+            }
+        }
+        delete bytes
     }
 }

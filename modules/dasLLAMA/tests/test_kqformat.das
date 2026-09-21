@@ -11,6 +11,8 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
+require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
+require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
@@ -209,6 +211,44 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
     }
+    t |> run("every descriptor row's disk bytes are the ggml block bytes of its type, and its ids round-trip") @(t : T?) {
+        for (f in type<KqFmt>) {
+            let d = kq_desc(f)
+            t |> equal(d.fmt, f, "row {f} names itself")
+            t |> equal(d.disk_bytes, ggml_type_bytes(d.ggml_type, d.elems), "{f}: disk bytes per stride unit")
+            t |> equal(d.elems, kq_sb(f) ? 256l : 32l, "{f}: stride unit")
+            if (kq_sb(f)) {
+                var back = KqFmt.q8
+                t |> success(kq_fmt_of_id(d.schema_id, back) && back == f, "{f}: the schema id names the row back")
+                t |> success(d.qsb > 0l && d.ssb > 0l, "{f}: a lattice format has a plane pair")
+            } else {
+                t |> equal(d.schema_id, -1, "{f}: no kernel id off the lattice")
+            }
+        }
+        var none = KqFmt.q8
+        t |> success(!kq_fmt_of_id(99, none), "an id no format carries")
+        none = KqFmt.k4
+        t |> success(!kq_fmt_of_id(-1, none), "the off-lattice rows' -1 names no format")
+        t |> equal(none, KqFmt.k4, "a refused id leaves the out slot alone")
+        t |> success(!kq_sb(-1) && !kq_sb(KQ_FMT_COUNT) && !kq_sb(99), "an int off the enum is not a lattice format")
+        var tripped = false
+        try {
+            let f = kq_fmt_of_id(99, "test")
+            t |> success(false, "unreachable: {f}")
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "the panicking overload refuses an id no row carries")
+    }
+    t |> run("kq_bytes_per_weight is the stride table's arithmetic on every superblock format") @(t : T?) {
+        for (f in type<KqFmt>) {
+            if (kq_sb(f)) {
+                let want = float(kq_qsb(f) + kq_ssb(f)) / float(kq_elems(f))
+                t |> equal(kq_bytes_per_weight(f), want, "bytes per weight of {f}")
+            }
+        }
+        t |> equal(kq_bytes_per_weight(KqFmt.q8), 34.0 / 32.0, "q8: 32 quants + an f16 scale per block")
+    }
     t |> run("stream/repack region codes are pinned") @(t : T?) {
         t |> equal(kq_stream_code(KqFmt.q8), 0)
         t |> equal(kq_stream_code(KqFmt.q51), 2)
@@ -269,5 +309,30 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
+    }
+}
+
+def private stamp_family(_f : KqTag_k4) : string => "k4"
+def private stamp_family(_f : KqTag_q51) : string => "q51"
+def private stamp_family(_f : auto(TT)) : string => "other:{typeinfo typename(type<TT>)}"
+
+def private stamped_family(fmt : KqFmt) : string {
+    var r = ""
+    kq_fmt_stamp(fmt) <| $(F) {
+        r = stamp_family(F)
+    }
+    return r
+}
+
+[test]
+def test_kq_fmt_stamp(t : T?) {
+    t |> run("kq_fmt_stamp binds every member's tag, so a per-format overload family resolves at compile time") <| @(t : T?) {
+        t |> equal("k4", stamped_family(KqFmt.k4))
+        t |> equal("q51", stamped_family(KqFmt.q51))
+        for (f in type<KqFmt>) {
+            if (f != KqFmt.k4 && f != KqFmt.q51) {
+                t |> equal("other:dasllama_kqformat::KqTag_{f} const", stamped_family(f), "{f}")
+            }
+        }
     }
 }

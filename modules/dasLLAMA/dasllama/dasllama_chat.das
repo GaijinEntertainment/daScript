@@ -1017,16 +1017,12 @@ def add_assistant_(m : Model; var c : ChatSession; text : string) {
     c.history |> push(Message(role = Role.assistant, content = text))
 }
 
-//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format).
-//! Replies that don't open with `<think>` pass through unchanged; an unterminated block strips
-//! to empty, since the reasoning never reached an answer.
+//! `reply` with a leading `<think>…</think>` reasoning block removed (the Qwen3 thinking format):
+//! the symmetric matcher drained over the whole reply - a reply that does not open with `<think>`
+//! passes through unchanged, an unterminated block strips to empty (the reasoning never reached an answer).
 def strip_think(reply : string) : string {
-    let open = find(reply, "<think>")
-    if (open < 0 || !is_null_or_whitespace(slice(reply, 0, open))) {
-        return reply
-    }
-    let close = find(reply, "</think>")
-    return close < 0 ? "" : strip(slice(reply, close + length("</think>"), length(reply)))
+    var ts = ThinkStream(mode = ThinkMode.symmetric, open_mark = "<think>", close_mark = "</think>", state = TS_START)
+    return think_drain_(ts, reply).content
 }
 
 // ===== Reply-side reasoning matcher (per-arch, streaming-capable) =====

@@ -61,8 +61,10 @@ class stamped from a template declared elsewhere is not a kernel body: it compil
 pipeline where it is stamped.
 
 **A CPU kernel body under `dasllama/` - the arithmetic loop a `[tune]` family picks one variant
-of - lands in that tier's `dasllama/dasllama_math_<tier>.das`, never in
-`dasllama/dasllama_math.das`.**
+of, or a function a `register_kernel_backend` call names - lands in a tier file,
+`dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`; a body that a
+`register_kernel_backend` call in another tier file names, or that two tier files' calls name,
+lands in `dasllama/dasllama_math_default.das`.**
 
 **A quirk of one family - a special case only one model architecture's file, or one backend
 driver's, needs - lands in that file, never in another family's file.**

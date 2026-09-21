@@ -95,9 +95,7 @@ def test_ple_fp32_rail(t : T?) {
         var eq = true
         var worst = 0.0lf
         for (r in [0l, 1l, c.vocab_size - 1l]) {
-            unsafe {
-                dequant_q8_row(tr, tr.ple_emb_off + r * all, all, addr(have[0]))
-            }
+            dequant_q8_row(tr, tr.ple_emb_off + r * all, all, unsafe(addr(have[0])))
             var want <- file_row(path, r, all)
             for (i in range64(all)) {
                 if (have[i] != want[i]) {
@@ -149,7 +147,7 @@ def test_ple_fp32_kq_table(t : T?) {
         have |> resize(all)
         for (blk in range64(all / 256l)) {
             let sb = (tr.ple_emb_off + blk * 256l) / 256l
-            dequant_k5_plane_superblock(tr.k5q, sb * K5_QSB, tr.k5s, sb * K5_SSB, have, blk * 256l)
+            dequant_k5_plane_superblock(tr.kq[int(KqFmt.k5)].q, sb * K5_QSB, tr.kq[int(KqFmt.k5)].s, sb * K5_SSB, have, blk * 256l)
         }
         var want <- file_row(path, 0l, all)
         var num = 0.0lf

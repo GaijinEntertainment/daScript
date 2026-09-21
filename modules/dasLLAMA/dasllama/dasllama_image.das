@@ -11,6 +11,7 @@ require dasllama/dasllama_ple
 require daslib/fio
 require dasllama/dasllama_env
 require daslib/apply
+require daslib/enum_trait   // the plane table's sections walk the KqFmt enum
 require strings
 require daslib/strings_boost
 require dasllama/dasllama_tokenizer
@@ -38,7 +39,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 38   // the dev-W plane leaves the expert stacks out: the routed block has no dev-W route
+let IMAGE_VERSION = 39   // the lattice planes ride one per-format table on Model, their interleaves serialized in enum order
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -65,9 +66,9 @@ def image_identity(tag : string = ""; quant : string = "q8") : string {
 //! is one file per box rather than one per tune state).
 def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
     if (tag != "" && has_value(g_config_free_tags, tag)) {
-        return DlimConfiguration(quant = quant)
+        return <- DlimConfiguration(quant = quant)
     }
-    return dlim_config_current(quant)
+    return <- dlim_config_current(quant)
 }
 
 //! The identity of an explicit configuration — the ONE spelling every identity consumer (the
@@ -491,6 +492,14 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
             static_if (!typeinfo is_string(field[0])) {
                 cur = plane_end(cur, field)
             }
+        } static_elif (typeinfo is_dim(field)) {
+            for (el in field) {
+                apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        cur = plane_end(cur, ifield)
+                    }
+                }
+            }
         } static_elif (typeinfo safe_has_field < image_planes > (field)) {
             // a staging plane-group (nested carrier's bytes) — sized exactly like nested planes
             apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
@@ -683,19 +692,11 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.kquant_native)
     arch |> serialize_raw(t.kq_repacked)
     arch |> serialize_raw(t.mx4_repacked)
-    arch |> serialize_raw(t.kq_repack_mr4)
-    arch |> serialize_raw(t.kq_repack_mr5)
-    arch |> serialize_raw(t.kq_repack_mr6)
-    arch |> serialize_raw(t.kq_repack_mr40)
-    arch |> serialize_raw(t.kq_repack_mr44)
-    arch |> serialize_raw(t.kq_repack_mr3)
-    arch |> serialize_raw(t.kq_repack_mr33)
-    arch |> serialize_raw(t.kq_repack_mr34)
-    arch |> serialize_raw(t.kq_repack_mr45)
-    arch |> serialize_raw(t.kq_repack_mr2)
-    arch |> serialize_raw(t.kq_repack_mr23)
-    arch |> serialize_raw(t.kq_repack_mr24)
-    arch |> serialize_raw(t.kq_repack_mr25)
+    for (f in type<KqFmt>) {
+        if (kq_sb(f)) {
+            arch |> serialize_raw(t.kq[int(f)].mr)
+        }
+    }
     arch |> serialize_raw(t.wcls_fmt)
     arch |> serialize_raw(t.emb_fmt)
     arch |> serialize_raw(t.ple_emb_fmt)
@@ -735,8 +736,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes
-let IMAGE_META_FIELDS = 76 + 4
+//! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
+let IMAGE_META_FIELDS = 64 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the
@@ -777,6 +778,9 @@ def private layout_describe(var t; var d : string&) {
         static_if (typeinfo is_struct(field)) {
             layout_describe(field, d)
             d += "^"   // close the nesting so sibling boundaries stay unambiguous
+        } static_elif (typeinfo is_dim(field)) {
+            layout_describe(field[0], d)   // one element's shape stands for the table
+            d += "^"
         } static_elif (typeinfo is_array(field)) {
             layout_describe_elem(field, d)
         }
@@ -832,7 +836,8 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
-    arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness"),
+    arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
@@ -867,6 +872,21 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                     // lock_count != 0 is a BORROWED view over some other image — never ours to free
                     if (consume && lock_count(field) == 0) {
                         delete field
+                    }
+                }
+            } static_elif (typeinfo is_dim(field)) {
+                for (el, i in field, count()) {
+                    let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                    apply(el) $(iname : string; var ifield) {
+                        static_if (typeinfo is_array(ifield)) {
+                            let pname = kq_plane_name(fmt, iname)
+                            if (!invoke(plane, pname, w, sections)) {
+                                write_plane(w, sections, pname, ifield)
+                            }
+                            if (consume && lock_count(ifield) == 0) {
+                                delete ifield
+                            }
+                        }
                     }
                 }
             } static_elif (typeinfo safe_has_field < image_planes > (field)) {
@@ -1029,7 +1049,11 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
 // streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q", "iq4xsq", "k3q", "iq3sq", "iq3xxsq", "iq4nlq", "k2q", "iq2sq", "iq2xsq", "iq2xxsq"]) {
+    var names <- [for (f in type<KqFmt>); kq_plane_name(f, "q"); where kq_sb(f)]
+    names |> push("qblob")
+    names |> push("mblob")
+    names |> push("q51q")
+    for (fname in names) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)
@@ -1139,7 +1163,8 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 //! process just built alike: plane fields borrow `base` in place, the archive blob restores
 //! everything else. false = decline (the caller owns `base` and releases it either way).
 [arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"), arch(at = "../ARCHITECTURE_RUNTIME.md#weights-epoch-on-load"),
-    arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"),
+    arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
@@ -1235,6 +1260,15 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         static_if (typeinfo is_array(field)) {
             static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
                 borrow_plane(bp, msize, path, by_name, ok, name, field)
+            }
+        } static_elif (typeinfo is_dim(field)) {
+            for (el, i in field, count()) {
+                let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                apply(el) $(iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        borrow_plane(bp, msize, path, by_name, ok, kq_plane_name(fmt, iname), ifield)
+                    }
+                }
             }
         } static_elif (typeinfo safe_has_field < borrowed_plane > (field)) {
             bind_plane_section(bp, msize, path, by_name, ok, name, field)

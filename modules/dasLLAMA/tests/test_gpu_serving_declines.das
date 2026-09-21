@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // three Model shells live in one cell's frame - the default test stack overflows on them
 options _dasllama_internal = true
 
 require dastest/testing_boost public

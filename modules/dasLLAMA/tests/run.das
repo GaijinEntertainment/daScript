@@ -115,6 +115,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_fat_hook_umbrella.das",
                     "modules/dasLLAMA/tests/test_fat_start.das",
                     "modules/dasLLAMA/tests/test_gen_records_args.das",
+                    "modules/dasLLAMA/tests/test_from_template.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
                     "modules/dasLLAMA/tests/test_gguf_shards.das",
                     "modules/dasLLAMA/tests/test_gpu_serving_declines.das",
@@ -282,7 +283,7 @@ def area_tests(area : string) : array<string> {
     } elif (area == "llm") {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das",
                     "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_facade.das",
-                    "test_flash.das", "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
+                    "test_flash.das", "test_forward.das", "test_from_template.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
                     "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_moe.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_math_activations.das",
@@ -339,7 +340,7 @@ let MODULE_AREAS <- {
     "dasllama_arch_qwen2moe" => "llm", "dasllama_arch_qwen3" => "llm", "dasllama_arch_qwen35" => "llm",
     "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_gpu_resident" => "llm", "dasllama_gpu_tier" => "llm",
-    "dasllama_kv_codec" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
+    "dasllama_kv_dtype" => "llm", "dasllama_kv_codec" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
     "dasllama_metal_prefill" => "llm", "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     "dasllama_rope" => "llm", "dasllama_sampling" => "llm", "dasllama_scheduler" => "llm",
@@ -375,7 +376,7 @@ def areas_for_path(path : string) : array<string> {
                 return <- ["tts"]
             } elif (name == "_vision_oracle.das") {
                 return <- ["vision"]
-            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das") {
+            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
                 return <- ["llm"]
             }
             return <- clone_to_move(AREAS)

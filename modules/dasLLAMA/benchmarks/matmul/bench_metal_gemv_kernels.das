@@ -1311,7 +1311,7 @@ class MetalSkReduceLab {
 // Weight contract: f32-X, in-kernel superblock dequant. Two weight layouts per format:
 // the ggml interleaved block_q4_K stream (144B/sb: d f16, dmin f16, scales[12], qs[128]) for the
 // upstream wall arm, and the production plane pair (k4q 128B qs + k4s 20B [d][dmin][scales[12]][pad4],
-// gguf_transcode_q4k's exact output) for ours. Geometry both: a 64-thread tg, 2 simdgroups
+// gguf_transcode_kq's exact k4 output) for ours. Geometry both: a 64-thread tg, 2 simdgroups
 // x 2 rows, lane owns 32 elems of every 4th
 // superblock (ix = lane/8 block-stream, iq/ir sub-position), y loaded once per superblock and
 // reused across both rows. K-quant traffic/row: 148B (planes) / 144B (ggml) per 256 elems vs

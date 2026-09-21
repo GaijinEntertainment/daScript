@@ -54,32 +54,8 @@ def ple_check_table(t : Model; origin : string) {
     var have = 0l
     if (t.ple_emb_fmt == KqFmt.q8) {
         have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
-    } elif (t.ple_emb_fmt == KqFmt.k4) {
-        have = (long_length(t.k4q) / K4_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k5) {
-        have = (long_length(t.k5q) / K5_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k6) {
-        have = (long_length(t.k6q) / K6_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.q40) {
-        have = (long_length(t.q40q) / Q40_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq4xs) {
-        have = (long_length(t.iq4xsq) / IQ4XS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k3) {
-        have = (long_length(t.k3q) / K3_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq3s) {
-        have = (long_length(t.iq3sq) / IQ3S_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq3xxs) {
-        have = (long_length(t.iq3xxsq) / IQ3XXS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq4nl) {
-        have = (long_length(t.iq4nlq) / Q40_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k2) {
-        have = (long_length(t.k2q) / K2_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2s) {
-        have = (long_length(t.iq2sq) / IQ2S_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2xs) {
-        have = (long_length(t.iq2xsq) / IQ2XS_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.iq2xxs) {
-        have = (long_length(t.iq2xxsq) / IQ2XXS_QSB) * 256l
+    } elif (kq_sb(t.ple_emb_fmt)) {
+        have = (long_length(t.kq[int(t.ple_emb_fmt)].q) / kq_qsb(t.ple_emb_fmt)) * 256l
     }
     if (have < need) {
         panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
@@ -168,29 +144,6 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
 }
 
-// gemma4 MoE router input: weightless RMSNorm(attn_out) × (1/√dim) × ffn_gate_inp_s, into s.xb2.
-// Distinct from the plain-matmul routers: the RMS is over attn_out (not the shared-expert pre-norm),
-// weightless, then scaled by 1/√n_embd and a learned per-channel scale before the ffn_gate_inp matmul.
-def private gemma4_router_tmp(t : Model; var s : Session; l : int64) {
-    let dim = t.config.dim
-    // sum of squares in DOUBLE: float drift here flips the discrete top-8 expert pick
-    var ss = 0.0lf
-    for (i in range64(dim)) {
-        ss += double(s.moe_ao[i] * s.moe_ao[i])
-    }
-    let scale = 1.0 / sqrt(float(ss / double(dim)) + t.config.norm_eps)
-    let inv_d = 1.0 / sqrt(float(dim))
-    unsafe {
-        let scp = addr < float const? >(t.fblob[t.moe_router_scale_off + l * dim])
-        var op = addr(s.xb2[0])
-        let ip = addr < float const? >(s.moe_ao[0])
-        let si = scale * inv_d
-        for (i in range64(dim)) {
-            op[i] = ip[i] * si * scp[i]
-        }
-    }
-}
-
 // gemma4 MoE layer (26B-A4B): two parallel branches of the residual stream in s.moe_ao, SUMMED.
 // routed = post_ffw_norm_2(Σ_j w_j · GeGLU_e_j(pre_ffw_norm_2(attn_out))); dense = a full dense
 // shared expert, always on. Leaves post_ffw_norm(routed + dense) in s.moe_acc.
@@ -205,7 +158,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     prof_add("norm", ts_norm0)
     trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
     let ts_route = prof_ticks()
-    gemma4_router_tmp(t, s, l)
+    gemma4_router(t, s.xb2, s.moe_ao, l, dim, 1l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
     for (j in range64(k)) {   // each expert's down output is scaled by ffn_down_exps_s — fold it into w_j
@@ -296,10 +249,10 @@ def ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-// gemma4 MoE router input, batched: twin of gemma4_router_tmp over npos positions. Sum-of-squares
-// accumulates in DOUBLE — top-8 select is near-tie-brittle, float SoS would flip experts.
-// Bit-identical per row to the decode single-token path.
-def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
+//! gemma4 MoE router input over npos rows (decode: npos = 1): rin[p] = weightless RMSNorm(src[p]) ×
+//! (1/√dim) × ffn_gate_inp_s, ahead of the ffn_gate_inp matmul. The sum of squares accumulates in
+//! DOUBLE (float drift flips the near-tie top-8 pick); the row's scale × 1/√dim folds once per row.
+def gemma4_router(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
     let eps = t.config.norm_eps
     let inv_d = 1.0 / sqrt(float(dim))
     unsafe {
@@ -315,9 +268,9 @@ def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<f
                         let v = ip[off + i]
                         ss += double(v * v)
                     }
-                    let scale = 1.0 / sqrt(float(ss / double(dim)) + eps)
+                    let si = (1.0 / sqrt(float(ss / double(dim)) + eps)) * inv_d
                     for (i in range64(dim)) {
-                        op[off + i] = ip[off + i] * scale * inv_d * scp[i]
+                        op[off + i] = ip[off + i] * si * scp[i]
                     }
                 }
             }
@@ -376,7 +329,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     // 1. route every position: double-RMS router input, one batched GEMM, per-row select + down-scale fold
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
-    gemma4_router_batch(t, s.xb2_b, s.x_b, l, dim, npos)
+    gemma4_router(t, s.xb2_b, s.x_b, l, dim, npos)
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
         moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
@@ -476,32 +429,15 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {   // fused_kq: native-plane region-list chain, one batched GEMM per projection
-            if (kq_sb(f1)) {
-                mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            } else {
-                mm_b_q51_groupn(s.moe_ghb, t, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
-            if (kq_sb(f3)) {
-                mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            } else {
-                mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
+            mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, false, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+            mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, false, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
             prof_add("mm_gemm", ts_g1)
             let ts_act = prof_ticks()
             gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
             prof_add("act", ts_act)
-            // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51 the Q8_0 form
-            if (kq_sb(f2)) {
-                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
-            } else {
-                requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
-            }
+            requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
             let ts_g3 = prof_ticks()
-            if (kq_sb(f2)) {
-                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
-            } else {
-                mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            }
+            mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, false, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             prof_add("mm_moe_dn", ts_g3)   // down separately from gate/up — the q51-vs-kq lane split is the diagnostic
         }
         if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
@@ -538,34 +474,13 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
         let base = e * dim * nfe
-        if (kq_sb(f1)) {
-            mm_b_kq_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f1 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
-        if (kq_sb(f3)) {
-            mm_b_kq_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f3 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
+        mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+        mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
         let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
-        if (kq_sb(f2)) {
-            // kq v2: Q8_K-form rows + the per-16 sums the fold consumes
-            requant_rows_q8k_bs(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-            mm_b_kq_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } elif (f2 == KqFmt.q51) {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q51_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } else {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        }
+        requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
+        mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
         let ts_park = prof_ticks()
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)

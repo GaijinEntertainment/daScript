@@ -12,6 +12,10 @@ module dasllama_kqformat shared public
 
 require dasllama/dasllama_lint public
 require daslib/enum_trait   // kq_fmt_of_name walks the enum
+require daslib/ast
+require daslib/ast_boost
+require daslib/templates_boost
+require daslib/macro_boost
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
@@ -36,15 +40,186 @@ enum KqFmt : uint8 {
     mx4
 }
 
+//! One empty tag type per KqFmt member - the overload key of every per-format function family
+//! (the plane codec, the grp repack); `kq_fmt_stamp` binds the member's tag, so a family is a
+//! set of overloads and a format without one fails to compile at the stamp, never at runtime.
+struct KqTag_q8 {}
+struct KqTag_k4 {}
+struct KqTag_k5 {}
+struct KqTag_k6 {}
+struct KqTag_q40 {}
+struct KqTag_q51 {}
+struct KqTag_iq4xs {}
+struct KqTag_k3 {}
+struct KqTag_iq3s {}
+struct KqTag_iq3xxs {}
+struct KqTag_iq4nl {}
+struct KqTag_k2 {}
+struct KqTag_iq2s {}
+struct KqTag_iq2xs {}
+struct KqTag_iq2xxs {}
+struct KqTag_mx4 {}
+
+[call_macro(name = "kq_fmt_stamp")]
+class KqFmtStamp : AstCallMacro {
+    //! ``kq_fmt_stamp(fmt) <| $(F) { ... }`` stamps the block once per ``KqFmt`` member behind a ladder on
+    //! ``fmt``, ``F`` bound to the member's tag value (``KqTag_k4()`` ...), so a per-format overload family
+    //! called on ``F`` resolves at compile time and a member without an overload fails the compile.
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 2 && expr.arguments[1] is ExprMakeBlock, prog, expr.at,
+            "expecting kq_fmt_stamp(fmt) followed by a block")
+        macro_verify(expr.arguments[0] is ExprVar, prog, expr.at,
+            "kq_fmt_stamp takes a plain variable for the format, got {describe(expr.arguments[0])}")
+        let emb = expr.arguments[1] as ExprMakeBlock
+        macro_verify(emb._block is ExprBlock, prog, expr.at, "expecting a block body, got {describe(emb._block)}")
+        var blk = emb._block as ExprBlock
+        macro_verify(length(blk.arguments) == 1 && empty(blk.finalList), prog, expr.at,
+            "expecting one block argument, the format tag, and no finally section")
+        let tp = "{blk.arguments[0].name}"
+        var fmt = expr.arguments[0]
+        var ladder : ExpressionPtr
+        for (f in type<KqFmt>) {
+            let tagName = "KqTag_{f}"
+            var arm = bind_block_argument(blk, tp, qmacro($c(tagName)()), expr.at)
+            if (ladder == null) {
+                ladder = arm
+            } else {
+                ladder = qmacro_expr() {
+                    if ($e(fmt) == $v(f)) {
+                        $e(arm)
+                    } else {
+                        $e(ladder)
+                    }
+                }
+            }
+        }
+        return ladder
+    }
+}
+
+// upstream (ggml) tensor data type ids - the subset the loader reads
+let GGML_TYPE_F32 = 0
+let GGML_TYPE_F16 = 1
+let GGML_TYPE_Q4_0 = 2
+let GGML_TYPE_Q5_0 = 6
+let GGML_TYPE_Q5_1 = 7
+let GGML_TYPE_Q8_0 = 8
+let GGML_TYPE_Q3_K = 11
+let GGML_TYPE_Q2_K = 10
+let GGML_TYPE_IQ3_S = 21
+let GGML_TYPE_IQ2_S = 22
+let GGML_TYPE_IQ2_XS = 17
+let GGML_TYPE_IQ2_XXS = 16
+let GGML_TYPE_IQ3_XXS = 18
+let GGML_TYPE_IQ4_NL = 20
+let GGML_TYPE_Q4_K = 12
+let GGML_TYPE_Q5_K = 13
+let GGML_TYPE_Q6_K = 14
+let GGML_TYPE_IQ4_XS = 23
+let GGML_TYPE_BF16 = 30
+let GGML_TYPE_MXFP4 = 39
+
+//! One format's descriptor row - every per-format number a consumer keys off. The stride unit is
+//! one 256-weight superblock on the kq lattice and one 32-weight block for q8/q51/mx4; `qsb` is 0
+//! where no stride-walked plane pair exists (q8), `schema_id` -1 where no kernel takes an int id.
+struct KqDesc {
+    fmt : KqFmt
+    qsb : int64          //!< quant-plane bytes per stride unit
+    ssb : int64          //!< scale-plane bytes per stride unit
+    elems : int64        //!< weights per stride unit
+    disk_bytes : int64   //!< bytes one stride unit takes on disk (the ggml block bytes)
+    ggml_type : int      //!< the ggml type the planes convert from
+    schema_id : int      //!< the kernel/IR format id
+    stream_code : int    //!< the loader's stream/repack region tag
+}
+
+//! The descriptor row of a format - a new format is one row here plus its planes; every
+//! per-format accessor below is a field of this row.
+def kq_desc(f : KqFmt) : KqDesc {
+    if (f == KqFmt.k4) {
+        return KqDesc(fmt = f, qsb = K4_QSB, ssb = K4_SSB, elems = 256l, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_K, schema_id = 4, stream_code = 4)
+    }
+    if (f == KqFmt.k5) {
+        return KqDesc(fmt = f, qsb = K5_QSB, ssb = K5_SSB, elems = 256l, disk_bytes = 176l, ggml_type = GGML_TYPE_Q5_K, schema_id = 5, stream_code = 5)
+    }
+    if (f == KqFmt.k6) {
+        return KqDesc(fmt = f, qsb = K6_QSB, ssb = K6_SSB, elems = 256l, disk_bytes = 210l, ggml_type = GGML_TYPE_Q6_K, schema_id = 6, stream_code = 6)
+    }
+    if (f == KqFmt.q40) {
+        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, elems = 256l, disk_bytes = 144l, ggml_type = GGML_TYPE_Q4_0, schema_id = 40, stream_code = 40)
+    }
+    if (f == KqFmt.iq4xs) {
+        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ4XS_SSB, elems = 256l, disk_bytes = 136l, ggml_type = GGML_TYPE_IQ4_XS, schema_id = 44, stream_code = 44)
+    }
+    if (f == KqFmt.k3) {
+        return KqDesc(fmt = f, qsb = K3_QSB, ssb = K3_SSB, elems = 256l, disk_bytes = 110l, ggml_type = GGML_TYPE_Q3_K, schema_id = 3, stream_code = 3)
+    }
+    if (f == KqFmt.iq3s) {
+        return KqDesc(fmt = f, qsb = IQ3S_QSB, ssb = IQ3S_SSB, elems = 256l, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 33, stream_code = 33)
+    }
+    if (f == KqFmt.iq3xxs) {
+        return KqDesc(fmt = f, qsb = IQ3XXS_QSB, ssb = IQ3XXS_SSB, elems = 256l, disk_bytes = 98l, ggml_type = GGML_TYPE_IQ3_XXS, schema_id = 34, stream_code = 34)
+    }
+    if (f == KqFmt.iq4nl) {
+        return KqDesc(fmt = f, qsb = Q40_QSB, ssb = Q40_SSB, elems = 256l, disk_bytes = 144l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = 45, stream_code = 45)
+    }
+    if (f == KqFmt.k2) {
+        return KqDesc(fmt = f, qsb = K2_QSB, ssb = K2_SSB, elems = 256l, disk_bytes = 84l, ggml_type = GGML_TYPE_Q2_K, schema_id = 2, stream_code = K2_STREAM_TAG)
+    }
+    if (f == KqFmt.iq2s) {
+        return KqDesc(fmt = f, qsb = IQ2S_QSB, ssb = IQ2S_SSB, elems = 256l, disk_bytes = 82l, ggml_type = GGML_TYPE_IQ2_S, schema_id = 23, stream_code = 23)
+    }
+    if (f == KqFmt.iq2xs) {
+        return KqDesc(fmt = f, qsb = IQ2XS_QSB, ssb = IQ2XS_SSB, elems = 256l, disk_bytes = 74l, ggml_type = GGML_TYPE_IQ2_XS, schema_id = 24, stream_code = 24)
+    }
+    if (f == KqFmt.iq2xxs) {
+        return KqDesc(fmt = f, qsb = IQ2XXS_QSB, ssb = IQ2XXS_SSB, elems = 256l, disk_bytes = 66l, ggml_type = GGML_TYPE_IQ2_XXS, schema_id = 25, stream_code = 25)
+    }
+    if (f == KqFmt.q51) {
+        return KqDesc(fmt = f, qsb = Q51_QB, ssb = Q51_SB, elems = 32l, disk_bytes = 24l, ggml_type = GGML_TYPE_Q5_1, schema_id = -1, stream_code = 2)
+    }
+    if (f == KqFmt.mx4) {
+        return KqDesc(fmt = f, qsb = MX4_QB, ssb = MX4_SB, elems = 32l, disk_bytes = 17l, ggml_type = GGML_TYPE_MXFP4, schema_id = -1, stream_code = MX4_STREAM_TAG)
+    }
+    return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = 32l, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
+}
+
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
 //! kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
-def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+def kq_sb(f : KqFmt) : bool => kq_desc(f).elems == 256l
 
 //! Parses an enum member's spelling (`k4`, `iq2xxs`, ...) into `out`; false for any other string.
-def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
+def kq_fmt_of_name(name : string; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => "{f}" == name
+
+//! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51, mx4), off the kq lattice.
+def kq_block32(f : KqFmt) : bool => !kq_sb(f)
+
+//! The same predicate over the int id space the GPU drivers carry per stack/plane.
+def kq_block32(fmt : int) : bool => !kq_sb(fmt)
+
+//! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
+let KQ_FMT_COUNT = int(KqFmt.mx4) + 1
+
+//! The same predicate over the int id space the GPU drivers carry per stack/plane (pure: it sits in asserts).
+def kq_sb(fmt : int) : bool => fmt >= 0 && fmt < KQ_FMT_COUNT && kq_sb(unsafe(reinterpret<KqFmt>(uint8(fmt))))
+
+//! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
+//! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
+//! Q4_0 is 40, an i-quant is bit width x 10 + a variant digit (IQ4_XS = 44, IQ3_S = 33). q8/q51 panic.
+def kq_schema_id(f : KqFmt) : int {
+    let id = kq_desc(f).schema_id
+    if (id < 0) {
+        panic("kq_schema_id: not a kq superblock format")
+    }
+    return id
+}
+
+//! The first format the predicate admits, into `out`; false when none does - the one walk every
+//! key-to-format lookup (name, kernel id, stream code) runs.
+def kq_fmt_where(var out : KqFmt&; blk : block<(f : KqFmt) : bool>) : bool {
     for (f in type<KqFmt>) {
-        if ("{f}" == name) {
+        if (invoke(blk, f)) {
             out = f
             return true
         }
@@ -52,61 +227,20 @@ def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
     return false
 }
 
-//! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51, mx4), off the kq lattice.
-def kq_block32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.mx4
+//! The format a kernel/IR id names; false for an id no format carries.
+def kq_fmt_of_id(id : int; var out : KqFmt&) : bool => id >= 0 && kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).schema_id == id
 
-//! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_block32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4)
-
-//! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs)
-
-//! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
-//! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
-//! Q4_0 is 40, an i-quant is bit width x 10 + a variant digit (IQ4_XS = 44, IQ3_S = 33). q8/q51 panic.
-def kq_schema_id(f : KqFmt) : int {
-    if (f == KqFmt.k4) {
-        return 4
+//! The format of a kernel/IR id, or a panic naming the asking site (`what`) on an id no row carries.
+def kq_fmt_of_id(id : int; what : string) : KqFmt {
+    var f = KqFmt.q8
+    if (!kq_fmt_of_id(id, f)) {
+        panic("{what}: unknown kq format id {id}")
     }
-    if (f == KqFmt.k5) {
-        return 5
-    }
-    if (f == KqFmt.k6) {
-        return 6
-    }
-    if (f == KqFmt.q40) {
-        return 40
-    }
-    if (f == KqFmt.iq4xs) {
-        return 44
-    }
-    if (f == KqFmt.k3) {
-        return 3
-    }
-    if (f == KqFmt.iq3s) {
-        return 33
-    }
-    if (f == KqFmt.iq3xxs) {
-        return 34
-    }
-    if (f == KqFmt.iq4nl) {
-        return 45
-    }
-    if (f == KqFmt.k2) {
-        return 2
-    }
-    if (f == KqFmt.iq2s) {
-        return 23
-    }
-    if (f == KqFmt.iq2xs) {
-        return 24
-    }
-    if (f == KqFmt.iq2xxs) {
-        return 25
-    }
-    panic("kq_schema_id: not a kq superblock format")
-    return 0
+    return f
 }
+
+//! The ggml type a kq format's plane converts from.
+def kq_ggml_type(f : KqFmt) : int => kq_desc(f).ggml_type
 
 // ===== plane stride truth (per 256-weight superblock row unless noted) =====
 
@@ -141,14 +275,26 @@ let IQ2XXS_SSB = 20l   // IQ2_XXS scale plane: the iq3xxs row shape - f16 d EIGH
 // IQ4_NL reuses Q40_QSB/Q40_SSB outright: the disk bytes are q40's (f16 d + 16 nibble bytes
 // per 32-block, the k/k+16 pairing) — only the nibble SEMANTICS differ (IQ4NL_LUT, no -8).
 
-//! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (upstream's kvalues_iq4nl).
-//! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
-//! forked worker reads a module global as zeros - kernels take `iq4nl_lut()` as a local instead.
-let IQ4NL_LUT = fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
-
-//! The same codebook as a per-call local (16 bytes on the caller's frame) - the form every
-//! worker-run kernel reads.
+//! The IQ4_NL / IQ4_XS nibble codebook (upstream's kvalues_iq4nl): weight = scale x lut[nibble], as
+//! a per-call local (16 bytes on the caller's frame) - the form every worker-run kernel reads.
 def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
+
+//! The codebook's main-context copy (tests, oracles, the emitter's constant bake): a kernel that
+//! can run on a forked worker reads a module global as zeros - kernels take `iq4nl_lut()`.
+let IQ4NL_LUT = iq4nl_lut()
+
+//! The 6-bit sub-scale/min pair j of a 12-byte packed Q4_K/Q5_K scale block at sp - the one
+//! decode the dots, repacks, dequants and the Q5_K encoder share.
+def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
+    unsafe {
+        if (j < 4l) {
+            return int2(int(sp[j]) & 63, int(sp[j + 4l]) & 63)
+        }
+        let sc = (int(sp[j + 4l]) & 15) | ((int(sp[j - 4l]) >> 6) << 4)
+        let mn = (int(sp[j + 4l]) >> 4) | ((int(sp[j]) >> 6) << 4)
+        return int2(sc, mn)
+    }
+}
 
 //! The IQ3_S grid (upstream's iq3s_grid): entry qs | (qh bit << 8) packs FOUR weight magnitudes as
 //! bytes; the per-element sign rides the block's own sign bytes. Per-call local (2 KB on the
@@ -283,6 +429,54 @@ def ksigns_iq2xs() : uint8[128] {
 
 //! Main-context copy of ksigns_iq2xs.
 let KSIGNS_IQ2XS = ksigns_iq2xs()
+
+//! The signed-grid octet the grid formats share (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs): two grid
+//! words carry eight magnitudes and `sgn`'s bit j flips element j. Generic in the operand.
+def grid_octet_dot(g1, g2 : uint; sgn : int; a : auto(TA) const?; ab : int64) : int {
+    var acc = 0
+    unsafe {
+        for (j in range64(4l)) {
+            let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
+            let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
+            acc += (((sgn >> int(j)) & 1) != 0 ? -w1 : w1) * int(a[ab + j])
+            acc += (((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2) * int(a[ab + 4l + j])
+        }
+    }
+    return acc
+}
+
+//! The octet dequantized: dst[at .. at + 8) = db * magnitude * sign, ggml's own float order.
+def store_grid_pair(var dst : auto(TD); at : int64; db : float; g1, g2 : uint; sgn : int) {
+    unsafe {
+        for (j in range64(4l)) {
+            dst[at + j] = db * float((g1 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(j)) & 1) != 0 ? -1.0 : 1.0)
+            dst[at + 4l + j] = db * float((g2 >> uint(8l * j)) & 0xFFu) * (((sgn >> int(4l + j)) & 1) != 0 ? -1.0 : 1.0)
+        }
+    }
+}
+
+//! The 16 byte-select masks the panel unpacks negate through: mask n selects the bytes whose
+//! sign bit is set in nibble n. Built per call, never a module global (a forked worker reads a
+//! `let` global as zero).
+def sign_masks_iq() : uint[16] => fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu, 0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu, 0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu, 0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+
+//! The octet into the byte-expanded signed panel at superblock base `ob`: each word's four
+//! magnitudes negated byte-wise through the sign nibble's mask (odd 1..15, no cross-byte carry),
+//! one u32 store each; element l*8 + half*4 + t of (blk, row r) lands in the lo half below 16.
+def store_grid_panel_pair(var dst : auto(TD)?; ob, blk, l, r, mr : int64; g1, g2 : uint; sgn : int; smask : uint[16]) {
+    unsafe {
+        let m1 = smask[sgn & 15]
+        let m2 = smask[(sgn >> 4) & 15]
+        let e1 = l * 8l
+        let e2 = l * 8l + 4l
+        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+        wp1[0] = (g1 ^ m1) + (m1 & 0x01010101u)
+        wp2[0] = (g2 ^ m2) + (m2 & 0x01010101u)
+    }
+}
 
 //! Halve an f16 bit pattern exactly (exponent decrement; subnormal results truncate-halve).
 //! The IQ3_XXS transcode folds upstream's 0.25 into the stored d (one half) and the grid (the other).
@@ -785,70 +979,25 @@ let IQ2XXS_GRID = iq2xxs_grid2()
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
 //! q8 panics (its planes are byte-per-elem, not stride-walked here).
 def kq_qsb(f : KqFmt) : int64 {
-    if (f == KqFmt.k4 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.iq4nl) {
-        return K4_QSB
+    let qsb = kq_desc(f).qsb
+    if (qsb == 0l) {
+        panic("kq_qsb: no plane stride for this format")
     }
-    if (f == KqFmt.k5) {
-        return K5_QSB
-    }
-    if (f == KqFmt.k6) {
-        return K6_QSB
-    }
-    if (f == KqFmt.q51) {
-        return Q51_QB
-    }
-    if (f == KqFmt.k3) {
-        return K3_QSB
-    }
-    if (f == KqFmt.iq3s) {
-        return IQ3S_QSB
-    }
-    if (f == KqFmt.iq3xxs) {
-        return IQ3XXS_QSB
-    }
-    if (f == KqFmt.k2) {
-        return K2_QSB
-    }
-    if (f == KqFmt.iq2s) {
-        return IQ2S_QSB
-    }
-    if (f == KqFmt.iq2xs) {
-        return IQ2XS_QSB
-    }
-    if (f == KqFmt.iq2xxs) {
-        return IQ2XXS_QSB
-    }
-    if (f == KqFmt.mx4) {
-        return MX4_QB
-    }
-    panic("kq_qsb: no plane stride for this format")
-    return 0l
+    return qsb
 }
 
 //! Scale-plane bytes per stride unit (see kq_qsb for the unit).
 def kq_ssb(f : KqFmt) : int64 {
-    if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs) {
-        return K4_SSB
+    let ssb = kq_desc(f).ssb
+    if (ssb == 0l) {
+        panic("kq_ssb: no plane stride for this format")
     }
-    if (f == KqFmt.k6 || f == KqFmt.k3) {
-        return K6_SSB
-    }
-    if (f == KqFmt.q40 || f == KqFmt.iq4nl) {
-        return Q40_SSB
-    }
-    if (f == KqFmt.q51) {
-        return Q51_SB
-    }
-    if (f == KqFmt.mx4) {
-        return MX4_SB
-    }
-    panic("kq_ssb: no plane stride for this format")
-    return 0l
+    return ssb
 }
 
 //! Weights per stride unit: the kq lattice strides per 256-weight superblock; q8/q51 per
 //! 32-weight block.
-def kq_elems(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
+def kq_elems(f : KqFmt) : int64 => kq_desc(f).elems
 
 //! The loader's stream/repack region tag for a format (stream_repack_one / push_repack codes).
 //! k2's stream-region code: kernel id 2 IS q51's stream tag, so k2 streams under 20 and the
@@ -858,30 +1007,8 @@ let K2_STREAM_TAG = 20
 //! mx4's stream tag is the GGML type id (`GGML_TYPE_MXFP4`); no loader path streams an mx4 plane, so the row exists only to keep `kq_stream_code` total
 let MX4_STREAM_TAG = 39
 
-def kq_stream_code(f : KqFmt) : int {
-    if (f == KqFmt.q8) {
-        return 0
-    }
-    if (f == KqFmt.q51) {
-        return 2
-    }
-    if (f == KqFmt.k2) {
-        return K2_STREAM_TAG
-    }
-    if (f == KqFmt.mx4) {
-        return MX4_STREAM_TAG
-    }
-    return kq_schema_id(f)
-}
+def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 
 //! the stream code's format; false for a code no format carries
-def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool {
-    for (f in type<KqFmt>) {
-        if (kq_stream_code(f) == code) {
-            out = f
-            return true
-        }
-    }
-    return false
-}
+def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool => kq_fmt_where(out) <| $(f : KqFmt) => kq_desc(f).stream_code == code
 

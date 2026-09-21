@@ -53,9 +53,7 @@ def feq(a, b : array<uint8>) : bool {
     return true
 }
 
-// forward_batch over the whole prompt (one batched pass from position 0) == N× forward. Only the
-// bit-exact-by-design modes (classic, blocked) are checked here; flash is online-softmax (tolerance,
-// not bit-exact) and has its own oracle test.
+// forward_batch over the whole prompt (one batched pass from position 0) == N× forward.
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)
@@ -117,11 +115,9 @@ def test_prefill_fp32(t : T?) {
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]
-        for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
-            check_prefill(t, tr, prompt, mode)
-            check_continuation(t, tr, prompt, 4l, mode)
-            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips g_attn_par_threshold (threaded arm)
-        }
+        check_prefill(t, tr, prompt, AttnPrefillMode.classic)
+        check_continuation(t, tr, prompt, 4l, AttnPrefillMode.classic)
+        check_prefill(t, tr, long_prompt, AttnPrefillMode.classic)   // 200 tok trips g_attn_par_threshold (threaded arm)
         delete tk
         delete tr
     }
@@ -148,11 +144,9 @@ def test_prefill_q8(t : T?) {
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]
-        for (mode in [AttnPrefillMode.classic, AttnPrefillMode.blocked]) {
-            check_prefill(t, tr, prompt, mode)
-            check_continuation(t, tr, prompt, 4l, mode)
-            check_prefill(t, tr, long_prompt, mode)   // 200 tok trips g_attn_par_threshold (threaded arm)
-        }
+        check_prefill(t, tr, prompt, AttnPrefillMode.classic)
+        check_continuation(t, tr, prompt, 4l, AttnPrefillMode.classic)
+        check_prefill(t, tr, long_prompt, AttnPrefillMode.classic)   // 200 tok trips g_attn_par_threshold (threaded arm)
         clear_kernel_backend_pin()
         delete tk
         delete tr

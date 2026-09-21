@@ -6,8 +6,8 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_math_default   // dot_k4q8, the K-quant leaf per row
-require dasllama/dasllama_convert   // transcode_q4k_superblock, quantize_q8_k_into_ptr
+require dasllama/dasllama_math_default   // dot_kq, the K-quant leaf per row
+require dasllama/dasllama_convert   // kq_transcode_superblock, quantize_q8_k_into_ptr
 require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
 require daslib/f16_cvt
 require daslib/jobque_boost
@@ -567,7 +567,7 @@ def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows,
     ks |> resize(rows * nsb * ssb)
     for (r in range64(rows)) {
         for (s in range64(nsb)) {
-            transcode_q4k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            kq_transcode_superblock(KqFmt.k4, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
         }
         var st = seed + uint(r) * 0x85EBCA6Bu
         for (i in range64(nsb * qsb)) {
@@ -577,7 +577,7 @@ def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows,
     }
 }
 
-//! the leaf the lane applies per row: the row requantized to the Q8_K form, dot_k4q8 over the disk-order planes, then the bias
+//! the leaf the lane applies per row: the row requantized to the Q8_K form, the k4 dot_kq over the disk-order planes, then the bias
 def private kq_leaf_rows(kq, ks : array<uint8>; x : array<float>; t, nin, nout : int64; b : array<float>; var want : array<float>) {
     let nsb = nin / 256l
     let qsb = kq_qsb(4)
@@ -593,8 +593,8 @@ def private kq_leaf_rows(kq, ks : array<uint8>; x : array<float>; t, nin, nout :
         for (p in range64(t)) {
             quantize_q8_k_into_ptr(addr<float const?>(x[p * nin]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
             for (o in range64(nout)) {
-                let d = dot_k4q8(addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
-                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin)
+                let d = dot_kq(addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
+                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin, KqTag_k4())
                 want[p * nout + o] = d + b[o]
             }
         }

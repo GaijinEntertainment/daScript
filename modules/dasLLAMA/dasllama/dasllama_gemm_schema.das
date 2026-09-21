@@ -73,47 +73,11 @@ def kq_dev_ssb_i(fmt : int) : int64 {
 let Q51_QPB = 20l
 let Q51_SPB = 4l
 
-//! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
-//! Q6_K, 40 = Q4_0, 44 = IQ4_XS, 3 = Q3_K, 33 = IQ3_S, 34 = IQ3_XXS, 45 = IQ4_NL, 2 = Q2_K, 23 = IQ2_S, 24 = IQ2_XS, 25 = IQ2_XXS). The ONE stride source for every fmt-branched kq walker/
-//! kernel/repack — an unknown id panics instead of silently walking another format's stride.
-def kq_qsb(fmt : int) : int64 {
-    if (fmt == 4) return kq_qsb(KqFmt.k4)
-    if (fmt == 5) return kq_qsb(KqFmt.k5)
-    if (fmt == 6) return kq_qsb(KqFmt.k6)
-    if (fmt == 40) return kq_qsb(KqFmt.q40)
-    if (fmt == 44) return kq_qsb(KqFmt.iq4xs)
-    if (fmt == 3) return kq_qsb(KqFmt.k3)
-    if (fmt == 33) return kq_qsb(KqFmt.iq3s)
-    if (fmt == 34) return kq_qsb(KqFmt.iq3xxs)
-    if (fmt == 45) return kq_qsb(KqFmt.iq4nl)
-    if (fmt == 2) return kq_qsb(KqFmt.k2)
-    if (fmt == 23) return kq_qsb(KqFmt.iq2s)
-    if (fmt == 24) return kq_qsb(KqFmt.iq2xs)
-    if (fmt == 25) return kq_qsb(KqFmt.iq2xxs)
-    panic("kq_qsb: unknown kq format id {fmt}")
-    return 0l
-}
+//! Quant-plane bytes per stride unit for a kernel/IR format id (`kq_schema_id`'s space).
+def kq_qsb(fmt : int) : int64 => kq_qsb(kq_fmt_of_id(fmt, "kq_qsb"))
 
-//! Scale-plane bytes per 256-weight superblock per row (see kq_qsb): k4/k5 20, k6/k3 18,
-//! q40/iq4nl 16 (8 x f16 d), iq4xs/iq3s/iq3xxs 20 (the decoded k4 row shape) - the per-format
-//! layouts live on the kq_ssb(KqFmt) arms and the transcode docs.
-def kq_ssb(fmt : int) : int64 {
-    if (fmt == 4) return kq_ssb(KqFmt.k4)
-    if (fmt == 5) return kq_ssb(KqFmt.k5)
-    if (fmt == 6) return kq_ssb(KqFmt.k6)
-    if (fmt == 40) return kq_ssb(KqFmt.q40)
-    if (fmt == 44) return kq_ssb(KqFmt.iq4xs)
-    if (fmt == 3) return kq_ssb(KqFmt.k3)
-    if (fmt == 33) return kq_ssb(KqFmt.iq3s)
-    if (fmt == 34) return kq_ssb(KqFmt.iq3xxs)
-    if (fmt == 45) return kq_ssb(KqFmt.iq4nl)
-    if (fmt == 2) return kq_ssb(KqFmt.k2)
-    if (fmt == 23) return kq_ssb(KqFmt.iq2s)
-    if (fmt == 24) return kq_ssb(KqFmt.iq2xs)
-    if (fmt == 25) return kq_ssb(KqFmt.iq2xxs)
-    panic("kq_ssb: unknown kq format id {fmt}")
-    return 0l
-}
+//! Scale-plane bytes per stride unit for a kernel/IR format id (see kq_qsb).
+def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 
 //! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
 //! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).

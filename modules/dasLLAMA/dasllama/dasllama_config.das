@@ -12,7 +12,10 @@ options _dasllama_internal = true
 module dasllama_config shared public
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_kqformat   // KqFmt - the lattice interleaves are indexed by it
+require daslib/enum_trait   // the identity walks the enum
 require strings
+require daslib/strings_boost
 require daslib/utf8_utils
 
 //! The CPU tier's layout half: which backend's repack shapes the planes, its interleave numbers,
@@ -23,19 +26,7 @@ struct public DlimCpuConfig {
     q8_mr : int64
     q8_wbias : int64
     q8_kgroup : int64
-    kq_mr4 : int64
-    kq_mr5 : int64
-    kq_mr6 : int64
-    kq_mr40 : int64
-    kq_mr44 : int64
-    kq_mr3 : int64
-    kq_mr33 : int64
-    kq_mr34 : int64
-    kq_mr45 : int64
-    kq_mr2 : int64
-    kq_mr23 : int64
-    kq_mr24 : int64
-    kq_mr25 : int64
+    kq_mr : array<int64>   //!< the lattice planes' repack interleaves, by int(KqFmt) (0 off the lattice)
     q51_mr : int64
     wscale_f16 : bool
     kquant_native : bool
@@ -139,10 +130,16 @@ def public dlim_config_current(quant : string = "q8") : DlimConfiguration {
     invoke(g_dlim_cpu_source, c.cpu)
     c.vulkan_on = invoke(g_dlim_vulkan_source, c.vulkan)
     c.metal_on = invoke(g_dlim_metal_source, c.metal)
-    return c
+    return <- c
 }
 
 // ===== pure formatters (identity, tags, JSON) =====
+
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-kq-mr-identity")]
+def private kq_mr_identity(c : DlimCpuConfig) : string {
+    let parts <- [for (f in type<KqFmt>); "{int(f) < length(c.kq_mr) ? c.kq_mr[int(f)] : 0l}"; where kq_sb(f)]
+    return join(parts, "/")
+}
 
 //! The identity string an image file/header is keyed by — a pure formatter of the struct.
 //! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
@@ -151,7 +148,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
     let pk = pack_version > 0 ? "p{pack_version}" : ""
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
-        + "|kq {c.cpu.kq_mr4}/{c.cpu.kq_mr5}/{c.cpu.kq_mr6}/{c.cpu.kq_mr40}/{c.cpu.kq_mr44}/{c.cpu.kq_mr3}/{c.cpu.kq_mr33}/{c.cpu.kq_mr34}/{c.cpu.kq_mr45}/{c.cpu.kq_mr2}/{c.cpu.kq_mr23}/{c.cpu.kq_mr24}/{c.cpu.kq_mr25}"
+        + "|kq {kq_mr_identity(c.cpu)}"
         + "|q51 mr{c.cpu.q51_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}"
         + (tag != "" ? "|{tag}" : ""))

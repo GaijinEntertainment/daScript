@@ -9,15 +9,17 @@ require dastest/testing_boost public
 require dasllama/dasllama_gemm_schema   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
 require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane gather oracle
 require _model_tier
+require _kq_dot   // dot_kq on the run-time format — the reference the kernel gates hold to
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
 require dasllama/dasllama_convert
 require dasllama/dasllama_math   // pin_kernel_backend — the layout arm needs disk-order planes
-require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel arms gate them vs the plane dequant
+require dasllama/dasllama_math_default   // dot_kq on the format tag — the kernel arms gate it vs the plane dequant
 require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack oracle
 require dasllama/dasllama_repack     // repack_k4/k5/k6/q40_grp + repack_q51_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for load_gguf
+require daslib/jobque_boost   // team_parallel_for - the lane-context arm of the iq4nl dequant
 require math
 
 // K-quant (Q4_K / Q6_K) superblock dequant gates. The synthetic arms hand-pack one superblock
@@ -110,7 +112,7 @@ def private build_q6k_block() : array<uint8> {
 }
 
 // loop-generated test labels: "k4"/"k5"/"k6" for the K-quants, "q40" for fmt 40, "iq4xs" for
-// fmt 44 — matches the kernel/repack function names (dot_q40q8, repack_q40_grp) so failures grep 1:1
+// fmt 44 — matches the format tag names (KqTag_q40, KqFmt.q40) so failures grep 1:1
 // iq3xxs synthetic superblock: 98B IQ3_XXS disk block — f16 d, 64 grid-index bytes, 8 x aux32
 // (4x7-bit ksigns indices + a 4-bit scale in the top nibble). Any byte pattern is legal.
 def private iq3xxs_qs_pat(i : int) : int => (i * 13 + 5) % 256
@@ -447,7 +449,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(20)
-        transcode_q4k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k4, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q4k_superblock(blkb, 0l, want, 0l)
@@ -464,7 +466,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(160)
         ks |> resize(20)
-        transcode_q5k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k5, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q5k_superblock(blkb, 0l, want, 0l)
@@ -481,7 +483,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(192)
         ks |> resize(18)
-        transcode_q6k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k6, blkb, 0l, kq, 0l, ks, 0l)
         var want : array<float>
         want |> resize(256)
         dequant_q6k_superblock(blkb, 0l, want, 0l)
@@ -498,7 +500,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
-        transcode_q40_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.q40, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_q40_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -513,7 +515,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(20)
-        transcode_iq4xs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq4xs, blkb, 0l, kq, 0l, ks, 0l)
         for (blk in range(8)) {
             t |> equal(iq4xs_sc(ks, 0l, int64(blk)), SYNTH_SC[blk] - 32, "decoded sub-scale is ls - 32, signed")
         }
@@ -531,7 +533,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(96)
         ks |> resize(18)
-        transcode_q3k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k3, blkb, 0l, kq, 0l, ks, 0l)
         for (i in range(16)) {
             t |> equal(int(int8(ks[i])), SYNTH_SC[i % 8] - 32, "decoded sub-scale is scale - 32, signed")
         }
@@ -549,7 +551,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(104)
         ks |> resize(20)
-        transcode_iq3s_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq3s, blkb, 0l, kq, 0l, ks, 0l)
         for (b in range(8)) {
             t |> equal(int(int8(ks[4 + b])), 1 + 2 * (SYNTH_SC[b] & 15), "decoded sub-scale is 1 + 2s")
         }
@@ -573,7 +575,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_q2k_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.k2, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_k2_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -589,7 +591,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_iq2xs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2xs, blkb, 0l, kq, 0l, ks, 0l)
         for (g in range(16)) {
             t |> equal(int(ks[4 + g]), 1 + 2 * (SYNTH_SC[g % 8] & 15), "decoded strip is 1 + 2s")
         }
@@ -615,7 +617,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(64)
         ks |> resize(20)
-        transcode_iq2xxs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2xxs, blkb, 0l, kq, 0l, ks, 0l)
         for (b in range(8)) {
             t |> equal(int(ks[4 + b]), 1 + 2 * (SYNTH_SC[b % 8] & 15), "decoded per-32 strip is 1 + 2s")
         }
@@ -641,7 +643,7 @@ def test_kq_transcode_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(72)
         ks |> resize(20)
-        transcode_iq2s_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq2s, blkb, 0l, kq, 0l, ks, 0l)
         for (g in range(16)) {
             t |> equal(int(ks[4 + g]), 1 + 2 * (SYNTH_SC[g % 8] & 15), "decoded strip is 1 + 2s")
         }
@@ -668,7 +670,7 @@ def test_kq_transcode_planes(t : T?) {
             var ks : array<uint8>
             kq |> resize(20)
             ks |> resize(4)
-            transcode_q51_block(blkb, 0l, kq, 0l, ks, 0l)
+            kq_transcode_superblock(KqFmt.q51, blkb, 0l, kq, 0l, ks, 0l)
             var dst : array<float>
             dst |> resize(32)
             dequant_q51_plane_block(kq, 0l, ks, 0l, dst, 0l)
@@ -702,7 +704,7 @@ def private q51_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, 
     for (r in range64(rows)) {
         for (b in range64(nb)) {
             let blkb <- build_q51_block(int(r * 31l + b))
-            transcode_q51_block(blkb, 0l, kq, (r * nb + b) * 20l, ks, (r * nb + b) * 4l)
+            kq_transcode_superblock(KqFmt.q51, blkb, 0l, kq, (r * nb + b) * 20l, ks, (r * nb + b) * 4l)
         }
     }
 }
@@ -857,7 +859,7 @@ def private q51_grp_gate(t : T?) {
         for (mr in fixed_array(4l, 8l)) {
             var gq := kq
             var gs := ks
-            repack_q51_grp(addr(gq[0]), addr(gs[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q51, addr(gq[0]), addr(gs[0]), n, d, mr)
             let grpRows = (d / mr) * mr
             for (r in range64(d)) {
                 if (r < grpRows) {
@@ -914,7 +916,7 @@ def private q51_gather_gate(t : T?) {
         g.q51q := kq
         g.q51s := ks
         unsafe {
-            repack_q51_grp(addr(g.q51q[0]), addr(g.q51s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q51, addr(g.q51q[0]), addr(g.q51s[0]), n, d, mr)
         }
         var wqGrp : array<uint8>
         var wsGrp : array<uint8>
@@ -974,31 +976,31 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     ks |> resize(nsb * ssb)
     for (s in range64(nsb)) {
         if (fmt == 4) {
-            transcode_q4k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 5) {
-            transcode_q5k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 40) {
-            transcode_q40_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 44) {
-            transcode_iq4xs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 3) {
-            transcode_q3k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 33) {
-            transcode_iq3s_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 34) {
-            transcode_iq3xxs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 45) {
-            transcode_iq4nl_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 2) {
-            transcode_q2k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 24) {
-            transcode_iq2xs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 25) {
-            transcode_iq2xxs_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 23) {
-            transcode_iq2s_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } else {
-            transcode_q6k_superblock(blk1, 0l, kq, s * qsb, ks, s * ssb)
+            kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, s * qsb, ks, s * ssb)
         }
     }
     var st = 0x12345u
@@ -1057,35 +1059,9 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     for (i in range64(n)) {
         ref += double(w[i]) * double(xq[i]) * double(xs[i / sdiv])
     }
-    var got = 0.0
+    var got : float
     unsafe {
-        if (fmt == 4) {
-            got = dot_k4q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 5) {
-            got = dot_k5q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 40) {
-            got = dot_q40q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 44) {
-            got = dot_iq4xs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 3) {
-            got = dot_k3q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 33) {
-            got = dot_iq3s_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 34) {
-            got = dot_iq3xxs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 45) {
-            got = dot_iq4nl_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 2) {
-            got = dot_k2q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 24) {
-            got = dot_iq2xs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 25) {
-            got = dot_iq2xxs_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } elif (fmt == 23) {
-            got = dot_iq2s_q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        } else {
-            got = dot_k6q8(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-        }
+        got = dot_kq(addr(kq[0]), addr(ks[0]), addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kq_fmt_of_id(fmt, "kq_dot_gate"))
     }
     let denom = max(abs(float(ref)), 1.0e-6)
     t |> success(abs(got - float(ref)) / denom < 1.0e-4, "kernel dot must match the fp64 plane-dequant reference")
@@ -1143,31 +1119,31 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         // per-row LCG over the quant payload only (scale planes stay valid f16/int8)
@@ -1192,39 +1168,13 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     var y : array<float>
     y |> resize(d)
     matmul_kq(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d)
+    let kf = kq_fmt_of_id(fmt, "kq_gemv_gate")
     unsafe {
         var bad = 0
         for (r in range64(d)) {
             let kqr = addr(kq[r * nsb * qsb])
             let ksr = addr(ks[r * nsb * ssb])
-            var want = 0.0
-            if (fmt == 4) {
-                want = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 5) {
-                want = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 40) {
-                want = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 44) {
-                want = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 3) {
-                want = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 33) {
-                want = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 34) {
-                want = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 45) {
-                want = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 2) {
-                want = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 24) {
-                want = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 25) {
-                want = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 23) {
-                want = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } else {
-                want = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            }
+            let want = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
             if (y[r] != want) {
                 bad++
             }
@@ -1278,7 +1228,7 @@ def test_kq_gemv_rows(t : T?) {
 // grp<mr> scalar reference (kq_grp_row_dot — the stamped cores' decline body) and the grp row
 // dequant to reproduce them BIT-EXACTLY (same block order, exact integer sub-sums — only the
 // plane layout moved).
-def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     let d = 32l
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
@@ -1291,31 +1241,31 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         // per-row LCG over the quant payload only (scale planes stay valid f16/int8)
@@ -1341,37 +1291,12 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
     var wrow : array<float>
     want |> resize(d)
     wrow |> resize(d * n)
+    let kf = kq_fmt_of_id(fmt, "kq_rows_gate")
     unsafe {
         for (r in range64(d)) {
             let kqr = addr(kq[r * nsb * qsb])
             let ksr = addr(ks[r * nsb * ssb])
-            if (fmt == 4) {
-                want[r] = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 5) {
-                want[r] = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 40) {
-                want[r] = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 44) {
-                want[r] = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 3) {
-                want[r] = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 33) {
-                want[r] = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 34) {
-                want[r] = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 45) {
-                want[r] = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 2) {
-                want[r] = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 24) {
-                want[r] = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 25) {
-                want[r] = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } elif (fmt == 23) {
-                want[r] = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            } else {
-                want[r] = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-            }
+            want[r] = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
             for (s in range64(nsb)) {
                 if (fmt == 4) {
                     dequant_k4_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
@@ -1403,31 +1328,31 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {   
             }
         }
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 5) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 44) {
-            repack_iq4xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq4xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 3) {
-            repack_k3_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
-            repack_iq3s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
-            repack_iq3xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 2) {
-            repack_k2_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k2, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 24) {
-            repack_iq2xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 25) {
-            repack_iq2xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 23) {
-            repack_iq2s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
         var dotbad = 0
         var deqbad = 0
@@ -1505,31 +1430,31 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0xDEADBEFu + uint(r) * 0x9E3779Bu
@@ -1540,31 +1465,31 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     }
     unsafe {
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 5) {
-            repack_k5_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k5, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 44) {
-            repack_iq4xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq4xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 3) {
-            repack_k3_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
-            repack_iq3s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
-            repack_iq3xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 2) {
-            repack_k2_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k2, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 24) {
-            repack_iq2xs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 25) {
-            repack_iq2xxs_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 23) {
-            repack_iq2s_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.iq2s, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
     // ntok-row activation image, bs-quantized per row
@@ -1733,7 +1658,7 @@ def test_kq_tile(t : T?) {
 // per-region grp slices, the per-expert-slice repack shape). Regions carry distinct LCG
 // payloads; both offs forms run — the shared activation image (gate/up, xoff 0) and
 // per-region activation rows (down, xoff = r*n).
-def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l; nreg : int64 = 3l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l; nreg : int64 = 3l) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -1745,31 +1670,31 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0x51ED270Bu + uint(r) * 0x85EBCA6Bu
@@ -1810,52 +1735,15 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     var want_pr : array<float>
     want_sh |> resize(nreg * d)
     want_pr |> resize(nreg * d)
+    let kf = kq_fmt_of_id(fmt, "kq_groupn_gate")
     unsafe {
         for (r in range64(nreg)) {
             for (row in range64(d)) {
                 let sb = (r * d + row) * nsb
                 let kqr = addr(kq[sb * qsb])
                 let ksr = addr(ks[sb * ssb])
-                if (fmt == 4) {
-                    want_sh[r * d + row] = dot_k4q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k4q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 5) {
-                    want_sh[r * d + row] = dot_k5q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k5q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 40) {
-                    want_sh[r * d + row] = dot_q40q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_q40q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 44) {
-                    want_sh[r * d + row] = dot_iq4xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq4xs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 3) {
-                    want_sh[r * d + row] = dot_k3q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k3q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 33) {
-                    want_sh[r * d + row] = dot_iq3s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq3s_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 34) {
-                    want_sh[r * d + row] = dot_iq3xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq3xxs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 45) {
-                    want_sh[r * d + row] = dot_iq4nl_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq4nl_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 2) {
-                    want_sh[r * d + row] = dot_k2q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k2q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 24) {
-                    want_sh[r * d + row] = dot_iq2xs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2xs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 25) {
-                    want_sh[r * d + row] = dot_iq2xxs_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2xxs_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } elif (fmt == 23) {
-                    want_sh[r * d + row] = dot_iq2s_q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_iq2s_q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                } else {
-                    want_sh[r * d + row] = dot_k6q8(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                    want_pr[r * d + row] = dot_k6q8(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n)
-                }
+                want_sh[r * d + row] = dot_kq(kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, kf)
+                want_pr[r * d + row] = dot_kq(kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n, kf)
             }
         }
     }
@@ -1889,31 +1777,31 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     unsafe {
         for (r in range64(nreg)) {
             if (fmt == 4) {
-                repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 5) {
-                repack_k5_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k5, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 40) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 44) {
-                repack_iq4xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 3) {
-                repack_k3_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
-                repack_iq3s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
-                repack_iq3xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 2) {
-                repack_k2_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k2, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 24) {
-                repack_iq2xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 25) {
-                repack_iq2xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 23) {
-                repack_iq2s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } else {
-                repack_k6_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k6, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             }
         }
         for (r in range64(nreg)) {   // grp references: one direct rows-core call per region, both bindings
@@ -2042,31 +1930,31 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 5) {
-                transcode_q5k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k5, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 44) {
-                transcode_iq4xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
-                transcode_iq3s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
-                transcode_iq3xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
-                transcode_iq4nl_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq4nl, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 2) {
-                transcode_q2k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k2, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 24) {
-                transcode_iq2xs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 25) {
-                transcode_iq2xxs_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 23) {
-                transcode_iq2s_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.iq2s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = 0x7F4A7C15u + uint(r) * 0x85EBCA6Bu
@@ -2078,31 +1966,31 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     unsafe {
         for (r in range64(nreg)) {   // per-region grp repack — the per-expert-slice shape
             if (fmt == 4) {
-                repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 5) {
-                repack_k5_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k5, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 40) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 44) {
-                repack_iq4xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 3) {
-                repack_k3_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
-                repack_iq3s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
-                repack_iq3xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
-                repack_q40_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.q40, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 2) {
-                repack_k2_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k2, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 24) {
-                repack_iq2xs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 25) {
-                repack_iq2xxs_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 23) {
-                repack_iq2s_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.iq2s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } else {
-                repack_k6_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+                repack_kq_grp(KqFmt.k6, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             }
         }
     }
@@ -2257,17 +2145,7 @@ def test_quantize_bs(t : T?) {
 def private dequant_plane_prefix(tr : Model; fmt : KqFmt; eloff, n : int64; var dst : array<float>) {
     for (blk in range64(n / 256l)) {
         let sb = (eloff + blk * 256l) / 256l
-        if (fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(tr.k4q, sb * K4_QSB, tr.k4s, sb * K4_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(tr.k5q, sb * K5_QSB, tr.k5s, sb * K5_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.k6) {
-            dequant_k6_plane_superblock(tr.k6q, sb * K6_QSB, tr.k6s, sb * K6_SSB, dst, blk * 256l)
-        } elif (fmt == KqFmt.q40) {
-            dequant_q40_plane_superblock(tr.q40q, sb * Q40_QSB, tr.q40s, sb * Q40_SSB, dst, blk * 256l)
-        } else {
-            panic("dequant_plane_prefix: not a kq format")
-        }
+        dequant_kq_plane_sb(fmt, tr.kq[int(fmt)].q, tr.kq[int(fmt)].s, sb, false, dst, blk * 256l)
     }
 }
 
@@ -2645,7 +2523,7 @@ def test_iq3xxs_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(96)
         ks |> resize(20)
-        transcode_iq3xxs_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq3xxs, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_iq3xxs_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -2683,7 +2561,7 @@ def test_iq4nl_planes(t : T?) {
         var ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
-        transcode_iq4nl_superblock(blkb, 0l, kq, 0l, ks, 0l)
+        kq_transcode_superblock(KqFmt.iq4nl, blkb, 0l, kq, 0l, ks, 0l)
         var dst : array<float>
         dst |> resize(256)
         dequant_iq4nl_plane_superblock(kq, 0l, ks, 0l, dst, 0l)
@@ -2699,6 +2577,80 @@ def test_iq4nl_planes(t : T?) {
         delete kq
         delete ks
         delete dst
+    }
+    t |> run("the per-32 formats refuse the lattice codecs by name: q8 has no plane transcode and no grp repack") @(t : T?) {
+        var blkb : array<uint8>
+        blkb |> resize(34)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(128)
+        ks |> resize(16)
+        var tripped = false
+        try {
+            kq_transcode_superblock(KqFmt.q8, blkb, 0l, kq, 0l, ks, 0l)
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "q8 plane transcode panics")
+        tripped = false
+        try {
+            unsafe {
+                repack_kq_grp(KqFmt.q8, addr(kq[0]), addr(ks[0]), 32l, 1l, 4l)
+            }
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "q8 grp repack panics")
+        delete blkb
+        delete kq
+        delete ks
+    }
+    t |> run("iq4nl plane dequant reads its codebook on a team lane: lane values == main-thread values") @(t : T?) {
+        let blkb <- build_iq4nl_block()
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq |> resize(128)
+        ks |> resize(16)
+        kq_transcode_superblock(KqFmt.iq4nl, blkb, 0l, kq, 0l, ks, 0l)
+        var main_dst : array<float>
+        main_dst |> resize(256)
+        dequant_iq4nl_plane_superblock(kq, 0l, ks, 0l, main_dst, 0l)
+        var lane_dst : array<float>
+        lane_dst |> resize(256)
+        var ran = 0
+        with_job_que() {
+            set_jobque_fork_pool(true, true)
+            set_jobque_team_mode(true)
+            unsafe {
+                let kqp = addr(kq)
+                let ksp = addr(ks)
+                var dp = addr(lane_dst)
+                var rp = addr(ran)
+                team_parallel_for(0, 1, 1) <| @(rb, re : int) {
+                    feint("{rb} {re}")
+                    dequant_iq4nl_plane_superblock(*kqp, 0l, *ksp, 0l, *dp, 0l)
+                    unsafe(rp[0]) = 1
+                }
+            }
+            set_jobque_team_mode(false)
+        }
+        t |> equal(ran, 1, "the lane body ran")
+        var nonzero = 0
+        var diff = 0
+        for (a, b in main_dst, lane_dst) {
+            if (a != 0.0) {
+                nonzero++
+            }
+            if (a != b) {
+                diff++
+            }
+        }
+        t |> success(nonzero > 200, "the fixture's expected weights are not zero ({nonzero} nonzero of 256)")
+        t |> equal(diff, 0, "elements the lane dequanted differently from the main thread")
+        delete kq
+        delete ks
+        delete main_dst
+        delete lane_dst
     }
 }
 
@@ -2728,7 +2680,7 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
         var seed = 11
         for (gtype in gtypes) {
             let fmt = gguf_kq_fmt_of_type(gtype)
-            let sbb = gguf_kq_disk_sbb(gtype)
+            let sbb = ggml_type_bytes(gtype, 256l)
             var bytes : array<uint8>
             bytes |> reserve(sbb * 3l)
             var x = uint(seed) * 2654435761u
@@ -2854,9 +2806,9 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
     for (r in range64(d)) {
         for (sbi in range64(nsb)) {
             if (fmt == 3) {
-                transcode_q3k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+                kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
             } else {
-                transcode_q6k_superblock(blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk1, 0l, kq, (r * nsb + sbi) * qsb, ks, (r * nsb + sbi) * ssb)
             }
         }
         var st = 0xC0FFEEu + uint(r) * 0x9E3779Bu
@@ -2866,26 +2818,22 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
         }
     }
     var m = Model()
-    if (fmt == 3) {
-        m.k3q := kq
-        m.k3s := ks
-    } else {
-        m.k6q := kq
-        m.k6s := ks
-    }
+    let kf = fmt == 3 ? KqFmt.k3 : KqFmt.k6
+    m.kq[int(kf)].q := kq
+    m.kq[int(kf)].s := ks
     var wqDisk : array<uint8>
     var wsDisk : array<uint8>
-    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, false, mr, wqDisk, wsDisk)
+    moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, false, mr, wqDisk, wsDisk)
     unsafe {
         if (fmt == 3) {
-            repack_k3_grp(addr(m.k3q[0]), addr(m.k3s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k3, addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(m.k6q[0]), addr(m.k6s[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
         }
     }
     var wqGrp : array<uint8>
     var wsGrp : array<uint8>
-    moe_gpu_gather_stack_kq(m, fmt == 3 ? KqFmt.k3 : KqFmt.k6, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+    moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, true, mr, wqGrp, wsGrp)
     var qdiff = 0
     for (a, b in wqDisk, wqGrp) {
         if (a != b) {
@@ -2937,19 +2885,8 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
         }
     }
     var m = Model()
-    if (fmt == KqFmt.iq4xs) {
-        m.iq4xsq := kq
-        m.iq4xss := ks
-    } elif (fmt == KqFmt.iq3s) {
-        m.iq3sq := kq
-        m.iq3ss := ks
-    } elif (fmt == KqFmt.iq3xxs) {
-        m.iq3xxsq := kq
-        m.iq3xxss := ks
-    } else {
-        m.iq2xxsq := kq
-        m.iq2xxss := ks
-    }
+    m.kq[int(fmt)].q := kq
+    m.kq[int(fmt)].s := ks
     var wqDisk : array<uint8>
     var wsDisk : array<uint8>
     moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, false, mr, wqDisk, wsDisk)
@@ -2977,9 +2914,9 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s) {
         unsafe {
             if (fmt == KqFmt.iq4xs) {
-                repack_iq4xs_grp(addr(m.iq4xsq[0]), addr(m.iq4xss[0]), n, d, mr)
+                repack_kq_grp(KqFmt.iq4xs, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             } else {
-                repack_iq3s_grp(addr(m.iq3sq[0]), addr(m.iq3ss[0]), n, d, mr)
+                repack_kq_grp(KqFmt.iq3s, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             }
         }
         var wqGrp : array<uint8>

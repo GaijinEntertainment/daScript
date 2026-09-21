@@ -75,7 +75,7 @@ def private build_pool(nregions, d : int64; var kq : array<uint8>; var ks : arra
     ks |> resize(nregions * d * nsb * ssb)
     for (r in range64(nregions * d)) {
         for (s in range64(nsb)) {
-            transcode_q4k_superblock(blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            kq_transcode_superblock(KqFmt.k4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
         }
     }
     var st = 0x7F4A7C15u
@@ -85,7 +85,7 @@ def private build_pool(nregions, d : int64; var kq : array<uint8>; var ks : arra
     }
     unsafe {
         for (r in range64(nregions)) {
-            repack_k4_grp(addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), N, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), N, d, mr)
         }
     }
 }

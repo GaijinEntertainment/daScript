@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_ple
 require ?das_metal dasllama/dasllama_metal_shapes   // ffn_second_hidden — the width-servability unit
+require math
 
 // The PLE go-live tripwire (ple_check_table) and the MatFormer width classifier
 // (ffn_second_hidden): both decided from a synthetic Model, no weights on disk.
@@ -44,15 +45,7 @@ def test_ple_check_table(t : T?) {
             var mk <- ple_shell(fmt)
             t |> success(trips(mk), "{fmt} fmt with an empty plane trips")
             let sbytes = (need / 256l) * qsb
-            if (fmt == KqFmt.k4) {
-                mk.k4q |> resize(sbytes)
-            } elif (fmt == KqFmt.k5) {
-                mk.k5q |> resize(sbytes)
-            } elif (fmt == KqFmt.k6) {
-                mk.k6q |> resize(sbytes)
-            } else {
-                mk.q40q |> resize(sbytes)
-            }
+            mk.kq[int(fmt)].q |> resize(sbytes)
             t |> success(!trips(mk), "{fmt} fmt with the table resident passes")
             delete mk
         }
@@ -63,6 +56,49 @@ def test_ple_check_table(t : T?) {
         mn.ple_emb_off = 4096l
         t |> success(!trips(mn), "a model with no per-layer embeddings is exempt")
         delete mn
+    }
+}
+
+[test]
+def test_gemma4_router_rows(t : T?) {
+    t |> run("a prefill row of the gemma4 router input is bit-identical to the decode row (npos = 1)") @(t : T?) {
+        let dim = 256l
+        let npos = 5l
+        var m = Model()
+        m.config.dim = dim
+        m.config.norm_eps = 1.0e-6
+        m.moe_router_scale_off = 32l
+        m.fblob |> resize(m.moe_router_scale_off + 2l * dim)   // two layers of scale rows
+        for (i in range64(2l * dim)) {
+            m.fblob[m.moe_router_scale_off + i] = 0.5 + 0.01 * float(i % 37l)
+        }
+        var src : array<float>
+        src |> resize(npos * dim)
+        for (i in range64(npos * dim)) {
+            src[i] = sin(float(i) * 0.37) * (1.0 + float(i / dim))
+        }
+        var batch : array<float>
+        batch |> resize(npos * dim)
+        gemma4_router(m, batch, src, 1l, dim, npos)
+        var row : array<float>
+        var one : array<float>
+        row |> resize(dim)
+        one |> resize(dim)
+        var bad = 0
+        for (p in range64(npos)) {
+            for (i in range64(dim)) {
+                row[i] = src[p * dim + i]
+            }
+            gemma4_router(m, one, row, 1l, dim, 1l)
+            for (i in range64(dim)) {
+                if (one[i] != batch[p * dim + i]) {
+                    bad++
+                }
+            }
+        }
+        t |> equal(0, bad, "every element of every row matches the single-row call")
+        t |> success(batch[1] != 0.0 && batch[dim + 1l] != batch[1], "the rows carry distinct non-zero values (the compare is not vacuous)")
+        delete m
     }
 }
 

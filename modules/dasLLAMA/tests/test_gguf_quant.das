@@ -264,7 +264,7 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
                       GGML_TYPE_Q2_K, GGML_TYPE_IQ2_S, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_XXS]
         var ti = 0
         for (gtype in types) {
-            let sbb = gguf_kq_disk_sbb(gtype)
+            let sbb = ggml_type_bytes(gtype, 256l)
             t |> success(sbb > 0l, "type {gtype} has a disk stride")
             let fmt = gguf_kq_fmt_of_type(gtype)
             let data <- synth_sb_bytes(sbb, 7 + ti)

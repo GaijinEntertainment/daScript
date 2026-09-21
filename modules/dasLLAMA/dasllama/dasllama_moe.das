@@ -536,13 +536,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                         mi++
                     }
                 }
-                if (kq_sb(f1)) {
-                    mm_at_kq_groupn(s.moe_gu, t, f1, s.moe_offs, m, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                } elif (f1 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_gu, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                }
+                mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, false, m, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
                 mi = 0l
                 for (j in range64(k)) {
                     if (s.heat_hit[j] == int8(0)) {
@@ -551,22 +545,12 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                         mi++
                     }
                 }
-                if (kq_sb(f3)) {
-                    mm_at_kq_groupn(s.moe_gu2, t, f3, s.moe_offs, m, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                } elif (f3 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_gu2, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                }
+                mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, false, m, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
                 prof_add("mm_moe", ts_gu)
                 let ts_act = prof_ticks()
                 gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, m)
                 prof_add("act", ts_act)
-                if (kq_sb(f2)) {
-                    requant_rows_q8k_bs(s.moe_gu, nfe, m, s.moe_dq, s.moe_ds, s.moe_dbs)
-                } else {
-                    requant_rows_q8(s.moe_gu, nfe, m, s.moe_dq, s.moe_ds)
-                }
+                requant_rows_f(f2, s.moe_gu, nfe, m, s.moe_dq, s.moe_ds, s.moe_dbs)
                 ts_down = prof_ticks()
                 mi = 0l
                 for (j in range64(k)) {
@@ -576,13 +560,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                         mi++
                     }
                 }
-                if (kq_sb(f2)) {
-                    mm_at_kq_groupn(s.moe_dn, t, f2, s.moe_offs, m, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
-                } elif (f2 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_dn, t, s.moe_offs, m, s.moe_dq, s.moe_ds, nfe, dim)
-                } else {
-                    mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, m, s.moe_dq, s.moe_ds, nfe, dim)
-                }
+                mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, false, m, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
             }
             s.moe_hdn |> resize(nhits * dim)
             prof_add("mm_moe_dn", ts_down)
@@ -614,51 +592,19 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 s.moe_offs[j * 2l + 1l] = 0l   // gates share the single hoisted xb image
                 s.moe_boffs[j] = t.web1_off + e * nfe
             }
-            if (kq_sb(f1)) {   // native K-quant expert stack reads the Q8_K-form scratch (never biased — detect guards that)
-                mm_at_kq_groupn(s.moe_gu, t, f1, s.moe_offs, k, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            } elif (f1 == KqFmt.q51) {   // native Q5_1 stack reads the Q8_0-form image (never biased)
-                mm_at_q51_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } elif (t.experts_mx4) {   // native 4-bit expert weights — half the Q8 traffic
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_gu, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_mx4_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } else {
-                mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            }
+            mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
             for (j in range64(k)) {
                 let e = l * ne + s.moe_idx[j]
                 s.moe_offs[j * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
                 s.moe_offs[j * 2l + 1l] = 0l   // ups read the same hoisted xb image (explicit, not inherited from the gate pass)
                 s.moe_boffs[j] = t.web3_off + e * nfe
             }
-            if (kq_sb(f3)) {   // kq v2: Q8_K-form scratch
-                mm_at_kq_groupn(s.moe_gu2, t, f3, s.moe_offs, k, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            } elif (f3 == KqFmt.q51) {
-                mm_at_q51_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } elif (t.experts_mx4) {
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_gu2, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_mx4_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } else {
-                mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            }
+            mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
             prof_add("mm_moe", ts_gu)
             let ts_act = prof_ticks()
             gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
             prof_add("act", ts_act)
-            if (kq_sb(f2)) {   // kq v2: the down stack reads Q8_K-form rows; q51/q8 the Q8_0 form
-                requant_rows_q8k_bs(s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)
-            } else {
-                requant_rows_q8(s.moe_gu, nfe, k, s.moe_dq, s.moe_ds)   // books mm_requant
-            }
+            requant_rows_f(f2, s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)   // books mm_requant
             let ts_down = prof_ticks()
             for (j in range64(k)) {
                 let e = l * ne + s.moe_idx[j]
@@ -666,21 +612,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 s.moe_offs[j * 2l + 1l] = j * nfe   // each down reads its own requantized row
                 s.moe_boffs[j] = t.web2_off + e * dim   // down bias added before the routed weight scales it
             }
-            if (kq_sb(f2)) {
-                mm_at_kq_groupn(s.moe_dn, t, f2, s.moe_offs, k, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
-            } elif (f2 == KqFmt.q51) {
-                mm_at_q51_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            } elif (t.experts_mx4) {
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_dn, t, s.moe_offs, s.moe_boffs, k, s.moe_dq, s.moe_ds, nfe, dim)
-                } else {
-                    mm_at_mx4_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, s.moe_boffs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            } else {
-                mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            }
+            mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, biased, k, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
             prof_add("mm_moe_dn", ts_down)
         }
         if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline

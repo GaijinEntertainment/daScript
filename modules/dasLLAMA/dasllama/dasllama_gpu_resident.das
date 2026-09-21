@@ -256,7 +256,7 @@ def private rdec_efmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.ex
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
-def trim_model_planes(var t : Model) : bool {   // nolint:STYLE037,STYLE038 — the flat per-format plane-trim ladder (one arm per KqFmt) is the honest shape
+def trim_model_planes(var t : Model) : bool {
     if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
         return false
     }
@@ -286,78 +286,18 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE037,STYLE038 — 
         // the region's plane pair verbatim (repack layout preserved), rebased to superblock 0
         let nsb = vocab * (dim / 256l)
         let sb0 = t.wcls_off / 256l
+        let f = t.emb_fmt
+        if (!kq_sb(f)) {
+            to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{f}' has no kq plane pair - declining\n")
+            return false
+        }
+        let qsb = kq_qsb(f)
+        let ssb = kq_ssb(f)
+        t.embq |> reserve_resize(nsb * qsb)
+        t.embs |> reserve_resize(nsb * ssb)
         unsafe {
-            if (t.emb_fmt == KqFmt.k4) {
-                t.embq |> reserve_resize(nsb * K4_QSB)
-                t.embs |> reserve_resize(nsb * K4_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k4q[sb0 * K4_QSB]), nsb * K4_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k4s[sb0 * K4_SSB]), nsb * K4_SSB)
-            } elif (t.emb_fmt == KqFmt.k5) {
-                t.embq |> reserve_resize(nsb * K5_QSB)
-                t.embs |> reserve_resize(nsb * K5_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k5q[sb0 * K5_QSB]), nsb * K5_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k5s[sb0 * K5_SSB]), nsb * K5_SSB)
-            } elif (t.emb_fmt == KqFmt.k6) {
-                t.embq |> reserve_resize(nsb * K6_QSB)
-                t.embs |> reserve_resize(nsb * K6_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k6q[sb0 * K6_QSB]), nsb * K6_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k6s[sb0 * K6_SSB]), nsb * K6_SSB)
-            } elif (t.emb_fmt == KqFmt.q40) {
-                t.embq |> reserve_resize(nsb * Q40_QSB)
-                t.embs |> reserve_resize(nsb * Q40_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
-            } elif (t.emb_fmt == KqFmt.iq4xs) {
-                t.embq |> reserve_resize(nsb * IQ4XS_QSB)
-                t.embs |> reserve_resize(nsb * IQ4XS_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq4xsq[sb0 * IQ4XS_QSB]), nsb * IQ4XS_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq4xss[sb0 * IQ4XS_SSB]), nsb * IQ4XS_SSB)
-            } elif (t.emb_fmt == KqFmt.k3) {
-                t.embq |> reserve_resize(nsb * K3_QSB)
-                t.embs |> reserve_resize(nsb * K3_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k3q[sb0 * K3_QSB]), nsb * K3_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k3s[sb0 * K3_SSB]), nsb * K3_SSB)
-            } elif (t.emb_fmt == KqFmt.iq4nl) {
-                t.embq |> reserve(nsb * Q40_QSB)
-                t.embq |> resize(nsb * Q40_QSB)
-                t.embs |> reserve(nsb * Q40_SSB)
-                t.embs |> resize(nsb * Q40_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq4nlq[sb0 * Q40_QSB]), nsb * Q40_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq4nls[sb0 * Q40_SSB]), nsb * Q40_SSB)
-            } elif (t.emb_fmt == KqFmt.k2) {
-                t.embq |> reserve_resize(nsb * K2_QSB)
-                t.embs |> reserve_resize(nsb * K2_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k2q[sb0 * K2_QSB]), nsb * K2_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k2s[sb0 * K2_SSB]), nsb * K2_SSB)
-            } elif (t.emb_fmt == KqFmt.iq2s) {
-                t.embq |> reserve_resize(nsb * IQ2S_QSB)
-                t.embs |> reserve_resize(nsb * IQ2S_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2sq[sb0 * IQ2S_QSB]), nsb * IQ2S_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2ss[sb0 * IQ2S_SSB]), nsb * IQ2S_SSB)
-            } elif (t.emb_fmt == KqFmt.iq2xs) {
-                t.embq |> reserve_resize(nsb * IQ2XS_QSB)
-                t.embs |> reserve_resize(nsb * IQ2XS_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2xsq[sb0 * IQ2XS_QSB]), nsb * IQ2XS_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2xss[sb0 * IQ2XS_SSB]), nsb * IQ2XS_SSB)
-            } elif (t.emb_fmt == KqFmt.iq2xxs) {
-                t.embq |> reserve_resize(nsb * IQ2XXS_QSB)
-                t.embs |> reserve_resize(nsb * IQ2XXS_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq2xxsq[sb0 * IQ2XXS_QSB]), nsb * IQ2XXS_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq2xxss[sb0 * IQ2XXS_SSB]), nsb * IQ2XXS_SSB)
-            } elif (t.emb_fmt == KqFmt.iq3xxs) {
-                t.embq |> reserve_resize(nsb * IQ3XXS_QSB)
-                t.embs |> reserve_resize(nsb * IQ3XXS_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq3xxsq[sb0 * IQ3XXS_QSB]), nsb * IQ3XXS_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq3xxss[sb0 * IQ3XXS_SSB]), nsb * IQ3XXS_SSB)
-            } elif (t.emb_fmt == KqFmt.iq3s) {
-                t.embq |> reserve_resize(nsb * IQ3S_QSB)
-                t.embs |> reserve_resize(nsb * IQ3S_SSB)
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq3sq[sb0 * IQ3S_QSB]), nsb * IQ3S_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq3ss[sb0 * IQ3S_SSB]), nsb * IQ3S_SSB)
-            } else {
-                to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair - declining\n")
-                return false
-            }
+            memcpy(addr<void?>(t.embq[0]), addr<void?>(t.kq[int(f)].q[sb0 * qsb]), nsb * qsb)
+            memcpy(addr<void?>(t.embs[0]), addr<void?>(t.kq[int(f)].s[sb0 * ssb]), nsb * ssb)
         }
     }   // fp32 embeddings ride fblob, which the trim keeps
     t.planes_trimmed = true
@@ -366,32 +306,10 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE037,STYLE038 — 
     delete t.qscales16
     delete t.wblob
     delete t.bf16blob
-    delete t.k4q
-    delete t.k4s
-    delete t.k5q
-    delete t.k5s
-    delete t.k6q
-    delete t.k6s
-    delete t.iq4xsq
-    delete t.iq4xss
-    delete t.k3q
-    delete t.k3s
-    delete t.iq3sq
-    delete t.iq3ss
-    delete t.iq3xxsq
-    delete t.iq3xxss
-    delete t.iq4nlq
-    delete t.iq4nls
-    delete t.k2q
-    delete t.k2s
-    delete t.iq2sq
-    delete t.iq2ss
-    delete t.iq2xsq
-    delete t.iq2xss
-    delete t.iq2xxsq
-    delete t.iq2xxss
-    delete t.q40q
-    delete t.q40s
+    for (p in t.kq) {
+        delete p.q
+        delete p.s
+    }
     delete t.q51q
     delete t.q51s
     delete t.mxq

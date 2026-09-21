@@ -15,6 +15,8 @@ require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
 require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
+require daslib/enum_trait   // the plane table walks the KqFmt enum
+require strings   // the scale-plane name's format prefix
 require math
 
 // Disk-format -> compute-layout transforms: the metal-flavor blob transform, the CPU repack
@@ -169,92 +171,21 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 //! which is the only point where that plane's fills are done and its bytes are not yet written.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
-    // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
-    // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
-    if (name == "k4s") {
-        if (!empty(t.k4s)) {
-            compact_kq_scale_strip(t.k4s)
-        }
-        return true
-    }
-    if (name == "k5s") {
-        if (!empty(t.k5s)) {
-            compact_kq_scale_strip(t.k5s)
-        }
-        return true
-    }
-    if (name == "iq4xss") {
-        if (!empty(t.iq4xss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq4xs, unsafe(addr < uint8 const? >(t.iq4xss[0])), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
-            t.iq4xss <- xc
-        }
-        return true
-    }
-    if (name == "iq3ss") {
-        if (!empty(t.iq3ss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq3s, unsafe(addr < uint8 const? >(t.iq3ss[0])), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
-            t.iq3ss <- xc
-        }
-        return true
-    }
-    if (name == "iq3xxss") {
-        if (!empty(t.iq3xxss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq3xxs, unsafe(addr < uint8 const? >(t.iq3xxss[0])), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
-            t.iq3xxss <- xc
-        }
-        return true
-    }
-    if (name == "iq2ss") {
-        if (!empty(t.iq2ss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq2s, unsafe(addr < uint8 const? >(t.iq2ss[0])), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
-            t.iq2ss <- xc
-        }
-        return true
-    }
-    if (name == "iq2xss") {
-        if (!empty(t.iq2xss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq2xs, unsafe(addr < uint8 const? >(t.iq2xss[0])), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
-            t.iq2xss <- xc
-        }
-        return true
-    }
-    if (name == "iq2xxss") {
-        if (!empty(t.iq2xxss)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.iq2xxs, unsafe(addr < uint8 const? >(t.iq2xxss[0])), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
-            t.iq2xxss <- xc
-        }
-        return true
-    }
-    if (name == "k2s") {
-        if (!empty(t.k2s)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.k2, unsafe(addr < uint8 const? >(t.k2s[0])), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
-            t.k2s <- xc
-        }
-        return true
-    }
-    if (name == "k3s") {
-        if (!empty(t.k3s)) {
-            var @exact_size xc : array<uint8>
-            kq_split_scale_plane(KqFmt.k3, unsafe(addr < uint8 const? >(t.k3s[0])), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
-            t.k3s <- xc
-        }
-        return true
-    }
-    if (name != "k6s") {
+    var f = KqFmt.q8
+    if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl) {
         return false
     }
-    if (!empty(t.k6s)) {
-        var @exact_size k6c : array<uint8>
-        kq_split_scale_plane(KqFmt.k6, unsafe(addr < uint8 const? >(t.k6s[0])), long_length(t.k6s) / K6_SSB, k6c)
-        t.k6s <- k6c
+    if (empty(t.kq[int(f)].s)) {
+        return true
     }
+    if (f == KqFmt.k4 || f == KqFmt.k5) {
+        // the 16B verbatim disk scale block per superblock; the 4B pad is repack scratch a blob model never uses
+        compact_kq_scale_strip(t.kq[int(f)].s)
+        return true
+    }
+    var @exact_size xc : array<uint8>
+    kq_split_scale_plane(f, unsafe(addr<uint8 const?>(t.kq[int(f)].s[0])), long_length(t.kq[int(f)].s) / kq_ssb(f), xc)
+    t.kq[int(f)].s <- xc
     return true
 }
 
@@ -349,69 +280,28 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var qsp : float? = null
         var mxqp : uint8? = null
         var mxsp : uint8? = null
-        var k4qp : uint8? = null
-        var k4sp : uint8? = null
-        var k5qp : uint8? = null
-        var k5sp : uint8? = null
-        var k6qp : uint8? = null
-        var k6sp : uint8? = null
-        var q40qp : uint8? = null
-        var q40sp : uint8? = null
         var q51qp : uint8? = null
         var q51sp : uint8? = null
-        var iq4xsqp : uint8? = null
-        var iq4xssp : uint8? = null
-        if (!empty(t.iq4xsq)) { iq4xsqp = addr(t.iq4xsq[0]) }
-        if (!empty(t.iq4xss)) { iq4xssp = addr(t.iq4xss[0]) }
-        var k3qp : uint8? = null
-        var k3sp : uint8? = null
-        if (!empty(t.k3q)) { k3qp = addr(t.k3q[0]) }
-        if (!empty(t.k3s)) { k3sp = addr(t.k3s[0]) }
-        var iq3sqp : uint8? = null
-        var iq3ssp : uint8? = null
-        if (!empty(t.iq3sq)) { iq3sqp = addr(t.iq3sq[0]) }
-        if (!empty(t.iq3ss)) { iq3ssp = addr(t.iq3ss[0]) }
-        var iq3xxsqp : uint8? = null
-        var iq3xxssp : uint8? = null
-        if (!empty(t.iq3xxsq)) { iq3xxsqp = addr(t.iq3xxsq[0]) }
-        if (!empty(t.iq3xxss)) { iq3xxssp = addr(t.iq3xxss[0]) }
-        var iq4nlqp : uint8? = null
-        var iq4nlsp : uint8? = null
-        if (!empty(t.iq4nlq)) { iq4nlqp = addr(t.iq4nlq[0]) }
-        if (!empty(t.iq4nls)) { iq4nlsp = addr(t.iq4nls[0]) }
-        var k2qp : uint8? = null
-        var k2sp : uint8? = null
-        if (!empty(t.k2q)) { k2qp = addr(t.k2q[0]) }
-        if (!empty(t.k2s)) { k2sp = addr(t.k2s[0]) }
-        var iq2sqp : uint8? = null
-        var iq2ssp : uint8? = null
-        if (!empty(t.iq2sq)) { iq2sqp = addr(t.iq2sq[0]) }
-        if (!empty(t.iq2ss)) { iq2ssp = addr(t.iq2ss[0]) }
-        var iq2xsqp : uint8? = null
-        var iq2xssp : uint8? = null
-        if (!empty(t.iq2xsq)) { iq2xsqp = addr(t.iq2xsq[0]) }
-        if (!empty(t.iq2xss)) { iq2xssp = addr(t.iq2xss[0]) }
-        var iq2xxsqp : uint8? = null
-        var iq2xxssp : uint8? = null
-        if (!empty(t.iq2xxsq)) { iq2xxsqp = addr(t.iq2xxsq[0]) }
-        if (!empty(t.iq2xxss)) { iq2xxssp = addr(t.iq2xxss[0]) }
+        // the lattice plane pairs' bases, by int(KqFmt); the lanes index them by the region's format
+        var kqp : array<uint8?>
+        var ksp : array<uint8?>
+        kqp |> resize(KQ_FMT_COUNT)
+        ksp |> resize(KQ_FMT_COUNT)
+        for (pl, i in t.kq, count()) {
+            if (!empty(pl.q)) { kqp[i] = addr(pl.q[0]) }
+            if (!empty(pl.s)) { ksp[i] = addr(pl.s[0]) }
+        }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
         if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
         if (!empty(t.mxs)) { mxsp = addr(t.mxs[0]) }
-        if (!empty(t.k4q)) { k4qp = addr(t.k4q[0]) }
-        if (!empty(t.k4s)) { k4sp = addr(t.k4s[0]) }
-        if (!empty(t.k5q)) { k5qp = addr(t.k5q[0]) }
-        if (!empty(t.k5s)) { k5sp = addr(t.k5s[0]) }
-        if (!empty(t.k6q)) { k6qp = addr(t.k6q[0]) }
-        if (!empty(t.k6s)) { k6sp = addr(t.k6s[0]) }
-        if (!empty(t.q40q)) { q40qp = addr(t.q40q[0]) }
-        if (!empty(t.q40s)) { q40sp = addr(t.q40s[0]) }
         if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
         if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
         let rp = addr<StreamReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
+        var kqpp = addr(kqp[0])
+        var kspp = addr(ksp[0])
         maybe_parallel_for(0, nr, njobs) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
@@ -424,16 +314,17 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
-                        let fk = f == K2_STREAM_TAG ? 2 : f
-                        let qsb = kq_qsb(fk)
-                        let ssb = kq_ssb(fk)
-                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : (f == 44 ? iq4xsqp : (f == 3 ? k3qp : (f == 33 ? iq3sqp : (f == 34 ? iq3xxsqp : (f == 45 ? iq4nlqp : (fk == 2 ? k2qp : (f == 23 ? iq2sqp : (f == 24 ? iq2xsqp : iq2xxsqp)))))))))))
-                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : (f == 40 ? q40sp : (f == 44 ? iq4xssp : (f == 3 ? k3sp : (f == 33 ? iq3ssp : (f == 34 ? iq3xxssp : (f == 45 ? iq4nlsp : (fk == 2 ? k2sp : (f == 23 ? iq2ssp : (f == 24 ? iq2xssp : iq2xxssp)))))))))))
-                        invoke(rkq, fk, kqp + sb * qsb, ksp + sb * ssb, rp[i].n, rp[i].d)
+                        var rf = KqFmt.q8
+                        if (!kq_fmt_of_stream_code(f, rf)) {
+                            panic("repack_regions: region code {f} names no kq format")
+                        }
+                        invoke(rkq, kq_schema_id(rf), kqpp[int(rf)] + sb * kq_qsb(rf), kspp[int(rf)] + sb * kq_ssb(rf), rp[i].n, rp[i].d)
                     }
                 }
             }
         }
+        delete kqp
+        delete ksp
     }
 }
 
@@ -546,32 +437,8 @@ def private repack_q8_weights(var t : Model) {
 
 // route one kq-tagged tensor to its format's plane pair (q8 tags no-op — those live in qblob)
 def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d : int64) {
-    if (fmt == KqFmt.k4) {
-        push_repack(regs, 4, woff, n, d)
-    } elif (fmt == KqFmt.k5) {
-        push_repack(regs, 5, woff, n, d)
-    } elif (fmt == KqFmt.k6) {
-        push_repack(regs, 6, woff, n, d)
-    } elif (fmt == KqFmt.q40) {
-        push_repack(regs, 40, woff, n, d)
-    } elif (fmt == KqFmt.iq4xs) {
-        push_repack(regs, 44, woff, n, d)
-    } elif (fmt == KqFmt.k3) {
-        push_repack(regs, 3, woff, n, d)
-    } elif (fmt == KqFmt.iq3s) {
-        push_repack(regs, 33, woff, n, d)
-    } elif (fmt == KqFmt.iq3xxs) {
-        push_repack(regs, 34, woff, n, d)
-    } elif (fmt == KqFmt.iq4nl) {
-        push_repack(regs, 45, woff, n, d)
-    } elif (fmt == KqFmt.k2) {
-        push_repack(regs, 20, woff, n, d)
-    } elif (fmt == KqFmt.iq2s) {
-        push_repack(regs, 23, woff, n, d)
-    } elif (fmt == KqFmt.iq2xs) {
-        push_repack(regs, 24, woff, n, d)
-    } elif (fmt == KqFmt.iq2xxs) {
-        push_repack(regs, 25, woff, n, d)
+    if (kq_sb(fmt)) {
+        push_repack(regs, kq_stream_code(fmt), woff, n, d)
     }
 }
 
@@ -995,18 +862,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let ng = repacked ? slice_rows / mr : 0l
     unsafe {
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
-        let qp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4q[sb0 * kq_qsb(4)])
-            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5q[sb0 * kq_qsb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)])
-            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)])
-            : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xsq[sb0 * kq_qsb(44)])
-            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3q[sb0 * kq_qsb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3sq[sb0 * kq_qsb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxsq[sb0 * kq_qsb(34)]) : (fmt == KqFmt.iq4nl ? addr<uint8 const?>(t.iq4nlq[sb0 * kq_qsb(45)]) : (fmt == KqFmt.k2 ? addr<uint8 const?>(t.k2q[sb0 * kq_qsb(2)]) : (fmt == KqFmt.iq2s ? addr<uint8 const?>(t.iq2sq[sb0 * kq_qsb(23)]) : (fmt == KqFmt.iq2xs ? addr<uint8 const?>(t.iq2xsq[sb0 * kq_qsb(24)]) : addr<uint8 const?>(t.iq2xxsq[sb0 * kq_qsb(25)])))))))))))))
-        let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * kq_ssb(4)])
-            : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * kq_ssb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)])
-            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)])
-            : (fmt == KqFmt.iq4xs ? addr<uint8 const?>(t.iq4xss[sb0 * kq_ssb(44)])
-            : (fmt == KqFmt.k3 ? addr<uint8 const?>(t.k3s[sb0 * kq_ssb(3)]) : (fmt == KqFmt.iq3s ? addr<uint8 const?>(t.iq3ss[sb0 * kq_ssb(33)]) : (fmt == KqFmt.iq3xxs ? addr<uint8 const?>(t.iq3xxss[sb0 * kq_ssb(34)]) : (fmt == KqFmt.iq4nl ? addr<uint8 const?>(t.iq4nls[sb0 * kq_ssb(45)]) : (fmt == KqFmt.k2 ? addr<uint8 const?>(t.k2s[sb0 * kq_ssb(2)]) : (fmt == KqFmt.iq2s ? addr<uint8 const?>(t.iq2ss[sb0 * kq_ssb(23)]) : (fmt == KqFmt.iq2xs ? addr<uint8 const?>(t.iq2xss[sb0 * kq_ssb(24)]) : addr<uint8 const?>(t.iq2xxss[sb0 * kq_ssb(25)])))))))))))))
+        let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
+        let sp = addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1

@@ -1,13 +1,14 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-**A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
-issues asserts on `t`) that dispatches one or more kernel classes and asserts on their output -
-or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
-`REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+**A kernel-unit cell, or a kernel gate - a cell or probe that dispatches or binds a kernel
+class by hand rather than through the generated builders - applies `REVIEW_KERNEL_CELLS.md`
+(beside this file) together with this list, wherever the diff puts the file.** A kernel-unit
+cell is a model-less cell - a `t |> run` block, or a helper call that asserts on `t` - that
+dispatches one or more kernel classes and asserts on their output; a kernel class is a
+`[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das`.
 
 **A diff that touches a pinned test cell - one whose expected value is written down where a
 person edits it, a document, a checked-in table, a generated artifact's committed form, a
@@ -35,9 +36,8 @@ exemption, is a defect - run it through `run.das`.**
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
 touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
-no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run`
-by bare same-dir name, so anything that fires on require fires inside every one of those test
-processes.
+no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run` by
+bare same-dir name, so anything that fires on require fires inside every one of those test processes.
 
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
 thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**

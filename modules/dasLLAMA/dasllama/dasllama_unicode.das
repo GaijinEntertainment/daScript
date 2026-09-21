@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_unicode shared public
 
 require dasllama/dasllama_lint public
+require daslib/utf8_utils   // utf8_encode - the codepoint -> bytes encoder cpt_to_utf8 wraps
 require strings
 
 // Unicode classification + UTF-8 codec for the Llama-3 / tiktoken BPE pre-tokenizer.
@@ -199,12 +200,7 @@ def cpt_is_mark(cpt : int) : bool {
 }
 
 //! True if codepoint is whitespace (regex \s), per the upstream whitespace set.
-def cpt_is_whitespace(cpt : int) : bool {
-    for (w in WS) {
-        return true if (w == cpt)
-    }
-    return false
-}
+def cpt_is_whitespace(cpt : int) : bool => find_index(WS, cpt) >= 0
 
 //! Decode a UTF-8 string into an array of codepoints. Malformed leads pass through
 //! as a single byte (latin-1 style) — matches lenient tokenizer decoding.
@@ -278,14 +274,6 @@ def cpts_to_utf8(c : array<int>; a, b : int) : string {
 //! Encode a whole codepoint array to a UTF-8 string.
 def cpts_to_utf8(c : array<int>) : string => cpts_to_utf8(c, 0, length(c))
 
-//! Encode a single codepoint to its UTF-8 bytes as a string.
-def cpt_to_utf8(cpt : int) : string {
-    if (cpt < 128) {
-        return string([uint8(cpt)])
-    } elif (cpt < 2048) {
-        return string([uint8(192 + (cpt >> 6)), uint8(128 + (cpt & 63))])
-    } elif (cpt < 65536) {
-        return string([uint8(224 + (cpt >> 12)), uint8(128 + ((cpt >> 6) & 63)), uint8(128 + (cpt & 63))])
-    }
-    return string([uint8(240 + (cpt >> 18)), uint8(128 + ((cpt >> 12) & 63)), uint8(128 + ((cpt >> 6) & 63)), uint8(128 + (cpt & 63))])
-}
+//! Encode a single codepoint to its UTF-8 bytes as a string (the stdlib encoder; a hot loop
+//! appends through `utf8_encode(var bytes, uint(cpt))` instead and never builds the string).
+def cpt_to_utf8(cpt : int) : string => string(utf8_encode(uint(cpt)))

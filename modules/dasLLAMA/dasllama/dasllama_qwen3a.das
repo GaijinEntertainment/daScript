@@ -774,7 +774,7 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     for (_i in range64(max_new)) {
         let ti = ref_time_ticks()
         // greedy argmax + its logprob (logit − logsumexp) for the confidence signal
-        let best = int(hargmax(s.qctx.logits))
+        let best = int(parallel_argmax(s.qctx.logits, long_length(s.qctx.logits)))
         let mx = s.qctx.logits[best]
         plog_sum += double(s.qctx.logits[best]) - (log(hlse(s.qctx.logits, mx)) + double(mx))
         if (int64(best) == im_end || int64(best) == eot) {

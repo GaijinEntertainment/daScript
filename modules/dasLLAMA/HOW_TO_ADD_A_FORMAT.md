@@ -38,26 +38,35 @@ Write the answers down; they are the first lines of the PR body's format section
 
 ## 1. Identity - `dasllama/dasllama_kqformat.das`
 
-The taxonomy every other file keys off. One edit here, then the compiler finds the ladders.
+The taxonomy every other file keys off. One member and one descriptor row here; every
+per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `kq_stream_code`,
+`kq_ggml_type`, the int-id twins in `dasllama_gemm_schema.das`) reads the row.
 
 - Append the member to `KqFmt` - **append, never reorder**: the int value is the device stack
   tag (`vk_kq_schema_id`) and the image plane id.
-- `kq_sb` (both overloads) if it is a superblock format.
-- `kq_schema_id`: the kernel/IR id. The ids are mnemonics - K-quants by bit width (4/5/6),
-  Q4_0 = 40, i-quants = bit width x 10 + a variant digit (IQ4_XS = 44). Three id spaces exist -
-  `int(KqFmt)`, the kernel id, and the stream/repack region code (`kq_stream_code`: 0/2 are
-  q8/q51, else the kernel id) - and a new format touches all three; `test_kqformat` pins them.
-  A kernel id of 0, 1 or 2 collides in the stream space (Q2_K streams under 20 and translates
-  back at every dispatch boundary), so dodge those or claim a distinct code the same way, and
-  key every region ladder on the translated kernel id, never on the stream code by position.
-- The stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per superblock row of the quant and
-  scale planes) and the `kq_qsb` / `kq_ssb` arms. A codebook goes here too (`IQ4NL_LUT`); a grid
-  or codebook table reaches worker lanes only as a function returning the literal
-  (`iq3s_grid()`, `iq2s_grid2()`: a direct `return fixed_array<T>(...)`, no local), never as a
-  module global - a team-lane kernel reads a `let` global as zero.
-- `dasllama_gemm_schema.das`: the int-id twins `kq_qsb(int)` / `kq_ssb(int)`, and
-  `kq_reads_packed_planes` - the one packed-versus-panel predicate the batch cell generator, the
-  probe, the tests and the bench all read.
+- The `GGML_TYPE_<FMT>` constant, the stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per
+  superblock row of the quant and scale planes), and the `kq_desc` row: strides, weights per
+  stride unit, disk bytes per stride unit (the ggml block bytes), the ggml type, the kernel/IR id
+  and the stream code. The kernel ids are mnemonics - K-quants by bit width (4/5/6), Q4_0 = 40,
+  i-quants = bit width x 10 + a variant digit (IQ4_XS = 44). Three id spaces exist -
+  `int(KqFmt)`, the kernel id, and the stream/repack region code (0/2 are q8/q51, else the kernel
+  id) - and the row carries all three; `test_kqformat` pins them and holds the disk bytes to
+  `ggml_type_bytes`. A kernel id of 0, 1 or 2 collides in the stream space (Q2_K streams under
+  20 and translates back at every dispatch boundary), so dodge those or claim a distinct code the
+  same way, and key every region ladder on the translated kernel id, never on the stream code by
+  position.
+- A codebook goes here too; a grid or codebook table reaches worker lanes only as a function
+  returning the literal (`iq4nl_lut()`, `iq3s_grid()`, `iq2s_grid2()`: a direct
+  `return fixed_array<T>(...)`, no local), never as a module global - a team-lane kernel reads a
+  `let` global as zero; the global twin (`IQ4NL_LUT = iq4nl_lut()`) serves tests and oracles.
+- A signed-grid format (two grid words per octet, a sign byte flipping element j) shares the
+  octet with the five it joins: `grid_octet_dot` (the dot), `store_grid_pair` (the dequant),
+  `store_grid_panel_pair` + `sign_masks_iq` (the panel unpack) - what a new member writes is
+  the grid-index and sign derivation alone. The helpers are generic in their operand ON PURPOSE:
+  a generic instantiates in the caller's partition, and the split-module JIT inlines within a
+  partition only - a plain kqformat function would be a real call per eight weights.
+- `dasllama_gemm_schema.das`: `kq_reads_packed_planes` - the one packed-versus-panel predicate
+  the batch cell generator, the probe, the tests and the bench all read.
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream
   code, and the codebook's edge values; its radix guard holds every id under `DAT_KEY_FMTS`
   (`dasllama_vulkan_common.das`, the Vulkan decode block's layer-key radix) - the 32nd member
@@ -65,15 +74,22 @@ The taxonomy every other file keys off. One edit here, then the compiler finds t
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 
-- `GGML_TYPE_<FMT>` constant (`dasllama_gguf.das`).
-- `transcode_<fmt>_superblock(bytes, bo, kq, kqo, ks, kso)` - the per-superblock disk -> plane
-  split, array form (what the tests drive).
+- `KqTag_<fmt>` (`dasllama_kqformat.das`) - the format's empty tag struct beside the others; it
+  is the overload key every per-format family resolves on, and `kq_fmt_stamp(fmt) <| $(F)`
+  binds it, so a member without an overload fails the compile at the stamp. The tag is the
+  LAST parameter of every family: the leaf's data pointers and `n` keep the six x64 register
+  argument slots (a tag in slot 0 pushes `n` onto the stack and reshuffles the dot's register
+  allocation).
+- `kq_transcode_p(src, kq, ks; _f : KqTag_<fmt>)` - the ONE codec of the format: one stride
+  unit (the superblock; q51's 32-block) from its disk bytes at `src` into the quant plane at
+  `kq` and the scale plane at `ks`, pointer form. The array form the tests drive is the shared
+  `kq_transcode_superblock(fmt, bytes, bo, kq, kqo, ks, kso)` (bounds-checked, then the stamp),
+  and the bulk loader is the shared `gguf_transcode_kq` (`dasllama_gguf.das`: the descriptor
+  row sizes the slice, `kq_transcode_check` + `guard_dst` + `with_tensor_view` +
+  `maybe_parallel_for` over units, the stamp hoisted outside the loop) - neither needs an edit.
 - `dequant_<fmt>_plane_superblock` - the reference dequant off the planes, in ggml's own float
   order (`dequantize_row_<fmt>` decides the order; match it operation for operation so the
   plane dequant is bit-exact against the file dequant).
-- `gguf_transcode_<fmt>` (`dasllama_gguf.das`) - the bulk, threaded, pointerized twin of the
-  superblock transcode (`kq_transcode_check` + `guard_dst` + `with_tensor_view` +
-  `maybe_parallel_for` over superblocks).
 - `tests/test_kquant.das`: a hand-packed synthetic superblock (`build_<fmt>_block`, written in
   the PACK direction so a misread cannot cancel; `|=` is not defined on `uint8`, so build each
   byte in an `int` and store it once) and an arm asserting the plane dequant equals the
@@ -88,38 +104,23 @@ a format whose decoded form FITS the row may decode at transcode instead (IQ4_XS
 
 ## 3. Planes and the loader - `dasllama_common.das`, `dasllama_load.das`, `dasllama_layout.das`
 
-This is the ladder walk (`followup_general.md` item 131). Every site is a flat
-`if (fmt == KqFmt.k4) ... elif` chain; add the arm next to `q40`'s. The compiler does not find
-these - a missing arm falls to the `else` panic (good) or silently to k6 (bad, the
-`kq_kernel_gen` shape); grep `KqFmt.q40` and `== 40` and visit every hit.
+A lattice format's planes live in `Model.kq[int(KqFmt)]` (`KqPlanes`: the quant plane, the scale
+plane, the frozen repack interleave), and every plane consumer - the load's cursors and sizing,
+the streamed fill, the matmul dispatch, `embed_row`, the repack walkers, the device gathers, the
+PLE tripwire, the embed trim, the image walk and the bake identity - indexes that table through
+the descriptor row's strides. A new lattice format therefore needs no edit in this step: its row
+in `kq_desc` sizes, fills, streams, serializes and dispatches it. What still keys on the format
+by hand:
 
-- `Model`: the plane pair `<fmt>q` / `<fmt>s` and `kq_repack_mr<id>`.
-- `dasllama_load.das`: `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, `kq_take`, the `LayoutSizes`
-  constructor, `stream_field_of` (the streamed image plane name), the scale-half landing
-  `memcpy`, the stream repack `invoke(g_stream_repack, <id>, ...)`, `transcode_kq_tensor`,
-  `load_big`, `kq_fmt_of` (GGML type -> tag), the two `noisy` log lines,
-  `g_stream_plane_total["<fmt>q"]`, the plane `reserve`/`resize` block, and the
-  repack-interleave freeze ladder (`t.kq_repack_mr<id> = active_kq_layout_mr(<id>)`, two copies:
-  the streamed-save arm and the eager arm) - a format missing from that ladder keeps the field's
-  default while its planes sit at the companion's `mr`, every `kq_active_mr` consumer reads the
-  wrong interleave, and the model emits repeated tokens with no diagnostic; only an end-to-end
-  run sees it.
-- `dasllama_common.das`: `kq_active_mr`, `kq_fi`, `mm_at_kq_pre` (two arms), `mm_b_kq_tile`,
-  `mm_at_kq_groupn` (two arms), `mm_b_kq_groupn`, `mm_b_kq_pre`, `kq_plane_q`, `kq_plane_s`,
-  `embed_row` (four arms: grp and plane form, trimmed and untrimmed), the bake config fill
-  (`c.kq_mr<id> = active_kq_layout_mr(<id>)`).
-- `dasllama_layout.das`: the plane base pointers + the `rkq` ternary, `push_repack_kq`, the
-  `moe_gpu_gather_stack_kq` plane ternaries - the gather walks grouped rows and tail rows
-  (`d % mr`, or an unrepacked load) through two per-format ladders, so a format already in the
-  device form needs its verbatim arm in both. Bump `PACK_VERSION` with any pack edit: it folds
-  into every image identity, so the next load re-bakes instead of mapping a stale `.dlim`.
-- `dasllama_gpu_resident.das` (embed trim), `dasllama_ple.das` (two arms),
-  `dasllama_blocks.das` (`kq_bytes_per_weight`).
-- `dasllama_config.das`: `DlimCpuConfig.kq_mr<id>` AND the identity string in `dlim_identity`
-  (a field added without the string keys two interleaves identically); `dasllama_image.das`:
-  `IMAGE_VERSION` bump, the streamed plane name list in `stream_extra_bytes`, `serialize_raw`
-  of the new `kq_repack_mr<id>` in `serialize_image_meta` and `IMAGE_META_FIELDS` grown by one -
-  the count tripwire fires at the first model load, after the tokenizer build.
+- `dasllama_load.das`: `kq_fmt_of` (GGML type -> tag, with the native-knob gates); the bulk
+  transcode call (`transcode_kq_tensor`) is generic over the descriptor row.
+- `dasllama_layout.das`: the grouped-row branch of `moe_gpu_gather_stack_kq` - a format whose
+  repack is not the uniform four-byte-column form needs its verbatim arm there; and
+  `metal_blob_scale_plane`, where a format whose scale row already IS the device form (q40,
+  iq4nl) is excluded by name. Bump `PACK_VERSION` with any pack edit: it folds into every image
+  identity, so the next load re-bakes instead of mapping a stale `.dlim`.
+- `dasllama_image.das`: bump `IMAGE_VERSION` when the plane table's shape or the meta order
+  moves; the interleaves serialize in enum order, so an appended member lands last.
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`
 
@@ -128,8 +129,13 @@ these - a missing arm falls to the `else` panic (good) or silently to k6 (bad, t
   onto the lattice as its own `[tune_perm]` spelling where it fits; the probe IS the side-by-side
   (perms race each other and the reference, per box). Our CPU kernels typically win - keep it
   that way by never leaving one of their tricks unmeasured.
-- `dot_<fmt>_q8` - the portable disk-order row dot (exact integer inner sums, one float fold per
-  superblock), `<fmt>_rows_kernel`, the `kq_gemv_kernel` arm, the `matmul_kq_groupn` arm. A
+- `dot_kq(kqrow, ksrow, xqp, xsp, xbsp, n; _f : KqTag_<fmt>)` - the portable disk-order row
+  dot (exact integer inner sums, one float fold per superblock); the rows walk (`kq_rows_kernel`),
+  the `kq_gemv_kernel` and `matmul_kq_groupn` arms and the gen tier's row tails come from the
+  stamp. The enum overload `dot_kq(..., fmt : KqFmt)` the gates drive lives in the test fixture
+  `tests/_kq_dot.das`, never in `dasllama_math_default`: a stamp there adds sixteen call sites
+  to the dots in their own JIT partition, and the inliner's decisions over the leaves follow
+  their call-site count. A
   kernel that can run on a forked worker takes its table as a per-call local or a pointer
   argument, never a module global: the fused chains invoke the rows cores inside job contexts,
   where a `let` global reads zero, so a codebook format's rows come out zero on every worker row
@@ -137,15 +143,20 @@ these - a missing arm falls to the `else` panic (good) or silently to k6 (bad, t
   garbage. The probe that catches it is any kernel gate run under
   `with_job_que() { setup_dasllama_jobque() ... }` with enough rows to fork.
 - `dequant_<fmt>_row_grp` - the grp<mr> row dequant (own helper; `dequant_kq_row_grp` dispatches).
-- `repack_<fmt>_grp` (`dasllama_repack.das`) - disk-order -> grp<mr> planes; tail rows (d % mr)
-  stay disk-order untouched. A format with both d and dmin takes a field-major grp scale header
-  (`[16 sc x mr][mr x f16 d][mr x f16 dmin]`, `repack_k2_grp`'s shape) so `load_f16_vec_at`
+- `repack_grp(kq, ks, n, d, mr; _f : KqTag_<fmt>)` (`dasllama_repack.das`) - disk-order ->
+  grp<mr> planes, the format's overload behind the shared `repack_kq_grp(fmt, ...)` router;
+  tail rows (d % mr) stay disk-order untouched. Two primitives build every overload: the quant
+  plane as `colw`-byte columns (`repack_columns` - the column-form formats are one line,
+  `repack_column_form`) and the scale row field-major (`repack_fields` over a `RepackField`
+  list: the k4 row, the k6 row, or the format's own order); only a nibble re-pairing (k4/k5,
+  k6, k3) writes its quant half by hand. A format with both d and dmin takes a field-major grp
+  scale header (`[16 sc x mr][mr x f16 d][mr x f16 dmin]`, k2's field list) so `load_f16_vec_at`
   serves d and dmin as vectors; the repack and both grp readers move in one bit-exact step.
 - `dasllama_math_gen.das`: `<fmt>q8_layout_gen` (the layout companion), `<fmt>_grp_row_dot`
   (the scalar grp reference = the stubs' body and the repack oracle), `<fmt>q8_gemv_gen` +
   `<fmt>q8_tile_gen` with the `[tune_perm]` grid copied from q40's and
-  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, `kq_layout_of`, `repack_kq_gen` /
-  `repack_kq_bake`, `kq_kernel_gen` (two ladders), `kq_batch_cell_gen` (`packed` + tile +
+  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, `kq_layout_of` (`repack_kq_gen` /
+  `repack_kq_bake` route through `repack_kq_grp` and need no arm), `kq_kernel_gen` (two ladders), `kq_batch_cell_gen` (`packed` + tile +
   tail ladders - a packed format with no arm here dereferences a null scale plane inside the k6
   tile under the JIT, a panel format with no arm silently decodes as k6), `kq_batch_kernel_gen`
   tail, `kq_batch_groupn_gen` tail, `kq_groupn_gen` (two ladders), both

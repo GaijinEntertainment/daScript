@@ -59,15 +59,6 @@ def bind_span(blob : PlaneF; span : TtsSpan; var a : array<float>) {
     }
 }
 
-//! Forget a borrowed view or delete an owned buffer - the one teardown for a weight array.
-def release_weight(var a : array<float>) {
-    if (lock_count(a) != 0) {
-        unsafe(_builtin_forget_temp_array(a))
-    } else {
-        delete a
-    }
-}
-
 //! The blob walk's mode: staging moves each weight into `blob` (int8 quants into `qblob`) and
 //! records its span; serving binds each weight as a view over `plane` / `qplane` at its span.
 struct TtsBlobIo {
@@ -112,15 +103,6 @@ def bind_span_q8(qplane : PlaneI8; span : TtsSpan; var a : array<int8>) {
     }
 }
 
-//! `release_weight` for an int8 quant array.
-def release_weight_q8(var a : array<int8>) {
-    if (lock_count(a) != 0) {
-        unsafe(_builtin_forget_temp_array(a))
-    } else {
-        delete a
-    }
-}
-
 //! `weight_slot` for an int8 quant array.
 def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) {
     if (io.staging) {
@@ -128,15 +110,6 @@ def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) 
         delete a
     } else {
         bind_span_q8(io.qplane, span, a)
-    }
-}
-
-//! `release_weight` for a byte plane (a K-quant quant or scale plane).
-def release_weight_u8(var a : array<uint8>) {
-    if (lock_count(a) != 0) {
-        unsafe(_builtin_forget_temp_array(a))
-    } else {
-        delete a
     }
 }
 
@@ -194,7 +167,7 @@ def serialize(var arch : Archive; var w : TtsWeight) {
 }
 
 def finalize(var w : TtsWeight) {
-    release_weight(w.a)
+    release_plane(w.a)
 }
 
 def weights_walk(var io : TtsBlobIo; var w : TtsWeight) {
@@ -261,13 +234,13 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
 }
 
 def finalize(var c : TtsConv1d) {
-    release_weight(c.w)
-    release_weight(c.wt)
-    release_weight(c.wk)
-    release_weight(c.wtr)
-    release_weight_q8(c.wq)
-    release_weight(c.wqs)
-    release_weight(c.b)
+    release_plane(c.w)
+    release_plane(c.wt)
+    release_plane(c.wk)
+    release_plane(c.wtr)
+    release_plane(c.wq)
+    release_plane(c.wqs)
+    release_plane(c.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
@@ -321,13 +294,13 @@ def serialize(var arch : Archive; var l : TtsLinear) {
 }
 
 def finalize(var l : TtsLinear) {
-    release_weight(l.w)
-    release_weight(l.wt)
-    release_weight_q8(l.wq)
-    release_weight(l.wqs)
-    release_weight_u8(l.kq)
-    release_weight_u8(l.ks)
-    release_weight(l.b)
+    release_plane(l.w)
+    release_plane(l.wt)
+    release_plane(l.wq)
+    release_plane(l.wqs)
+    release_plane(l.kq)
+    release_plane(l.ks)
+    release_plane(l.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
@@ -355,8 +328,8 @@ def serialize(var arch : Archive; var n : TtsNorm) {
 }
 
 def finalize(var n : TtsNorm) {
-    release_weight(n.w)
-    release_weight(n.b)
+    release_plane(n.w)
+    release_plane(n.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var n : TtsNorm) {
@@ -387,9 +360,9 @@ def serialize(var arch : Archive; var l : TtsLstm) {
 }
 
 def finalize(var l : TtsLstm) {
-    release_weight(l.w_ih)
-    release_weight(l.w_hh)
-    release_weight(l.b)
+    release_plane(l.w_ih)
+    release_plane(l.w_hh)
+    release_plane(l.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var l : TtsLstm) {
@@ -1137,7 +1110,7 @@ def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = fals
             repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
         }
         l.q8 = true
-        release_weight(l.w)
+        release_plane(l.w)
         return
     }
     return if (l.nout % 16l != 0l)
@@ -1249,7 +1222,7 @@ def linear_take_kq(var l : TtsLinear; fmt : int; var kq, ks : array<uint8>; repa
         repack_kq_weight(fmt, l.kq, l.ks, 0l, l.nin, l.nout)
         l.kq_repacked = true
     }
-    release_weight(l.w)
+    release_plane(l.w)
 }
 
 // one row [nin] through the K-quant GEMV: the row requantized to the Q8_K form where it sits,

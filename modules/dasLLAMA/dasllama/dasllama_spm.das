@@ -145,9 +145,8 @@ struct private SpmBigram {
     mid : int64
 }
 
-// heap priority: highest score, then leftmost — exactly the sequential scan's selection order.
-// The bg_* heap in dasllama_bpe is a deliberate twin: different key struct and comparator,
-// and the two backends share no module to host a generic heap.
+//! Highest score, then leftmost - the sequential scan's selection order. This heap is a measured twin of
+//! dasllama_bpe's: served from that module's partition (even as a generic) SPM encode read 5-19% slower.
 def private sg_before(a, b : SpmBigram) : bool => a.score > b.score || (a.score == b.score && a.li < b.li)
 
 def private sg_push(var h : array<SpmBigram>; bg : SpmBigram) {
@@ -192,9 +191,9 @@ def private sg_try_push(tk : SpmTokenizer; var h : array<SpmBigram>; toks : arra
         l_id = toks[li], r_id = toks[ri], mid = mid))
 }
 
-// Heap merge over the WHOLE token sequence: O(n log n) where the sequential rescan is O(n^2) in
-// text length. Stale entries (an endpoint merged since push) are skipped by the adjacency+id
-// guard; selection order matches the scan exactly, so ids are identical.
+//! Heap merge over the whole token sequence: O(n log n) where the sequential rescan is O(n^2); a stale entry
+//! (an endpoint merged since its push) fails the adjacency+id guard, so the ids are the scan's exactly.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap")]
 def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
     let n = length(toks)
     return if (n < 2)

@@ -57,7 +57,7 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   accumulation, the shared expert, and the decode instruments. The block kernels reach it only
   through `moe_ffn_core`.
 - **`dasllama_attn_prefill.das`** - prefill attention, threaded over heads. `prefill_attention`
-  is the only entry; the classic/blocked/flash head kernels and their KV-codec ladders are its
+  is the only entry; the classic/flash head kernels and their KV-codec ladders are its
   implementation.
 - **`dasllama_batch.das`** - the batched decode step: one pass of the weights over B sessions,
   GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.

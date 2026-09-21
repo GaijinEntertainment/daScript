@@ -425,3 +425,37 @@ class private TunedMacro : AstFunctionAnnotation {
         return false
     }
 }
+
+//! `[from_template(src = "<name>_template", PLACEHOLDER = "target", ...)]` on an empty-body
+//! function clones the template's body into it with every placeholder call renamed to its target -
+//! `[tuned]`'s clone without a perm or sidecar key; the stub's signature types the clone.
+[function_macro(name = "from_template")]
+class private FromTemplateMacro : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
+        let src = find_arg(args, "src")
+        if (!(src is tString)) {
+            errors := "from_template: src = \"<name>_template\" names the body to clone"
+            return false
+        }
+        var tmpl = find_template_function(src as tString)
+        if (tmpl == null) {
+            errors := "from_template: template function not found: {src as tString}"
+            return false
+        }
+        var body = clone_expression(tmpl.body)
+        var rules : Template
+        for (a in args) {
+            if (a.name != "src") {
+                let v = get_annotation_argument_value(a)
+                if (!(v is tString)) {
+                    errors := "from_template: {a.name} must name the function the placeholder call becomes"
+                    return false
+                }
+                rules |> renameCall("{a.name}", v as tString)
+            }
+        }
+        func.body = rules |> apply_template(func.at, body, false)
+        return true
+    }
+}

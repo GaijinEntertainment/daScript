@@ -1244,7 +1244,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     var hit_eos = false
     let tdec = ref_time_ticks()
     for (_i in range64(max_new)) {
-        let best = int(hargmax(s.qctx.logits))
+        let best = int(parallel_argmax(s.qctx.logits, long_length(s.qctx.logits)))
         let mx = s.qctx.logits[best]
         plog_sum += double(s.qctx.logits[best]) - (log(hlse(s.qctx.logits, mx)) + double(mx))
         toks |> push(best)

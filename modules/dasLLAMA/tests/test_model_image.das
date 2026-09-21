@@ -115,9 +115,7 @@ def finalize(var t : ImgProbeInner) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
             if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
+                unsafe(_builtin_forget_temp_array(field))
             } else {
                 delete field
             }
@@ -141,9 +139,7 @@ def finalize(var t : ImgProbe) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
             if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
+                unsafe(_builtin_forget_temp_array(field))
             } else {
                 delete field
             }
@@ -329,9 +325,7 @@ def test_image_mechanics(t : T?) {
         for (x in owned) {
             feint("{x}")
             try {
-                unsafe {
-                    _builtin_forget_temp_array(owned)
-                }
+                unsafe(_builtin_forget_temp_array(owned))
             } recover {
                 caught = true
             }
@@ -828,9 +822,9 @@ def test_metal_flavor_derive(tst : T?) {
             t |> equal(long_length(tm.mblob), long_length(tr.mblob), "blob plane length")
             t |> equal(count_mismatch(tr.mblob, tm.mblob), 0l, "derived blob plane is byte-identical")
             // the kq scale strips take their device form on the same rail (empty on a pure q8)
-            t |> equal(count_mismatch(tr.k4s, tm.k4s), 0l, "k4 scale strip")
-            t |> equal(count_mismatch(tr.k5s, tm.k5s), 0l, "k5 scale strip")
-            t |> equal(count_mismatch(tr.k6s, tm.k6s), 0l, "k6 scale strip")
+            t |> equal(count_mismatch(tr.kq[int(KqFmt.k4)].s, tm.kq[int(KqFmt.k4)].s), 0l, "k4 scale strip")
+            t |> equal(count_mismatch(tr.kq[int(KqFmt.k5)].s, tm.kq[int(KqFmt.k5)].s), 0l, "k5 scale strip")
+            t |> equal(count_mismatch(tr.kq[int(KqFmt.k6)].s, tm.kq[int(KqFmt.k6)].s), 0l, "k6 scale strip")
             delete tm
             delete tr
             set_metal_mode(MetalMode.off)
@@ -2532,25 +2526,37 @@ def test_dlim_flavor_lanes(t : T?) {
 // Split layout owner: metal_blob_scale_plane in dasllama_layout.das.
 [test]
 def test_k6_scale_split_sizing(t : T?) {
+    t |> run("a scale-plane name is a lattice format's member spelling plus s, and nothing else") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var m = Model()
+        t |> success(metal_blob_scale_plane(m, "k4s") && metal_blob_scale_plane(m, "iq2xxss"), "k4s and iq2xxss name lattice scale planes")
+        t |> success(!metal_blob_scale_plane(m, "k6"), "no s suffix")
+        t |> success(!metal_blob_scale_plane(m, "zzs"), "no such format")
+        t |> success(!metal_blob_scale_plane(m, "q8s"), "q8 is off the lattice")
+        t |> success(!metal_blob_scale_plane(m, "q40s") && !metal_blob_scale_plane(m, "iq4nls"), "q40 and iq4nl carry no split scale plane")
+    }
     t |> run("k6 scale split at 27B-scale strip clears max_unreserved_size") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
         let nsb = 4000000l   // x K6_SSB = 72 MB, past the 67,108,864 B guard
         var m = Model()
-        m.k6s |> reserve_resize(nsb * K6_SSB)
+        let k6 = int(KqFmt.k6)
+        m.kq[k6].s |> reserve_resize(nsb * K6_SSB)
         for (i in range64(K6_SSB)) {   // K6_SSB bytes into sb0 and the last sb — distinct values trace the split
-            m.k6s[i] = uint8(100l + i)
-            m.k6s[(nsb - 1l) * K6_SSB + i] = uint8(200l + i)
+            m.kq[k6].s[i] = uint8(100l + i)
+            m.kq[k6].s[(nsb - 1l) * K6_SSB + i] = uint8(200l + i)
         }
         t |> success(metal_blob_scale_plane(m, "k6s"), "k6s is a kq scale plane")
-        t |> equal(long_length(m.k6s), nsb * K6_SSB, "split form keeps the byte count")
-        t |> equal(int(m.k6s[0]), 100, "sb0 sub-scales lead the strip")
-        t |> equal(int(m.k6s[15l]), 115, "sb0 sub-scale 15 in place")
-        t |> equal(int(m.k6s[(nsb - 1l) * 16l]), 200, "last sb's subs end the sub-strip")
-        t |> equal(int(m.k6s[nsb * 16l]), 116, "sb0 d low byte opens the d strip")
-        t |> equal(int(m.k6s[nsb * 16l + 1l]), 117, "sb0 d high byte")
-        t |> equal(int(m.k6s[nsb * 16l + (nsb - 1l) * 2l]), 216, "last sb's d low byte closes the strip")
+        t |> equal(long_length(m.kq[k6].s), nsb * K6_SSB, "split form keeps the byte count")
+        t |> equal(int(m.kq[k6].s[0]), 100, "sb0 sub-scales lead the strip")
+        t |> equal(int(m.kq[k6].s[15l]), 115, "sb0 sub-scale 15 in place")
+        t |> equal(int(m.kq[k6].s[(nsb - 1l) * 16l]), 200, "last sb's subs end the sub-strip")
+        t |> equal(int(m.kq[k6].s[nsb * 16l]), 116, "sb0 d low byte opens the d strip")
+        t |> equal(int(m.kq[k6].s[nsb * 16l + 1l]), 117, "sb0 d high byte")
+        t |> equal(int(m.kq[k6].s[nsb * 16l + (nsb - 1l) * 2l]), 216, "last sb's d low byte closes the strip")
         delete m
     }
     t |> run("the split-scale arms: k3/k6 lead with the 16-byte strip, every other split format leads with the d") @(t : T?) {
@@ -2566,9 +2572,7 @@ def test_k6_scale_split_sizing(t : T?) {
             let tail_at = strip_first ? 16l : 0l            // and the one the d bytes start at
             var src <- split_scale_src(ssb, nsb)
             var dst : array<uint8>
-            unsafe {
-                kq_split_scale_plane(f, addr<uint8 const?>(src[0]), nsb, dst)
-            }
+            kq_split_scale_plane(f, unsafe(addr<uint8 const?>(src[0])), nsb, dst)
             t |> equal(long_length(dst), nsb * (16l + tail), "{f}: the split plane is nsb x (16 + {tail})")
             for (sb in range64(nsb)) {
                 t |> equal(int(dst[sb * 16l]), int(sb * 32l + strip_at), "{f}: sb{sb}'s strip opens at source byte {strip_at}")
@@ -2584,9 +2588,7 @@ def test_k6_scale_split_sizing(t : T?) {
             var poisoned <- split_scale_src(ssb, nsb)
             poisoned[ssb + tail_at] = uint8(int(poisoned[ssb + tail_at]) + 7)
             var pdst : array<uint8>
-            unsafe {
-                kq_split_scale_plane(f, addr<uint8 const?>(poisoned[0]), nsb, pdst)
-            }
+            kq_split_scale_plane(f, unsafe(addr<uint8 const?>(poisoned[0])), nsb, pdst)
             t |> equal(int(pdst[nsb * 16l + tail]), int(dst[nsb * 16l + tail]) + 7, "{f}: the poison lands in sb1's tail")
             var strip_moved = 0l
             for (i in range64(nsb * 16l)) {
@@ -2615,17 +2617,16 @@ def test_blob_stream_scale_plane_once(t : T?) {
         let nsb = 3l
         var src <- split_scale_src(K6_SSB, nsb)
         var once : array<uint8>
-        unsafe {
-            kq_split_scale_plane(KqFmt.k6, addr<uint8 const?>(src[0]), nsb, once)
-        }
+        kq_split_scale_plane(KqFmt.k6, unsafe(addr<uint8 const?>(src[0])), nsb, once)
         var m = Model()
-        m.k6s <- split_scale_src(K6_SSB, nsb)
+        let k6 = int(KqFmt.k6)
+        m.kq[k6].s <- split_scale_src(K6_SSB, nsb)
         tt |> success(blob_stream_scale_plane(m, "k6s"), "the first walk converts the plane")
         tt |> success(blob_stream_scale_plane(m, "k6s"), "the second walk answers for a plane already converted")
-        tt |> equal(long_length(m.k6s), long_length(once), "the plane keeps its device-form size")
+        tt |> equal(long_length(m.kq[k6].s), long_length(once), "the plane keeps its device-form size")
         var moved = 0l
-        for (i in range64(min(long_length(m.k6s), long_length(once)))) {
-            if (m.k6s[i] != once[i]) {
+        for (i in range64(min(long_length(m.kq[k6].s), long_length(once)))) {
+            if (m.kq[k6].s[i] != once[i]) {
                 moved++
             }
         }
@@ -2633,9 +2634,7 @@ def test_blob_stream_scale_plane_once(t : T?) {
         // the must-red control: the split is NOT a no-op on its own output, so the equality above
         // is the memo's doing and not an accident of the transform
         var twice : array<uint8>
-        unsafe {
-            kq_split_scale_plane(KqFmt.k6, addr<uint8 const?>(once[0]), long_length(once) / K6_SSB, twice)
-        }
+        kq_split_scale_plane(KqFmt.k6, unsafe(addr<uint8 const?>(once[0])), long_length(once) / K6_SSB, twice)
         var differs = 0l
         for (i in range64(min(long_length(twice), long_length(once)))) {
             if (twice[i] != once[i]) {
@@ -2838,6 +2837,34 @@ def test_layout_fingerprint(t : T?) {
 
 [test]
 def test_dlim_identity_pack_version(t : T?) {
+    t |> run("the interleave segment has one slot per lattice format, in enum order") <| @(t : T?) {
+        var lattice = 0
+        for (i in range(KQ_FMT_COUNT)) {
+            if (kq_sb(i)) {
+                lattice++
+            }
+        }
+        var c = DlimConfiguration()
+        let base = dlim_identity(c, IMAGE_VERSION, "", 0)
+        let seg = base |> find("|kq ")
+        t |> success(seg >= 0, "the identity carries its kq segment: {base}")
+        let rest = slice(base, seg + 4)
+        let segment = slice(rest, 0, rest |> find("|"))
+        var slots = 1
+        for (ch in segment) {
+            if (ch == '/') {
+                slots++
+            }
+        }
+        t |> equal(slots, lattice, "one slot per lattice format: {segment}")
+        c.cpu.kq_mr |> resize(KQ_FMT_COUNT)
+        c.cpu.kq_mr[int(KqFmt.k4)] = 8l
+        let k4 = dlim_identity(c, IMAGE_VERSION, "", 0)
+        c.cpu.kq_mr[int(KqFmt.k4)] = 0l
+        c.cpu.kq_mr[int(KqFmt.k6)] = 8l
+        let k6 = dlim_identity(c, IMAGE_VERSION, "", 0)
+        t |> success(k4 != base && k6 != base && k4 != k6, "the slot a format's interleave lands in is its own: {k4} vs {k6}")
+    }
     t |> run("the pack-code version folds into the identity and nothing else moves") <| @(t : T?) {
         let c = DlimConfiguration()
         let base = dlim_identity(c, IMAGE_VERSION, "", 0)

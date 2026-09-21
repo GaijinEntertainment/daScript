@@ -11,6 +11,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
+require _kq_dot   // dot_kq on the run-time format
 require daslib/f16_cvt
 require math
 
@@ -94,11 +95,11 @@ def private build_kq_region(fmt : int; var kq : array<uint8>; var ks : array<uin
     for (r in range64(rows)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
-                transcode_q4k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k4, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 40) {
-                transcode_q40_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.q40, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } else {
-                transcode_q6k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+                kq_transcode_superblock(KqFmt.k6, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             }
         }
         var st = seed + uint(r) * 0x85EBCA6Bu
@@ -136,12 +137,7 @@ def private kq_row_dot(fmt : int; kq : array<uint8>; ks : array<uint8>; row, nsb
         let xqp = addr<int8 const?>(xq[xoff])
         let xsp = addr<float const?>(xs[soff])
         let xbp = addr<int const?>(xbs[boff])
-        if (fmt == 4) {
-            return dot_k4q8(kqr, ksr, xqp, xsp, xbp, n)
-        } elif (fmt == 40) {
-            return dot_q40q8(kqr, ksr, xqp, xsp, xbp, n)
-        }
-        return dot_k6q8(kqr, ksr, xqp, xsp, xbp, n)
+        return dot_kq(kqr, ksr, xqp, xsp, xbp, n, kq_fmt_of_id(fmt, "disk_dot"))
     }
 }
 
@@ -167,11 +163,11 @@ def private grp_row_dot(fmt : int; kqg : uint8 const?; ksg : uint8 const?; r, mr
 def private repack_grp(fmt : int; var kq : array<uint8>; var ks : array<uint8>; n, d, mr : int64) {
     unsafe {
         if (fmt == 4) {
-            repack_k4_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 40) {
-            repack_q40_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.q40, addr(kq[0]), addr(ks[0]), n, d, mr)
         } else {
-            repack_k6_grp(addr(kq[0]), addr(ks[0]), n, d, mr)
+            repack_kq_grp(KqFmt.k6, addr(kq[0]), addr(ks[0]), n, d, mr)
         }
     }
 }

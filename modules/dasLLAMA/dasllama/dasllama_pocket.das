@@ -366,7 +366,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
         var inscope ks : array<uint8>
         kq |> reserve_resize(n / 256l * kq_qsb(KqFmt.k4))
         ks |> reserve_resize(n / 256l * kq_ssb(KqFmt.k4))
-        gguf_transcode_q4k(m, bytes, wname, kq, ks, 0l, n)
+        gguf_transcode_kq(m, bytes, wname, KqFmt.k4, kq, ks, 0l, n)
         linear_take_kq(l, 4, kq, ks, true)   // repacked wherever the backend the load selected carries kq kernels
         return <- l
     }
