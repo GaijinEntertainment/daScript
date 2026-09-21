@@ -2265,6 +2265,44 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   and off by up to 0.13 of the peak on five of thirty-two compares against the fused one - the
   folded down sum's rounding through the 26B's router near-ties, item 82.
 
+### From the Vulkan batched-decode arc, the E-series carriers (2026-09-21)
+
+Instruments as the MoE section above (the pod's cm2 arm and the 5060 Ti, `lcpp_bench.das --npl 4`
+three reps, llama.cpp b10660's `llama-batched-bench` the same hour, `external`; every ratio
+`tg128@4` against the reference's `S_TG` at `-npl 4` [direction-grade - two processes]); both
+carriers Q8_0, `DASLLAMA_PARITY_FULL=1` for the E4B. The one-row rates did not move through the
+section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 121.5, 66.1 -> 66.2).
+
+- **The rows form alone (commit e43ace31d: the side input a row, the pre-step projection a row a
+  column, the branch's split forms, q alone on a shared-KV layer), tg128@4 ours / llama.cpp:** the
+  pod E2B 540.7 +/- 1.7 / 185.5 (2.92), E4B 335.8 +/- 0.3 / 360.2 (0.93); the 5060 Ti E2B 371.0 +/- 1.0
+  / 113.1 (3.28), E4B 209.9 +/- 0.5 / 213.0 (0.99). The E4B's four-row step under the profiler read
+  2.4 ms of device idle a step on the pod and 4.4 on the 5060 Ti against a dense carrier's half a
+  millisecond: the batch driver ran the CPU pre-step (`ple_pre_prefill`: the gather and the
+  [dim x layers*ple] host GEMM over the rows) on every step, for rows the device then gathered and
+  projected again.
+- **The pre-step gate (commit 0840fc4a0: the batch step skips the CPU pre-step where the decode
+  gate says the armed driver projects, and runs it late on a declined step):** the pod E2B 567.7
+  +/- 1.6 (3.06), E4B 357.5 +/- 0.2 (0.99); the 5060 Ti E2B 386.3 +/- 2.0 (3.42), E4B 226.5 +/- 0.7
+  (1.06). The E4B's idle a step 2.4 -> 1.7 ms on the pod, 4.4 -> 2.9 on the 5060 Ti.
+- **The router's columns and the fused branch's rows form (commit 00ac50e0b: `RouterGemvT` reads
+  each row once over every column - the pre-step projection had streamed its 55 MB plane once a
+  row - and the branch takes the fused act + requant + proj over the columns where the one-row
+  branch fuses, `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao):** the pod E2B 585.0 +/- 0.2 / 185.5
+  (3.15), E4B 363.4 +/- 0.8 / 360.2 (1.01); the 5060 Ti E2B 394.9 +/- 0.3 / 113.1 (3.49), E4B 234.7
+  +/- 0.6 / 213.0 (1.10). Against llama.cpp CUDA on the 5060 Ti (the same checkout built with CUDA
+  13.4): E2B 449.7 (0.88), E4B 247.6 (0.95). The E4B's four-row step, us, pod / 5060 Ti: pleproj
+  159 -> 120 / 555 -> 233; the branch (the FFN step's rows requant, the gate, the fused act + proj)
+  1465 -> 1122 / 1375 -> 1195; the step whole 10763 -> 10512 / 16647 -> 16138. The reference's
+  E2B batched row reads 185 on the pod against its own flat 111.5 (1.66x, where its E4B row scales
+  3.3x over 108.9) and 113 on the 5060 Ti against 64.4: the reference's four-stream E2B shape is its
+  own question, and the E2B ratios stand as measured.
+- **The rows against the sessions alone:** the E2B regions file's nine cells bit for bit on both
+  boxes at every commit, the batched cells served (`test_gpu_resident_regions_e2b.das`); the fused
+  branch's columns held to the one-row dispatches bit for bit (`test_vkd_q8_gemv_pleact`'s columns
+  arms), the router's columns likewise (`test_vkd_router_gemv_cols`), and the gpt-oss regions file
+  bit for bit over the router's new form.
+
 ### From the M4 Metal pass (2026-09-13)
 
 Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes

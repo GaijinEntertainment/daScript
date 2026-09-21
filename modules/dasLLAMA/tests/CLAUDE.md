@@ -373,7 +373,7 @@ against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, 
 the quants bit for bit - the sandwich column at gemma-3-1b's and gemma-2's widths and the plain
 column; the N-row command's sites take the row kernel where the one-row command's take the
 epilogue) and
-`test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
+`test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths, and its columns form over four and three rows against the one-row dispatches bit for bit),
 the gpt-oss arc's arms - `test_vkd_ar_class` and `test_vkd_ar_rq_fused` add the biased add
 partner (the output bias row past the norm row) against the seam and the CPU oracle,
 `test_vkd_act_family` runs the unbiased act kernels under the clamped swiglu beside silu and adds
