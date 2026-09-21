@@ -279,11 +279,12 @@ def public jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_le
     return "{h}"
 }
 
-def public jit_gc_stale_dlls(subdir : string; keep_basename : string; keep_names : table<string>) {
+def public jit_gc_stale_dlls(subdir : string; keep_basename : string; keep_names : table<string>; mine : table<string>) {
     // keep mask: the current DLL-hash prefix (dll/lib/exp/pdb/rsp + monolith .o) OR an exact keep_names entry (split obj cache's live partition objects - named by partition key, not dll hash)
     let keep_prefix = "{keep_basename}."
     dir(subdir) $(fname) {
-        if (fname == "." || fname == ".." || fname |> starts_with(keep_prefix) || keep_names |> key_exists(fname)) return
+        if (fname == "." || fname == ".." || fname |> starts_with(keep_prefix)
+            || keep_names |> key_exists(fname) || !(mine |> key_exists(fname))) return
         let full_path = "{subdir}/{fname}"
         var err : string
         let ok = remove(full_path, err)
