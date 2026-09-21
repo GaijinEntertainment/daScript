@@ -68,8 +68,11 @@ of, or a function a `register_kernel_backend` call names - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A quirk of one family - a special case only one model architecture's file, or one backend
-driver's, needs - lands in that file, never in another family's file.**
+**A branch keyed on a `Config` flag only one model architecture sets, or a special case only one
+backend driver needs, lands in that architecture's or driver's file - unless it is one arm of a
+kernel two or more architectures share, in which case the arm lands beside the kernel and the
+flag is named in that file's charter line.** A family arm in another family's file is a defect
+either way.
 
 **Logic or a named constant that two files in one folder both use lands in a file both already
 require - a new file of its own when they require none in common - never as a second copy.** Two
