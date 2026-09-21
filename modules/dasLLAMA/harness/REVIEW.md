@@ -9,8 +9,6 @@ anything about the Vulkan backend, `../followup_general.md` for everything else.
 `dot_q8q8_laneq4x4`.** Running that bench pins one matmul backend for the rest of the process, so
 a CPU timing after it runs against the pinned backend instead of the one it would have picked.
 
-**Weakening `REVIEW.das`'s last-row check on the `benches` list is a defect.**
-
 **A diff that points a `dashv` call in this folder at the sidecar exchange - dasllama.io's
 tune-sidecar service: sidecar lookup, download, or submit - is a defect; it calls the exchange
 through `dasllama/dasllama_exchange` (the module `../dasllama/dasllama_exchange.das` declares)

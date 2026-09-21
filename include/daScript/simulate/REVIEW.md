@@ -45,12 +45,10 @@ the same reason.
   template under this folder that generated code runs for every evaluated expression. An added
   load, branch, call, copy, or counter, a direct call becoming indirect, a static dispatch
   becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
-  PR names the check showing the shipped build costs no more: its codegen unchanged, a
-  measurement of the new code against the code it replaces, or the addition landing its entry
-  under `ARCHITECTURE.md`'s sanctioned hot-path additions - a diff cannot show optimized
-  codegen. The
-  baseline is what already answered correctly: a slot that returned a wrong constant costs more
-  once it computes the right one, and that is not this defect.
+  PR names what shows the shipped build costs no more: its emitted codegen unchanged, or a
+  measurement of the new code against the code it replaces - a diff cannot show optimized
+  codegen. The baseline is what already answered correctly: a slot that returned a wrong
+  constant costs more once it computes the right one, and that is not this defect.
 
 - **A diff that adds work to the hot path - whether or not the shipped build flattens it -
   lands its entry under `ARCHITECTURE.md`'s sanctioned hot-path additions in the same diff:

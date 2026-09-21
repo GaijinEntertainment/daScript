@@ -1271,7 +1271,7 @@ def private check_unicode_tables_stamp {
 // tuner race entries build theirs because the tuner runs before the driver inits.
 let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_metal_gemm.das"}
 let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode"}
-let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue("]
+let private DEVICE_CREATION_CALLS <- ["metal_create_system_default_device(", "metal_new_command_queue(", "create_device_storage_8_16_int_dot"]
 
 def private def_name_of(body : string) : string {
     let nl = find(body, "\n")

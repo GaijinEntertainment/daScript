@@ -92,9 +92,12 @@ names.** The `grid=` spec carries no number for these classes, so nothing else t
 offset, or a handle alone is not a key - carry the span and the form, the element type and
 layout the upload produces, in the key too.**
 
+**A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
+the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
+
 **Weakening `REVIEW.das`'s device-creation check is a defect - a new name in
-`DEVICE_CREATION_FILES` or `DEVICE_CREATION_FUNCTIONS` weakens it.** A GPU family shares the one
-device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.
+`DEVICE_CREATION_FILES` or `DEVICE_CREATION_FUNCTIONS`, or a device- or queue-creating call
+spelling absent from `DEVICE_CREATION_CALLS`, weakens it.**
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's

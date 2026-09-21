@@ -206,9 +206,10 @@ lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
 `require ... public` that re-exports an engine module OUT of a file carrying this option,
 beyond what that consumer's ruled charter grants, breaks this rule too.
 
-**An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it flagged
-is a defect:** dropping a check, rewriting a finding text so it no longer names what failed, adding
-a name to a check's licensed set - the names that check does not flag - or re-stamping a pinned
+**An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
+flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
+reading - rewriting a finding text so it no longer names what failed, adding a name to a check's licensed
+set - the names that check does not flag - or re-stamping a pinned
 hash, count or list, where that check's own finding text does not sanction the addition or the
 re-stamp; the gate itself says what it enforces.
 

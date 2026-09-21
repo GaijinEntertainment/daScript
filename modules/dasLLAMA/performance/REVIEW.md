@@ -6,25 +6,19 @@ doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
 
-**A diff that narrows what this folder's `REVIEW.das` walks - a file or folder the gate stops
-reading - ledgers the excluded scope in `../ARCHITECTURE_MEASUREMENT.md` in the same change.**
-
-**A diff that weakens this folder's `REVIEW.das` in any other way - the conditions a check fires
-on - is a defect.**
-
 **A diff that answers a `REVIEW.das` red on the conditions a `records/` row, an archived
 sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured under - box
 noise, a remote-desktop session, the release it was minted at - by hand-editing that artifact
 is a defect: re-mint it on a quiet, session-free box instead.**
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
-under review cannot reach is a defect - re-mint, or re-stamp to the commit the exe that produced
-the stamped artifact was built at.** A commit stamp is any field in a checked-in JSON under this
+under review cannot reach is a defect - re-stamp to the commit the exe that produced the stamped
+artifact was built at when the branch can reach it, re-mint when it cannot.** A commit stamp is any field in a checked-in JSON under this
 folder that names a daslang commit - a `das` row's `sha`, a sidecar's `provenance.engine_sha`, a
 ruler record's `meta.das_sha`. A stamp that resolves to no commit at all counts as unreachable.
 
 **A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
-field, its old stamp, and the build commit of the exe it re-stamps to.**
+field, its old stamp, and its new value.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -82,9 +76,8 @@ and labels the file's rows `direction-grade` everywhere the change cites them - 
 rows, architecture or profile docs.**
 
 **A diff that writes a `das` row to `records/<box>.json` names on the row the codegen form of the
-exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three
-(`skills/internal/build_and_debug.md`), and a rate that does not name its form cannot be compared
-with one that was built another way.
+exe it timed - one unit, split, or split with LTO.** An exe builds in any of the three, and a rate
+that does not name its form cannot be compared with one that was built another way.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the

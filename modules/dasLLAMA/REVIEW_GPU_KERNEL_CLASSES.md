@@ -38,8 +38,7 @@ kargs field, or an `@off` bind offset: stamp it into the class as a `@template_c
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
 a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
 `static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site
-reads is a defect -
-move it to the template whose body reads it, or make the body read it.
+reads is a defect - move it to the template whose body reads it, or make the body read it.
 
 **A diff that changes a stamp's generated source - through the class's own body, the template or
 base shell it stamps, or a helper its body splices - carries in the PR body, for each affected
@@ -90,14 +89,18 @@ asserted: a row that dispatches a listed class reds the census.
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**
 
 **Weakening any refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time, or
-any `test_lens_*` / `test_vkd_lens_*` cell that holds one (`modules/dasLLAMA/tests/test_metal_misc_kernels.das`,
-`modules/dasLLAMA/tests/test_vulkan_kernels.das`), is a defect; a new refusal lands with the cell
-that holds it, in the same change.**
+any `test_lens_*` / `test_vkd_lens_*` cell that holds one, is a defect** - the cells sit in
+`modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal and
+`modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan.
+
+**A diff that adds a refusal to the `[metal_dispatch]` / `[vk_dispatch]` lens lands the cell that
+holds it in the same change** - a `test_lens_*` cell in
+`modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a `test_vkd_lens_*` cell in
+`modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan.
 
 **A diff that replaces a refusal with a derivation - the lens computing the value it used to
 demand, so no class can compile with that value missing - points that refusal's cell at the
-derived path in the same change.** Deriving the value is not a weakening; leaving the cell on
-the removed refusal is.
+derived path in the same change.** Deriving the value is not a weakening.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row would leave the rest of each row outside the tracked
