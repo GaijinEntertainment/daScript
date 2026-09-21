@@ -81,7 +81,7 @@ def main() : int {
                 rep.why = "PANIC {this_context().last_exception |> rtrim}"   //! a declined step's per-row fallback can die on a blob-only model: the census names it beside the declines
             }
             let c1 = batch_step_census()
-            print("CENSUS {base_name(path)} npl={npl} kv={kv} ctx={t.config.seq_len}: tps={rep.tps} why='{rep.why}' steps device={c1.device - c0.device} cpu_stack={c1.cpu_stack - c0.cpu_stack} per_row={c1.per_row - c0.per_row} declines:{declines_text()}\n")
+            print("CENSUS {base_name(path)} npl={npl} kv={kv} ctx={t.config.seq_len}: served={rep.tps > 0.0lf} why='{rep.why}' steps device={c1.device - c0.device} cpu_stack={c1.cpu_stack - c0.cpu_stack} per_row={c1.per_row - c0.per_row} declines:{declines_text()}\n")   //! the row's rate stays out of the line: the census ranks nothing, it names what declined
             delete t
         }
     }

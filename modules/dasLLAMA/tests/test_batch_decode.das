@@ -20,7 +20,8 @@ require _model_tier   // model_available: the stocked-carrier gate (shards, the 
 // stories15M.bin (gitignored); skips cleanly when absent, same contract as test_forward.
 // The reference pins the fused decode chain OFF (the std path is what the batch worker mirrors).
 // The batched bench row's refusal cell needs SmolLM2-135M-Instruct-Q8_0.gguf under models_dir()
-// (a tokenizer for the scheduler's streams) and the JIT; it skips without either.
+// (a tokenizer for the scheduler's streams) and the JIT; it skips without either. The deltanet
+// hybrid cells need Qwen3.5-0.8B-Q8_0.gguf under models_dir() and the JIT; they skip without either.
 def private llama2c_dir() : string {
     let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
@@ -173,8 +174,17 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
     var ws <- create_batch_workspace_(tr)
     var sess <- [unsafe(addr(s0)), unsafe(addr(s1)), unsafe(addr(s2))]
     var cur <- [greedy_top(s0.logits, vocab), greedy_top(s1.logits, vocab), greedy_top(s2.logits, vocab)]
+    //! an exact bar (0) is one code path, so the batched side free-runs its own greedy and the tokens
+    //! must match; a bar above 0 concedes rounding, so the batched side is FED the reference's tokens
+    //! and only the logits are held to the bar - a near-tie flip cannot red a correct engine
+    let forced = tol > 0.0
     var tokens_ok = true
     var maxd = 0.0
+    var got : array<array<int64>>
+    got |> resize(3)
+    for (g in got) {
+        g |> resize(nsteps)
+    }
     for (st in range64(nsteps)) {
         eval_batch_(tr, ws, sess, cur)
         for (i in range64(3l)) {
@@ -182,17 +192,35 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
             for (v in range64(vocab)) {
                 maxd = max(maxd, abs(sp.logits[v] - refs[i].lg[st * vocab + v]))
             }
-            cur[i] = greedy_top(sp.logits, vocab)
-            if (cur[i] != refs[i].toks[st]) {
+            let top = greedy_top(sp.logits, vocab)
+            got[i][st] = top
+            if (top != refs[i].toks[st]) {
                 tokens_ok = false
             }
+            cur[i] = forced ? refs[i].toks[st] : top
         }
     }
-    t |> success(tokens_ok, "{tag}: batched greedy tokens match sequential token-for-token")
+    for (i in range64(3l)) {
+        to_log(LOG_INFO, "{tag} row{i} reference ids: {refs[i].toks}\n{tag} row{i} batched argmax ids: {got[i]}\n")
+    }
+    if (!forced) {
+        t |> success(tokens_ok, "{tag}: batched greedy tokens match sequential token-for-token")
+    }
     t |> success(maxd <= tol, "{tag}: per-step logits within {tol} (max diff {maxd})")
     cache_feq(t, s0, refs[0], c, tol, "{tag} row0")
     cache_feq(t, s1, refs[1], c, tol, "{tag} row1")
     cache_feq(t, s2, refs[2], c, tol, "{tag} row2")
+    // the control: row 0 against row 1's reference lands outside the bar - the bar discriminates here
+    var xlg = 0.0
+    for (v in range64(vocab)) {
+        xlg = max(xlg, abs(s0.logits[v] - refs[1].lg[(nsteps - 1l) * vocab + v]))
+    }
+    t |> success(xlg > tol, "{tag}: control - row 0's logits against row 1's reference exceed {tol} ({xlg})")
+    if (!empty(refs[1].dn)) {
+        let xdn = logits_maxdiff(s0.dn_state, refs[1].dn)
+        t |> success(xdn > tol, "{tag}: control - row 0's deltanet state against row 1's reference exceeds {tol} ({xdn})")
+    }
+    delete got
     sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
     unsafe {
         delete ws
@@ -283,6 +311,19 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag : string) {
         let c1 = batch_step_census()
         t |> equal(c1.cpu_stack - c0.cpu_stack, 8l, "{tag}: every step ran on the CPU batched stack")
         t |> equal(c1.per_row - c0.per_row, 0l, "{tag}: ... none of them a row at a time")
+        // the state is forward-only: a step below the deltanet position panics instead of rewinding
+        var sr <- make_run_state(tr.config, kdt, kdt)
+        let pb <- prompt_b()
+        eval_(tr, sr, pb)
+        sr.n_past = 1l
+        var tripped = false
+        try {
+            eval_(tr, sr, [1l])
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "{tag}: a decode below the deltanet position panics - the state is forward-only")
+        delete sr
     }
     set_fused_decode(prev_fused)
     clear_kernel_backend_pin()
@@ -386,13 +427,14 @@ def test_batch_decode_q4(t : T?) {
             return
         }
         var tr <- load_checkpoint(MODEL_PATH)
-        quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4_0: the q4 batched GEMM
+        quantize_weights_q4(tr)  // all 2D weights -> Q4_0, tr.quant = q4_0
+        //! one code path: the batched Q4_0 GEMM is the GEMV's dot_q4 run over the rows, so the bar is exact
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
         with_job_que() {
             setup_dasllama_jobque_()
             let c0 = batch_step_census()
-            batch_vs_ref(t, tr, KVDtype.f32, 6l, 1.0e-6, "q4_0")
+            batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")
             let c1 = batch_step_census()
             t |> equal(c1.cpu_stack - c0.cpu_stack, 6l, "q4_0: every step ran on the CPU batched stack")
             t |> equal(c1.per_row - c0.per_row, 0l, "q4_0: ... none of them a row at a time")

@@ -264,7 +264,7 @@ a struct field list, so it has no count to pin. Everything else taking an `Archi
 
 The `Model`'s per-format plane table (`kq`, one `KqPlanes` slot per `KqFmt`) carries planes for the
 256-element lattice formats alone - the formats `kq_sb` is true for. A 32-block format keeps its
-planes as top-level `Model` fields of the same name (`q51q`, `q51s`). Every walk over the table -
-the image writer and the map-back alike - skips a slot whose format is not `kq_sb`, because
+planes as top-level `Model` fields of the same name (`q51q`, `q51s`). The two walks that name
+sections - the image writer and the map-back - skip a slot whose format is not `kq_sb`, because
 `kq_plane_name` gives that slot the same section name as the top-level field, and a `.dlim`
 carrying two sections of one name fails its map-back.

@@ -21,7 +21,8 @@ twin ignores that field.**
 stamp one `class template` or derive from one base shell.** Body divergence is carried by a
 `@template_constant`, or by an overridden method spliced flat at emission.
 
-**Two kernel classes a cell or a regions file holds bit for bit against each other spell every
+**Two kernel classes a cell or a regions file (a `tests/test_gpu_resident_regions*.das` file,
+whose instrument is the driver against itself) holds bit for bit against each other spell every
 multiply that feeds an add as `mad` in both, on the path the compare covers.** A driver decides
 per kernel whether to contract a multiply-add into one fma, so two bodies spelled alike round a
 ulp apart on a driver that contracts one and not the other; `mad` is the fused instruction by

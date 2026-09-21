@@ -2037,11 +2037,13 @@ processes throughout].
   the census (`harness/batch_decline_census.das -- --kv q8_0 | tq4 <gguf>`, the `-jit` script,
   the untuned tier) serves Qwen3.5-0.8B Q8 and Llama-3.2-1B Q8 batched at four streams on both
   codecs, no decline. The tq4 signs table read past its 128 floats on every 256-wide head: the
-  forced-feed probe (`harness/forced_feed_probe.das -- <gguf> tq4 6` - a CPU prefill, then six
-  steps fed the CPU chain's tokens on a CPU and a GPU-decode session, per-step logits maxd) read
-  the hybrid at 6.3-13.2 and gemma-2-2b Q4_K_M at 8.7-12.1 on tq4 KV with argmax flips, against
-  0.2-0.3 and 0.7-1.0 on q8_0; with the table at the kernels' 512 ceiling the tq4 rows read
-  0.24-0.60 and 0.82-1.44, tokens exact [one process, the M5 Max].
+  support matrix's `fam-qwen35` row (`tests/run.das -- --suite matrix --arm fam-qwen35 --family
+  qwen35`, the Metal-override generate against the CPU truth token-for-token, per KV codec) reds
+  on tq4 at master and passes with the table at the kernels' 512 ceiling; the forced-feed probe
+  (`harness/forced_feed_probe.das -- <gguf> --kv tq4 --steps 6` - a CPU prefill, then six steps
+  fed the CPU chain's tokens on a CPU and a GPU-decode session, per-step logits maxd printed)
+  localized it to the tq4 rows of every 256-wide head, gemma-2-2b Q4_K_M included, with argmax
+  flips on the unfixed table and none on q8_0 [one process, the M5 Max].
 - **Nine streams (the census at `--npl 9`):** every non-hybrid K-quant catalog carrier serves
   batched - gemma-4-12B Q4_K_M, Llama-3.2-1B Q4_K_M, Qwen3-30B-A3B Q4_K_M, Mistral-Small-24B,
   gemma-4-26B-A4B Q4_K_M, gemma-4-E2B Q8 - no off-lattice decline in the catalog; every hybrid

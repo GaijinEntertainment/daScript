@@ -1838,8 +1838,7 @@ def private encode_draft_rows_step(t : Model; var r : StepRes) {
     var dnw = 0l
     encode_verify_layer(t, r, enc, brt.buf, c.n_layers, r.chain_pos, dnw)
     let norm_off = t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off
-    var bcls = r.blog != null ? r.blog : r.bnc   //! one row of a model with no spec classifier lands in the stream's own zero-copy logits
-    enc_cls_tail_rows(t, r, enc, norm_off, bcls, nr)
+    enc_cls_tail_rows(t, r, enc, norm_off, r.blog, nr)   //! three rows or more: the step always carries the pooled logits rows
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
@@ -1878,7 +1877,7 @@ def private finish_draft_rows_step(t : Model; r : StepRes; slot : int64) : bool 
         let c = t.config
         unsafe {
             let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
-            let lg = reinterpret<uint8?>(metal_buffer_contents(r.blog != null ? r.blog : r.bnc))
+            let lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
             let hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))
             for (g in g_v_groups) {
                 var s & = unsafe(*g.s)

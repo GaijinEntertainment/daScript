@@ -205,6 +205,24 @@ def test_mtp_output_invariance(t : T?) {
 }
 
 [test]
+def test_mtp_q4_0(t : T?) {
+    t |> run("MTP self-spec greedy decode rides the q4_0 requant tier (Qwen3.5-0.8B-MTP Q8 -> q4_0)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+        if (!model_available(t, path)) return
+        var tr <- load_model_(path, QuantMode.q4_0)
+        tr.config.seq_len = 2048l
+        with_pinned_kernels() {
+            t |> invariance_ok(tr, MTP_PROMPT, 48, "q4_0 counting")
+        }
+        delete tr
+    }
+}
+
+[test]
 def test_mtp_reject_rollback(t : T?) {
     t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly") @(t : T?) {
         if (!jit_enabled()) {

@@ -51,10 +51,11 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a `[test]` file here, or adds, removes or moves a cell, or changes its suite
-or skip condition, corrects or adds, in the same change, the `CLAUDE.md` entry of every `[test]`
-file running the cell, counts and skip clauses included.** A file's entry is the clause naming
-it by its `.das` file name; a `{a,b}` shorthand or a suite roster owes nothing.
+**A diff that adds a `[test]` file here, or adds, removes, moves or renames a cell, or changes
+its suite, its skip condition or what it claims, corrects or adds, in the same change, the
+`CLAUDE.md` entry of every `[test]` file running the cell, counts and skip clauses included.** A
+file's entry is the clause that describes the file, named with or without its `.das` suffix; a
+`{a,b}` shorthand or a suite roster owes nothing.
 
 **A diff that changes an axis or a bar a file's own `CLAUDE.md` entry names - a shape, a length,
 a format or a lane the cell sweeps, or a tolerance it holds - corrects that entry in the same
@@ -130,8 +131,9 @@ round-trip is a defect.**
 **A test that compares generated tokens, ids, or logits through a model's vocabulary without
 logging a human-readable form of BOTH sides is a defect: for a token or id compare the decoded
 text (`log_gen_texts` in `_model_tier.das`, or one line per side), for a logits compare each
-side's argmax decoded piece and the measured max difference.** A red, or a suspicious green, must
-be readable in the log, not only as an id or float difference.
+side's argmax decoded piece and the measured max difference; a compare through a vocabulary the
+test cannot decode (a raw-id fixture with no tokenizer) logs the ids, one line per side.** A red,
+or a suspicious green, must be readable in the log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter

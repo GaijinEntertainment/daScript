@@ -1905,7 +1905,7 @@ def test_metal_family_matrix(t : T?) {
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state
             // mirror, fused sequential scan) + gated attention (2x-wide Q, partial rope 64/256,
-            // σ out-gate). Decode + prefill serve; batch = per-row fallback (see qwen35_row).
+            // σ out-gate). Decode, prefill and the batched step serve (see qwen35_row).
             qwen35_row(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
                 "qwen35-0.8b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
                     MetalNeed.partial_rope | MetalNeed.q_gated), 4.0)

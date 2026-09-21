@@ -186,7 +186,7 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : 
     let device_home = homes >= npl
     let device_served = device_home || batch_decode_override_armed()
     let passes0 = cpu_pass_total()
-    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, kv_dtype, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify; the board's streams take the f16 codec
+    var sch <- create_scheduler(t, npl, npl, plen, 0l, 0l, kv_dtype, mtp)   //! a prompt is one prefill quantum; `mtp` ticks every stream's speculative round through one joint verify; the board's streams take the f16 codec, a census row names its own
     if (device_home) {
         verify(set_device_kv(sch, true), "bench_tg_batched_rep: an idle scheduler takes the device mode")
     }
