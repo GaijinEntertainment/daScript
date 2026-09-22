@@ -685,6 +685,13 @@ def private tok_synth_longword() : string {
 def flat_row_plen(plen, ngen, row_ctx : int64; real_row : bool) : int64
     => real_row ? max(plen, row_ctx - ngen) : plen
 
+//! the context every row of one model needs: the batched streams' prompt, window, a slot a stream
+//! for the admits and the margin (times `spec_rows` under the self-speculative arm), and never under
+//! the flat rows' own need - the flat session has no capacity check on its prefill path, so a cap
+//! under `plen` is a prefill written past the cache
+def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int64
+    => max(npl > 1 ? bplen + (ngen + int64(npl) + 8l) * spec_rows : 0l, max(plen, ngen))
+
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
 // Non-private: tests/test_tok_seed.das gates the header walk.
 def tok_read_seed(path : string) : string {
@@ -1499,7 +1506,7 @@ def main() : int {
         let bplen = cfg.npl_plen > 0 ? int64(cfg.npl_plen) : (plen > 0l ? plen : BENCH_PP_TOKENS)   //! the batched row's prompts: --npl-plen, else -p, else the flat reference exe's -p default when the pp row is off
         //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
         let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
-        let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)   //! a stream's context: its prompt, its window, a slot a stream for the admits, and the margin
+        let rows_ctx = rows_ctx_need(plen, ngen, bplen, cfg.npl, spec_rows)
         if (cfg.npl > 1) {
             set_gpu_resident_regions(int64(cfg.npl))   //! the batched row's streams each home in a region: asked before the load sizes the mirror
             if (!real_row) {

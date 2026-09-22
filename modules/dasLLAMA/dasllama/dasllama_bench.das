@@ -107,9 +107,18 @@ def public bench_session(var t : Model; plen, ngen : int64; kdt, vdt : KVDtype) 
     return <- make_run_state(t.config, kdt, vdt)
 }
 
+//! the pp row refuses a prompt its session cannot hold: the prefill path checks no capacity, and a
+//! prompt past `seq_len` is written past the cache - garbage logits when the box is lucky, a crash otherwise
+def private bench_pp_fits(t : Model; plen : int64) {
+    if (plen > t.config.seq_len) {
+        panic("bench: a pp row of {plen} tokens on a session of {t.config.seq_len} positions - the driver capped the context under its own prompt")
+    }
+}
+
 //! the pp row's untimed warmup: one full-size prefill, as llama-bench does before timing
 [cold_path]   // a driver over the annotated forward_* entries; it allocates its prompt per call
 def public bench_pp_warm(t : Model; var s : Session; plen : int64) {
+    bench_pp_fits(t, plen)
     let warm <- bench_prompt(plen, BENCH_WARM_SEED)
     forward_prefill(t, s, warm, plen, 0l)
 }
@@ -117,6 +126,7 @@ def public bench_pp_warm(t : Model; var s : Session; plen : int64) {
 //! one timed pp rep: `plen` synthetic ids prefilled from an empty cache; returns tok/s
 [cold_path]
 def public bench_pp_rep(t : Model; var s : Session; plen, seed : int64) : double {
+    bench_pp_fits(t, plen)
     let prompt <- bench_prompt(plen, seed)
     let t0 = ref_time_ticks()
     forward_prefill(t, s, prompt, plen, 0l)
