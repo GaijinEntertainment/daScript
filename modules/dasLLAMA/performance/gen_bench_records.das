@@ -24,6 +24,8 @@ require math
 //   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps the ref's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
+//   each text leg's tg128@4 rides its das child (--npl) and answers to the llama-batched-bench
+//           beside that leg's llama-bench, under the same -ngl / op-offload / affinity arms
 //   image : das cpu/accel/metal (lcpp_bench --image)  vs patched llama-mtmd-cli ("image-chat":
 //           metal/amx vs the stock build, neon vs the CPU ref build — llama-bench itself has no
 //           image mode; the picture is the pinned fixture)

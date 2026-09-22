@@ -45,6 +45,8 @@ A box without an accelerated tier simply shows fewer categories.
   then 128 generated tokens, served together and read as the summed rate; das runs the streams
   through its scheduler and the batched step, the reference row is `llama-batched-bench`'s
   `-npl 4` row (`-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on`), `S_TG` summed the same way.
+  Every category carries the row: the batched exe runs under its category's flat reference
+  arms - the same build and `-ngl`, `--no-op-offload` for cpu + accel.
 - **Speech-to-text / audio-in**: wall time to transcribe a clip, best of the timed repetitions,
   **engine-internal and load-excluded on every path** - das times `transcribe()` from a warmed
   process; whisper.cpp rows are its own `total time - load time`; the patched multimodal CLI
