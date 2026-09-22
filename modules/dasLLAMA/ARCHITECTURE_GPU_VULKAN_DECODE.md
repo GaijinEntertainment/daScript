@@ -239,12 +239,13 @@ so the layer after it requants on its own.
 the ownership rule of sec.2.2u holds per slot: before a token the driver binds the selected
 region's slot in every recurrent layer to the calling session (`vk_rdec_dn_own` - the owner's path
 is one pointer compare; a foreign dirty slot flushes home first, then the session's state and
-history come up), the flush, release and invalidate seams walk every slot beside the per-op table,
-and a position-zero reset releases the session's slots. The conv-ring parity is a word per region
+history come up), the flush, release and invalidate seams walk every slot beside the per-op
+table, and a position-zero reset releases the session's slots. The ring parity is a word per region
 (`RDec.dn_par`), riding the row's `TokMeta` with its slot index (`parity`, `dnslot`): a region's
-slots step once per row, so the driver flips its word after each row it submits. Two sessions in
-two regions step with no flush between them, which lets the N-row command take a recurrent layer
-(`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao).
+slots step once per row, so the driver flips its word after each row it submits. A slot is
+`nvh x ds x ds` floats of state and a ring pair of `2 x cd x (dconv - 1)` floats; the step kernel
+binds every slot and indexes the row's own from `dnslot` and `DnStepArgs.nvh`. Two regions step
+with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao).
 
 **The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the
 mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its slot index

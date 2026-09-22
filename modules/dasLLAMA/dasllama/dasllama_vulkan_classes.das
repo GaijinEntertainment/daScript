@@ -26,9 +26,9 @@ require math
 struct TokMeta {
     pos : uint      // this token's absolute position (mirror row = layerbase + pos * kvd)
     cnt : uint      // cached positions incl. this one
-    parity : uint   // deltanet conv-ring parity of the row's region
+    parity : uint
     mirbase : uint  //! the N-row command: this row's K/V mirror region as an element offset; 0 in the one-row command, whose push carries the region
-    dnslot : uint   // the row's region as the deltanet state and ring slot (both commands: the step kernel takes no region push)
+    dnslot : uint
     pad0 : uint
     pad1 : uint
     pad2 : uint     //! the row is TOK_META_BYTES wide
@@ -2297,15 +2297,12 @@ struct DnStepArgs {
     dt_off : uint
     hist_off : uint
     eps : float
-    qscale : float   // the conv-ring parity and the slot ride tok[0]
+    qscale : float
     out_f32 : uint
-    nvh : uint       // a slot's state is nvh * ds * ds floats, its ring pair 2 * cd * (dconv - 1); a row's workgroups are its heads
-    bstride : uint   // the rows' beta rows' stride in smalls (the f32 arm's router form lands them 2 * nvh apart, the q8 arm nvh)
+    nvh : uint
+    bstride : uint
 }
 
-// the decode-step FUSED chain (one workgroup per v-head per row): conv preamble -> chunk-length-1 delta
-// rule IN PLACE on the persistent state -> gated out-norm -> the head's o row. The conv ring is
-// parity-double-buffered inside the smalls member; a row's region names its state and ring slot.
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
 class DnStepFused {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
@@ -2335,7 +2332,7 @@ class DnStepFused {
         let taps = pa.dconv - 1u
         let par = tok[row].parity
         let slot = tok[row].dnslot
-        let prow = row * (pa.cd + pa.nvh * ds)   //! the row's projection row (qkv | z)
+        let prow = row * (pa.cd + pa.nvh * ds)
         let ringb = pa.hist_off + slot * 2u * pa.cd * taps
         let rrb = ringb + par * pa.cd * taps
         let wrb = ringb + (1u - par) * pa.cd * taps
@@ -2493,7 +2490,7 @@ class DnStepFused {
             e += 256u
         }
         barrier()
-        let orow = (row * pa.nvh + h) * ds   //! the head's o row in the rows' o plane
+        let orow = (row * pa.nvh + h) * ds
         if (pa.out_f32 != 0u) {
             e = tid
             while (e < ds) {
@@ -2538,7 +2535,7 @@ struct DnScanArgs {
     dt_off : uint
     o_off : uint      // the raw o rows' base in orows (position-major, di wide)
     di : uint
-    state_base : uint // the region's state slot in the state member (floats)
+    region_state_base : uint
 }
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
@@ -2591,7 +2588,7 @@ class DnScan {
             ti += 128u
         }
         barrier()
-        let sb = pa.state_base + h * ds * ds + (live ? col : 0u) + lane * ds
+        let sb = pa.region_state_base + h * ds * ds + (live ? col : 0u) + lane * ds
         let row_stride = lanes_per_col * ds
         var s : float[16]
         s[0] = state[sb]

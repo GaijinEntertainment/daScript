@@ -2047,7 +2047,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
             }
             rdec_take_mirror(t, s, r, pos)
         }
-        if (c.recr_mask != 0ul) {   //! the row's recurrent state into its region's slots (the region is selected: the bind above)
+        if (c.recr_mask != 0ul) {
             if (pos == 0l) {
                 dn_reset(s)
             }

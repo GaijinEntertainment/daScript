@@ -205,6 +205,21 @@ past its binding on every row but the first.
 attention and the mirror store add that field to every K/V address they touch, so a block left
 unwritten sends a row at whatever base the memory held.
 
+**Every `TokMeta` block a diff fills for a model with a recurrent layer writes `dnslot`, the
+row's deltanet state and ring slot; a site with one region writes 0.** The fused step kernel
+carries no slot in its push and reads the slot from the row's block, so an unwritten field steps
+whatever state the memory held.
+
+**A descriptor set the resident prefill's recurrent block builds (`pf_dn_layer_sets` in
+`dasllama/dasllama_vulkan_prefill.das`) binds the whole deltanet state and smalls buffers - every
+mirror region's slot - never one region's slot.** The block names the region in its push constants
+(the scan's state base, the conv and tail's ring offset), so a set narrowed to one slot's range
+sends every other region's dispatch past its binding.
+
+**A diff that grows `TokMeta` sizes every binding of the block at `TOK_META_BYTES * rows`,
+never at a literal.** A binding kept at the old row width leaves every row past the first
+reading its position, count and region outside the binding, with no error.
+
 **A diff that adds a recorded form - a recorder that builds the resident token command into its
 own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name
 list and stamp count.** The profiler sums intervals by the recorder's own names.

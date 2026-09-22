@@ -194,10 +194,14 @@ carries `@role = "alias"`). Those two are the probe's deliberately unread bindin
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
 shared.** Per window the block runs the qkv and z GEMMs into the window planes, the beta and
-alpha rows into the layer's smalls, the conv over the layer's ring image, the sequential scan
-over the layer's own state slot, and the out GEMM into `pf_xb2`. The smalls are the layer's
-per-layer f32 plane: the layer's cold constants (conv taps, out-norm weights, the `a` and `dt`
-rows), the two parity ring images, and the beta and alpha rows. The weight planes stay in their file
+alpha rows into the layer's smalls, the conv over the selected region's ring image, the sequential
+scan over that region's state slot (the slot's bases ride the pushes, the sets bind every region's
+slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
+cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
+parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v). A prompt from position
+zero resets the region's parity word and zero-fills the slot's state and its first ring image
+alone (`pf_dn_zero`), so the first window's conv reads a zero history and the last window's tail
+lands in image 0, the parity the owner handoff hands the session. The weight planes stay in their file
 formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v
 carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.
 

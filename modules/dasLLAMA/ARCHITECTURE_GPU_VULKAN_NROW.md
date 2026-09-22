@@ -44,7 +44,10 @@ column's block, so the columns' rows quantize in parallel - the eight-column gua
 replaced read a quarter slower than the split gate and up GEMVs at four rows on the 12B,
 `PERF_LEDGER.md`'s gemma section of 2026-09-20); the residual epilogues stay separate dispatches
 over the rows, because an epilogue run by the last workgroup would serialize the rows' steps
-where the separate dispatch runs them in parallel workgroups. The row-parallel kernels take the
+where the separate dispatch runs them in parallel workgroups. The rows' fused add-rms-and-requant
+stamp (`rq_b`) writes Q8_0 blocks alone, so the command's prologue fuses only where layer 0's head
+takes a Q8_0 feed and reads no float row; every other head takes the split add-rms and requant
+pair, as the site before a routed block does. The row-parallel kernels take the
 rows' planes whole; the rope, the mirror store and the attention run at each row's own position,
 cached count and mirror region, which ride the shared `TokMeta` block a row (`mirbase` an
 element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`

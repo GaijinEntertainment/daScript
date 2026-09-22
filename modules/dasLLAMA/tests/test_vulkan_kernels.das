@@ -8883,12 +8883,12 @@ struct DnRowsOut {
     of : array<float>
 }
 
-//! one `dn_step_cls` dispatch over `nrows` rows: the planes uploaded fresh, the rows' (parity, slot) pairs in the TokMeta block, every output plane read back
+//! one `dn_step_cls` dispatch over `nrows` rows on buffers of its own: two calls share no device plane
 def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
                              offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
     var r : DnRowsOut
     let proj_bytes = int64(nrows * prow) * 4l
-    let st_bytes = int64(nslots * st_n) * 4l   //! every slot, whatever the row count: a one-row dispatch in slot 1 writes past a one-slot plane
+    let st_bytes = int64(nslots * st_n) * 4l
     let sm_bytes = int64(sm_n) * 4l
     let sc_bytes = int64(nrows * nblk) * 4l
     let q_bytes = int64(nrows * nblk) * 32l
@@ -8947,8 +8947,8 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     return <- r
 }
 
-//! the elements of `got` at `gbase` differing from `want`'s at `wbase` over `n` (a NaN differs from everything)
-def private rows_off(got, want : array<float>; gbase, wbase, n : int) : int {
+//! the count of differing elements (a NaN differs from everything)
+def private elems_off(got, want : array<float>; gbase, wbase, n : int) : int {
     var bad = 0
     for (i in range(n)) {
         if (got[gbase + i] != want[wbase + i]) {
@@ -8958,7 +8958,7 @@ def private rows_off(got, want : array<float>; gbase, wbase, n : int) : int {
     return bad
 }
 
-def private rows_off(got, want : array<uint>; gbase, wbase, n : int) : int {
+def private elems_off(got, want : array<uint>; gbase, wbase, n : int) : int {
     var bad = 0
     for (i in range(n)) {
         if (got[gbase + i] != want[wbase + i]) {
@@ -8968,8 +8968,7 @@ def private rows_off(got, want : array<uint>; gbase, wbase, n : int) : int {
     return bad
 }
 
-//! the fused step over two rows in two region slots against the one-row dispatch a row at a time: the row's o row (both forms), its
-//! slot's state and ring pair, bit for bit; the rows' beta rows sit at the f32 arm's stride, their alpha rows at the q8 arm's
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
     let nrows = 2
     let nkh = 2
@@ -9012,7 +9011,7 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
     smh[0] = eps
     smh[1] = qscale
     for (i in range(nvh)) {
-        smh[a_off + i] = -0.4 - float(i) * 0.1   // a stays negative (decay)
+        smh[a_off + i] = -0.4 - float(i) * 0.1   //! a stays negative (decay)
     }
     var pars <- [1, 0]   //! the slots' parities differ: each row reads its own image
     var slots <- [0, 1]
@@ -9031,10 +9030,10 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
         var pars1 <- [pars[r]]
         var slots1 <- [slots[r]]
         var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
-        let off_st = rows_off(got.st, want.st, r * st_n, r * st_n, st_n)
-        let off_ring = rows_off(got.sm, want.sm, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
-        let off_o = (out_f32 ? rows_off(got.of, want.of, r * nvh * ds, 0, nvh * ds)
-            : rows_off(got.sc, want.sc, r * nblk, 0, nblk) + rows_off(got.q, want.q, r * nblk * 8, 0, nblk * 8))
+        let off_st = elems_off(got.st, want.st, r * st_n, r * st_n, st_n)
+        let off_ring = elems_off(got.sm, want.sm, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
+        let off_o = (out_f32 ? elems_off(got.of, want.of, r * nvh * ds, 0, nvh * ds)
+            : elems_off(got.sc, want.sc, r * nblk, 0, nblk) + elems_off(got.q, want.q, r * nblk * 8, 0, nblk * 8))
         t |> success(off_st == 0 && off_ring == 0 && off_o == 0,
             "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {off_st}, ring {off_ring}, o row {off_o} elements off the one-row dispatch")
         delete proj1

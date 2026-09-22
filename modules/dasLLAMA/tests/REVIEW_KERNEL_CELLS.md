@@ -81,3 +81,8 @@ new step's error, or how its bar follows from that error, whether or not the bar
 **A kernel-unit cell for a kernel that attends inside a restricted horizon - a window, a
 sliding span, a block-diagonal range - writes its CPU oracle to attend strictly inside that
 horizon.** A leak then fails the ordinary compare, so the cell needs no separate leak control.
+
+**A kernel-unit cell that binds a buffer the kernel indexes by a per-row slot id - a state,
+ring or region plane the row's own metadata names - sizes that buffer for every slot its rows
+name, never for the dispatch's row count.** A one-row dispatch whose row sits in slot 1 then
+writes past a one-slot plane, and no error says so.

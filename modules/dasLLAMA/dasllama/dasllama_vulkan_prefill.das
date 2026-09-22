@@ -641,7 +641,7 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
-    let smalls_dev = L.dn[0].smalls_dev   //! the sets bind every region's slot; the window's pushes name the selected region's
+    let smalls_dev = L.dn[0].smalls_dev
     let smalls_bytes = L.dn[0].smalls_bytes
     L.pf_dn_conv_set = set_dn_conv_cls(
         fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, smalls_dev),
@@ -649,7 +649,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     L.pf_dn_scan_set = set_dn_scan_cls(
         fixed_array(g_rd.pf_dnconv, L.dn[0].state_dev, smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(np * cd * 4l, L.dn[0].state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
+        fixed_array(np * cd * 4l, L.dn[0].slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
         fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS))
     L.pf_dn_scan_p3_set = set_dn_scan_p3_cls(
         fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, smalls_dev),
@@ -677,14 +677,14 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     }
 }
 
-//! the selected region's slot from zero: its state and the ring image the first window's conv reads
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
     for (L in g_rd.layers) {
         if (L.recurrent) {
             let st & = unsafe(L.dn[g_rd.region])
-            cmd_fill_zero(raw, st.state_dev, st.state_off, st.state_bytes)
-            cmd_fill_zero(raw, st.smalls_dev, st.hist_off * 4l, st.ring_bytes)
+            cmd_fill_zero(raw, st.state_dev, st.state_byte_off, st.slot_state_bytes)
+            cmd_fill_zero(raw, st.smalls_dev, st.hist_off * 4l, st.ring_image_bytes)
         }
     }
 }
@@ -705,7 +705,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let eps = g_rd.eps
     let x6 = pf_dnx6(l)
     let xq8k = !x6 && kq_sb(L.fqkv)
-    let st & = unsafe(L.dn[g_rd.region])   //! the window runs in the selected region's slot: its ring image and state base ride the pushes
+    let st & = unsafe(L.dn[g_rd.region])
     let hist_off = uint(st.hist_off)
     if (x6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
@@ -762,7 +762,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     pfq_ts(raw)
     var pcs = DnScanArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
         beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
-        o_off = uint(DN_O_OFF), di = uint(di), state_base = uint(st.state_off / 4l))
+        o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l))
     enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
     pfq_ts(raw)
     var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
@@ -1499,7 +1499,7 @@ def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
     }
     var L & = unsafe(g_rd.layers[l])
     var st & = unsafe(L.dn[g_rd.region])
-    st.parity = g_rd.dn_par[g_rd.region]   // the last window's tail landed in the region's image 0, where the prompt reset the parity
+    st.parity = g_rd.dn_par[g_rd.region]
     st.owner_state_addr = intptr(stp)
     st.owner_hist_addr = intptr(histp)
     st.valid = true
