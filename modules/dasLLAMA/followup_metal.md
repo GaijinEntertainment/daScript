@@ -695,3 +695,15 @@ work that does not amortize: the K-quant rows GEMM's tile at ntok 4, or the four
 over the deepest dense KV on the board. Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07
 and 1.09) clears the 0.95 bar, so the width or the depth of this one is the axis to bisect with
 `lcpp_bench --prof` on the batched row.
+
+## 25. The Qwen3.8-27B no-head verify cell panics through the CPU decode stack
+
+`tests/test_metal_mtp_parity.das`'s `test_metal_verify_qwen38_27b` (large tier) pins the
+batch-rail same-slab verify to decline a recurrent session's rows as `dn_state`; on the M5 the
+B=2 arm serves (maxd 2.3e-4, no flips) and two later arms die in
+`dasllama_common.das`'s "CPU decode stack on a blob-only metal-flavor model" panic - the
+verify declines, and the fallback lands on a stack the blob twin cannot run. Red at master
+ce42fb986 and on every branch since; the stocked suite never reaches it (the mtp suite is not
+in `stocked`). The work: decide whether the batch driver now serves the hybrid's verify rows -
+then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
+CPU stack.
