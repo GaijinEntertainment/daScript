@@ -733,3 +733,14 @@ ce42fb986 and on every branch since; the stocked suite never reaches it (the mtp
 in `stocked`). The work: decide whether the batch driver now serves the hybrid's verify rows -
 then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
 CPU stack.
+
+## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
+
+`lcpp_bench --mtp-ab` (single stream, Metal, tg-real128, greedy, depth 1, M5 Max, `-jit`, the
+untuned gate bypassed - decode is GPU-bound): Qwen3.5-0.8B-MTP Q8 364.5 -> 438.6 tok/s (1.20x,
+87.9% accepted), 4B 103.7 -> 125.8 (1.21x, 85.5%), 9B 57.3 -> 63.2 (1.10x, 84.5%; 5 reps, cv
+1-2.5%). An accept rate of 85% at depth 1 buys 1.85 tokens a round at most, and the 0.8B and 4B
+take two thirds of that; the 9B takes a third with the same rate, so its round carries a cost
+that scales with the model and not with the drafts - the verify's two rows against a 9.7 GB
+weight pass at its bandwidth roof should be nearly free. The work: the round's stage split on
+the 9B (`harness/mtp_ruler.das`, the verify against the plain step) to name the term.
