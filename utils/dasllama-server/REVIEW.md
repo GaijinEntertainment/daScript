@@ -7,11 +7,12 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that changes a flag's user-visible text updates every copy of that text in the same
-change - the flag's `@clarg_doc` in the tool that declares it, every `README.md` place that documents the flag (its
-table row, and the section documenting the key where it has one), its row in
-`doc/source/reference/utils/dasllama_server.rst` (repo root) - adding a copy where one is
-missing** - a copy left behind sends the user to a flag that no longer does what it says.
+**A diff that adds a `main.das` flag, changes what one does or defaults to, or edits any copy of
+its text leaves every copy stating the same behavior and the same default, adding any copy that is
+missing - the flag's `@clarg_doc`, its `README.md` table row with its `Default` cell, the
+`README.md` section on its config-file key where one exists, and its row in
+`doc/source/reference/utils/dasllama_server.rst` (repo root).** A copy left behind sends the user
+to a flag that no longer does what it says.
 
 **A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
 `tests/` subfolder's `REVIEW.md` (beside this file) too.**
@@ -28,9 +29,11 @@ place `control.html` sends that field, in the same change.**
 before - a new route requires all of its fields - adds that field to every `control.html`
 request to that route, in the same change.**
 
-**A diff that changes what a route answers - an item, a field, or a value, including one a
-`dasllama/*` module supplies - re-captures every fixture under `tests/fixtures/` that
-records that route, in the same change.** The fixtures are the recorded response shape.
+**A diff that changes the shape a route answers - a key, an item in a list it answers, or a value
+the code sets itself rather than one the traffic since boot, the configuration, the loaded model or
+the machine decides, including one a `dasllama/*` module supplies - re-captures every fixture under
+`tests/fixtures/` that records that route, in the same change.** The fixtures are the recorded
+response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under
@@ -44,8 +47,8 @@ answers one, updates that route's `README.md` row in the same change.** The row 
 consumer learns the key exists and when to expect it.
 
 **A `served` or `served_note` value `openai_server.das` writes itself - all of it but the engine
-text it quotes - uses no name the engine has for its own parts - `pass`, `region`, `mirror`,
-`resident driver`, `tier`, `rails` - and no name of the same kind.**
+text it quotes - uses only words a user understands without knowing how the engine is built, and
+names a part of the engine by what that part does for the user.**
 
 **A `served_note` that carries the engine's decline text leads with a sentence of
 `openai_server.das`'s own that stands without it.**

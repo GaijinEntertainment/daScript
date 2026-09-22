@@ -790,10 +790,10 @@ what it costs today and what the fix would change.
   ledgered: batched decode (see the batched-tg entry) turns each step into a B-row GEMM where the
   same split/placement question prices real serving throughput; revisit there, not as a B=1 hunt.
 
-- **`g_lp_cbs` per-step buffer churn: the `@scratch` recycling never happens on the batch-decode
-  pipeline path (spotted 2026-08-02, lint uplift).** `metal_batch_decode_forward` builds each
-  step's command-buffer list in a LOCAL `cbs` and hands it over with `g_lp_cbs <- cbs`
-  (`dasllama_metal_decode.das:3002`) - the move drops the global's retained buffer every step,
+- **`BatchLanding.cbs` per-step buffer churn: the `@scratch` recycling never happens on the batch-decode
+  pipeline path (spotted 2026-08-02, lint uplift).** `batch_step_build` builds each
+  step's command-buffer list in a LOCAL `cbs` and hands it over with `L.cbs <- cbs`
+  (`dasllama_metal_decode.das`, the landing stash at the end of the build) - the move drops the slot's retained buffer every step,
   so `finish_pending_step`'s capacity-retaining `clear()` recycles nothing, and on a persistent
   heap the dropped buffer is ~ncb pointers per step. **What a fix changes:** prefill's
   `g_pf_cbs` ping-pong pattern (build into the global, or `push_from` a reference) recycles both
@@ -2065,6 +2065,25 @@ processes throughout].
   draft forms on this carrier; on synthetic ids every accepted draft is noise, so the spec row's
   ceiling is the plain row and the served rate is the ruler's question (sec.2.45 of the
   measurement doc) [direction-grade - two processes].
+
+### From the server-MTP arc, the batched pre-encoded step (2026-09-21)
+
+- **What the pre-encoded step holds (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a).** A pre-encoded
+  batched step holds its own set of `batch_step_build`'s pooled buffers beside the step in flight, so
+  the pool's peak grows by one step's set. The bytes are `batch_step_build`'s own sizing at four rows
+  (the server's default stream count, the fixed-row forms' four-row pad) over each carrier's loaded
+  `Config`, each buffer rounded up to the pool's power-of-two bucket. The fixed part - the rows'
+  activations, the FFN pair and the logits plane - is 3.5 to 5.6 MB on the catalog's large carriers
+  (gemma-4-26B-A4B 4.6 MB, Qwen3.8-27B 5.6 MB, gpt-oss-20b 4.5 MB, Mistral-Small-3.1-24B 3.5 MB,
+  gemma-4-E4B 4.9 MB). A carrier the fused partD attention does not serve (a head size other than
+  64 or 128, mixed head sizes, a sliding window, sinks) also holds the chunked attention's partials:
+  rows x heads x (largest head size + 2) x 4 bytes per 64-key chunk of the deepest row. At each
+  carrier's trained context that is gemma-4-26B-A4B 539 MB at 262144 keys (a 1 GiB bucket),
+  Qwen3.8-27B 406 MB at 262144 (512 MiB), gpt-oss-20b 138 MB at 131072 (256 MiB), gemma-4-E4B
+  135 MB at 131072 (256 MiB); Mistral-Small-3.1-24B rides partD and holds none. Decision: the rail
+  ships off (`DASLLAMA_METAL_BATCH_PRE=1` arms it) - the E4B four-row step times the same with it
+  on and off (`followup_metal.md` row 23), so the second set buys nothing until a step chained on
+  the GPU's own picks lands on top of it.
 
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 

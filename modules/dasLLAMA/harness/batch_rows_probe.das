@@ -151,6 +151,22 @@ def private print_chain_stats(feed : string; spec : int) {   // nolint:LINT012,L
     }
 }
 
+//! The stage counters start at zero for the arm about to run: without this every printed split
+//! would fold in the earlier row counts and their knockout arms.
+def private reset_batch_stages {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_decode_stage_reset()
+    }
+}
+
+def private print_batch_stages(steps : int64) {   // nolint:LINT012,LINT019 — read only in the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let st = metal_batch_decode_stage_stats()
+        let n = double(max(st.steps, 1l))
+        print("  batch stages per step: setup {double(st.setup_us) / n / 1000.0lf:.2f} encode {double(st.encode_us) / n / 1000.0lf:.2f} wait {double(st.wait_us) / n / 1000.0lf:.2f} gpu {st.gpu_us / n / 1000.0lf:.2f} readback {double(st.readback_us) / n / 1000.0lf:.2f} ms; pre-encoded steps taken {metal_batch_pre_taken()} of {st.steps} ({steps} timed; a pre-encoded step's build is charged to the call before it)\n")
+    }
+}
+
 var private g_dead_levers = 0   // knockout arms that left the step's time unchanged: the lever did not engage
 
 def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64) : int {
@@ -163,6 +179,7 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
         let mode = cfg.sameslab ? " same-slab" : ""
         var full = 0.0lf
         for (arm in arms) {
+            reset_batch_stages()
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 set_metal_decode_skip(arm)
             }
@@ -175,6 +192,7 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
                 }
                 let ratio = base > 0.0lf ? ms / base : 0.0lf
                 print("B={nb}{mode}: {ms:.2f} ms/step  x{ratio:.2f} of the single step  ({ms / double(nb):.2f} ms per row)\n")
+                print_batch_stages(int64(cfg.steps))
                 measured++
             } else {
                 let skipped_stage_ms = full - ms

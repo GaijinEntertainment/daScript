@@ -142,7 +142,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode for every request (needs a model with an in-file NextN head, e.g. the -MTP- GGUFs; pays on the dense qwen35 models). A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "Path to a llama.cpp llama-bench binary — enables the control page's benchmark button"
@@ -594,6 +594,34 @@ def private effective_gpu(cfg : ServerArgs) : string {
 def private cfg_sourced(key : string) : bool
     => key_exists(g_cfg_sources, key)
 
+//! The scheduler's tri-state `mtp` off the config surface: a key the TOML or `--mtp` set pins
+//! 0 / 1; unset is -1 and each slot decides (self-speculation on when it runs one stream
+//! host-cached). Non-private: test_openai_server_mtp.das gates it.
+def mtp_setting(sourced : bool; on : bool) : int
+    => sourced ? (on ? 1 : 0) : -1
+
+//! What the unset default resolves to for the server-wide slot shape - the GET /config surface
+//! reports resolved values, and unset no longer means off.
+def mtp_default_resolved(streams : int; gpu : string) : bool
+    => streams == 1 && gpu != "vulkan"
+
+//! One roster entry as the control page's editor reads and writes it; `mtp` rides as the bool the
+//! editor validates, an inherited (-1) knob as absence.
+def private roster_entry_json(ent : ModelEntry) : JsonValue? {
+    var etab <- {
+        "name" => JV(ent.name), "path" => JV(ent.path), "backend" => JV(ent.backend),
+        "ctx" => JV(int64(ent.ctx)), "quant" => JV(ent.quant), "kv_dtype" => JV(ent.kv_dtype),
+        "streams" => JV(int64(ent.streams)), "chunk" => JV(int64(ent.chunk)),
+        "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
+        "image_mmproj" => JV(ent.image_mmproj),
+        "default" => JV(ent.is_default)
+    }
+    if (ent.mtp >= 0) {
+        etab["mtp"] = JV(ent.mtp != 0)
+    }
+    return JV(etab)
+}
+
 // vulkan detail knobs — explicit config/CLI wins; unset gets the blessed serving shape
 // (K=2 resident + S=35 streamed + DN + ATTN) under gpu = vulkan
 // 0 / unset = auto (-1): the loader fills the VRAM budget and streams the rest; a positive value
@@ -654,25 +682,13 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
         flat = cfg.flat,
-        mtp = cfg.mtp,
+        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu),
         lcpp_bin = cfg.lcpp_bin,
         models_dir = cfg.models_dir))
     var sources <- { for (k in CONFIG_KEYS); k => JV(g_cfg_sources?[k] ?? "default") }
     // the [[models]] roster — the page's roster editor reads/writes this shape (a config-less
     // single-model start serializes as a synthesized one-entry roster)
-    var mentries : array<JsonValue?>
-    mentries |> reserve(length(g_models))
-    for (ent in g_models) {
-        var etab <- {
-            "name" => JV(ent.name), "path" => JV(ent.path), "backend" => JV(ent.backend),
-            "ctx" => JV(int64(ent.ctx)), "quant" => JV(ent.quant), "kv_dtype" => JV(ent.kv_dtype),
-            "streams" => JV(int64(ent.streams)), "chunk" => JV(int64(ent.chunk)),
-            "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
-            "mtp" => JV(int64(ent.mtp)), "image_mmproj" => JV(ent.image_mmproj),
-            "default" => JV(ent.is_default)
-        }
-        mentries |> push(JV(etab))
-    }
+    var mentries <- [for (ent in g_models); roster_entry_json(ent)]
     var top <- {
         "config" => config,
         "models" => JV(mentries),
@@ -1104,7 +1120,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         port, streams,
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
-         asr_team_dispatch = asr_team_dispatch, mtp = g_cfg.mtp])
+         asr_team_dispatch = asr_team_dispatch,
+         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp)])
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()

@@ -680,18 +680,71 @@ row at engine sha cc969d961, the E2B das row at 60b736faa): gemma-4-E4B Q8 259.6
 reference's 290.1 tok/s, while the E2B - the same
 E-series batch arm, PLE rows form, shared-KV layers Q-only - reads 454.2 against 479.7 (0.95). The
 flat rows hold on both files (E4B tg128 90.0 vs 81.2). Whatever the E4B pays per step it pays
-only at four rows: the E4B is the deeper and wider of the two, so the candidates are the PLE
-gather's per-row cost and the attention split's head-width gate, both readable off
-`lcpp_bench --prof`'s stage report after the batched row. The pass rule for a batched arm is
-0.95 of `llama-batched-bench` (`ARCHITECTURE_MEASUREMENT.md`); the E2B sits on the bar and the
-E4B under it.
+only at four rows. The stage split (`harness/batch_rows_probe.das --bs 4 --knockouts --sameslab
+--steps 32`, M5 Max, `-jit`, the archived m5 sidecar; direction-grade) puts the four-row GPU step
+at 13.45 ms against the single row's 11.09: the GEMV stage 9.65 ms (the weight stream, at its
+roof), elementwise 1.73, attention 1.04, other 0.5, and the batch driver costs 12.39 ms at ONE row
+against the single-row driver's 11.09; `lcpp_bench --prof`'s stage line adds ~1 ms of host work per
+step outside the GPU (encode 0.73, handoff 0.15, sched 0.11). The E2B shows the same shape (8.05
+against 6.25; elementwise 1.11, attention 0.89), so the E4B's deficit is the E-series' shared
+per-step cost meeting less flat headroom (its flat lead is 1.11, the E2B's 1.17). The host encode
+is NOT on the critical path: the step's command buffers commit progressively (`DASLLAMA_METAL_BATCH_NCB`),
+so the GPU runs under the encode already, and the pre-encoded step (`DASLLAMA_METAL_BATCH_PRE`,
+sec.2.38a of `ARCHITECTURE_GPU_MTP_DECODE.md`) moves the four-row step 13.26 -> 13.18 ms in the
+same probe (`--bs 4`, no knockouts: setup 0.05 encode 0.68 wait 12.04 gpu 11.87 readback 0.07 ms a
+step, 33 of 34 steps pre-encoded; debug-jit) and leaves the bench row at 259.0 (`lcpp_bench -jit
+--for-debug-purposes`, debug-jit, against the board cell's 259.6). What the row pays is the
+GPU's idle between steps, ~1.0 ms of a 14.3 ms bench step (`lcpp_bench --prof`, `JOBQUE_PROFILING=1`,
+one rep, debug-jit): the CPU PLE pre-step 0.37 (row 13 - the model_proj GEMM for four rows on the host), the
+sampler's argmax over four 262144-wide rows 0.19, the driver's setup + sched + handoff + readback +
+wake 0.4. The pipelined submission (`DASLLAMA_METAL_BATCH_PIPE=1`, a bench-only rail: it serves the
+PREVIOUS step's logits) hides all of it - 12.01 against 13.34 ms in the probe - which bounds the
+lever: the next step committed BEFORE the current one lands, on the GPU's own argmax (the rows twin
+of the single-row greedy chain, sec.2.38: argmax rows -> per-row embed gather -> the PLE gather +
+model_proj chain of row 13 on device -> the layer stack), verified against the caller's tokens at
+the landing, a miss re-running the step; only rows whose sampler is a bare argmax may chain. The
+elementwise chain's dispatch count (~40 us a layer at four rows) is the second, smaller lever. The
+pass rule for a batched arm is 0.95 of `llama-batched-bench` (`ARCHITECTURE_MEASUREMENT.md`); the
+E2B sits on the bar and the E4B under it, ~0.6 ms a step away.
 
 ## 24. The dense 24B batched row loses at four rows what its flat row wins
 
 The same board: Mistral-Small-3.1-24B Q4_K_M flat tg128 38.3 against llama.cpp's 36.6 (1.05),
 batched tg128@4 72.4 against 77.2 (0.94). A dense K-quant file at 24B is weight-bound at one row
 and every step is one weight pass at four, so a batched deficit beside a flat lead is per-row
-work that does not amortize: the K-quant rows GEMM's tile at ntok 4, or the four-row attention
-over the deepest dense KV on the board. Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07
-and 1.09) clears the 0.95 bar, so the width or the depth of this one is the axis to bisect with
-`lcpp_bench --prof` on the batched row.
+work that does not amortize. The stage split (`harness/batch_rows_probe.das --bs 4 --knockouts
+--sameslab --steps 32`, M5 Max, `-jit`, the archived m5 sidecar; direction-grade): the four-row
+GPU step is 44.65 ms against the single row's 26.08 (1.70x) and the GEMV stage alone is 41.98 ms -
+1.6x the single step's - because a K-quant model at B <= 8 rides per-stream plane GEMVs, so the
+weights stream once per row with only the cache sharing them. `llama-batched-bench` scales worse
+(its four-row step is 1.9x its flat one), so the 0.94 is the flat lead being eaten. The lever is a
+batched K-quant GEMM form for B <= 8 - the kq mul_mm twins serve B >= 9 today; at M-pad 32 the
+q8 rail measured negative, but against a 1.6x weight stream the K-quant arithmetic is different.
+Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07 and 1.09) clears the bar on its
+flat lead alone.
+
+## 25. The Qwen3.8-27B no-head verify cell panics through the CPU decode stack
+
+`tests/test_metal_mtp_parity.das`'s `test_metal_verify_qwen38_27b` (large tier) pins the
+batch-rail same-slab verify to decline a recurrent session's rows as `dn_state`; on the M5 the
+B=2 arm serves (maxd 2.3e-4, no flips) and two later arms die in
+`dasllama_common.das`'s "CPU decode stack on a blob-only metal-flavor model" panic - the
+verify declines, and the fallback lands on a stack the blob twin cannot run. Red at master
+ce42fb986 and on every branch since; the stocked suite never reaches it (the mtp suite is not
+in `stocked`). The work: decide whether the batch driver now serves the hybrid's verify rows -
+then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
+CPU stack.
+
+## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
+
+`lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,
+`-jit --for-debug-purposes`, debug-jit, `DASLLAMA_ALLOW_UNTUNED=1` with the box sidecar older than
+the binary - the CPU kernels ran the `arm-i8mm` class profile's winners, which moves prefill and
+not this decode row - direction-grade, both arms in one process): Qwen3.5-0.8B-MTP Q8 364.5 ->
+438.6 tok/s (1.20x, 87.9% accepted; 3 reps, sd 0.1 / 0.7), 4B 103.7 -> 125.8 (1.21x, 85.5%; 3 reps,
+sd 1.2 / 2.8), 9B 57.3 -> 63.2 (1.10x, 84.5%; 5 reps, sd 0.6 / 1.6 - a 3-rep read at sd 4.0 / 2.5
+was void). An accept rate of 85% at depth 1 buys 1.85 tokens a round at most, and the 0.8B and 4B
+take two thirds of that; the 9B takes a third with the same rate, so its round carries a cost
+that scales with the model and not with the drafts - the verify's two rows against a 9.7 GB
+weight pass at its bandwidth roof should be nearly free. The work: the round's stage split on
+the 9B (`harness/mtp_ruler.das`, the verify against the plain step) to name the term.

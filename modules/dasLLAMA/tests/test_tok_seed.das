@@ -70,6 +70,16 @@ def test_tok_seed_body_only(t : T?) {
 }
 
 [test]
+def test_flat_row_plen(t : T?) {
+    t |> run("the flat session's prompt rows never shrink the context under the tg-real row's prompts") @(t : T?) {
+        // -p 0 -n 32 beside a real row whose longest prompt capped the context at 270 + 32 + 8
+        t |> equal(flat_row_plen(0l, 32l, 310l, true), 278l, "the real row's cap stands: the flat rows read it back as prompt rows")
+        t |> equal(flat_row_plen(512l, 128l, 310l, true), 512l, "a flat prompt longer than the real row's cap keeps its own length")
+        t |> equal(flat_row_plen(0l, 32l, 4096l, false), 0l, "no real row: the flat session sizes as llama-bench does, plen + ngen")
+    }
+}
+
+[test]
 def test_tok_seed_hash_in_body(t : T?) {
     t |> run("a '#' MID-LINE in the body is corpus, not a header") @(t : T?) {
         let p = write_corpus("mid_line_hash.txt", "# header\nlet x = 1 # not a header\ntail\n")

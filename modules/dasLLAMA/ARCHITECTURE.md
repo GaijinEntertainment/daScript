@@ -85,7 +85,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   command - and the gemma-4 form both eras take.
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.29, 2.33-2.37a, 2.39: the Metal speculative round over
   the batch driver's same-slab verify, and the box knob that sets the depth a round drafts.
-- `ARCHITECTURE_GPU_MTP_DECODE.md` - sec.2.30-2.32, 2.38, 2.39a-2.39b: the kernel argument-alignment
+- `ARCHITECTURE_GPU_MTP_DECODE.md` - sec.2.30-2.32, 2.38, 2.38a, 2.39a-2.39b: the kernel argument-alignment
   contract enforced at every dispatch, the K-quant small-batch crown and the row-buffer pad a
   multi-row verify dispatches under, the single-row driver's greedy chain, and the decode layer
   encoder.

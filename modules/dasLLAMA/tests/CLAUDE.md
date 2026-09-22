@@ -91,9 +91,15 @@ batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (rea
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
 
 MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
-mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 27b 35b 3.8-27b` (3.8-27b = the Qwen3.8-27B
-trunk + its split Q8_0 head; ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
-verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; ffk = the
+mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b` (4b = Qwen3.5-4B-MTP
+Q8_0, the mid tier; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
+trunk + its split Q8_0 head; the 4b and 9b blocks carry the `qwen35` family tag; every fixture
+loads its served twin through `load_model_cached`, so the file mints a `.dlim` per carrier - the
+ledgered exception to the loader rule, since the metal MTP rail is what the image flavor serves;
+ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
+verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers, with the
+one-step-off control (row 0 against the PREVIOUS plain step must land outside the bar at every
+step); ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
 steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
@@ -578,8 +584,16 @@ at, which grows to the batch) and, under the scheduler's self-speculative mode, 
 a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
 runs the joint-verify invariance cell: three speculative streams admitted together emit,
 token for token, what each emits alone on a one-stream speculative scheduler (the verify's
-rows forms are per row, so the joint pass and the solo pass round alike). Stocked suite; skips
-off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
+rows forms are per row, so the joint pass and the solo pass round alike), and its staggered twin:
+the same three streams with the LAST one on a prompt past 200 tokens, so the joint round's groups
+sit at different depths across three 64-row chunk boundaries - the round's chunk count, its
+attention form and every group's layer bases must follow that group's own depth and mirror cap,
+not group 0's; the Llama carrier also
+runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
+pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
+sixteen or more; the shipped default reads off), token for token per stream, then the rail's
+retire under a parked step and the drivers' shutdown against the Metal live-object count. Stocked
+suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
 `test_gpu_resident_regions*.das` (`_resident_regions.das` carries the cells; one model a file; the qwen3 file is Qwen3-0.6B Q8_0, six cells on a q/k-norm carrier: the interleaved single steps, the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope + store or the split pair - bit for bit and served by the N-row command (`vk_rdec_token_n_rows` at two or more, asserted by every batched cell), the batched-first cell (a batched step before any one-row step, a one-row step, a batched step again: the unsplit twin's availability is the device's, never the one-row record's), the widening cell (three regions: two rows batched, each alone, then all three batched - a record at a row count the command had not recorded after a one-row step, so the N-row sets' own combine form and the served-step counter hold; the gpt-oss and gemma-4 MoE files), the split-forms cell (the fuse knob pinned off for the load, the rows against the split one-row forms; the E2B and gemma-4 MoE files), the wide single steps (both prompts past RD_WIDE_POS, so the one-row command's wide twin records and serves, bit for bit against the session alone), and the fuse bisect (`DASLLAMA_VK_FUSE_BISECT` a bit at a time, one model load a bit: the one-row steps within the split bar of the fused run with the one-token-off control, and under the fused q/k norm's bit the batched rows bit for bit on the split pair); the phi3 file is Phi-3.5-mini Q4_K_M, the two batched-step cells on a K-quant carrier, held to the split bar with the one-token-off control rather than bit for bit; `test_gpu_resident_regions_hybrid_k.das` is Qwen3.5-9B-MTP UD-Q5_K_XL (large tier), the same two cells on the same bar, on a deltanet hybrid whose recurrent projections are K-quant planes, so every recurrent head takes the rows' Q8_K feed; the gemma3 file is gemma-3-1b Q8_0, the two batched-step cells and the batched-first cell on the gemma-3 dense base bit for bit; the llama file is Llama-3.2-1B Q4_K_M, the two batched-step cells on a K-quant carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off control rather than bit for bit, since those sites round apart from the one-row command's, `../followup_vulkan.md` item 75; `test_gpu_resident_regions_gemma2.das` is gemma-2-2b Q8_0, the two batched-step cells and the batched-first cell on a carrier with the attention softcap and the classifier epilogue - the N-row command's epilogue over every row's logits - plus the stamp witness, a step whose census count shows the two-head attention slab served (a group of two heads); `test_gpu_resident_regions_gemma4.das` is gemma-4-12B Q8_0, large tier (`DASLLAMA_PARITY_FULL=1`), the same three cells on a carrier with the epilogue's suppressed ids, V-from-K global layers at a head of 512 and a per-layer output scale - the pins themselves are `test_vkd_cls_epi_rows`' witness, since the batch driver's host tail re-pins every row; `test_gpu_resident_regions_qwen2moe.das` is Qwen1.5-MoE-A2.7B Q8_0, large tier, the two batched-step cells on a MoE carrier with Q8_0 unbiased experts beside a shared expert (the routed block's plain act and the shared expert's Q8_0 requant of the routed feed) bit for bit; `test_gpu_resident_regions_gptoss.das` is gpt-oss-20b mxfp4, large tier, the same three cells on a MoE carrier - the N-row command's routed block (the router's columns, the per-row top-k, the expert GEMVs over the rows' slots, the combine per row) on the native-MXFP4 stacks with the biased router, the biased act and the attention sinks; `test_gpu_resident_regions_qwen3moe.das` is Qwen3-30B-A3B Q4_K_M, large tier, the two batched-step cells on a MoE carrier with no shared expert, K-quant stacks fed by the rows' Q8_K requant, held to the wide bar with the one-token-off control (item 75: the K-quant projection leaves round apart from the one-row command's, and a MoE's expert planes carry that rounding through every layer - the bar's reading is `_resident_regions.das`'s); `test_gpu_resident_regions_gemma4moe.das` is gemma-4-26B-A4B Q4_K_M, large tier, the same two cells on the gemma-4 MoE form - the routed feed and the router off their own norms, the parallel shared expert, the folded down scale, the combine over both branches - on the same bar, with the one-row command's fused forms pinned off for the load: the rows take the unfolded down under the combine's sum, and against the fused one-row form the 26B's router near-ties flip whole positions (item 83)) - stocked suite, `-jit` only; the resident driver's mirror
@@ -832,7 +846,9 @@ against the committed `site/files/dasllama/bench_records.json` and its first-pai
 `bench_cells.json` (what daslang.io/dasllama.html renders); red means a records commit skipped
 `gen_site_records`. Plus the projection contract: the render fields survive, the receipt-only
 fields are absent from the text.
-`test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
+`test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk and its
+`flat_row_plen` seam (the flat session's prompt rows beside a tg-real row: the real row's cap
+read back, a longer flat prompt kept, the llama-bench sizing with no real row), required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora

@@ -9,17 +9,17 @@ percentage of two such numbers, which counts as produced by the runs its sides c
 error or agreement reading (a cosine, a max-abs error) a test's tolerance is set from. A figure
 rule below binds a figure this change writes or changes - in the repo, in a commit message, or in
 its PR body. It does not bind a figure a changed line carries unchanged. A figure on a page a
-`site*/` or `utils/` folder checklist owns (repo root) answers to that checklist instead of this
-one; a reading a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for the
+`site*/` folder checklist owns (repo root) answers to that checklist instead of this one; a
+reading a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for the
 tolerance value itself, and to this list for naming the box and flags it was read on.
 
 The naming a figure rule asks for is attached to the figure by a sentence, a table heading or a
 provenance line that unambiguously covers it, or by a citation of a passage or board row whose
 provenance covers it. A provenance line is a paragraph whose whole content is provenance - the
-harness, flags, box and exe - set before the rows it covers or naming them. A tag (`external`,
-`direction-grade`, `out-of-process`, `debug-jit`)
-covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
-of the paragraphs that line sits under or names.
+harness, flags, box and exe. It covers the rows it names or, when it names none, the paragraphs
+after it up to the next heading or the next provenance line. A tag (`external`,
+`direction-grade`, `out-of-process`, `debug-jit`) covers the figures of the sentence or bullet it
+sits in, or, on a provenance line, the figures that line covers.
 
 A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
 
@@ -39,7 +39,8 @@ A board cell is a run `performance/gen_bench_records.das` spawns, or a manual
 of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it never writes the
 store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
 writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
-rather than as the released exe. A rig leg is the backend arm a board cell runs - one the set
+rather than as the released exe. A `-jit` reading is a wall or rate, or a ratio of two, that an
+instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is the backend arm a board cell runs - one the set
 `stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
@@ -53,8 +54,8 @@ serves, whatever the modality; a turn wall is its wall. A served-turn rate an in
 `harness/` prints stays in that run's log: the ledger entry carries what the instrument decided -
 served, declined, how many rows it counted - never that rate.
 
-**A `-jit` A/B pair's arms keep their absolute rates in the commit message or PR body that states
-the pair.**
+**A pair of `-jit` readings held against each other keeps each arm's absolute wall or rate in the
+commit message or PR body that states the pair.**
 
 **A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced
 tags it `external`; a figure one of them produced carries no such tag, whatever binary the run
@@ -71,10 +72,8 @@ measured against.**
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A `--for-debug-purposes` reading written outside `PERF_LEDGER.md` and covered by a committed
-board row - one matching on all three of model, served-turn leg and backend - cites that row and
-marks the reading `debug-jit`.**
-A `--for-debug-purposes` reading is the `-jit` script's own output.
+**A diff that writes a `-jit` reading outside `PERF_LEDGER.md` tags it `debug-jit`, and cites the
+committed board row of the same model, served-turn leg and backend where one exists.**
 
 **A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure
 names its source and the report; a figure a third-party exe produced names that exe, its build,
@@ -114,7 +113,9 @@ win that never lands there is invisible to the next regression check.
 
 **A rate or wall of any served-turn leg written down as a measurement rather than as a
 prediction is a defect unless it cites the committed board row it came from, or names harness,
-flags, environment overrides, box, and the exe or script that ran it.**
+flags, environment overrides, box, the exe or script that ran it, and - for a figure computed
+over repeated timings - the repetition count and their spread: the standard deviation, or the
+min and max.**
 
 **A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
 figure computed from one - or changes what such a number measures, ships that number's

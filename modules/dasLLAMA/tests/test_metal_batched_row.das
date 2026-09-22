@@ -13,6 +13,10 @@ require dasllama/dasllama_scheduler   // nolint:STYLE030,LINT019 - the scheduler
 require _scheduler_rig   // nolint:STYLE030,LINT019 - toks_of, inside the das_metal halves
 require _ids   // nolint:STYLE030,LINT019 - same_ids, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_stats - the batched driver's own count
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - the pre-encode lever and its taken count, inside the das_metal halves
+require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_shutdown before the leak gate, inside the das_metal halves
+require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_live_object_count for the leak gate, inside the das_metal halves
+require daslib/env_registry   // nolint:STYLE030,LINT019 - env_is_set, inside the das_metal halves
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the das_metal halves
 require _model_tier
@@ -285,6 +289,73 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
 }
 
 [test]
+def test_metal_batched_row_mtp_joint_staggered(t : T?) {
+    t |> run("a joint verify whose streams sit at different depths across a 64-row chunk boundary emits what each stream emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+            if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 1024l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                let prev_spec = get_mtp_spec()
+                set_mtp_spec(true)
+                //! group 0 is shallow, the LAST group deep: the round's chunk count and its attention form must follow the deepest row, not the first group's
+                var deep = ""
+                for (_i in range(12)) {
+                    deep += "The quick brown fox jumps over the lazy dog while the farmer counts his sheep one by one in the field. "
+                }
+                deep += "Count from one to twenty: one, two, three,"
+                var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                                 <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
+                                 <- encode(tr, deep, true, false)]
+                t |> success(long_length(prompts[2]) > 200l, "the deep stream's prompt crosses three chunk boundaries ({long_length(prompts[2])} tokens)")
+                var none : array<int64>
+                let greedy = SamplingParams()
+                var refs : array<array<int64>>
+                for (pi in range64(3l)) {
+                    var sch0 <- create_scheduler(tr, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+                    var events0 : array<SchedEvent>
+                    t |> success(submit(tr, sch0, make_req(pi + 1l, prompts[pi], greedy, 24l, none)), "solo stream {pi + 1l} queued")
+                    drain(tr, sch0, events0)
+                    refs |> emplace(toks_of(events0, pi + 1l))
+                    delete sch0
+                    delete events0
+                }
+                var sch <- create_scheduler(tr, 3l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+                var events : array<SchedEvent>
+                for (pi in range64(3l)) {
+                    t |> success(submit(tr, sch, make_req(10l + pi, prompts[pi], greedy, 24l, none)), "joint stream {10l + pi} queued")
+                }
+                drain(tr, sch, events)
+                set_mtp_spec(prev_spec)
+                t |> equal(sch.mtp_joined_max, 3l, "one joint verify carried all three streams (the widest tick carried {sch.mtp_joined_max})")
+                for (pi in range64(3l)) {
+                    var got <- toks_of(events, 10l + pi)
+                    log_gen_texts(tr, "staggered stream {pi} (solo, joint)", refs[pi], got)
+                    t |> success(same_ids(got, refs[pi]), "staggered stream {pi} tokens == its solo stream")
+                    delete got
+                }
+                delete sch
+                delete events
+                delete refs
+                delete prompts
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
 def test_metal_batched_row_deltanet(t : T?) {
     t |> run("the batched row serves a deltanet hybrid through the batched driver's recurrent rows form (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -313,6 +384,78 @@ def test_metal_batched_row_deltanet(t : T?) {
                 t |> success(wide.tps > 0.0lf, "... at a rate ({wide.tps:.1f} tok/s summed over 9 streams)")
                 let census2 = batch_step_census()
                 t |> success(census2.device - census1.device >= 8l, "its timed steps went through the device batched driver ({census2.device - census1.device} device steps)")
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
+def test_metal_batched_row_pre_encode(t : T?) {
+    t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {
+        if (!family_on(t, "llama")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                let prior_pre = metal_batch_pre_enabled()
+                if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
+                    t |> success(!prior_pre, "the pre-encode rail ships off")
+                }
+                var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                                 <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
+                                 <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false),
+                                 <- encode(tr, "The planets of the solar system, from the sun outward: Mercury, Venus,", true, false)]
+                var none : array<int64>
+                let greedy = SamplingParams()
+                var refs : array<array<int64>>
+                for (arm in range(2)) {
+                    let pre = arm == 1
+                    set_metal_batch_pre(pre)
+                    let taken0 = metal_batch_pre_taken()
+                    var sch <- create_scheduler(tr, 4l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+                    var events : array<SchedEvent>
+                    for (pi in range64(4l)) {
+                        t |> success(submit(tr, sch, make_req(pi + 1l, prompts[pi], greedy, 24l, none)), "stream {pi + 1l} queued (pre {pre})")
+                    }
+                    drain(tr, sch, events)
+                    let taken = metal_batch_pre_taken() - taken0
+                    if (!pre) {
+                        t |> equal(taken, 0l, "rail off: no step committed from a pre-encode")
+                        for (pi in range64(4l)) {
+                            refs |> emplace(toks_of(events, pi + 1l))
+                        }
+                    } else {
+                        t |> success(taken >= 16l, "rail on: {taken} steps committed the step pre-encoded by the call before them")
+                        for (pi in range64(4l)) {
+                            var got <- toks_of(events, pi + 1l)
+                            log_gen_texts(tr, "stream {pi} (encoded at call, pre-encoded)", refs[pi], got)
+                            t |> success(same_ids(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
+                            delete got
+                        }
+                    }
+                    delete sch
+                    delete events
+                }
+                //! the rail's retire under a PARKED step: the on arm leaves the next step pre-encoded; the lever's off retires it, the drivers' shutdown drops the rest, and the live-object count reads what either left behind
+                set_metal_batch_pre(false)
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after the parked pre-encoded step's retire and the drivers' shutdown")
+                set_metal_batch_pre(prior_pre)
+                delete refs
+                delete prompts
             }
             set_metal_mode(prior_mode)
             delete tr

@@ -44,6 +44,14 @@ the exec tier and the tune state they ran under, and they enter no board, ledger
 The real `llama-bench` runs only when `--ref <path>` is passed; the upstream columns come from
 that run, and they are pinned, not re-measured.
 
+A run's flat rows and its tg-real rows share one session context, and the flat rows never
+narrow it. `flat_row_plen` sizes the flat session at `plen` prompt rows - `plen + ngen`
+positions, as `llama-bench` does - except beside a tg-real row, whose own prompts already
+capped the context at the row's size: there it reads that cap back as `row_ctx - ngen` prompt
+rows. A flat session sized under the real row's prompts leaves the speculative round's context
+gate reading a context every prompt exceeds, so the round stays cold and the run's speculative
+arm drafts nothing.
+
 `performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
 writes `performance/records/<box>.json`. `gen_site_records.das` merges those into the two files
 the site renders: the full merge, and its projection minus the receipt fields (`SiteModel`) that

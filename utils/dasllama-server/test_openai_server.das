@@ -933,7 +933,7 @@ def test_parse_tool_calls_auto(t : T?) {
 // ===== multi-model: two slots, "model" routing, per-slot caches surviving interleaved traffic =====
 
 let MODEL2_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-let TEST_PORT_MM = 18121
+let TEST_PORT_MM = 18129   // 18120-18127 are test_openai_server_think.das's
 
 // Two-slot variant of with_llama_server: tinyllama as the default slot "tiny", SmolLM2-135M as
 // "smol" (backend pinned cpu — asserts the requested-vs-effective surface). Same thread/context

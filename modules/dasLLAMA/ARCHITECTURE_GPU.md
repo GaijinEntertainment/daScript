@@ -93,7 +93,7 @@ that a question answered for one backend has an obvious address in the other. Th
   deltanet hybrid's recurrent layer runs its projections as rows GEMVs and then the conv, history,
   norm, scan and gate a row at a time against that session's own `DnMirror` (`recurrent_batch`):
   the `DnArgs.row` field picks the row's slice of the batch planes, the mirror's live-region bases
-  pick its state, and the mirrors advance when the step lands (`g_lp_dn_uids`); a step whose
+  pick its state, and the mirrors advance when the step lands (`BatchLanding.dn_uids`); a step whose
   rows have no resident or CPU-synced state declines `dn_state`. The mirror cache (`g_dn_mirrors`,
   an LRU) rests at four sessions and grows to whatever a scheduler names through the tier's
   `gpu_dn_room_` seam at its creation (`create_scheduler` -> the facade's `gpu_dn_room`), and the batch
@@ -194,7 +194,7 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
 
 Sections 2.28-2.29, 2.33-2.37a and 2.39 - the Metal speculative round, the depth a round drafts, and
 the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; sections 2.30-2.32,
-2.38 and 2.39a - the decode driver's kernel forms and layer encoder - are `ARCHITECTURE_GPU_MTP_DECODE.md`.
+2.38-2.38a and 2.39a - the decode driver's kernel forms, pre-encoded steps and layer encoder - are `ARCHITECTURE_GPU_MTP_DECODE.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
@@ -220,9 +220,12 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
   driver-cost shield, not a placement mechanism; memory is still memory.
 - **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
   (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`, which runs the
-  registered reload preps (`register_reload_prep`; the decode driver registers `discard_pre`), quiesces, and
-  releases the address-keyed region caches. Vulkan's reload story is the unmap notify
+  registered reload preps (`register_reload_prep`; the decode driver registers `discard_pre_encoded_steps`),
+  quiesces, and releases the address-keyed region caches. Vulkan's reload story is the unmap notify
   (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
+- **The batched pre-encoded step is Metal-only**: the batch driver encodes the next step under the
+  current one's GPU run (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a, `DASLLAMA_METAL_BATCH_PRE`);
+  Vulkan's N-row token command records once and resubmits, so it has no encode to move.
 - **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
   registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
   the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
@@ -292,9 +295,6 @@ The Vulkan resident driver's sections live in its companions, each head saying w
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 
 Section 2.2b, the tensor-GEMM and fused-attention shapes that measured out, is
-`ARCHITECTURE_GPU_RACE_SHAPES.md`.
-
-Sections 2.2w-2.2x, the tower attention routes and the tower driver's encode chains, are
-`ARCHITECTURE_GPU_TOWER.md`.
-
-Sections 2.2y-2.2z, the Metal quant plane reads, are `ARCHITECTURE_GPU_QUANT_PLANES.md`.
+`ARCHITECTURE_GPU_RACE_SHAPES.md`; sections 2.2w-2.2x, the tower attention routes and the tower
+driver's encode chains, are `ARCHITECTURE_GPU_TOWER.md`; sections 2.2y-2.2z, the Metal quant plane
+reads, are `ARCHITECTURE_GPU_QUANT_PLANES.md`.

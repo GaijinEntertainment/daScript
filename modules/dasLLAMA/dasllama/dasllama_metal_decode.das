@@ -50,8 +50,9 @@ require daslib/typemacro_boost   // [template_struct_instance] — the layer enc
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 def public metal_decode_shutdown {
     discard_pre()
+    discard_batch_pre()
     finish_pending_step()   // land any in-flight pipelined step before tearing down
-    g_lp_err = false
+    g_land_err = false
     metal_kernels_release()
     metal_common_release()
 }
@@ -327,7 +328,8 @@ var private g_rope_sin_next_swa : array<float>
 // Hetero models (gemma4) carry TWO attention classes (global = config fields, sliding = _swa);
 // buffers size to the class maxima and each layer binds its class's uniform set.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
-def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
+//! `deepest` = -1 means the step's rows reach no further than `pos`.
+def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
     let head_size = c.head_size
@@ -547,9 +549,10 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         }
         r.u_vocab = uniform_u32(uint(c.vocab_size))
     }
-    // chunked split-K attention above the single-tg depth (128-row chunks, cross-chunk combine)
-    r.chunked = pos + 1l > g_attn_single_max
-    let nchunks = (pos + 1l + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
+    // chunked split-K attention above the single-tg depth: the form and the partials follow the DEEPEST row the step reaches, never row 0's depth
+    let top = deepest >= 0l ? deepest : pos
+    r.chunked = top + nrows > g_attn_single_max
+    let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
     if (r.chunked) {
         r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
@@ -1294,6 +1297,7 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
     }
     let ts_prep = prof_ticks()
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     let mr = g_mirrors[s.uid]
     let dpos = pos - 1l
     let need_wm = wm_pos >= 0l ? wm_pos : pos
@@ -1606,9 +1610,12 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
     enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
     var dnli = 0l
-    let pos0 = g_v_groups[0].pos
+    var pdeep = g_v_groups[0].pos   //! the chain's chunk count follows the DEEPEST group: a shallower count leaves the deep rows' partials unwritten
+    for (g in g_v_groups) {
+        pdeep = max(pdeep, g.pos)
+    }
     for (l in range64(c.n_layers)) {
-        encode_verify_layer(t, r, enc, brt.buf, l, pos0, dnli)
+        encode_verify_layer(t, r, enc, brt.buf, l, pdeep, dnli)
     }
     enc_cls_tail_rows(t, r, enc, t.rms_final_off, r.blog, nr)
     // the head's carry hiddens from committed history: a group's row 0 takes its saved pre-draft hidden (cat row nr + its index), row i the verify's post-norm row i-1
@@ -1622,7 +1629,7 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     }
     enc_draft_head_rows(t, r, enc, r.bcat, nr)
     var dnw = 0l
-    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, pos0, dnw)
+    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, pdeep, dnw)
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
@@ -1794,8 +1801,9 @@ def private group_routes(t : Model; r : StepRes; nr : int64) : tuple<buf : Metal
     g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         for (g in g_v_groups) {
-            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
-            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
+            //! each group's layer bases follow ITS mirror's cap - a deeper stream's slice is taller than group 0's
+            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, g.cap, l))) / esz)
+            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, g.cap, l))) / esz)
             for (i in range64(g.nr)) {
                 let e = (l * nr + g.row0 + i) * 4l
                 g_vrt[e] = lb
@@ -1902,6 +1910,7 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
     let c = t.config
     let ng = long_length(g_v_groups)
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     var chain_pos = 0l
     for (gi in range64(ng)) {
         var g & = unsafe(g_v_groups[gi])
@@ -1918,7 +1927,7 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
     }
     let g0 = g_v_groups[0]
     let nrows = max(ng, 3l)
-    var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows])
+    var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows, deepest = chain_pos])
     if (!r.gpu_logits) {
         release_step(r)
         return false
@@ -2005,6 +2014,7 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     }
     let ts_verify = prof_ticks()
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     for (gi in range64(ng)) {
         let mr = g_mirrors[g_v_groups[gi].s.uid]
         g_v_groups[gi].koff = mr.koff
@@ -2014,7 +2024,11 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     prof_add("mtp.verify.prep", ts_verify)
     let ts_poke = prof_ticks()
     let g0 = g_v_groups[0]
-    var r = acquire_step(t, *g0.s, g0.pos + 1l, g0.koff, g0.voff, g0.cap, [nrows = nr * ng])
+    var pmax = g0.pos
+    for (g in g_v_groups) {
+        pmax = max(pmax, g.pos)
+    }
+    var r = acquire_step(t, *g0.s, g0.pos + 1l, g0.koff, g0.voff, g0.cap, [nrows = nr * ng, deepest = pmax + 1l])
     var refused = !r.gpu_logits   // verify has no CPU classifier fallback (blog/bxf live under gpu_logits)
     if (!refused && r.dn) {
         let cd = dn_conv_dim(c)
@@ -2475,6 +2489,12 @@ def private discard_pre {
     release_step(r)
 }
 
+//! Both drivers' pre-encoded steps retired: the single-row chain's and the batch driver's.
+def private discard_pre_encoded_steps {
+    discard_pre()
+    discard_batch_pre()
+}
+
 // Pre-encode the PREDICTED next step (same session, pos + 1) while the current step runs on the
 // GPU. When speculation gates pass, the cb commits AND chains itself (argmax + embed gather, no
 // CPU poke); otherwise it stays uncommitted. Quietly declines when gates fail — slow path serves those.
@@ -2558,7 +2578,8 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
     finish_pending_step()
-    g_lp_err = false
+    g_land_err = false
+    discard_batch_pre()
     var why = decode_decline(t, s, pos)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
         why = MetalDecodeDecline.device
@@ -2648,6 +2669,7 @@ var private g_mtp_carry_pre = false
 def set_metal_mtp_carry_hidden(on : bool; pre : bool = false) {
     g_mtp_carry_hidden = on
     g_mtp_carry_pre = pre
+    discard_batch_pre()   // a step encoded under the other carry would stash the wrong hidden
 }
 
 def metal_mtp_carry_pre() : bool => g_mtp_carry_pre
@@ -2683,6 +2705,7 @@ var private g_b_addrms_unfused = false
 
 def public set_metal_batch_addrms_unfused(v : bool) {
     g_b_addrms_unfused = v
+    discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
 
 // one-deep encode-ahead for the batch driver: a step commits BEFORE the previous is waited on, so
@@ -2967,14 +2990,15 @@ struct private BatchLayerEnc : LayerEncT {
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-dispatch-requires")]
-def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {   // nolint:STYLE037,STYLE038 — the batch step driver; encode/commit/stash share the whole step's state
+def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     var why = batch_decode_decline(t, ws, sessions, nrows)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
         why = MetalDecodeDecline.device
     }
     if (why != MetalDecodeDecline.none) {
         finish_pending_step()   // the CPU fallback needs the in-flight step's KV/logits landed first
-        g_lp_err = false
+        g_land_err = false
+        discard_batch_pre()   // the CPU step advances the rows past the pre-encoded positions
         if (why == MetalDecodeDecline.feature) {
             batch_decline(why, metal_missing_needs(t, BATCH_NEEDS_OK))
         } else {
@@ -2985,27 +3009,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     residency_flush()   // pin/commit before the step's submission (the post-CPU-window slack)
     // a parked single-stream pre-step may reference a batch row's mirror slice — retire it first
     discard_pre()
-    // encode-ahead readiness: with a step in flight, mirror_prepare must stay on its fast path
-    // (no upload, no eviction, no rebuild — those touch arena slices the GPU is still writing).
-    // Any miss → complete the pending step first and take this one synchronously.
-    if (g_lp_active) {
-        var ready = true
-        for (i in range64(nrows)) {
-            var sp = sessions[i]
-            if (!key_exists(g_mirrors, sp.uid)) {
-                ready = false
-                break
-            }
-            let mr = g_mirrors[sp.uid]   // cheap copy — fields tested off it
-            if (mr.cap_rows < ws.positions[i] + 1l || mr.kdt != ws.scr.kv_dtype_k ||
-                    mr.vdt != ws.scr.kv_dtype_v || mr.watermark < ws.positions[i]) {
-                ready = false
-                break
-            }
-        }
-        if (!ready) {
-            finish_pending_step()
-        }
+    if (batch_pre_matches(t, ws, sessions, nrows)) {
+        return batch_take_pre(t, ws, sessions, nrows)
+    }
+    discard_batch_pre()
+    // encode-ahead readiness: with a step in flight, mirror_prepare must stay on its fast path - any
+    // miss completes the pending step first and takes this one synchronously
+    if (pending_active() && !rows_mirror_ready(ws, sessions, nrows, 0l)) {
+        finish_pending_step()
     }
     // the recurrent rows' state: each session's DnMirror at its own position - a cold mirror syncs
     // from the CPU prefix under the previous step's completion, a session with neither declines the step
@@ -3023,7 +3034,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             var sp = sessions[i]
             var dm = dn_mirror_prepare(*sp, ws.positions[i], dn_mirror_regions(t))
             if (!dm.ok) {
-                g_lp_err = false
+                g_land_err = false
                 batch_decline(MetalDecodeDecline.dn_state)
                 return false
             }
@@ -3033,46 +3044,59 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         }
     }
     let ts_all = ref_time_ticks()
-    let c = t.config
-    let dim = c.dim
-    let head_size = c.head_size
-    let n_heads = c.n_heads
-    let qd = n_heads * head_size
-    let kv_dim = c.n_kv_heads * head_size
-    let hidden = layer_hidden(t, 0l)
-    let hid2 = ffn_second_hidden(t)   //! the MatFormer E-series' second FFN width (0 = uniform); the step gate declines a third
-    let hid_mx = max(hidden, hid2)
-    let qkvd = qd + 2l * kv_dim
-    // the two-class attention geometry (gemma4): config fields = the GLOBAL class, _sw twins =
-    // the SLIDING class; buffers size to class maxima, each layer binds its class's uniform set
-    let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : head_size
-    let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
-    let qd_sw = n_heads * hs_sw
-    let kvd_sw = kvh_sw * hs_sw
-    let qkvd_sw = qd_sw + 2l * kvd_sw
-    let hetero = hs_sw != head_size || kvh_sw != c.n_kv_heads
-    let qd_mx = max(qd, qd_sw)
-    let qkvd_mx = max(qkvd, qkvd_sw)
-    let hs_mx = max(head_size, hs_sw)
-    let half_sw = hs_sw / 2l
-    let s16 = t.wscale_f16
+    let rp = batch_rows_prepare(t, ws, sessions, nrows, 0l)
+    if (!rp.ok) {
+        finish_pending_step()   // fall back synchronously — the CPU loop needs completed KV state
+        g_land_err = false
+        batch_decline(MetalDecodeDecline.mirror)
+        return false
+    }
+    var L & = g_land[1 - g_lp_i]
+    batch_step_build(t, ws, sessions, nrows, rp.maxcnt, 0l, false, ts_all, L)
+    if (!L.gpu_logits) {
+        L.xb = L.bx   // the CPU-classifier tail reads x_b — sync-only writeback
+        L.xb_dst = unsafe(addr < void? >(ws.scr.x_b[0]))
+        L.xb_bytes = nrows * L.dim * 4l
+    }
+    return batch_step_land(t, ws, sessions, nrows, L)
+}
+
+def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; var L : BatchLanding&) : bool {
+    // the overlap: the PREVIOUS step completes only now, with this one already committed behind it
+    finish_pending_step()
+    g_land_err = false   // a lost pipelined step was logged + counted; this step retries fresh
+    g_lp_i = 1 - g_lp_i
+    L.active = true
+    let gpu_logits = L.gpu_logits
+    batch_pre_encode_next(t, ws, sessions, nrows, L)
+    if (!(g_b_pipe && gpu_logits && empty(g_skip))) {
+        finish_pending_step()   // synchronous path: complete + read back immediately
+        if (g_land_err) {
+            g_land_err = false
+            discard_batch_pre()   // the CPU rerun advances the rows past the step just pre-encoded
+            return false   // the dispatch failed — the caller reruns this step on the CPU loop
+        }
+    }
+    if (gpu_logits) {
+        batch_decode_override_logits_done()
+    }
+    return true
+}
+
+//! `maxcnt` is the deepest row's count; `ok = false` is a failed reserve or prepare - the caller chooses between declining and standing down.
+def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, poff : int64) : tuple<ok : bool; maxcnt : int64> {
     let kdt = ws.scr.kv_dtype_k
-    let f16 = kdt == KVDtype.f16
-    let tq4 = kdt == KVDtype.tq4
-    let blockc = kdt == KVDtype.q8_0 || tq4  // block codec: byte-offset row table + codec kernel twins
-    let esz = f16 ? 2l : 4l
+    let blockc = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4   // block codec: the row table carries byte offsets
+    let esz = kdt == KVDtype.f16 ? 2l : 4l
     // reserve the whole step's arena demand BEFORE pinning — growth is a release-all rebuild
     // and cannot run once the batch's rows are pinned (the readiness check above already
     // finished any in-flight step when a session needs a new slice)
     var demand = 0ul
     for (i in range64(nrows)) {
-        demand += mirror_arena_demand(t, *sessions[i], ws.positions[i])
+        demand += mirror_arena_demand(t, *sessions[i], ws.positions[i] + poff)
     }
     if (!mirror_reserve(demand)) {
-        finish_pending_step()
-        g_lp_err = false
-        batch_decline(MetalDecodeDecline.mirror)
-        return false
+        return (ok = false, maxcnt = 0l)
     }
     // pin the batch's uids: a later row's mirror alloc must never evict an earlier row's slice
     for (i in range64(nrows)) {
@@ -3092,7 +3116,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         for (i in range64(nrows)) {
             var sp = sessions[i]
             if (!same || i == 0l) {
-                mir_same = mirror_prepare(t, *sp, ws.positions[i])
+                mir_same = mirror_prepare(t, *sp, ws.positions[i] + poff)
             }
             let mir = mir_same
             if (!mir.ok) {
@@ -3102,7 +3126,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             g_b_koffs[i] = mir.koff
             g_b_voffs[i] = mir.voff
             g_b_caps[i] = mir.cap
-            let cnt = ws.positions[i] + 1l
+            let cnt = ws.positions[i] + poff + 1l
             maxcnt = max(maxcnt, cnt)
             // block codecs address in BYTES (there is no scalar element size); scalar mirrors keep
             // their element-offset entries
@@ -3127,12 +3151,151 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         }
     }
     g_pin |> clear()
-    if (!rows_ok) {
-        finish_pending_step()   // fall back synchronously — the CPU loop needs completed KV state
-        g_lp_err = false
-        batch_decline(MetalDecodeDecline.mirror)
-        return false
+    return (ok = rows_ok, maxcnt = maxcnt)
+}
+
+def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
+    unsafe {
+        if (L.poke_x) {
+            memcpy(metal_buffer_contents(L.bx), addr < void? >(ws.scr.x_b[0]), L.nrows * L.dim * 4l)
+        }
+        memcpy(metal_buffer_contents(L.bcos), addr < void? >(ws.scr.rope_cos[0]), L.bytes_tab)
+        memcpy(metal_buffer_contents(L.bsin), addr < void? >(ws.scr.rope_sin[0]), L.bytes_tab)
+        if (L.bcos_swa != null) {
+            memcpy(metal_buffer_contents(L.bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), L.bytes_tab_sw)
+            memcpy(metal_buffer_contents(L.bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), L.bytes_tab_sw)
+        }
+        if (L.bple != null) {   // the CPU pre-step's rows (position-major) land layer-major, the layer's block one contiguous multiply
+            let ple_all = L.layers * L.ple_n
+            var dst = reinterpret<float?>(metal_buffer_contents(L.bple))
+            let src = addr < float const? >(ws.scr.ple_inp[0])
+            for (l in range64(L.layers)) {
+                for (p in range64(L.nrows)) {
+                    memcpy(reinterpret<void?>(dst + (l * L.nrows + p) * L.ple_n),
+                        reinterpret<void const?>(src + p * ple_all + l * L.ple_n), L.ple_n * 4l)
+                }
+            }
+        }
     }
+}
+
+//! Every row's mirror slice sits on `mirror_prepare`'s fast path at `positions + poff`: the slice
+//! holds the position, the codec is the session's, and the watermark sits EXACTLY there - below it
+//! a prepare uploads, above it a rewind re-uploads from row 0, both under an in-flight step's writes.
+def private rows_mirror_ready(ws : BatchWorkspace; sessions : array<Session?>; nrows, poff : int64) : bool {
+    for (i in range64(nrows)) {
+        let sp = sessions[i]
+        let pos = ws.positions[i] + poff
+        return false if (!key_exists(g_mirrors, sp.uid))
+        let mr = g_mirrors[sp.uid]   // cheap copy — fields tested off it
+        return false if (mr.cap_rows < pos + 1l || mr.kdt != sp.kv_dtype_k || mr.vdt != sp.kv_dtype_v || mr.watermark != pos)
+    }
+    return true
+}
+
+var private g_b_pre = false   //!< DASLLAMA_METAL_BATCH_PRE: the next batched step pre-encodes under this one's GPU run
+
+//! Test and A/B lever over `DASLLAMA_METAL_BATCH_PRE`.
+def public set_metal_batch_pre(on : bool) {
+    if (g_bgemm_min < 0l) {
+        load_batch_knobs()   // the lazy env load would overwrite the lever on the first step
+    }
+    g_b_pre = on
+    if (!on) {
+        discard_batch_pre()
+    }
+}
+
+def public metal_batch_pre_enabled() : bool {
+    if (g_bgemm_min < 0l) {
+        load_batch_knobs()   // the shipped default is the env's, not the initializer's
+    }
+    return g_b_pre
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
+def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; L : BatchLanding) {
+    return if (!g_b_pre || !L.gpu_logits || L.sameslab || t.config.recr_mask != 0ul || !empty(g_skip))
+    for (i in range64(nrows)) {
+        return if (ws.positions[i] + 2l > t.config.seq_len)
+    }
+    return if (!rows_mirror_ready(ws, sessions, nrows, 1l))
+    let ts_all = ref_time_ticks()
+    let rp = batch_rows_prepare(t, ws, sessions, nrows, 1l)
+    return if (!rp.ok)
+    var P & = g_land[1 - g_lp_i]
+    batch_step_build(t, ws, sessions, nrows, rp.maxcnt, 1l, true, ts_all, P)
+    P.pre_valid = true
+}
+
+//! The pre-encoded step is this call's: the same rows (by uid - a session pointer is not identity)
+//! at the same positions, the same model shape and KV codec, the arena epoch, every slice where
+//! the row table names it, and every row's zero-copy logits wrap where the scatter was encoded.
+def private batch_pre_matches(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    let P & = g_land[1 - g_lp_i]
+    let c = t.config
+    return false if (!P.pre_valid || batch_same_slab() || P.nrows != nrows || P.kdt != ws.scr.kv_dtype_k || P.epoch != g_arena_epoch || !empty(g_skip) ||
+        P.dim != c.dim || P.layers != c.n_layers || P.seq != c.seq_len || P.vocab != c.vocab_size)
+    for (i in range64(nrows)) {
+        return false if (P.uids[i] != sessions[i].uid || P.positions[i] != ws.positions[i])
+    }
+    return false if (!rows_mirror_ready(ws, sessions, nrows, 0l))   // a prepare off the fast path would touch the arena under the pending step
+    for (i in range64(nrows)) {
+        let mir = mirror_prepare(t, *sessions[i], ws.positions[i])
+        return false if (!mir.ok || mir.koff != P.koffs[i] || mir.voff != P.voffs[i] || mir.cap != P.caps[i])
+    }
+    if (P.nc_all) {
+        for (i in range64(nrows)) {
+            return false if (nc_logits_for(g_dev, *sessions[i]) != P.ncbufs[i])
+        }
+    }
+    return true
+}
+
+def private batch_take_pre(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    let ts_all = ref_time_ticks()
+    var P & = g_land[1 - g_lp_i]
+    batch_step_poke(P, ws)
+    for (c_i in P.cbs) {
+        metal_commit(c_i)
+    }
+    P.pre_valid = false
+    mark_rows_committed(P)
+    g_batch_pre_taken++
+    g_us_bsetup += int64(get_time_usec(ts_all))
+    return batch_step_land(t, ws, sessions, nrows, P)
+}
+
+//! `pre` leaves every command buffer ended, uncommitted and unpoked; `poff` is the rows' position offset from `ws.positions`.
+def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, maxcnt, poff : int64; pre : bool; ts_all : int64; var L : BatchLanding&) {   // nolint:STYLE037,STYLE038 — the batch step encoder; acquisition, layer chain, classifier tail and stash share the whole step's state
+    let c = t.config
+    let dim = c.dim
+    let head_size = c.head_size
+    let n_heads = c.n_heads
+    let qd = n_heads * head_size
+    let kv_dim = c.n_kv_heads * head_size
+    let hidden = layer_hidden(t, 0l)
+    let hid2 = ffn_second_hidden(t)   //! the MatFormer E-series' second FFN width (0 = uniform); the step gate declines a third
+    let hid_mx = max(hidden, hid2)
+    let qkvd = qd + 2l * kv_dim
+    // the two-class attention geometry (gemma4): config fields = the GLOBAL class, _sw twins =
+    // the SLIDING class; buffers size to class maxima, each layer binds its class's uniform set
+    let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : head_size
+    let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
+    let qd_sw = n_heads * hs_sw
+    let kvd_sw = kvh_sw * hs_sw
+    let qkvd_sw = qd_sw + 2l * kvd_sw
+    let hetero = hs_sw != head_size || kvh_sw != c.n_kv_heads
+    let qd_mx = max(qd, qd_sw)
+    let qkvd_mx = max(qkvd, qkvd_sw)
+    let hs_mx = max(head_size, hs_sw)
+    let half_sw = hs_sw / 2l
+    let s16 = t.wscale_f16
+    let kdt = ws.scr.kv_dtype_k
+    let tq4 = kdt == KVDtype.tq4
+    let blockc = kdt == KVDtype.q8_0 || tq4  // block codec: byte-offset row table + codec kernel twins
+    let dn = c.recr_mask != 0ul
+    let same = batch_same_slab()
     if (g_bgemm_min < 0l) {
         load_batch_knobs()
     }
@@ -3342,34 +3505,30 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_nsgs = use_attn_d ? uniform_u32(uint(d_nsgs)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
     let gpu_toks = same && g_b_same_toks != null && t.cls_q8
+    L.bx = bx
+    L.poke_x = !gpu_toks
+    L.bcos = bcos
+    L.bsin = bsin
+    L.bcos_swa = bcos_swa
+    L.bsin_swa = bsin_swa
+    L.bytes_tab = bytes_tab
+    L.bytes_tab_sw = bytes_tab_sw
+    L.bple = bple
+    L.ple_n = ple_n
+    L.dim = dim
+    L.nrows = nrows
+    L.layers = c.n_layers
     unsafe {
-        if (!gpu_toks) {
-            memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
-        }
-        memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), bytes_tab)
-        memcpy(metal_buffer_contents(bsin), addr < void? >(ws.scr.rope_sin[0]), bytes_tab)
-        if (dual_rope) {
-            memcpy(metal_buffer_contents(bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), bytes_tab_sw)
-            memcpy(metal_buffer_contents(bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), bytes_tab_sw)
-        }
         memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), bytes_rt)
-        if (plef) {
-            let ple_all = c.n_layers * ple_n
-            var dst = reinterpret<float?>(metal_buffer_contents(bple))
-            let src = addr < float const? >(ws.scr.ple_inp[0])
-            for (l in range64(c.n_layers)) {
-                for (p in range64(nrows)) {
-                    memcpy(reinterpret<void?>(dst + (l * nrows + p) * ple_n),
-                        reinterpret<void const?>(src + p * ple_all + l * ple_n), ple_n * 4l)
-                }
-            }
-        }
+    }
+    if (!pre) {
+        batch_step_poke(L, ws)
     }
     g_us_bsetup += int64(get_time_usec(ts_all))
     let ts_enc = ref_time_ticks()
     let ncb = min(g_bncb, c.n_layers)
     let lay_per_cb = (c.n_layers + ncb - 1l) / ncb
-    var cbs : array<MetalCommandBuffer?>   // two steps' cb lists are alive at once (this one + the pending g_lp_cbs), so a reused global cannot serve
+    var cbs : array<MetalCommandBuffer?>   // two steps' cb lists are alive at once (this one + the pending L.cbs), so a reused global cannot serve
     cbs |> reserve(ncb)   // nolint:PERF026 — see the declaration above; bounded by ncb
     // concurrent-encode rail: a concurrent encoder + explicit barriers ONLY at real buffer hazards
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
@@ -3385,7 +3544,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             enc_embed(enc, bemb.buf, bemb.boff, g_b_same_toks, bx, u_dim, u_esc, dim, uint64(i * 4l), uint64(i * dim * 4l))
         }
         if (u_esc != g_one) {
-            g_lp_upooled |> push((buf = u_esc, size = 4ul))
+            L.upooled |> push((buf = u_esc, size = 4ul))
         }
     }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's)
@@ -3431,7 +3590,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         if ((l + 1l) % lay_per_cb == 0l && l + 1l < c.n_layers) {
             metal_end_encoding(enc)
             metal_release(enc)
-            metal_commit(cb)
+            if (!pre) {
+                metal_commit(cb)
+            }
             cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
             cb = metal_new_command_buffer_unretained(g_queue)
             enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
@@ -3461,8 +3622,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         if (same) {
             var bvarg = pool_acquire(g_pool, g_dev, 64ul)
             enc_argmax_rows(enc, blog, bvarg, u_vocab, nrows)
-            g_lp_bvarg = bvarg
-            g_lp_pooled |> push((buf = bvarg, size = 64ul))
+            L.bvarg = bvarg
+            L.pooled |> push((buf = bvarg, size = 64ul))
         }
         nc_all = !same
         for (i in range64(nrows)) {
@@ -3476,198 +3637,183 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     metal_end_encoding(enc)
     metal_release(enc)
-    metal_commit(cb)
+    if (!pre) {
+        metal_commit(cb)
+    }
     cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
     hz_arm(false)   // disarm the oracle with the encoder — a leaked arm would eat the next CAPTURE's stage
     g_us_bencode += int64(get_time_usec(ts_enc))
-    // optimistic watermark at commit: the in-order queue writes row pos before any later-committed
-    // work reads the mirror — the pipe's fast-path prepare must not re-upload it from the (not yet
-    // written back) CPU cache
-    for (i in range64(nrows)) {
-        var sp = sessions[i]
-        if (key_exists(g_mirrors, sp.uid)) {
-            let wm0 = g_mirrors[sp.uid].watermark
-            g_mirrors[sp.uid].watermark = max(wm0, ws.positions[i] + 1l)
-        }
-    }
-    // the overlap: the PREVIOUS step completes only now, with this one already committed behind it
-    finish_pending_step()
-    g_lp_err = false   // a lost pipelined step was logged + counted; this step retries fresh
-    // stash this step as the pending one (finish_pending_step just cleared every slot)
-    g_lp_active = true
-    g_lp_cbs <- cbs   // nolint:PERF030 — emptied by finish_pending_step's clear() above; capacity deliberately retained
-    g_lp_pooled |> push((buf = bx, size = bytes_x))
-    g_lp_pooled |> push((buf = bxb, size = bytes_xb))
-    g_lp_pooled |> push((buf = bxb2, size = bytes_x))
-    g_lp_pooled |> push((buf = bqkv, size = bytes_qkv))
-    g_lp_pooled |> push((buf = bhb, size = bytes_h))
-    g_lp_pooled |> push((buf = bhb2, size = bytes_h))
+    // the landing stash (the slot was emptied by its last finish or discard)
+    L.cbs <- cbs   // emptied by release_landing's clear(); capacity deliberately retained
+    // every run below APPENDS: the same-slab argmax and the embed-scale uniform were pushed during the encode
+    L.pooled |> push((buf = bx, size = bytes_x))   // nolint:STYLE012
+    L.pooled |> push((buf = bxb, size = bytes_xb))
+    L.pooled |> push((buf = bxb2, size = bytes_x))
+    L.pooled |> push((buf = bqkv, size = bytes_qkv))
+    L.pooled |> push((buf = bhb, size = bytes_h))
+    L.pooled |> push((buf = bhb2, size = bytes_h))
     if (use_attn_d || chunked) {
-        g_lp_pooled |> push((buf = bpart, size = bytes_part))
+        L.pooled |> push((buf = bpart, size = bytes_part))
     }
     if (bytes_sk > 0ul) {
-        g_lp_pooled |> push((buf = bpsk, size = bytes_sk))
+        L.pooled |> push((buf = bpsk, size = bytes_sk))
     }
     if (moe) {
-        g_lp_pooled |> push((buf = bmlg, size = bytes_mlg))
-        g_lp_pooled |> push((buf = bmsel, size = bytes_msel))
-        g_lp_pooled |> push((buf = bmdn, size = bytes_mdn))
-        g_lp_upooled |> push((buf = u_moe_ne, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_k, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_nfe, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_eblk, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_esb, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_ss, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_xs_dn, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_knfe, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_kdim, size = 4ul))
-        g_lp_upooled |> push((buf = u_moe_tot, size = 4ul))
+        L.pooled |> push((buf = bmlg, size = bytes_mlg))   // nolint:STYLE012
+        L.pooled |> push((buf = bmsel, size = bytes_msel))
+        L.pooled |> push((buf = bmdn, size = bytes_mdn))
+        L.upooled |> push((buf = u_moe_ne, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_moe_k, size = 4ul))
+        L.upooled |> push((buf = u_moe_nfe, size = 4ul))
+        L.upooled |> push((buf = u_moe_eblk, size = 4ul))
+        L.upooled |> push((buf = u_moe_esb, size = 4ul))
+        L.upooled |> push((buf = u_moe_ss, size = 4ul))
+        L.upooled |> push((buf = u_moe_xs_dn, size = 4ul))
+        L.upooled |> push((buf = u_moe_knfe, size = 4ul))
+        L.upooled |> push((buf = u_moe_kdim, size = 4ul))
+        L.upooled |> push((buf = u_moe_tot, size = 4ul))
         if (g4moe) {
-            g_lp_pooled |> push((buf = bmg4x, size = bytes_mg4x))
-            g_lp_pooled |> push((buf = bmg4rt, size = bytes_mg4x))
-            g_lp_pooled |> push((buf = bmgh, size = bytes_mgh))
-            g_lp_pooled |> push((buf = bmgh2, size = bytes_mgh))
-            g_lp_upooled |> push((buf = u_moe_invd, size = 4ul))
+            L.pooled |> push((buf = bmg4x, size = bytes_mg4x))   // nolint:STYLE012
+            L.pooled |> push((buf = bmg4rt, size = bytes_mg4x))
+            L.pooled |> push((buf = bmgh, size = bytes_mgh))
+            L.pooled |> push((buf = bmgh2, size = bytes_mgh))
+            L.upooled |> push((buf = u_moe_invd, size = 4ul))
         }
-        g_lp_upooled |> push((buf = u_moe_gmode, size = 4ul))
+        L.upooled |> push((buf = u_moe_gmode, size = 4ul))
     }
     if (u_hass != null) {
-        g_lp_upooled |> push((buf = u_hass, size = 4ul))
+        L.upooled |> push((buf = u_hass, size = 4ul))
     }
     if (use_attn_d) {
-        g_lp_upooled |> push((buf = u_nsgs, size = 4ul))
+        L.upooled |> push((buf = u_nsgs, size = 4ul))
     } elif (chunked) {
-        g_lp_upooled |> push((buf = u_nch, size = 4ul))
+        L.upooled |> push((buf = u_nch, size = 4ul))
     }
     if (gpu_logits) {
-        g_lp_pooled |> push((buf = bxf, size = bytes_x))
-        g_lp_pooled |> push((buf = blog, size = bytes_log))
-        g_lp_upooled |> push((buf = u_vocab, size = 4ul))
+        L.pooled |> push((buf = bxf, size = bytes_x))   // nolint:STYLE012
+        L.pooled |> push((buf = blog, size = bytes_log))
+        L.upooled |> push((buf = u_vocab, size = 4ul))
     }
     if (u_flcap != null) {
-        g_lp_upooled |> push((buf = u_flcap, size = 4ul))
-        g_lp_upooled |> push((buf = u_fltot, size = 4ul))
+        L.upooled |> push((buf = u_flcap, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_fltot, size = 4ul))
     }
     if (bsupp != null) {
-        g_lp_upooled |> push((buf = bsupp, size = uint64(nsupp * 4l)))
-        g_lp_upooled |> push((buf = u_nsupp, size = 4ul))
+        L.upooled |> push((buf = bsupp, size = uint64(nsupp * 4l)))   // nolint:STYLE012
+        L.upooled |> push((buf = u_nsupp, size = 4ul))
     }
     if (u_winsl != null) {
-        g_lp_upooled |> push((buf = u_winsl, size = 4ul))
+        L.upooled |> push((buf = u_winsl, size = 4ul))
     }
     if (hetero) {
-        g_lp_upooled |> push((buf = u_qd_sw, size = 4ul))
-        g_lp_upooled |> push((buf = u_kvd_sw, size = 4ul))
-        g_lp_upooled |> push((buf = u_qkvd_sw, size = 4ul))
-        g_lp_upooled |> push((buf = u_hs_sw, size = 4ul))
+        L.upooled |> push((buf = u_qd_sw, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_kvd_sw, size = 4ul))
+        L.upooled |> push((buf = u_qkvd_sw, size = 4ul))
+        L.upooled |> push((buf = u_hs_sw, size = 4ul))
     }
-    g_lp_upooled |> push((buf = u_softcap, size = 4ul))
-    g_lp_upooled |> push((buf = u_zero32, size = 4ul))
-    g_lp_upooled |> push((buf = bcos, size = bytes_tab))
-    g_lp_upooled |> push((buf = bsin, size = bytes_tab))
+    L.upooled |> push((buf = u_softcap, size = 4ul))   // nolint:STYLE012
+    L.upooled |> push((buf = u_zero32, size = 4ul))
+    L.upooled |> push((buf = bcos, size = bytes_tab))
+    L.upooled |> push((buf = bsin, size = bytes_tab))
     if (dual_rope) {
-        g_lp_upooled |> push((buf = bcos_swa, size = bytes_tab_sw))
-        g_lp_upooled |> push((buf = bsin_swa, size = bytes_tab_sw))
+        L.upooled |> push((buf = bcos_swa, size = bytes_tab_sw))   // nolint:STYLE012
+        L.upooled |> push((buf = bsin_swa, size = bytes_tab_sw))
     }
-    g_lp_upooled |> push((buf = brt, size = bytes_rt))
-    g_lp_upooled |> push((buf = u_dim, size = 4ul))
-    g_lp_upooled |> push((buf = u_qd, size = 4ul))
-    g_lp_upooled |> push((buf = u_kvd, size = 4ul))
-    g_lp_upooled |> push((buf = u_qkvd, size = 4ul))
-    g_lp_upooled |> push((buf = u_hidden, size = 4ul))
-    g_lp_upooled |> push((buf = u_hs, size = 4ul))
-    g_lp_upooled |> push((buf = u_eps, size = 4ul))
-    g_lp_upooled |> push((buf = u_s16, size = 4ul))
-    g_lp_upooled |> push((buf = u_total_dim, size = 4ul))
-    g_lp_upooled |> push((buf = u_total_h, size = 4ul))
-    g_lp_upooled |> push((buf = u_one32, size = 4ul))
+    L.upooled |> push((buf = brt, size = bytes_rt))   // nolint:STYLE012
+    L.upooled |> push((buf = u_dim, size = 4ul))
+    L.upooled |> push((buf = u_qd, size = 4ul))
+    L.upooled |> push((buf = u_kvd, size = 4ul))
+    L.upooled |> push((buf = u_qkvd, size = 4ul))
+    L.upooled |> push((buf = u_hidden, size = 4ul))
+    L.upooled |> push((buf = u_hs, size = 4ul))
+    L.upooled |> push((buf = u_eps, size = 4ul))
+    L.upooled |> push((buf = u_s16, size = 4ul))
+    L.upooled |> push((buf = u_total_dim, size = 4ul))
+    L.upooled |> push((buf = u_total_h, size = 4ul))
+    L.upooled |> push((buf = u_one32, size = 4ul))
     if (u_moe_nsh != null) {
-        g_lp_upooled |> push((buf = u_moe_nsh, size = 4ul))
+        L.upooled |> push((buf = u_moe_nsh, size = 4ul))
     }
     if (u_hidden2 != null) {
-        g_lp_upooled |> push((buf = u_hidden2, size = 4ul))
-        g_lp_upooled |> push((buf = u_total_h2, size = 4ul))
+        L.upooled |> push((buf = u_hidden2, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_total_h2, size = 4ul))
     }
     if (plef) {
-        g_lp_upooled |> push((buf = bple, size = bytes_ple))
-        g_lp_upooled |> push((buf = u_ple, size = 4ul))
-        g_lp_upooled |> push((buf = u_ple_tot, size = 4ul))
+        L.upooled |> push((buf = bple, size = bytes_ple))   // nolint:STYLE012
+        L.upooled |> push((buf = u_ple, size = 4ul))
+        L.upooled |> push((buf = u_ple_tot, size = 4ul))
     }
     if (dn) {
-        g_lp_pooled |> push((buf = bdn_qkv, size = bytes_dn_cd))
-        g_lp_pooled |> push((buf = bdn_cv, size = bytes_dn_cd))
-        g_lp_pooled |> push((buf = bdn_z, size = bytes_dn_di))
-        g_lp_pooled |> push((buf = bdn_o, size = bytes_dn_di))
-        g_lp_pooled |> push((buf = bdn_b, size = bytes_dn_h))
-        g_lp_pooled |> push((buf = bdn_g, size = bytes_dn_h))
-        g_lp_upooled |> push((buf = u_cd, size = 4ul))
-        g_lp_upooled |> push((buf = u_nvh, size = 4ul))
-        g_lp_upooled |> push((buf = u_di, size = 4ul))
-        g_lp_dn_uids |> reserve(nrows)
-        g_lp_dn_pos |> reserve(nrows)
+        L.pooled |> push((buf = bdn_qkv, size = bytes_dn_cd))   // nolint:STYLE012
+        L.pooled |> push((buf = bdn_cv, size = bytes_dn_cd))
+        L.pooled |> push((buf = bdn_z, size = bytes_dn_di))
+        L.pooled |> push((buf = bdn_o, size = bytes_dn_di))
+        L.pooled |> push((buf = bdn_b, size = bytes_dn_h))
+        L.pooled |> push((buf = bdn_g, size = bytes_dn_h))
+        L.upooled |> push((buf = u_cd, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_nvh, size = 4ul))
+        L.upooled |> push((buf = u_di, size = 4ul))
+        L.dn_uids |> reserve(nrows)
+        L.dn_pos |> reserve(nrows)
         for (i in range64(nrows)) {
-            g_lp_dn_uids |> push(sessions[i].uid)
-            g_lp_dn_pos |> push(ws.positions[i])
+            L.dn_uids |> push(sessions[i].uid)
+            L.dn_pos |> push(ws.positions[i] + poff)
         }
     }
     if (c.q_gated) {
-        g_lp_pooled |> push((buf = bdn_qg, size = 2ul * bytes_qg))
-        g_lp_pooled |> push((buf = bdn_gate, size = bytes_qg))
-        g_lp_upooled |> push((buf = u_dn_qd2, size = 4ul))
-        g_lp_upooled |> push((buf = u_total_qd, size = 4ul))
+        L.pooled |> push((buf = bdn_qg, size = 2ul * bytes_qg))   // nolint:STYLE012
+        L.pooled |> push((buf = bdn_gate, size = bytes_qg))
+        L.upooled |> push((buf = u_dn_qd2, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_total_qd, size = 4ul))
     }
-    g_lp_blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
-    g_lp_sameslab = same
+    L.blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
+    L.sameslab = same
     //! a plain step on a NextN-headed (or carry-armed) model lands each row's post-norm hidden into its session's `mtp_h`, so the stream's next speculative round starts warm - the same-slab verify lands the rows into `mtp_hrows` instead
     let carry = same || c.n_layer_nextn > 0l || g_mtp_carry_hidden
-    g_lp_bxf = carry && gpu_logits ? (g_mtp_carry_pre && c.n_layer_nextn <= 0l ? bx : bxf) : null
-    g_lp_bxf_bytes = g_lp_bxf != null ? nrows * dim * 4l : 0l
-    g_lp_xb = null
-    if (!gpu_logits) {
-        g_lp_xb = bx   // the CPU-classifier tail reads x_b — sync-only writeback
-        g_lp_xb_dst = unsafe(addr < void? >(ws.scr.x_b[0]))
-        g_lp_xb_bytes = nrows * dim * 4l
-    }
-    g_lp_sessions |> clear()
-    g_lp_sessions |> reserve(nrows)
-    g_lp_positions |> resize(nrows)
-    g_lp_koffs |> resize(nrows)
-    g_lp_voffs |> resize(nrows)
-    g_lp_caps |> resize(nrows)
+    L.bxf = carry && gpu_logits ? (g_mtp_carry_pre && c.n_layer_nextn <= 0l ? bx : bxf) : null
+    L.bxf_bytes = L.bxf != null ? nrows * dim * 4l : 0l
+    L.xb = null   // the CPU-classifier tail's x_b writeback is the forward's to arm (sync-only; the pre rail needs GPU logits)
+    L.sessions |> clear()
+    L.sessions |> reserve(nrows)
+    L.uids |> clear()
+    L.uids |> reserve(nrows)
+    L.ncbufs |> clear()
+    L.nc_all = nc_all
+    L.positions |> resize(nrows)
+    L.koffs |> resize(nrows)
+    L.voffs |> resize(nrows)
+    L.caps |> resize(nrows)
     for (i in range64(nrows)) {
-        g_lp_sessions |> push(sessions[i])
-        g_lp_positions[i] = ws.positions[i]
-        g_lp_koffs[i] = g_b_koffs[i]
-        g_lp_voffs[i] = g_b_voffs[i]
-        g_lp_caps[i] = g_b_caps[i]
+        L.sessions |> push(sessions[i])
+        L.uids |> push(sessions[i].uid)
+        if (nc_all) {
+            L.ncbufs |> push(nc_logits_for(g_dev, *sessions[i]))
+        }
+        L.positions[i] = ws.positions[i] + poff
+        L.koffs[i] = g_b_koffs[i]
+        L.voffs[i] = g_b_voffs[i]
+        L.caps[i] = g_b_caps[i]
     }
-    g_lp_nrows = nrows
-    g_lp_layers = c.n_layers
-    g_lp_seq = c.seq_len
-    g_lp_vocab = c.vocab_size
+    L.seq = c.seq_len
+    L.vocab = c.vocab_size
+    L.kdt = kdt
+    L.epoch = g_arena_epoch
+    L.gpu_logits = gpu_logits
     // hetero (gemma4): per-layer row bytes + per-(row, layer) slab bases — uniform models
     // capture the same values the old l * cap * rowb arithmetic produced
-    g_lp_lrowb |> resize(c.n_layers)
-    g_lp_lkbase |> resize(nrows * c.n_layers)
-    g_lp_lvbase |> resize(nrows * c.n_layers)
+    L.lrowb |> grow_resize(c.n_layers)
+    L.lkbase |> grow_resize(nrows * c.n_layers)
+    L.lvbase |> grow_resize(nrows * c.n_layers)
     for (l in range64(c.n_layers)) {
-        g_lp_lrowb[l] = kv_row_bytes(kdt, layer_kv_dim(c, l))
+        L.lrowb[l] = kv_row_bytes(kdt, layer_kv_dim(c, l))
         for (i in range64(nrows)) {
-            g_lp_lkbase[i * c.n_layers + l] = mirror_lbase(t, kdt, g_lp_caps[i], l)
-            g_lp_lvbase[i * c.n_layers + l] = mirror_lbase(t, kdt, g_lp_caps[i], l)
+            L.lkbase[i * c.n_layers + l] = mirror_lbase(t, kdt, L.caps[i], l)
+            L.lvbase[i * c.n_layers + l] = mirror_lbase(t, kdt, L.caps[i], l)
         }
     }
-    if (!(g_b_pipe && gpu_logits && empty(g_skip))) {
-        finish_pending_step()   // synchronous path: complete + read back immediately
-        if (g_lp_err) {
-            g_lp_err = false
-            return false   // the dispatch failed — the caller reruns this step on the CPU loop
-        }
+    if (!pre) {
+        mark_rows_committed(L)
     }
-    if (gpu_logits) {
-        batch_decode_override_logits_done()
-    }
-    return true
 }
 
 
@@ -3689,6 +3835,7 @@ def public set_metal_mtp_debug(mode : string) {
 //! against the chunked per-(row, head) pair, flipped inside one process.
 def public set_metal_attn_d(on : bool) {
     g_env_attn_d = on
+    discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
@@ -3701,6 +3848,7 @@ def private load_batch_knobs() {
     g_bmv = g_env_metal.batch_mv
     g_bmv8 = g_env_metal.batch_mv8
     g_b_pipe = g_env_metal.batch_pipe
+    g_b_pre = g_env_metal.batch_pre
 }
 
 [init]
@@ -3710,7 +3858,7 @@ def dasllama_metal_decode_register() {
     // shapes decline per call
     register_decode_override("metal", @@metal_decode_forward)
     register_batch_decode_override("metal", @@metal_batch_decode_forward)
-    register_reload_prep(@@discard_pre)   // a reload orphans the speculative pre-step — retire it before the regions drop
+    register_reload_prep(@@discard_pre_encoded_steps)   // a reload orphans the pre-encoded steps — retire them before the regions drop
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_spec_batch_override("metal", @@metal_mtp_spec_eval_batch)
     register_mtp_round_override("metal", @@metal_mtp_spec_round)

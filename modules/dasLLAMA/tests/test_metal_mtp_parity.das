@@ -110,6 +110,7 @@ struct FfStats {
     flips : int64
     maxd : float
     flip_margin_max : float
+    off_min : float = 1e30   //!< the one-step-off control: the smallest distance from B's row to A's PREVIOUS step
 }
 
 // The forced-feed pair: session A steps plainly on the GPU, session B runs the speculative round
@@ -136,12 +137,21 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                 set_metal_mtp_debug("reject")
                 set_mtp_depth(depth)
             }
+            var prev : array<float>
             for (_i in range64(nsteps)) {
                 var mx = 0.0
                 for (a, b in sa.logits, sb.logits) {
                     mx = max(mx, abs(a - b))
                 }
                 st.maxd = max(st.maxd, mx)
+                if (!empty(prev)) {
+                    var off = 0.0
+                    for (p, b in prev, sb.logits) {
+                        off = max(off, abs(p - b))
+                    }
+                    st.off_min = min(st.off_min, off)
+                }
+                prev := sa.logits
                 if (greedy_top(sb.logits, vocab) != tok) {
                     st.flips++
                     st.flip_margin_max = max(st.flip_margin_max, top2_margin(sa.logits, vocab))
@@ -166,6 +176,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             set_mtp_depth(1l)
             st.served = metal_decode_stats().decodes - before
             select_decode_override("")
+            delete prev
             delete one
             delete sa
             delete sb
@@ -268,7 +279,8 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
     } else {
         t |> success(st.cold == 0l, "{tag} {pn}: every round drafted+verified ({st.drafted} drafted, {st.cold} cold)")
         t |> success(st.maxd <= FF_TOL, "{tag} {pn}: verify row0 vs plain step within {FF_TOL} over {st.steps} forced-feed steps (maxd {st.maxd}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
-        to_log(LOG_INFO, "metal mtp {tag} {pn} forced-feed: maxd={st.maxd} flips={st.flips}/{st.steps} widest_margin={st.flip_margin_max} drafted={st.drafted} cold={st.cold}\n")
+        t |> success(st.off_min > FF_TOL, "{tag} {pn} control: verify row0 against the PREVIOUS plain step lands outside {FF_TOL} at every step (smallest {st.off_min})")
+        to_log(LOG_INFO, "metal mtp {tag} {pn} forced-feed: maxd={st.maxd} flips={st.flips}/{st.steps} widest_margin={st.flip_margin_max} drafted={st.drafted} cold={st.cold} one_step_off_min={st.off_min}\n")
     }
 }
 
@@ -689,6 +701,22 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
 def test_metal_mtp_parity_0_8b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-0.8B-MTP-Q8_0") <| @(t : T?) {
         run_fixture(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf", "0.8b")
+    }
+}
+
+[test]
+def test_metal_mtp_parity_4b(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-4B-MTP-Q8_0") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        run_fixture(t, "Qwen3.5-4B-MTP-Q8_0.gguf", "4b")
+    }
+}
+
+[test]
+def test_metal_mtp_parity_9b(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-9B-MTP-UD-Q5_K_XL (large tier)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        run_fixture(t, "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf", "9b")
     }
 }
 
