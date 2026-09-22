@@ -1830,7 +1830,8 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         //! the rows form fuses a site wherever its feed is Q8_0 (the `rq_b` stamp, a row a workgroup); the one-row form fuses under the lever and its bisect
         let bx = vk_fuse_bisect_bits()
-        let pro_fused = one ? fuse && (bx & FUSE_BX_PROLOGUE_RQ) == 0l : !kq_sb(g_rd.layers[0].fq)
+        let f0 = rd_head_feed(g_rd.layers[0])
+        let pro_fused = one ? fuse && (bx & FUSE_BX_PROLOGUE_RQ) == 0l : !kq_sb(f0.fmt) && !f0.storex   //! the rows stamp stores no float row: a head reading one takes the split prologue
         let att_fused = one && fuse && (bx & FUSE_BX_POST_ATT_RQ) == 0l
         let next_fused = one && fuse && (bx & FUSE_BX_POST_FFN_RQ) == 0l
         if (pro_fused) {   // rms_att[0](x) -> xq/xs (and xb where layer 0's head reads it)
@@ -2288,7 +2289,8 @@ def private rd_ensure_n_sets {
     if (g_rd.n_sets_made) return
     let dim = g_rd.dim
     let nb = g_rd.nb
-    if (!kq_sb(g_rd.layers[0].fq)) {
+    let f0 = rd_head_feed(g_rd.layers[0])
+    if (!kq_sb(f0.fmt) && !f0.storex) {
         g_rd.s_prologue_rq_b = set_ar_rq_stamp(RqStamp.rq_b, g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev)
     }
     for (l in range64(g_rd.n_layers)) {

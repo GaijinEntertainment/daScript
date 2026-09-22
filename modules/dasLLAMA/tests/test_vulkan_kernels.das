@@ -8875,6 +8875,205 @@ def test_vkd_dn_family(t0 : T?) {
     }
 }
 
+struct DnRowsOut {
+    st : array<float>
+    sm : array<float>
+    sc : array<float>
+    q : array<uint>
+    of : array<float>
+}
+
+//! one `dn_step_cls` dispatch over `nrows` rows: the planes uploaded fresh, the rows' (parity, slot) pairs in the TokMeta block, every output plane read back
+def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
+                             offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
+    var r : DnRowsOut
+    let proj_bytes = int64(nrows * prow) * 4l
+    let st_bytes = int64(nrows * st_n) * 4l
+    let sm_bytes = int64(sm_n) * 4l
+    let sc_bytes = int64(nrows * nblk) * 4l
+    let q_bytes = int64(nrows * nblk) * 32l
+    let of_bytes = int64(nrows * nvh * ds) * 4l
+    let projd = make_device_buf(proj_bytes)
+    let std = make_device_buf(st_bytes)
+    let smd = make_device_buf(sm_bytes)
+    let scd = make_device_buf(sc_bytes)
+    let qd = make_device_buf(q_bytes)
+    let ofd = make_device_buf(of_bytes)
+    var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
+    r.st |> resize(nrows * st_n)
+    r.sm |> resize(sm_n)
+    r.sc |> resize(nrows * nblk)
+    r.q |> resize(nrows * nblk * 8)
+    r.of |> resize(nrows * nvh * ds)
+    unsafe {
+        upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
+        upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
+        upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
+        nan_sentinel_upload(scd, sc_bytes)
+        nan_sentinel_upload(ofd, of_bytes)
+        var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
+        var tm = reinterpret<TokMeta?>(tokb.mapped)
+        for (i in range(nrows)) {
+            tm[i].parity = uint(pars[i])
+            tm[i].dnslot = uint(slots[i])
+        }
+        var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
+            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
+            fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
+            beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
+            taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
+            eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, nvh = uint(nvh), bstride = uint(offs[7]))
+        enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+        vhz_dep(raw, h, 1u | 2u | 4u | 8u | 32u, 0u, true)
+        cmd_copy_whole(raw, std, host.buf, st_bytes)
+        cmd_copy_range(raw, smd, 0l, host.buf, st_bytes, sm_bytes)
+        cmd_copy_range(raw, scd, 0l, host.buf, st_bytes + sm_bytes, sc_bytes)
+        cmd_copy_range(raw, qd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes, q_bytes)
+        cmd_copy_range(raw, ofd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes + q_bytes, of_bytes)
+        vk_check(vkEndCommandBuffer(raw), null)
+        submit_wait(raw)
+        let base = intptr(host.mapped)
+        memcpy(addr<void?>(r.st[0]), host.mapped, st_bytes)
+        memcpy(addr<void?>(r.sm[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
+        memcpy(addr<void?>(r.sc[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
+        memcpy(addr<void?>(r.q[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
+        memcpy(addr<void?>(r.of[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
+    }
+    return <- r
+}
+
+//! the elements of `got` at `gbase` differing from `want`'s at `wbase` over `n` (a NaN differs from everything)
+def private rows_off(got, want : array<float>; gbase, wbase, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (got[gbase + i] != want[wbase + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+def private rows_off(got, want : array<uint>; gbase, wbase, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (got[gbase + i] != want[wbase + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the fused step over two rows in two region slots against the one-row dispatch a row at a time: the row's o row (both forms), its
+//! slot's state and ring pair, bit for bit; the rows' beta rows sit at the f32 arm's stride, their alpha rows at the q8 arm's
+def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
+    let nrows = 2
+    let nkh = 2
+    let nvh = 4
+    let kd = nkh * ds
+    let cd = 2 * kd + nvh * ds
+    let dconv = 4
+    let taps = dconv - 1
+    let eps = 0.00001
+    let qscale = 1.25
+    let bstride = 2 * nvh
+    let beta_off = 16
+    let g_off = beta_off + nrows * bstride
+    let a_off = g_off + nrows * nvh
+    let dt_off = a_off + nvh
+    let taps_off = dt_off + nvh
+    let wnorm_off = taps_off + cd * dconv
+    let hist_off = wnorm_off + ds
+    let ring = cd * taps
+    let sm_n = hist_off + nrows * 2 * ring
+    let prow = cd + nvh * ds
+    let st_n = nvh * ds * ds
+    let nblk = nvh * ds / 32
+    let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, bstride)
+    var projh : array<float>
+    var sth : array<float>
+    var smh : array<float>
+    projh |> resize(nrows * prow)
+    sth |> resize(nrows * st_n)
+    smh |> resize(sm_n)
+    for (i in range(nrows * prow)) {
+        projh[i] = float((i * 29) % 67) * 0.03 - 1.0
+    }
+    for (i in range(nrows * st_n)) {
+        sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+    }
+    for (i in range(sm_n)) {
+        smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+    }
+    smh[0] = eps
+    smh[1] = qscale
+    for (i in range(nvh)) {
+        smh[a_off + i] = -0.4 - float(i) * 0.1   // a stays negative (decay)
+    }
+    var pars <- [1, 0]   //! the slots' parities differ: each row reads its own image
+    var slots <- [0, 1]
+    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+    for (r in range(nrows)) {
+        var proj1 : array<float>
+        proj1 |> resize(prow)
+        for (i in range(prow)) {
+            proj1[i] = projh[r * prow + i]
+        }
+        var sm1 := smh
+        for (i in range(nvh)) {   //! row r's beta and alpha rows at row 0's place: the one-row dispatch reads row 0
+            sm1[beta_off + i] = smh[beta_off + r * bstride + i]
+            sm1[g_off + i] = smh[g_off + r * nvh + i]
+        }
+        var pars1 <- [pars[r]]
+        var slots1 <- [slots[r]]
+        var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+        let off_st = rows_off(got.st, want.st, r * st_n, r * st_n, st_n)
+        let off_ring = rows_off(got.sm, want.sm, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
+        let off_o = (out_f32 ? rows_off(got.of, want.of, r * nvh * ds, 0, nvh * ds)
+            : rows_off(got.sc, want.sc, r * nblk, 0, nblk) + rows_off(got.q, want.q, r * nblk * 8, 0, nblk * 8))
+        t |> success(off_st == 0 && off_ring == 0 && off_o == 0,
+            "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {off_st}, ring {off_ring}, o row {off_o} elements off the one-row dispatch")
+        delete proj1
+        delete sm1
+        delete pars1
+        delete slots1
+        delete want
+    }
+    delete got
+    delete projh
+    delete sth
+    delete smh
+    delete pars
+    delete slots
+}
+
+[test]
+def test_vkd_dn_step_rows(t0 : T?) {
+    t0 |> run("dn_step_fused over two rows in two region slots == the one-row dispatch a row at a time") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                t |> skip("dn chain declined on this device (shared-memory cap)")
+                return
+            }
+            verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
+            for (ds in fixed_array(64, 128)) {
+                dn_step_rows_arm(t, ds, false)
+                dn_step_rows_arm(t, ds, true)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_dn_ba(t0 : T?) {
     t0 |> run("dn_ba (the prefill's f32 beta/alpha GEMM) == the CPU dot at a partial tile and past one workgroup") <| @(t : T?) {
