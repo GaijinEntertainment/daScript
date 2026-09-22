@@ -70,7 +70,7 @@ struct Args {
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK); its sibling llama-mtmd-cli serves as the metal/amx image-chat reference"
     ref_stock : string
 
-    @clarg_doc = "Streams of the metal leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through llama-batched-bench beside --ref-stock; 0 = no batched row (default: 4)"
+    @clarg_doc = "Streams of every leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through the llama-batched-bench beside the leg's llama-bench, under its -ngl, op-offload and affinity arms; 0 = no batched row (default: 4)"
     npl : int = 4
 
     @clarg_name = "ref-no-affinity"
@@ -444,9 +444,9 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
                                "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (be == "metal") {
         args |> push_from(["--ngl", "99"])
-        if (cfg.npl > 1) {   //! the batched row rides the metal leg's own child: on Metal --npl reshapes nothing, so the flat rows stay the board's
-            args |> push_from(["--npl", "{cfg.npl}"])
-        }
+    }
+    if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
+        args |> push_from(["--npl", "{cfg.npl}"])
     }
     if (accel) {
         args |> push("--accel")
@@ -980,12 +980,19 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
         rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
     }
-    if (ngl != 0 && cfg.npl > 1) {   //! the metal leg's batched row: the das child measured tg@npl, the batched exe answers it
+    if (cfg.npl > 1) {   //! the leg's batched row: the das child measured tg@npl, the batched exe answers it under the flat reference's arms
         let batched_bin = llama_batched_bench_sibling(bin)
         if (empty(batched_bin)) {
             to_log(LOG_WARNING, "gen_bench_records: no llama-batched-bench beside {bin} - {file} ref {flavor} {backend} carries no tg{cfg.ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
         } else {
-            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(cfg.plen), int64(cfg.ngen), int64(cfg.npl), cfg.reps)
+            var extra : array<string>
+            if (nopo) {
+                extra |> push("--no-op-offload")
+            }
+            if (ngl == 0 && !cfg.ref_no_affinity) {
+                extra |> push_from(lcpp_affinity_argv(threads))
+            }
+            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(cfg.plen), int64(cfg.ngen), int64(cfg.npl), cfg.reps, extra)
             if (empty(br.why)) {
                 rr.tests |> insert("tg{cfg.ngen}@{cfg.npl}", br.row)
                 rr.cmd = "{cmd} ; {br.cmd}"

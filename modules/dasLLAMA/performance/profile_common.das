@@ -2338,10 +2338,13 @@ def llama_batched_bench_tg(raw : string; npl : int64) : double {
 }
 
 //! the batched reference row at `npl` parallel sequences: `reps` runs of the batched exe, each its own process,
-//! the S_TG cells folded to a mean and a sample standard deviation. `why` names the failure - a run that printed
-//! no row - and the row then reads 0
-def llama_batched_ref_row(bin, mpath : string; ngl, threads : int; plen, ngen, npl : int64; reps : int) : tuple<row : BenchTest; cmd : string; why : string> {
-    let args <- llama_batched_bench_args(bin, mpath, ngl, threads, plen, ngen, npl)
+//! the S_TG cells folded to a mean and a sample standard deviation. `extra` rides the command line after the
+//! row's shape - the CPU leg's affinity and op-offload arms, the flat reference's own. `why` names the failure -
+//! a run that printed no row - and the row then reads 0
+def llama_batched_ref_row(bin, mpath : string; ngl, threads : int; plen, ngen, npl : int64; reps : int;
+                          extra : array<string>) : tuple<row : BenchTest; cmd : string; why : string> {
+    var args <- llama_batched_bench_args(bin, mpath, ngl, threads, plen, ngen, npl)
+    args |> push_from(extra)
     let cmd = argv_line(args)
     var rates : array<double>
     rates |> reserve(reps)

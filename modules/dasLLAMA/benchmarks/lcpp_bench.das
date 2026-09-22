@@ -1808,13 +1808,12 @@ def main() : int {
         var refBatched = BenchTest()   //! the batched reference row; a 0 rate is none
         var refCmd = ""
         if (!empty(cfg.ref)) {
-            var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
-            if (!gpu) {
-                if (!cfg.ref_no_affinity) {
-                    refArgs |> push_from(lcpp_affinity_argv(threads))
-                }
+            var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
+            if (!gpu && !cfg.ref_no_affinity) {
+                refPin |> push_from(lcpp_affinity_argv(threads))
             }
-            refArgs |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
+            var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
+            refArgs |> push_from(refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
             refCmd = argv_line(refArgs)
             say(fmt, "ref: {refCmd}\n")
             if (!run_llama_bench(refArgs, refRows)) {
@@ -1829,7 +1828,7 @@ def main() : int {
                 if (empty(batched_bin)) {
                     say(fmt, "warning: no llama-batched-bench beside {cfg.ref} - no ref tg{ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
                 } else {
-                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), reps)
+                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), reps, refPin)
                     say(fmt, "ref: {br.cmd}\n")
                     if (empty(br.why)) {
                         refBatched = br.row

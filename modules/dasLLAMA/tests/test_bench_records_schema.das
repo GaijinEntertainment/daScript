@@ -384,6 +384,13 @@ def test_parse_llama_batched_bench(t : T?) {
         t |> numericEqual(float(llama_batched_bench_tg(garbage, 4l)), 0.0, "a cell that is not a number reads 0")
         t |> equal(llama_batched_bench_sibling("/no/such/dir/llama-bench"), "", "no sibling beside a missing reference = no batched exe")
     }
+    t |> run("the batched reference row carries the leg's arms after the row's shape, and a dead exe reads no row") @(t : T?) {
+        let br = llama_batched_ref_row("/no/such/dir/llama-batched-bench", "m.gguf", 0, 6, 512l, 128l, 4l, 1,
+            ["--no-op-offload", "--cpu-strict", "1"])
+        t |> success(ends_with(br.cmd, "-npl 4 -fa on --no-op-offload --cpu-strict 1"), "the CPU leg's arms follow the shape: {br.cmd}")
+        t |> success(!empty(br.why), "a run that printed no row names why")
+        t |> numericEqual(float(br.row.tok_s), 0.0, "and its row reads 0")
+    }
 }
 
 [test]
