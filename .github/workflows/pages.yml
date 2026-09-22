@@ -176,12 +176,17 @@ jobs:
         set -eux
         ./bin/daslang -documentation doc/reflections/das2rst.das
 
+    # The three generator steps below call their tools DIRECTLY, as das2rst does, not through
+    # `cmake --build ./build --target ...`: on a cache hit the host build is skipped and there
+    # is no configured build/ at all (a site-only merge is exactly that run), and the cmake
+    # targets depend on the daslang target, so even a configured tree would rebuild it. Each
+    # command is the target's COMMAND from doc/CMakeLists.txt, run from the repo root.
     - name: "Run imgui2rst"
       # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
       # from its own generator; the host above builds with dasGlfw+dasImgui ON.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: cmake --build ./build --target run_imgui2rst
+      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
 
     - name: "Run vulkan2rst"
       # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
@@ -189,14 +194,14 @@ jobs:
       # and never creates a Vulkan instance, so this needs no GPU.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: cmake --build ./build --target run_vulkan2rst
+      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
 
     - name: "Stage tutorial recordings (docs-assets release)"
       # The `.. video::` directive fails the -W sphinx build on any recording
       # missing from _static/tutorials/, so staging must precede sphinx.
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: cmake --build ./build --target stage_doc_assets
+      run: bash utils/internal/docs-assets/fetch.sh
 
     - name: "Build Sphinx HTML"
       run: |
