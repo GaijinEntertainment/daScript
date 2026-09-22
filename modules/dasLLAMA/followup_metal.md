@@ -680,21 +680,36 @@ row at engine sha cc969d961, the E2B das row at 60b736faa): gemma-4-E4B Q8 259.6
 reference's 290.1 tok/s, while the E2B - the same
 E-series batch arm, PLE rows form, shared-KV layers Q-only - reads 454.2 against 479.7 (0.95). The
 flat rows hold on both files (E4B tg128 90.0 vs 81.2). Whatever the E4B pays per step it pays
-only at four rows: the E4B is the deeper and wider of the two, so the candidates are the PLE
-gather's per-row cost and the attention split's head-width gate, both readable off
-`lcpp_bench --prof`'s stage report after the batched row. The pass rule for a batched arm is
-0.95 of `llama-batched-bench` (`ARCHITECTURE_MEASUREMENT.md`); the E2B sits on the bar and the
-E4B under it.
+only at four rows. The stage split (`harness/batch_rows_probe.das --bs 4 --knockouts --sameslab
+--steps 32`, M5 Max, `-jit`, the archived m5 sidecar; direction-grade) puts the four-row GPU step
+at 13.45 ms against the single row's 11.09: the GEMV stage 9.65 ms (the weight stream, at its
+roof), elementwise 1.73, attention 1.04, other 0.5, and the batch driver costs 12.39 ms at ONE row
+against the single-row driver's 11.09; `lcpp_bench --prof`'s stage line adds ~1 ms of host work per
+step outside the GPU (encode 0.73, handoff 0.15, sched 0.11). The E2B shows the same shape (8.05
+against 6.25; elementwise 1.11, attention 0.89), so the E4B's deficit is the E-series' shared
+per-step cost meeting less flat headroom (its flat lead is 1.11, the E2B's 1.17). The two levers:
+the host encode overlapped with the device (the pipelined submission `DASLLAMA_METAL_BATCH_PIPE=1`
+hides it but dies with a SIGSEGV on the E4B row - its landing reads step globals the next step's
+build has already overwritten), and the elementwise chain's dispatch count (~40 us a layer at four
+rows: the qk / v norms, the gated-q multiply, the post norms and the residual adds as separate
+dispatches). The pass rule for a batched arm is 0.95 of `llama-batched-bench`
+(`ARCHITECTURE_MEASUREMENT.md`); the E2B sits on the bar and the E4B under it, ~0.6 ms a step away.
 
 ## 24. The dense 24B batched row loses at four rows what its flat row wins
 
 The same board: Mistral-Small-3.1-24B Q4_K_M flat tg128 38.3 against llama.cpp's 36.6 (1.05),
 batched tg128@4 72.4 against 77.2 (0.94). A dense K-quant file at 24B is weight-bound at one row
 and every step is one weight pass at four, so a batched deficit beside a flat lead is per-row
-work that does not amortize: the K-quant rows GEMM's tile at ntok 4, or the four-row attention
-over the deepest dense KV on the board. Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07
-and 1.09) clears the 0.95 bar, so the width or the depth of this one is the axis to bisect with
-`lcpp_bench --prof` on the batched row.
+work that does not amortize. The stage split (`harness/batch_rows_probe.das --bs 4 --knockouts
+--sameslab --steps 32`, M5 Max, `-jit`, the archived m5 sidecar; direction-grade): the four-row
+GPU step is 44.65 ms against the single row's 26.08 (1.70x) and the GEMV stage alone is 41.98 ms -
+1.6x the single step's - because a K-quant model at B <= 8 rides per-stream plane GEMVs, so the
+weights stream once per row with only the cache sharing them. `llama-batched-bench` scales worse
+(its four-row step is 1.9x its flat one), so the 0.94 is the flat lead being eaten. The lever is a
+batched K-quant GEMM form for B <= 8 - the kq mul_mm twins serve B >= 9 today; at M-pad 32 the
+q8 rail measured negative, but against a 1.6x weight stream the K-quant arithmetic is different.
+Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07 and 1.09) clears the bar on its
+flat lead alone.
 
 ## 25. The Qwen3.8-27B no-head verify cell panics through the CPU decode stack
 
