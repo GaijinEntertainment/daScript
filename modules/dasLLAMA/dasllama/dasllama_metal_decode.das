@@ -3193,7 +3193,7 @@ def private rows_mirror_ready(ws : BatchWorkspace; sessions : array<Session?>; n
     return true
 }
 
-var private g_b_pre = true   //!< DASLLAMA_METAL_BATCH_PRE: the next batched step pre-encodes under this one's GPU run
+var private g_b_pre = false   //!< DASLLAMA_METAL_BATCH_PRE: the next batched step pre-encodes under this one's GPU run
 
 //! Test and A/B lever over `DASLLAMA_METAL_BATCH_PRE`.
 def public set_metal_batch_pre(on : bool) {

@@ -119,11 +119,20 @@ own init/release pair.
 **A Metal decline counter beside the decline site is a defect - decline counting lives in
 `dasllama/dasllama_metal_common.das`.**
 
-**A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
-backend-only capability - a hook in sec.1.5's per-driver registered-hook or borrowed-kernel
-lists included - lands its own entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list
-in the same change, even when that list already carries an asymmetry of the same class.** One
-backend serving the same path faster or slower is not such a change.
+**A diff that adds or removes a hook seat only the Vulkan family fills (an `install_*` or
+`set_*_hook(s)` slot in `dasllama/dasllama_gpu_tier.das`), a hook a GPU driver registers in a
+model family's registry, or a prefill builder the tower driver borrows names it, in the same
+change, in the row of `ARCHITECTURE_GPU.md` sec.1.5's role table for the file that fills,
+registers or borrows it.**
+
+**A diff that adds or removes a registered override only one GPU backend files
+(`register_*("metal", ...)` or `register_*("vulkan", ...)`), a `dasllama/dasllama_gpu_tier.das`
+seat Metal fills, a function only one backend exports that code outside that backend's own files
+calls, a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation the other lens lacks,
+or a decode or prefill behavior only one backend's drivers provide lands its own entry in
+`ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change, even when the list
+already carries one of the same class.** One backend serving the same path faster or slower is
+not such a change.
 
 **A change that can alter what a served GPU decode or prefill path computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both,

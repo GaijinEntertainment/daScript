@@ -157,8 +157,9 @@ same-slab verify, the recurrent rows (their state buffer is one per session) and
 stay on the build-at-call path. The single-row driver, the speculative round's draft and verify
 steps, a knob setter that changes what a step encodes, a dispatch failure's CPU rerun and
 `metal_decode_flush` all retire the pre-encoded step: each advances the rows past the positions it
-was built for or moves the slices under it. `DASLLAMA_METAL_BATCH_PRE=0` is the build-at-call
-A/B rail.
+was built for or moves the slices under it. The rail ships off - `DASLLAMA_METAL_BATCH_PRE=1` arms
+it: on the E4B four-row step it times the same as building at the call, and it holds a second
+step's pooled buffers (`PERF_LEDGER.md`, the server-MTP section).
 
 **The mirror watermark moves at commit, not at landing.** `batch_mark_committed` marks every
 row's mirror at its position plus one the moment the step's command buffers are committed. The

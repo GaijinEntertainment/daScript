@@ -117,7 +117,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_BATCH_MV` | flag | on | Fixed-B GEMV forms for small batched decode. |
 | `DASLLAMA_METAL_BATCH_MV8` | flag | on | The column-tiling MV8 probe for batched decode. |
 | `DASLLAMA_METAL_BATCH_PIPE` | flag | off | Pipelined batched decode submission. |
-| `DASLLAMA_METAL_BATCH_PRE` | flag | on | The batched decode pre-encodes the next step under the current one's GPU run and pokes its token inputs at commit. |
+| `DASLLAMA_METAL_BATCH_PRE` | flag | off | The batched decode pre-encodes the next step under the current one's GPU run and pokes its token inputs at commit. Off by default: it times the same as building at the call and holds a second step's buffers. |
 | `DASLLAMA_METAL_BATCH_MM` | flag | off | The mul_mm rail for batched decode; measured negative at M-pad-32, kept as the A/B rail. |
 
 ## Vulkan backend

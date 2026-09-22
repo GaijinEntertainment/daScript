@@ -243,8 +243,7 @@ maxdiff on green as well as red, is a defect.**
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
 tolerance, or past a floor or ceiling, ships in the same change a control that lands outside that
 bound in every cell that holds it.** A bound nothing has exceeded where it is applied is not known
-to discriminate there. An assert whose threshold the cell computes from a number measured in the
-same run carries no bar - this rule does not reach it.
+to discriminate there.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

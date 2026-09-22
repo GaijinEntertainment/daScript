@@ -411,7 +411,7 @@ def test_metal_batched_row_pre_encode(t : T?) {
                 setup_dasllama_jobque_()
                 let prior_pre = metal_batch_pre_enabled()
                 if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
-                    t |> success(prior_pre, "the pre-encode rail ships on")
+                    t |> success(!prior_pre, "the pre-encode rail ships off")
                 }
                 var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
                                  <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),

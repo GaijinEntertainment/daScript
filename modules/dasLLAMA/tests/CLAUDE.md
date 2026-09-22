@@ -97,7 +97,9 @@ trunk + its split Q8_0 head; the 4b and 9b blocks carry the `qwen35` family tag;
 loads its served twin through `load_model_cached`, so the file mints a `.dlim` per carrier - the
 ledgered exception to the loader rule, since the metal MTP rail is what the image flavor serves;
 ctrl = plain-vs-plain forced feed must be bit-identical; ff = the
-verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers; ffk = the
+verify's row 0 vs the plain GPU step, forced-feed logits tolerance on two prose openers, with the
+one-step-off control (row 0 against the PREVIOUS plain step must land outside the bar at every
+step); ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
 steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
@@ -587,7 +589,7 @@ attention form and every group's layer bases must follow that group's own depth 
 not group 0's; the Llama carrier also
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
-sixteen or more; the shipped default reads on), token for token per stream, then the rail's
+sixteen or more; the shipped default reads off), token for token per stream, then the rail's
 retire under a parked step and the drivers' shutdown against the Metal live-object count. Stocked
 suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table

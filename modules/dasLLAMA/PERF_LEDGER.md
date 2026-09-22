@@ -2080,9 +2080,10 @@ processes throughout].
   rows x heads x (largest head size + 2) x 4 bytes per 64-key chunk of the deepest row. At each
   carrier's trained context that is gemma-4-26B-A4B 539 MB at 262144 keys (a 1 GiB bucket),
   Qwen3.8-27B 406 MB at 262144 (512 MiB), gpt-oss-20b 138 MB at 131072 (256 MiB), gemma-4-E4B
-  135 MB at 131072 (256 MiB); Mistral-Small-3.1-24B rides partD and holds none. The rail stays on
-  by default - the E4B four-row step times the same with it on and off (`followup_metal.md` row
-  23) - and `DASLLAMA_METAL_BATCH_PRE=0` returns the second set at long context.
+  135 MB at 131072 (256 MiB); Mistral-Small-3.1-24B rides partD and holds none. Decision: the rail
+  ships off (`DASLLAMA_METAL_BATCH_PRE=1` arms it) - the E4B four-row step times the same with it
+  on and off (`followup_metal.md` row 23), so the second set buys nothing until a step chained on
+  the GPU's own picks lands on top of it.
 
 ### From the Vulkan batched-decode arc, the qwen and phi carriers (2026-09-20)
 
