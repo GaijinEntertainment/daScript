@@ -3182,7 +3182,7 @@ def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
     if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
-        var built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
+        let built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
         panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline - kernel slot {ord} of the class whose built slots read [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}): its ensure_ never ran, or ran before the model drop")
     }
     let m = hz_masks(c.pipes[ord], set_)

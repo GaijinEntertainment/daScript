@@ -2280,6 +2280,9 @@ def private rd_ensure_n_rail : bool {
     var ok = gemv_cls_ensure_n(g_rd.cls_fmt_marker, nb) && ensure_cls_ar_rq_b()
     for (L in g_rd.layers) {
         break if (!ok)
+        if (dasllama_noisy()) {
+            to_log(LOG_INFO, "vk_rdec n rail: layer recurrent {L.recurrent} moe {L.moe} ple {L.ple} dense {has_dense_triple(L)} fq {L.fq} fk {L.fk} fv {L.fv} fo {L.fo} fqkv {L.fqkv} fz {L.fz} fout {L.fout} f1 {L.f1} f3 {L.f3} f2 {L.f2} fpg {L.fpg}\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
+        }
         ok = (L.recurrent
                 ? (gemv_cls_ensure_n(L.fqkv, nb) && gemv_cls_ensure_n(L.fz, nb) && gemv_cls_ensure_n(L.fout, nb) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
                 : (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb))
