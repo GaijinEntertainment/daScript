@@ -241,7 +241,7 @@ region's slot in every recurrent layer to the calling session (`vk_rdec_dn_own` 
 is one pointer compare; a foreign dirty slot flushes home first, then the session's state and
 history come up), the flush, release and invalidate seams walk every slot beside the per-op
 table, and a position-zero reset releases the session's slots. The ring parity is a word per region
-(`RDec.dn_par`), riding the row's `TokMeta` with its slot index (`parity`, `dnslot`): a region's
+(`RDec.dn_parity`), riding the row's `TokMeta` with its slot index (`parity`, `dnslot`): a region's
 slots step once per row, so the driver flips its word after each row it submits. A slot is
 `nvh x ds x ds` floats of state and a ring pair of `2 x cd x (dconv - 1)` floats; the step kernel
 binds every slot and indexes the row's own from `dnslot` and the head count its geometry pins. Two regions step
