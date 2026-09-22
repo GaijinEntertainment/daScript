@@ -14,10 +14,10 @@ sec.2.2al; the per-op tier's decode era, whose routed block the command's rows f
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
-MoE, per-layer-embedding and shared-KV standard-attention layers, and none where a layer or the
-tail has no N-row form - a recurrent layer, a gated q, a weight format with no N-column leaf, or
-more routed slots than the block's slot planes hold - and logs the reason once per armed
-model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
+MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
+the tail has no N-row form - a weight format with no N-column leaf, a routed block beside a
+per-layer-embedding branch, or more routed slots than the block's slot planes hold - and logs the
+reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
 runs once over the rows' logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's
 own; the one-row command and the prefill's tail pass one row. The pins matter on the one-row
 path alone: the batch driver's host tail pins the suppressed ids again on every row after the
@@ -60,6 +60,18 @@ stamp names; the one-row command's list is borrowed for the record and put back.
 N-column leaves and its fused gate-up form are built on the first batched step; a stamp that
 declines on the device logs once, and the command answers 0 rows from then on, so the
 row-at-a-time loop serves.
+
+**A recurrent layer's head steps the rows in their regions' state slots.** The qkv, z, beta/alpha
+and out GEMVs go out in their N-column forms over the rows' planes - a projection row (qkv | z) a
+row, the beta and alpha rows a row apart at the arm's stride (the q8 arm's GEMVs land them `nvh`
+apart, the f32 arm's router form `2 x nvh`, `DnStepArgs.bstride`), an o row a row - and the fused
+step (`dn_step_cls`) runs a workgroup per (row, head), the row's `TokMeta` naming the state and
+ring slot (`dnslot`) and the ring parity it reads, so two rows in two regions advance two states
+in one dispatch and the driver flips each row's region parity after the submit
+(`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v); the batch driver owns each row's state in its
+region before the command, as the one-row path does before a token. A gated q rides the same
+kernels as one row: the q GEMV's y stride, the fused norm+rope's and the attention's `qrow` are the
+q plane's `2 x qd` row where the gate is on, the projection row's width where it is not.
 
 **A MoE layer's routed block steps the rows as regions of the one-row leaves.** The router GEMV
 takes the rows as columns of one dispatch (`RouterArgs.ncols`: a workgroup an expert row, its

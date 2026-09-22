@@ -1549,12 +1549,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent layer, a gated q, a layer carrying both a routed block and a
-    per-layer-embedding branch, a weight format with no N-column leaf, and a MoE whose `nb * k`
-    picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), so a
-    batched step of such a model pays a weight pass a row. The work: each kind's N-row form, the
-    recurrent one behind its own state question (N device state slots a region - a residency
-    change), the gated q behind the gate's N form, the slot cap behind larger slot planes.
+    answers 0 on a layer carrying both a routed block and a per-layer-embedding branch, a weight
+    format with no N-column leaf (a recurrent layer's qkv, z or out plane among them), and a MoE
+    whose `nb * k` picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md`
+    sec.2.2ao), so a batched step of such a model pays a weight pass a row. The work: each kind's
+    N-row form - the routed-beside-PLE layer's, the slot cap behind larger slot planes, an N leaf
+    for each format without one.
 73. **The decode attention slab runs four heads' arithmetic on a GQA group of three.** The score
     and V loops of `DaAttnT` unroll over the slab's `G` heads - four, or two on a group of one or
     two heads (`da_slab_is_g2`, the `g2` stamps) - so a three-head group still pays a dead lane,
