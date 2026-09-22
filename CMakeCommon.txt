@@ -91,6 +91,15 @@ MACRO(SETUP_SANITIZERS)
             ADD_COMPILE_OPTIONS(/fsanitize=address)
         ENDIF()
     ENDIF()
+    IF(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+        SET(DAS_SANITIZER_ENV ${CMAKE_COMMAND} -E env
+            "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/.github/lsan_suppressions.txt"
+            "TSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/.github/tsan_suppressions.txt"
+            "UBSAN_OPTIONS=print_stacktrace=1"
+            CACHE INTERNAL "sanitizer runtime options for every lane that runs a built binary")
+    ELSE()
+        SET(DAS_SANITIZER_ENV "" CACHE INTERNAL "sanitizer runtime options for every lane that runs a built binary")
+    ENDIF()
 ENDMACRO()
 
 # Some options are defines and should be exported together with library.

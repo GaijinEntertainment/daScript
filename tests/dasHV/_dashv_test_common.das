@@ -1,7 +1,6 @@
 // Shared helpers for dasHV tests
 //
 // Provides:
-//   - Port constants (one per test file to avoid conflicts)
 //   - with_test_server() lifecycle helper
 //   - File I/O helpers for form upload tests
 
@@ -15,61 +14,48 @@ require dashv/dashv_boost public
 require daslib/jobque_boost public
 require daslib/fio public
 
-// ──────────────────────────────────────────────────────────────────────────
-// Port assignments — each test file uses a unique port
-// ──────────────────────────────────────────────────────────────────────────
-
-let PORT_CLIENT_BASIC   = 19001
-let PORT_REQUEST_BUILDER = 19002
-let PORT_SERVER_ROUTES  = 19003
-let PORT_SERVER_ADVANCED = 19004
-let PORT_COOKIES        = 19005
-let PORT_FORMS          = 19006
-let PORT_WEBSOCKETS     = 19007
-let PORT_SSE            = 19008
-let PORT_WRITER_CONNECTED = 19009
-let PORT_WILDCARD_PRIORITY = 19010
-
-// ──────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // Generic server lifecycle
-// ──────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 //
-// Starts a HvWebServer subclass on a dedicated thread, waits for it to be
-// ready, runs the user's block, then shuts down.
+// Starts a HvWebServer subclass on a dedicated thread, waits for the port it
+// bound, runs the user's block, then shuts down.
 
-def with_test_server(server_type : auto(ServerType); port : int; blk : block<(base_url : string) : void>) {
+def with_test_server(server_type : auto(ServerType); blk : block<(base_url : string) : void>) {
     with_job_status(1) $(started) {
         with_job_status(1) $(finished) {
+            with_atomic32() $(bound) {
             with_atomic32() $(stop_flag) {
-                new_thread() @() {
-                    var server = new ServerType()
-                    server->init(port)
-                    server->start()
-                    started |> notify_and_release
-                    while (stop_flag |> get == 0) {
-                        server->tick()
-                        sleep(1u)
-                    }
-                    server->stop()
-                    server->cleanup()
-                    unsafe {
-                        delete server
-                    }
-                    finished |> notify_and_release
+            new_thread() @() {
+                var server = new ServerType()
+                server->init(0)
+                var port = -1
+                if (server->start() == 0) {
+                    port = server->bound_port()
                 }
-                started |> join
-                let base_url = "http://127.0.0.1:{port}"
-                invoke(blk, base_url)
-                stop_flag |> set(1)
-                finished |> join
+                bound |> set(port)
+                started |> notify_and_release
+                while (stop_flag |> get == 0) {
+                    server->tick()
+                    sleep(1u)
+                }
+                server->stop()
+                server->cleanup()
+                unsafe {
+                    delete server
+                }
+                finished |> notify_and_release
+            }
+            started |> join
+            let port = bound |> get
+            invoke(blk, "http://127.0.0.1:{port}")
+            stop_flag |> set(1)
+            finished |> join
+            }
             }
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// File helpers for form/upload tests
-// ──────────────────────────────────────────────────────────────────────────
 
 def write_test_file(path, content : string) {
     fopen(path, "w") $(f) {

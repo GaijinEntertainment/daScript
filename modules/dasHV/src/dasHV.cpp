@@ -9,6 +9,7 @@
 
 #include <hv/hlog.h>
 #include <hv/hasync.h>
+#include <hv/hsocket.h>
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketClient,hv::WebSocketClient)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketServer,hv::WebSocketServer)
@@ -578,6 +579,19 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
         }
     }
     auto adapter = new WebServer_Adapter((char *)pClass,info,context);
+    // libHV serves nothing for port 0 - it listens only above zero - so a server asked for any free
+    // port learns one from a socket of its own and releases it. Resolved here rather than at start,
+    // so bound_port answers before the event loop runs and a route still registers single-threaded.
+    if ( port == 0 ) {
+        int fd = Listen(0, adapter->host);
+        if ( fd >= 0 ) {
+            sockaddr_u addr;
+            memset(&addr, 0, sizeof(addr));
+            socklen_t len = sizeof(addr);
+            if ( getsockname(fd, &addr.sa, &len) == 0 ) port = (int) sockaddr_port(&addr);
+            closesocket(fd);
+        }
+    }
     adapter->port = port;
     adapter->https_port = httpsPort;
     shared_ptr<hv::WebSocketServer> sp(adapter);
@@ -625,6 +639,12 @@ int das_wss_start ( Handle<hv::WebSocketServer> h ) {
     auto adapter = lookup_server(h);
     if ( !adapter ) return -1;
     return adapter->start();
+}
+
+int das_wss_bound_port ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return -1;
+    return adapter->port;
 }
 
 void das_wss_tick ( Handle<hv::WebSocketServer> h ) {
@@ -1431,6 +1451,9 @@ public:
                 ->args({"server","host"});
         addExtern<DAS_BIND_FUN(das_wss_start)> (*this, lib, "start",
             SideEffects::worstDefault, "das_wss_start")
+                ->args({"server"});
+        addExtern<DAS_BIND_FUN(das_wss_bound_port)> (*this, lib, "bound_port",
+            SideEffects::worstDefault, "das_wss_bound_port")
                 ->args({"server"});
         addExtern<DAS_BIND_FUN(das_wss_tick)> (*this, lib, "tick",
             SideEffects::worstDefault, "das_wss_tick")

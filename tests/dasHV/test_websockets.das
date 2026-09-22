@@ -158,32 +158,37 @@ def wait_closed(var client : TestWsClient?; max_ms : int = 3000) {
 // Server lifecycle helper for WS tests
 // ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
-def with_ws_test_server(port : int; blk : block<(ws_url : string; http_url : string) : void>) {
+def with_ws_test_server(blk : block<(ws_url : string; http_url : string) : void>) {
     with_job_status(1) $(started) {
         with_job_status(1) $(finished) {
+            with_atomic32() $(bound) {
             with_atomic32() $(stop_flag) {
-                new_thread() @() {
-                    var server = new WsTestServer()
-                    server->init(port)
-                    server->start()
-                    started |> notify_and_release
-                    while (stop_flag |> get == 0) {
-                        server->tick()
-                        sleep(1u)
-                    }
-                    server->stop()
-                    server->cleanup()
-                    unsafe {
-                        delete server
-                    }
-                    finished |> notify_and_release
+            new_thread() @() {
+                var server = new WsTestServer()
+                server->init(0)
+                var port = -1
+                if (server->start() == 0) {
+                    port = server->bound_port()
                 }
-                started |> join
-                let ws_url = "ws://127.0.0.1:{port}"
-                let http_url = "http://127.0.0.1:{port}"
-                invoke(blk, ws_url, http_url)
-                stop_flag |> set(1)
-                finished |> join
+                bound |> set(port)
+                started |> notify_and_release
+                while (stop_flag |> get == 0) {
+                    server->tick()
+                    sleep(1u)
+                }
+                server->stop()
+                server->cleanup()
+                unsafe {
+                    delete server
+                }
+                finished |> notify_and_release
+            }
+            started |> join
+            let port = bound |> get
+            invoke(blk, "ws://127.0.0.1:{port}", "http://127.0.0.1:{port}")
+            stop_flag |> set(1)
+            finished |> join
+            }
             }
         }
     }
@@ -195,7 +200,7 @@ def with_ws_test_server(port : int; blk : block<(ws_url : string; http_url : str
 
 [test]
 def test_websockets(t : T?) {  // nolint:STYLE038 - one connect/exchange/assert flow per websocket feature, sharing the test server
-    with_ws_test_server(PORT_WEBSOCKETS) $(ws_url, http_url) {
+    with_ws_test_server() $(ws_url, http_url) {
 
         t |> run("connect and receive welcome") @(t : T?) {
             var client = new TestWsClient()

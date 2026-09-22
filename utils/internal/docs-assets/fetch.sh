@@ -19,6 +19,37 @@ repo_root="$(cd "$script_dir/../../.." && pwd)"
 dest="$repo_root/doc/source/_static/tutorials"
 
 mkdir -p "$dest"
+
+# A staged file's mtime is when it was downloaded, so the release held its then-current bytes at
+# that moment: an asset uploaded since reads newer, and nothing else does. One metadata call
+# answers it for the whole set, and a staged set that is already current costs no download.
+remote="$(gh release view docs-assets \
+    --repo GaijinEntertainment/daScript \
+    --json assets \
+    -q '.assets[] | select(.name | endswith(".mp4")) | "\(.name) \(.updatedAt)"')"
+
+epoch_of() {  # GNU coreutils on CI, BSD on a developer's mac
+    date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s
+}
+mtime_of() {
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"
+}
+
+stale=0
+while read -r name updated; do
+    [ -n "$name" ] || continue
+    file="$dest/$name"
+    if [ ! -f "$file" ] || [ "$(epoch_of "$updated")" -gt "$(mtime_of "$file")" ]; then
+        stale=1
+        break
+    fi
+done <<< "$remote"
+
+if [ "$stale" -eq 0 ]; then
+    echo "[docs_assets] $(ls "$dest"/*.mp4 2>/dev/null | wc -l) MP4s already current in $dest"
+    exit 0
+fi
+
 gh release download docs-assets \
     --repo GaijinEntertainment/daScript \
     --pattern '*.mp4' \

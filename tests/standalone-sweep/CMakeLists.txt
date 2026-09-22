@@ -75,7 +75,7 @@ set_target_properties(standalone_sweep_aot PROPERTIES
 SETUP_CPP11(standalone_sweep_aot)
 add_dependencies(standalone_sweep_aot standalone_sweep_aot_corpus)
 
-add_custom_target(run_standalone_sweep_aot
+add_das_target(run_standalone_sweep_aot
     COMMAND $<TARGET_FILE:standalone_sweep_aot>
     DEPENDS standalone_sweep_aot
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -84,7 +84,7 @@ add_custom_target(run_standalone_sweep_aot
 
 ### JIT tier
 if(NOT DAS_LLVM_DISABLED)
-    add_custom_target(standalone_sweep_jit
+    add_das_target(standalone_sweep_jit
         COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
             -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_lib -DFILES_LIST=${_sweep_files_list}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/sweep_jit.cmake

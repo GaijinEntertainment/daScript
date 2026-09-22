@@ -70,6 +70,7 @@ let public FN_JIT_STR_CAT           = "jit_str_cat"
 let public FN_JIT_PROLOGUE          = "jit_prologue"
 let public FN_JIT_EPILOGUE          = "jit_epilogue"
 let public FN_JIT_MAKE_BLOCK        = "jit_make_block"
+let public FN_JIT_TRY_RECOVER       = "jit_try_recover"
 let public FN_JIT_AD_BY_SID         = "jit_ad_by_sid"
 let public FN_JIT_DEBUG             = "jit_debug"
 let public FN_JIT_ITERATOR_ITERATE  = "jit_iterator_iterate"
@@ -551,10 +552,23 @@ def public declare_extern_fn(name : string; typ : LLVMTypeRef) : LLVMOpaqueValue
 }
 
 
-def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?; attrs : LLVMOpaqueAttributeRef? []) {
+def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?) {
     var f = LLVMAddFunctionWithType(g_mod, name, typ)
     LLVMAddGlobalMapping(g_engine, f, fnAddr)
+    return f
+}
+
+def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?; attrs : LLVMOpaqueAttributeRef? []) {
+    var f = jit_add_extern(name, typ, fnAddr)
     LLVMAddAttributesToFunction(f, attrs)
+    return f
+}
+
+def public jit_add_extern(name : string; typ : LLVMTypeRef; fnAddr : void?; argAttr : tuple<LLVMOpaqueAttributeRef?; array<int>>) {
+    var f = jit_add_extern(name, typ, fnAddr)
+    for (i in argAttr._1) {
+        LLVMAddAttributeToFunctionArgument(f, uint(i), argAttr._0)
+    }
     return f
 }
 
@@ -852,6 +866,9 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     jit_add_extern(FN_JIT_MAKE_BLOCK,
         jit_fn_type($(blk : void?; argStackTop : int; ad : int64; bodyNode, jitImpl, funcInfo, at, ctx : void?) : void {}),
         get_jit_make_block(), fixed_array(nounwind, willreturn), (nocapture, [0, 3, 4, 5, 6]))
+    jit_add_extern(FN_JIT_TRY_RECOVER,
+        jit_fn_type($(tryBlock, catchBlock, at, ctx : void?) : void {}),
+        get_jit_try_recover(), (nocapture, [0, 1, 2, 3]))
     jit_add_extern(FN_JIT_AD_BY_SID, jit_fn_type($(sid : int64; ctx : void?) : int64 {}),
         get_jit_ad_by_sid(), fixed_array(nounwind, willreturn), (nocapture, [1]))
     jit_add_extern(FN_JIT_DEBUG, jit_fn_type($(res : float4; typeInfo, message, ctx, at : void?) : void {}),

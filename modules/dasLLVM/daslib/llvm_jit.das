@@ -601,7 +601,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def process_finally(expr : ExpressionPtr) {
-        var blk <- collect_finally(expr, false)
+        var blk <- collect_finally(expr, false, true)
         sort(blk) <| $(a, b) => uid.get_block_name_ptr(a).publ() < uid.get_block_name_ptr(b).publ()
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
@@ -615,7 +615,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def process_labels(expr : ExpressionPtr) {
-        var lls <- collect_labels(expr)
+        var lls <- collect_labels(expr, true)
         sort(lls)
         for (ll in lls) {
             labels[ll] = append_basic_block("label_{ll}_")
@@ -3749,13 +3749,28 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprTryCatch
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
+        return false
+    }
+
     def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
-        unsupported(expr, "try-catch")
+        let try_ptr = emit_block_value(expr.try_block, expr.at)
+        return if (try_ptr == null)
+        let catch_ptr = emit_block_value(expr.catch_block, expr.at)
+        return if (catch_ptr == null)
+        var params = fixed_array(
+            try_ptr,                    // try block
+            catch_ptr,                  // catch block
+            get_line_info_ptr(expr.at), // LineInfo
+            get_context_param()         // Context
+        )
+        LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_TRY_RECOVER],
+            LLVMGetNamedFunction(g_mod, FN_JIT_TRY_RECOVER), params, "")
     }
 
 // ExprQuote
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        unsupported(expr, "raw quote( ) is not jit-able - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module")
+        unsupported(expr, "raw quote( ) is not jit-able - daslib/quote lowering (the aot_macros gate) did not run for this module")
     }
 
 // ExprIfThenElse
@@ -6538,6 +6553,9 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprReturn(expr : ExprReturn?) {
         if (thisBlock != null) {
+            if (expr.returnFunc != null) {
+                to_log(LOG_WARNING, "LLVM JIT: return inside try/recover leaves the try arm, not the function. at {describe(expr.at)}\n")
+            }
             pre_visit_expr_return(expr, isCMRESType(thisBlock.returnType))
         } elif (thisFunc != null) {
             pre_visit_expr_return(expr, isCMRES(thisFunc))
@@ -6741,13 +6759,13 @@ class public LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def make_block_function(expr : ExprMakeBlock?; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
+    def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
         var result : LLVMOpaqueValue?
         var impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
             astVisitor.adapter = mv_adapter
-            let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?>(expr._block)), thisFunc, captureType)
+            let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?>(blockExpr)), thisFunc, captureType)
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
             carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
@@ -6763,8 +6781,8 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
             (*astVisitor)->after_function_entry(cblk)
-            visit(expr._block, astVisitor.adapter)
-            (*astVisitor)->post_make_block(unsafe(reinterpret<ExprBlock?>(expr._block)))
+            visit(blockExpr, astVisitor.adapter)
+            (*astVisitor)->post_make_block(unsafe(reinterpret<ExprBlock?>(blockExpr)))
             result = LLVMGetNamedFunction(g_mod, fmna.publ())
             impl = LLVMGetNamedFunction(g_mod, fmna.impl())
         }
@@ -6779,7 +6797,25 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
-        var captured <- capture_block(expr._block)
+        let blk_ptr = emit_block_value(expr._block, expr.at)
+        setE(expr, blk_ptr) if (blk_ptr != null)
+    }
+
+    def capture_argument_ptr(v : VariablePtr; argumentIndex : int) : LLVMOpaqueValue? {
+        let arg = LLVMGetParam(ffunc, uint(argumentIndex))
+        return arg if (v._type.isRef)
+        var slot : LLVMOpaqueValue?
+        at_function_entry() {
+            slot = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(v._type), "var_{v.name}")
+            LLVMSetAlignment(slot, 16u)
+            LLVMBuildStore(g_builder, arg, slot)
+        }
+        setV(v, slot)
+        return slot
+    }
+
+    def emit_block_value(blockExpr : ExpressionPtr; at : LineInfo) : LLVMOpaqueValue? {
+        var captured <- capture_block(blockExpr)
         sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
         // build block type
         var blk_fields <- build_block_type()
@@ -6793,7 +6829,7 @@ class public LlvmJitVisitor : AstVisitor {
         // allocate block, set captured fields
         var blk : LLVMOpaqueValue?
         at_function_entry() {
-            blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}_")
+            blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(at.line)}_")
         }
         var blkv = LLVMGetUndef(this_block_type)
         for (c, idx in captured, count()) {
@@ -6808,7 +6844,7 @@ class public LlvmJitVisitor : AstVisitor {
                     // its a function argument
                     for (a in thisBlock.arguments) {
                         if (a == c.variable) {
-                            v_ptr = LLVMGetParam(ffunc, uint(c.expression.argumentIndex))
+                            v_ptr = capture_argument_ptr(c.variable, c.expression.argumentIndex)
                             break
                         }
                     }
@@ -6816,7 +6852,7 @@ class public LlvmJitVisitor : AstVisitor {
                     // its a function argument
                     for (a in thisFunc.arguments) {
                         if (a == c.variable) {
-                            v_ptr = LLVMGetParam(ffunc, uint(c.expression.argumentIndex))
+                            v_ptr = capture_argument_ptr(c.variable, c.expression.argumentIndex)
                             break
                         }
                     }
@@ -6833,19 +6869,28 @@ class public LlvmJitVisitor : AstVisitor {
             }
 
             if (v_ptr == null) {
-                failed_E(expr, "capture {c.variable.name} not found")
-                return
+                failed_E(blockExpr, "capture {c.variable.name} not found")
+                return null
             }
             blkv = LLVMBuildInsertValue(g_builder, blkv, v_ptr, uint(idx + first_field_index), "capture_{c.variable.name}")
         }
         LLVMBuildStore(g_builder, blkv, blk)
 
         // make block function
-        var blk_make = make_block_function(expr, captured, first_field_index, this_block_type)
+        assume rawBlock = blockExpr as ExprBlock
+        // a try/recover arm has no returnType; put it back, the node outlives this emit's gc root
+        let noRetType = rawBlock.returnType == null
+        if (noRetType) {
+            rawBlock.returnType = new TypeDecl(baseType = Type.tVoid, at = at)
+        }
+        var blk_make = make_block_function(blockExpr, captured, first_field_index, this_block_type)
+        if (noRetType) {
+            rawBlock.returnType = null
+        }
 
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
-        assume annBlock = expr._block as ExprBlock
+        assume annBlock = blockExpr as ExprBlock
         let argStackTop = annBlock.stackTop
         var ann_data_ptr : LLVMOpaqueValue? = null
         if (annBlock.annotationDataSid != 0 |> uint64()) {
@@ -6868,12 +6913,12 @@ class public LlvmJitVisitor : AstVisitor {
             func_ptr,                                                   // bodyNode
             impl_ptr,                                                   // jitImpl
             null_ptr,                                                   // TODO: funcInfo
-            get_line_info_ptr(expr.at),                                 // LineInfo
+            get_line_info_ptr(at),                                      // LineInfo
             get_context_param()                                         // Context
         )
         var typ = g_fn_types[FN_JIT_MAKE_BLOCK]
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_MAKE_BLOCK), params, "")
-        setE(expr, blk_ptr)
+        return blk_ptr
     }
 
 // ExprMemZero
@@ -8114,10 +8159,7 @@ class public DisableJitVisitor : AstVisitor {
     }
 
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
-        // ever run; a raw one means lowering didn't fire for the defining module (macro
-        // modules stay raw by design) — skip the function instead of failing the file
-        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {describe(expr.at)}, falling back to interpreter.\n")
+        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (the aot_macros gate) did not run for this module at {describe(expr.at)}, falling back to interpreter.\n")
         disable = true
     }
 

@@ -512,6 +512,7 @@ ENDIF()
 # Every dynamic module should pass through this macro.
 MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     MESSAGE("REGISTER DAS SHARED MODULE ${module_name}")
+    SET_PROPERTY(GLOBAL APPEND PROPERTY DAS_SHARED_MODULE_TARGETS ${module_name})
     SETUP_DAS_SHARED_LIBRARY(${module_name} ${ARGN})
     DAS_APPLY_STRICT_WARNINGS(${module_name})
 
@@ -640,7 +641,6 @@ MACRO(ADD_EXAMPLE_RUN das_file)
         IF("${ARGN}" STREQUAL "FALSE")
             SET(_exe FALSE)
         ENDIF()
-        MESSAGE("EXAMPLE_RUN ${das_file} (exe=${_exe})")
         LIST(APPEND DAS_EXAMPLES_TO_RUN "${das_file}|${_exe}")
     ENDIF()
 ENDMACRO()
@@ -1411,28 +1411,29 @@ target_sources(libDaScriptDyn PRIVATE src/misc/alloc_tracker_overrides.cpp)
 target_link_libraries(libDaScript libDaScript_runtime)
 target_link_libraries(libDaScriptDyn libDaScriptDyn_runtime)
 
+set(AotDaslibList
+    daslib/ast_boost.das
+    daslib/ast_cursor.das
+    daslib/functional.das
+    daslib/json_boost.das
+    daslib/json.das
+    daslib/math_boost.das
+    daslib/random.das
+    daslib/regex_boost.das
+    daslib/regex.das
+    daslib/shader_lingua_franca.das
+    daslib/strings_boost.das
+    daslib/strings_convert.das
+    daslib/templates_boost.das
+    daslib/utf8_utils.das
+)
+
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     if(${DAS_TOOLS_DISABLED})
         # error, we need tools to generate aot
         message(FATAL_ERROR "DAS_AOT_EXAMPLES_DISABLED requires DAS_TOOLS_DISABLED to be OFF")
     endif()
-
-    set(AotDaslibList
-        daslib/ast_boost.das
-        daslib/ast_cursor.das
-        daslib/functional.das
-        daslib/json_boost.das
-        daslib/json.das
-        daslib/math_boost.das
-        daslib/random.das
-        daslib/regex_boost.das
-        daslib/regex.das
-        daslib/strings_boost.das
-        daslib/strings_convert.das
-        daslib/templates_boost.das
-        daslib/utf8_utils.das
-    )
 
     add_custom_target(dasAotStub)
     DAS_AOT_LIB("${AotDaslibList}" AOT_GENERATED_SRC dasAotStub daslang)

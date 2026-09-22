@@ -478,6 +478,7 @@ class AstVisitor {
     def abstract preVisitExprContinue(expr : ExprContinue?) : void
     def abstract visitExprContinue(expr : ExprContinue?) : ExpressionPtr
     def abstract canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool
+    def abstract canVisitTryCatchBody(expr : ExprTryCatch?) : bool
     def abstract preVisitExprMakeBlock(expr : ExprMakeBlock?) : void
     def abstract visitExprMakeBlock(expr : ExprMakeBlock?) : ExpressionPtr
     def abstract preVisitExprMakeGenerator(expr : ExprMakeGenerator?) : void

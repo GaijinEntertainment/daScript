@@ -154,8 +154,8 @@ IF(DAS_CLANG_BIND_INCLUDED AND NOT DAS_TOOLS_DISABLED)
 if(NOT CLANG_INCLUDE)
     set(CLANG_INCLUDE "$ENV{DAS_CLANG_INCLUDE}")
 endif()
-if(NOT CLANG_INCLUDE)
-    message(FATAL_ERROR "CLANG_INCLUDE (or env DAS_CLANG_INCLUDE) names the libclang include dir")
+if(NOT CLANG_INCLUDE OR NOT EXISTS "${CLANG_INCLUDE}/clang-c/Index.h")
+    message(FATAL_ERROR "CLANG_INCLUDE (${CLANG_INCLUDE}) holds no clang-c/Index.h - find_package(Clang) found none, so set CLANG_INCLUDE or env DAS_CLANG_INCLUDE")
 endif()
 execute_process(
     COMMAND "${DASLANG}" modules/dasClangBind/bind/bind_clangbind.das -- --clang_path "${CLANG_INCLUDE}/"
@@ -171,11 +171,14 @@ if(NOT _rc EQUAL 0)
 endif()
 ]==])
 
+    find_path(DAS_CBIND_CLANG_INCLUDE_DIR clang-c/Index.h
+        HINTS ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS} "${PATH_TO_LIBCLANG}/include")
     add_custom_target(check_clangbind_fresh
-        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang> -P ${_cbind_script}
+        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang>
+                -DCLANG_INCLUDE=${DAS_CBIND_CLANG_INCLUDE_DIR} -P ${_cbind_script}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Checking the dasClangBind self-binder output is committed (env DAS_CLANG_INCLUDE)"
+        COMMENT "Checking the dasClangBind self-binder output is committed"
     )
     add_custom_target(run_tests_cbind_const_preproc
         COMMAND $<TARGET_FILE:daslang> modules/dasClangBind/tests/test_const_preproc.das

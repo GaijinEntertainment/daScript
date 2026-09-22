@@ -50,7 +50,7 @@ class SseTestServer : HvWebServer {
 
 [test]
 def test_sse_basic(t : T?) {
-    with_test_server(type<SseTestServer>, PORT_SSE) $(base_url) {
+    with_test_server(type<SseTestServer>) $(base_url) {
         t |> run("SSE endpoint returns event-stream content type") @(t : T?) {
             GET("{base_url}/events") $(var resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -73,7 +73,7 @@ def test_sse_basic(t : T?) {
 
 [test]
 def test_request_cb_streaming(t : T?) {
-    with_test_server(type<SseTestServer>, PORT_SSE) $(base_url) {
+    with_test_server(type<SseTestServer>) $(base_url) {
         t |> run("request_cb receives body chunks") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.GET
@@ -113,7 +113,7 @@ def test_request_cb_streaming(t : T?) {
 
 [test]
 def test_sse_echo(t : T?) {
-    with_test_server(type<SseTestServer>, PORT_SSE) $(base_url) {
+    with_test_server(type<SseTestServer>) $(base_url) {
         t |> run("SSE echo endpoint returns posted body as event") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.POST
@@ -139,7 +139,7 @@ def test_sse_echo(t : T?) {
 
 [test]
 def test_request_cb_plain(t : T?) {
-    with_test_server(type<SseTestServer>, PORT_SSE) $(base_url) {
+    with_test_server(type<SseTestServer>) $(base_url) {
         t |> run("request_cb works with plain GET endpoint") @(t : T?) {
             with_http_request() $(var req) {
                 req.method = http_method.GET

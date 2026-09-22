@@ -576,7 +576,9 @@ if(NOT ${DAS_LLVM_DISABLED})
     # binds every function (a miss is a hard error under --use-aot). The JIT backend already compiles
     # all of tests/ (run_tests_jit is green), so --aot-object emits them too.
     FILE(GLOB _llvm_aot_jit_tests RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tests/jit_tests/*.das")
-    set(LLVM_AOT_TEST_FILES ${TEST_AOT_ALL_DAS} ${_llvm_aot_jit_tests})
+    FILE(GLOB_RECURSE _llvm_aot_benches RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/benchmarks/*.das")
+    list(FILTER _llvm_aot_benches EXCLUDE REGEX "benchmarks/(sql|terminal)/")
+    set(LLVM_AOT_TEST_FILES ${TEST_AOT_ALL_DAS} ${_llvm_aot_jit_tests} ${_llvm_aot_benches})
     list(REMOVE_DUPLICATES LLVM_AOT_TEST_FILES)
     # _-prefixed helpers and negative/fixture tests.
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")
@@ -585,7 +587,9 @@ if(NOT ${DAS_LLVM_DISABLED})
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(cant_|llvm_tune|llvm_code|llvm_compile_only|dll_cache|jit_fastpath|typeinfo)|_solid\\.das$")
     # msl/metal exercise 16/8-bit lattice + simdgroup ops the LLVM JIT declines (lattice_fallback in
     # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
-    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "tests/(msl|metal)/")
+    # spirv joins them on the fp16 side: aarch64 lowers the lattice natively (g_lattice_fp16_ops_native),
+    # so both sides keep those functions AOT-able and their hashes then disagree - error[50101], arm only.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "tests/(msl|metal|spirv)/")
 
     set(LLVM_AOT_TEST_LIST ${PROJECT_BINARY_DIR}/llvm_aot_corpus.txt)
     set(_llvm_aot_list_text "")
@@ -594,9 +598,14 @@ if(NOT ${DAS_LLVM_DISABLED})
     endforeach()
     file(WRITE ${LLVM_AOT_TEST_LIST} "${_llvm_aot_list_text}")
 
+    FILE(GLOB _llvm_aot_harness RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/dastest/*.das")
+    set(LLVM_AOT_OBJECT_FILES ${LLVM_AOT_TEST_FILES} ${_llvm_aot_harness} ${AotDaslibList})
+    list(REMOVE_ITEM LLVM_AOT_OBJECT_FILES daslib/json_boost.das daslib/regex_boost.das)
+    list(REMOVE_DUPLICATES LLVM_AOT_OBJECT_FILES)
+
     add_custom_target(test_llvm_aot_corpus)
     SET(LLVM_AOT_GENERATED_OBJ)
-    DAS_LLVM_AOT_LIB("${LLVM_AOT_TEST_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
+    DAS_LLVM_AOT_LIB("${LLVM_AOT_OBJECT_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
 
     # Same main.cpp as daslang / test_aot; the .o are pre-built external inputs (EXTERNAL_OBJECT),
     # so the C++ toolchain links them without recompiling.

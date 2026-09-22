@@ -909,6 +909,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 ### OS specific routines
 
 - `close_process` - Frees the handle.
+- `executable_on_path`
 - `exit` - Terminates the program immediately with the specified integer exit code, equivalent to C exit.
 - `exit_now` - Ends the process at once with the given exit code: stdout and stderr are flushed, and nothing else runs - no `atexit` handler, no module teardown, no leak dump.
 - `get_env_variable` - Returns the string value of the environment variable with the given name, or an empty string if undefined.
@@ -1082,6 +1083,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### WebSocket server lifecycle
 
+- `bound_port` - The port the server listens on: the one passed to `make_web_socket_server`, or, when that was 0, the free port the operating system picked.
 - `destroy_web_socket_server` - Releases the server handle.
 - `make_web_socket_server` - Creates a new low-level WebSocket/HTTP server on the given port, optionally with TLS.
 - `set_bind_host` - Selects the WebSocket server interface to bind before start.
@@ -5465,6 +5467,7 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.init_wss` - Initializes an HTTPS/WSS server with TLS.
 - `HvWebServer.cleanup` - Releases the underlying WebSocket server handle.
 - `HvWebServer.start` - Starts the server.
+- `HvWebServer.bound_port` - The port the listening socket actually holds, or -1 before `start` succeeds.
 - `HvWebServer.set_bind_host` - Selects the interface to bind before `start` (for example, `127.0.0.1`).
 - `HvWebServer.stop` - Stops the server.
 - `HvWebServer.tick` - Processes pending HTTP and WebSocket events; must be called periodically.
@@ -5519,7 +5522,7 @@ The DECS module implements a Data-oriented Entity Component System. Entities are
 
 ### Constants
 
-- `INVALID_ENTITY_ID` - Entity ID which represents invalid entity.
+- `INVALID_ENTITY_ID`
 
 ### Structures
 
@@ -6156,11 +6159,11 @@ The JSON-RPC module is a transport-agnostic JSON-RPC 2.0 implementation (https:/
 
 ### Constants
 
-- `PARSE_ERROR` - < Invalid JSON received.
-- `INVALID_REQUEST` - < Not a valid request object.
-- `METHOD_NOT_FOUND` - < Method does not exist or is not available.
-- `INVALID_PARAMS` - < Invalid method params.
-- `INTERNAL_ERROR` - < Internal JSON-RPC error.
+- `PARSE_ERROR`
+- `INVALID_REQUEST`
+- `METHOD_NOT_FOUND`
+- `INVALID_PARAMS`
+- `INTERNAL_ERROR`
 
 ### Structures
 
@@ -6461,7 +6464,7 @@ The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewri
 
 ### Call macros
 
-- `_fold` - implements _fold(expression) that folds LINQ expressions into optimized sequnences for example::
+- `_fold`
 
 ## lint
 
@@ -6635,7 +6638,7 @@ The MACRO_BOOST module provides utility macros for macro authors, including patt
 ### Block analysis
 
 - `capture_block` - Collect all captured variables in the expression.
-- `collect_finally` - Collect all finally blocks in the expression.
+- `collect_finally` - Collect all finally blocks in the expression - array of ExprBlock? with a `finally` section.
 - `collect_labels` - Collect all labels in the expression.
 
 ### Expression analysis
@@ -6946,8 +6949,8 @@ The RANDOM module implements pseudo-random number generation using a linear cong
 
 ### Constants
 
-- `LCG_RAND_MAX` - maximum possible output of random number generator
-- `LCG_RAND_MAX_BIG` - maximum possible output of random_big_int
+- `LCG_RAND_MAX`
+- `LCG_RAND_MAX_BIG`
 
 ### Seed and basic generators
 
@@ -7521,6 +7524,7 @@ The TEMPLATES_BOOST module extends template utilities with high-level macros for
 ### Template application
 
 - `apply_template` - Applies the template to the given expression.
+- `bind_block_argument` - Clones the body of a block literal with its argument `argname` replaced by the expression `bound`, and returns it as a plain (argument-less) block.
 - `clone_and_rename_var` - Clones `src` and renames every `ExprVar` named `from_name` to `to_name`.
 
 ### Expression helpers
@@ -7702,8 +7706,8 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 ### Constants
 
-- `s_utf8d` - Byte-class and state-transition table for the UTF-8 DFA decoder.
-- `UTF8_ACCEPT` - DFA accept state indicating a valid UTF-8 sequence.
+- `s_utf8d`
+- `UTF8_ACCEPT`
 - `_UTF32_NON_WORD_RANGES`
 - `_UTF32_LATIN1_LOWER`
 

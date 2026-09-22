@@ -84,11 +84,11 @@ namespace das
         FuncInfo *  debugInfo;
         uint64_t    mangledNameHash;
         void *      aotFunction;
-        // native JIT entry (the SimNode_Jit::func mirror), type JitFunction. Set/cleared by
-        // das_instrument_jit / das_remove_jit only — mutually exclusive with aotFunction, so
-        // the invoke fastpaths test aot first, then jit, then fall to code->eval. Written at
-        // install time (before any dispatch); the team publish/claim seq_cst pair orders it
-        // for workers. Fork/clone contexts share the functions array, so one write is global.
+        // native JIT entry (the SimNode_Jit::func mirror), type JitFunction. Mutually exclusive
+        // with aotFunction, so the invoke fastpaths test aot first, then jit, then fall to
+        // code->eval. Written at install time (before any dispatch); the team publish/claim
+        // seq_cst pair orders it for workers. Fork/clone contexts share the functions array,
+        // so one write is global.
         void *      jitFunction;
         uint32_t    stackSize;
         union {
@@ -126,6 +126,7 @@ namespace das
         virtual bool rtti_node_isInstrument() const { return false; }
         virtual bool rtti_node_isInstrumentFunction() const { return false; }
         virtual bool rtti_node_isJit() const { return false; }
+        virtual void * rtti_node_jitFunction() const { return nullptr; }
         virtual bool rtti_node_isKeepAlive() const { return false; }
         virtual bool rtti_node_isCallBase() const { return false; }
         virtual bool rtti_node_isErrorMessage() const { return false; }

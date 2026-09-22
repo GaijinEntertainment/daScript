@@ -52,8 +52,8 @@ def load_suite_config(path : string; var error : string&) : SuiteConfig {
         }
     }
     for (lane in cfg.lanes) {
-        if (lane != "interp" && lane != "jit") {
-            error = "suite config names an unknown lane \"{lane}\" (interp or jit): {path}"
+        if (lane != "interp" && lane != "jit" && lane != "aot") {
+            error = "suite config names an unknown lane \"{lane}\" (interp, jit or aot): {path}"
         }
     }
     return <- cfg

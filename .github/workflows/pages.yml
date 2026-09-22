@@ -172,9 +172,7 @@ jobs:
       # the log names the .so and the missing symbol directly.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: |
-        set -eux
-        ./bin/daslang -documentation doc/reflections/das2rst.das
+      run: cmake --build ./build --target check_docs_generated
 
     # The three generator steps below call their tools DIRECTLY, as das2rst does, not through
     # `cmake --build ./build --target ...`: on a cache hit the host build is skipped and there

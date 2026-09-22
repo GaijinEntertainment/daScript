@@ -90,6 +90,7 @@ namespace das {
 
 #if (defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)) || defined(__APPLE__)
     void * getFunction ( const char * fun, const char * lib ) {
+        AllocTrackerInternalGuard atg;
         void * libhandle = nullptr;
         libhandle = getLibraryHandle(lib);
         if ( !libhandle ) {
@@ -356,6 +357,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     static void * bindDynamicLibrary ( const string & library ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
+        // LLVM.dll pulls in libz3, whose static initializer leaks 40 bytes nothing here can free.
+        AllocTrackerInternalGuard atg;
         auto it = g_dasBindLib.find(library);
         if ( it!=g_dasBindLib.end() ) {
             return it->second;

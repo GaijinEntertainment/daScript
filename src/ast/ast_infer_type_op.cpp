@@ -1089,18 +1089,5 @@ namespace das {
         if (func)
             func->hasTryRecover = true;
     }
-    ExpressionPtr InferTypes::visit(ExprTryCatch *expr) {
-        if (jitEnabled()) {
-            auto tryBlock = new ExprMakeBlock(expr->try_block->at, expr->try_block);
-            ((ExprBlock *)tryBlock->block)->returnType = new TypeDecl(Type::autoinfer, expr->try_block->at);
-            auto catchBlock = new ExprMakeBlock(expr->catch_block->at, expr->catch_block);
-            ((ExprBlock *)catchBlock->block)->returnType = new TypeDecl(Type::autoinfer, expr->catch_block->at);
-            auto ccall = new ExprCall(expr->at, "builtin_try_recover");
-            ccall->arguments.push_back(tryBlock);
-            ccall->arguments.push_back(catchBlock);
-            return ccall;
-        }
-        return Visitor::visit(expr);
-    }
 
 }

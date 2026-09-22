@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6f7c71e1f8536f47ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6d2465abe21a7826ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -63,7 +63,7 @@ def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
 [macro_function]
 def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs : array<FunctionPtr>;
                               disabled : array<FunctionPtr>; var uids : UidNodes?; dll_hash_basename : string;
-                              keep_objs : array<string>) {
+                              keep_objs : array<string>; mine : table<string>) {
     dll.reset()
     dll = get_dll_by_path(output_path)
     // linked ok but unloadable = eaten between the two; the panic text carries the diagnosis
@@ -80,7 +80,7 @@ def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs
         for (obj in keep_objs) {
             keep_names |> insert(base_name(obj))
         }
-        jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename, keep_names)
+        jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename, keep_names, mine)
     }
 }
 
@@ -241,7 +241,39 @@ struct private JitSplitPart {
     tm : LLVMTargetMachineRef
     pbo : LLVMOpaquePassBuilderOptions?
     obj : string
+    obj_final : string
     tag : string
+}
+
+def private publish_link_set(tmp_base, final_base : string) {
+    let d = dir_name(tmp_base)
+    let tmp_prefix = "{base_name(tmp_base)}."
+    let final_name = base_name(final_base)
+    var produced : array<string>
+    dir(d) $(fname) {
+        if (fname |> starts_with(tmp_prefix)) {
+            produced |> push(fname)
+        }
+    }
+    for (fname in produced) {
+        let suffix = slice(fname, length(tmp_prefix), length(fname))
+        publish_object("{d}/{fname}", "{d}/{final_name}.{suffix}")
+    }
+}
+
+var g_published_names : table<string>
+
+def private publish_object(tmp, final : string) {
+    if (tmp == final || !stat(tmp).is_valid) return
+    if (!rename(tmp, final)) {
+        var err : string
+        remove(tmp, err)
+        if (!stat(final).is_valid) {
+            to_log(LOG_WARNING, "LLVM JIT: could not publish {tmp} as {final}\n")
+        }
+        return
+    }
+    g_published_names |> insert(base_name(final))
 }
 
 // live split partitions between codegen and disposal - module-global so the failure path
@@ -294,6 +326,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
                               output_path : string; log_jit_time : bool;
                               target : SplitTarget) : tuple<objs : array<string>; t_irgen : int; t_optemit : int; link_whole_lib : bool; main_ok : bool> {
     var phase_tm = ref_time_ticks()   // t_irgen covers partitioning + per-partition declare/irgen/ctors
+    let publish_token = "{ref_time_ticks()}"
     // partition by owning das-module, first-appearance (= program module) order - deterministic
     var order : array<string>
     var buckets : table<string; array<FunctionPtr>>
@@ -338,10 +371,11 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         chain = fold_function_hints(buckets[pname], chain)
         let pkey = (chain ^ env_salt) * JIT_FNV_PRIME
         // cache off (incl. a pinned output path, where no GC may run): positional names, overwritten in place - key-named objs would accumulate without bound there
-        let obj = (obj_cache ? artifact_path("{dir_name(output_path)}/{pkey}.m_{ptag}", JitArtifact.object)
+        let obj_final = (obj_cache ? artifact_path("{dir_name(output_path)}/{pkey}.m_{ptag}", JitArtifact.object)
                              : artifact_path("{output_path}.p{pi}_{ptag}", JitArtifact.object))
-        objs |> push(obj)   // link order = partition order, hit or miss
-        if (obj_cache && stat(obj).is_valid) {
+        let obj = "{obj_final}.{publish_token}.tmp"
+        objs |> push(obj_final)   // link order = partition order, hit or miss
+        if (obj_cache && stat(obj_final).is_valid) {
             cached++
             if (log_jit_time) {
                 to_log(LOG_INFO, "LLVM JIT: obj cache hit {ptag}\n")
@@ -381,7 +415,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
             tm = create_default_target_machine(codegen_level, use_host_cpu),
             pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
-            obj = obj, tag = ptag))
+            obj = obj, obj_final = obj_final, tag = ptag))
     }
     if (target.gen_exe) {
         let ptag = "exe_main"
@@ -415,12 +449,13 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)
             }
-            let obj = artifact_path("{output_path}.p{length(order)}_{ptag}", JitArtifact.object)
-            objs |> push(obj)
+            let obj_final = artifact_path("{output_path}.p{length(order)}_{ptag}", JitArtifact.object)
+            let obj = "{obj_final}.{publish_token}.tmp"
+            objs |> push(obj_final)
             g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
                 tm = create_default_target_machine(codegen_level, use_host_cpu),
                 pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
-                obj = obj, tag = ptag))
+                obj = obj, obj_final = obj_final, tag = ptag))
         }
     }
     if (obj_cache) {
@@ -462,6 +497,9 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         if (!ok) {
             reset_jit_globals_after_failure()
             panic("LLVM JIT: split parallel optimize+emit failed")
+        }
+        for (p in g_split_parts) {
+            publish_object(p.obj, p.obj_final)
         }
     }
     // phase C - the opt-in IR dump only (workers verified each module post-optimize, pre-emit; cached partitions have no live IR)
@@ -668,6 +706,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
                 split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, target_triple, output_path, log_jit_time,
                 SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict, register_all_modules = register_all_modules, lto = jit_lto))
+            let link_base = "{output_path}.{ref_time_ticks()}"
             t_irgen = sres.t_irgen
             // the pool interleaves passes and emission, so "optimize" carries the combined
             // optimize + emit-obj + post-opt-verify + partition-teardown wall, and "emit+link"
@@ -688,7 +727,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                     remove_split_link_files(sres.objs, output_path)   // the partition set is the link's alone: a failed link leaves nothing beside the user's -output
                     emit_failed = true
                 }
-            } elif (!link_from_objects(sres.objs, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time)) {
+            } elif (!link_from_objects(sres.objs, link_base, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time)) {
                 // self-heal: drop the whole link set before the panic - a truncated .o from a
                 // killed emit would otherwise probe-hit (and re-fail this link) forever
                 for (o in sres.objs) {
@@ -699,11 +738,12 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 panic("LLVM JIT: split link failed for {output_path} - cached partition objects dropped, the next run re-emits them")
             }
             if (!gen_exe) {
+                publish_link_set(link_base, output_path)
                 // partition objects are named by partition key, not the dll hash - the GC keep-set
                 // preserves exactly the current link set. The LTO probe's artifact set is one-off:
                 // skip its GC so a probe run cannot evict the normal cache generation.
                 let lto_probe = g_env_jit.jit_probe_lto
-                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs, g_published_names)
             }
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
@@ -797,7 +837,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker,
                     linker_string, LINK_WHOLE_LIB, true, debug_info, log_jit_time, opt_level |> uint)
                 let no_keep_objs : array<string>   // monolith artifacts all carry the dll-hash prefix
-                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename, no_keep_objs)
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename, no_keep_objs, g_published_names)
             }
         }
         t_emit = get_time_usec(phase_tm)

@@ -8,12 +8,27 @@
 if(NOT DAS_TOOLS_DISABLED)
     add_das_target(check_docs_generated
         COMMAND $<TARGET_FILE:daslang> -documentation ${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das
+                -- --digest ${CMAKE_CURRENT_BINARY_DIR}/everything.md
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Regenerating stdlib RST (das2rst)"
     )
+    # The shipped digest is generated but tracked: skills/daslang ships to agents with no
+    # daslang to generate it. So the lane checks, and updating the tracked copy is this target -
+    # a copy of what the generator already wrote, never a second das2rst run to disagree with it.
+    add_custom_target(regen_docs_digest
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/everything.md
+                ${PROJECT_SOURCE_DIR}/skills/daslang/references/everything.md
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Updating the shipped module digest (skills/daslang/references/everything.md)"
+    )
     add_custom_target(check_docs_fresh
-        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR}
+        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDAS_DOC_BUILD=${CMAKE_CURRENT_BINARY_DIR}
+                # OFF: the digest carries the symbols of every module the build loaded, so a
+                # checkout with one module more than the doc lane's generates a different file and
+                # no local configuration reproduces what CI compares against. Back ON once the
+                # digest is generated from a fixed module list.
+                -DDAS_DOC_GATE=OFF
                 -P ${PROJECT_SOURCE_DIR}/doc/check_docs_fresh.cmake
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Checking generated documentation is fresh"
@@ -59,14 +74,14 @@ if(DAS_BUILD_DOCUMENTATION)
         set(DAS_DOC_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/doc_html")
         set(DAS_DOC_DOCTREE_DIR "${CMAKE_CURRENT_BINARY_DIR}/doc_doctrees")
 
-        # Step 1: regenerate stdlib RST from daslib source comments (requires daslang)
+        # Step 1: the pages come from check_docs_generated - one das2rst per build, never two
+        # racing over the same pages and digest
         add_custom_command(
             OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
-            COMMAND $<TARGET_FILE:daslang> -documentation "${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das"
             COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
-            DEPENDS daslang
+            DEPENDS check_docs_generated
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-            COMMENT "Generating stdlib RST documentation (das2rst)"
+            COMMENT "Staging generated stdlib RST for Sphinx"
         )
 
         # Step 2: build HTML with Sphinx
@@ -130,6 +145,10 @@ if(NOT DAS_TOOLS_DISABLED)
         endif()
     endforeach()
     add_dependencies(check_docs_fresh ${_doc_generators})
+    add_dependencies(regen_docs_digest check_docs_generated)
+    # check_doc_verify walks doc/source, which the generators rewrite; it is a nightly member of
+    # run_extended_all, so under run_all it would otherwise read a page mid-write
+    add_dependencies(check_doc_verify ${_doc_generators})
 
     set(_doc_all ${_doc_generators} check_docs_fresh)
     if(TARGET build_doc)
