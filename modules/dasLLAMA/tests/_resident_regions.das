@@ -680,7 +680,7 @@ def private cached_of(events : array<SchedEvent>; id : int64) : int64 => finishe
 //! The second turn samples at top-k 1 under a temperature - the same token as the argmax, through a sampler that is not one,
 //! so its rows land logits where the other three land picks (a batched step of both kinds lands both)
 def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int; rows_stepped : int64> {
-    var sch <- create_scheduler(m, 2l, 4l, 64l)
+    var sch <- create_scheduler(m, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())   //! the streams' caches on the mirror's codec: under DASLLAMA_VK_KV32=1 a f16 stream is not served
     let on = set_device_kv(sch, device)
     var pa <- prompt_a()
     var pb <- prompt_b()
@@ -764,7 +764,7 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
         var tr <- load_two_regions(t, file)
         with_job_que() {
             setup_dasllama_jobque_()
-            var sch <- create_scheduler(tr, 2l, 4l, 64l)
+            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
             var long_prompt <- prose_ids(WINDOW_ROWS + 188l, 3l)
             var events : array<SchedEvent>
