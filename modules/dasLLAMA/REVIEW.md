@@ -51,8 +51,9 @@ folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `daslla
 or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes) change, a GPU kernel
 A/B race, a call that makes, arms or tears down device-home serving (`create_device_session`,
 `set_device_kv`, `moe_gpu_drop_model`), a knockout (an arm that skips a stage to measure that
-stage's cost), or a hand-binding arm (one that writes buffer or kargs (kernel-argument struct)
-binding numbers as literals), wherever the diff puts it - applies `REVIEW_GPU.md`.**
+stage's cost), a hand-binding arm (one that writes buffer or kargs (kernel-argument struct)
+binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
+wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever
