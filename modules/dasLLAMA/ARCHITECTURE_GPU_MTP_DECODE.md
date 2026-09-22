@@ -148,6 +148,14 @@ the recurrent rows (their state buffer is one per session) and a knockout run st
 build-at-call path, and the single-row driver retires the pre-encoded batch step on entry because
 its own prepare may move the slices. `DASLLAMA_METAL_BATCH_PRE=0` is the build-at-call A/B rail.
 
+**The mirror watermark moves at commit, not at landing.** `batch_mark_committed` marks every
+row's mirror at its position plus one the moment the step's command buffers are committed. The
+queue is in order, so the step writes each row before any later-committed work reads the mirror,
+and the next step's `mirror_prepare` therefore finds the position covered and stays on its fast
+path. A watermark moved only when the step lands would put every pre-encode behind a re-upload of
+rows from a CPU cache the landing has not written back yet - the one thing the fast path exists
+to avoid.
+
 The rail is neutral on the board rows because the step's command buffers already commit
 progressively (`DASLLAMA_METAL_BATCH_NCB`), so the GPU runs under the encode either way; what the
 rows pay is the GPU's idle between the landing and the next commit (`followup_metal.md` row 23).

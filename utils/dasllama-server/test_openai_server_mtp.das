@@ -74,7 +74,6 @@ def private with_mtp_server(t : T?; model_path : string; port : int; streams : i
     }
 }
 
-// One greedy chat of a few tokens, then the stats counter the round increments per draft.
 def private drafted_after_chat(t : T?; base_url : string) : int64 {
     POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Count from one to ten.\"}],\"max_tokens\":24,\"temperature\":0}") $(resp) {
         t |> equal(int(resp.status_code), int(http_status.OK))

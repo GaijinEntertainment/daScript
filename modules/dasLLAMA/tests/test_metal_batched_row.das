@@ -347,7 +347,7 @@ def test_metal_batched_row_pre_encode(t : T?) {
                 var none : array<int64>
                 let greedy = SamplingParams()
                 var refs : array<array<int64>>
-                for (arm in range(2)) {   //! arm 0 = every step encoded at its call (the reference), arm 1 = the pre-encode rail
+                for (arm in range(2)) {
                     let pre = arm == 1
                     set_metal_batch_pre(pre)
                     let taken0 = metal_batch_pre_taken()

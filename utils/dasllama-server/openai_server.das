@@ -5585,7 +5585,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && s_streams == 1l)   //! auto: the draft-and-verify round wins at one stream, the plain batched step at several
+    var spec = want > 0 || (want < 0 && s_streams == 1l)
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         if (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")

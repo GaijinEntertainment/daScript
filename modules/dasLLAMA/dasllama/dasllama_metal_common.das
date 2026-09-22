@@ -1888,8 +1888,6 @@ var @scratch g_sameslab_arg : array<int64>
 
 def pending_active() : bool => g_land[g_lp_i].active
 
-//! Both slots' pool buffers back to the pools, both slots' borrowed handles cleared - the step's
-//! landing state after `finish_pending_step`, or a pre-encoded step's after `discard_batch_pre`.
 def release_landing(var L : BatchLanding&) {
     for (pb in L.pooled) {
         var b = pb.buf
@@ -1920,8 +1918,7 @@ def release_landing(var L : BatchLanding&) {
     L.pre_valid = false
 }
 
-//! Retire the pre-encoded batched step without running it: its command buffers were never
-//! committed, so releasing them drops the work.
+//! Retiring a pre-encoded step drops its work: its command buffers were never committed.
 def discard_batch_pre {
     var P & = g_land[1 - g_lp_i]
     return if (!P.pre_valid)

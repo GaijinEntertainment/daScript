@@ -1105,7 +1105,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
          asr_team_dispatch = asr_team_dispatch,
-         mtp = g_cfg_sources |> key_exists("mtp") ? (g_cfg.mtp ? 1 : 0) : -1])   //! unset = each slot decides by its stream count
+         mtp = g_cfg_sources |> key_exists("mtp") ? (g_cfg.mtp ? 1 : 0) : -1])   // unset = each slot decides by its stream count
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()

@@ -674,10 +674,8 @@ def private tok_synth_longword() : string {
     }
 }
 
-//! The flat session's prompt rows: `plen` alone sizes it as llama-bench does (`plen + ngen`), but
-//! beside a tg-real row - whose prompts already capped the context at `row_ctx` - the flat
-//! session must not narrow it under them, or the speculative round's context gate reads a
-//! context every prompt exceeds and stays cold. Non-private: tests/test_tok_seed.das gates it.
+//! Non-private: tests/test_tok_seed.das gates it.
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def flat_row_plen(plen, ngen, row_ctx : int64; real_row : bool) : int64
     => real_row ? max(plen, row_ctx - ngen) : plen
 

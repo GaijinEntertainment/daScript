@@ -151,8 +151,6 @@ def private print_chain_stats(feed : string; spec : int) {   // nolint:LINT012,L
     }
 }
 
-//! The batch driver's per-step stage split over the timed window: what the host paid before the
-//! commit, what the wait absorbed, and how many steps rode a pre-encoded command buffer set.
 def private print_batch_stages(steps : int64) {   // nolint:LINT012,LINT019 — read only in the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let st = metal_batch_decode_stage_stats()

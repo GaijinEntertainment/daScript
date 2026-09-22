@@ -328,8 +328,7 @@ var private g_rope_sin_next_swa : array<float>
 // Hetero models (gemma4) carry TWO attention classes (global = config fields, sliding = _swa);
 // buffers size to the class maxima and each layer binds its class's uniform set.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
-//! `deepest`: the largest row position the step's rows reach (a joint round's groups sit at different
-//! positions) - it sizes the attention partials; -1 = `pos`
+//! `deepest` = -1 means the step's rows reach no further than `pos`.
 def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
@@ -553,7 +552,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     // chunked split-K attention above the single-tg depth (128-row chunks, cross-chunk combine)
     r.chunked = pos + 1l > g_attn_single_max
     let top = deepest >= 0l ? deepest : pos
-    let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS   //! the DEEPEST row's chunk count - the layer chain dispatches this many per (row, head)
+    let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
     if (r.chunked) {
         r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
@@ -2484,7 +2483,7 @@ def private discard_pre {
 }
 
 //! Both drivers' pre-encoded steps retired: the single-row chain's and the batch driver's.
-def private discard_pres {
+def private discard_pre_encoded_steps {
     discard_pre()
     discard_batch_pre()
 }
@@ -2570,8 +2569,7 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
 [hot_path]
 def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool {
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
-    // and logits — land it before reading anything session-side (no-op when nothing pends), and
-    // a pre-encoded batch step's rows may include this session or its slice's neighbours
+    // and logits — land it before reading anything session-side (no-op when nothing pends)
     finish_pending_step()
     g_land_err = false
     discard_batch_pre()
@@ -3002,7 +3000,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     residency_flush()   // pin/commit before the step's submission (the post-CPU-window slack)
     // a parked single-stream pre-step may reference a batch row's mirror slice — retire it first
     discard_pre()
-    // the step the previous call pre-encoded for these rows: commit it, or retire a stale one
     if (batch_pre_matches(t, ws, sessions, nrows)) {
         return batch_take_pre(t, ws, sessions, nrows)
     }
@@ -3072,8 +3069,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     return batch_step_land(t, ws, sessions, nrows, L)
 }
 
-//! A built step is committed: the pending step (if any) completes behind it, the slot flips, the
-//! next step pre-encodes under this one's GPU run, and - outside the pipe rail - this one lands.
 def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; var L : BatchLanding&) : bool {
     // the overlap: the PREVIOUS step completes only now, with this one already committed behind it
     finish_pending_step()
@@ -3095,12 +3090,10 @@ def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array
     return true
 }
 
-//! Every row's mirror slice for the step at `ws.positions + poff`, the row table image and the
-//! per-row offsets in the `g_b_*` scratch; `maxcnt` = the deepest row's count. A failed reserve or
-//! prepare reads `ok = false` - the caller decides between declining and standing down.
+//! `maxcnt` is the deepest row's count; `ok = false` is a failed reserve or prepare - the caller chooses between declining and standing down.
 def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, poff : int64) : tuple<ok : bool; maxcnt : int64> {
     let kdt = ws.scr.kv_dtype_k
-    let blockc = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4   // block codec: byte-offset row table + codec kernel twins
+    let blockc = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4   // block codec: the row table carries byte offsets
     let esz = kdt == KVDtype.f16 ? 2l : 4l
     // reserve the whole step's arena demand BEFORE pinning — growth is a release-all rebuild
     // and cannot run once the batch's rows are pinned (the readiness check above already
@@ -3168,8 +3161,6 @@ def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Sess
     return (ok = rows_ok, maxcnt = maxcnt)
 }
 
-//! The token-dependent inputs of a built step: the rows' embeds, their rope rows and the
-//! E-series' per-layer side rows - what the caller's CPU pre-step produced for THIS step.
 def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
     unsafe {
         if (L.poke_x) {
@@ -3195,9 +3186,7 @@ def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
     }
 }
 
-//! The optimistic watermark at commit: the in-order queue writes row pos before any later-committed
-//! work reads the mirror, so the next step's prepare must not re-upload it from the (not yet
-//! written back) CPU cache.
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
 def private batch_mark_committed(L : BatchLanding) {
     for (i in range64(L.nrows)) {
         let sp = L.sessions[i]
@@ -3226,9 +3215,6 @@ def public metal_batch_pre_enabled() : bool => g_b_pre
 //! Batched steps that committed a step pre-encoded by the call before them.
 def public metal_batch_pre_taken() : int64 => g_batch_pre_taken
 
-//! Pre-encode the step at `positions + 1` for the same rows into the free slot while `L` runs:
-//! only when every row's slice is on the prepare's fast path (no grow, eviction or upload may
-//! touch the arena under an in-flight step) and the step can be poked at commit.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
 def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; L : BatchLanding) {
     return if (!g_b_pre || !L.gpu_logits || L.sameslab || t.config.recr_mask != 0ul || !empty(g_skip))
@@ -3247,8 +3233,6 @@ def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions :
     P.pre_valid = true
 }
 
-//! The pre-encoded step is this call's step: the same rows at the same positions, the same KV
-//! codec and arena epoch, and every row's slice still where the row table names it.
 def private batch_pre_matches(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let P & = g_land[1 - g_lp_i]
     return false if (!P.pre_valid || batch_same_slab() || P.nrows != nrows || P.kdt != ws.scr.kv_dtype_k || P.epoch != g_arena_epoch || !empty(g_skip))
@@ -3265,8 +3249,6 @@ def private batch_pre_matches(t : Model; ws : BatchWorkspace; var sessions : arr
     return true
 }
 
-//! Commit the pre-encoded step as this call's: poke the token inputs, commit its command buffers
-//! in order, then land it like a freshly built one.
 def private batch_take_pre(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let ts_all = ref_time_ticks()
     var P & = g_land[1 - g_lp_i]
@@ -3281,9 +3263,7 @@ def private batch_take_pre(t : Model; ws : BatchWorkspace; var sessions : array<
     return batch_step_land(t, ws, sessions, nrows, P)
 }
 
-//! One batched step's whole encode into `L`: pooled buffers, uniforms, the layer chain and the
-//! classifier tail, the landing stash. `pre` leaves every command buffer ended and uncommitted with
-//! the token inputs unpoked; `poff` is the rows' position offset from `ws.positions`.
+//! `pre` leaves every command buffer ended, uncommitted and unpoked; `poff` is the rows' position offset from `ws.positions`.
 def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, maxcnt, poff : int64; pre : bool; ts_all : int64; var L : BatchLanding&) {   // nolint:STYLE037,STYLE038 — the batch step encoder; acquisition, layer chain, classifier tail and stash share the whole step's state
     let c = t.config
     let dim = c.dim
@@ -3522,7 +3502,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var u_nsgs = use_attn_d ? uniform_u32(uint(d_nsgs)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
     let gpu_toks = same && g_b_same_toks != null && t.cls_q8
-    // the poke handles: a built step takes its inputs now, a pre-encoded one when the caller commits it
     L.bx = bx
     L.poke_x = !gpu_toks
     L.bcos = bcos
@@ -3867,7 +3846,7 @@ def dasllama_metal_decode_register() {
     // shapes decline per call
     register_decode_override("metal", @@metal_decode_forward)
     register_batch_decode_override("metal", @@metal_batch_decode_forward)
-    register_reload_prep(@@discard_pres)   // a reload orphans the pre-encoded steps — retire them before the regions drop
+    register_reload_prep(@@discard_pre_encoded_steps)   // a reload orphans the pre-encoded steps — retire them before the regions drop
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_spec_batch_override("metal", @@metal_mtp_spec_eval_batch)
     register_mtp_round_override("metal", @@metal_mtp_spec_round)
