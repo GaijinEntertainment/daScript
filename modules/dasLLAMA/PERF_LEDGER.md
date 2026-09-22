@@ -2480,13 +2480,17 @@ hour, `external`; every ratio `tg128@4` against the reference's `S_TG` at `-npl 
   the recurrent layers); the resident, regions and scheduler hybrid files green at the commit.
 - **The N-row recurrent form and the gated q (commits dcc6852a6, ca0ac2a0e, da7d315f2), tg128@4
   ours cm2 / ours KHR / llama.cpp:** Qwen3.5-0.8B Q8_0 1553.1 +/- 1.3 / 1561.0 +/- 3.8 / 971.1
-  (1.60 / 1.61), flat 470.3 / 468.6 / 381.5; Qwen3.5-9B-MTP UD-Q5_K_XL 314.8 +/- 0.4 / 314.8 +/- 0.5 /
-  277.4 (1.13 / 1.13), flat 104.9 / 104.9 / 102.3; Qwen3.6-35B-A3B UD-IQ2_XXS 440.6 +/- 2.6 / 443.4
+  (1.60 / 1.61), flat 470.3 / 468.6 / 381.5; Qwen3.5-9B-MTP UD-Q5_K_XL 316.1 +/- 0.4 / 315.8 +/- 0.4 /
+  277.4 (1.14 / 1.14), flat 104.8 / 104.8 / 102.3 (the rows form that fed its K-quant recurrent
+  heads Q8_0 blocks read 314.8 on both arms: the Q8_K feed the shipped form requants at every
+  recurrent head costs nothing the ruler sees); Qwen3.6-35B-A3B UD-IQ2_XXS 440.6 +/- 2.6 / 443.4
   +/- 2.0 / 235.9 (1.87 / 1.88), flat 163.7 / 163.7 / 131.5 - against the MoE section's 30 (0.13)
   a row at a time, where the one slot went home and back on every stream switch. pp512 cm2 / KHR:
   the 0.8B 29102 / 23862, the 9B 5326 / 4223, the 35B 4583 / 4138 (the reference's four-stream
   prompt rate 29067 / 5008 / 4588). The 9B's four-row ratio is the section's tightest and its flat
-  ratio 1.03: the dense K-quant 9B trunk, not the recurrent form, sets it.
+  ratio 1.02: the dense K-quant 9B trunk, not the recurrent form, sets it. Its regions file
+  (`test_gpu_resident_regions_hybrid_k.das`, the split bar, 4 of 4) is what found the rows form's
+  Q8_0 feed and, after it, an N rail that never ensured a recurrent layer's FFN leaves.
 - **The rows against the sessions alone:** the hybrid regions file's batched cells bit for bit
   through the N-row command (11 of 11), the scheduler's deltanet cells, the resident hybrid file,
   and the fused step's two-row arm against the one-row dispatch a row at a time bit for bit on both
