@@ -2047,6 +2047,13 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
             }
             rdec_take_mirror(t, s, r, pos)
         }
+        if (c.recr_mask != 0ul) {   //! the row's recurrent state into its region's slots (the region is selected: the bind above)
+            if (pos == 0l) {
+                dn_reset(s)
+            }
+            s.dn_pos = pos + 1l
+            rdec_dn_own_all(s, c.n_layers)
+        }
         copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
         g_rdec_poss[i] = pos

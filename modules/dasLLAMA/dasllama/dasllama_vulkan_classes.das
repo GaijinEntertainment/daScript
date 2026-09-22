@@ -2299,13 +2299,14 @@ struct DnStepArgs {
     eps : float
     qscale : float   // the conv-ring parity and the slot ride tok[0]
     out_f32 : uint
-    nvh : uint       // a slot's state is nvh * ds * ds floats, its ring pair 2 * cd * (dconv - 1)
+    nvh : uint       // a slot's state is nvh * ds * ds floats, its ring pair 2 * cd * (dconv - 1); a row's workgroups are its heads
+    bstride : uint   // the rows' beta rows' stride in smalls (the f32 arm's router form lands them 2 * nvh apart, the q8 arm nvh)
 }
 
-// the decode-step FUSED chain (one workgroup per v-head): conv preamble -> chunk-length-1 delta
+// the decode-step FUSED chain (one workgroup per v-head per row): conv preamble -> chunk-length-1 delta
 // rule IN PLACE on the persistent state -> gated out-norm -> the head's o row. The conv ring is
-// parity-double-buffered inside the smalls member.
-[vk_dispatch(name = "dn_step_cls", grid = "nvh", params = "nvh : int64")]
+// parity-double-buffered inside the smalls member; a row's region names its state and ring slot.
+[vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
 class DnStepFused {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
@@ -2328,11 +2329,13 @@ class DnStepFused {
 
     [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
-        let h = gl_WorkGroupID.x
+        let row = gl_WorkGroupID.x / pa.nvh
+        let h = gl_WorkGroupID.x % pa.nvh
         let ds = pa.ds
         let taps = pa.dconv - 1u
-        let par = tok[0u].parity
-        let slot = tok[0u].dnslot
+        let par = tok[row].parity
+        let slot = tok[row].dnslot
+        let prow = row * (pa.cd + pa.nvh * ds)   //! the row's projection row (qkv | z)
         let ringb = pa.hist_off + slot * 2u * pa.cd * taps
         let rrb = ringb + par * pa.cd * taps
         let wrb = ringb + (1u - par) * pa.cd * taps
@@ -2343,7 +2346,7 @@ class DnStepFused {
             let sl = e / ds
             let j = e % ds
             let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
-            let fresh = proj[ch]
+            let fresh = proj[prow + ch]
             var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
             var k = 0u
             while (k < taps) {
@@ -2404,9 +2407,9 @@ class DnStepFused {
             let sk = 1.0 / max(sqrt(sumk), pa.eps)
             ds8[0u] = sq
             ds8[1u] = sk
-            let graw = smalls[pa.g_off + h] + smalls[pa.dt_off + h]
+            let graw = smalls[pa.g_off + row * pa.nvh + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + h]))
+            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.bstride + h]))
             ds8[4u] = qkr * sq * sk
         }
         barrier()
@@ -2484,20 +2487,21 @@ class DnStepFused {
         barrier()
         e = tid
         while (e < ds) {
-            let zv = proj[pa.cd + h * ds + e]
+            let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * ds8[5u] * smalls[pa.wnorm_off + e]
             dout[e] = xn * (zv / (1.0 + exp(-zv)))
             e += 256u
         }
         barrier()
+        let orow = (row * pa.nvh + h) * ds   //! the head's o row in the rows' o plane
         if (pa.out_f32 != 0u) {
             e = tid
             while (e < ds) {
-                outf[h * ds + e] = dout[e]
+                outf[orow + e] = dout[e]
                 e += 256u
             }
         } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
-            let gb = (h * ds) / 32u + tid
+            let gb = orow / 32u + tid
             let jb = tid * 32u
             var amax = 0.0
             for (i in range(32)) {

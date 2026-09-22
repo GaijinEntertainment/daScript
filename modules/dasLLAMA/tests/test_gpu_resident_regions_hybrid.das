@@ -20,7 +20,7 @@ def test_regions_interleaved_single_steps(t : T?) {
 
 [test]
 def test_regions_batched_steps(t : T?) {
-    cell_regions_batched_steps(t, REGIONS_FILE, served = false)   // the N-row command declines a hybrid carrier: the rows step one at a time
+    cell_regions_batched_steps(t, REGIONS_FILE)   // the N-row command's recurrent form: each row's deltanet step in its region's state slot, the gated q over the rows
 }
 
 [test]
