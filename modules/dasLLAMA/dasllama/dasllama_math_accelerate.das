@@ -66,6 +66,15 @@ struct private BnnsF16Plane {
 }
 
 var private g_accel_f16 = false
+var private g_accel_engaged = 0l   //! float-batch calls the tier served since the last reset - a run's engagement witness
+
+//! calls the tier served since `dasllama_accelerate_reset_engaged`: a driver that armed the tier and
+//! read 0 after its rows measured the portable path under the accel label
+def dasllama_accelerate_engaged() : int64 => g_accel_engaged
+
+def dasllama_accelerate_reset_engaged() {
+    g_accel_engaged = 0l
+}
 var private g_hw_planes : table<uint64; BnnsF16Plane>
 var private @scratch g_hx_scratch : array<uint16>   // grow-only f16-activation staging, reused per call
 
@@ -252,6 +261,7 @@ def private accel_fp_batch(var yp : float?; wp : float const?; xp : float const?
     if (ntok * d * n < g_accel_min_mmac * 1000000l) {
         return false
     }
+    g_accel_engaged++
     if (g_accel_f16 && accel_f32_f16_lane(yp, wp, xp, n, d, ntok)) {
         return true
     }
@@ -261,6 +271,7 @@ def private accel_fp_batch(var yp : float?; wp : float const?; xp : float const?
 
 [hot_path]
 def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float const?; n, d, ntok : int64) : bool {
+    g_accel_engaged++
     if (g_accel_f16 && accel_bf16_f16_lane(yp, wp, xp, n, d, ntok)) {
         return true
     }

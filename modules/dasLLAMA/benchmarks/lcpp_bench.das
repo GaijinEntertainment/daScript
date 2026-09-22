@@ -1286,6 +1286,14 @@ def private tests_of(rows : array<BenchRow>) : table<string; BenchTest> {
 var private g_debug_run = false
 var private g_refused_rows = 0   //! rows the run asked for that reported nothing: main exits non-zero once the records have landed
 
+//! the accel row's engagement witness: how many float-batch calls the armed tier served over the row -
+//! 0 on a carrier with no float plane at batch width, where the accel row reads as the portable one
+def private accel_pp_witness(fmt : OutFmt; row : string) {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        say(fmt, "accel: the float-batch tier served {dasllama_accelerate_engaged()} call(s) over {row}\n")
+    }
+}
+
 def private exchange_compiled_in() : bool {
     static_if (typeinfo module_exists(dasllama_exchange)) {
         return true
@@ -1734,11 +1742,17 @@ def main() : int {
                 continue
             }
             if (plen > 0l) {
+                static_if (typeinfo builtin_module_exists(das_accelerate)) {
+                    dasllama_accelerate_reset_engaged()   //! the witness counts this row's calls alone
+                }
                 bench_pp_warm(t, s, plen)   // untimed full-size run, as llama-bench does
                 if (!bench_output_gate(t, s, fmt, "pp{plen}{dtag}")) {
                     panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} - see the REFUSED line")
                 }
                 var tps <- [for (rep in range(reps)); bench_pp_rep(t, s, plen, int64(rep))]
+                if (cfg.accel) {
+                    accel_pp_witness(fmt, "pp{plen}{dtag}")
+                }
                 let st = say_row(fmt, "pp{plen}{dtag}", "", tps, results)
                 if (cfg.prof) {
                     // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
