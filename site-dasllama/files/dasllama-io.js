@@ -382,10 +382,13 @@
     return best;   // 0 when only unversioned history exists -> the filter starts at "all"
   }
 
+  // an official row is its green dot alone (every official run is verified); a community row
+  // carries its badge beside the dot the promotion sets
   function sourceCell(r) {
-    return '<td class="dl-grp-start"><span class="dl-src">' +
+    var official = r.source === 'official';
+    return '<td class="dl-grp-start" title="' + esc(r.source + (r.verified ? ' · verified' : ' · unverified')) + '"><span class="dl-src">' +
       '<span class="dl-src__dot ' + (r.verified ? 'dl-src__dot--ok' : 'dl-src__dot--un') + '"></span>' +
-      '<span class="dl-src__badge' + (r.source === 'official' ? ' dl-src__badge--official' : '') + '">' + esc(r.source) + '</span>' +
+      (official ? '' : '<span class="dl-src__badge">' + esc(r.source) + '</span>') +
       '</span></td>';
   }
 
@@ -403,27 +406,28 @@
             return esc(r.model) + (sub ? ' <span class="dl-model-sub">' + esc(sub) + '</span>' : '');
           }, cls: 'dl-td-model' },
         { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
-          cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
+          cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2 dl-td-machine' },
         { key: 'lane', label: 'category', get: function (r) { return r.lane; },
-          cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2' },
+          cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2 dl-td-lane' },
         { key: 'threads', label: 'threads', num: true, dim: true,
           get: function (r) { return r.threads; },
           cell: function (r) { return r.threads ? String(r.threads) : '-'; } },
-        { key: 'size', label: 'size GB', num: true, dim: true, get: function (r) { return r.size; },
+        { key: 'size', label: 'GB', num: true, dim: true, get: function (r) { return r.size; },
           cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } },
-        { key: 'pp_das', label: 'pp512 das', num: true, grp: true, grpStart: true,
+        // the das number heads each metric group under the metric's own name; the reference beside it is 'lcpp'
+        { key: 'pp_das', label: 'pp512', num: true, grp: true, grpStart: true,
           get: function (r) { return r.pp_das; }, cell: function (r) { return tps(r.pp_das); } },
         { key: 'pp_ref', label: 'lcpp', num: true, dim: true,
           get: function (r) { return r.pp_ref; }, cell: function (r) { return tps(r.pp_ref); } },
         { key: 'pp_ratio', label: 'ratio', num: true, grp: true,
           get: function (r) { return r.pp_ratio; }, cell: function (r) { return ratioCell(r.pp_ratio); } },
-        { key: 'tg_das', label: 'tg128 das', num: true, grp: true, grpStart: true,
+        { key: 'tg_das', label: 'tg128', num: true, grp: true, grpStart: true,
           get: function (r) { return r.tg_das; }, cell: function (r) { return tps(r.tg_das); } },
         { key: 'tg_ref', label: 'lcpp', num: true, dim: true,
           get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
         { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
           get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } },
-        { key: 'tgb_das', label: 'tg128@4 das', num: true, grp: true, grpStart: true,
+        { key: 'tgb_das', label: 'tg128@4', num: true, grp: true, grpStart: true,
           get: function (r) { return r.tgb_das; }, cell: function (r) { return tps(r.tgb_das); } },
         { key: 'tgb_ref', label: 'lcpp', num: true, dim: true,
           get: function (r) { return r.tgb_ref; }, cell: function (r) { return tps(r.tgb_ref); } },
