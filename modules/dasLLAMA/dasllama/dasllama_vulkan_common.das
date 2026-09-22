@@ -3178,12 +3178,18 @@ def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
     vkCmdPushConstants(raw, boost_value_to_vk(c.pipe_layout), sf, 0u, uint(c.push_bytes), unsafe(addr<void?>(pc)))
 }
 
+//! the lens's refusal of a class slot whose pipeline was never registered, naming the family's built slots beside it
+[cold_path]
+def private vkd_unregistered_panic(c : VkdClass; ord : int) {
+    let built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
+    panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline - kernel slot {ord} of the class whose built slots read [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}): its ensure_ never ran, or ran before the model drop")
+}
+
 // the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
     if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
-        let built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
-        panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline - kernel slot {ord} of the class whose built slots read [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}): its ensure_ never ran, or ran before the model drop")
+        vkd_unregistered_panic(c, ord)
     }
     let m = hz_masks(c.pipes[ord], set_)
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
