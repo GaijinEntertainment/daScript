@@ -87,6 +87,12 @@ struct Args {
 
     @clarg_doc = "Streams of the batched tg row, tg<n>@<npl>: that many streams through the scheduler - device-home where a whole-model driver homes them, host-cached otherwise - the summed rate the batched reference exe's parallel row reads; 0 = no batched row (default: 0)"
     npl : int = 0
+    @clarg_name = "npl-plen"
+    @clarg_doc = "Prompt tokens of each batched-row stream, both engines - the reference exe's -npp (default: -p, or 512 when the pp row is off)"
+    npl_plen : int = 0
+    @clarg_name = "npl-reps"
+    @clarg_doc = "Timed repetitions of the batched row, both engines (default: -r)"
+    npl_reps : int = 0
     @clarg_name = "npl-mtp"
     @clarg_doc = "The batched tg row's streams tick through the self-speculative round (a NextN model), every stream's verify rows in one joint pass; the reference row stays plain decode"
     npl_mtp : bool
@@ -1329,6 +1335,7 @@ def main() : int {
     let plen = max(int64(cfg.plen), 0l)
     let ngen = max(int64(cfg.ngen), 0l)
     let reps = max(cfg.reps, 1)
+    let breps = cfg.npl_reps > 0 ? cfg.npl_reps : reps
     var levers <- levers_of(cfg)
     if (length(levers) > 1) {
         var names <- [for (l in levers); "--{l.flag}-ab"]
@@ -1489,7 +1496,7 @@ def main() : int {
         // load INSIDE the que, on the image rail: the .dlim maps in ms, and the GPU tier's
         // gather/upload parallelizes over the lanes (que-less it runs single-threaded — at
         // STREAM=35 that gather was the dominant per-run cost)
-        let bplen = plen > 0l ? plen : BENCH_PP_TOKENS   //! the batched row's prompts: -p, or the flat reference exe's -p default when the pp row is off
+        let bplen = cfg.npl_plen > 0 ? int64(cfg.npl_plen) : (plen > 0l ? plen : BENCH_PP_TOKENS)   //! the batched row's prompts: --npl-plen, else -p, else the flat reference exe's -p default when the pp row is off
         //! the self-speculative streams emit up to depth + 1 tokens a tick: their rows take the rep's whole budget
         let spec_rows = cfg.npl_mtp ? (cfg.mtp_depth > 0 ? int64(cfg.mtp_depth) : get_mtp_depth()) + 1l : 1l
         let rows_ctx = cfg.npl > 1 ? bplen + (ngen + int64(cfg.npl) + 8l) * spec_rows : max(plen, ngen)   //! a stream's context: its prompt, its window, a slot a stream for the admits, and the margin
@@ -1750,7 +1757,7 @@ def main() : int {
                 let flat_len = t.config.seq_len   //! the flat session's rows; the streams take the wider context the load was capped at
                 t.config.seq_len = sched_ctx
                 var tps : array<double>
-                tps |> reserve(reps)
+                tps |> reserve(breps)
                 var refused = ""
                 let prev_spec = get_mtp_spec()
                 if (cfg.npl_mtp) {   //! the streams draft and verify together; a model with no NextN head refuses the row below
@@ -1759,7 +1766,7 @@ def main() : int {
                         refused = "--npl-mtp asks the speculative round of a model with no NextN head"
                     }
                 }
-                for (rep in range(reps)) {
+                for (rep in range(breps)) {
                     break if (!empty(refused))
                     let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep), cfg.npl_mtp)
                     if (!empty(br.why)) {
@@ -1773,7 +1780,7 @@ def main() : int {
                     static_if (typeinfo builtin_module_exists(das_metal)) {
                         metal_decode_stage_reset()
                     }
-                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(reps), cfg.npl_mtp)
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(breps), cfg.npl_mtp)
                     if (empty(br.why)) {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
                         forward_profile_report()
@@ -1828,7 +1835,7 @@ def main() : int {
                 if (empty(batched_bin)) {
                     say(fmt, "warning: no llama-batched-bench beside {cfg.ref} - no ref tg{ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
                 } else {
-                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), reps, refPin)
+                    let br = llama_batched_ref_row(batched_bin, mpath, cfg.ngl, threads, bplen, ngen, int64(cfg.npl), breps, refPin)
                     say(fmt, "ref: {br.cmd}\n")
                     if (empty(br.why)) {
                         refBatched = br.row

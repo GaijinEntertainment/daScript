@@ -46,7 +46,9 @@ A box without an accelerated tier simply shows fewer categories.
   through its scheduler and the batched step, the reference row is `llama-batched-bench`'s
   `-npl 4` row (`-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on`), `S_TG` summed the same way.
   Every category carries the row: the batched exe runs under its category's flat reference
-  arms - the same build and `-ngl`, `--no-op-offload` for cpu + accel.
+  arms - the same build and `-ngl`, `--no-op-offload` for cpu + accel. On the cpu categories the
+  streams start from 128-token prompts and the row takes 3 repetitions, both engines alike: the
+  untimed prefill of four 512-token prompts per rep dominated a CPU cell's wall time.
 - **Speech-to-text / audio-in**: wall time to transcribe a clip, best of the timed repetitions,
   **engine-internal and load-excluded on every path** - das times `transcribe()` from a warmed
   process; whisper.cpp rows are its own `total time - load time`; the patched multimodal CLI

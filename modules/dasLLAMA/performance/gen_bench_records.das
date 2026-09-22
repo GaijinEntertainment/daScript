@@ -75,6 +75,18 @@ struct Args {
     @clarg_doc = "Streams of every leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through the llama-batched-bench beside the leg's llama-bench, under its -ngl, op-offload and affinity arms; 0 = no batched row (default: 4)"
     npl : int = 4
 
+    @clarg_name = "npl-cpu-plen"
+    @clarg_doc = "Prompt tokens of each batched-row stream on the cpu legs, both engines (default: 128) - at 512 the untimed prefill of four streams per rep was three quarters of a dense CPU cell"
+    npl_cpu_plen : int = 128
+
+    @clarg_name = "npl-cpu-reps"
+    @clarg_doc = "Timed repetitions of the batched row on the cpu legs, both engines (default: 3)"
+    npl_cpu_reps : int = 3
+
+    @clarg_name = "image-settle"
+    @clarg_doc = "Seconds to idle before each image-chat cell (default: 60) - one image turn runs seconds, the text cells' --das-settle is sized for minutes-long cells"
+    image_settle : int = 60
+
     @clarg_name = "ref-no-affinity"
     @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
     ref_no_affinity : bool
@@ -449,6 +461,9 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
     }
     if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
         args |> push_from(["--npl", "{cfg.npl}"])
+        if (be != "metal") {
+            args |> push_from(["--npl-plen", "{cfg.npl_cpu_plen}", "--npl-reps", "{cfg.npl_cpu_reps}"])
+        }
     }
     if (accel) {
         args |> push("--accel")
@@ -994,7 +1009,9 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
             if (ngl == 0 && !cfg.ref_no_affinity) {
                 extra |> push_from(lcpp_affinity_argv(threads))
             }
-            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(cfg.plen), int64(cfg.ngen), int64(cfg.npl), cfg.reps, extra)
+            let bplen = ngl == 0 ? cfg.npl_cpu_plen : cfg.plen
+            let breps = ngl == 0 ? cfg.npl_cpu_reps : cfg.reps
+            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(bplen), int64(cfg.ngen), int64(cfg.npl), breps, extra)
             if (empty(br.why)) {
                 rr.tests |> insert("tg{cfg.ngen}@{cfg.npl}", br.row)
                 rr.cmd = "{cmd} ; {br.cmd}"
@@ -1604,22 +1621,22 @@ def main : int {
             // CPU build (kernel vs kernel — stock ggml op-offloads to Metal even at -ngl 0);
             // amx vs stock -ngl 0 --no-op-offload
             if (legMetal) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "metal")
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legNeon) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed)
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 let cpuMtmd = mtmd_bin()
                 image_ref_pass(file, path, mmPath, picPath, stat(cpuMtmd).is_valid ? cpuMtmd : "", "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legAmx) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "accel")
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
         }
