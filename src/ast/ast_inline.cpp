@@ -1319,9 +1319,13 @@ namespace das {
                     && !ret->subexpr->type->ref
                     && ret->subexpr->type->canCopy();
                 if ( ret->moveSemantics && !storeAsCopy ) {
-                    return new ExprMove(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                    auto store = new ExprMove(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                    store->no_promotion = true;
+                    return store;
                 }
-                return new ExprCopy(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                auto store = new ExprCopy(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                store->no_promotion = true;
+                return store;
             }
         protected:
             // ----- terminality prescan (read-only) -----

@@ -800,6 +800,7 @@ namespace das {
     }
     // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
     ExpressionPtr InferTypes::inferAssignOperator(const string &opN, ExprOp2 *expr) {
+        if (!hasFunctionNamed(opN)) return nullptr;
         auto opName = "_::" + opN;
         auto tempCall = new ExprLooksLikeCall(expr->at, opName);
         tempCall->arguments.push_back(expr->left);
@@ -997,6 +998,16 @@ namespace das {
                                      expr->right->type, expr->at);
         } else {
             auto cloneType = expr->left->type;
+            if (expr->no_promotion && !cloneType->isHandle() && !cloneType->isString()
+                && !cloneType->canCopy(expr->right->type->isTemp() || multiContext)) {
+                for (auto & userClone : getCloneFunc(cloneType, expr->right->type)) {
+                    if (!userClone->generated) {
+                        error("raw clone !:= of " + describeType(cloneType) + " is the generated field-wise clone, which its operator := replaces; clone the fields instead", "", "",
+                              expr->at, CompilationError::cant_clone);
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             if (cloneType->isHandle()) {
                 expr->type = new TypeDecl(); // we return nothing
                 return Visitor::visit(expr);

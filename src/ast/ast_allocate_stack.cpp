@@ -1529,9 +1529,11 @@ namespace das {
                             if ( var->init_via_move ) {
                                 assign = new ExprMove(expr->at, left, right);
                                 ((ExprMove *)assign)->allowConstantLValue = true;
+                                ((ExprMove *)assign)->no_promotion = true;
                             } else {
                                 assign = new ExprCopy(expr->at, left, right);
                                 ((ExprCopy *)assign)->allowConstantLValue = true;
+                                ((ExprCopy *)assign)->no_promotion = true;
                             }
                             assign->alwaysSafe = true;
                             assign->generated = true;

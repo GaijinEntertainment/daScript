@@ -268,12 +268,15 @@ def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.
 
 ### Copy, move and clone
 
-`=`, `<-` and `:=` overload on the pair of types (destination first, a `var T&`), and an overload
-for the exact pair wins over the built-in copy, move or clone, like `operator .` over a field.
+`=`, `<-` and `:=` overload on the pair of types (destination first, a `var T&`), and the overload
+the pair selects by the usual rules wins over the built-in copy, move or clone, like `operator .`
+over a field; a compiler-made copy (an inlined return, a yield) stays built-in.
 Initialization uses the same overload: `var x : T = src` lowers to `x <- copy_to_move(src, type<T>)`
-(`<-` init to `move_to_move`, `:=` init to `clone_to_move`). Inside the body, the raw form
-(`dst !== src`, `dst !<- src`, `dst !:= src`) is the built-in operation, so a same-pair overload
-does not call itself.
+(`<-` init to `move_to_move`, `:=` init to `clone_to_move`); a generic overload (`src : auto(TT)`)
+serves init too. Inside the body, the raw form (`dst !== src`, `dst !<- src`, `dst !:= src`) is
+the built-in operation, so a same-pair overload does not call itself. Exception: a non-copyable
+type's built-in clone is a generated field-wise clone that an `operator :=` on the pair replaces,
+so `!:=` there is a compile error - clone the fields.
 
 ```das
 typedef distinct SoundHandle = uint

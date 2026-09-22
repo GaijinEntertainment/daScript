@@ -1246,8 +1246,17 @@ def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
-def copy_to_move(copy_src; _t : type<auto(TT)>) : TT -const -# {
+def copy_to_move(copy_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
     //! A fresh `TT` assigned from `copy_src` through `operator =`, returned by move: what `var x : TT = copy_src` lowers to when an `operator =` takes the pair.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+def copy_to_move(var copy_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
+    //! The `copy_to_move` for a mutable source, so an `operator =` taking `var src` is the one the init reaches.
     unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
         var copy_dest : TT -#
         copy_dest = copy_src

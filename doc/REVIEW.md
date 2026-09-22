@@ -19,6 +19,12 @@ file, a command, a flag, an API, a `.das_package` name - states, in the PR body,
 exists and works at merge, and where that was checked** - the build proves the page renders,
 never that what it points a reader at is there.
 
+**A diff that adds a `require` to `reflections/das2rst.das` for a daslib module the generator
+documents through `//!` comments places it after `require daslib/rst_comment`, and never moves
+that line below one** - the comment reader is installed when `rst_comment` compiles, and a
+module compiled before it is documented with no comments at all; the documentation build
+starts from an empty `generated/detail/`, so nothing on disk masks the loss.
+
 **A diff that changes a generator or a grouping under `reflections/` states, in the PR body,
 that every name the generator newly places on a page resolves in the tree, and where that was
 checked** - a name the generator lists is a name a reader will type. The page-placing code

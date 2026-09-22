@@ -1205,12 +1205,25 @@ namespace das {
     bool InferTypes::verifyCloneFunc(const MatchingFunctions &fnList, const LineInfo &at) const {
         return verifyAnyFunc(fnList, at);
     }
-    MatchingFunctions InferTypes::getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right) const {
+    bool InferTypes::hasFunctionNamed(const string &funcName) const {
+        auto hFuncName = hash64z(funcName.c_str());
+        bool found = false;
+        program->library.foreach([&](Module *mod) -> bool {
+            if ( mod->functionsByName.find(hFuncName) || mod->genericsByName.find(hFuncName) ) {
+                found = true;
+                return false;
+            }
+            return true;
+        }, "*");
+        return found;
+    }
+    MatchingFunctions InferTypes::getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right, MatchingFunctions &generics) const {
         auto leftRef = new TypeDecl(*left);
         leftRef->ref = true;
         leftRef->constant = false;
         vector<TypeDeclPtr> argDummy = {leftRef, right};
-        auto fns = findMatchingFunctions("*", thisModule, opName, argDummy);
+        MatchingFunctions fns;
+        findMatchingFunctionsAndGenerics(fns, generics, "_::" + opName, argDummy, false, true);
         applyLSP(argDummy, fns);
         return fns;
     }
@@ -1225,10 +1238,13 @@ namespace das {
     ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
         if ( init->type && init->type->isAutoOrAlias() ) return nullptr;
         if ( isAssignInitCall(init) ) return nullptr;
-        auto fns = getAssignFunc(opName, varType, init->type);
-        if ( fns.empty() || !verifyAnyFunc(fns, at) ) return nullptr;
+        if ( !hasFunctionNamed(opName) ) return nullptr;
+        MatchingFunctions generics;
+        auto fns = getAssignFunc(opName, varType, init->type, generics);
+        if ( fns.empty() && generics.empty() ) return nullptr;
+        if ( fns.size() > 1 ) return nullptr;
         reportAstChanged();
-        auto call = new ExprCall(at, opName == "<-" ? "move_to_move" : "copy_to_move");
+        auto call = new ExprCall(at, opName == "<-" ? "_::move_to_move" : "_::copy_to_move");
         call->arguments.push_back(init);
         auto tdecl = new TypeDecl(*varType);
         tdecl->ref = false;

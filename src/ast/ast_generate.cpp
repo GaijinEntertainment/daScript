@@ -1116,6 +1116,7 @@ namespace das {
             auto mto = new ExprVar(expr->at, yarg->name);
             auto mfr = expr->subexpr->clone();
             auto mve = new ExprMove(expr->at, mto, mfr);
+            mve->no_promotion = true;
             blk->list.push_back(mve);
         } else {
             // result = a
@@ -1127,6 +1128,7 @@ namespace das {
             }
             auto cpy = new ExprCopy(expr->at, cto, cfr);
             cpy->allowCopyTemp = true;  // this is for generators which return temp# values
+            cpy->no_promotion = true;
             blk->list.push_back(cpy);
         }
         // yield = X

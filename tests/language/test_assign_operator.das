@@ -138,6 +138,76 @@ def test_move_operator(t : T?) {
     }
 }
 
+struct Wrap {
+    v : int
+}
+
+def operator =(var dst : Wrap&; src : auto(TT)) {
+    dst.v = int(src) * 10
+}
+
+struct Sink {
+    got : int
+}
+
+def operator =(var dst : Sink&; var src : array<int>) {
+    dst.got = length(src)
+    src |> push(0)
+}
+
+[test]
+def test_init_reaches_generic_and_mutable_source_overloads(t : T?) {
+    t |> run("a generic operator = serves init the way it serves assignment") @(t : T?) {
+        var w : Wrap = 3.5f
+        t |> equal(w.v, 30)
+        w = 4
+        t |> equal(w.v, 40)
+        let made = Sfx(hit = 1u, current = 9)
+        t |> equal(*made.current, 9u)
+    }
+    t |> run("an operator = taking var src sees the mutable source at init") @(t : T?) {
+        var arr <- [1, 2]
+        var s : Sink = arr
+        t |> equal(s.got, 2)
+        t |> equal(length(arr), 3)
+        s = arr
+        t |> equal(s.got, 3)
+        t |> equal(length(arr), 4)
+    }
+}
+
+[inline]
+def pass_through(src : Counted) : Counted {
+    return src
+}
+
+def with_finally(src : Counted) : int {
+    let held : Counted = src
+    var total = 0
+    {
+        total += held.copies
+    } finally {
+        total += held.copies * 10
+    }
+    return total
+}
+
+[test]
+def test_compiler_made_copies_stay_builtin(t : T?) {
+    t |> run("an inlined return store does not run the operator a second time") @(t : T?) {
+        var src : Counted
+        src.value = 8
+        let got : Counted = pass_through(src)
+        t |> equal(got.value, 8)
+        t |> equal(got.copies, 1)
+    }
+    t |> run("a let relocated for finally still runs the operator once") @(t : T?) {
+        var src : Counted
+        src.value = 9
+        t |> equal(with_finally(src), 11)
+    }
+}
+
 [test]
 def test_class_operator(t : T?) {
     t |> run("an operator = declared in a class takes self as the destination") @(t : T?) {

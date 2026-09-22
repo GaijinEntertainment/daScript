@@ -653,10 +653,10 @@ The same pattern applies to ``--``.
 Copy, move and clone operators
 ---------------------------------------------
 
-``=``, ``<-`` and ``:=`` overload like any other operator, and an overload for the exact
-pair of types wins over the built-in copy, move or clone - the same rule as ``operator .``
-over field access. The first parameter is the destination, a mutable reference; the second
-is the source, of any type:
+``=``, ``<-`` and ``:=`` overload like any other operator, and the overload the pair of types
+selects, by the usual overload rules, wins over the built-in copy, move or clone - the same
+rule as ``operator .`` over field access. The first parameter is the destination, a mutable
+reference; the second is the source, of any type, a generic ``auto`` included:
 
 .. das-doc: given typedef distinct SoundHandle = uint
 .. code-block:: das
@@ -675,12 +675,18 @@ is the source, of any type:
 
 Initialization goes through the same overload: ``var x : T = src`` (a local, ``let`` or ``var``,
 a global, a struct field default, a field in ``S(x = src)``) becomes ``x <- copy_to_move(src, type<T>)``, a fresh ``T`` assigned
-through the operator and moved in, exactly as ``var x : T := src`` becomes
-``clone_to_move(src)``; ``var x : T <- src`` uses ``move_to_move`` and ``operator <-``.
+through the operator and moved in, the way a ``:=`` init already resolves through ``clone``;
+``var x : T <- src`` uses ``move_to_move`` and ``operator <-``. A compiler-made copy - an
+inlined function's return, a generator's yield - is always the built-in one, so the operator
+runs once, where you wrote it.
 
 Inside an operator body, spell the built-in operation with the raw form - ``dst !== src``,
 ``dst !<- src``, ``dst !:= src`` - so an overload on the same pair of types does not call
-itself. The raw forms are listed under :ref:`Original Operator Access <expressions>`.
+itself. The raw forms are listed under :ref:`Original Operator Access <expressions>`. One
+raw form has no fallback: the built-in clone of a non-copyable type (a struct holding a
+container, an array, a table) is a generated field-wise clone, and an ``operator :=`` on that
+exact pair replaces it, so ``dst !:= src`` inside such an operator is a compile error - clone
+the fields instead.
 
 ---------------------------------------------
 Compound assignment operators

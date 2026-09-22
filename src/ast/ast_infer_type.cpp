@@ -618,7 +618,7 @@ namespace das {
             if (rangeError) {
                 return Visitor::visitGlobalLetInit(var, init);
             }
-            if (!var->init_via_clone && !var->type->ref) {
+            if (!var->generated && !var->init_via_clone && !var->type->ref) {
                 if (auto viaAssign = promoteInitToAssign(var->init_via_move ? "<-" : "=", var->type, var->init, var->init->at)) {
                     var->init = viaAssign;
                     var->init_via_move = !var->type->canCopy();
@@ -5742,7 +5742,7 @@ namespace das {
             if (rangeError) {
                 return Visitor::visitLetInit(expr, var, init);
             }
-            if (!var->init_via_clone && !var->type->ref) {
+            if (!var->generated && !var->init_via_clone && !var->type->ref) {
                 if (auto viaAssign = promoteInitToAssign(var->init_via_move ? "<-" : "=", var->type, var->init, var->at)) {
                     var->init = viaAssign;
                     var->init_via_move = !var->type->canCopy();
