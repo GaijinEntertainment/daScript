@@ -1,0 +1,38 @@
+name: dasweb-verify browser unit tests
+
+# Per-PR: catches a broken helper, or a data.json sample with no expectations.json row, before nightly_playground.yml does.
+
+on:
+  pull_request:
+    paths:
+      - 'utils/internal/dasweb-verify/browser/**'
+      - 'web/examples/ui/samples/data.json'
+      - '.github/workflows/dasweb-verify-browser.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  node_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: "Install runner dependencies"
+      working-directory: utils/internal/dasweb-verify/browser
+      run: npm ci
+
+    - name: "Unit tests"
+      working-directory: utils/internal/dasweb-verify/browser
+      run: node --test

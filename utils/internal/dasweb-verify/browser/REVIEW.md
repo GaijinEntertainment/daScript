@@ -24,10 +24,10 @@ a fresh hash only hides the bug.
 returns - through the frame the playground embeds it in; open the artifact URL as a top-level
 page instead.** That frame is cross-origin by design, so nothing inside it can be read.
 
-**`probe.mjs` polls `glGetError` only on pages with no GL-error watcher of their own - artifact
-pages, installed with `pollGl: true` - and never on the playground, where
-`site/playground/run-frame.html` (repo root) already polls.** `getError` clears the flag, so
-only one poller per context can see an error.
+**A diff that makes `probe.mjs` poll `glGetError` on the playground page is a defect - poll
+only on artifact pages, which get the probe with `pollGl: true`.**
+`site/playground/run-frame.html` (repo root) already polls the playground, and `getError` clears
+the error it returns, so two pollers on one WebGL context each miss errors.
 
 **Never let importing `runner.mjs` drive a browser - `main()` stays behind the entry-point
 check.** `node --test` imports every file it discovers, so deleting that guard makes the suite
@@ -38,11 +38,12 @@ its line here, with its tests, in the same change.**
 
 - `runner.mjs` - driving loop: browser lifecycle, page hooks, polling, recovery, plus the
   in-flight stop condition and wedge/drift rows that mirror `protocol.mjs` verdicts.
-- `protocol.mjs` - pure data in, pure data out: expectations lookup, output and
-  navigation-error classification, verdicts, the report. No playwright, no network, no DOM.
+- `protocol.mjs` - pure data in, pure data out: expectations lookup, output-pane
+  classification, console-message classification, navigation-error classification, verdicts,
+  the report. No playwright, no network, no DOM.
 - `protocol.test.mjs` - the `node:test` suite over the pure helpers. No browser.
 - `runner.test.mjs` - the `node:test` suite over `runner.mjs`, driven by a stubbed page. No
-  browser, no verdict assertions.
+  browser, no assertion on a value a `protocol.mjs` function returns.
 - `probe.mjs` - browser-side only, installed via `addInitScript`. Self-contained, no node
   API.
 - `expectations.json` - the per-sample table. Data only.
