@@ -3483,6 +3483,7 @@ The RTTI module exposes runtime type information and program introspection facil
 - `Annotation.isStructureTypeAnnotation` - Property-like accessor that returns `true` if the given `Annotation` is a `StructureTypeAnnotation`, which binds a C++ class as a daslang handled struct.
 - `Annotation.isFunctionAnnotation` - Property-like accessor that returns `true` if the given `Annotation` is a `FunctionAnnotation` (applied to functions).
 - `Annotation.isEnumerationAnnotation` - Property-like accessor that returns `true` if the given `Annotation` is an `EnumerationAnnotation`.
+- `Annotation.isDistinctTypeAnnotation` - Property-like accessor that returns `true` if the given `Annotation` is a distinct type (`typedef distinct Meters = float`).
 - `Annotation` - Handled type or macro.
 - `EnumValueInfo` - Single element of enumeration, its name and value.
 - `ModuleGroup` - Collection of modules.
@@ -4263,6 +4264,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `get_builtin_function_address` - Takes as argument a BuiltInFunction, and returns its address.
 - `get_const_expr` - Returns what the compiler makes of `expression` as a constant -- folding arithmetic and constant constructor calls even where the compilation policy leaves folding off -- or null when it is not a constant.
 - `get_current_search_module` - Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.
+- `get_distinct_underlying_type` - Returns the workhorse type a distinct type annotation wraps (`float` for `typedef distinct Meters = float`).
 - `get_field_type` - Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.
 - `get_file_source_line` - Reads a single source line from a FileInfo and invokes the block with the line text as a temporary string.
 - `get_func_aot_prefix` - Returns the AOT function prefix string for the specified function.
@@ -4279,6 +4281,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `has_field` - Returns true if a structure, variant, tuple, handled type, or pointer to any of those has the specified field.
 - `is_cpp_keyword` - Returns true if the string is a reserved C++ keyword (including contextual keywords like override and final).
 - `is_das_keyword` - Returns true if the string is a built-in daScript language keyword.
+- `is_distinct_type_private` - Returns true if a distinct type annotation was declared `typedef private distinct`, so no other module can name it.
 - `is_expr_const` - Returns true if the expression is or inherits from ExprConst.
 - `is_expr_like_call` - Returns true if the expression is or inherits from ExprLooksLikeCall.
 - `is_same_type` - Compares two types using the given comparison parameters and returns true if they match.
