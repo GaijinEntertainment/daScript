@@ -13,6 +13,7 @@ require dasllama/dasllama_scheduler   // nolint:STYLE030,LINT019 - the scheduler
 require _scheduler_rig   // nolint:STYLE030,LINT019 - toks_of, inside the das_metal halves
 require _ids   // nolint:STYLE030,LINT019 - same_ids, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_stats - the batched driver's own count
+require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - the pre-encode lever and its taken count, inside the das_metal halves
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the das_metal halves
 require _model_tier
@@ -313,6 +314,70 @@ def test_metal_batched_row_deltanet(t : T?) {
                 t |> success(wide.tps > 0.0lf, "... at a rate ({wide.tps:.1f} tok/s summed over 9 streams)")
                 let census2 = batch_step_census()
                 t |> success(census2.device - census1.device >= 8l, "its timed steps went through the device batched driver ({census2.device - census1.device} device steps)")
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
+def test_metal_batched_row_pre_encode(t : T?) {
+    t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {
+        if (!family_on(t, "llama")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                let prior_pre = metal_batch_pre_enabled()
+                var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                                 <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
+                                 <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false),
+                                 <- encode(tr, "The planets of the solar system, from the sun outward: Mercury, Venus,", true, false)]
+                var none : array<int64>
+                let greedy = SamplingParams()
+                var refs : array<array<int64>>
+                for (arm in range(2)) {   //! arm 0 = every step encoded at its call (the reference), arm 1 = the pre-encode rail
+                    let pre = arm == 1
+                    set_metal_batch_pre(pre)
+                    let taken0 = metal_batch_pre_taken()
+                    var sch <- create_scheduler(tr, 4l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+                    var events : array<SchedEvent>
+                    for (pi in range64(4l)) {
+                        t |> success(submit(tr, sch, make_req(pi + 1l, prompts[pi], greedy, 24l, none)), "stream {pi + 1l} queued (pre {pre})")
+                    }
+                    drain(tr, sch, events)
+                    let taken = metal_batch_pre_taken() - taken0
+                    if (!pre) {
+                        t |> equal(taken, 0l, "rail off: no step committed from a pre-encode")
+                        for (pi in range64(4l)) {
+                            refs |> emplace(toks_of(events, pi + 1l))
+                        }
+                    } else {
+                        t |> success(taken >= 16l, "rail on: {taken} steps committed the step pre-encoded by the call before them")
+                        for (pi in range64(4l)) {
+                            var got <- toks_of(events, pi + 1l)
+                            log_gen_texts(tr, "stream {pi} (encoded at call, pre-encoded)", refs[pi], got)
+                            t |> success(same_ids(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
+                            delete got
+                        }
+                    }
+                    delete sch
+                    delete events
+                }
+                set_metal_batch_pre(prior_pre)
+                delete refs
+                delete prompts
             }
             set_metal_mode(prior_mode)
             delete tr

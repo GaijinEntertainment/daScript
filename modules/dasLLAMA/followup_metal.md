@@ -687,13 +687,24 @@ roof), elementwise 1.73, attention 1.04, other 0.5, and the batch driver costs 1
 against the single-row driver's 11.09; `lcpp_bench --prof`'s stage line adds ~1 ms of host work per
 step outside the GPU (encode 0.73, handoff 0.15, sched 0.11). The E2B shows the same shape (8.05
 against 6.25; elementwise 1.11, attention 0.89), so the E4B's deficit is the E-series' shared
-per-step cost meeting less flat headroom (its flat lead is 1.11, the E2B's 1.17). The two levers:
-the host encode overlapped with the device (the pipelined submission `DASLLAMA_METAL_BATCH_PIPE=1`
-hides it but dies with a SIGSEGV on the E4B row - its landing reads step globals the next step's
-build has already overwritten), and the elementwise chain's dispatch count (~40 us a layer at four
-rows: the qk / v norms, the gated-q multiply, the post norms and the residual adds as separate
-dispatches). The pass rule for a batched arm is 0.95 of `llama-batched-bench`
-(`ARCHITECTURE_MEASUREMENT.md`); the E2B sits on the bar and the E4B under it, ~0.6 ms a step away.
+per-step cost meeting less flat headroom (its flat lead is 1.11, the E2B's 1.17). The host encode
+is NOT on the critical path: the step's command buffers commit progressively (`DASLLAMA_METAL_BATCH_NCB`),
+so the GPU runs under the encode already, and the pre-encoded step (`DASLLAMA_METAL_BATCH_PRE`,
+sec.2.38a of `ARCHITECTURE_GPU_MTP_DECODE.md`) moves the four-row step 13.26 -> 13.18 ms in the
+same probe (`--bs 4`, no knockouts: setup 0.05 encode 0.68 wait 12.04 gpu 11.87 readback 0.07 ms a
+step, 33 of 34 steps pre-encoded) and leaves the bench row at 259.0. What the row pays is the
+GPU's idle between steps, ~1.0 ms of a 14.3 ms bench step (`lcpp_bench --prof`, `JOBQUE_PROFILING=1`,
+one rep): the CPU PLE pre-step 0.37 (row 13 - the model_proj GEMM for four rows on the host), the
+sampler's argmax over four 262144-wide rows 0.19, the driver's setup + sched + handoff + readback +
+wake 0.4. The pipelined submission (`DASLLAMA_METAL_BATCH_PIPE=1`, a bench-only rail: it serves the
+PREVIOUS step's logits) hides all of it - 12.01 against 13.34 ms in the probe - which bounds the
+lever: the next step committed BEFORE the current one lands, on the GPU's own argmax (the rows twin
+of the single-row greedy chain, sec.2.38: argmax rows -> per-row embed gather -> the PLE gather +
+model_proj chain of row 13 on device -> the layer stack), verified against the caller's tokens at
+the landing, a miss re-running the step; only rows whose sampler is a bare argmax may chain. The
+elementwise chain's dispatch count (~40 us a layer at four rows) is the second, smaller lever. The
+pass rule for a batched arm is 0.95 of `llama-batched-bench` (`ARCHITECTURE_MEASUREMENT.md`); the
+E2B sits on the bar and the E4B under it, ~0.6 ms a step away.
 
 ## 24. The dense 24B batched row loses at four rows what its flat row wins
 

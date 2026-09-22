@@ -325,6 +325,9 @@ struct public MetalEnv {
     @clarg_doc = "Pipelined batched decode submission."
     batch_pipe : bool = false
 
+    @clarg_doc = "The batched decode pre-encodes the next step under the current one's GPU run and pokes its token inputs at commit."
+    batch_pre : bool = true
+
     @clarg_doc = "The mul_mm rail for batched decode; measured negative at M-pad-32, kept as the A/B rail."
     batch_mm : bool = false
 }

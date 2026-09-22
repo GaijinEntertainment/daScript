@@ -129,6 +129,32 @@ The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the 
 values (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index
 wins - what lets the chain predict a bare-argmax sampler's pick bit for bit.
 
+### 2.38a The batch driver's pre-encoded step {#batch-pre-encode}
+
+**The batch driver encodes the next step under the current one's GPU run and commits it when the
+caller arrives with the tokens.** A batched step's landing state is a `BatchLanding` (the pooled
+buffers, the command buffers, the rows' sessions, positions and slice offsets, and the poke
+handles) in one of two slots: the pending step's and the pre-encoded step's, never the same slot.
+After a step commits, `batch_pre_encode_next` builds the step at every row's position plus one into
+the free slot with every command buffer ended and none committed, and only while each row's mirror
+slice is on `mirror_prepare`'s fast path (the slice holds the position, the codec matches, the
+watermark covers it) - a grow, an eviction or an upload would touch arena slices the in-flight
+step is writing. The next call matches the pre-encoded step against its rows (the same sessions at
+the same positions, the KV codec, the arena epoch, and every slice still where the row table names
+it), pokes the token-dependent inputs the caller's CPU pre-step produced - the rows' embeds, their
+rope rows, the E-series' per-layer side rows - commits the command buffers in order and lands the
+step like a freshly built one; a step that does not match is retired unrun. The same-slab verify,
+the recurrent rows (their state buffer is one per session) and a knockout run stay on the
+build-at-call path, and the single-row driver retires the pre-encoded batch step on entry because
+its own prepare may move the slices. `DASLLAMA_METAL_BATCH_PRE=0` is the build-at-call A/B rail.
+
+The rail is neutral on the board rows because the step's command buffers already commit
+progressively (`DASLLAMA_METAL_BATCH_NCB`), so the GPU runs under the encode either way; what the
+rows pay is the GPU's idle between the landing and the next commit (`followup_metal.md` row 23).
+The rail is the scaffold for the rows twin of the greedy chain (sec.2.38): a pre-encoded step
+that opens with the GPU's argmax over the running step's logits and the rows' gathers commits at
+once, and the poke disappears.
+
 ### 2.39a The decode driver's layer encoder {#metal-layer-enc}
 
 **A layer is one chain at every row shape, written once.** `LayerEncT`

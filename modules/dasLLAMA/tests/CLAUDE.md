@@ -576,7 +576,10 @@ at, which grows to the batch) and, under the scheduler's self-speculative mode, 
 a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
 runs the joint-verify invariance cell: three speculative streams admitted together emit,
 token for token, what each emits alone on a one-stream speculative scheduler (the verify's
-rows forms are per row, so the joint pass and the solo pass round alike). Stocked suite; skips
+rows forms are per row, so the joint pass and the solo pass round alike); the Llama carrier also
+runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
+pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
+sixteen or more), token for token per stream. Stocked suite; skips
 off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
