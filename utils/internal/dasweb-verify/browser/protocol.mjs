@@ -46,6 +46,33 @@ export function isProgramStderrEcho(text) {
     return String(text).startsWith('[das:err] ');
 }
 
+// Emscripten's assertion-build watchdog prints these to console.error every 10 s
+// while a load is pending. Progress, not failure: a load that never finishes still
+// fails the row as no frames, or as an audio program that never started.
+export const RUN_DEPENDENCY_WAIT_LINES = [
+    /^still waiting on run dependencies:$/,
+    /^dependency: /,
+    /^\(end of list\)$/,
+];
+
+export function isRunDependencyWait(text) {
+    const s = String(text);
+    return RUN_DEPENDENCY_WAIT_LINES.some((re) => re.test(s));
+}
+
+// A failed request is no failure: the playground probes `<sample>.das.assets.json`
+// for every sample and most have none; an asset a run frame needs and cannot get
+// surfaces as an `asset <url>: …` output-pane line the verdict reads.
+export function isFailedRequest(text) {
+    return String(text).startsWith('Failed to load resource:');
+}
+
+export function isConsolePageError(type, text) {
+    if (type !== 'error') return false;
+    const s = String(text);
+    return !isFailedRequest(s) && !isProgramStderrEcho(s) && !isRunDependencyWait(s);
+}
+
 // Chromium net errors that mean the connection died with NO response delivered,
 // so the request never reached the origin and nothing about the artifact is in
 // question. An artifact URL is immutable (source hash x toolchain id), so asking

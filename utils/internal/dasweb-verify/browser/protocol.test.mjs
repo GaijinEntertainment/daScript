@@ -222,6 +222,33 @@ test('program stderr echoed to the console is not a page error', () => {
     assert.equal(P.isProgramStderrEcho('Blocking on the main thread is very dangerous'), false);
 });
 
+test('emscripten\'s run-dependency watchdog is progress, not a page error', () => {
+    const watchdog = [
+        'still waiting on run dependencies:',
+        'dependency: wasm-instantiate',
+        'dependency: fp /data/level.bin',
+        '(end of list)',
+    ];
+    for (const line of watchdog) {
+        assert.equal(P.isRunDependencyWait(line), true, line);
+        assert.equal(P.isConsolePageError('error', line), false, line);
+    }
+    assert.equal(P.isRunDependencyWait('Aborted(still waiting on run dependencies:)'), false);
+    assert.equal(P.isRunDependencyWait('RuntimeError: unreachable'), false);
+});
+
+test('only console errors are page errors, minus failed requests, stderr echoes and the watchdog', () => {
+    assert.equal(P.isFailedRequest('Failed to load resource: net::ERR_NAME_NOT_RESOLVED'), true);
+    assert.equal(P.isFailedRequest('Uncaught TypeError: Failed to load resource: x'), false);
+    assert.equal(P.isConsolePageError('error', 'Uncaught RangeError: offset is out of bounds'), true);
+    assert.equal(P.isConsolePageError('error', 'WebGL: INVALID_ENUM: glBlitFramebuffer'), true);
+    assert.equal(P.isConsolePageError('warning', 'Uncaught RangeError: offset is out of bounds'), false);
+    assert.equal(P.isConsolePageError('log', 'still waiting on run dependencies:'), false);
+    assert.equal(P.isConsolePageError('error',
+        'Failed to load resource: the server responded with a status of 404 ()'), false);
+    assert.equal(P.isConsolePageError('error', '[das:err] EXCEPTION: join deadlock avoided'), false);
+});
+
 test('a dropped connection is retryable, every other navigation failure is not', () => {
     assert.equal(P.isTransportDrop(
         'page.goto: net::ERR_CONNECTION_CLOSED at https://run.daslang.io/api/build/artifact/a/b/sample.html'), true);

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { Artifacts } from './runner.mjs';
+import { Artifacts, collectPageErrors } from './runner.mjs';
 
 const run = promisify(execFile);
 const RUNNER = fileURLToPath(new URL('./runner.mjs', import.meta.url));
@@ -105,6 +105,47 @@ test('the retry waits before asking again', async () => {
     const t0 = Date.now();
     await captureStderr(() => artifacts.load(ARTIFACT_URL));
     assert.ok(Date.now() - t0 >= 100, `retried after ${Date.now() - t0}ms, expected a wait`);
+});
+
+function listenedPage() {
+    const listeners = {};
+    const page = { on(event, fn) { listeners[event] = fn; } };
+    const emit = (type, text) => listeners.console({ type: () => type, text: () => text });
+    const throwInPage = (message) => listeners.pageerror(new Error(message));
+    return { page, emit, throwInPage };
+}
+
+test('collectPageErrors keeps uncaught exceptions and console errors, not the watchdog', () => {
+    const { page, emit, throwInPage } = listenedPage();
+    const pageErrors = [];
+    collectPageErrors(page, {}, pageErrors);
+    throwInPage('RuntimeError: unreachable');
+    emit('error', 'still waiting on run dependencies:');
+    emit('error', 'dependency: wasm-instantiate');
+    emit('error', '(end of list)');
+    emit('warning', 'Uncaught RangeError: offset is out of bounds');
+    emit('error', 'Uncaught RangeError: offset is out of bounds');
+    assert.deepEqual(pageErrors, ['RuntimeError: unreachable', 'Uncaught RangeError: offset is out of bounds']);
+});
+
+test('collectPageErrors echoes every console message under --console', async () => {
+    const { page, emit } = listenedPage();
+    collectPageErrors(page, { console: true }, []);
+    const written = await captureStderr(async () => {
+        emit('log', 'hello');
+        emit('error', 'still waiting on run dependencies:');
+    });
+    assert.deepEqual(written, ['  [log] hello\n', '  [error] still waiting on run dependencies:\n']);
+});
+
+test('an artifact page collects its page errors from the moment it opens', async () => {
+    const { page, emit } = listenedPage();
+    const context = { async addInitScript() {}, async newPage() { return page; } };
+    const artifacts = new Artifacts({ async newContext() { return context; } }, {});
+    await artifacts.open();
+    emit('error', 'dependency: wasm-instantiate');
+    emit('error', 'Uncaught RangeError: offset is out of bounds');
+    assert.deepEqual(artifacts.pageErrors, ['Uncaught RangeError: offset is out of bounds']);
 });
 
 // main() is behind an entry-point check so `node --test` can import this module.

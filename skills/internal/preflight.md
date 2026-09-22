@@ -69,6 +69,7 @@ working-tree copy.
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+| `dasweb-verify-browser.yml` | `pull_request` touching `utils/internal/dasweb-verify/browser/**`, `web/examples/ui/samples/data.json`, or the workflow file itself; `workflow_dispatch` | `node_test`: `node --test` in `utils/internal/dasweb-verify/browser` - section below |
 | `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push that edits the file itself or what the bundle carries (`utils/dasllama-server/**`, `utils/watchdog/**`, `utils/daspkg/**`, `daslib/daspkg.das`, `modules/dasHV/**`, `modules/dasLLAMA/benchmarks/lcpp_bench.das`, `modules/dasLLAMA/dasllama/dasllama_bench.das`; `.md` edits excepted) | four cells (linux x86_64 and arm64 on ubuntu-22.04, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server` (the server, the watchdog, the `dasllama-bench` companion), smoke, package; a release or a `publish` dispatch uploads to the rolling `dasllama-server` release (and the daslang release being cut). Local mirror: `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>` on the box, then the smoke by hand - the server on a spare port answering `/v1/stats` in setup mode, `dasllama-bench -m none.gguf --help` exiting 0 |
 | `release.yml` | `release: prereleased` and `workflow_dispatch` (build + smoke; publishes nothing) | four cells (linux x86_64, linux arm64, darwin26 arm64, windows x86_64): build, the test suite under `-jit`, bundle + smoke, `.deb` / `.rpm` / pip wheel, sha256 per asset, the `.rpm` and wheel smokes, upload; then `pypi_route` + `publish_pypi` by tag shape - section below |
 | `nightly_issue.yml` | `workflow_call`, from every lane with a cron (`build.yml`, `extended_checks.yml`, `codeql.yml`, `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_lint.yml`, `nightly_playground.yml`, `nightly_vulkan.yml`) once a `schedule` run of that lane has a failed job | keeps ONE open `nightly-failure` issue for the whole nightly, titled `The nightly is red`: the first red lane files it, every lane after that files nothing while it is open. Close the issue when the nightly is green. No local mirror |
@@ -329,3 +330,15 @@ bin/Release/daslang dastest/dastest.das -- --test modules/dasImgui/tests --headl
   --isolated-mode --isolated-mode-threads 4 --timeout 600 \
   --exclude glfw_synth --exclude key_hud --exclude embedded_terminal
 ```
+
+## dasweb-verify-browser.yml
+
+`node_test` (ubuntu-latest, node 22): "SCM Checkout", `actions/setup-node`, "Install runner
+dependencies", "Unit tests". `node --test` runs every `*.test.mjs` in the folder; one case fails
+when a sample in `web/examples/ui/samples/data.json` has no `expectations.json` row, which is why
+that manifest is a trigger path. The suite launches no browser and makes no network request; the
+browser run against the deployed daslang.io is `nightly_playground.yml`.
+
+| CI step | Local mirror |
+|---|---|
+| Install runner dependencies + Unit tests | `npm ci && node --test` in `utils/internal/dasweb-verify/browser` |
