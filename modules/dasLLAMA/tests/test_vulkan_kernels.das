@@ -8884,11 +8884,11 @@ struct DnRowsOut {
 }
 
 //! one `dn_step_cls` dispatch over `nrows` rows: the planes uploaded fresh, the rows' (parity, slot) pairs in the TokMeta block, every output plane read back
-def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
+def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
                              offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
     var r : DnRowsOut
     let proj_bytes = int64(nrows * prow) * 4l
-    let st_bytes = int64(nrows * st_n) * 4l
+    let st_bytes = int64(nslots * st_n) * 4l   //! every slot, whatever the row count: a one-row dispatch in slot 1 writes past a one-slot plane
     let sm_bytes = int64(sm_n) * 4l
     let sc_bytes = int64(nrows * nblk) * 4l
     let q_bytes = int64(nrows * nblk) * 32l
@@ -8900,7 +8900,7 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     let qd = make_device_buf(q_bytes)
     let ofd = make_device_buf(of_bytes)
     var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
-    r.st |> resize(nrows * st_n)
+    r.st |> resize(nslots * st_n)
     r.sm |> resize(sm_n)
     r.sc |> resize(nrows * nblk)
     r.q |> resize(nrows * nblk * 8)
@@ -9016,7 +9016,7 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
     }
     var pars <- [1, 0]   //! the slots' parities differ: each row reads its own image
     var slots <- [0, 1]
-    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
     for (r in range(nrows)) {
         var proj1 : array<float>
         proj1 |> resize(prow)
@@ -9030,7 +9030,7 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
         }
         var pars1 <- [pars[r]]
         var slots1 <- [slots[r]]
-        var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+        var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
         let off_st = rows_off(got.st, want.st, r * st_n, r * st_n, st_n)
         let off_ring = rows_off(got.sm, want.sm, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
         let off_o = (out_f32 ? rows_off(got.of, want.of, r * nvh * ds, 0, nvh * ds)
