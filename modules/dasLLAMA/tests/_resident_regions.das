@@ -304,6 +304,18 @@ enum LogitsBar {
 
 let private WIDE_BAR_REL = 0.10
 
+//! every recurrent layer's device state home, then the host copy's sum: a slot that never came home leaves the sum where it was
+def private dn_state_home(var s : Session) : double {
+    for (l in range64(long_length(s.dn_state_prefix))) {
+        dn_flush_layer(s, l)
+    }
+    var sum = 0.0lf
+    for (v in s.dn_state) {
+        sum += double(v)
+    }
+    return sum
+}
+
 //! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
 def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
     var fa <- feed_a()
@@ -314,6 +326,8 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     var sb <- create_session(tr, mirror_kv_dtype())
     eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
     eval(tr, sb, pb)
+    let hybrid = tr.config.recr_mask != 0ul
+    let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
     var ws <- create_batch_workspace(tr)
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     let gen_a = sa.rdec_gen
@@ -331,6 +345,9 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
             hold_within(t, sa.logits, ra[st + 1l], ra[st], "batched step {st}, row A", rel)
             hold_within(t, sb.logits, rb[st + 1l], rb[st], "batched step {st}, row B", rel)
         }
+    }
+    if (hybrid) {
+        t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
     }
     t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
     t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
