@@ -3200,12 +3200,21 @@ alias_declaration
 // `distinct` is NOT a keyword; the NAME is validated in the action, so the identifier
 // stays free everywhere else (daslib/linq's distinct() etc.)
 distinct_alias
-    :   optional_public_or_private_alias[pubA] NAME[kw] NAME[name] '=' type_declaration[tdecl] {
+    :   optional_public_or_private_alias[pubA] NAME[kw] NAME[name] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeAlias(pubename);
+        }
+    } '=' type_declaration[tdecl] {
         if ( *$kw != "distinct" ) {
             das2_yyerror(scanner,"expected 'distinct', got '"+*$kw+"'",tokAt(scanner,@kw),
                 CompilationError::invalid_distinct_type);
         } else {
             ast_distinctDeclaration(scanner,$name,tokAt(scanner,@name),!$pubA,$tdecl);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@tdecl);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterAlias($name->c_str(),pubename);
         }
         delete $kw;
         delete $name;

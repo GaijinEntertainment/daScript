@@ -251,11 +251,11 @@ KIND.** An rvalue stays materialized, because a reference to a temporary dangles
 **Never reuse a swizzle rewrite's source node in a second output lane without cloning it** -
 the first appearance moves it, and skipping the clone gives one node two parents.
 
-**A diff that changes how the RST label (the `.. _name:` target) or the topic key (the
-`|detail/...|` / `|handmade/...|` substitution name) is computed makes the same change at
-every site in `rst.das` that spells it, keeping them byte-for-byte equal; how a key resolves
-to a file is not the key.** When the two diverge, the page prints a bare signature and the
-symbol re-stubs.
+**A diff that adds or changes a site in `rst.das` that spells a symbol's RST label (the
+`.. _name:` target) or topic key (the `|detail/...|` / `|handmade/...|` substitution name) keeps
+every site in `rst.das` that spells the label or key of that same symbol byte-for-byte equal;
+how a key resolves to a file is not the key.** When two such sites diverge, the page prints a
+bare signature and the symbol re-stubs.
 
 **A diff that adds a numeric value form to the toml lexer routes it through `rewind_to_bare`
 on a bare-key character.** Without the rewind, a bare key that starts like a number lexes as
