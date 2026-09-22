@@ -669,6 +669,11 @@ namespace das {
         }
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
+        if (!expr->no_promotion && !expr->right->type->isAutoOrAlias()) {
+            if (auto opMove = inferAssignOperator("<-", expr)) {
+                return opMove;
+            }
+        }
         // infer
         if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right,
                                "can only move compatible type", CompilationError::cant_move, expr->at)) {
@@ -793,6 +798,22 @@ namespace das {
         }
         markNoDiscard(expr->right);
     }
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+    ExpressionPtr InferTypes::inferAssignOperator(const string &opN, ExprOp2 *expr) {
+        auto opName = "_::" + opN;
+        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
+        tempCall->arguments.push_back(expr->left);
+        tempCall->arguments.push_back(expr->right);
+        auto ffunc = inferFunctionCall(tempCall, InferCallError::tryOperator);
+        if (ffunc || opName != tempCall->name) {
+            reportAstChanged();
+            auto opCall = new ExprCall(expr->at, tempCall->name);
+            opCall->arguments = das::move(tempCall->arguments);
+            return opCall;
+        }
+        gc_free_now(tempCall);
+        return nullptr;
+    }
     ExpressionPtr InferTypes::visit(ExprCopy *expr) {
         if (auto nExpr = promoteAssignmentToProperty(expr)) {
             reportAstChanged();
@@ -811,6 +832,11 @@ namespace das {
             if (rangeError) {
                 expr->type = new TypeDecl(); // suppress downstream type-mismatch
                 return Visitor::visit(expr);
+            }
+        }
+        if (!expr->no_promotion) {
+            if (auto opCopy = inferAssignOperator("=", expr)) {
+                return opCopy;
             }
         }
         // infer
@@ -940,16 +966,18 @@ namespace das {
             }
         }
         // lets infer clone call (and instance generic if need be)
-        auto opName = "_::clone";
-        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
-        tempCall->arguments.push_back(expr->left);
-        tempCall->arguments.push_back(expr->right);
-        expr->func = inferFunctionCall(tempCall, InferCallError::tryOperator);
-        if (expr->func || opName != tempCall->name) { // this happens when the clone gets instanced
-            reportAstChanged();
-            auto opCall = new ExprCall(expr->at, tempCall->name);
-            opCall->arguments = das::move(tempCall->arguments);
-            return opCall;
+        if (!expr->no_promotion) {
+            auto opName = "_::clone";
+            auto tempCall = new ExprLooksLikeCall(expr->at, opName);
+            tempCall->arguments.push_back(expr->left);
+            tempCall->arguments.push_back(expr->right);
+            expr->func = inferFunctionCall(tempCall, InferCallError::tryOperator);
+            if (expr->func || opName != tempCall->name) { // this happens when the clone gets instanced
+                reportAstChanged();
+                auto opCall = new ExprCall(expr->at, tempCall->name);
+                opCall->arguments = das::move(tempCall->arguments);
+                return opCall;
+            }
         }
         // infer
         if (!isSameSmartPtrType(expr->left->type, expr->right->type, true)) {
@@ -976,7 +1004,9 @@ namespace das {
                 reportAstChanged();
                 auto cloneFn = new ExprCall(expr->at, "clone_string");
                 cloneFn->arguments.push_back(expr->right->clone());
-                return new ExprCopy(expr->at, expr->left->clone(), cloneFn);
+                auto eCopy = new ExprCopy(expr->at, expr->left->clone(), cloneFn);
+                eCopy->no_promotion = expr->no_promotion;
+                return eCopy;
             } else if (cloneType->isPointer() && cloneType->smartPtr) {
                 if ( !cloneType->firstType || !cloneType->firstType->annotation ) {
                     error("can only clone smart pointer to handled type", "", "",
@@ -1008,6 +1038,7 @@ namespace das {
                 reportAstChanged();
                 auto eCopy = new ExprCopy(expr->at, expr->left->clone(), expr->right->clone());
                 eCopy->allowCopyTemp = true;
+                eCopy->no_promotion = expr->no_promotion;
                 return eCopy;
             } else if (cloneType->isGoodArrayType() || cloneType->isGoodTableType()) {
                 reportAstChanged();

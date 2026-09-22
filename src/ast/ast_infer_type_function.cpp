@@ -1205,6 +1205,38 @@ namespace das {
     bool InferTypes::verifyCloneFunc(const MatchingFunctions &fnList, const LineInfo &at) const {
         return verifyAnyFunc(fnList, at);
     }
+    MatchingFunctions InferTypes::getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right) const {
+        auto leftRef = new TypeDecl(*left);
+        leftRef->ref = true;
+        leftRef->constant = false;
+        vector<TypeDeclPtr> argDummy = {leftRef, right};
+        auto fns = findMatchingFunctions("*", thisModule, opName, argDummy);
+        applyLSP(argDummy, fns);
+        return fns;
+    }
+    static bool isAssignInitCall ( Expression * init ) {
+        if ( !init->rtti_isCall() ) return false;
+        auto call = static_cast<ExprCall *>(init);
+        const string & name = !call->func ? call->name
+            : call->func->fromGeneric ? call->func->getOrigin()->name : call->func->name;
+        return name == "copy_to_move" || name == "move_to_move"
+            || name == "_::copy_to_move" || name == "_::move_to_move";
+    }
+    ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
+        if ( init->type && init->type->isAutoOrAlias() ) return nullptr;
+        if ( isAssignInitCall(init) ) return nullptr;
+        auto fns = getAssignFunc(opName, varType, init->type);
+        if ( fns.empty() || !verifyAnyFunc(fns, at) ) return nullptr;
+        reportAstChanged();
+        auto call = new ExprCall(at, opName == "<-" ? "move_to_move" : "copy_to_move");
+        call->arguments.push_back(init);
+        auto tdecl = new TypeDecl(*varType);
+        tdecl->ref = false;
+        tdecl->constant = false;
+        tdecl->temporary = false;
+        call->arguments.push_back(new ExprTypeDecl(at, tdecl));
+        return call;
+    }
     MatchingFunctions InferTypes::getFinalizeFunc(const TypeDeclPtr &subexpr) const {
         vector<TypeDeclPtr> argDummy = {subexpr};
         auto fins = findMatchingFunctions("*", thisModule, "finalize", argDummy); // "_::finalize"

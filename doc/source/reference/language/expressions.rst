@@ -542,6 +542,12 @@ matching overload (or a variant macro) exists:
 +--------------+---------------------------------------------------+
 | ``a !?as x`` | safe variant access (skips ``operator ?as``)      |
 +--------------+---------------------------------------------------+
+| ``a !== b``  | copy (skips ``operator =``)                       |
++--------------+---------------------------------------------------+
+| ``a !<- b``  | move (skips ``operator <-``)                      |
++--------------+---------------------------------------------------+
+| ``a !:= b``  | clone (skips ``operator :=``)                     |
++--------------+---------------------------------------------------+
 
 Generated and generic code uses these forms to guarantee the language's own
 semantics no matter what overloads a user module brings into scope.

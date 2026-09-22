@@ -297,6 +297,12 @@ namespace das {
 
         MatchingFunctions getCloneFunc(const TypeDeclPtr &left, const TypeDeclPtr &right) const;
 
+        MatchingFunctions getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right) const;
+
+        ExpressionPtr inferAssignOperator(const string &opN, ExprOp2 *expr);
+
+        ExpressionPtr promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at);
+
         bool verifyCloneFunc(const MatchingFunctions &fnList, const LineInfo &at) const;
 
         MatchingFunctions getFinalizeFunc(const TypeDeclPtr &subexpr) const;

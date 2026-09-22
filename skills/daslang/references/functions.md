@@ -266,10 +266,26 @@ def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.
 // ball.magnitude reads, ball.magnitude := 10.0 writes
 ```
 
+### Copy, move and clone
+
+`=`, `<-` and `:=` overload on the pair of types (destination first, a `var T&`), and an overload
+for the exact pair wins over the built-in copy, move or clone, like `operator .` over a field.
+Initialization uses the same overload: `var x : T = src` lowers to `x <- copy_to_move(src, type<T>)`
+(`<-` init to `move_to_move`, `:=` init to `clone_to_move`). Inside the body, the raw form
+(`dst !== src`, `dst !<- src`, `dst !:= src`) is the built-in operation, so a same-pair overload
+does not call itself.
+
+```das
+typedef distinct SoundHandle = uint
+def operator = (var dst : SoundHandle&; src : int) { dst !== SoundHandle(uint(src)) }
+var handle : SoundHandle = 0   // through the operator; so is `handle = 0` and a struct field `h : SoundHandle = 0`
+```
+
 ### Original-operator access (`!`)
 
 `!` in front of any overloadable access or test operator yields the **original** operator, never
-the overload: `a!.x`, `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`, `a !as x`, `a !?as x`.
+the overload: `a!.x`, `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`, `a !as x`, `a !?as x`,
+`a !== b`, `a !<- b`, `a !:= b`.
 The variant and coalescing forms also bypass variant macros. Legacy spelling: `t . .field` ==
 `t!.field`, the space required because `t..field` lexes as the interval operator.
 

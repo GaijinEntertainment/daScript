@@ -848,6 +848,9 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return NOTQBRA;
 }
 <normal>"\!\?\?"                            return NOTQQ;
+<normal>"\!\=\="                            return NOTEQUEQU;
+<normal>"\!\<\-"                            return NOTLARROW;
+<normal>"\!\:\="                            return NOTCLONEEQU;
 <normal>\!is([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT NOTOP"); return NOTIS;
 <normal>\!as([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT NOTOP"); return NOTAS;
 <normal>\!\?as([^a-zA-Z0-9_])                unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT NOTOP"); return NOTQAS;

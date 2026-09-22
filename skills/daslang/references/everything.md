@@ -2298,17 +2298,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
-- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
-- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
-- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
-- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
-- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
-- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
-- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
-- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
-- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
-- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
+- `render_bd`
+- `render_cowbell`
+- `render_cp`
+- `render_crash`
+- `render_hh`
+- `render_oh`
+- `render_ride`
+- `render_rimshot`
+- `render_sd`
+- `render_tambourine`
+- `render_tom`
 
 ### Oscillator type
 
@@ -3689,6 +3689,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `ExprMakeBlockFlags` - properties of the `ExprMakeBlock` object.
 - `CopyFlags` - properties of the `ExprCopy` object.
 - `MoveFlags` - Properties of the `ExprMove` object.
+- `CloneFlags` - Properties of the `ExprClone` object.
 - `IfFlags` - properties of the `ExprIf` object.
 - `StringBuilderFlags` - properties of the `ExprStringBuilder` object.
 - `ExpressionPtr` - Smart pointer to an `Expression` object.
@@ -4744,6 +4745,7 @@ The ARCHIVE module implements general-purpose serialization infrastructure. It p
 - `MemSerializer.extractData` - Extract the data from the serializer.
 - `MemSerializer.getCopyOfData` - Returns copy of the data from the serializer.
 - `MemSerializer.getLastError` - Returns last serialization error.
+- `MemSerializer.MemSerializer` - Initialize the serializer for reading or writing.
 
 ### Serialization
 
@@ -5003,6 +5005,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `CursorVisitor.generated_variable`
 - `CursorVisitor.on_field_name`
 - `CursorVisitor.cursor_on_token`
+- `CursorVisitor.CursorVisitor`
 
 ### Cursor queries
 
@@ -5525,7 +5528,7 @@ The DECS module implements a Data-oriented Entity Component System. Entities are
 
 ### Constants
 
-- `INVALID_ENTITY_ID`
+- `INVALID_ENTITY_ID` - Entity ID which represents invalid entity.
 
 ### Structures
 
@@ -5676,10 +5679,12 @@ C#-like multicast delegate (multicast callback) via type macro. Generates a stru
 - `DelegateReturn.clone`
 - `DelegateReturn.`
 - `DelegateReturn.each`
+- `DelegateReturn.DelegateReturn`
 - `DelegateVoid`
 - `DelegateVoid.clone`
 - `DelegateVoid.`
 - `DelegateVoid.each`
+- `DelegateVoid.DelegateVoid`
 
 ### Delegate type macro
 
@@ -6162,11 +6167,11 @@ The JSON-RPC module is a transport-agnostic JSON-RPC 2.0 implementation (https:/
 
 ### Constants
 
-- `PARSE_ERROR`
-- `INVALID_REQUEST`
-- `METHOD_NOT_FOUND`
-- `INVALID_PARAMS`
-- `INTERNAL_ERROR`
+- `PARSE_ERROR` - < Invalid JSON received.
+- `INVALID_REQUEST` - < Not a valid request object.
+- `METHOD_NOT_FOUND` - < Method does not exist or is not available.
+- `INVALID_PARAMS` - < Invalid method params.
+- `INTERNAL_ERROR` - < Internal JSON-RPC error.
 
 ### Structures
 
@@ -6952,8 +6957,8 @@ The RANDOM module implements pseudo-random number generation using a linear cong
 
 ### Constants
 
-- `LCG_RAND_MAX`
-- `LCG_RAND_MAX_BIG`
+- `LCG_RAND_MAX` - maximum possible output of random number generator
+- `LCG_RAND_MAX_BIG` - maximum possible output of random_big_int
 
 ### Seed and basic generators
 
@@ -7716,29 +7721,29 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 ### Encoding and decoding
 
-- `decode_unicode_escape` - Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
-- `utf16_to_utf32` - Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
-- `utf8_decode` - Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
-- `utf8_encode` - Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
+- `decode_unicode_escape`
+- `utf16_to_utf32`
+- `utf8_decode`
+- `utf8_encode`
 
 ### Iteration
 
-- `each_word` - Tokenizes UTF-8 into lower-cased word tokens (uses `utf32_is_word_char` for boundaries, `utf32_to_lower` for case fold).
+- `each_word`
 
 ### Length and measurement
 
-- `utf8_length` - Returns the number of characters in the UTF-8 string
+- `utf8_length`
 
 ### Validation
 
-- `contains_utf8_bom` - Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
-- `is_first_byte_of_utf8_char` - Returns true if the given byte is the first byte of a UTF-8 character.
-- `is_utf8_string_valid` - Returns true if the byte array contains a valid UTF-8 encoded string.
+- `contains_utf8_bom`
+- `is_first_byte_of_utf8_char`
+- `is_utf8_string_valid`
 
 ### Unicode word/case primitives
 
-- `utf32_is_word_char` - ASCII `[A-Za-z0-9_]` fast path; otherwise consults a non-word range table.
-- `utf32_to_lower` - Lowercases a codepoint.
+- `utf32_is_word_char`
+- `utf32_to_lower`
 
 ## validate_code
 

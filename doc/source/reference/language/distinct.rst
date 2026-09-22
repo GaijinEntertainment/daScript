@@ -81,6 +81,40 @@ value, and the nominal wall still holds, so ``table<EntityId; string>`` refuses 
 key and a key of any other distinct type over ``int`` at compile time. Arrays, struct fields,
 tuple and variant fields all work as well.
 
+-----------------------
+Assignment across types
+-----------------------
+
+The wall between a distinct type and everything else is opened only by an operator you write.
+``=`` and ``<-`` overload on the pair of types (see :ref:`Functions <functions>`), and every
+init or assignment of that pair - a local, a global, a struct field default, a field in
+``Sfx(current = 0)``, a plain assignment - goes through it. Code that predates a distinct type, such as
+``handle : SoundHandle = 0`` and ``handle = 0``, keeps compiling once the module defines the
+pair it uses:
+
+.. code-block:: das
+
+    typedef distinct SoundHandle = uint
+
+    def operator = (var dst : SoundHandle&; src : int) {
+        dst !== SoundHandle(uint(src))
+    }
+
+    def operator != (h : SoundHandle; z : int) : bool => *h != uint(z)
+
+    struct Sfx {
+        current : SoundHandle = 0       // the operator, at field-default time
+    }
+
+    def stop(var sfx : Sfx) {
+        if (sfx.current != 0) {
+            sfx.current = 0             // the operator again
+        }
+    }
+
+The raw form ``dst !== src`` inside the operator body is the built-in copy, so an overload on
+the same pair never recurses into itself.
+
 ---------
 Overloads
 ---------

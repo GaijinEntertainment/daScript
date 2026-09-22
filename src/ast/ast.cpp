@@ -2286,6 +2286,7 @@ namespace das {
     ExpressionPtr ExprClone::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprClone>(expr);
         ExprOp2::clone(cexpr);
+        cexpr->cloneFlags = cloneFlags;
         return cexpr;
     }
 

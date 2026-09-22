@@ -15,11 +15,11 @@ require strings
 require jobque
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/rst
+require daslib/rst_comment
 require daslib/strings_convert
 require daslib/md_boost
 require daslib/clargs
-require daslib/rst
-require daslib/rst_comment
 require daslib/functional
 require daslib/json
 require daslib/json_boost
@@ -181,7 +181,7 @@ def document_module_builtin(_root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_%%)),
-        hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone%%)),
+        hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~(clone|copy_to_move|move_to_move)%%)),
         hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%)),
         hide_group(group_by_regex("Internal container init infrastructure", mod, %regex~_table_index_and_init%%)),
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|resize_no_init|reserve|each|each_kv|emplace|emplace_from|erase|find|

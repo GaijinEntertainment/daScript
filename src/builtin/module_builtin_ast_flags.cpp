@@ -257,14 +257,21 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "CopyFlags";
-        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "allowConstantLValue" };
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "allowConstantLValue", "no_promotion" };
         return ft;
     }
 
     TypeDeclPtr makeExprMoveFlags() {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "MoveFlags";
-        ft->argNames = { "takeOverRightStack", "allowConstantLValue", "podDelete" };
+        ft->argNames = { "takeOverRightStack", "allowConstantLValue", "podDelete", "no_promotion" };
+        return ft;
+    }
+
+    TypeDeclPtr makeExprCloneFlags() {
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
+        ft->alias = "CloneFlags";
+        ft->argNames = { "no_promotion" };
         return ft;
     }
 
@@ -314,6 +321,7 @@ namespace das {
         addAlias(makeExprMakeBlockFlags());
         addAlias(makeExprCopyFlags());
         addAlias(makeExprMoveFlags());
+        addAlias(makeExprCloneFlags());
         addAlias(makeExprIfFlags());
         addAlias(makeExprStringBuilderFlags());
     }

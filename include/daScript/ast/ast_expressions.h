@@ -488,6 +488,7 @@ namespace das
                 bool allowCopyTemp : 1;
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
+                bool no_promotion : 1;
             };
             uint32_t copyFlags = 0;
         };
@@ -507,6 +508,7 @@ namespace das
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
                 bool podDelete : 1;
+                bool no_promotion : 1;
             };
             uint32_t moveFlags = 0;
         };
@@ -522,6 +524,12 @@ namespace das
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual bool rtti_isClone() const override { return true; }
+        union {
+            struct {
+                bool no_promotion : 1;
+            };
+            uint32_t cloneFlags = 0;
+        };
     };
 
     // this only exists during parsing, and can't be

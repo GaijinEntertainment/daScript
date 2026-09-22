@@ -1246,6 +1246,24 @@ def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
+def copy_to_move(copy_src; _t : type<auto(TT)>) : TT -const -# {
+    //! A fresh `TT` assigned from `copy_src` through `operator =`, returned by move: what `var x : TT = copy_src` lowers to when an `operator =` takes the pair.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+def move_to_move(var move_src; _t : type<auto(TT)>) : TT -const -# {
+    //! A fresh `TT` moved from `move_src` through `operator <-`, returned by move: what `var x : TT <- move_src` lowers to when an `operator <-` takes the pair.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var move_dest : TT -#
+        move_dest <- move_src
+        return <- move_dest
+    }
+}
+
 def clone_dim(var a; b : auto | #) {
     static_if (typeinfo is_dim(a) && typeinfo is_dim(b) && typeinfo dim(a) == typeinfo dim(b)) {
         static_if (typeinfo is_pod(a)) {

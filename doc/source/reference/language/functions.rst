@@ -609,8 +609,10 @@ The following table lists all operators that can be overloaded in Daslang:
      - ``?[]``
    * - Dot
      - ``.``  ``?.``  ``. name``  ``. name :=``  ``. name +=``  etc.
+   * - Assignment
+     - ``=`` (copy)  ``<-`` (move)  ``:=`` (clone)
    * - Type
-     - ``:=`` (clone)  ``delete`` (finalize)  ``is``  ``as``  ``?as``
+     - ``delete`` (finalize)  ``is``  ``as``  ``?as``
    * - Null coalesce
      - ``??``
    * - Interval
@@ -646,6 +648,39 @@ In the parser, ``++operator`` is the prefix form and ``operator++`` is the postf
     }
 
 The same pattern applies to ``--``.
+
+---------------------------------------------
+Copy, move and clone operators
+---------------------------------------------
+
+``=``, ``<-`` and ``:=`` overload like any other operator, and an overload for the exact
+pair of types wins over the built-in copy, move or clone - the same rule as ``operator .``
+over field access. The first parameter is the destination, a mutable reference; the second
+is the source, of any type:
+
+.. das-doc: given typedef distinct SoundHandle = uint
+.. code-block:: das
+
+    def operator = (var dst : SoundHandle&; src : int) {
+        dst !== SoundHandle(uint(src))
+    }
+
+    def operator = (var dst : uint&; src : SoundHandle) {
+        dst !== *src
+    }
+
+    var handle : SoundHandle = 0        // operator = (SoundHandle&, int)
+    handle = 0                          // the same overload
+    var raw : uint = handle             // operator = (uint&, SoundHandle)
+
+Initialization goes through the same overload: ``var x : T = src`` (a local, ``let`` or ``var``,
+a global, a struct field default, a field in ``S(x = src)``) becomes ``x <- copy_to_move(src, type<T>)``, a fresh ``T`` assigned
+through the operator and moved in, exactly as ``var x : T := src`` becomes
+``clone_to_move(src)``; ``var x : T <- src`` uses ``move_to_move`` and ``operator <-``.
+
+Inside an operator body, spell the built-in operation with the raw form - ``dst !== src``,
+``dst !<- src``, ``dst !:= src`` - so an overload on the same pair of types does not call
+itself. The raw forms are listed under :ref:`Original Operator Access <expressions>`.
 
 ---------------------------------------------
 Compound assignment operators
