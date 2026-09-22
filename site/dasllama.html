@@ -151,8 +151,13 @@
   .dl-table--bench thead th.is-sorted.is-desc::after { content: ' ▼'; }
   .dl-table--bench tbody tr.dl-row { cursor: pointer; }
   .dl-table--bench tbody tr.dl-row--flat { cursor: default; }
-  .dl-table--bench tbody td { padding: 8px 9px; white-space: nowrap; }
-  .dl-table--bench thead th { padding: 12px 9px; }
+  .dl-table--bench tbody td { padding: 8px 6px; white-space: nowrap; }
+  .dl-table--bench thead th { padding: 12px 6px; }
+  /* the three text columns wrap so the numbers stay inside the container (the same three rules
+     as files/dasllama-table.css, which dasllama.io loads and this page inlines) */
+  .dl-table--bench td.dl-td-model { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; min-width: 170px; max-width: 230px; }
+  .dl-table--bench td.dl-td-machine { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; min-width: 110px; max-width: 170px; }
+  .dl-table--bench td.dl-td-lane { white-space: normal; min-width: 56px; }
   /* group boundary: a hairline before each metric block, so "das | ref | ratio" reads as a unit */
   .dl-table--bench th.dl-grp-start, .dl-table--bench td.dl-grp-start { border-left: 1px solid var(--rule); }
   .dl-table--bench .dl-dim2 { color: var(--fg-dim); }
