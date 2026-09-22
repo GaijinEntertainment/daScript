@@ -200,25 +200,23 @@ plane's whole `RDec.nb`-row extent, never one row's.** A per-row plane is a buff
 sizes to one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read
 past its binding on every row but the first.
 
-**Every `TokMeta` block a diff fills - in the resident driver, a seam, or a test - writes
-`mirbase`, the row's mirror base in elements; a site with one mirror region writes 0.** The
-attention and the mirror store add that field to every K/V address they touch, so a block left
-unwritten sends a row at whatever base the memory held.
+**Every `TokMeta` block a diff fills - in the resident driver, a seam, a probe or a test - writes
+every field the kernels that block feeds read: `mirbase`, the row's mirror base in elements, and
+`dnslot`, the row's deltanet state and ring slot; a site with one region writes 0 for both.** The
+attention and the mirror store add `mirbase` to every K/V address they touch, and the fused step
+kernel carries no slot in its push and reads `dnslot` from the row's block, so a field left
+unwritten sends a row at whatever base or state the memory held.
 
-**Every `TokMeta` block a diff fills for a model with a recurrent layer writes `dnslot`, the
-row's deltanet state and ring slot; a site with one region writes 0.** The fused step kernel
-carries no slot in its push and reads the slot from the row's block, so an unwritten field steps
-whatever state the memory held.
+**A binding of the `TokMeta` block - in the resident driver, a seam, a probe or a test - is sized
+`TOK_META_BYTES * rows`, never a literal.** A binding at an older row width leaves every row past
+the first reading its position, count and region outside the binding, with no error.
 
-**A descriptor set the resident prefill's recurrent block builds (`pf_dn_layer_sets` in
-`dasllama/dasllama_vulkan_prefill.das`) binds the whole deltanet state and smalls buffers - every
-mirror region's slot - never one region's slot.** The block names the region in its push constants
-(the scan's state base, the conv and tail's ring offset), so a set narrowed to one slot's range
-sends every other region's dispatch past its binding.
-
-**A diff that grows `TokMeta` sizes every binding of the block at `TOK_META_BYTES * rows`,
-never at a literal.** A binding kept at the old row width leaves every row past the first
-reading its position, count and region outside the binding, with no error.
+**A descriptor set the resident driver builds for a command whose dispatches index a plane by row
+or by region - the N-row token command's per-row planes, the prefill's recurrent block over the
+deltanet state and smalls buffers (`pf_dn_layer_sets` in `dasllama/dasllama_vulkan_prefill.das`) -
+binds the plane's whole extent, `RDec.nb` rows or every region's slot, never one row's or one
+slot's range.** The dispatch names its row or region in its metadata or its push, so a set
+narrowed to one row or slot sends every other row's dispatch past its binding.
 
 **A diff that adds a recorded form - a recorder that builds the resident token command into its
 own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name

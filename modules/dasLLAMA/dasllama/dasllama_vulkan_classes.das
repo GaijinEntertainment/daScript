@@ -31,7 +31,7 @@ struct TokMeta {
     dnslot : uint
     pad0 : uint
     pad1 : uint
-    pad2 : uint     //! the row is TOK_META_BYTES wide
+    pad2 : uint
 }
 
 // ===== add + rmsnorm =====
@@ -2299,8 +2299,7 @@ struct DnStepArgs {
     eps : float
     qscale : float
     out_f32 : uint
-    nvh : uint
-    bstride : uint
+    beta_row_stride : uint
 }
 
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
@@ -2326,13 +2325,14 @@ class DnStepFused {
 
     [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
-        let row = gl_WorkGroupID.x / pa.nvh
-        let h = gl_WorkGroupID.x % pa.nvh
         let ds = pa.ds
+        let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
+        let row = gl_WorkGroupID.x / nvh
+        let h = gl_WorkGroupID.x % nvh
         let taps = pa.dconv - 1u
         let par = tok[row].parity
         let slot = tok[row].dnslot
-        let prow = row * (pa.cd + pa.nvh * ds)
+        let prow = row * (pa.cd + nvh * ds)
         let ringb = pa.hist_off + slot * 2u * pa.cd * taps
         let rrb = ringb + par * pa.cd * taps
         let wrb = ringb + (1u - par) * pa.cd * taps
@@ -2404,9 +2404,9 @@ class DnStepFused {
             let sk = 1.0 / max(sqrt(sumk), pa.eps)
             ds8[0u] = sq
             ds8[1u] = sk
-            let graw = smalls[pa.g_off + row * pa.nvh + h] + smalls[pa.dt_off + h]
+            let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.bstride + h]))
+            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.beta_row_stride + h]))
             ds8[4u] = qkr * sq * sk
         }
         barrier()
@@ -2420,7 +2420,7 @@ class DnStepFused {
         let active = tid < ds * nparts
         let c = tid % ds
         let r0 = (tid / ds) * rows_per_part
-        let sbase = slot * pa.nvh * ds * ds + h * ds * ds
+        let sbase = slot * nvh * ds * ds + h * ds * ds
         var sreg : float[64]
         var ksp = 0.0
         var qsp = 0.0
@@ -2490,7 +2490,7 @@ class DnStepFused {
             e += 256u
         }
         barrier()
-        let orow = (row * pa.nvh + h) * ds
+        let orow = (row * nvh + h) * ds
         if (pa.out_f32 != 0u) {
             e = tid
             while (e < ds) {

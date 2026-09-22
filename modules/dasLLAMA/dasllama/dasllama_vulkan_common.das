@@ -313,7 +313,8 @@ let DN_SM_WNORM = DN_SM_TAPS + DN_MAX_CD * DN_MAX_DCONV
 let DN_SM_A = DN_SM_WNORM + DN_MAX_DS
 let DN_SM_DT = DN_SM_A + DN_MAX_HEADS
 let DN_SM_HIST = DN_SM_DT + DN_MAX_HEADS
-let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + 64l) * 4l
+let DN_SM_SLACK = 64l   //! floats past the last ring image, so a ring's last row never sits at the buffer's end
+let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + DN_SM_SLACK) * 4l
 let DN_TAIL_BYTES = DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
 // decode-step scratch: the raw β/γ staging (+ the ring parity word) and the o-row Q8_0 image
@@ -2428,7 +2429,7 @@ struct RDec {
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
-    dn_par : array<int>
+    dn_parity : array<int>
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64

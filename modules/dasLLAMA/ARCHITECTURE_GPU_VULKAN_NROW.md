@@ -67,7 +67,7 @@ row-at-a-time loop serves.
 **A recurrent layer's head steps the rows in their regions' state slots.** The qkv, z, beta/alpha
 and out GEMVs go out in their N-column forms over the rows' planes - a projection row (qkv | z) a
 row, the beta and alpha rows a row apart at the arm's stride (the q8 arm's GEMVs land them `nvh`
-apart, the f32 arm's router form `2 x nvh`, `DnStepArgs.bstride`), an o row a row - and the fused
+apart, the f32 arm's router form `2 x nvh`, `DnStepArgs.beta_row_stride`), an o row a row - and the fused
 step (`dn_step_cls`) runs a workgroup per (row, head), the row's `TokMeta` naming the state and
 ring slot (`dnslot`) and the ring parity it reads, so two rows in two regions advance two states
 in one dispatch and the driver flips each row's region parity after the submit

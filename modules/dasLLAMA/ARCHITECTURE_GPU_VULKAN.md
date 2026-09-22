@@ -200,7 +200,7 @@ slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 
 cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
 parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v). A prompt from position
 zero resets the region's parity word and zero-fills the slot's state and its first ring image
-alone (`pf_dn_zero`), so the first window's conv reads a zero history and the last window's tail
+alone (`pf_dn_zero_region`), so the first window's conv reads a zero history and the last window's tail
 lands in image 0, the parity the owner handoff hands the session. The weight planes stay in their file
 formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v
 carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.

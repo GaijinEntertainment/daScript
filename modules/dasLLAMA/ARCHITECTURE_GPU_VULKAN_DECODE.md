@@ -235,7 +235,7 @@ so the layer after it requants on its own.
 
 **Each recurrent layer owns a device state slot per mirror region in the per-op step's shape**
 (`RLayer.dn`: a `DnStep` a region over one state and one smalls buffer - the slot's state at
-`state_off`, its parity-double-buffered conv ring at `hist_off`, the owner's host addresses), and
+`state_byte_off`, its parity-double-buffered conv ring at `hist_off`, the owner's host addresses), and
 the ownership rule of sec.2.2u holds per slot: before a token the driver binds the selected
 region's slot in every recurrent layer to the calling session (`vk_rdec_dn_own` - the owner's path
 is one pointer compare; a foreign dirty slot flushes home first, then the session's state and
@@ -244,7 +244,7 @@ table, and a position-zero reset releases the session's slots. The ring parity i
 (`RDec.dn_par`), riding the row's `TokMeta` with its slot index (`parity`, `dnslot`): a region's
 slots step once per row, so the driver flips its word after each row it submits. A slot is
 `nvh x ds x ds` floats of state and a ring pair of `2 x cd x (dconv - 1)` floats; the step kernel
-binds every slot and indexes the row's own from `dnslot` and `DnStepArgs.nvh`. Two regions step
+binds every slot and indexes the row's own from `dnslot` and the head count its geometry pins. Two regions step
 with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao).
 
 **The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the

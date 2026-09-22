@@ -1693,3 +1693,12 @@ module) is independent and can land any time - it is pure structure.
     the six `test_mtp_sampled_walk.das` assertions reading the one name - after saying in one
     line that a speculative round and a device pick are never live on one session in one step
     (the scheduler's speculative arm never asks a pick).
+87. **The mistral3 family has no batched evidence.** Mistral-Small-3.1-24B-Instruct-2503 Q4_K_M
+    (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
+    K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
+    rows and `PERF_LEDGER.md` carries no row. The work, on a box with the room: a regions file in
+    `test_gpu_resident_regions_llama_k.das`'s shape (the two batched-step cells on the split bar,
+    large tier) registered in `tests/run.das`, and the section's row form - `daslang -jit
+    benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
+    arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b
+    2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` on the same file the same hour.

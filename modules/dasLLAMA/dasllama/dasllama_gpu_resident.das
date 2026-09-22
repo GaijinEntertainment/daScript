@@ -1733,6 +1733,15 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     s.rdec_host_current = true   // the host still holds everything the mirror does
 }
 
+//! a row's recurrent state into its selected region's slots before the step: the state from zero at position 0, its position advanced
+def private rdec_dn_row_own(var s : Session; c : Config; pos : int64) {
+    if (pos == 0l) {
+        dn_reset(s)
+    }
+    s.dn_pos = pos + 1l
+    rdec_dn_own_all(s, c.n_layers)
+}
+
 [hot_path]
 def private rdec_dn_own_all(var s : Session; n_layers : int64) {
     for (l in range64(n_layers)) {
@@ -2048,11 +2057,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
             rdec_take_mirror(t, s, r, pos)
         }
         if (c.recr_mask != 0ul) {
-            if (pos == 0l) {
-                dn_reset(s)
-            }
-            s.dn_pos = pos + 1l
-            rdec_dn_own_all(s, c.n_layers)
+            rdec_dn_row_own(s, c, pos)
         }
         copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
@@ -2127,11 +2132,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             rdec_take_mirror(t, s, r, pos)
         }
         if (c.recr_mask != 0ul) {
-            if (pos == 0l) {
-                dn_reset(s)
-            }
-            s.dn_pos = pos + 1l
-            rdec_dn_own_all(s, c.n_layers)
+            rdec_dn_row_own(s, c, pos)
         }
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
         for (k in range64(dim)) {

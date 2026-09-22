@@ -2462,11 +2462,16 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
 
 ### From the Vulkan hybrid rows arc (2026-09-22)
 
-Instruments as the E-series section above (the pod's cm2 arm and its KHR arm under
-`DASLLAMA_COOPMAT=mm`, `lcpp_bench.das --npl 4` three reps, llama.cpp b10660's Vulkan
-`llama-batched-bench` the same hour, `external`; every ratio `tg128@4` against the reference's
-`S_TG` at `-npl 4` [direction-grade - two processes]; a lever's pair is two commits in two processes
-[direction-grade - two commits]). The pod alone so far; the 5060 Ti rows are owed.
+Instruments as the E-series section above: the pod (RTX PRO 4500, Linux), `daslang -jit
+benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2 arm
+and on the KHR arm under `DASLLAMA_COOPMAT=mm`, `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0
+DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1 DAS_JOBQUE_THREADS=16` and no `DAS_TUNE_POLICY`
+override (the untuned tier) for every carrier; llama.cpp b10660's prebuilt Vulkan
+`llama-batched-bench -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` the same
+hour, `external`; every ratio `tg128@4` against the reference's `S_TG` at `-npl 4`
+[direction-grade - two processes]; a lever's pair is two commits in two processes
+[direction-grade - two commits]. The test counts below are the same box and tier under
+`dastest -jit`, cm2, `DAS_JOBQUE_THREADS=8`. No 5060 Ti row is in this section.
 
 - **The residency (commit d14bc2e32: a deltanet state slot per mirror region, the row's slot and
   parity in its `TokMeta` row, the prefill in the selected region's slot):** the one-row rates
@@ -2489,15 +2494,23 @@ Instruments as the E-series section above (the pod's cm2 arm and its KHR arm und
   prologue stamp stores no float row (a recurrent layer 0 reading one now takes the split
   prologue), and four rope and attention sets bound the grown `TokMeta` block at its old row width,
   every row past the first reading its position outside the binding.
+- **The per-region planes' footprint (computed from the geometry, no device measurement):** a
+  recurrent layer's state slots are `regions x nvh x ds x ds x 4` bytes and its ring pairs
+  `regions x 2 x cd x (dconv - 1) x 4` - at four regions on the Qwen3.5-0.8B (16 heads of 128,
+  cd 6144, dconv 4) 4 MB + 0.6 MB a layer over 18 recurrent layers, 83 MB; on the Qwen3.6-35B-A3B
+  (32 heads of 128, cd 12288) 8 MB + 1.2 MB a layer over 30 layers, 276 MB; at `RD_NB_MAX` (eight)
+  regions twice that. The rows' deltanet planes grow by the row count: the projection row
+  `(cd + di) x 4`, the o row `di` bytes plus `di / 32 x 4` of scales plus `di x 4` of f32, so
+  eight rows on the 35B hold 0.9 MB. Beside the K/V mirror the same regions hold (the residency
+  section's sizing), the slots are within a percent of the plan.
 - **The carriers that served batched without evidence (the phi3, gemma3 and mistral3 families), the
   same instruments, tg128@4 ours cm2 / ours KHR / llama.cpp:** Phi-3.5-mini Q4_K_M 578.7 +/- 0.4 /
   574.8 +/- 0.4 / 552.1 (1.05 / 1.04), flat 220.4 / 221.0 / 217.4; gemma-3-1b Q8_0 1240.1 +/- 0.3 /
   1240.3 +/- 1.2 / 845.5 (1.47 / 1.47), flat 398.3 / 395.2 / 310.5; gemma-3-4b Q8_0 542.8 +/- 0.6 /
   543.4 +/- 0.6 / 442.6 (1.23 / 1.23), flat 152.2 / 152.6 / 137.2. The regions files pin the rows:
   `test_gpu_resident_regions_gemma3.das` bit for bit (6 of 6), `test_gpu_resident_regions_phi3.das`
-  on the split bar (4 of 4). Mistral-Small-3.1-24B Q4_K_M (`test_gpu_resident_regions_mistral3.das`)
-  has no row: the pod's volume holds no room for its 14 GB beside the stocked models, so the file
-  skips there and the row waits for a box that stocks it.
+  on the split bar (4 of 4). Mistral-Small-3.1-24B Q4_K_M has no row and no regions file: the pod's
+  volume holds no room for its 14 GB beside the stocked models (`followup_vulkan.md` item 87).
 
 ### From the M4 Metal pass (2026-09-13)
 

@@ -694,16 +694,17 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let scd = make_device_buf(sc_bytes)
         let qd = make_device_buf(q_bytes)
         let ofd = make_device_buf(of_bytes)
-        var tokb = make_host_buf(16l, true)
+        var tokb = make_host_buf(TOK_META_BYTES, true)
         unsafe {
             upload_region_at(projd, 0l, addr<uint8 const?>(projh[0]), proj_bytes)
             upload_region_at(std, 0l, addr<uint8 const?>(sth[0]), st_bytes)
             upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
             var tm = reinterpret<TokMeta?>(tokb.mapped)
             tm.parity = 1u
+            tm.dnslot = 0u
         }
         var s = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
-            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, 16l, of_bytes),
+            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
             fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
         for (oform in range(2)) {
             var raw = alloc_cmd()

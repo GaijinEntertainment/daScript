@@ -304,9 +304,8 @@ enum LogitsBar {
 
 let private WIDE_BAR_REL = 0.10
 
-//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone; `served`
-//! says the carrier has an N-row form (a PLE or hybrid carrier's command declines by design and steps a row at a time)
-def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar; served : bool) {
+//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
     var fa <- feed_a()
     var fb <- feed_b()
     var ra <- logits_alone(tr, pa, fa)
@@ -340,10 +339,10 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     delete passes
     static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
         let nrows = vk_rdec_token_n_rows()
-        t |> success(served ? nrows >= 2l : nrows == 0l, served ? "the N-row token command serves the two rows at once ({nrows} rows)" : "the N-row token command declines this carrier by design ({nrows} rows)")
+        t |> success(nrows >= 2l, "the N-row token command serves the two rows at once ({nrows} rows)")
     }
     let stepped = rdec_nrow_steps() - steps0
-    t |> success(served ? stepped == STEPS : stepped == 0l, served ? "every batched step went through the N-row command ({stepped} of {STEPS})" : "no batched step went through the N-row command ({stepped})")
+    t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
     sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
     unsafe {
         delete ws
@@ -357,7 +356,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     delete fb
 }
 
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; served : bool = true) {
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -365,7 +364,7 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
             setup_dasllama_jobque_()
             var pa <- prompt_a()
             var pb <- prompt_b()
-            batched_steps_body(t, tr, pa, pb, bar, served)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }
@@ -375,7 +374,7 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
 
 //! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
-def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; served : bool = true) {
+def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -386,7 +385,7 @@ def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = Lo
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
             }
-            batched_steps_body(t, tr, pa, pb, bar, served)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }
@@ -419,7 +418,7 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
                     delete got
                     if (bit == 64l) {
                         var pb <- prompt_b()
-                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact, true)
+                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
                         delete pb
                     }
                     delete tr

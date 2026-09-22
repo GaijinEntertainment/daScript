@@ -641,15 +641,16 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
-    let smalls_dev = L.dn[0].smalls_dev
-    let smalls_bytes = L.dn[0].smalls_bytes
+    let dn0 & = unsafe(L.dn[0])   //! every region's slot shares the layer's two buffers; slot 0 names them, the window's pushes name the selected region's
+    let smalls_dev = dn0.smalls_dev
+    let smalls_bytes = dn0.smalls_bytes
     L.pf_dn_conv_set = set_dn_conv_cls(
         fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, smalls_dev),
         fixed_array(np * cd * 4l, np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     L.pf_dn_scan_set = set_dn_scan_cls(
-        fixed_array(g_rd.pf_dnconv, L.dn[0].state_dev, smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(np * cd * 4l, L.dn[0].slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
+        fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev),
+        fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
         fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS))
     L.pf_dn_scan_p3_set = set_dn_scan_p3_cls(
         fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, smalls_dev),
@@ -678,7 +679,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
-def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
+def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
     for (L in g_rd.layers) {
         if (L.recurrent) {
@@ -1499,7 +1500,7 @@ def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
     }
     var L & = unsafe(g_rd.layers[l])
     var st & = unsafe(L.dn[g_rd.region])
-    st.parity = g_rd.dn_par[g_rd.region]
+    st.parity = g_rd.dn_parity[g_rd.region]
     st.owner_state_addr = intptr(stp)
     st.owner_hist_addr = intptr(histp)
     st.valid = true
@@ -1604,7 +1605,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 upload_region_at(g_rd.pf_ple, 0l, addr<uint8 const?>(ple_rows[int(w0 * all)]), wlen * all * 4l)
             }
             if (pos0 + w0 == 0l && g_rd.hybrid) {
-                g_rd.dn_par[g_rd.region] = 0
+                g_rd.dn_parity[g_rd.region] = 0
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
@@ -1618,7 +1619,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pfq_ts(raw)   // q0: submit start
             var h : VkHaz
             if (pos0 + w0 == 0l && g_rd.hybrid) {
-                pf_dn_zero(raw, h)
+                pf_dn_zero_region(raw, h)
             }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             if (use_ids) {

@@ -8087,7 +8087,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
                         tm1.cnt = 0u
                         tm1.parity = 0u
                         tm1.mirbase = 0u
-                        var tok2 = make_host_buf(32l, true)
+                        var tok2 = make_host_buf(2l * TOK_META_BYTES, true)
                         var tm2 = reinterpret<TokMeta?>(tok2.mapped)
                         for (r in range(2)) {
                             tm2[r].pos = uint(r)
@@ -8099,7 +8099,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
                             fixed_array(q_bytes, kv_bytes, mn_bytes, mn_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, b_bytes),
                             fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                         var s2 = set_qkn_rope_cls(fixed_array(q2d, kv2d, kmn, vmn, cs2d, wnd, tok2.buf, bd),
-                            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 32l, b_bytes),
+                            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 2l * TOK_META_BYTES, b_bytes),
                             fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                         var rawn = alloc_cmd()
                         let beginn = VkCommandBufferBeginInfo()
@@ -8541,7 +8541,7 @@ def test_vkd_dn_family(t0 : T?) {
                         g_off = uint(g_off), taps_off = uint(taps_off),
                         wnorm_off = uint(wnorm_off), a_off = uint(a_off),
                         dt_off = uint(dt_off), hist_off = uint(hist_off),
-                        eps = eps, qscale = qscale, nvh = uint(nvh))
+                        eps = eps, qscale = qscale)
                     enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
                     vhz_dep(raw, h, 1u | 2u | 4u | 8u, 0u, true)
                     cmd_copy_whole(raw, st2, host.buf, st_bytes)
@@ -8680,7 +8680,7 @@ def test_vkd_dn_family(t0 : T?) {
                         g_off = uint(g_off), taps_off = uint(taps_off),
                         wnorm_off = uint(wnorm_off), a_off = uint(a_off),
                         dt_off = uint(dt_off), hist_off = uint(hist_off),
-                        eps = eps, qscale = qscale, out_f32 = 1u, nvh = uint(nvh))
+                        eps = eps, qscale = qscale, out_f32 = 1u)
                     enc_dn_step_cls(rawf, hf, scf, pcf, int64(nvh))
                     vhz_dep(rawf, hf, 2u | 8u | 32u, 0u, true)
                     cmd_copy_whole(rawf, ofd2, hostf.buf, of_bytes)
@@ -8876,11 +8876,11 @@ def test_vkd_dn_family(t0 : T?) {
 }
 
 struct DnRowsOut {
-    st : array<float>
-    sm : array<float>
-    sc : array<float>
-    q : array<uint>
-    of : array<float>
+    state : array<float>
+    smalls : array<float>
+    oscales : array<float>
+    oquants : array<uint>
+    of32 : array<float>
 }
 
 //! one `dn_step_cls` dispatch over `nrows` rows on buffers of its own: two calls share no device plane
@@ -8900,16 +8900,24 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     let qd = make_device_buf(q_bytes)
     let ofd = make_device_buf(of_bytes)
     var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
-    r.st |> resize(nslots * st_n)
-    r.sm |> resize(sm_n)
-    r.sc |> resize(nrows * nblk)
-    r.q |> resize(nrows * nblk * 8)
-    r.of |> resize(nrows * nvh * ds)
+    r.state |> resize(nslots * st_n)
+    r.smalls |> resize(sm_n)
+    r.oscales |> resize(nrows * nblk)
+    r.oquants |> resize(nrows * nblk * 8)
+    r.of32 |> resize(nrows * nvh * ds)
+    static_if (!typeinfo builtin_module_exists(vulkan)) {
+        return <- r
+    }
+    let ring = cd * (dconv - 1)
     unsafe {
         upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
         upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
         upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
+        for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
+            nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
+        }
         nan_sentinel_upload(scd, sc_bytes)
+        nan_sentinel_upload(qd, q_bytes)
         nan_sentinel_upload(ofd, of_bytes)
         var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
         var tm = reinterpret<TokMeta?>(tokb.mapped)
@@ -8927,7 +8935,7 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
         var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
             beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
             taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
-            eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, nvh = uint(nvh), bstride = uint(offs[7]))
+            eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
         enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
         vhz_dep(raw, h, 1u | 2u | 4u | 8u | 32u, 0u, true)
         cmd_copy_whole(raw, std, host.buf, st_bytes)
@@ -8938,27 +8946,17 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
         let base = intptr(host.mapped)
-        memcpy(addr<void?>(r.st[0]), host.mapped, st_bytes)
-        memcpy(addr<void?>(r.sm[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
-        memcpy(addr<void?>(r.sc[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
-        memcpy(addr<void?>(r.q[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
-        memcpy(addr<void?>(r.of[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
+        memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
+        memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
+        memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
+        memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
+        memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
     }
     return <- r
 }
 
 //! the count of differing elements (a NaN differs from everything)
-def private elems_off(got, want : array<float>; gbase, wbase, n : int) : int {
-    var bad = 0
-    for (i in range(n)) {
-        if (got[gbase + i] != want[wbase + i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private elems_off(got, want : array<uint>; gbase, wbase, n : int) : int {
+def private n_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
     var bad = 0
     for (i in range(n)) {
         if (got[gbase + i] != want[wbase + i]) {
@@ -9030,12 +9028,15 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
         var pars1 <- [pars[r]]
         var slots1 <- [slots[r]]
         var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
-        let off_st = elems_off(got.st, want.st, r * st_n, r * st_n, st_n)
-        let off_ring = elems_off(got.sm, want.sm, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
-        let off_o = (out_f32 ? elems_off(got.of, want.of, r * nvh * ds, 0, nvh * ds)
-            : elems_off(got.sc, want.sc, r * nblk, 0, nblk) + elems_off(got.q, want.q, r * nblk * 8, 0, nblk * 8))
-        t |> success(off_st == 0 && off_ring == 0 && off_o == 0,
-            "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {off_st}, ring {off_ring}, o row {off_o} elements off the one-row dispatch")
+        let st_diffs = n_differing(got.state, want.state, r * st_n, r * st_n, st_n)
+        let ring_diffs = n_differing(got.smalls, want.smalls, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
+        let o_diffs = (out_f32 ? n_differing(got.of32, want.of32, r * nvh * ds, 0, nvh * ds)
+            : n_differing(got.oscales, want.oscales, r * nblk, 0, nblk) + n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
+        t |> success(st_diffs == 0 && ring_diffs == 0 && o_diffs == 0,
+            "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {st_diffs}, ring {ring_diffs}, o row {o_diffs} elements off the one-row dispatch")
+        let other = 1 - r   //! the control: row r's reference must miss the other row's o row, so the compare can fail
+        let ctrl = out_f32 ? n_differing(got.of32, want.of32, other * nvh * ds, 0, nvh * ds) : n_differing(got.oquants, want.oquants, other * nblk * 8, 0, nblk * 8)
+        t |> success(ctrl > 0, "control: row {r}'s one-row reference misses row {other}'s o row ({ctrl} elements apart)")
         delete proj1
         delete sm1
         delete pars1
