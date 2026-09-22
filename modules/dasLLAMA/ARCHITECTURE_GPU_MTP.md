@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. Thi
 carries sections 2.28-2.29, 2.33-2.37a and 2.39: the speculative round on Metal, the box knob
 that sets the depth a round drafts, the draft chains and the verify that commits them, and the
 assistant drafter. `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries sections 2.30-2.32, 2.38,
-2.39a and 2.39b - the decode driver's layer encoder, the kernel forms and row-buffer pad a
+2.38a, 2.39a and 2.39b - the decode driver's layer encoder, the kernel forms and row-buffer pad a
 multi-row verify dispatches under, the single-row driver's greedy chain, the argument-alignment
 contract a kernel declares on its `[metal_dispatch]`, and the rotated prefix a rope-store kernel
 takes. The GPU backend role table these

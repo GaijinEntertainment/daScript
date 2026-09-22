@@ -1,11 +1,11 @@
 # dasLLAMA Architecture - the Metal decode driver's kernel forms and layer encoder
 
 Companion to `ARCHITECTURE_GPU_MTP.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.30-2.32, 2.38, 2.39a and 2.39b: the argument-alignment contract a kernel declares on
+carries sections 2.30-2.32, 2.38, 2.38a, 2.39a and 2.39b: the argument-alignment contract a kernel declares on
 its `[metal_dispatch]` - the contract the batch driver's fixed-B mul_mv forms carry - the
 K-quant small-batch form and the row-buffer pad a multi-row verify dispatches under, the
-single-row driver's greedy chain, the decode layer encoder, and the rotated prefix a rope-store
-kernel takes. The speculative round these
+single-row driver's greedy chain, the batch driver's pre-encoded step, the decode layer encoder,
+and the rotated prefix a rope-store kernel takes. The speculative round these
 forms serve is `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table these sections build on
 stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
@@ -81,14 +81,20 @@ twelve, each tile past the first offsetting x by its first row's count of n floa
 same rows of the site's y stride - so the spare rows of the last tile compute garbage that must
 land inside an allocation this step owns and nobody reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
 
-The attention partials follow the same ownership rule along the position axis: `acquire_step`
-sizes `bpart` for the DEEPEST row's chunk count - `ceil((deepest + nrows) / 64)` chunks per (row,
-head), where `deepest` is the largest position any of the step's rows reaches (a joint round's
-groups sit at different positions, so the callers pass it) - because the layer chain dispatches
-that many chunks for every row. A buffer sized for the first row's count is short by one chunk
-per (row, head) whenever the rows straddle a 64-row boundary, and the chunked attention then
-writes past its end into the pool's neighbour - a corruption that surfaces rounds later, on
-whatever the heap put there.
+The attention partials follow the same ownership rule along the position axis, and so does the
+attention form: `acquire_step` sizes `bpart` for the DEEPEST row's chunk count -
+`ceil((deepest + nrows) / 64)` chunks per (row, head), where `deepest` is the largest position
+any of the step's rows reaches (a joint round's groups sit at different positions, so the callers
+pass it) - and picks the chunked form off that same depth, never off row 0's. The layer chain
+dispatches its chunks off the deepest group's position too (`encode_verify_step` passes it as the
+chain position), so every row's partials are written before the combine reads them; the combine
+kernel's batched arm clamps a row's chunk count to the dispatched plane besides, so a row deeper
+than the plane reads a prefix rather than its neighbours' partials. A buffer sized for the first
+row's count is short by one chunk per (row, head) whenever the rows straddle a 64-row boundary,
+and the chunked attention then writes past its end into the pool's neighbour - a corruption that
+surfaces rounds later, on whatever the heap put there. Each group's layer bases inside its mirror
+slice follow that group's own cap (`group_routes`): a deeper stream's slice is taller than group
+0's, and a base computed from another group's cap addresses the wrong layer.
 
 ### 2.38 The single-row driver's greedy chain {#greedy-chain}
 
@@ -139,14 +145,20 @@ After a step commits, `batch_pre_encode_next` builds the step at every row's pos
 the free slot with every command buffer ended and none committed, and only while each row's mirror
 slice is on `mirror_prepare`'s fast path (the slice holds the position, the codec matches, the
 watermark covers it) - a grow, an eviction or an upload would touch arena slices the in-flight
-step is writing. The next call matches the pre-encoded step against its rows (the same sessions at
-the same positions, the KV codec, the arena epoch, and every slice still where the row table names
-it), pokes the token-dependent inputs the caller's CPU pre-step produced - the rows' embeds, their
-rope rows, the E-series' per-layer side rows - commits the command buffers in order and lands the
-step like a freshly built one; a step that does not match is retired unrun. The same-slab verify,
-the recurrent rows (their state buffer is one per session) and a knockout run stay on the
-build-at-call path, and the single-row driver retires the pre-encoded batch step on entry because
-its own prepare may move the slices. `DASLLAMA_METAL_BATCH_PRE=0` is the build-at-call A/B rail.
+step is writing; the watermark must sit exactly at the row's position, since below it a prepare
+uploads and above it a rewind re-uploads from row 0. The next call matches the pre-encoded step
+against its rows - the same sessions by uid (a session pointer is not identity: the scheduler's reap
+moves its streams) at the same positions, the model shape and KV codec, the arena epoch, every
+slice still where the row table names it, and every row's zero-copy logits wrap where the scatter
+was encoded - pokes the token-dependent inputs the caller's CPU pre-step produced - the rows'
+embeds, their rope rows, the E-series' per-layer side rows - commits the command buffers in order
+and lands the step like a freshly built one; a step that does not match is retired unrun. The
+same-slab verify, the recurrent rows (their state buffer is one per session) and a knockout run
+stay on the build-at-call path. The single-row driver, the speculative round's draft and verify
+steps, a knob setter that changes what a step encodes, a dispatch failure's CPU rerun and
+`metal_decode_flush` all retire the pre-encoded step: each advances the rows past the positions it
+was built for or moves the slices under it. `DASLLAMA_METAL_BATCH_PRE=0` is the build-at-call
+A/B rail.
 
 **The mirror watermark moves at commit, not at landing.** `batch_mark_committed` marks every
 row's mirror at its position plus one the moment the step's command buffers are committed. The

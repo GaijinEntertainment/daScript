@@ -17,11 +17,14 @@ change reaches a test when it alters anything the test's result depends on - the
 shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
 asserts on; a comment-only edit reaches none.
 
-**A PR that adds or changes a cell above the large tier also runs the `stocked` suite with
-`DASLLAMA_PARITY_FULL=1` and names the box in its body.** A plain stocked run skips every such
-cell and reads green.
+**A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
+`_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
+stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
+`run.das` accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names
+the box in the PR body.** A run without
+`DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**A PR's `stocked` run carries no `--exclude`** - an excluding run is the iteration form between
+**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form between
 PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
@@ -56,7 +59,12 @@ suite, its skip condition, or what it claims - a shape, a length, a format or a 
 sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLAUDE.md` entry of
 every test file running the cell, counts and skip clauses included.** A file's entry is the
 clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
-a suite roster owes nothing.
+a suite roster needs no update.
+
+**A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
+(`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
+mechanics" section in the same change.** An arm the census does not name is unreachable to
+whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
@@ -74,11 +82,6 @@ block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` l
 `MODULE_AREAS`, a suite's or an area's file list - is not the surface. Both documents restate
 the surface for an agent that reads them cold; a copy the code has left behind sends that agent
 to a flag that no longer does what the text says.
-
-**A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
-(`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
-filter mechanics" section in the same change** - an arm the census does not name is
-unreachable to whoever is choosing what to run.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
@@ -193,10 +196,9 @@ one CPU inference reads) and the stages a decode override selects on that model'
 (`blob_twin(t, path, seq_cap)`, `_metal_blob_twin.das`), in one session.** The planar
 model and its blob twin share one shape, so one session serves both.
 
-**A diff that adds a model-loading block to a `run.das` suite other than `model-free`,
-`stocked` and `kernels` tags it with its family.** The family tag is the token passed to
-`family_on(t, name)` (`_model_tier.das`). An untagged block silently joins every family's
-gate.
+**A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` -
+every suite but `model-free` and `stocked` - tags it with its family.** The family tag is the token passed to `family_on(t, name)`
+(`_model_tier.das`). An untagged block runs under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
@@ -237,11 +239,12 @@ not exact-value: it is not float-portable.
 **An embedder-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A diff that adds an assert carrying a bar - a tolerance, a count floor or a ceiling - or loosens
-one, ships in the same change a control that lands outside the bar in every cell that holds it.**
-A bar nothing has exceeded where it is applied is not known to discriminate there. An assert
-whose threshold the cell computes from a number measured in the same run carries no bar - this
-rule does not reach it.
+**A diff that adds or loosens an assert holding a figure the run measures - the difference
+between two computed sides, a rate, an error, or a count the run decides - within a nonzero
+tolerance, or past a floor or ceiling, ships in the same change a control that lands outside that
+bound in every cell that holds it.** A bound nothing has exceeded where it is applied is not known
+to discriminate there. An assert whose threshold the cell computes from a number measured in the
+same run carries no bar - this rule does not reach it.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

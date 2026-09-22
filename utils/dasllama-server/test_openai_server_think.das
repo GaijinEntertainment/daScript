@@ -6,6 +6,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // the server under test (sibling — bare require, hyphenated dir)
+require _server_rig                                     // models_dir / model_missing - the suites' one model root and gate
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
 require daslib/json_boost                               // read_json / from_JV
@@ -26,25 +27,10 @@ require dasllama/dasllama_env
 let TEST_PORT = 18120
 let TEST_CTX = 2048l   // room for a thinking span + the answer; keeps the KV cache small
 
-def private models_dir() : string {
-    return g_env_harness.models_dir   // empty -> paths are relative -> the tests skip
-}
 let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
 let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
 let GEMMA4_PATH = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
 let GPTOSS_PATH = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
-
-def private model_missing(t : T?; path : string) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA server test is JIT-only)")
-        return true
-    }
-    if (!stat(path).is_valid) {
-        t |> skip("{base_name(path)} not present (set DASLLAMA_MODELS_DIR)")
-        return true
-    }
-    return false
-}
 
 // Start the server on a dedicated thread (model loaded in-thread — slots are per-context), wait
 // until it answers /v1/models, run the block, POST /shutdown, join. `ready_s` scales the wait to

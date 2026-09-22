@@ -787,7 +787,7 @@ class template MetalSqAttnCombT {
             // holes past a shallow row's last chunk are never read; sliding layers skip the
             // row's below-window chunks
             let cnt = rt[bb].w
-            nch = (cnt + 63u) / 64u
+            nch = min((cnt + 63u) / 64u, nchmax)   // a row deeper than the dispatch's plane reads a prefix, never its neighbours' partials
             let wstart = ka.window > 0u && cnt > ka.window ? cnt - ka.window : 0u
             chlo = wstart / 64u
         }

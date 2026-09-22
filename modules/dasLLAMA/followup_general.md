@@ -27,15 +27,18 @@
 
 3. **The pipelined batch-decode landing holds borrowed Session pointers across the caller's
    deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
-   memcpy-ing KV rows and logits through `g_lp_sessions[i]` - raw borrowed pointers. Nothing
+   memcpy-ing KV rows and logits through `BatchLanding.sessions[i]` - raw borrowed pointers - and
+   the batch driver's pre-encoded step parks the same pointers, uncommitted, in the other slot
+   (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a). Nothing
    quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
    and every test helper deletes its sessions right after `eval_batch_` with a step potentially
    pending - a landing after those deletes writes into freed heap. Empirically quiet today
    (probed 2026-07-30: batch-only prelude showed no corruption), but it is a lifetime landmine,
    and the server would inherit it if a chat session ever dies mid-pipeline. Done = a session
    retirement seam the drivers hook (land or abandon pending steps that reference the dying
-   session), or the landing rail stops holding raw session pointers; plus `metal_decode_flush`
-   calls at the test helpers' teardown as the interim belt.
+   session, and retire a pre-encoded step whose rows include it), or the landing rail stops
+   holding raw session pointers; plus `metal_decode_flush` calls at the test helpers' teardown as
+   the interim belt.
 
 4. **The GPU-PLE prefill pre-step never engages on the E4B even though the model qualifies.**
    The census (family-scoped E4B row, metal prefill serving on device - `attn_qk_mm` counted)

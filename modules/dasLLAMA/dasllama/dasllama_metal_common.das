@@ -402,6 +402,7 @@ def public set_metal_decode_mirror_cap_mb(v : int) {
 //! `DASLLAMA_METAL_LOGITS=0` pins it process-wide (shared with the prefill driver).
 def public set_metal_decode_logits_cpu(v : bool) {
     g_logits_cpu = v
+    discard_batch_pre()   // a step encoded under the other setting would serve the wrong tail
 }
 
 
@@ -610,6 +611,9 @@ def public metal_decode_stage_reset {
     g_sched_b_ms = 0.0lf
     g_handoff_b_ms = 0.0lf
 }
+
+//! Batched steps that committed a step pre-encoded by the call before them (since load/reset).
+def public metal_batch_pre_taken() : int64 => g_batch_pre_taken
 
 //! Cumulative batched-step stage wall since load/reset — the batch bench's numbers rail
 //! (per STEP, one step = nrows tokens).
@@ -1861,9 +1865,9 @@ struct BatchLanding {
     layers : int64
     seq : int64
     vocab : int64
-    @scratch lrowb : array<int64>      //!< hetero (gemma4): per-layer row bytes; uniform models read one value per layer
-    @scratch lkbase : array<int64>     //!< per (row i, layer l) flattened i * n_layers + l (caps differ per row)
-    @scratch lvbase : array<int64>
+    @scratch @exact_size lrowb : array<int64>      //!< hetero (gemma4): per-layer row bytes; uniform models read one value per layer
+    @scratch @exact_size lkbase : array<int64>     //!< per (row i, layer l) flattened i * n_layers + l (caps differ per row)
+    @scratch @exact_size lvbase : array<int64>
     bx : MetalBuffer?             //!< the poke targets: the rows' embeds ...
     poke_x : bool                 //!< ... unless the same-slab step gathers them on the GPU
     bcos : MetalBuffer?           //!< ... the rows' rope tables, per class ...
@@ -1875,9 +1879,12 @@ struct BatchLanding {
     bple : MetalBuffer?           //!< ... and the E-series' per-layer side rows
     ple_n : int64
     dim : int64
-    kdt : KVDtype                 //!< the match key: KV codec, arena epoch, and the rows' sessions and positions above
+    kdt : KVDtype                 //!< the match key: KV codec, arena epoch, the rows' uids and positions, the model shape
     epoch : int64
+    @scratch uids : array<uint64> //!< the rows' session uids (never reused) - a session pointer is not identity: the scheduler's reap moves streams
     gpu_logits : bool             //!< the classifier rode the step (landing scatter or zero-copy); the pre rail needs it
+    nc_all : bool                 //!< every row's logits scatter went to its session's zero-copy wrap ...
+    @scratch ncbufs : array<MetalBuffer?>   //!< ... these (borrowed from the nc cache); a re-resolve that differs voids a pre-encoded step
 }
 
 var g_land : BatchLanding[2]   //!< the pending step and the pre-encoded step, never the same slot
@@ -1889,6 +1896,10 @@ var @scratch g_sameslab_arg : array<int64>
 def pending_active() : bool => g_land[g_lp_i].active
 
 def release_landing(var L : BatchLanding&) {
+    for (c_i in L.cbs) {   // a landed step's buffers completed; a retired pre-encoded step's were never committed
+        metal_release(c_i)
+    }
+    L.cbs |> clear()   // released above — delete of array<T?> would double-free the pointees
     for (pb in L.pooled) {
         var b = pb.buf
         pool_release(g_pool, b, pb.size)
@@ -1912,6 +1923,8 @@ def release_landing(var L : BatchLanding&) {
     L.bsin_swa = null
     L.bple = null
     L.sessions |> clear()   // borrowed handles — clear, never delete
+    L.uids |> clear()
+    L.ncbufs |> clear()   // the nc cache owns these
     L.dn_uids |> clear()
     L.dn_pos |> clear()
     L.active = false
@@ -1922,11 +1935,21 @@ def release_landing(var L : BatchLanding&) {
 def discard_batch_pre {
     var P & = g_land[1 - g_lp_i]
     return if (!P.pre_valid)
-    for (c_i in P.cbs) {
-        metal_release(c_i)
-    }
-    P.cbs |> clear()
     release_landing(P)
+}
+
+//! The optimistic watermark at commit: the in-order queue writes row pos before any later-committed
+//! work reads the mirror, so the next step's prepare must not re-upload it from the (not yet
+//! written back) CPU cache; the landing calls it again, never regressing the mark.
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
+def mark_rows_committed(L : BatchLanding) {
+    for (i in range64(L.nrows)) {
+        let sp = L.sessions[i]
+        if (key_exists(g_mirrors, sp.uid)) {
+            let wm0 = g_mirrors[sp.uid].watermark
+            g_mirrors[sp.uid].watermark = max(wm0, L.positions[i] + 1l)
+        }
+    }
 }
 
 //! The same-slab verify's per-row argmax as the join landed it (row i = the truth for draft i+1).
@@ -2024,10 +2047,6 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
     }
     g_prev_gpu_end = ge_last
     g_us_bwait += int64(get_time_usec(ts_wait))
-    for (c_i in L.cbs) {
-        metal_release(c_i)
-    }
-    L.cbs |> clear()   // released above — delete of array<T?> would double-free the pointees
     if (empty(err)) {
         let ts_rb = ref_time_ticks()
         unsafe {
@@ -2053,15 +2072,12 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                         reinterpret<void?>(lgp + i * L.vocab * 4l), L.vocab * 4l)
                 }
                 land_row_carry(L, *sp, i, pos)
-                if (key_exists(g_mirrors, sp.uid)) {   // never regress the optimistic commit-time mark
-                    let wm0 = g_mirrors[sp.uid].watermark
-                    g_mirrors[sp.uid].watermark = max(wm0, pos + 1l)
-                }
             }
             if (L.sameslab && L.nrows > 0l) {
                 land_sameslab_rows(L, lgp)
             }
         }
+        mark_rows_committed(L)   // never regress the optimistic commit-time mark
         g_us_breadback += int64(get_time_usec(ts_rb))
         for (u, p in L.dn_uids, L.dn_pos) {   // the GPU state now holds each recurrent row's update
             dn_mirror_advance(u, p)
@@ -2087,6 +2103,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
 //! Complete any in-flight pipelined GPU decode step (the encode-ahead rails), landing its logits
 //! and KV writeback. Benches call this before closing a timing window; no-op when nothing pends.
 def public metal_decode_flush {
+    discard_batch_pre()   // both rails: the parked pre-encoded step holds the same borrowed sessions
     finish_pending_step()
 }
 

@@ -6,12 +6,13 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // the server under test (sibling — bare require, hyphenated dir)
+require main                                            // mtp_setting / mtp_default_resolved - the config surface's tri-state seam
+require _server_rig                                     // models_dir / model_missing - the suites' one model root and gate
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
 require daslib/json_boost                               // read_json
-require daslib/fio                                      // stat / path_join / sleep
+require daslib/fio                                      // path_join / sleep
 require math                                            // min
-require dasllama/dasllama_env
 
 // The self-speculation default: unset, a slot runs MTP when it serves ONE stream and plain
 // decode when it serves several; an explicit setting wins; a model with no NextN head serves
@@ -19,26 +20,11 @@ require dasllama/dasllama_env
 // Model-gated + JIT-only like the sibling tests; needs Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN
 // head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
 
-let TEST_PORT = 18140
+let TEST_PORT = 18150   // 18150-18154: the five cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
 let TEST_CTX = 1024l
 
-def private models_dir() : string {
-    return g_env_harness.models_dir   // empty -> paths are relative -> the tests skip
-}
 let MTP_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 let PLAIN_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
-
-def private model_missing(t : T?; path : string) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA server test is JIT-only)")
-        return true
-    }
-    if (!stat(path).is_valid) {
-        t |> skip("{base_name(path)} not present (set DASLLAMA_MODELS_DIR)")
-        return true
-    }
-    return false
-}
 
 // Start the server on a dedicated thread with `streams` scheduler slots and the mtp knob
 // `mtp` (-1 unset, 0, 1), wait until it answers /v1/models, run the block, shut it down.
@@ -130,5 +116,22 @@ def test_mtp_default_no_head(t : T?) {
         with_mtp_server(t, PLAIN_PATH, TEST_PORT + 4, 1l, -1) $(base_url) {
             t |> equal(0l, drafted_after_chat(t, base_url), "a head-less model drafts nothing and answers")
         }
+    }
+}
+
+// model-free: the config surface's tri-state seam and the resolved value GET /config reports
+[test]
+def test_mtp_setting_tri_state(t : T?) {
+    t |> run("a key the TOML or --mtp set pins 0 / 1; unset is -1 and each slot decides") @(t : T?) {
+        t |> equal(mtp_setting(true, true), 1, "mtp = true")
+        t |> equal(mtp_setting(true, false), 0, "mtp = false")
+        t |> equal(mtp_setting(false, false), -1, "unset: the slot decides")
+        t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
+    }
+    t |> run("the unset default resolves on for one host-cached stream, off at several streams or on a Vulkan-resident server") @(t : T?) {
+        t |> success(mtp_default_resolved(1, ""), "one stream, no device")
+        t |> success(mtp_default_resolved(1, "metal"), "one stream on Metal - the rows stay host-cached there")
+        t |> success(!mtp_default_resolved(4, ""), "four streams")
+        t |> success(!mtp_default_resolved(1, "vulkan"), "a Vulkan-resident slot keeps its device home")
     }
 }

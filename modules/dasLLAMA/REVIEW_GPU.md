@@ -1,7 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_MTP_DECODE.md`,
+`ARCHITECTURE_GPU_VULKAN_NROW.md`.
 Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
@@ -52,10 +53,11 @@ loop with its guards and bounds, a cooperative op, a staged or padded operand, a
 fill, a chunk step and its alignment gate, a bucket-ordered read - wherever the diff puts it,
 applies `REVIEW_GPU_KERNEL_BODY.md` too.**
 
-**A prefill K/V panel - the per-layer device K/V slab the prefill GEMMs write; the Vulkan
-resident mirror is one - is sized from the padded write extent, never from the live key count.**
-The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
-count is overrun silently into whatever the pool put next to it.
+**A device buffer a dispatch writes is sized to every element the dispatch's full grid writes,
+never to the live count of rows, keys or chunks.** A dispatch writes whole tiles past the live
+rows, and a batched attention writes, for every row, as many key chunks as the row at the largest
+position has, so a buffer sized to the live count is overrun silently into whatever the pool put
+next to it.
 
 **A row-splitting GEMM encoder - one that dispatches a subset of a site's output rows at an
 offset - is called only where the width it is given equals the row stride the site writes with,
@@ -74,8 +76,7 @@ the added dispatch divides (the site's own K, key span or row count), or on the 
 when the split divides no extent - or ships no gate, where the measurement shows the split wins
 at both ends of that quantity; either way the threshold, or the no-gate decision, comes from a
 measurement at the smallest and at the largest value that quantity takes on the path, both
-measurements in the PR body.** The small-work regression hides behind the big-work
-win.
+measurements in the PR body.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at every
 authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
@@ -87,13 +88,19 @@ the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for 
 **A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
 host computes that class's `wgs`, shows in the same change that the host's count still covers
 exactly the indices the body's decode reads - by changing both, by a decode that permutes the
-same index set, or - where the body's decode and the host's count both read one shared function
-- by showing that for every shape the encoder dispatches that class on, the stamp it picks is the
-one that function's value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
+same index set, or - where the body's decode and the host's count both read one shared
+function - by showing that for every shape the encoder dispatches that class on, the stamp it
+picks is the one that function's value names.** The `grid=` spec carries no number for these
+classes, so nothing else ties the two.
 
-**A device-upload cache key covers every input the uploaded bytes depend on: a host address, an
-offset, or a handle alone is not a key - carry the span and the form, the element type and
-layout the upload produces, in the key too.**
+**A key that decides whether uploaded bytes or encoded GPU work may be reused compares every
+input that content was built from - every span, element type, layout, position, offset and model
+shape, the row count, each row's session by its `uid`, and, for every device buffer the content
+reads that a grow can free and allocate again, a counter bumped on each such rebuild - never a
+session pointer, and never a host address, an offset or a handle alone.** An address, offset or
+handle names whatever occupies it now, and the scheduler moves sessions in memory as it admits and
+erases streams, so a key without the other inputs, or with a session pointer in place of the
+`uid`, reuses stale content silently.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -175,7 +182,8 @@ bakes.** Parity runs never reach it.
 **An f16 store into any GPU-resident K/V that does not clamp to the f16 finite range
 (+/-65504) is a defect.**
 
-**A per-layer K/V panel or mirror slab that aliases another layer's is gathered, stored and
+**A per-layer K/V panel (the per-layer device K/V slab the prefill GEMMs write; the Vulkan
+resident mirror is one) or mirror slab that aliases another layer's is gathered, stored and
 released only through its source layer.** An aliasing layer that gathers, stores or releases
 a second time double-frees the panel or overwrites the source's rows.
 
@@ -213,8 +221,8 @@ runs only where the gate's `mint_time` flag is false, and the mint-time verdict 
 model's own fields.** The load selects the repacking CPU backend before the GPU backend is
 decided, so a mint-time read bakes a verdict the drivers do not share.
 
-**A diff that gives a per-format pick that maps a weight format to a Metal pipeline or builder
-- a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
+**A diff that gives a per-format pick that maps a weight format to a Metal pipeline or
+builder - a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
 format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
 `dasllama/dasllama_metal_shapes.das`), in the same change.** Those predicates are what declines
 an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.

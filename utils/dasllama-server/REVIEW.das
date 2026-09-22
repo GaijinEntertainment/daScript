@@ -240,5 +240,61 @@ def main() : int {
         }
     }
     check_routes_in_surfaces()
+    check_test_ports()
     return gate_verdict("dasllama-server")
+}
+
+let TESTS_DIR = "utils/dasllama-server"
+
+//! Every `[test]` file's boot ports - a literal `let NAME = 18xxx` and every `NAME + n` beside
+//! it - claimed once across the folder: two suites on one port bind-fail, or answer from the
+//! other's server.
+def check_test_ports() {
+    var inscope claims : table<int; string>   // port -> the file that claims it
+    dir(TESTS_DIR) $(name) {
+        return if (!(name |> starts_with("test_")) || !(name |> ends_with(".das")))
+        let path = "{TESTS_DIR}/{name}"
+        let text = fread(path)
+        var inscope bases : table<string; int>
+        for (raw in split(text, "\n")) {
+            let line = strip(raw)
+            continue if (!(line |> starts_with("let ")))
+            let eq = find(line, " = 18")
+            continue if (eq < 4)
+            let port_txt = slice(line, eq + 3, eq + 8)
+            continue if (length(port_txt) != 5)
+            let port = to_int(port_txt)
+            continue if (port < 18000 || port > 18999)
+            bases[slice(line, 4, eq)] = port
+            claim_port(claims, port, path)
+        }
+        peek_data(text) $(d) {
+            let n = length(d)
+            for (base, port in keys(bases), values(bases)) {
+                var at = 0
+                while (true) {
+                    let hit = find(d, "{base} + ", at)
+                    break if (hit < 0)
+                    at = hit + length(base) + 3
+                    continue if (hit > 0 && (is_alnum(int(d[hit - 1])) || int(d[hit - 1]) == '_'))
+                    var off = 0
+                    var i = at
+                    while (i < n && int(d[i]) >= '0' && int(d[i]) <= '9') {
+                        off = off * 10 + int(d[i]) - '0'
+                        i++
+                    }
+                    claim_port(claims, port + off, path) if (off > 0)
+                }
+            }
+        }
+    }
+}
+
+def private claim_port(var claims : table<int; string>; port : int; path : string) {
+    let owner = claims?[port] ?? ""
+    if (!empty(owner) && owner != path) {
+        gate_finding(path, "boots a server on port {port}, which {owner} claims too - give the file a range no sibling claims")
+        return
+    }
+    claims[port] = path
 }

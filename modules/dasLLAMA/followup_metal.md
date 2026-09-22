@@ -692,9 +692,10 @@ is NOT on the critical path: the step's command buffers commit progressively (`D
 so the GPU runs under the encode already, and the pre-encoded step (`DASLLAMA_METAL_BATCH_PRE`,
 sec.2.38a of `ARCHITECTURE_GPU_MTP_DECODE.md`) moves the four-row step 13.26 -> 13.18 ms in the
 same probe (`--bs 4`, no knockouts: setup 0.05 encode 0.68 wait 12.04 gpu 11.87 readback 0.07 ms a
-step, 33 of 34 steps pre-encoded) and leaves the bench row at 259.0. What the row pays is the
+step, 33 of 34 steps pre-encoded; debug-jit) and leaves the bench row at 259.0 (`lcpp_bench -jit
+--for-debug-purposes`, debug-jit, against the board cell's 259.6). What the row pays is the
 GPU's idle between steps, ~1.0 ms of a 14.3 ms bench step (`lcpp_bench --prof`, `JOBQUE_PROFILING=1`,
-one rep): the CPU PLE pre-step 0.37 (row 13 - the model_proj GEMM for four rows on the host), the
+one rep, debug-jit): the CPU PLE pre-step 0.37 (row 13 - the model_proj GEMM for four rows on the host), the
 sampler's argmax over four 262144-wide rows 0.19, the driver's setup + sched + handoff + readback +
 wake 0.4. The pipelined submission (`DASLLAMA_METAL_BATCH_PIPE=1`, a bench-only rail: it serves the
 PREVIOUS step's logits) hides all of it - 12.01 against 13.34 ms in the probe - which bounds the
@@ -736,10 +737,13 @@ CPU stack.
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
-`lcpp_bench --mtp-ab` (single stream, Metal, tg-real128, greedy, depth 1, M5 Max, `-jit`, the
-untuned gate bypassed - decode is GPU-bound): Qwen3.5-0.8B-MTP Q8 364.5 -> 438.6 tok/s (1.20x,
-87.9% accepted), 4B 103.7 -> 125.8 (1.21x, 85.5%), 9B 57.3 -> 63.2 (1.10x, 84.5%; 5 reps, cv
-1-2.5%). An accept rate of 85% at depth 1 buys 1.85 tokens a round at most, and the 0.8B and 4B
+`lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,
+`-jit --for-debug-purposes`, debug-jit, `DASLLAMA_ALLOW_UNTUNED=1` with the box sidecar older than
+the binary - the CPU kernels ran the `arm-i8mm` class profile's winners, which moves prefill and
+not this decode row - direction-grade, both arms in one process): Qwen3.5-0.8B-MTP Q8 364.5 ->
+438.6 tok/s (1.20x, 87.9% accepted; 3 reps, sd 0.1 / 0.7), 4B 103.7 -> 125.8 (1.21x, 85.5%; 3 reps,
+sd 1.2 / 2.8), 9B 57.3 -> 63.2 (1.10x, 84.5%; 5 reps, sd 0.6 / 1.6 - a 3-rep read at sd 4.0 / 2.5
+was void). An accept rate of 85% at depth 1 buys 1.85 tokens a round at most, and the 0.8B and 4B
 take two thirds of that; the 9B takes a third with the same rate, so its round carries a cost
 that scales with the model and not with the drafts - the verify's two rows against a 9.7 GB
 weight pass at its bandwidth roof should be nearly free. The work: the round's stage split on

@@ -23,7 +23,7 @@ require dasllama/dasllama_env
 // as test_openai_server; SmolLM2-135M — small, chatml template (real stop ids). In-dir like its
 // siblings: a require path can't contain the '-' of "dasllama-server".
 
-let TEST_PORT = 18101
+let TEST_PORT = 18105   // 18099 + 2 = 18101 is test_openai_server.das's; 18097-18147 and 18150-18154 belong to the sibling suites
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
 def private models_dir() : string {

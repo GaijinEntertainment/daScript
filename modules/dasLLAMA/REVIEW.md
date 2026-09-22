@@ -110,19 +110,25 @@ file's `[init]`, may carry its null default as the declared "no hook".
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
 token-exact fixtures.
 
-**A diff that adds or changes a predicate in `dasllama/` that picks a kernel form because it
-measured faster - every form it picks among produces the right answer for the dispatch, and the
-dispatch's own shape does not single one out as the narrowest form that covers it - or the VALUE
-of a constant there that timing two candidates chose, rests on timing that ran every candidate
-interleaved in one process under one instrument, and puts that race's rows, each naming its arm,
-in the PR body or the change's dated `PERF_LEDGER.md` row.** A reading across two processes or
-two commits says which way the clock moved, not which form to adopt.
+**A diff that sets a constant in `dasllama/` to the value a timing of candidate values chose, or
+that adds or changes a predicate there that picks among kernel variants computing the same result
+because one measured faster (not because it is the smallest variant that fits the dispatch), takes
+the winner from a race that timed every candidate interleaved in one process with one script, and
+puts that race's rows, each naming its candidate, in the PR body or the change's dated
+`PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
+else that changed between the runs, so they cannot pick a candidate.
 
-**A diff that adds a model dimension, a row count or a region count as a factor of an existing
-allocation's size, or drops such a factor, wherever it sits, ships the measured pair - peak
-footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles; a new allocation
-carrying such a factor states its size in bytes, at the largest model shape the code path
-serves, in a `PERF_LEDGER.md` row.**
+**A diff after which an existing allocation's size starts or stops growing with a count the model
+file sets, with how many tokens one step computes at once, or with how many regions one buffer is
+split into (the K/V cache's device copy, one region per request served at once; an MoE dispatch's
+expert regions) ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md` with
+the decision it settles.**
+
+**A diff that adds an allocation whose size grows with a count the model file sets, with how many
+tokens one step computes at once, or with how many regions one buffer is split into (the K/V
+cache's device copy, one region per request served at once; an MoE dispatch's expert regions)
+states that size in bytes, at the largest model shape the code path serves, in a `PERF_LEDGER.md`
+row.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, `mm_fblob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is

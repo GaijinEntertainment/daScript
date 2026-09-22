@@ -125,7 +125,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, it is on when the server runs one stream (`streams = 1`) and off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5/3.6 MTP models, at several streams the plain batched step is faster (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board). `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs), and a device-resident slot (`--gpu vulkan`) keeps plain decode, since an armed round keeps every stream's cache on the host. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--models-dir` | - | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
 | `--tune` | - | - | Re-tune this box's dasLLAMA kernels, then relaunch (the JIT run; a fat build carries no tuner and ignores it) |
 | `--help` | `-?` | - | Show help and exit |
@@ -406,7 +406,7 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 The image is decoded and encoded on a dedicated vision worker thread - a large upload never
 stalls the other streams' decode - and its soft-token rows then prefill between the two token
 spans of the rendered turn, as one non-causal span. Wrapped base64 (GNU `base64`'s 76-column
-default) decodes fine; the payload caps at 32 MB of file and 64 MP decoded, each a named 400.
+default) decodes fine; the payload caps at 32 MB of file and 67 MP decoded, each a named 400.
 Today's rules:
 
 - **One image per request, on the FINAL user message.** Two images is a 400; an image anywhere

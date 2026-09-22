@@ -5567,7 +5567,7 @@ struct private SchedDefaults {
     page_rows : int64
     prefix_groups : int64
     kv_dtype : KVDtype
-    mtp : int   //! -1 auto (on when the slot runs one stream) | 0 off | 1 on
+    mtp : int   //! -1 auto (on when the slot runs one stream and is not device-capable) | 0 off | 1 on
 }
 
 var private g_sched_defaults = SchedDefaults()
@@ -5585,7 +5585,8 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && s_streams == 1l)
+    //! auto arms a one-stream slot that is not device-capable: an armed round keeps every stream host-cached (`slot_wants_device_kv`), so a Vulkan-resident slot would trade its device home for the draft
+    var spec = want > 0 || (want < 0 && s_streams == 1l && !s.gpu_capable)
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         if (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
@@ -5607,7 +5608,7 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows
     }
 }
 
-//! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream), 0 / 1 set it
+//! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream host-cached; a device-capable slot keeps plain decode), 0 / 1 set it
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) : bool {

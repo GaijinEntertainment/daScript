@@ -549,9 +549,9 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         }
         r.u_vocab = uniform_u32(uint(c.vocab_size))
     }
-    // chunked split-K attention above the single-tg depth (128-row chunks, cross-chunk combine)
-    r.chunked = pos + 1l > g_attn_single_max
+    // chunked split-K attention above the single-tg depth: the form and the partials follow the DEEPEST row the step reaches, never row 0's depth
     let top = deepest >= 0l ? deepest : pos
+    r.chunked = top + nrows > g_attn_single_max
     let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
     if (r.chunked) {
@@ -1297,6 +1297,7 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
     }
     let ts_prep = prof_ticks()
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     let mr = g_mirrors[s.uid]
     let dpos = pos - 1l
     let need_wm = wm_pos >= 0l ? wm_pos : pos
@@ -1609,9 +1610,12 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
     enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
     var dnli = 0l
-    let pos0 = g_v_groups[0].pos
+    var pdeep = g_v_groups[0].pos   //! the chain's chunk count follows the DEEPEST group: a shallower count leaves the deep rows' partials unwritten
+    for (g in g_v_groups) {
+        pdeep = max(pdeep, g.pos)
+    }
     for (l in range64(c.n_layers)) {
-        encode_verify_layer(t, r, enc, brt.buf, l, pos0, dnli)
+        encode_verify_layer(t, r, enc, brt.buf, l, pdeep, dnli)
     }
     enc_cls_tail_rows(t, r, enc, t.rms_final_off, r.blog, nr)
     // the head's carry hiddens from committed history: a group's row 0 takes its saved pre-draft hidden (cat row nr + its index), row i the verify's post-norm row i-1
@@ -1625,7 +1629,7 @@ def private encode_verify_step(t : Model; var r : StepRes) {
     }
     enc_draft_head_rows(t, r, enc, r.bcat, nr)
     var dnw = 0l
-    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, pos0, dnw)
+    encode_verify_layer(t, r, enc, brt.buf, c.n_layers, pdeep, dnw)
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
@@ -1797,8 +1801,9 @@ def private group_routes(t : Model; r : StepRes; nr : int64) : tuple<buf : Metal
     g_vrt |> grow_resize((c.n_layers + c.n_layer_nextn) * 4l * nr)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         for (g in g_v_groups) {
-            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
-            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
+            //! each group's layer bases follow ITS mirror's cap - a deeper stream's slice is taller than group 0's
+            let lb = uint((g.koff + uint64(mirror_lbase(t, r.kdt, g.cap, l))) / esz)
+            let vb = uint((g.voff + uint64(mirror_lbase(t, r.kdt, g.cap, l))) / esz)
             for (i in range64(g.nr)) {
                 let e = (l * nr + g.row0 + i) * 4l
                 g_vrt[e] = lb
@@ -1905,6 +1910,7 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
     let c = t.config
     let ng = long_length(g_v_groups)
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     var chain_pos = 0l
     for (gi in range64(ng)) {
         var g & = unsafe(g_v_groups[gi])
@@ -2008,6 +2014,7 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     }
     let ts_verify = prof_ticks()
     finish_pending_step()
+    discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
     for (gi in range64(ng)) {
         let mr = g_mirrors[g_v_groups[gi].s.uid]
         g_v_groups[gi].koff = mr.koff
@@ -2662,6 +2669,7 @@ var private g_mtp_carry_pre = false
 def set_metal_mtp_carry_hidden(on : bool; pre : bool = false) {
     g_mtp_carry_hidden = on
     g_mtp_carry_pre = pre
+    discard_batch_pre()   // a step encoded under the other carry would stash the wrong hidden
 }
 
 def metal_mtp_carry_pre() : bool => g_mtp_carry_pre
@@ -2697,6 +2705,7 @@ var private g_b_addrms_unfused = false
 
 def public set_metal_batch_addrms_unfused(v : bool) {
     g_b_addrms_unfused = v
+    discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
 
 // one-deep encode-ahead for the batch driver: a step commits BEFORE the previous is waited on, so
@@ -2981,7 +2990,7 @@ struct private BatchLayerEnc : LayerEncT {
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-dispatch-requires")]
-def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {   // nolint:STYLE038 — the batch step driver: decline, the pre-encoded step's commit, readiness, the recurrent rows and the build share the step's state
+def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     var why = batch_decode_decline(t, ws, sessions, nrows)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
         why = MetalDecodeDecline.device
@@ -3004,27 +3013,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         return batch_take_pre(t, ws, sessions, nrows)
     }
     discard_batch_pre()
-    // encode-ahead readiness: with a step in flight, mirror_prepare must stay on its fast path
-    // (no upload, no eviction, no rebuild — those touch arena slices the GPU is still writing).
-    // Any miss → complete the pending step first and take this one synchronously.
-    if (pending_active()) {
-        var ready = true
-        for (i in range64(nrows)) {
-            var sp = sessions[i]
-            if (!key_exists(g_mirrors, sp.uid)) {
-                ready = false
-                break
-            }
-            let mr = g_mirrors[sp.uid]   // cheap copy — fields tested off it
-            if (mr.cap_rows < ws.positions[i] + 1l || mr.kdt != ws.scr.kv_dtype_k ||
-                    mr.vdt != ws.scr.kv_dtype_v || mr.watermark < ws.positions[i]) {
-                ready = false
-                break
-            }
-        }
-        if (!ready) {
-            finish_pending_step()
-        }
+    // encode-ahead readiness: with a step in flight, mirror_prepare must stay on its fast path - any
+    // miss completes the pending step first and takes this one synchronously
+    if (pending_active() && !rows_mirror_ready(ws, sessions, nrows, 0l)) {
+        finish_pending_step()
     }
     // the recurrent rows' state: each session's DnMirror at its own position - a cold mirror syncs
     // from the CPU prefix under the previous step's completion, a session with neither declines the step
@@ -3081,6 +3073,7 @@ def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array
         finish_pending_step()   // synchronous path: complete + read back immediately
         if (g_land_err) {
             g_land_err = false
+            discard_batch_pre()   // the CPU rerun advances the rows past the step just pre-encoded
             return false   // the dispatch failed — the caller reruns this step on the CPU loop
         }
     }
@@ -3186,15 +3179,18 @@ def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
-def private batch_mark_committed(L : BatchLanding) {
-    for (i in range64(L.nrows)) {
-        let sp = L.sessions[i]
-        if (key_exists(g_mirrors, sp.uid)) {
-            let wm0 = g_mirrors[sp.uid].watermark
-            g_mirrors[sp.uid].watermark = max(wm0, L.positions[i] + 1l)
-        }
+//! Every row's mirror slice sits on `mirror_prepare`'s fast path at `positions + poff`: the slice
+//! holds the position, the codec is the session's, and the watermark sits EXACTLY there - below it
+//! a prepare uploads, above it a rewind re-uploads from row 0, both under an in-flight step's writes.
+def private rows_mirror_ready(ws : BatchWorkspace; sessions : array<Session?>; nrows, poff : int64) : bool {
+    for (i in range64(nrows)) {
+        let sp = sessions[i]
+        let pos = ws.positions[i] + poff
+        return false if (!key_exists(g_mirrors, sp.uid))
+        let mr = g_mirrors[sp.uid]   // cheap copy — fields tested off it
+        return false if (mr.cap_rows < pos + 1l || mr.kdt != sp.kv_dtype_k || mr.vdt != sp.kv_dtype_v || mr.watermark != pos)
     }
+    return true
 }
 
 var private g_b_pre = true   //!< DASLLAMA_METAL_BATCH_PRE: the next batched step pre-encodes under this one's GPU run
@@ -3210,21 +3206,20 @@ def public set_metal_batch_pre(on : bool) {
     }
 }
 
-def public metal_batch_pre_enabled() : bool => g_b_pre
-
-//! Batched steps that committed a step pre-encoded by the call before them.
-def public metal_batch_pre_taken() : int64 => g_batch_pre_taken
+def public metal_batch_pre_enabled() : bool {
+    if (g_bgemm_min < 0l) {
+        load_batch_knobs()   // the shipped default is the env's, not the initializer's
+    }
+    return g_b_pre
+}
 
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
 def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; L : BatchLanding) {
     return if (!g_b_pre || !L.gpu_logits || L.sameslab || t.config.recr_mask != 0ul || !empty(g_skip))
     for (i in range64(nrows)) {
-        let sp = sessions[i]
-        let npos = ws.positions[i] + 1l
-        return if (npos + 1l > t.config.seq_len || !key_exists(g_mirrors, sp.uid))
-        let mr = g_mirrors[sp.uid]   // cheap copy — fields tested off it
-        return if (mr.cap_rows < npos + 1l || mr.kdt != sp.kv_dtype_k || mr.vdt != sp.kv_dtype_v || mr.watermark < npos)
+        return if (ws.positions[i] + 2l > t.config.seq_len)
     }
+    return if (!rows_mirror_ready(ws, sessions, nrows, 1l))
     let ts_all = ref_time_ticks()
     let rp = batch_rows_prepare(t, ws, sessions, nrows, 1l)
     return if (!rp.ok)
@@ -3233,18 +3228,26 @@ def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions :
     P.pre_valid = true
 }
 
+//! The pre-encoded step is this call's: the same rows (by uid - a session pointer is not identity)
+//! at the same positions, the same model shape and KV codec, the arena epoch, every slice where
+//! the row table names it, and every row's zero-copy logits wrap where the scatter was encoded.
 def private batch_pre_matches(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let P & = g_land[1 - g_lp_i]
-    return false if (!P.pre_valid || batch_same_slab() || P.nrows != nrows || P.kdt != ws.scr.kv_dtype_k || P.epoch != g_arena_epoch || !empty(g_skip))
+    let c = t.config
+    return false if (!P.pre_valid || batch_same_slab() || P.nrows != nrows || P.kdt != ws.scr.kv_dtype_k || P.epoch != g_arena_epoch || !empty(g_skip) ||
+        P.dim != c.dim || P.layers != c.n_layers || P.seq != c.seq_len || P.vocab != c.vocab_size)
     for (i in range64(nrows)) {
-        let sp = sessions[i]
-        return false if (P.sessions[i] != sp || P.positions[i] != ws.positions[i] || !key_exists(g_mirrors, sp.uid))
-        let mr = g_mirrors[sp.uid]   // the readiness test first: a prepare off the fast path would touch the arena under the pending step
-        return false if (mr.cap_rows < ws.positions[i] + 1l || mr.kdt != sp.kv_dtype_k || mr.vdt != sp.kv_dtype_v || mr.watermark < ws.positions[i])
+        return false if (P.uids[i] != sessions[i].uid || P.positions[i] != ws.positions[i])
     }
+    return false if (!rows_mirror_ready(ws, sessions, nrows, 0l))   // a prepare off the fast path would touch the arena under the pending step
     for (i in range64(nrows)) {
         let mir = mirror_prepare(t, *sessions[i], ws.positions[i])
         return false if (!mir.ok || mir.koff != P.koffs[i] || mir.voff != P.voffs[i] || mir.cap != P.caps[i])
+    }
+    if (P.nc_all) {
+        for (i in range64(nrows)) {
+            return false if (nc_logits_for(g_dev, *sessions[i]) != P.ncbufs[i])
+        }
     }
     return true
 }
@@ -3257,7 +3260,7 @@ def private batch_take_pre(t : Model; ws : BatchWorkspace; var sessions : array<
         metal_commit(c_i)
     }
     P.pre_valid = false
-    batch_mark_committed(P)
+    mark_rows_committed(P)
     g_batch_pre_taken++
     g_us_bsetup += int64(get_time_usec(ts_all))
     return batch_step_land(t, ws, sessions, nrows, P)
@@ -3772,12 +3775,20 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.xb = null   // the CPU-classifier tail's x_b writeback is the forward's to arm (sync-only; the pre rail needs GPU logits)
     L.sessions |> clear()
     L.sessions |> reserve(nrows)
+    L.uids |> clear()
+    L.uids |> reserve(nrows)
+    L.ncbufs |> clear()
+    L.nc_all = nc_all
     L.positions |> resize(nrows)
     L.koffs |> resize(nrows)
     L.voffs |> resize(nrows)
     L.caps |> resize(nrows)
     for (i in range64(nrows)) {
         L.sessions |> push(sessions[i])
+        L.uids |> push(sessions[i].uid)
+        if (nc_all) {
+            L.ncbufs |> push(nc_logits_for(g_dev, *sessions[i]))
+        }
         L.positions[i] = ws.positions[i] + poff
         L.koffs[i] = g_b_koffs[i]
         L.voffs[i] = g_b_voffs[i]
@@ -3790,9 +3801,9 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.gpu_logits = gpu_logits
     // hetero (gemma4): per-layer row bytes + per-(row, layer) slab bases — uniform models
     // capture the same values the old l * cap * rowb arithmetic produced
-    L.lrowb |> resize(c.n_layers)
-    L.lkbase |> resize(nrows * c.n_layers)
-    L.lvbase |> resize(nrows * c.n_layers)
+    L.lrowb |> grow_resize(c.n_layers)
+    L.lkbase |> grow_resize(nrows * c.n_layers)
+    L.lvbase |> grow_resize(nrows * c.n_layers)
     for (l in range64(c.n_layers)) {
         L.lrowb[l] = kv_row_bytes(kdt, layer_kv_dim(c, l))
         for (i in range64(nrows)) {
@@ -3801,7 +3812,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         }
     }
     if (!pre) {
-        batch_mark_committed(L)
+        mark_rows_committed(L)
     }
 }
 
@@ -3824,6 +3835,7 @@ def public set_metal_mtp_debug(mode : string) {
 //! against the chunked per-(row, head) pair, flipped inside one process.
 def public set_metal_attn_d(on : bool) {
     g_env_attn_d = on
+    discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
