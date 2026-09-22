@@ -1,8 +1,9 @@
 # dasLLAMA GPU Kernel Body Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`.
-Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
+`ARCHITECTURE_GPU_RACE_SHAPES.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -20,8 +21,8 @@ readiness, whether this window's rope tables are staged, is asked by `prefill_de
 the dispatch, and whose deciding value the host fixes before it records the dispatch, is a
 defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
 guard, clamping the index so the guarded work runs on a live value and its result is never
-stored also conforms.** Stamped means the deciding value is a `@template_constant`; the generated
-`*_msl` global or SPIR-V dump then shows no guard for a guard, a constant trip count for a bound.
+stored also conforms.** Stamped means the deciding value is a `@template_constant`, or - for a
+class no template instantiates - a module constant the class reads.
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value
@@ -39,10 +40,9 @@ dispatches steps nor a multiple of that chunk the site forces by splitting its K
 dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
 a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
 
-**Weakening `tests/test_metal_float_a_gate.das` - the gate on the MSL emitter's refusal to
-compile an unlicensed float `matmul2d` A operand, `[metal_kernel(float_a_ok=true)]` being the
-license - is a defect.** A float operand keeps the op off its native fast path; the emitter's
-own refusal is `modules/REVIEW_SHADER_EMITTERS.md`'s (repo root) rule.
+**Weakening this folder's `tests/test_metal_float_a_gate.das` - the gate that checks the MSL
+emitter refuses a float `matmul2d` A operand without the `[metal_kernel(float_a_ok=true)]`
+license - is a defect.** A float operand keeps the op off its native fast path.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
 `ARCHITECTURE_GPU_RACE_SHAPES.md` sec.2.2b sanctions extends that section in the same change.**

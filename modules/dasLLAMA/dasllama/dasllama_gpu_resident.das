@@ -1589,6 +1589,31 @@ var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the 
 var private @scratch @exact_size g_rdec_x_n : array<float>
 var private @scratch @exact_size g_rdec_cos_n : array<float>
 var private @scratch @do_not_delete g_rdec_lrows : array<float?>   //! borrowed rows into the sessions' logits
+var private @scratch g_rdec_picks : array<int64>   //! the rows' device picks (-1 on a row that landed its logits)
+var private g_rdec_picks_served = 0l
+//! the rows whose argmax the device landed alone this process: a cell reads the difference across its steps
+def public rdec_picks_served() : int64 => g_rdec_picks_served
+
+//! a landed pick into the session: the next sample_ returns it (a row that landed its logits, -1, leaves the sampler to them)
+def private rdec_land_pick(var s : Session; pick : int64) {
+    if (pick >= 0l) {
+        verify(!s.pick_ready, "dasLLAMA resident: a session's landed pick was never sampled before its next step - engine bug")
+        s.pick_tok = pick
+        s.pick_ready = true
+        g_rdec_picks_served++
+    }
+}
+
+//! the picks the first `n` rows landed, taken back: the step is declined after them, and the CPU rails' redo lands every row's logits
+def private rdec_unland_picks(var sessions : array<Session?>; n : int64) {
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        if (s.pick_ready) {
+            s.pick_ready = false
+            g_rdec_picks_served--
+        }
+    }
+}
 var private @scratch g_rdec_poss : array<int64>
 var private @scratch g_rdec_cnts : array<int64>
 var private @scratch g_rdec_regs : array<int64>
@@ -1786,10 +1811,10 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         g_rdec_one_tok |> resize(1l)
         g_rdec_one_tok[0] = token
         resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
-        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.logits)
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.pick_asked, s.logits))
         s.ple_gpu_pending = false
     } else {
-        rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
+        rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
     g_rdec_regions[r].cnt = pos + 1l
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
@@ -1968,18 +1993,24 @@ def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : ar
     return true
 }
 
-//! row `i`'s side input for the token command: the table row gathered on device, else row `i` of the pre-step `eval_batch` already ran
-def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
+//! the side-input rows of `n` tokens for the token command, into `g_rdec_ple_rows`: the table rows gathered on device where
+//! the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major either way)
+def private rdec_ple_side_rows(t : Model; tokens : array<int64>; n : int64; ws : BatchWorkspace; src_off : int64) {
     if (rdec_ple_proj_on()) {
-        g_rdec_one_tok |> resize(1l)
-        g_rdec_one_tok[0] = ws.row_tokens[i]
-        resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        resident_prefill_ple_rows(t, tokens, n)
         return
     }
-    let all = t.config.n_layers * t.config.n_embd_per_layer
+    let all = t.config.n_layers * t.config.n_embd_per_layer * n
     g_rdec_ple_rows |> reserve(all)
     g_rdec_ple_rows |> resize(all)
-    copy_floats(ws.scr.ple_inp, i * all, g_rdec_ple_rows, 0l, all)
+    copy_floats(ws.scr.ple_inp, src_off, g_rdec_ple_rows, 0l, all)
+}
+
+//! row `i`'s side input for the token command: the table row gathered on device, else row `i` of the pre-step `eval_batch` already ran
+def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
+    g_rdec_one_tok |> resize(1l)
+    g_rdec_one_tok[0] = ws.row_tokens[i]
+    rdec_ple_side_rows(t, g_rdec_one_tok, 1l, ws, i * t.config.n_layers * t.config.n_embd_per_layer)
 }
 
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
@@ -1989,16 +2020,9 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let dim = c.dim
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
-    let ple_raw = rdec_ple_proj_on()   //! the rows' side inputs, position-major: the table rows the device projects, else the pre-step's finished rows as the workspace holds them
+    let ple_raw = rdec_ple_proj_on()
     if (has_ple(c)) {
-        if (ple_raw) {
-            resident_prefill_ple_rows(t, ws.row_tokens, nrows)
-        } else {
-            let all = c.n_layers * c.n_embd_per_layer
-            g_rdec_ple_rows |> reserve(all * nrows)
-            g_rdec_ple_rows |> resize(all * nrows)
-            copy_floats(ws.scr.ple_inp, 0l, g_rdec_ple_rows, 0l, all * nrows)
-        }
+        rdec_ple_side_rows(t, ws.row_tokens, nrows, ws, 0l)
     }
     g_rdec_lrows |> resize(nrows)
     g_rdec_poss |> resize(nrows)
@@ -2028,15 +2052,20 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         g_rdec_poss[i] = pos
         g_rdec_cnts[i] = pos + 1l
         g_rdec_regs[i] = r
-        g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
+        g_rdec_lrows[i] = null
+        if (!s.pick_asked) {
+            g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
+        }
     }
+    g_rdec_picks |> resize(nrows)
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
+        rdec_land_pick(s, g_rdec_picks[i])
         let pos = g_rdec_poss[i]
         let r = g_rdec_regs[i]
         if (!s.device_kv) {
@@ -2081,6 +2110,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         let pos = ws.positions[i]
         let r = rdec_bind_region(s)
         if (r < 0l) {
+            rdec_unland_picks(sessions, i)
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
         if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
@@ -2104,7 +2134,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         if (ple) {
             rdec_batch_ple_row(t, ws, i)
         }
-        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, g_rdec_tmp)
+        let picked = rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
         for (l in range64(c.n_layers)) {
             continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)
@@ -2117,7 +2147,11 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         }
         g_rdec_regions[r].cnt = pos + 1l
         s.rdec_host_current = !s.device_kv
-        copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
+        if (picked >= 0l) {
+            rdec_land_pick(s, picked)
+        } else {
+            copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
+        }
     }
     batch_decode_override_logits_done()
     return true

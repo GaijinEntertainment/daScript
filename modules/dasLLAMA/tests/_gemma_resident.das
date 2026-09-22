@@ -36,6 +36,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on
+require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, live_maxabs, SUPPRESSED_LOGIT, argmax_of, feed_logits
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
@@ -52,45 +53,11 @@ let GEMMA_PPL_RATIO = 1.05
 //! arc's value-identical kernel rewrites, the IQ3_XXS file 0.68 to 1.71 - so the bar sits past that band (the readings: CLAUDE.md)
 let GEMMA_MOE_PPL_RATIO = 2.0
 let PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
-let private SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 
 def assert_pf_window(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
     }
-}
-
-//! the served tile arm, so a red names which prefill tile it came from
-def private tile_arm_tag() : string {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
-    } else {
-        return "no vulkan module"
-    }
-}
-
-def private argmax_of(v : array<float>) : int64 {
-    var best = SUPPRESSED_LOGIT
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
-}
-
-//! the largest |logit| among the live ones (a suppressed id would set the bar to nonsense)
-def private live_maxabs(v : array<float>) : float {
-    var m = 0.0
-    for (x in v) {
-        let a = abs(x)
-        if (a < -SUPPRESSED_LOGIT * 0.1 && a > m) {
-            m = a
-        }
-    }
-    return m
 }
 
 //! the first `count` ids of ordinary prose through the model's own tokenizer: on a junk prompt gemma's
@@ -141,20 +108,6 @@ def private gemma_model(t : T?; file : string) : Model {
 //! `gemma_model`'s empty answer: the cell skipped, and said why
 def private no_model(tr : Model) : bool => tr.config.n_layers == 0l
 
-// prefill `prompt`, then feed `toks` one per step; the logits after the prefill and after each step
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    let n = long_length(prompt)
-    var rows : array<array<float>>
-    rows |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- rows
-}
-
 //! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it.
 def gemma_forced_feed(t : T?; n : int64; file : string) {
@@ -169,31 +122,9 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
         var prompt <- [for (i in range64(n)); ids[i]]
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
         delete ids
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
-        var gpu <- feed_logits(tr, sg, prompt, toks)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
-        delete sg
-        moe_gpu_drop_model()   // every later step is the CPU chain
-        var sc <- create_session(tr, mirror_kv_dtype())
-        var cpu <- feed_logits(tr, sc, prompt, toks)
-        delete sc
-        for (st in range64(long_length(cpu))) {
-            let diff = logits_maxdiff(gpu[st], cpu[st])
-            let bar = GEMMA_LOGIT_BAR_REL * live_maxabs(cpu[st])
-            let ag = argmax_of(gpu[st])
-            let ac = argmax_of(cpu[st])
-            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-            to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), resident {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
-            if (st > 0l) {
-                let off = logits_maxdiff(gpu[st], cpu[st - 1l])
-                t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
-        }
-        delete gpu
-        delete cpu
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
+        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
+        delete fed
         delete prompt
         delete toks
     }

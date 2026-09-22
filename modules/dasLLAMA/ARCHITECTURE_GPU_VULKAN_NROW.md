@@ -73,15 +73,21 @@ gate and up forms - each fused stamp's twin byte for byte, by the stamps' own ce
 unfolded down, whose fold under the routing weights is the combine's; the site before the block
 takes the split add-rms and requant pair, since the router reads the normed rows as floats. The
 routed planes hold `nb` rows (`moe_dlog_dev`, `moe_xq_dev` and `moe_xs_dev`, `egate_dev`,
-`eup_dev`, `edown_dev`), the one-row sets binding their first row, and the rail declines a
+`eup_dev`, `edown_dev`), every set binding them whole (the one-row command reads row 0), and the rail declines a
 model whose `nb * k` slots pass `MAX_ROUTED_SLOTS`, the slot planes' extent. The rows share no
 expert weights - every slot reads its expert whole, as the reference's decode does below its
 grouped-GEMM threshold (`mul_mat_vec_max_cols` on its Vulkan backend, `MMVQ_MAX_BATCH_SIZE` on
 CUDA) - so the batched step's gain on a MoE carrier is the attention, the router, the shared
-expert and the submit, not the experts' bytes. The rows' combine quantizes the next head's feed
-under the N path's own decision (`RLayer.comb_rq_n`, made when its sets build), never the
-one-row command's `comb_rq`, which only a one-row record sets: the two commands record in any
-order, and a set the N record binds always exists. The router and the fused per-layer-embedding
+expert and the submit, not the experts' bytes. The one-column leaves walk their regions
+interleaved a row at a time (`r = rg % nreg`, the y row at `r * d + row`), so an expert two
+slots share leaves DRAM once and the second slot reads it from cache - the reference's MoE
+GEMV puts every token's dot of one row index in one block for the same reason - where a
+region-major walk put the two reads a whole expert stack apart. The rows' combine quantizes the next head's feed
+under a decision both commands share (`RLayer.comb_rq`, made once with the combine sets by
+whichever command records first, `rd_ensure_comb_sets`): the two commands record in any order,
+and a set either record binds always exists. One recorder encodes both commands
+(`rd_encode_token` over `nrows`): the one-row arms at one row, the N-column leaves, the rows
+stamp and the bisect knob past it, the sets one and the same. The router and the fused per-layer-embedding
 kernels hold at most eight columns in their register and workgroup arrays (`RD_NB_MAX`), clamped
 in the kernel; the router's partial plane holds sixteen subgroups' worth, twice the tier's floor.
 

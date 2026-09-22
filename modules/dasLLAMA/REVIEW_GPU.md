@@ -68,11 +68,13 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that turns one dispatch on an encoder path into two or more also gates that path in the
-same change - on the extent the added dispatch divides (the site's own K, key span or row
-count), or on the path's work size when the split divides no extent - and the threshold comes
-from a measurement at the smallest and at the largest value the gated quantity takes on the
-path, both measurements in the PR body.** The small-work regression hides behind the big-work
+**A diff that lands an encoder path whose work is split across two or more dispatches - a new
+path, or one dispatch turned into more - also gates that path in the same change - on the extent
+the added dispatch divides (the site's own K, key span or row count), or on the path's work size
+when the split divides no extent - or ships no gate, where the measurement shows the split wins
+at both ends of that quantity; either way the threshold, or the no-gate decision, comes from a
+measurement at the smallest and at the largest value that quantity takes on the path, both
+measurements in the PR body.** The small-work regression hides behind the big-work
 win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at every
@@ -83,10 +85,11 @@ the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for 
 `tg=` / `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
 **A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
-host computes that class's `wgs`, changes both in the same change, or - where the body's decode
-and the host's count both read one shared function - shows in the same change that for every
-shape the encoder dispatches that class on, the stamp it picks is the one that function's value
-names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
+host computes that class's `wgs`, shows in the same change that the host's count still covers
+exactly the indices the body's decode reads - by changing both, by a decode that permutes the
+same index set, or - where the body's decode and the host's count both read one shared function
+- by showing that for every shape the encoder dispatches that class on, the stamp it picks is the
+one that function's value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **A device-upload cache key covers every input the uploaded bytes depend on: a host address, an
 offset, or a handle alone is not a key - carry the span and the form, the element type and

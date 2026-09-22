@@ -14,8 +14,9 @@ code lands in which file is the checklist's own.
 **A function, a class (a kernel class among them), a module global (`let` or `var`, private or
 not), a named constant or a `require` under `dasllama/` lands in the file whose charter line - in
 an `ARCHITECTURE_*.md` companion's sec.1, or a role row of `ARCHITECTURE_GPU.md` sec.1.5 - names
-its concern and whose must-not-hold cell does not, or that charter line changes in the same
-diff - no other file's charter naming the kind is an excuse.** `ARCHITECTURE.md`'s sec.1 routing
+its concern, unless that charter row carries a `must not hold` cell - the concerns that file
+never holds - naming the concern; a diff may instead change that charter line in the same
+change. Another file's charter naming the same kind of code does not license the landing.** `ARCHITECTURE.md`'s sec.1 routing
 block names the companion that holds each file's charter line. A driver arm is host code that
 ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
 a hook or capability registry.
@@ -31,13 +32,17 @@ checklist.**
 family ships more than one arm lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one
 of the coopmat forms a family ships (cm2, KHR).
 
-**A host-side ensure/set/encode ladder that picks a stamp from its push-constant and shape
-arguments alone lands in `dasllama/dasllama_vulkan_classes.das`; a pick that reads the driver's
-state - `g_rd` or an `RLayer` field - stays in the backend driver file its charter line names,
-`dasllama/dasllama_vulkan_decode.das` for a decode-time ladder and
-`dasllama/dasllama_vulkan_prefill.das` for a batch one.** A stamp is one class stamped from a
-kernel class template; a predicate over shape values alone is the classes file's, whoever calls
-it.
+**A host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from its
+push-constant and shape arguments alone lands in `dasllama/dasllama_vulkan_classes.das`.** A
+stamp is one class stamped from a kernel class template; a predicate over shape values alone is
+the classes file's, whoever calls it.
+
+**A host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
+`RLayer` field - lands in `dasllama/dasllama_vulkan_decode.das` for a decode-time chain,
+`dasllama/dasllama_vulkan_prefill.das` for a batch one.**
+
+**A host-side ensure/set/encode chain that only switches on a stamp it is handed lands in the
+file of the function that decides that stamp.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,

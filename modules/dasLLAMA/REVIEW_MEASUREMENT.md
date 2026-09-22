@@ -15,7 +15,9 @@ tolerance value itself, and to this list for naming the box and flags it was rea
 
 The naming a figure rule asks for is attached to the figure by a sentence, a table heading or a
 provenance line that unambiguously covers it, or by a citation of a passage or board row whose
-provenance covers it. A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`)
+provenance covers it. A provenance line is a paragraph whose whole content is provenance - the
+harness, flags, box and exe - set before the rows it covers or naming them. A tag (`external`,
+`direction-grade`, `out-of-process`, `debug-jit`)
 covers the figures of the sentence or bullet it sits in, or, on a provenance line, the figures
 of the paragraphs that line sits under or names.
 
@@ -40,6 +42,9 @@ writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a scrip
 rather than as the released exe. A rig leg is the backend arm a board cell runs - one the set
 `stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
+
+**A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
+it.**
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
@@ -102,14 +107,21 @@ official` does not carry the model.
 body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
 or says the run printed none.**
 
-**A diff that claims to make an already-served path faster re-mints a board row
-(`performance/records/<box>.json`) that exercises that path, in the same change, and names that
-row in the PR body.** The board is the module's committed record of what serving costs; a kernel
+**A diff that claims to make an already-served path faster, where a rig leg drives that path,
+re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,
+and names that row in the PR body.** The board is the module's committed record of what serving costs; a kernel
 win that never lands there is invisible to the next regression check.
 
 **A rate or wall of any served-turn leg written down as a measurement rather than as a
 prediction is a defect unless it cites the committed board row it came from, or names harness,
 flags, environment overrides, box, and the exe or script that ran it.**
+
+**A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
+figure computed from one - or changes what such a number measures, ships that number's
+alternate in the same change: another row of the same run at the same shape, or a
+reference-build row - a figure from a run of the third-party engine this module measures against
+- at the same shape, named with the command that produced it.** A number with no alternate
+beside it ranks nothing.
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the

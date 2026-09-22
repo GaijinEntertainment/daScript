@@ -519,6 +519,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.sum_batch += long_length(sch.batch_rows)
     } elif (!empty(sch.batch_rows)) {
         let ts_step = prof_ticks()
+        for (si in sch.batch_idx) {
+            sch.streams[si].session.pick_asked = sampler_is_argmax(sch.streams[si].params)
+        }
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
         prof_add("sched_eval_batch", ts_step)
         sch.decode_steps ++
@@ -528,6 +531,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
                 sch.gen_tokens ++
             }
+            sch.streams[sch.batch_idx[bi]].session.pick_asked = false   //! the ask is a step's
         }
         prof_add("sched_sample", ts_sample)
     }

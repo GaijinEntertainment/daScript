@@ -9,9 +9,9 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
 Two kernel classes are twins when one body serves both: their compiled bodies differ only on an
 axis one value fixes - a template constant, a typedef, which base shell's method they inherit, or
-a run-time count of live entries inside a fixed extent (a column count, a row count). A base
-shell is the dispatch-less base class whose methods the emitter splices flat into each deriving
-class.
+a run-time count of live entries inside a fixed extent (a column count, a row count). Two classes
+with bodies of their own that share a base shell's method are not twins. A base shell is the
+dispatch-less base class whose methods the emitter splices flat into each deriving class.
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
@@ -31,9 +31,11 @@ multiply-add into one fma, so two bodies spelled alike round a ulp apart on a dr
 contracts one and not the other; `mad` is the fused instruction by definition and leaves the
 driver nothing to choose.
 
-**A value that is the same on every dispatch a compiled kernel's pipeline serves - a tile width
-the class fixes is, a dimension the model sets is not - never reaches that kernel as a uniform, a
-kargs field, or an `@off` bind offset: stamp it into the class as a `@template_constant`.**
+**A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
+supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a
+`@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class as a
+`@template_constant`, or - for a class no template instantiates - compile it in as a module
+constant the class reads.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
 a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
@@ -120,9 +122,10 @@ the device, so it does not count.
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
 
-**A kernel-class method a compiled body calls in value position - inside an expression rather
-than as its own statement - returns its value in one statement after compile-time folding: an
-arrow form (`=>`), or a `static_if` whose every arm is one `return`; a method that needs more
-than one statement hands its value back through a `var T&` parameter instead.** The emitter
-splices a value-position method as one expression, so a body that folds to more than one
-statement reaches the kernel as a statement and its value never arrives.
+**A kernel-class method whose call sits nested inside a larger expression - as an argument, an
+operand or a subscript, but not as the whole right-hand side of a `let` or an assignment -
+returns its value in one statement after compile-time folding: an arrow form (`=>`), or a
+`static_if` whose every arm is one `return`; a method that needs more than one statement hands
+its value back through a `var T&` parameter instead.** The emitter splices such a nested call as
+one expression, so a body that folds to more than one statement reaches the kernel as a
+statement and its value never arrives.

@@ -179,14 +179,14 @@ summing the first reduce's partials would read the second's writes out of the sa
 ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
 prepare fails on the path that skipped the ensure.
 
-**A diff that adds a stamp to, or adds, removes or retypes a binding on one stamp of, a
-`[vk_dispatch]` class template whose stamps are dispatched with a set one stamp's `set_<family>`
-built - through a hand-written picker in `dasllama/dasllama_vulkan_classes.das` (`gemv_cls_set_n`,
-`q8_gemv_gu_n_set`, `fa_stamp_set`) or a driver set handed across stamps (`RLayer.s_attn` to
-`DaAttnT`'s) - keeps every stamp's binding list identical, in the same change; a field a
-`@template_gate` omits on a stamp is not a binding change.** The picker asks one stamp's set and
-the encode dispatches another, so the stamp the diff left behind reads the set's buffers in the
-wrong slots, and nothing refuses it.
+**A diff that adds a stamp, or adds, removes or retypes a binding on one stamp, of a
+`[vk_dispatch]` class template whose set is picked at dispatch keeps every stamp's binding list
+identical, in the same change; a field a `@template_gate` omits on a stamp is not a binding
+change.** A set is picked at dispatch when a hand-written picker under `dasllama/` returns one
+stamp's set by a stamp argument, or when a driver set is handed across stamps (`RLayer.s_attn`
+handed to `DaAttnT`'s set). The picker asks one stamp's set and the encode
+dispatches another, so the stamp the diff left behind reads the set's buffers in the wrong
+slots, and nothing refuses it.
 
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
@@ -194,9 +194,9 @@ wrong slots, and nothing refuses it.
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**A descriptor set the N-row token command - the resident decode command that runs `RDec.nb`
-rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its plane's whole
-`RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
+**A descriptor set the N-row token command - the resident decode command that runs two to
+`RDec.nb` rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its
+plane's whole `RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
 sizes to one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read
 past its binding on every row but the first.
 
@@ -214,9 +214,9 @@ list and stamp count.** The profiler sums intervals by the recorder's own names.
 form that leaves its list installed sends every later one-row profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
-(`dasllama/dasllama_vulkan_common.das`) calls `xfer_spin_wait` on the value it returned before it
-submits any command that writes the buffer that copy reads.** The host's wait is the only order
-between the copy's read and that write.
+(`dasllama/dasllama_vulkan_common.das`) waits (`xfer_wait`, spinning or blocking) on the value it
+returned before it submits any command that writes the buffer that copy reads.** The host's wait
+is the only order between the copy's read and that write.
 
 **A kernel body in `dasllama/dasllama_vulkan_classes.das` that divides or takes a modulo by a
 divisor that is not a literal or a template constant - a push-constant field, bare or computed

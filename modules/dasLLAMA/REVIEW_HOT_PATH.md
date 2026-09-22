@@ -25,6 +25,7 @@ region entry is a defect - move it to the entry; an interior function carries on
 only from a load, stage, bake, or convert path - it is no region entry; it carries `[cold_path]`
 or nothing.**
 
-**A driver that calls a model serving entry - `forward`, `eval`, `eval_batch`, or a `forward_*`
-entry taking a `Session` - and is reached only by a measurement - a benchmark row, a rig's loop -
-carries `[cold_path]`.**
+**A function that reaches a model serving entry - `forward`, `eval`, `eval_batch`, or a
+`forward_*` entry taking a `Session` - through a call chain of any length, and is reachable only
+from this module's `tests/`, `harness/`, `benchmarks/` or `performance/`, is a defect unless the
+outermost such function carries `[cold_path]`; the functions it reaches need none.**

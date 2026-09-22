@@ -373,7 +373,11 @@ last column standing),
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
 gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
-suppressed id pinned on every row),
+suppressed id pinned on every row), `test_vkd_cls_argmax` (the classifier tail's device pick over
+four rows at two vocab widths against the host's `parallel_argmax`, a tie landing on the lower id,
+an all-equal row landing id 0, a poisoned row reddening the compare; the served witness is the
+regions files' device-mode scheduler cell, which counts the picks the driver landed alone against
+the rows it stepped, the sampled fourth request's rows landing logits beside them),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
 the biased add partner beside the plain step), `test_vkd_q8_gemv_ar_row_twin` (that epilogue
 against the row kernel `cls_ar_rq_b` fed the GEMV's own y row, the updated row, the scales and
@@ -555,9 +559,12 @@ tier rides the batched Q4_0 GEMM, bit for bit the GEMV's dot - and the f16 / q8_
 codecs, the mid-run shrink, the B == 1 delegation, the step census) and on the deltanet hybrid
 Qwen3.5-0.8B Q8 (f32 and f16 KV at 1e-6: the recurrent rows form per session, the gated
 partial-rope attention rows, the final deltanet state and conv history, every step counted on
-the CPU batched stack by the census, and a decode below the deltanet position panicking - the
-state is forward-only) and, under the large tier, on the MoE hybrid Qwen3.6-35B-A3B UD-Q4_K_M -
-the f32-on-disk beta/alpha arm of the batched layer's projection prologue, f16 KV at 1e-6; a cell whose bar is exact free-runs the batched greedy and holds the
+the CPU batched stack by the census - the loaded model's GPU state dropped, as the scheduler
+file's SmolLM cells do, so both sides serve on the CPU lane under `DASLLAMA_GPU=1` - and
+a decode below the deltanet position panicking - the state is forward-only) and, under the
+large tier, on the MoE hybrid Qwen3.6-35B-A3B UD-Q4_K_M - the f32-on-disk beta/alpha arm of the
+batched layer's projection prologue, f16 KV at 1e-6; a cell whose bar is exact free-runs the
+batched greedy and holds the
 tokens, a cell whose bar concedes rounding feeds the reference's tokens and holds the logits, and
 every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
 plus the batched bench row's refusal contract on SmolLM2.
@@ -592,7 +599,9 @@ against the host-cached scheduler over four requests on two streams (`_scheduler
 with `test_scheduler.das`): token for token where the two sides run one code path - each prompt
 one window-chain call, each step the batched token command, the prefill counter pinning it -
 and for the second turn, which adopts the rows of the turn it continues and so splits its
-prefill, the adopted count alone. Every cell holds `gpu_cpu_passes_()` empty
+prefill, the adopted count alone; the three argmax requests' decode steps land their picks on the
+device (the count held equal to the rows stepped less the second turn's, which samples at top-k 1
+under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of
 `test_gpu_resident_qwen2.das`: one prompt prefilled in one call against two calls, cut at 40
 of 57, 512 of 600 and 300 of 900 (the cuts placed against the engine's `PF_WINDOW`, asserted),

@@ -46,12 +46,13 @@ none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 **A claim about emitted shape checked against the das source is a defect - the check reads the
 emitted artifact: the SPIR-V words `dasSpirv` builds, or the MSL text `dasMetal` writes.** Emitted
 shape is the structure of the emitted kernel - its signature, its parameter attributes, its
-statement forms - and its emitted shape values (tile, unroll width, threadgroup size); a grid
-is a dispatch argument, read at the encoder call site.
+statement forms - and the constants that structure carries: a tile, an unroll width, a
+threadgroup size, the extent of a local or `@workgroup` array. A grid is not one - it is a
+dispatch argument, read at the encoder call site.
 
-**A diff whose text - a commit message, a PR body, an architecture line - claims an emitted shape
-value states in the PR body what it read in the emitted artifact: the SPIR-V words or the MSL
-text, and the count or value read there.**
+**A diff that claims an emitted shape value - in a commit message, a PR body, or an architecture
+line - states in its PR body which emitted artifact was read, the SPIR-V words or the MSL text,
+and the count or value read there.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md` sec.5) naming that capability - covered by the row

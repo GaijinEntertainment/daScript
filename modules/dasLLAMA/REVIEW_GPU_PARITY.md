@@ -12,8 +12,9 @@ tokens - counts only when it comes from `harness/parity.das`, `benchmarks/lcpp_b
 --parity` (`performance/model_specs.das`'s fixed model list), or an in-suite parity instrument
 run through `tests/run.das` that feeds both sides the same fixed tokens and compares them in the
 form `tests/REVIEW.md` binds - the logits against a tolerance a one-token-off control reads
-past, or a counting prompt's tokens exact.** A probe that prints a difference and asserts
-nothing is not parity evidence.
+past, a counting prompt's tokens exact, or - where the changed path lands a token id and no
+logits row - the served ids token for token against the host's `parallel_argmax` over the same
+logits.** A probe that prints a difference and asserts nothing is not parity evidence.
 
 **A `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md` entry that settles a parity
 fix names the run its evidence came from, and that run is one this checklist admits as parity
@@ -41,9 +42,10 @@ is the default and needs no flag.
 changed path does not count.** That line is the Vulkan driver naming a call it handed back to
 the CPU path.
 
-**Driver-against-itself evidence - a batched row against the same session stepped alone, both
-on the device, the regions files' shape - is rows evidence, never parity, and the arming, codec
-and pass-through rules above bind it the same.**
+**Driver-against-itself evidence - two GPU-served arms of one model compared against each other
+- is evidence for a `PERF_LEDGER.md` row, never parity evidence; the three rules above on the
+armed backend, the mirror codec and the pass-through line bind it as they bind parity
+evidence.**
 
 **A diff that widens a bar an instrument holds names, in the same change, the reading the new
 bar comes from and the box that read it.**

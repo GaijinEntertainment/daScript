@@ -26,18 +26,13 @@ same change.** A stale gate reads the wrong buffer and passes on garbage that ha
 **A kernel-unit cell that compares a row of floats it indexes by an id - the classifier's logits
 rows by token id, a router's by expert - over synthetic rows and does not log the measured max
 difference with the row and the id it sits at is a defect.** A red, or a suspicious green, must
-say how far and where, not only how many.
+say how far and where, not only how many. A cell is a `t |> run` block, or a helper that asserts
+on `t`.
 
-A kernel-unit cell is a model-less cell that dispatches one or more kernel classes and asserts on
-their output; every rule below that names one means this.
-
-**A kernel-unit cell missing a compare against a CPU oracle in the cell itself is a defect; where the
-cell compares two kernel forms against each other, the oracle compare targets one of those two
-forms, in that cell or in a cell of the same file that dispatches that form at the same shapes.**
-A kernel class is a `[metal_dispatch]` or `[vk_dispatch]` class, or a CPU kernel in
-`../dasllama/dasllama_math*.das`. A cell is a `t |> run` block, or a helper that asserts on `t`; a
-CPU oracle is the same computation written in plain code and run on the CPU. Two forms can be
-bit-equal and both wrong.
+**A kernel-unit cell whose output no CPU-oracle compare covers is a defect: the compare sits in
+that cell, or - where the cell compares two kernel forms against each other - in a cell of the
+same file that dispatches one of those two forms at the same shapes.** A CPU oracle is the same
+computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
 **A diff that changes a `[vk_dispatch]` or `[metal_dispatch]` class's branch selection - a
 branch added, or a predicate widened or narrowed, so that a different set of kargs values, or of

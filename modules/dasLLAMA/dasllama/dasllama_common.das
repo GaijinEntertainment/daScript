@@ -488,11 +488,14 @@ def mtp_walk_samples(s : Session) : bool {
     return true
 }
 
-//! Every speculative round opens here: a token the previous round parked must have been consumed
-//! by the caller's sample_ - a caller that read s.logits instead would emit a stale token later.
+//! Every speculative round opens here: a token the previous round parked, or a pick a device driver landed, must have
+//! been consumed by the caller's sample_ - a caller that read s.logits instead would emit a stale token later.
 def mtp_round_begin(s : Session) {
     if (s.mtp_pre_drawn) {
         panic("dasLLAMA: the speculative round's parked token was never consumed - the caller samples through sample_ after every round")
+    }
+    if (s.pick_ready) {
+        panic("dasLLAMA: a device-landed pick was never consumed before a speculative round - the caller samples through sample_ after every step")
     }
 }
 
@@ -824,8 +827,9 @@ def get_metal_mode : MetalMode {
 // set by an override that ALSO produced this position's logits; reset before every invocation
 var private g_decode_logits_done = false
 
-//! A whole-decode override that computed s.logits itself (final norm + classifier on its device)
-//! calls this from inside its forward — forward() then skips the CPU final-norm/classifier step.
+//! A whole-decode override that computed s.logits itself (final norm + classifier on its device), or landed the
+//! row's pick in their place (`Session.pick_ready`), calls this from inside its forward — forward() then skips the
+//! CPU final-norm/classifier step.
 def decode_override_logits_done {
     g_decode_logits_done = true
 }
@@ -833,9 +837,9 @@ def decode_override_logits_done {
 // the batch twin — reset before every eval_batch_ invocation
 var private g_batch_decode_logits_done = false
 
-//! A batch-decode override that filled EVERY sessions[i].logits itself calls this from inside its
-//! forward — eval_batch_ then skips the CPU final-norm/classifier/scatter step (suppress pins and
-//! the n_past advance still run there).
+//! A batch-decode override that filled EVERY sessions[i].logits itself, or landed a row's pick in its place
+//! (`Session.pick_ready`), calls this from inside its forward — eval_batch_ then skips the CPU
+//! final-norm/classifier/scatter step (suppress pins and the n_past advance still run there).
 def batch_decode_override_logits_done {
     g_batch_decode_logits_done = true
 }
@@ -1959,6 +1963,9 @@ struct Session {
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
+    pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
+    pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
+    pick_tok : int64
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)

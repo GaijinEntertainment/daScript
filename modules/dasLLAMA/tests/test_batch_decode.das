@@ -8,6 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
 require dasllama/dasllama_load   // load_model_: the engine load the batched row's scheduler streams need
+require dasllama/dasllama   // moe_gpu_drop_model: the hybrid cells serve both sides on the CPU lane under an armed tier
 require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
@@ -303,6 +304,7 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 
     if (!model_available(t, path)) return
     pin_kernel_backend("portable")   // same-dot parity — see test_batch_decode_q8
     var tr <- load_model_(path, QuantMode.q8)
+    moe_gpu_drop_model()   //! the claim is one CPU lane, both sides: an armed tier would serve the reference rows on the device (and its whole-model driver's one region cannot hold three host-cached sessions prefilled back to back)
     t |> equal(tr.dn_ba_f32, ba_f32, "{tag}: the carrier takes the {ba_f32 ? "f32-on-disk" : "q8-plane"} beta/alpha arm")
     tr.config.seq_len = min(tr.config.seq_len, 64l)
     let prev_fused = get_fused_decode()

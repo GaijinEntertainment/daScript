@@ -3198,7 +3198,7 @@ def private rebase_pseudo(si : int; ss : StreamStack const) {
 def private stream_copy_begin : VkCommandBuffer {
     let xfer = g_gpu.xfer_fam >= 0
     if (xfer && g_gpu.xfer_value > 0ul) {
-        xfer_host_wait(g_gpu.xfer_value)   // every prior transfer-queue copy retired
+        xfer_wait(g_gpu.xfer_value, false)
     }
     var raw = xfer ? g_gpu.xfer_cmd : g_gpu.stream_cmd
     let rf : VkCommandBufferResetFlags
@@ -3256,7 +3256,7 @@ def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
     if (xfer) {
         let sig = xfer_submit_after(raw, XFER_NO_WAIT)
         if (sync) {
-            xfer_host_wait(sig)
+            xfer_wait(sig, false)
         }
         // the consumer still attaches the GPU-side wait — cross-queue visibility by the book
         g_gpu.stream_slots[si].wait_value = sig

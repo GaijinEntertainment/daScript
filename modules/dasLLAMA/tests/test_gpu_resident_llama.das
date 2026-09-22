@@ -13,7 +13,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // tile_arm_tag, argmax_of, feed_logits
+require _resident_feed   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
 
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
@@ -62,35 +62,14 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
-        var gpu <- feed_logits(tr, sg, prompt, toks)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
-        var passes <- gpu_cpu_passes_()
-        t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
-        delete passes
-        delete sg
-        moe_gpu_drop_model()   //! every later step is the CPU chain
-        t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
-        var sc <- create_session(tr, mirror_kv_dtype())
-        var cpu <- feed_logits(tr, sc, prompt, toks)
-        delete sc
-        for (st in range64(long_length(cpu))) {
-            let diff = logits_maxdiff(gpu[st], cpu[st])
-            let bar = LOGIT_BAR_REL * logits_maxabs(cpu[st])
-            let ag = argmax_of(gpu[st])
-            let ac = argmax_of(cpu[st])
-            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-            to_log(LOG_INFO, "{file} {what}: argmax cpu {ac} ({cpu[st][ac]}), resident {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{file} {what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
-            if (st > 0l) {   //! the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
-                let off = logits_maxdiff(gpu[st], cpu[st - 1l])
-                t |> success(off > bar, "{file} {what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
+            delete passes
         }
-        delete gpu
-        delete cpu
+        t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
+        feed_steps_within(t, "{file} ", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
+        delete fed
         delete prompt
         delete toks
     }

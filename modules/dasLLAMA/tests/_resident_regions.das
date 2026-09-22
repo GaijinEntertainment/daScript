@@ -677,8 +677,10 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
 def private cached_of(events : array<SchedEvent>; id : int64) : int64 => finished_of(events, id).n_cached
 
 //! three requests through a two-stream scheduler, then a second turn that opens with the last one's prompt and reply
-//! (two slots park two claims: the third request's arrival is what evicts the first's rows); every prompt is one prefill chunk
-def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int> {
+//! (two slots park two claims: the third request's arrival is what evicts the first's rows); every prompt is one prefill chunk.
+//! The second turn samples at top-k 1 under a temperature - the same token as the argmax, through a sampler that is not one,
+//! so its rows land logits where the other three land picks (a batched step of both kinds lands both)
+def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int; rows_stepped : int64> {
     var sch <- create_scheduler(m, 2l, 4l, 64l)
     let on = set_device_kv(sch, device)
     var pa <- prompt_a()
@@ -690,15 +692,17 @@ def private serve_four(m : Model; device : bool; var events : array<SchedEvent>)
     drain(m, sch, events)
     var turn2 <- prose_ids(33l, 11l)
     turn2 |> push_from(toks_of(events, 3l), prose_ids(20l, 5l))
-    submit(m, sch, make_req(4l, turn2, 8l))
+    var no_stop : array<int64>
+    submit(m, sch, make_req(4l, turn2, SamplingParams(temp = 0.7, top_k = 1l), 8l, no_stop))
     drain(m, sch, events)
     delete pa
     delete pb
     delete pc
     delete turn2
     let parked = length(sch.parked)
+    let rows_stepped = sch.sum_batch
     delete sch
-    return (on = on, parked = parked)
+    return (on = on, parked = parked, rows_stepped = rows_stepped)
 }
 
 def cell_scheduler_device_mode(t : T?; file : string) {
@@ -712,8 +716,16 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             let served0 = moe_gpu_resident_prefills()
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
+            let picks0 = rdec_picks_served()
             let served = serve_four(tr, true, dev)
             t |> success(served.on, "an idle scheduler switches to device-home sessions")
+            //! every decode step of the three argmax requests lands a pick (their first token samples off the prefill's logits inline);
+            //! the sampled fourth request's steps land logits, so the count is the rows stepped less its own
+            var td4 <- toks_of(dev, 4l)
+            let sampled_steps = long_length(td4) - 1l
+            delete td4
+            t |> equal(rdec_picks_served() - picks0, served.rows_stepped - sampled_steps, "the device landed the argmax streams' picks alone, no logits row ({served.rows_stepped} rows stepped, {sampled_steps} of them the sampled request's)")
+            t |> success(served.rows_stepped - sampled_steps >= 21l, "the three argmax requests stepped seven decode rows each at least ({served.rows_stepped - sampled_steps})")
             // four turns on two stream slots: the first turn's claim is evicted by the third's, the third's is spent by the turn that adopts it
             t |> equal(served.parked, gpu_device_prefill_continues(tr) ? 2 : 0, "parked claims stay within the stream slots, and a model whose prefill cannot continue parks none")
             // one code path on both sides: each prompt enters the window chain once and each step the batched token command;

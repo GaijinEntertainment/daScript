@@ -52,9 +52,9 @@ root).
 
 - **Weakening `REVIEW.das`'s fail-closed sync check is a defect.** That check requires every
   `tests/msl/_fail_closed/` fixture to have a `check_rejects` call in
-  `test_msl_fail_closed.das`, and every such call to have a fixture - a fixture without its
-  call leaves a rejection unpinned, and a call without its fixture is a rejection the emitter
-  no longer makes.
+  `tests/msl/test_msl_fail_closed.das` (repo root), and every such call to have a fixture - a
+  fixture without its call leaves a rejection unpinned, and a call without its fixture is a
+  rejection the emitter no longer makes.
 
 - **Never zero a cooperative tensor element by element, in a `[metal_kernel]` body or in emitted
   MSL, before a `matmul2d` `run` accumulates into it - `get_destination_cooperative_tensor`

@@ -1824,7 +1824,7 @@ def vk_drop_model_state {
     }
     vk_check(vkQueueWaitIdle(g_gpu.queue), null)
     if (g_gpu.xfer_fam >= 0 && g_gpu.xfer_value > 0ul) {
-        xfer_host_wait(g_gpu.xfer_value)   // in-flight transfer-queue copies retire before the sweeps
+        xfer_wait(g_gpu.xfer_value, false)   // in-flight transfer-queue copies retire before the sweeps
     }
     g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
@@ -2245,6 +2245,7 @@ enum RqStamp {
     rqx     //!< Q8_0 quants, the row stored (a Q8_0 recurrent head or a router reads it as floats)
     rqk     //!< Q8_K superblocks (a K-quant consumer)
     rqkx    //!< Q8_K superblocks, the row stored
+    rq_b    //!< Q8_0 quants over the N-row command's rows, a row a workgroup (the rows form of `rq`; the other stamps have none)
 }
 
 struct RLayer {
@@ -2356,15 +2357,10 @@ struct RLayer {
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
     s_edown_sum : VkDescriptorSet
-    comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows
+    comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows - decided once for both commands, with the combine sets (`rd_ensure_comb_sets`)
     s_comb_rq : VkDescriptorSet
-    s_ple_gate_n, s_ple_act_n, s_ple_proj_n : VkDescriptorSet   //! the N-row command's per-layer-embedding branch over the rows' planes: the gate's columns, the act over the rows' slices, the proj's columns
-    s_ple_ar_rq_n, s_ple_pa_n : VkDescriptorSet   //! ... its fused forms where the one-row branch fuses: the FFN step quantizing the rows as they are, the act + requant + proj over the columns
-    comb_rq_n : bool   //! the N-row command's combine quantizes the next head's feed (decided with its sets, never off the one-row command's `comb_rq`)
-    s_router_n, s_topk_n : VkDescriptorSet   //! the N-row command's routed block over the rows' planes: the router's columns, the per-row top-k
-    s_egate_n, s_eup_n, s_eact_n, s_edown_n : VkDescriptorSet   //! ... the expert GEMVs over the rows' slots (the split gate and up: every stamp's twin, byte for byte), the act, the down
-    s_comb_n, s_comb_rq_n : VkDescriptorSet   //! ... the combine over the rows, and its twin that quantizes the next feed
-    s_quant_xe_n : VkDescriptorSet  //! ... the experts' own feed requant over the rows, where `xe_own`
+    s_ple_ar_rq_n : VkDescriptorSet //! the N-row command's fused FFN step on a PLE layer: the rows quantized as they are (the `rq_b` stamp of `s_ple_ar_rq`)
+    s_topk_n : VkDescriptorSet      //! the N-row command's per-row top-k (`TopKN`) over the routed block's planes
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
@@ -2443,6 +2439,12 @@ struct RDec {
     log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
     xlog_cmd : array<VkCommandBuffer>   //! ... the copy commands by row count (index 0 unused; the one-row command lands at 1), recorded on first use
     xlog_recorded : array<bool>
+    xlog_pick_cmd : array<VkCommandBuffer>   //! ... the picks-only twins, for a step whose every row wants its argmax alone
+    xlog_pick_recorded : array<bool>
+    pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
+    pick_host : HostBuf
+    pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
+    s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
@@ -2455,6 +2457,7 @@ struct RDec {
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
     s_prologue_rq_b : VkDescriptorSet   //! ... the N-row command's, over the rows' planes
     n_sets_made : bool   //! the N-row command's fused sites are built (a set replacement unmakes them with the one-row command's)
+    comb_sets_made : bool   //! the MoE layers' combine form is decided and its quantizing sets built (`rd_ensure_comb_sets`; both commands ask)
     n_rail : NRail = NRail.unasked   //! the N-row command's kernel classes on this device; declined = the command answers 0 rows
     n_decline_said : bool            //! the N-row command's decline reason logged for this model, once
     s_quant_final : VkDescriptorSet
@@ -2580,6 +2583,14 @@ def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_elems
 
 //! one mirror side's binding: all `regions` copies end to end
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
+
+//! the decided-once set families (the fused sites', the N-row rail's, the combine's) rebuild on their next ensure: a
+//! set they read was replaced
+def rd_unmake_sets {
+    g_rd.fused_sets_made = false
+    g_rd.n_sets_made = false
+    g_rd.comb_sets_made = false
+}
 
 //! every region's token command re-records: the sets or planes it references were replaced
 def rd_invalidate_token {
@@ -3468,15 +3479,26 @@ def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     return sig
 }
 
-//! spin until the transfer timeline reaches `v`: a blocking wait pays the OS wake-up latency a step
-def xfer_spin_wait(v : uint64) {
-    let sem = g_gpu.xfer_sem
-    var cur = 0ul
-    while (true) {
-        vk_check(vkGetSemaphoreCounterValue(dev_raw(), sem, cur), null)
-        if (cur >= v) {
-            break
+//! wait until the transfer timeline reaches `v`: spinning on its counter where a blocking wait's OS wake-up would cost more than the wait (the logits' landing a step), else blocking
+def xfer_wait(v : uint64; spin : bool) {
+    var sem = g_gpu.xfer_sem
+    if (spin) {
+        var cur = 0ul
+        while (true) {
+            vk_check(vkGetSemaphoreCounterValue(dev_raw(), sem, cur), null)
+            if (cur >= v) {
+                break
+            }
         }
+        return
+    }
+    var wi = VkSemaphoreWaitInfo()
+    var val = v
+    unsafe {
+        wi.semaphoreCount = 1u
+        wi.pSemaphores = addr(sem)
+        wi.pValues = addr(val)
+        vk_check(vkWaitSemaphores(dev_raw(), wi, 0xFFFFFFFFFFFFFFFFul), null)
     }
 }
 
@@ -3671,19 +3693,6 @@ def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : 
     vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dst)), uint64(dst_off), uint64(bytes), 0u)
 }
 
-// host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer
-// cmd, and the sync (cold-miss) completion wait
-def xfer_host_wait(v : uint64) {
-    var wi = VkSemaphoreWaitInfo()
-    var sem = g_gpu.xfer_sem
-    var val = v
-    unsafe {
-        wi.semaphoreCount = 1u
-        wi.pSemaphores = addr(sem)
-        wi.pValues = addr(val)
-        vk_check(vkWaitSemaphores(dev_raw(), wi, 0xFFFFFFFFFFFFFFFFul), null)
-    }
-}
 
 
 

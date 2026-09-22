@@ -210,7 +210,7 @@ transfer family armed (`RDec.log_xfer`) records the token command without the co
 signals `g_gpu.cmp_sem`, the compute -> transfer timeline (`submit_signal`), the transfer queue
 takes a recorded copy command a row count (`rd_xlog`, `RDec.xlog_cmd`) that waits for that value
 at the transfer stage and signals the transfer timeline (`xfer_submit_after`), and the host spins
-on the transfer timeline's counter (`xfer_spin_wait`) instead of the fence - a blocking wait
+on the transfer timeline's counter (`xfer_wait` spinning) instead of the fence - a blocking wait
 would pay the OS wake-up a step, as the fence wait's spin already knows. The logits planes are
 CONCURRENT between the two families (`make_device_buf` / `make_host_buf` at `xfer_shared`), so no
 ownership transfer sits on the path; the host orders the next step behind the copy, so the
@@ -218,7 +218,33 @@ command's next write of the plane never races its read. `DASLLAMA_VK_XFERQ=0` le
 without a transfer family; there the command carries the copy and the fence as before
 (`rd_submit_land` / `rd_wait_land` choose) - the one in-process switch that puts the copy back
 inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
-us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451. The figures in this section and the next are
+us, tg128@4 1019 -> 1136 summed, tg128 426 -> 451.
+
+**A row whose sampler is a bare argmax lands its pick alone.** After the epilogue the command runs
+the pick's two passes over every row, every step - `ClsArgmaxPart`, a workgroup a (row, chunk) over
+a slice of the row (`CLS_ARGMAX_CHUNKS`, 64, compiled into both passes: a 4096-wide slice of a 262144
+vocab, so a row's pass is a wave of small workgroups and not one workgroup's walk over a megabyte;
+9-12 us a step from a 128k to a 262k vocab), then `ClsArgmaxFin`, a workgroup a row over the
+chunks' partials - the first maximum's id, the lowest on a tie, as the host's `parallel_argmax`
+reads (a thread's first element seeds its candidate, so an all-equal or non-finite row lands id
+0, and only an empty slice lands `0xFFFFFFFF`, which the landing refuses as an engine bug), into
+`RDec.pick_dev`. The ask decides only what lands: the transfer command copies the picks behind the
+logits, and a step whose every row asks for its pick takes the picks-only twin (`RDec.xlog_pick_cmd`),
+so the logits plane never leaves the device and the host copies nothing (a device without the
+transfer family copies both inside the command and skips the host copy alone); the one-row command's
+guard steps (`rd_guard_step`: the first four tokens and every 256th) land the logits too, so the
+over-commit check reads a row on a picking stream at its cadence. The seams carry the ask -
+`RdecTokenFn`'s `pick_only`, a null `lrows` pointer of `RdecTokenNFn` - and answer the id, which
+the driver hands to the session (`rdec_land_pick`: `Session.pick_ready`, `pick_tok`) for the next
+`sample_` to return; a row-at-a-time step the driver declines after some rows landed takes their
+picks back (`rdec_unland_picks`), since the CPU rails redo every row's logits. The scheduler asks it
+a step for every stream whose parameters are a bare argmax (`sampler_is_argmax`: temperature at or
+under zero, penalties off - the served default) and clears the ask after the step's sample; a
+temperature or a penalty lands the logits as before, and so does every caller that never sets
+`Session.pick_asked` (the tests read the rows). A stream's first token samples off its prefill's
+logits inline, so a request of n tokens lands n - 1 picks. On the pod the host side of a four-row
+step held the logits copy (252-266 us of 4 MB on the E-series) and four pool argmaxes; the pick
+leaves a 16-byte landing, and its planes take 4 x (2 x 64 + 1) bytes a row of the plan. The figures in this section and the next are
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
