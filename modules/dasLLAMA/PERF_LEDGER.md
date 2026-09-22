@@ -2489,6 +2489,15 @@ Instruments as the E-series section above (the pod's cm2 arm and its KHR arm und
   prologue stamp stores no float row (a recurrent layer 0 reading one now takes the split
   prologue), and four rope and attention sets bound the grown `TokMeta` block at its old row width,
   every row past the first reading its position outside the binding.
+- **The carriers that served batched without evidence (the phi3, gemma3 and mistral3 families), the
+  same instruments, tg128@4 ours cm2 / ours KHR / llama.cpp:** Phi-3.5-mini Q4_K_M 578.7 +/- 0.4 /
+  574.8 +/- 0.4 / 552.1 (1.05 / 1.04), flat 220.4 / 221.0 / 217.4; gemma-3-1b Q8_0 1240.1 +/- 0.3 /
+  1240.3 +/- 1.2 / 845.5 (1.47 / 1.47), flat 398.3 / 395.2 / 310.5; gemma-3-4b Q8_0 542.8 +/- 0.6 /
+  543.4 +/- 0.6 / 442.6 (1.23 / 1.23), flat 152.2 / 152.6 / 137.2. The regions files pin the rows:
+  `test_gpu_resident_regions_gemma3.das` bit for bit (6 of 6), `test_gpu_resident_regions_phi3.das`
+  on the split bar (4 of 4). Mistral-Small-3.1-24B Q4_K_M (`test_gpu_resident_regions_mistral3.das`)
+  has no row: the pod's volume holds no room for its 14 GB beside the stocked models, so the file
+  skips there and the row waits for a box that stocks it.
 
 ### From the M4 Metal pass (2026-09-13)
 
