@@ -18,13 +18,13 @@ require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
-require ?vulkan dasllama/dasllama_gemm_schema   // kq_dev_ssb_i - the fixtures size their device scale planes per format
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS sizes the q8 plane helper outside the vulkan arm; kq_dev_ssb_i - the fixtures size their device scale planes per format
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 require daslib/fio   // the lens readonly gate's spawned compiles
 require daslib/strings_boost   // join: the spawned fixture's source
-require ?vulkan daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
+require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
 let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 s and e cells' Q8_CELL_K takes the edge path)
