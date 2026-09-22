@@ -674,6 +674,13 @@ def private tok_synth_longword() : string {
     }
 }
 
+//! The flat session's prompt rows: `plen` alone sizes it as llama-bench does (`plen + ngen`), but
+//! beside a tg-real row - whose prompts already capped the context at `row_ctx` - the flat
+//! session must not narrow it under them, or the speculative round's context gate reads a
+//! context every prompt exceeds and stays cold. Non-private: tests/test_tok_seed.das gates it.
+def flat_row_plen(plen, ngen, row_ctx : int64; real_row : bool) : int64
+    => real_row ? max(plen, row_ctx - ngen) : plen
+
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
 // Non-private: tests/test_tok_seed.das gates the header walk.
 def tok_read_seed(path : string) : string {
@@ -1564,7 +1571,7 @@ def main() : int {
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }
-        var s <- bench_session(t, plen, ngen, KVDtype.f16, KVDtype.f16)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
+        var s <- bench_session(t, flat_row_plen(plen, ngen, t.config.seq_len, real_row), ngen, KVDtype.f16, KVDtype.f16)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
         var pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
