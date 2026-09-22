@@ -18,10 +18,11 @@ functions or any of its assertions from `dasbind/test_extern_abi.das` is a defec
 check of which register or stack slot an interpreted `[extern]` call puts each argument in - the
 JIT never takes that path - so coverage lost there reports green on every lane.
 
-**A change to a `.das` file that it leaves in any `AOT_*_FILES` variable of
-`tests/aot/CMakeLists.txt`, `_MODULE_FILES` ones included - by glob or by name - is green on
+**A change to a `.das` file under this folder that it leaves in any `AOT_*_FILES` variable of
+`tests/aot/CMakeLists.txt` - by glob or by name - and not marked `options no_aot` is green on
 both the `dastest` run and that suite's `test_aot` lane.** The `tests` suite is the folder
-`tests/aot/`, not `tests/`, and the per-PR CI compiles only the language subset.
+`tests/aot/`, not `tests/`, and the per-PR CI compiles only the language subset. A module file
+an `AOT_*_MODULE_FILES` variable picks up answers to its own folder's checklist.
 
 **A new `.das` file under `tests/` that a glob in `tests/aot/CMakeLists.txt` puts in an
 `AOT_*_FILES` variable and that does not compile on its suite's `test_aot` lane is filtered out

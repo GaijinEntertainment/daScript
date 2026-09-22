@@ -14,10 +14,11 @@ entry file sits in it - or sits in a child folder of it, when the directory itse
 `README.md`. A change under `common/` (beside this file) is a change to every tool that requires
 it.
 
-A tool is shipped when `cmake --install` puts it in the bundle: a `DAS_UTILS_SHIPPED_EXES`
-entry or a C++ executable target in `CMakeLists.txt` (beside this file), a C++ executable
-target in the repo root's `CMakeLists.txt`, or an entry point an `install(FILES ...)` rule in
-the repo root's `CMakeLists.txt` copies as source.
+A tool is shipped when an `install(...)` rule in `CMakeLists.txt` (beside this file) or the
+repo root's `CMakeLists.txt` puts its program in the bundle - a built executable
+(`install(PROGRAMS ...)` for a `DAS_UTILS_SHIPPED_EXES` entry, `install(TARGETS ...)` for a
+C++ target), or the entry file copied as source (`install(FILES ...)` or
+`install(DIRECTORY ...)`).
 
 An arm is one test case that a test runner executes and reports pass or fail for on its own,
 in any language: a `dastest` `[test]` function and each `t |> run(...)` case inside that
@@ -33,6 +34,9 @@ the change names that lane. One arm can hold assertions of both kinds.
 
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**
+
+**A `[test]` file that covers a tool lives in that tool's directory - a diff that adds one
+anywhere else moves it there, in the same change.**
 
 **A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what
 identifies one - the fields that decide whether two `.dlim`s are the same image - answers to

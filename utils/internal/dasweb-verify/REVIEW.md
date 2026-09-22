@@ -4,14 +4,11 @@
 `README.md`. A `.mjs` file or `expectations.json`, wherever the diff puts it, answers to
 `browser/REVIEW.md`.
 
-**Never put a `[test]` file for this tool outside this directory - keep it here.**
-
 **A `[test]` file here requires its siblings by bare name (`require verify_core`), never by a
 path.**
 
 **A diff that adds a `[test]` file here also adds it to the `run_tests_dasweb_verify` target in
-`utils/CMakeLists.txt` (repo root), in the same change; a diff that names a test file from here
-in any other `CMakeLists.txt` is a defect.**
+`utils/CMakeLists.txt` (repo root), in the same change.**
 
 **A test here writes files only under a directory it made with `create_temp_directory`, and
 removes that directory before it returns.**

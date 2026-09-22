@@ -10,5 +10,6 @@ exposes to daslang, or a bit of a flag typedef; no other kind of file here pairs
 position. The generator pairs member lines by position from the end, so a reordered line, or a
 line missing under a multi-line type description, ships a wrong description with a green build.
 
-**A property's description is its own `function-` file - never a member line in the type's
-file.**
+**A property's description - a property is an `addProperty` accessor, whose stub is
+`function-<module>-_dot__rq_<name>-*.rst` - is its own `function-` file, never a member line in
+the type's file.**
