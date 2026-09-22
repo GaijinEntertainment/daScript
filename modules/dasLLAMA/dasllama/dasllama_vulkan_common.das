@@ -3181,6 +3181,9 @@ def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
 // the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
+    if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
+        panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline (kernel slot {ord} of a class with {length(c.bindings)} bindings and a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}) - its ensure_ never ran, or ran before the model drop")
+    }
     let m = hz_masks(c.pipes[ord], set_)
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)
