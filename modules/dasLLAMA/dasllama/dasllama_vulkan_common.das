@@ -313,7 +313,8 @@ let DN_SM_WNORM = DN_SM_TAPS + DN_MAX_CD * DN_MAX_DCONV
 let DN_SM_A = DN_SM_WNORM + DN_MAX_DS
 let DN_SM_DT = DN_SM_A + DN_MAX_HEADS
 let DN_SM_HIST = DN_SM_DT + DN_MAX_HEADS
-let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + 64l) * 4l
+let DN_SM_SLACK = 64l   //! floats past the last ring image, so a ring's last row never sits at the buffer's end
+let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + DN_SM_SLACK) * 4l
 let DN_TAIL_BYTES = DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
 // decode-step scratch: the raw β/γ staging (+ the ring parity word) and the o-row Q8_0 image
@@ -323,6 +324,7 @@ let DND_BG_BYTES = (2l * DN_MAX_HEADS + 4l) * 4l
 let DND_OQ_BYTES = DN_MAX_HEADS * DN_MAX_DS
 let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
 let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
+let TOK_META_BYTES = 32l   //! one TokMeta row (the kernels index the block by row)
 
 // heat-cache pool stacks live in a SYNTHETIC element-offset space far above any real plane
 // offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them
@@ -511,8 +513,11 @@ struct DnStep {
     s_qkv : int
     s_z : int
     s_o : int
-    state_bytes : int64
-    ring_bytes : int64
+    slot_state_bytes : int64
+    ring_image_bytes : int64
+    smalls_bytes : int64
+    state_byte_off : int64
+    hist_off : int64 = DN_SM_HIST   //! floats: this slot's ring pair, the parity image ring_image_bytes past it
     parity : int             // ring image holding current history (the kernel writes the other)
     tok : HostBuf            // the step's TokMeta block (parity, host-poked per step)
     valid : bool
@@ -2326,7 +2331,7 @@ struct RLayer {
     s_dnba : VkDescriptorSet                // f32 arm: the router-form GEMV over dn_ba_dev, two pushes
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
-    dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
+    dn : array<DnStep>
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2424,7 +2429,7 @@ struct RDec {
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
-    dn_parity : int               // the shared conv-ring parity: every recurrent layer steps once per token
+    dn_parity : array<int>
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
@@ -3173,9 +3178,19 @@ def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
     vkCmdPushConstants(raw, boost_value_to_vk(c.pipe_layout), sf, 0u, uint(c.push_bytes), unsafe(addr<void?>(pc)))
 }
 
+//! the lens's refusal of a class slot whose pipeline was never registered, naming the family's built slots beside it
+[cold_path]
+def private vkd_unregistered_panic(c : VkdClass; ord : int) {
+    let built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
+    panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline - kernel slot {ord} of the class whose built slots read [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}): its ensure_ never ran, or ran before the model drop")
+}
+
 // the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
+    if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
+        vkd_unregistered_panic(c, ord)
+    }
     let m = hz_masks(c.pipes[ord], set_)
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)

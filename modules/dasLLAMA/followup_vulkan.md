@@ -1549,12 +1549,12 @@ module) is independent and can land any time - it is pure structure.
     add+rms and the requant as two dispatches a site - three a layer on a K-quant model. The work:
     the Q8_K row form of the fused site, and `rd_ensure_n_sets` building its set for every feed.
 71. **The layer kinds the N-row command declines step a row at a time.** `vk_rdec_token_n_rows`
-    answers 0 on a recurrent layer, a gated q, a layer carrying both a routed block and a
-    per-layer-embedding branch, a weight format with no N-column leaf, and a MoE whose `nb * k`
-    picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), so a
-    batched step of such a model pays a weight pass a row. The work: each kind's N-row form, the
-    recurrent one behind its own state question (N device state slots a region - a residency
-    change), the gated q behind the gate's N form, the slot cap behind larger slot planes.
+    answers 0 on a layer carrying both a routed block and a per-layer-embedding branch, a weight
+    format with no N-column leaf (a recurrent layer's qkv, z or out plane among them), and a MoE
+    whose `nb * k` picks pass the routed planes' 64 slots (`ARCHITECTURE_GPU_VULKAN_NROW.md`
+    sec.2.2ao), so a batched step of such a model pays a weight pass a row. The work: each kind's
+    N-row form - the routed-beside-PLE layer's, the slot cap behind larger slot planes, an N leaf
+    for each format without one.
 73. **The decode attention slab runs four heads' arithmetic on a GQA group of three.** The score
     and V loops of `DaAttnT` unroll over the slab's `G` heads - four, or two on a group of one or
     two heads (`da_slab_is_g2`, the `g2` stamps) - so a three-head group still pays a dead lane,
@@ -1693,3 +1693,12 @@ module) is independent and can land any time - it is pure structure.
     the six `test_mtp_sampled_walk.das` assertions reading the one name - after saying in one
     line that a speculative round and a device pick are never live on one session in one step
     (the scheduler's speculative arm never asks a pick).
+87. **The mistral3 family has no batched evidence.** Mistral-Small-3.1-24B-Instruct-2503 Q4_K_M
+    (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
+    K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
+    rows and `PERF_LEDGER.md` carries no row. The work, on a box with the room: a regions file in
+    `test_gpu_resident_regions_llama_k.das`'s shape (the two batched-step cells on the split bar,
+    large tier) registered in `tests/run.das`, and the section's row form - `daslang -jit
+    benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
+    arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b
+    2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` on the same file the same hour.

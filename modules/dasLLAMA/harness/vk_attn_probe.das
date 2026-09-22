@@ -58,7 +58,7 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int) : doub
     let partd = make_device_buf(p_bytes)
     let aqd = make_device_buf(int64(qd * rows))
     let asd = make_device_buf(s_bytes)
-    var tokb = make_host_buf(16l * int64(rows), true)
+    var tokb = make_host_buf(TOK_META_BYTES * int64(rows), true)
     var raw = alloc_cmd()
     unsafe {
         upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
@@ -73,7 +73,7 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int) : doub
             tm[r].mirbase = uint(r * mir_elems)
         }
         var sc = set_da_attn_f16_cls(fixed_array(qdev, kd, vd, yd, tokb.buf, partd, aqd, asd),
-            fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l * int64(rows), p_bytes, int64(qd * rows), s_bytes),
+            fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES * int64(rows), p_bytes, int64(qd * rows), s_bytes),
             fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)

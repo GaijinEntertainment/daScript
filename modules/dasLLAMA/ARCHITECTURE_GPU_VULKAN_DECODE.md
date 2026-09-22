@@ -174,10 +174,11 @@ conv history's address beside it): a step from the owner runs on the resident co
 different session sends the resident copy home to its owner's buffers when it is dirty, then
 cold-uploads its own state and takes the slot. A flush request (`vk_dn_step_flush`) writes only
 when the requester is the owner - a foreign session's state is already on its host, so the
-request is a no-op there. Two sessions decoding turn about on the tier therefore pay a flush
-and an upload per recurrent layer per switch, and each reads its own state. The resident
-prefill takes the slots the same way: a prompt from position zero zeroes every slot, so the
-chain first sends home whatever another session left dirty there (`vk_rdec_dn_flush_owners`).
+request is a no-op there. Two sessions decoding turn about on the per-op tier therefore pay a
+flush and an upload per recurrent layer per switch, and each reads its own state; the whole-model
+driver keeps a slot per mirror region instead (sec.2.2v). The resident prefill takes its region's
+slot the same way: a prompt from position zero zeroes that slot, so the chain first sends home
+whatever another session left dirty in it (`vk_rdec_dn_flush_owners`).
 
 **A session's identity outlives nothing.** Every Session with deltanet state carries a
 `DnOwner` token whose range is that state's host addresses; the token's finalizer - run by the
@@ -232,16 +233,19 @@ layer's head, the classifier), storing the normed row too where a consumer reads
 recurrent head's beta/alpha GEMV, a MoE router); a MoE layer's residual step stays the combine,
 so the layer after it requants on its own.
 
-**Each recurrent layer owns a device state slot in the per-op step's shape** (`DnStep`: the
-state, the smalls with the parity-double-buffered conv ring, the owner's host addresses), and
-the session-ownership rule of sec.2.2u holds unchanged: before a token the driver binds every
-recurrent slot to the calling session (`vk_rdec_dn_own` - the owner's path is one pointer
-compare; a foreign dirty slot flushes home first, then the session's state and history come
-up), the engine's flush, release and invalidate seams walk these slots beside the per-op
-table, and a session's position-zero reset releases them like any other copy. The conv-ring
-parity is ONE word for the whole model, in the shared `TokMeta` the command already carries:
-every recurrent layer steps once per token, so every slot reads the same image and the driver
-flips the word after each submit; an uploaded history lands in the image the next step reads.
+**Each recurrent layer owns a device state slot per mirror region in the per-op step's shape**
+(`RLayer.dn`: a `DnStep` a region over one state and one smalls buffer - the slot's state at
+`state_byte_off`, its parity-double-buffered conv ring at `hist_off`, the owner's host addresses), and
+the ownership rule of sec.2.2u holds per slot: before a token the driver binds the selected
+region's slot in every recurrent layer to the calling session (`vk_rdec_dn_own` - the owner's path
+is one pointer compare; a foreign dirty slot flushes home first, then the session's state and
+history come up), the flush, release and invalidate seams walk every slot beside the per-op
+table, and a position-zero reset releases the session's slots. The ring parity is a word per region
+(`RDec.dn_parity`), riding the row's `TokMeta` with its slot index (`parity`, `dnslot`): a region's
+slots step once per row, so the driver flips its word after each row it submits. A slot is
+`nvh x ds x ds` floats of state and a ring pair of `2 x cd x (dconv - 1)` floats; the step kernel
+binds every slot and indexes the row's own from `dnslot` and the head count its geometry pins. Two regions step
+with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao).
 
 **The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the
 mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its slot index

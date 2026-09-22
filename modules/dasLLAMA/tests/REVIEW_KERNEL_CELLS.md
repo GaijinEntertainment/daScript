@@ -81,3 +81,9 @@ new step's error, or how its bar follows from that error, whether or not the bar
 **A kernel-unit cell for a kernel that attends inside a restricted horizon - a window, a
 sliding span, a block-diagonal range - writes its CPU oracle to attend strictly inside that
 horizon.** A leak then fails the ordinary compare, so the cell needs no separate leak control.
+
+**A kernel-unit cell that binds a buffer its kernel indexes by a slot id or an element offset read
+from each row's metadata block (`TokMeta.dnslot`, `TokMeta.mirbase` on Vulkan) sizes that buffer to
+cover every row's range - through the highest slot id plus one slot, or through the highest offset
+plus the span the kernel reads or writes past it - never to the dispatch's row count.** A one-row
+dispatch whose row sits in slot 1 writes past a one-slot buffer, and no error says so.

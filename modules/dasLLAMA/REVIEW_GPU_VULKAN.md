@@ -194,16 +194,23 @@ slots, and nothing refuses it.
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**A descriptor set the N-row token command - the resident decode command that runs two to
-`RDec.nb` rows in one dispatch (`dasllama/dasllama_vulkan_decode.das`) - dispatches binds its
-plane's whole `RDec.nb`-row extent, never one row's.** A per-row plane is a buffer the resident decode driver
-sizes to one slot per batched row (`* RDec.nb`); a one-row binding makes the N-row command read
-past its binding on every row but the first.
+**A descriptor set the resident driver builds binds a buffer it allocated per row or per region -
+one slot per batched row (`* RDec.nb`, the rows the N-row token command steps in one dispatch), or
+one slot per region, a region being one session's share of the device K/V mirror and recurrent
+state - over the whole buffer, never over one row's or one slot's range.** Each dispatch picks its
+row or region at run time, from `TokMeta` or its push constants, so a set narrowed to one slot sends
+every other row's or region's dispatch past its binding, with no error.
 
-**Every `TokMeta` block a diff fills - in the resident driver, a seam, or a test - writes
-`mirbase`, the row's mirror base in elements; a site with one mirror region writes 0.** The
-attention and the mirror store add that field to every K/V address they touch, so a block left
-unwritten sends a row at whatever base the memory held.
+**A diff that fills a `TokMeta` block, wherever it puts it, writes every field but the pads -
+`mirbase` as the row's K/V mirror base in elements past the base the kernel's push constants carry
+(0 where the push carries the row's own base), `dnslot` as the row's slot in the deltanet state and
+conv-history buffers (0 where they hold one slot).** A kernel reads each field from the row's block,
+so a field left unwritten sends the row to whatever position, base or state the memory held, with
+no error.
+
+**A `TokMeta` buffer or binding is sized `TOK_META_BYTES` times the rows the block holds, never a
+byte literal.** A literal stops matching when `TokMeta` gains a field, and every row past the first
+then reads its fields outside the binding, with no error.
 
 **A diff that adds a recorded form - a recorder that builds the resident token command into its
 own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name

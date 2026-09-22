@@ -26,8 +26,12 @@ require math
 struct TokMeta {
     pos : uint      // this token's absolute position (mirror row = layerbase + pos * kvd)
     cnt : uint      // cached positions incl. this one
-    parity : uint   // deltanet conv-ring parity
+    parity : uint
     mirbase : uint  //! the N-row command: this row's K/V mirror region as an element offset; 0 in the one-row command, whose push carries the region
+    dnslot : uint
+    pad0 : uint
+    pad1 : uint
+    pad2 : uint
 }
 
 // ===== add + rmsnorm =====
@@ -2293,14 +2297,12 @@ struct DnStepArgs {
     dt_off : uint
     hist_off : uint
     eps : float
-    qscale : float   // the conv-ring parity rides tok[0].parity
+    qscale : float
     out_f32 : uint
+    beta_row_stride : uint
 }
 
-// the decode-step FUSED chain (one workgroup per v-head): conv preamble -> chunk-length-1 delta
-// rule IN PLACE on the persistent state -> gated out-norm -> the head's o row. The conv ring is
-// parity-double-buffered inside the smalls member.
-[vk_dispatch(name = "dn_step_cls", grid = "nvh", params = "nvh : int64")]
+[vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
 class DnStepFused {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
@@ -2323,12 +2325,17 @@ class DnStepFused {
 
     [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
-        let h = gl_WorkGroupID.x
         let ds = pa.ds
+        let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
+        let row = gl_WorkGroupID.x / nvh
+        let h = gl_WorkGroupID.x % nvh
         let taps = pa.dconv - 1u
-        let par = tok[0u].parity
-        let rrb = pa.hist_off + par * pa.cd * taps
-        let wrb = pa.hist_off + (1u - par) * pa.cd * taps
+        let par = tok[row].parity
+        let slot = tok[row].dnslot
+        let prow = row * (pa.cd + nvh * ds)
+        let ringb = pa.hist_off + slot * 2u * pa.cd * taps
+        let rrb = ringb + par * pa.cd * taps
+        let wrb = ringb + (1u - par) * pa.cd * taps
         let tid = gl_LocalInvocationID.x
         let kh = h % pa.nkh
         var e = tid
@@ -2336,7 +2343,7 @@ class DnStepFused {
             let sl = e / ds
             let j = e % ds
             let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
-            let fresh = proj[ch]
+            let fresh = proj[prow + ch]
             var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
             var k = 0u
             while (k < taps) {
@@ -2397,9 +2404,9 @@ class DnStepFused {
             let sk = 1.0 / max(sqrt(sumk), pa.eps)
             ds8[0u] = sq
             ds8[1u] = sk
-            let graw = smalls[pa.g_off + h] + smalls[pa.dt_off + h]
+            let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + h]))
+            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.beta_row_stride + h]))
             ds8[4u] = qkr * sq * sk
         }
         barrier()
@@ -2413,7 +2420,7 @@ class DnStepFused {
         let active = tid < ds * nparts
         let c = tid % ds
         let r0 = (tid / ds) * rows_per_part
-        let sbase = h * ds * ds
+        let sbase = slot * nvh * ds * ds + h * ds * ds
         var sreg : float[64]
         var ksp = 0.0
         var qsp = 0.0
@@ -2477,20 +2484,21 @@ class DnStepFused {
         barrier()
         e = tid
         while (e < ds) {
-            let zv = proj[pa.cd + h * ds + e]
+            let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * ds8[5u] * smalls[pa.wnorm_off + e]
             dout[e] = xn * (zv / (1.0 + exp(-zv)))
             e += 256u
         }
         barrier()
+        let orow = (row * nvh + h) * ds
         if (pa.out_f32 != 0u) {
             e = tid
             while (e < ds) {
-                outf[h * ds + e] = dout[e]
+                outf[orow + e] = dout[e]
                 e += 256u
             }
         } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
-            let gb = (h * ds) / 32u + tid
+            let gb = orow / 32u + tid
             let jb = tid * 32u
             var amax = 0.0
             for (i in range(32)) {
@@ -2527,6 +2535,7 @@ struct DnScanArgs {
     dt_off : uint
     o_off : uint      // the raw o rows' base in orows (position-major, di wide)
     di : uint
+    region_state_base : uint
 }
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
@@ -2579,7 +2588,7 @@ class DnScan {
             ti += 128u
         }
         barrier()
-        let sb = h * ds * ds + (live ? col : 0u) + lane * ds
+        let sb = pa.region_state_base + h * ds * ds + (live ? col : 0u) + lane * ds
         let row_stride = lanes_per_col * ds
         var s : float[16]
         s[0] = state[sb]

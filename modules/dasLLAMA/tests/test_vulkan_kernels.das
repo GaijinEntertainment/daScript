@@ -2311,13 +2311,13 @@ def test_vkd_rope_family(t0 : T?) {
                     upload_region_at(q2, 0l, addr<uint8 const?>(qh[0]), q_bytes)
                     upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
                     //! the class kernel: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0), bias@6
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tm = reinterpret<TokMeta?>(tokb.mapped)
                     tm.pos = 0u
                     tm.cnt = 0u
                     tm.mirbase = 0u
                     var sc = set_rope_kv_cls(fixed_array(q2, kvd_dev, km2, vm2, csd, tokb.buf, bd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, 16l, b_bytes),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, TOK_META_BYTES, b_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 0u, 0u))
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -3942,12 +3942,12 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
             nan_sentinel_upload(aqd, int64(qdim))
             nan_sentinel_upload(asd, s_bytes)
-            var tokb = make_host_buf(16l, true)
+            var tokb = make_host_buf(TOK_META_BYTES, true)
             var tmc = reinterpret<TokMeta?>(tokb.mapped)
             tmc.cnt = uint(cnt)
             tmc.mirbase = 0u
             var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb.buf, partd, aqd, asd),
-                fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, int64(qdim), s_bytes),
+                fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, int64(qdim), s_bytes),
                 fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
@@ -3986,12 +3986,12 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             y_g4 |> resize(qdim)
             unsafe {
                 nan_sentinel_upload(yd, q_bytes)
-                var tokb4 = make_host_buf(16l, true)
+                var tokb4 = make_host_buf(TOK_META_BYTES, true)
                 var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
                 tmc4.cnt = uint(cnt)
                 tmc4.mirbase = 0u
                 var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb4.buf, partd, aqd, asd),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, int64(qdim), s_bytes),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, int64(qdim), s_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
                 var raw4 = alloc_cmd()
                 let begin4 = VkCommandBufferBeginInfo()
@@ -4119,12 +4119,12 @@ def test_vkd_da_attn(t0 : T?) {
                 upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
                 upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
                 // the class kernel: q@0, K@1, V@2, y@3, tok@4 (cnt rides TokMeta)
-                var tokb = make_host_buf(16l, true)
+                var tokb = make_host_buf(TOK_META_BYTES, true)
                 var tmc = reinterpret<TokMeta?>(tokb.mapped)
                 tmc.cnt = uint(cnt)
                 tmc.mirbase = 0u
                 var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb.buf, yd2, yd2, yd2),   //! unsplit, unfolded: the out rows fill the partials and quant bindings
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
                 var raw2 = alloc_cmd()
                 let begin = VkCommandBufferBeginInfo()
@@ -4149,12 +4149,12 @@ def test_vkd_da_attn(t0 : T?) {
             // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
             let cap = 4.0
             unsafe {
-                var tokb2 = make_host_buf(16l, true)
+                var tokb2 = make_host_buf(TOK_META_BYTES, true)
                 var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
                 tmc2.cnt = uint(cnt)
                 tmc2.mirbase = 0u
                 var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb2.buf, yd2, yd2, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
                 var raw3 = alloc_cmd()
                 let begin3 = VkCommandBufferBeginInfo()
@@ -4186,12 +4186,12 @@ def test_vkd_da_attn(t0 : T?) {
                 nan_sentinel_upload(partd, int64(cnt_off) * 4l)
                 zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                 nan_sentinel_upload(yd2, q_bytes)
-                var tokb4 = make_host_buf(16l, true)
+                var tokb4 = make_host_buf(TOK_META_BYTES, true)
                 var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
                 tmc4.cnt = uint(cnt)
                 tmc4.mirbase = 0u
                 var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb4.buf, partd, yd2, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes),
                     fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u))
                 var raw4 = alloc_cmd()
                 let begin4 = VkCommandBufferBeginInfo()
@@ -4246,12 +4246,12 @@ def test_vkd_da_attn(t0 : T?) {
                     nan_sentinel_upload(yd2, q_bytes)
                     nan_sentinel_upload(partd, int64(cnt_off) * 4l)
                     zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-                    var tokb5 = make_host_buf(16l, true)
+                    var tokb5 = make_host_buf(TOK_META_BYTES, true)
                     var tmc5 = reinterpret<TokMeta?>(tokb5.mapped)
                     tmc5.cnt = uint(cnt)
                     tmc5.mirbase = 0u
                     var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tokb5.buf, partd, yd2, yd2, sinkd),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
                     var raw5 = alloc_cmd()
                     let begin5 = VkCommandBufferBeginInfo()
@@ -4301,12 +4301,12 @@ def test_vkd_da_attn(t0 : T?) {
                         nan_sentinel_upload(yd2, q_bytes)
                         nan_sentinel_upload(partd, int64(cnt_off) * 4l)
                         zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-                        var tokb6 = make_host_buf(16l, true)
+                        var tokb6 = make_host_buf(TOK_META_BYTES, true)
                         var tmc6 = reinterpret<TokMeta?>(tokb6.mapped)
                         tmc6.cnt = uint(cnt)
                         tmc6.mirbase = 0u
                         var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tokb6.buf, partd, yd2, yd2, sinkd),
-                            fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
+                            fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
                             fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
                         var raw6 = alloc_cmd()
                         let begin6 = VkCommandBufferBeginInfo()
@@ -4375,7 +4375,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         }
         let q_bytes = int64(qdim * nrows) * 4l
         let m_bytes = int64(mir_elems) * int64(nrows) * 4l
-        let tok_bytes = 16l * int64(nrows)
+        let tok_bytes = TOK_META_BYTES * int64(nrows)
         let rowwg = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
         let rowgroups = int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))   //! the (kv head, slab) groups a row: a counter each
         let cnt_off = nrows * nheads * nsplit * (hs + 2)   //! the arrival counters past every row's pieces
@@ -7956,13 +7956,13 @@ def test_vkd_rope_b_pair(t0 : T?) {
                     upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
                     upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
                     upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tmq = reinterpret<TokMeta?>(tokb.mapped)
                     tmq.pos = 0u   // mirror row = layerbase alone
                     tmq.cnt = 0u
                     tmq.mirbase = 0u
                     var sc = set_qkn_rope_cls(fixed_array(qd2, kvdv, km2, vm2, csd, wnd, tokb.buf, bd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, 16l, b_bytes),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, b_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                     var raw = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
@@ -8081,13 +8081,13 @@ def test_vkd_rope_b_pair(t0 : T?) {
                         nan_sentinel_upload(vm1, mn_bytes)
                         nan_sentinel_upload(kmn, mn_bytes)
                         nan_sentinel_upload(vmn, mn_bytes)
-                        var tok1 = make_host_buf(16l, true)
+                        var tok1 = make_host_buf(TOK_META_BYTES, true)
                         var tm1 = reinterpret<TokMeta?>(tok1.mapped)
                         tm1.pos = 1u
                         tm1.cnt = 0u
                         tm1.parity = 0u
                         tm1.mirbase = 0u
-                        var tok2 = make_host_buf(32l, true)
+                        var tok2 = make_host_buf(2l * TOK_META_BYTES, true)
                         var tm2 = reinterpret<TokMeta?>(tok2.mapped)
                         for (r in range(2)) {
                             tm2[r].pos = uint(r)
@@ -8096,10 +8096,10 @@ def test_vkd_rope_b_pair(t0 : T?) {
                             tm2[r].mirbase = 0u
                         }
                         var s1 = set_qkn_rope_cls(fixed_array(q1d, kv1d, km1, vm1, cs1d, wnd, tok1.buf, bd),
-                            fixed_array(q_bytes, kv_bytes, mn_bytes, mn_bytes, cs_bytes, wn_bytes, 16l, b_bytes),
+                            fixed_array(q_bytes, kv_bytes, mn_bytes, mn_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, b_bytes),
                             fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                         var s2 = set_qkn_rope_cls(fixed_array(q2d, kv2d, kmn, vmn, cs2d, wnd, tok2.buf, bd),
-                            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 32l, b_bytes),
+                            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 2l * TOK_META_BYTES, b_bytes),
                             fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                         var rawn = alloc_cmd()
                         let beginn = VkCommandBufferBeginInfo()
@@ -8525,11 +8525,12 @@ def test_vkd_dn_family(t0 : T?) {
                     upload_region_at(projd, 0l, addr<uint8 const?>(projh[0]), proj_bytes)
                     upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
                     upload_region_at(sm2, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tmd = reinterpret<TokMeta?>(tokb.mapped)
                     tmd.parity = uint(par)
+                    tmd.dnslot = 0u
                     var sc = set_dn_step_cls(fixed_array(projd, st2, sm2, scd2, qd2, tokb.buf, ofd2),
-                        fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, 16l, of_bytes),
+                        fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
                         fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
                     var raw = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
@@ -8662,11 +8663,12 @@ def test_vkd_dn_family(t0 : T?) {
                     upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
                     upload_region_at(sm2, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
                     nan_sentinel_upload(ofd2, of_bytes)
-                    var tokf = make_host_buf(16l, true)
+                    var tokf = make_host_buf(TOK_META_BYTES, true)
                     var tmf = reinterpret<TokMeta?>(tokf.mapped)
                     tmf.parity = uint(par)
+                    tmf.dnslot = 0u
                     var scf = set_dn_step_cls(fixed_array(projd, st2, sm2, scd2, qd2, tokf.buf, ofd2),
-                        fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, 16l, of_bytes),
+                        fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
                         fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
                     var hostf = make_host_buf(of_bytes + st_bytes + sm_bytes, true, [cached = true])
                     var rawf = alloc_cmd()
@@ -8866,6 +8868,204 @@ def test_vkd_dn_family(t0 : T?) {
                 delete o_ref
                 delete o_cls
             }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+struct DnRowsOut {
+    state : array<float>
+    smalls : array<float>
+    oscales : array<float>
+    oquants : array<uint>
+    of32 : array<float>
+}
+
+//! one `dn_step_cls` dispatch over `nrows` rows on buffers of its own: two calls share no device plane
+def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
+                             offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
+    var r : DnRowsOut
+    let proj_bytes = int64(nrows * prow) * 4l
+    let st_bytes = int64(nslots * st_n) * 4l
+    let sm_bytes = int64(sm_n) * 4l
+    let sc_bytes = int64(nrows * nblk) * 4l
+    let q_bytes = int64(nrows * nblk) * 32l
+    let of_bytes = int64(nrows * nvh * ds) * 4l
+    r.state |> resize(nslots * st_n)
+    r.smalls |> resize(sm_n)
+    r.oscales |> resize(nrows * nblk)
+    r.oquants |> resize(nrows * nblk * 8)
+    r.of32 |> resize(nrows * nvh * ds)
+    static_if (typeinfo builtin_module_exists(vulkan)) {   //! the device half: a fully typed function is inferred in a build without the module too
+        let projd = make_device_buf(proj_bytes)
+        let std = make_device_buf(st_bytes)
+        let smd = make_device_buf(sm_bytes)
+        let scd = make_device_buf(sc_bytes)
+        let qd = make_device_buf(q_bytes)
+        let ofd = make_device_buf(of_bytes)
+        var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
+        let ring = cd * (dconv - 1)
+        unsafe {
+            upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
+            upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
+            upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
+            for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
+                nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
+            }
+            nan_sentinel_upload(scd, sc_bytes)
+            nan_sentinel_upload(qd, q_bytes)
+            nan_sentinel_upload(ofd, of_bytes)
+            var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
+            var tm = reinterpret<TokMeta?>(tokb.mapped)
+            for (i in range(nrows)) {
+                tm[i].parity = uint(pars[i])
+                tm[i].dnslot = uint(slots[i])
+            }
+            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
+                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
+                fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
+                beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
+                taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
+                eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
+            enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            vhz_dep(raw, h, 1u | 2u | 4u | 8u | 32u, 0u, true)
+            cmd_copy_whole(raw, std, host.buf, st_bytes)
+            cmd_copy_range(raw, smd, 0l, host.buf, st_bytes, sm_bytes)
+            cmd_copy_range(raw, scd, 0l, host.buf, st_bytes + sm_bytes, sc_bytes)
+            cmd_copy_range(raw, qd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes, q_bytes)
+            cmd_copy_range(raw, ofd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes + q_bytes, of_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            let base = intptr(host.mapped)
+            memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
+            memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
+            memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
+            memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
+            memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
+        }
+    }
+    return <- r
+}
+
+//! the count of differing elements (a NaN differs from everything)
+def private n_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (got[gbase + i] != want[wbase + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
+    let nrows = 2
+    let nkh = 2
+    let nvh = 4
+    let kd = nkh * ds
+    let cd = 2 * kd + nvh * ds
+    let dconv = 4
+    let taps = dconv - 1
+    let eps = 0.00001
+    let qscale = 1.25
+    let bstride = 2 * nvh
+    let beta_off = 16
+    let g_off = beta_off + nrows * bstride
+    let a_off = g_off + nrows * nvh
+    let dt_off = a_off + nvh
+    let taps_off = dt_off + nvh
+    let wnorm_off = taps_off + cd * dconv
+    let hist_off = wnorm_off + ds
+    let ring = cd * taps
+    let sm_n = hist_off + nrows * 2 * ring
+    let prow = cd + nvh * ds
+    let st_n = nvh * ds * ds
+    let nblk = nvh * ds / 32
+    let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, bstride)
+    var projh : array<float>
+    var sth : array<float>
+    var smh : array<float>
+    projh |> resize(nrows * prow)
+    sth |> resize(nrows * st_n)
+    smh |> resize(sm_n)
+    for (i in range(nrows * prow)) {
+        projh[i] = float((i * 29) % 67) * 0.03 - 1.0
+    }
+    for (i in range(nrows * st_n)) {
+        sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+    }
+    for (i in range(sm_n)) {
+        smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+    }
+    smh[0] = eps
+    smh[1] = qscale
+    for (i in range(nvh)) {
+        smh[a_off + i] = -0.4 - float(i) * 0.1   //! a stays negative (decay)
+    }
+    var pars <- [1, 0]   //! the slots' parities differ: each row reads its own image
+    var slots <- [0, 1]
+    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+    for (r in range(nrows)) {
+        var proj1 : array<float>
+        proj1 |> resize(prow)
+        for (i in range(prow)) {
+            proj1[i] = projh[r * prow + i]
+        }
+        var sm1 := smh
+        for (i in range(nvh)) {   //! row r's beta and alpha rows at row 0's place: the one-row dispatch reads row 0
+            sm1[beta_off + i] = smh[beta_off + r * bstride + i]
+            sm1[g_off + i] = smh[g_off + r * nvh + i]
+        }
+        var pars1 <- [pars[r]]
+        var slots1 <- [slots[r]]
+        var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+        let st_diffs = n_differing(got.state, want.state, r * st_n, r * st_n, st_n)
+        let ring_diffs = n_differing(got.smalls, want.smalls, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
+        let o_diffs = (out_f32 ? n_differing(got.of32, want.of32, r * nvh * ds, 0, nvh * ds)
+            : n_differing(got.oscales, want.oscales, r * nblk, 0, nblk) + n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
+        t |> success(st_diffs == 0 && ring_diffs == 0 && o_diffs == 0,
+            "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {st_diffs}, ring {ring_diffs}, o row {o_diffs} elements off the one-row dispatch")
+        let other = 1 - r   //! the control: row r's reference must miss the other row's o row, so the compare can fail
+        let ctrl = out_f32 ? n_differing(got.of32, want.of32, other * nvh * ds, 0, nvh * ds) : n_differing(got.oquants, want.oquants, other * nblk * 8, 0, nblk * 8)
+        t |> success(ctrl > 0, "control: row {r}'s one-row reference misses row {other}'s o row ({ctrl} elements apart)")
+        delete proj1
+        delete sm1
+        delete pars1
+        delete slots1
+        delete want
+    }
+    delete got
+    delete projh
+    delete sth
+    delete smh
+    delete pars
+    delete slots
+}
+
+[test]
+def test_vkd_dn_step_rows(t0 : T?) {
+    t0 |> run("dn_step_fused over two rows in two region slots == the one-row dispatch a row at a time") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                t |> skip("dn chain declined on this device (shared-memory cap)")
+                return
+            }
+            verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
+            for (ds in fixed_array(64, 128)) {
+                dn_step_rows_arm(t, ds, false)
+                dn_step_rows_arm(t, ds, true)
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -9467,13 +9667,13 @@ def test_vkd_kv16_writers(t0 : T?) {
                     upload_region_at(kvd_dev, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
                     upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
                     upload_region_at(q2, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tm = reinterpret<TokMeta?>(tokb.mapped)
                     tm.pos = 0u
                     tm.cnt = 0u
                     tm.mirbase = 0u
                     var sc = set_rope_kv_f16_cls(fixed_array(q2, kvd_dev, km2, vm2, csd, tokb.buf, csd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, 16l, cs_bytes),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, TOK_META_BYTES, cs_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 0u, 0u))
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -9743,13 +9943,13 @@ def test_vkd_kv16_writers(t0 : T?) {
                     upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
                     upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
                     upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tmq = reinterpret<TokMeta?>(tokb.mapped)
                     tmq.pos = 0u
                     tmq.cnt = 0u
                     tmq.mirbase = 0u
                     var sc = set_qkn_rope_f16_cls(fixed_array(qd2, kvdv, km2, vm2, csd, wnd, tokb.buf, csd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, 16l, cs_bytes),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, cs_bytes),
                         fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
                     var raw = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -9886,12 +10086,12 @@ def test_vkd_kv16_readers(t0 : T?) {
                     upload_region_at(qdv, 0l, addr<uint8 const?>(qh[0]), q_bytes)
                     upload_region_at(kd, 0l, addr<uint8 const?>(k16[0]), m_bytes)
                     upload_region_at(vd, 0l, addr<uint8 const?>(v16[0]), m_bytes)
-                    var tokb = make_host_buf(16l, true)
+                    var tokb = make_host_buf(TOK_META_BYTES, true)
                     var tmc = reinterpret<TokMeta?>(tokb.mapped)
                     tmc.cnt = uint(cnt)
                     tmc.mirbase = 0u
                     var sc = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb.buf, yd2, yd2, yd2),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -9917,12 +10117,12 @@ def test_vkd_kv16_readers(t0 : T?) {
                 var y_g2 : array<float>
                 y_g2 |> resize(nheads * hs)
                 unsafe {
-                    var tokb2 = make_host_buf(16l, true)
+                    var tokb2 = make_host_buf(TOK_META_BYTES, true)
                     var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
                     tmc2.cnt = uint(cnt)
                     tmc2.mirbase = 0u
                     var sc2 = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb2.buf, yd2, yd2, yd2),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes, q_bytes, q_bytes),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
                     var raw3 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw3, begin), null)

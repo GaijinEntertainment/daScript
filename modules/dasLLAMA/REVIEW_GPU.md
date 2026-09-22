@@ -39,8 +39,9 @@ or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
 `[spirv_decode]` callback, or a cooperative-matrix GEMM class stamped per weight format and
-column width, on the NV cooperative-matrix-2 arm or the KHR cooperative-matrix arm - wherever
-the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+column width, on the NV cooperative-matrix-2 arm or the KHR cooperative-matrix arm, or a kernel
+cell or probe that fills or binds a `TokMeta` block - wherever the diff puts it - applies
+`REVIEW_GPU_VULKAN.md` too.**
 
 **A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
 `[metal_dispatch]` or `[vk_dispatch]`, a base shell one derives from, or a class template one

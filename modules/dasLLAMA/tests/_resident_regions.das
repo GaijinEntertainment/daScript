@@ -304,9 +304,20 @@ enum LogitsBar {
 
 let private WIDE_BAR_REL = 0.10
 
-//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone; `served`
-//! says the carrier has an N-row form (a PLE or hybrid carrier's command declines by design and steps a row at a time)
-def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar; served : bool) {
+//! every recurrent layer's device state home, then the host copy's sum: a slot that never came home leaves the sum where it was
+def private dn_state_home(var s : Session) : double {
+    for (l in range64(long_length(s.dn_state_prefix))) {
+        dn_flush_layer(s, l)
+    }
+    var sum = 0.0lf
+    for (v in s.dn_state) {
+        sum += double(v)
+    }
+    return sum
+}
+
+//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
     var fa <- feed_a()
     var fb <- feed_b()
     var ra <- logits_alone(tr, pa, fa)
@@ -315,6 +326,8 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     var sb <- create_session(tr, mirror_kv_dtype())
     eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
     eval(tr, sb, pb)
+    let hybrid = tr.config.recr_mask != 0ul
+    let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
     var ws <- create_batch_workspace(tr)
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     let gen_a = sa.rdec_gen
@@ -333,6 +346,9 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
             hold_within(t, sb.logits, rb[st + 1l], rb[st], "batched step {st}, row B", rel)
         }
     }
+    if (hybrid) {
+        t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
+    }
     t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
     t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
     var passes <- gpu_cpu_passes_()
@@ -340,10 +356,10 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     delete passes
     static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
         let nrows = vk_rdec_token_n_rows()
-        t |> success(served ? nrows >= 2l : nrows == 0l, served ? "the N-row token command serves the two rows at once ({nrows} rows)" : "the N-row token command declines this carrier by design ({nrows} rows)")
+        t |> success(nrows >= 2l, "the N-row token command serves the two rows at once ({nrows} rows)")
     }
     let stepped = rdec_nrow_steps() - steps0
-    t |> success(served ? stepped == STEPS : stepped == 0l, served ? "every batched step went through the N-row command ({stepped} of {STEPS})" : "no batched step went through the N-row command ({stepped})")
+    t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
     sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
     unsafe {
         delete ws
@@ -357,7 +373,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     delete fb
 }
 
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; served : bool = true) {
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -365,7 +381,7 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
             setup_dasllama_jobque_()
             var pa <- prompt_a()
             var pb <- prompt_b()
-            batched_steps_body(t, tr, pa, pb, bar, served)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }
@@ -375,7 +391,7 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
 
 //! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
-def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; served : bool = true) {
+def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
@@ -386,7 +402,7 @@ def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = Lo
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
             }
-            batched_steps_body(t, tr, pa, pb, bar, served)
+            batched_steps_body(t, tr, pa, pb, bar)
             delete pa
             delete pb
         }
@@ -419,7 +435,7 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
                     delete got
                     if (bit == 64l) {
                         var pb <- prompt_b()
-                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact, true)
+                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
                         delete pb
                     }
                     delete tr
@@ -681,7 +697,7 @@ def private cached_of(events : array<SchedEvent>; id : int64) : int64 => finishe
 //! The second turn samples at top-k 1 under a temperature - the same token as the argmax, through a sampler that is not one,
 //! so its rows land logits where the other three land picks (a batched step of both kinds lands both)
 def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int; rows_stepped : int64> {
-    var sch <- create_scheduler(m, 2l, 4l, 64l)
+    var sch <- create_scheduler(m, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())   //! the streams' caches on the mirror's codec: under DASLLAMA_VK_KV32=1 a f16 stream is not served
     let on = set_device_kv(sch, device)
     var pa <- prompt_a()
     var pb <- prompt_b()
@@ -765,7 +781,7 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
         var tr <- load_two_regions(t, file)
         with_job_que() {
             setup_dasllama_jobque_()
-            var sch <- create_scheduler(tr, 2l, 4l, 64l)
+            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
             var long_prompt <- prose_ids(WINDOW_ROWS + 188l, 3l)
             var events : array<SchedEvent>

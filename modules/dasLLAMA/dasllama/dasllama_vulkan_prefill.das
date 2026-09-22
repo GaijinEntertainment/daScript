@@ -641,26 +641,29 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
+    let dn0 & = unsafe(L.dn[0])   //! every region's slot shares the layer's two buffers; slot 0 names them, the window's pushes name the selected region's
+    let smalls_dev = dn0.smalls_dev
+    let smalls_bytes = dn0.smalls_bytes
     L.pf_dn_conv_set = set_dn_conv_cls(
-        fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, L.dn.smalls_dev),
-        fixed_array(np * cd * 4l, np * cd * 4l, DND_SMALLS_BYTES),
+        fixed_array(g_rd.pf_dnqkv, g_rd.pf_dnconv, smalls_dev),
+        fixed_array(np * cd * 4l, np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNC, VHZ_DNSM))
     L.pf_dn_scan_set = set_dn_scan_cls(
-        fixed_array(g_rd.pf_dnconv, L.dn.state_dev, L.dn.smalls_dev, g_gpu.dn_ws_dev),
-        fixed_array(np * cd * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DN_WS_BYTES),
+        fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev),
+        fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES),
         fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS))
     L.pf_dn_scan_p3_set = set_dn_scan_p3_cls(
-        fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, L.dn.smalls_dev),
-        fixed_array(np * di * 4l, DN_WS_BYTES, DND_SMALLS_BYTES),
+        fixed_array(g_rd.pf_dnz, g_gpu.dn_ws_dev, smalls_dev),
+        fixed_array(np * di * 4l, DN_WS_BYTES, smalls_bytes),
         fixed_array(VHZ_DNZ, VHZ_DNWS, VHZ_DNSM))
     L.pf_dn_tail_set = set_dn_tail_cls(
-        fixed_array(g_rd.pf_dnqkv, L.dn.smalls_dev),
-        fixed_array(np * cd * 4l, DND_SMALLS_BYTES),
+        fixed_array(g_rd.pf_dnqkv, smalls_dev),
+        fixed_array(np * cd * 4l, smalls_bytes),
         fixed_array(VHZ_DNP, VHZ_DNSM))
     if (g_rd.dn_ba_f32) {
         L.pf_dn_ba_set = set_dn_ba_cls(
-            fixed_array(g_rd.dn_ba_dev, g_rd.pf_xb, L.dn.smalls_dev),
-            fixed_array(g_rd.dn_ba_bytes, np * dim * 4l, DND_SMALLS_BYTES),
+            fixed_array(g_rd.dn_ba_dev, g_rd.pf_xb, smalls_dev),
+            fixed_array(g_rd.dn_ba_bytes, np * dim * 4l, smalls_bytes),
             fixed_array(0u, VHZ_XB, VHZ_DNSM))
     }
     if (pf_dnx6(l)) {
@@ -670,18 +673,19 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     if (g_rd.dn_ba_f32 && pf_dnx6(l) && pf_f16g_on()) {
         L.pf_f16g_ba_set = f16_gemm_set(false, fixed_array(g_rd.dn_ba_dev, g_rd.pf_xf, g_rd.pf_splitk),
             fixed_array(g_rd.dn_ba_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
-        L.pf_f16g_ba_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, L.dn.smalls_dev),
-            fixed_array(g_rd.pf_splitk_bytes, DND_SMALLS_BYTES), fixed_array(VHZ_SK, VHZ_DNSM))
+        L.pf_f16g_ba_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, smalls_dev),
+            fixed_array(g_rd.pf_splitk_bytes, smalls_bytes), fixed_array(VHZ_SK, VHZ_DNSM))
     }
 }
 
-def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
-    let hist_bytes = g_rd.dn_cd * (g_rd.dn_dconv - 1l) * 4l
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
     for (L in g_rd.layers) {
         if (L.recurrent) {
-            cmd_fill_zero(raw, L.dn.state_dev, 0l, L.dn.state_bytes)
-            cmd_fill_zero(raw, L.dn.smalls_dev, DN_SM_HIST * 4l, hist_bytes)
+            let st & = unsafe(L.dn[g_rd.region])
+            cmd_fill_zero(raw, st.state_dev, st.state_byte_off, st.slot_state_bytes)
+            cmd_fill_zero(raw, st.smalls_dev, st.hist_off * 4l, st.ring_image_bytes)
         }
     }
 }
@@ -702,6 +706,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let eps = g_rd.eps
     let x6 = pf_dnx6(l)
     let xq8k = !x6 && kq_sb(L.fqkv)
+    let st & = unsafe(L.dn[g_rd.region])
+    let hist_off = uint(st.hist_off)
     if (x6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
@@ -743,21 +749,21 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         pf_gemm_enc(raw, h, b + 3, int(KqFmt.q8), pb.wq, pb.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
             pb.wqb, pb.wsb, np * dim, np * (dim / 32l) * 4l, np * nvh * 4l, VHZ_XQ, VHZ_DNBG, dim, nvh, L.bbeta, wlen, false)
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn.smalls_dev, DN_SM_BETA * 4l, wlen * nvh * 4l)
+        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, st.smalls_dev, DN_SM_BETA * 4l, wlen * nvh * 4l)
         let pa = arena_planes(int(KqFmt.q8), L.balpha)
         pf_gemm_enc(raw, h, b + 9, int(KqFmt.q8), pa.wq, pa.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
             pa.wqb, pa.wsb, np * dim, np * (dim / 32l) * 4l, np * nvh * 4l, VHZ_XQ, VHZ_DNBG, dim, nvh, L.balpha, wlen, false)
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
+        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, st.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
     var pcc = DnConvArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
-        hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
+        hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = hist_off,
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
     enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, wlen))
     pfq_ts(raw)
     var pcs = DnScanArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
         beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
-        o_off = uint(DN_O_OFF), di = uint(di))
+        o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l))
     enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
     pfq_ts(raw)
     var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
@@ -766,13 +772,13 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     pfq_ts(raw)
     if (last) {
         // a window shorter than the taps is window 0 alone, whose history is zero: the ring's leading rows read as zero
-        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(wlen - taps, 0l)), hist_off = uint(DN_SM_HIST),
+        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(wlen - taps, 0l)), hist_off = hist_off,
             zero_rows = uint(max(taps - wlen, 0l)))
         vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
         enc_dn_tail_cls(raw, h, L.pf_dn_tail_set, pct, (cd * taps + int64(WG_X) - 1l) / int64(WG_X))
     } else {
         vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnqkv, (wlen - taps) * cd * 4l, L.dn.smalls_dev, DN_SM_HIST * 4l, taps * cd * 4l)
+        cmd_copy_range(raw, g_rd.pf_dnqkv, (wlen - taps) * cd * 4l, st.smalls_dev, st.hist_off * 4l, taps * cd * 4l)
     }
     pfq_ts(raw)
     let o6 = pf_dno6(l)
@@ -1493,11 +1499,12 @@ def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
         return
     }
     var L & = unsafe(g_rd.layers[l])
-    L.dn.parity = g_rd.dn_parity   // the last window's tail landed in the prefill's ring image
-    L.dn.owner_state_addr = intptr(stp)
-    L.dn.owner_hist_addr = intptr(histp)
-    L.dn.valid = true
-    L.dn.dirty = true
+    var st & = unsafe(L.dn[g_rd.region])
+    st.parity = g_rd.dn_parity[g_rd.region]
+    st.owner_state_addr = intptr(stp)
+    st.owner_hist_addr = intptr(histp)
+    st.valid = true
+    st.dirty = true
 }
 
 //! False when the gather rail cannot build on this device (the caller keeps the CPU embed)
@@ -1598,7 +1605,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 upload_region_at(g_rd.pf_ple, 0l, addr<uint8 const?>(ple_rows[int(w0 * all)]), wlen * all * 4l)
             }
             if (pos0 + w0 == 0l && g_rd.hybrid) {
-                g_rd.dn_parity = 0
+                g_rd.dn_parity[g_rd.region] = 0
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
@@ -1612,7 +1619,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pfq_ts(raw)   // q0: submit start
             var h : VkHaz
             if (pos0 + w0 == 0l && g_rd.hybrid) {
-                pf_dn_zero(raw, h)
+                pf_dn_zero_region(raw, h)
             }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             if (use_ids) {
