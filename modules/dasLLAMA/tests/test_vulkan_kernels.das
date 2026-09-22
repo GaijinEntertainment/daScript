@@ -8893,64 +8893,63 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     let sc_bytes = int64(nrows * nblk) * 4l
     let q_bytes = int64(nrows * nblk) * 32l
     let of_bytes = int64(nrows * nvh * ds) * 4l
-    let projd = make_device_buf(proj_bytes)
-    let std = make_device_buf(st_bytes)
-    let smd = make_device_buf(sm_bytes)
-    let scd = make_device_buf(sc_bytes)
-    let qd = make_device_buf(q_bytes)
-    let ofd = make_device_buf(of_bytes)
-    var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
     r.state |> resize(nslots * st_n)
     r.smalls |> resize(sm_n)
     r.oscales |> resize(nrows * nblk)
     r.oquants |> resize(nrows * nblk * 8)
     r.of32 |> resize(nrows * nvh * ds)
-    static_if (!typeinfo builtin_module_exists(vulkan)) {
-        return <- r
-    }
-    let ring = cd * (dconv - 1)
-    unsafe {
-        upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
-        upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
-        upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
-        for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
-            nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
+    static_if (typeinfo builtin_module_exists(vulkan)) {   //! the device half: a fully typed function is inferred in a build without the module too
+        let projd = make_device_buf(proj_bytes)
+        let std = make_device_buf(st_bytes)
+        let smd = make_device_buf(sm_bytes)
+        let scd = make_device_buf(sc_bytes)
+        let qd = make_device_buf(q_bytes)
+        let ofd = make_device_buf(of_bytes)
+        var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
+        let ring = cd * (dconv - 1)
+        unsafe {
+            upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
+            upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
+            upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
+            for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
+                nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
+            }
+            nan_sentinel_upload(scd, sc_bytes)
+            nan_sentinel_upload(qd, q_bytes)
+            nan_sentinel_upload(ofd, of_bytes)
+            var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
+            var tm = reinterpret<TokMeta?>(tokb.mapped)
+            for (i in range(nrows)) {
+                tm[i].parity = uint(pars[i])
+                tm[i].dnslot = uint(slots[i])
+            }
+            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
+                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
+                fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
+                beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
+                taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
+                eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
+            enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            vhz_dep(raw, h, 1u | 2u | 4u | 8u | 32u, 0u, true)
+            cmd_copy_whole(raw, std, host.buf, st_bytes)
+            cmd_copy_range(raw, smd, 0l, host.buf, st_bytes, sm_bytes)
+            cmd_copy_range(raw, scd, 0l, host.buf, st_bytes + sm_bytes, sc_bytes)
+            cmd_copy_range(raw, qd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes, q_bytes)
+            cmd_copy_range(raw, ofd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes + q_bytes, of_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            let base = intptr(host.mapped)
+            memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
+            memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
+            memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
+            memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
+            memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
         }
-        nan_sentinel_upload(scd, sc_bytes)
-        nan_sentinel_upload(qd, q_bytes)
-        nan_sentinel_upload(ofd, of_bytes)
-        var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
-        var tm = reinterpret<TokMeta?>(tokb.mapped)
-        for (i in range(nrows)) {
-            tm[i].parity = uint(pars[i])
-            tm[i].dnslot = uint(slots[i])
-        }
-        var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
-            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
-            fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
-            beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
-            taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
-            eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
-        enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
-        vhz_dep(raw, h, 1u | 2u | 4u | 8u | 32u, 0u, true)
-        cmd_copy_whole(raw, std, host.buf, st_bytes)
-        cmd_copy_range(raw, smd, 0l, host.buf, st_bytes, sm_bytes)
-        cmd_copy_range(raw, scd, 0l, host.buf, st_bytes + sm_bytes, sc_bytes)
-        cmd_copy_range(raw, qd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes, q_bytes)
-        cmd_copy_range(raw, ofd, 0l, host.buf, st_bytes + sm_bytes + sc_bytes + q_bytes, of_bytes)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        let base = intptr(host.mapped)
-        memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
-        memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
-        memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
-        memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
-        memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
     }
     return <- r
 }
