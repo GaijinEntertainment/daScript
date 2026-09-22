@@ -693,6 +693,20 @@ def test_metal_mtp_parity_0_8b(t : T?) {
 }
 
 [test]
+def test_metal_mtp_parity_4b(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-4B-MTP-Q8_0") <| @(t : T?) {
+        run_fixture(t, "Qwen3.5-4B-MTP-Q8_0.gguf", "4b")
+    }
+}
+
+[test]
+def test_metal_mtp_parity_9b(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-9B-MTP-UD-Q5_K_XL (large tier)") <| @(t : T?) {
+        run_fixture(t, "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf", "9b")
+    }
+}
+
+[test]
 def test_metal_mtp_parity_27b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-27B-MTP-Q4_K_M (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-27B-MTP-Q4_K_M.gguf", "27b")

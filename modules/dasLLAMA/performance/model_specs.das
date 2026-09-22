@@ -380,6 +380,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M-q8out.gguf",
             recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M-q8out.gguf Q4_K_M",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true])),
+        // the 4B hybrid with its in-file MTP block - the mid-size dense carrier of the MTP series'
+        // Metal rail parity (tests/test_metal_mtp_parity.das); the local name carries the MTP tag
+        ModelSpec(file = "Qwen3.5-4B-MTP-Q8_0.gguf",
+            url = "{HF}/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/Qwen3.5-4B-Q8_0.gguf",
+            bytes = 4610580800l, sha256 = "4f40ff26e3b6e23888e520e9c33d9a309d919b940cd1375b421710c6cb6cc8dd"),
         // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
         // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
         // serving census's head-256 row; the local name carries the MTP tag the release's does not

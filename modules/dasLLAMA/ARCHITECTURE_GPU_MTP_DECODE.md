@@ -81,6 +81,15 @@ twelve, each tile past the first offsetting x by its first row's count of n floa
 same rows of the site's y stride - so the spare rows of the last tile compute garbage that must
 land inside an allocation this step owns and nobody reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
 
+The attention partials follow the same ownership rule along the position axis: `acquire_step`
+sizes `bpart` for the DEEPEST row's chunk count - `ceil((deepest + nrows) / 64)` chunks per (row,
+head), where `deepest` is the largest position any of the step's rows reaches (a joint round's
+groups sit at different positions, so the callers pass it) - because the layer chain dispatches
+that many chunks for every row. A buffer sized for the first row's count is short by one chunk
+per (row, head) whenever the rows straddle a 64-row boundary, and the chunked attention then
+writes past its end into the pool's neighbour - a corruption that surfaces rounds later, on
+whatever the heap put there.
+
 ### 2.38 The single-row driver's greedy chain {#greedy-chain}
 
 **The single-row driver pre-encodes the next step on the GPU's own argmax, and only a greedy

@@ -327,7 +327,9 @@ var private g_rope_sin_next_swa : array<float>
 // Hetero models (gemma4) carry TWO attention classes (global = config fields, sliding = _swa);
 // buffers size to the class maxima and each layer binds its class's uniform set.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
-def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
+//! `deepest`: the largest row position the step's rows reach (a joint round's groups sit at different
+//! positions) - it sizes the attention partials; -1 = `pos`
+def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
     let head_size = c.head_size
@@ -549,7 +551,8 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     }
     // chunked split-K attention above the single-tg depth (128-row chunks, cross-chunk combine)
     r.chunked = pos + 1l > g_attn_single_max
-    let nchunks = (pos + 1l + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
+    let top = deepest >= 0l ? deepest : pos
+    let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS   //! the DEEPEST row's chunk count - the layer chain dispatches this many per (row, head)
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
     if (r.chunked) {
         r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
@@ -1918,7 +1921,7 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
     }
     let g0 = g_v_groups[0]
     let nrows = max(ng, 3l)
-    var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows])
+    var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows, deepest = chain_pos])
     if (!r.gpu_logits) {
         release_step(r)
         return false
@@ -2014,7 +2017,11 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     prof_add("mtp.verify.prep", ts_verify)
     let ts_poke = prof_ticks()
     let g0 = g_v_groups[0]
-    var r = acquire_step(t, *g0.s, g0.pos + 1l, g0.koff, g0.voff, g0.cap, [nrows = nr * ng])
+    var pmax = g0.pos
+    for (g in g_v_groups) {
+        pmax = max(pmax, g.pos)
+    }
+    var r = acquire_step(t, *g0.s, g0.pos + 1l, g0.koff, g0.voff, g0.cap, [nrows = nr * ng, deepest = pmax + 1l])
     var refused = !r.gpu_logits   // verify has no CPU classifier fallback (blog/bxf live under gpu_logits)
     if (!refused && r.dn) {
         let cd = dn_conv_dim(c)
