@@ -162,7 +162,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.dn_oq_dev = make_device_buf(DND_OQ_BYTES)
         r.dn_os_dev = make_device_buf(DND_OS_BYTES)
         r.dn_of_dev = make_device_buf(DND_OQ_BYTES * 4l)
-        r.dn_parity = 0
+        r.dn_par |> resize(regions)
         ensure_dnd_state()   // the staging buffers the state uploads and flushes ride
     }
     // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final (dim each), then under qk_norm the
@@ -180,7 +180,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.dummy = make_device_buf(256l)
     r.x_host = make_host_buf(dim * 4l * nb, false, [cached = true])
     r.cos_host = make_host_buf(r.cos_elems * 4l * nb, false, [cached = true])
-    r.tok_meta = make_host_buf(16l * nb, true)   // the TokMeta block: a row's pos/cnt/mirbase each, the one-row command's at 0
+    r.tok_meta = make_host_buf(TOK_META_BYTES * nb, true)   // the TokMeta block: a row's pos/cnt/mirbase/dnslot each, the one-row command's at 0
     r.logits_host = make_host_buf(vocab * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.pick_dev = make_device_buf(4l * nb, r.log_xfer)
     r.pick_part_max_dev = make_device_buf(4l * nb * RD_PICK_CHUNKS)
@@ -770,12 +770,13 @@ def private rdn_upload_constants(L : RLayer; convw : float const?; wnormp : floa
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_range(raw, g_gpu.dn_smalls.buf, 0l, L.dn.smalls_dev, 0l, DN_SM_HIST * 4l)
+    cmd_copy_range(raw, g_gpu.dn_smalls.buf, 0l, L.dn[0].smalls_dev, 0l, DN_SM_HIST * 4l)
     vk_check(vkEndCommandBuffer(raw), null)
     submit_wait(g_gpu.batch_cmd)
 }
 
-def private rdn_state_upload(var st : DnStep; stp : float const?; histp : float const?) {
+//! the session's state and history into the slot, the history into the region's current parity image
+def private rdn_state_upload(var st : DnStep; stp : float const?; histp : float const?; par : int) {
     unsafe {
         memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void?>(stp), st.state_bytes)
         memcpy(reinterpret<void?>(reinterpret<float?>(g_gpu.dn_smalls.mapped) + DN_SM_HIST), reinterpret<void?>(histp), st.ring_bytes)
@@ -785,12 +786,12 @@ def private rdn_state_upload(var st : DnStep; stp : float const?; histp : float 
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_whole(raw, g_gpu.dn_state_stage.buf, st.state_dev, st.state_bytes)
+    cmd_copy_range(raw, g_gpu.dn_state_stage.buf, 0l, st.state_dev, st.state_off, st.state_bytes)
     cmd_copy_range(raw, g_gpu.dn_smalls.buf, DN_SM_HIST * 4l, st.smalls_dev,
-        DN_SM_HIST * 4l + int64(g_rd.dn_parity) * st.ring_bytes, st.ring_bytes)
+        st.hist_off * 4l + int64(par) * st.ring_bytes, st.ring_bytes)
     vk_check(vkEndCommandBuffer(raw), null)
     submit_wait(g_gpu.batch_cmd)
-    st.parity = g_rd.dn_parity
+    st.parity = par
     st.owner_state_addr = intptr(stp)
     st.owner_hist_addr = intptr(histp)
     st.valid = true
@@ -831,9 +832,19 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         "vk decode: the class rails must engage on a live device")
     L.m_dnqkv = rd_meta(); L.m_dnz = rd_meta(); L.m_dnout = rd_meta()
     L.s_quant_xb = rd_quant_xb_set()
-    L.dn = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l), smalls_dev = make_device_buf(DND_SMALLS_BYTES),
-                  state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * (g_rd.dn_dconv - 1l) * 4l,
-                  parity = 0, valid = false, dirty = false, owner_state_addr = 0ul, owner_hist_addr = 0ul)
+    // a state slot and a ring pair per mirror region, over one buffer each: the region's row names its slot in TokMeta
+    let nslot = g_rd.regions
+    let state_bytes = nvh * ds * ds * 4l
+    let ring_elems = cd * (g_rd.dn_dconv - 1l)
+    let smalls_bytes = (DN_SM_HIST + nslot * 2l * ring_elems + 64l) * 4l
+    let state_dev = make_device_buf(state_bytes * nslot)
+    let smalls_dev = make_device_buf(smalls_bytes)
+    L.dn |> resize(nslot)
+    for (s in range64(nslot)) {
+        L.dn[s] = DnStep(state_dev = state_dev, smalls_dev = smalls_dev, state_bytes = state_bytes, ring_bytes = ring_elems * 4l,
+                         smalls_bytes = smalls_bytes, state_off = s * state_bytes, hist_off = DN_SM_HIST + s * 2l * ring_elems,
+                         parity = 0, valid = false, dirty = false, owner_state_addr = 0ul, owner_hist_addr = 0ul)
+    }
     rdn_upload_constants(L, convw, wnormp, ap, dtp)
     let pqkv = arena_planes(fqkv, bqkv)
     let pz = arena_planes(fz, bz)
@@ -846,24 +857,24 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         fixed_array(pz.wqb, pz.wsb, META_BYTES, dim, (dim / 32l) * 4l, (cd + di) * 4l),
         fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNZ))   //! the z half of the row under its own class: the qkv and z GEMVs co-run, the step waits on both
     if (g_rd.dn_ba_f32) {
-        L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, L.dn.smalls_dev, g_rd.norms_dev),
-            fixed_array(g_rd.dn_ba_bytes, dim * 4l, DND_SMALLS_BYTES, g_rd.norms_bytes),
+        L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, smalls_dev, g_rd.norms_dev),
+            fixed_array(g_rd.dn_ba_bytes, dim * 4l, smalls_bytes, g_rd.norms_bytes),
             fixed_array(0u, VHZ_XB, VHZ_DNSM, 0u))
     } else {
         L.m_dnbeta = rd_meta(); L.m_dnalpha = rd_meta()
         let pb = arena_planes(int(KqFmt.q8), bbeta)
         let pa = arena_planes(int(KqFmt.q8), balpha)
-        L.s_dnbeta = gemv_cls_set(int(KqFmt.q8), fixed_array(pb.wq, pb.ws, L.m_dnbeta.buf, g_rd.xq_dev, g_rd.xs_dev, L.dn.smalls_dev),
-            fixed_array(pb.wqb, pb.wsb, META_BYTES, dim, (dim / 32l) * 4l, DND_SMALLS_BYTES),
+        L.s_dnbeta = gemv_cls_set(int(KqFmt.q8), fixed_array(pb.wq, pb.ws, L.m_dnbeta.buf, g_rd.xq_dev, g_rd.xs_dev, smalls_dev),
+            fixed_array(pb.wqb, pb.wsb, META_BYTES, dim, (dim / 32l) * 4l, smalls_bytes),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNSM))
-        L.s_dnalpha = gemv_cls_set(int(KqFmt.q8), fixed_array(pa.wq, pa.ws, L.m_dnalpha.buf, g_rd.xq_dev, g_rd.xs_dev, L.dn.smalls_dev),
-            fixed_array(pa.wqb, pa.wsb, META_BYTES, dim, (dim / 32l) * 4l, DND_SMALLS_BYTES),
+        L.s_dnalpha = gemv_cls_set(int(KqFmt.q8), fixed_array(pa.wq, pa.ws, L.m_dnalpha.buf, g_rd.xq_dev, g_rd.xs_dev, smalls_dev),
+            fixed_array(pa.wqb, pa.wsb, META_BYTES, dim, (dim / 32l) * 4l, smalls_bytes),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNSM))
     }
-    // the fused step: proj @0, state @1 (in place), smalls @2 (rw), o scales @3, o quants @4, tok @5, o f32 @6
+    // the fused step: proj @0, state @1 (in place, every slot), smalls @2 (rw), o scales @3, o quants @4, tok @5, o f32 @6
     L.s_dnstep = set_dn_step_cls(
-        fixed_array(g_rd.dn_proj_dev, L.dn.state_dev, L.dn.smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf, g_rd.dn_of_dev),
-        fixed_array((cd + di) * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l, DND_OQ_BYTES * 4l),
+        fixed_array(g_rd.dn_proj_dev, state_dev, smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf, g_rd.dn_of_dev),
+        fixed_array((cd + di) * 4l, state_bytes * nslot, smalls_bytes, DND_OS_BYTES, DND_OQ_BYTES, TOK_META_BYTES, DND_OQ_BYTES * 4l),
         fixed_array(VHZ_DNP | VHZ_DNZ, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO))
     if (kq_sb(fout)) {
         L.s_quant_dno = set_rq_cls(fixed_array(g_rd.dn_of_dev, g_rd.dn_oq_dev, g_rd.dn_os_dev),
@@ -949,14 +960,16 @@ def vk_rdec_upload_dn_ba(rows : array<float>) {
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     var L & = unsafe(g_rd.layers[l])
+    let slot = g_rd.region   //! the selected region's slot: the driver selects the session's region before it owns
+    var st & = unsafe(L.dn[slot])
     let caller = intptr(stp)
-    if (L.dn.valid && L.dn.owner_state_addr == caller) {
+    if (st.valid && st.owner_state_addr == caller) {
         return
     }
-    if (L.dn.valid && L.dn.dirty) {
-        dnd_flush_down(L.dn)
+    if (st.valid && st.dirty) {
+        dnd_flush_down(st)
     }
-    rdn_state_upload(L.dn, stp, histp)
+    rdn_state_upload(st, stp, histp, g_rd.dn_par[slot])
 }
 
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
@@ -1530,7 +1543,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         dconv = uint(g_rd.dn_dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
         taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
         dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u)
+        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u, nvh = uint(nvh))
     enc_dn_step_cls(raw, h, L.s_dnstep, pcd, nvh)
     rd_ts(raw, "d:step")
     if (kq_sb(L.fout)) {   // no stamp here - the requant bills to the out role
@@ -2139,8 +2152,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
         tm.pos = uint(pos)   // every carrier composes its mirror row as layerbase + pos * kvd
         tm.cnt = uint(cnt)
-        tm.parity = uint(g_rd.dn_parity)
+        tm.parity = g_rd.hybrid ? uint(g_rd.dn_par[g_rd.region]) : 0u
         tm.mirbase = 0u   //! the one-row command's region rides its push; an N-row step leaves its row 0 entry here
+        tm.dnslot = uint(g_rd.region)
         if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
             let t1 = ref_time_ticks()
             rd_submit_land(cmd, 1l, picks_only)
@@ -2174,12 +2188,13 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         }
     }
     if (g_rd.hybrid) {
-        // the steps wrote the other ring image: it is the current history now, and every slot is dirty
-        g_rd.dn_parity = 1 - g_rd.dn_parity
+        // the steps wrote the region's other ring image: it is the current history now, and the region's slot is dirty in every layer
+        let slot = g_rd.region
+        g_rd.dn_par[slot] = 1 - g_rd.dn_par[slot]
         for (L in g_rd.layers) {
             if (L.recurrent) {
-                L.dn.parity = g_rd.dn_parity
-                L.dn.dirty = true
+                L.dn[slot].parity = g_rd.dn_par[slot]
+                L.dn[slot].dirty = true
             }
         }
     }
@@ -2399,8 +2414,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         for (i in range64(nrows)) {
             tm[i].pos = uint(poss[i])
             tm[i].cnt = uint(cnts[i])
-            tm[i].parity = 0u
+            tm[i].parity = g_rd.hybrid ? uint(g_rd.dn_par[regs[i]]) : 0u
             tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
+            tm[i].dnslot = uint(regs[i])
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
         if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
@@ -2558,8 +2574,8 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     var st = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l),
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
-                    state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * taps * 4l,
-                    parity = 0, tok <- make_host_buf(16l, true), valid = false, dirty = false,
+                    state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * taps * 4l, smalls_bytes = DND_SMALLS_BYTES, state_off = 0l,
+                    parity = 0, tok <- make_host_buf(TOK_META_BYTES, true), valid = false, dirty = false,
                     owner_state_addr = 0ul, owner_hist_addr = 0ul)
     let fqkv = g_gpu.stacks[s_qkv].fmt
     let fz = g_gpu.stacks[s_z].fmt
@@ -2574,7 +2590,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     // fused step (class): proj = the shared y (qkv rows + z at cd); state advances in place — residency IS that binding; parity rides TokMeta
     st.fused_set = set_dn_step_cls(
         fixed_array(g_gpu.stacks[s_qkv].y_dev, st.state_dev, st.smalls_dev, g_gpu.dnd_os_dev, g_gpu.dnd_oq_dev, st.tok.buf, g_gpu.dnd_of_dev),
-        fixed_array(Y_BYTES, st.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l, DND_OQ_BYTES * 4l),
+        fixed_array(Y_BYTES, st.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, TOK_META_BYTES, DND_OQ_BYTES * 4l),
         fixed_array(VHG_Y1 | VHG_Y2, VHG_ST, VHG_SM, VHG_WS, VHG_WS, 0u, VHG_WS))
     // out GEMV: out planes@0/1, its once-filled regions@2, the o image@3/4, its y_dev@5
     st.out_set = gemv_cls_set(fo, fixed_array(g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].meta.buf,
@@ -2599,7 +2615,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
         dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
         taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
         dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = eps, qscale = 1.0 / sqrt(float(ds)))
+        eps = eps, qscale = 1.0 / sqrt(float(ds)), nvh = uint(nvh))
     enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_enc(fo, raw, h, st.out_set, pco, dim)
@@ -2677,6 +2693,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         memcpy(reinterpret<void?>(bg + nvh), reinterpret<void?>(gp), nvh * 4l)
         var tm = reinterpret<TokMeta?>(st.tok.mapped)
         tm.parity = uint(st.parity)
+        tm.dnslot = 0u   //! the per-op step's one slot
     }
     let ts1 = ref_time_ticks()
     submit_wait(st.cmd)
@@ -2699,8 +2716,10 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     }
     if (g_rd != null && g_rd.hybrid && l < long_length(g_rd.layers) && g_rd.layers[l].recurrent) {
         var L & = unsafe(g_rd.layers[l])
-        if (L.dn.valid && L.dn.owner_state_addr == intptr(stp)) {
-            dnd_send_home(L.dn)
+        for (st in L.dn) {
+            if (st.valid && st.owner_state_addr == intptr(stp)) {
+                dnd_send_home(st)
+            }
         }
         return
     }
@@ -2737,8 +2756,8 @@ def private dnd_flush_down(st : DnStep) {
     vk_check(vkResetCommandBuffer(raw, rf), null)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_whole(raw, st.state_dev, g_gpu.dn_state_host.buf, st.state_bytes)
-    cmd_copy_range(raw, st.smalls_dev, DN_SM_HIST * 4l + int64(st.parity) * st.ring_bytes,
+    cmd_copy_range(raw, st.state_dev, st.state_off, g_gpu.dn_state_host.buf, 0l, st.state_bytes)
+    cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.parity) * st.ring_bytes,
         g_gpu.dn_tail_host.buf, 0l, st.ring_bytes)
     vk_check(vkEndCommandBuffer(raw), null)
     submit_wait(g_gpu.batch_cmd)
@@ -2748,11 +2767,11 @@ def private dnd_flush_down(st : DnStep) {
     }
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records: the selected region's slot goes home
 def vk_rdec_dn_flush_owners {
     for (L in g_rd.layers) {
-        continue if (!L.recurrent || !L.dn.valid)
-        dnd_send_home(L.dn)
+        continue if (!L.recurrent || !L.dn[g_rd.region].valid)
+        dnd_send_home(L.dn[g_rd.region])
     }
 }
 
@@ -2766,8 +2785,9 @@ def vk_dn_step_invalidate {
     }
     if (g_rd != null && g_rd.hybrid) {
         for (L in g_rd.layers) {
-            if (L.recurrent) {
-                dnd_drop_slot(L.dn)
+            continue if (!L.recurrent)
+            for (st in L.dn) {
+                dnd_drop_slot(st)
             }
         }
     }
@@ -2785,8 +2805,11 @@ def vk_dn_step_release(state_lo : uint64; state_hi : uint64) {
     }
     if (g_rd != null && g_rd.hybrid) {
         for (L in g_rd.layers) {
-            if (L.recurrent && L.dn.owner_state_addr >= state_lo && L.dn.owner_state_addr < state_hi) {
-                dnd_drop_slot(L.dn)
+            continue if (!L.recurrent)
+            for (st in L.dn) {
+                if (st.owner_state_addr >= state_lo && st.owner_state_addr < state_hi) {
+                    dnd_drop_slot(st)
+                }
             }
         }
     }
@@ -3620,7 +3643,7 @@ def private ensure_dat_state(dim, qd, kvd, hs : int64) {
     g_gpu.dat_as_dev = make_device_buf((qd / 32l) * 4l)
     g_gpu.dat_xb2_dev = make_device_buf(dim * 4l)
     g_gpu.dat_cos = make_host_buf(hs * 4l, true)   // the kernels read the host-visible row directly
-    g_gpu.dat_tok = make_host_buf(16l, true)
+    g_gpu.dat_tok = make_host_buf(TOK_META_BYTES, true)
     g_gpu.dat_out = make_host_buf(dim * 4l + 2l * kvd * 4l, false, [cached = true])   // wo row | raw k | raw v
     g_gpu.dat_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: decode attention block engaged (mirror cap {DAT_MIRROR_ROWS} rows)\n")
@@ -3690,17 +3713,17 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
         }
         L.s_qkr = set_qkn_rope_f16_cls(
             fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, 16l, bbytes),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, TOK_META_BYTES, bbytes),
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
             fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l, bbytes),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, TOK_META_BYTES, bbytes),
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
     }
     L.s_attn = set_da_attn_f16_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
         fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev),
-        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l, qd * 4l, qd * 4l, qd * 4l),
+        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, TOK_META_BYTES, qd * 4l, qd * 4l, qd * 4l),
         fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_ATT, VHZ_ATT))
     L.s_rq = set_rq_cls(fixed_array(g_gpu.dat_attn_dev, g_gpu.dat_aq_dev, g_gpu.dat_as_dev),
         fixed_array(qd * 4l, qd, (qd / 32l) * 4l),

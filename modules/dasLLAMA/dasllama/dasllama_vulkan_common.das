@@ -323,6 +323,7 @@ let DND_BG_BYTES = (2l * DN_MAX_HEADS + 4l) * 4l
 let DND_OQ_BYTES = DN_MAX_HEADS * DN_MAX_DS
 let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
 let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
+let TOK_META_BYTES = 32l   //! one TokMeta row (the kernels index the block by row)
 
 // heat-cache pool stacks live in a SYNTHETIC element-offset space far above any real plane
 // offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them
@@ -511,8 +512,11 @@ struct DnStep {
     s_qkv : int
     s_z : int
     s_o : int
-    state_bytes : int64
-    ring_bytes : int64
+    state_bytes : int64      // one slot's state
+    ring_bytes : int64       // one ring image
+    smalls_bytes : int64     // the whole smalls member: colds, the beta/gamma rows, every slot's ring pair
+    state_off : int64        // this slot's state in state_dev, bytes (a slot per mirror region on the resident driver)
+    hist_off : int64 = DN_SM_HIST   // this slot's ring pair in smalls, floats (the parity image sits ring_bytes past it)
     parity : int             // ring image holding current history (the kernel writes the other)
     tok : HostBuf            // the step's TokMeta block (parity, host-poked per step)
     valid : bool
@@ -2326,7 +2330,7 @@ struct RLayer {
     s_dnba : VkDescriptorSet                // f32 arm: the router-form GEMV over dn_ba_dev, two pushes
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
-    dn : DnStep                     // state + smalls + the session owner (the per-op step's shape; its cmd/tok/sets stay unused here)
+    dn : array<DnStep>              // a slot per mirror region over one state and one smalls buffer (slot 0 names them); each slot's owner is the session in its region
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2424,7 +2428,7 @@ struct RDec {
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
-    dn_parity : int               // the shared conv-ring parity: every recurrent layer steps once per token
+    dn_par : array<int>           // the conv-ring parity per mirror region: every recurrent layer's slot in a region steps once per token
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64

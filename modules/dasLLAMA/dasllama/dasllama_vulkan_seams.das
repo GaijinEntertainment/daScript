@@ -77,13 +77,13 @@ def private ensure_rks_state {
     g_gpu.rks_k_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_v_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_scal = make_host_buf(XS_BYTES, true)   // the cos+sin row (data, not params)
-    g_gpu.rks_tok = make_host_buf(16l, true)   // TokMeta: per-call pos/cnt, shared with the attn seam
+    g_gpu.rks_tok = make_host_buf(TOK_META_BYTES, true)   // TokMeta: per-call pos/cnt, shared with the attn seam
     g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
     g_gpu.rks_set = set_rope_kv_cls(
         fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_tok.buf, g_gpu.rks_scal.buf),
         fixed_array(RKS_MAX_QD * 4l, (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, 16l, XS_BYTES),
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, TOK_META_BYTES, XS_BYTES),
         fixed_array(VHG_Y1, 0u, VHG_Y2, VHG_Y3, 0u, 0u, 0u))   // roped q / K mirror / V mirror; the bias slot is a never-read placeholder (the seam has no bias arm)
     g_gpu.rks_ready = true
 }
@@ -140,7 +140,7 @@ def private ensure_da_state {
     g_gpu.da_set = set_da_attn_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
         fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf, g_gpu.da_out_dev, g_gpu.da_out_dev, g_gpu.da_out_dev),
         fixed_array(RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l),
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, TOK_META_BYTES, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l),
         fixed_array(0u, 0u, 0u, VHG_YO, 0u, VHG_YO, VHG_YO, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
