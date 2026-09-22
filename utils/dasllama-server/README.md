@@ -117,7 +117,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--tts-voices-dir` | - | - | Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each, 60 s at most) a cloning speech model adds to its voices at boot, each under its file's stem (`mine.wav` -> voice `mine`; a stem the model already carries replaces that voice, with a log line). A clip that does not decode or runs past 60 s is logged and skipped; the key on a model that cannot clone is logged and ignored |
 | `--image-mmproj` | - | - | Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model - enables `image_url` parts on `/v1/chat/completions`. Per-model in a `[[models]]` roster: `image_mmproj = "..."`. When the file also carries a gemma4a audio encoder (the E-series mmproj carries both towers), the same flag arms **native audio**: `input_audio` parts serve through the same slot - one decoder, one mmproj, no dedicated ASR model copy |
 | `--ctx` | - | *model* | Context-length cap in tokens (default: the model's trained `context_length`; set it to bound `--flat` KV or trim RAM) |
-| `--max-tokens` | - | `256` | Default reply token budget when a request omits `max_tokens` (clamped to `--ctx` per request) |
+| `--max-tokens` | - | `16384` | Default reply token budget when a request omits `max_tokens` (clamped to `--ctx` per request) |
 | `--streams` | `-s` | `4` | Max concurrent generation streams |
 | `--threads` | `-t` | `16` | Worker-lane cap for the matmul dispatch (`-1` = all cores) - decode is bandwidth-bound, so an uncapped dispatch just fights the rest of the box |
 | `--team-dispatch` | - | `hybrid` | `hybrid`: LLM uses the worker team while the ASR and TTS workers run inline; `team`: all callers use serialized team publishes; `inline`: every caller runs independently |
@@ -125,7 +125,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | - | MTP/NextN self-speculative decode - needs a model with an in-file NextN head (the `-MTP-` GGUFs). Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. Up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, it is on when the server runs one stream (`streams = 1`) and off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5/3.6 MTP models, at several streams the plain batched step is faster (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board). `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--models-dir` | - | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
 | `--tune` | - | - | Re-tune this box's dasLLAMA kernels, then relaunch (the JIT run; a fat build carries no tuner and ignores it) |
 | `--help` | `-?` | - | Show help and exit |
@@ -556,6 +556,10 @@ absent; set `DASLLAMA_MODELS_DIR`):
   `/v1/audio/phonemes` document against the facade's own normalizer and chunker, and a
   second boot on the `f32` lane proving the pin reaches the worker. Needs `kitten-nano.gguf` and
   the front-end packs beside it.
+- `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
+  stream and decodes plain at four, an explicit `mtp` wins either way, and a head-less model
+  serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. Needs
+  `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
 - `test_exchange_client.das` - the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).

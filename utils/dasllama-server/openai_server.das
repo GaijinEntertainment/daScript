@@ -5567,7 +5567,7 @@ struct private SchedDefaults {
     page_rows : int64
     prefix_groups : int64
     kv_dtype : KVDtype
-    mtp : bool
+    mtp : int   //! -1 auto (on when the slot runs one stream) | 0 off | 1 on
 }
 
 var private g_sched_defaults = SchedDefaults()
@@ -5584,16 +5584,21 @@ def private init_one_scheduler(var s : ModelSlot) {
         pfx = 0l   // explicit unbounded
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
-    var spec = s.opts.mtp >= 0 ? s.opts.mtp != 0 : g_sched_defaults.mtp
+    let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
+    var spec = want > 0 || (want < 0 && s_streams == 1l)   //! auto: the draft-and-verify round wins at one stream, the plain batched step at several
     if (spec && s.model.config.n_layer_nextn <= 0l) {
-        to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
+        if (want > 0) {
+            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
+        } else {
+            to_log(LOG_INFO, "dasllama-server: {s.name} has no NextN head — the single-stream self-spec default stays off\n")
+        }
         spec = false
     }
     s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec)
 }
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
-def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : bool) {
+def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : int) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
                                      chunk_tokens = chunk_tokens, page_rows = page_rows,
                                      prefix_groups = prefix_groups, kv_dtype = kv_dtype, mtp = mtp)
@@ -5602,9 +5607,10 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows
     }
 }
 
+//! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream), 0 / 1 set it
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
-                team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : bool = false) : bool {
+                team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) : bool {
     if (g_server != null || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -5936,7 +5942,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
 //! ``init_server`` / ``update_server`` / ``shutdown_server`` directly.
 def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
-               team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : bool = false) {
+               team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
             team_dispatch, asr_team_dispatch, mtp)) {
         while (update_server()) {

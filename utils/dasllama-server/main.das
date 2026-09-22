@@ -142,7 +142,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode for every request (needs a model with an in-file NextN head, e.g. the -MTP- GGUFs; pays on the dense qwen35 models). A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: on when the server runs one stream (--streams 1), off otherwise; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "Path to a llama.cpp llama-bench binary — enables the control page's benchmark button"
@@ -1104,7 +1104,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         port, streams,
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
-         asr_team_dispatch = asr_team_dispatch, mtp = g_cfg.mtp])
+         asr_team_dispatch = asr_team_dispatch,
+         mtp = g_cfg_sources |> key_exists("mtp") ? (g_cfg.mtp ? 1 : 0) : -1])   //! unset = each slot decides by its stream count
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()
