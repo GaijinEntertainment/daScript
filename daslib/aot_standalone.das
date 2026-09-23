@@ -550,7 +550,7 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
 }
 
 def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
-    var noAotMarker = new NoAotMarker();
+    var noAotMarker = new NoAotMarker(interpretCollectCarriers = false);
     var unmarked <- foreignUsedFunctions(program, true)
     make_visitor(*noAotMarker) $(adapter_no_aot) {
         visit(program, adapter_no_aot)
