@@ -1471,14 +1471,6 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
-63. **Two of the prefill's class pick ladders sit outside the ladders' home.** `REVIEW_PLACEMENT.md`
-    lands a host-side pick ladder over Vulkan kernel classes in `dasllama_vulkan_classes.das`, where
-    `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2
-    tile ladder (`cm2_cls_*`, its `khr_cls_*` and `cm2e_cls_*` arms) sits in
-    `dasllama_vulkan_prefill.das`, pinned there by `REVIEW.das`'s `check_cm2_ladder_set`, which reads
-    that file's bodies. Move the nine ladders to the classes file and retarget the check's
-    `function_bodies` and its two findings at `VK_CLASSES` in the same change; the cells, the probe
-    harness and the prefill call them by name, so no caller moves.
 64. **The folded flash template's KHR stamps carry two constants their arm never reads.** `FaT`
     declares `BC` (the cm2 arm's K/V step) and `GATED` (the cm2 arm's gate multiply), and the
     head-size templates set `BC` for both arms, so every `fa_khr_*` stamp inherits a `BC` and a

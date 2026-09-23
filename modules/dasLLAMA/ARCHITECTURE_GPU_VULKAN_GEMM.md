@@ -89,10 +89,10 @@ values - since a clamped weight load runs every tile at a third the speed (the f
 clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waited on the partial workgroups (the 26B's shared expert, k6: 164 us against 71 whole). `STILE` is inert on the KHR classes.
 
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
-block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of
-the K-quants, q4_0, q8 and the 4-bit LUT formats, and 32 on the s and e stamps of the five
-grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; the e stamp is `<Fmt>Cm2EBatch`, the
-`cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT` carry its depth. A grid decode is
+block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and
+the 4-bit LUT formats - there the e column IS the m stamp (`KQ_CM2E_ALIASES_M` in `dasllama_kqformat.das` names them, the
+`cm2e_cls_*` ladder picks their m class, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
+of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`khr_cls_*`, `cm2e_cls_*`, `cm2_cls_*`, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
 a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
 RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32 (`moesk:k4`), its

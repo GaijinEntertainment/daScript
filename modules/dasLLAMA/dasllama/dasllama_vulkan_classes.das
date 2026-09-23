@@ -1976,6 +1976,139 @@ let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remain
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
 let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
+// the batch-tile class pick ladders: one arm per KqFmt member, stamped by kq_tile_stamp from the
+// `tile_<verb>_<tail>` placeholders; a format without the stamp fails the compile, never the run
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+def khr_cls_ensure(fmt : int) : bool {
+    var r = false
+    kq_tile_stamp(fmt) <| $() {
+        r = tile_ensure_khr_cls()
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt) <| $() {
+        r = tile_set_khr_cls(bufs, sizes, gbits)
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    kq_tile_stamp(fmt) <| $() {
+        tile_enc_khr_cls(raw, h, s, pc, groups)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_ensure(fmt : int) : bool {
+    var r = false
+    kq_tile_stamp(fmt) <| $() {
+        r = tile_ensure_cm2e_cls()
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt) <| $() {
+        r = tile_set_cm2e_cls(bufs, sizes, gbits)
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    kq_tile_stamp(fmt) <| $() {
+        tile_enc_cm2e_cls(raw, h, s, pc, groups)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_cls_ensure(fmt : int; tc : int64) : bool {
+    verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || kq_sb(fmt), "vk classes: a cm2 tile for a format the f16 feed never admits")
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {   //! the KHR arm is one 128 x 128 tile for every column, the expert schedule's s and m pieces included
+        return khr_cls_ensure(fmt)
+    }
+    if (tc == CM2_TC_E) {
+        return cm2e_cls_ensure(fmt)
+    }
+    if (fmt == int(KqFmt.q51)) {   //! the q51 rail is the expert schedule's: its s and e stamps; a dense q51 plane is declined at the plan
+        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        return ensure_q51_batch_cm2s_cls()
+    }
+    if (fmt == int(KqFmt.mx4)) {   //! the mx4 rail is the expert schedule's too: the loader tags only routed expert stacks mx4
+        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
+        return ensure_mx4_batch_cm2s_cls()
+    }
+    var r = false
+    kq_tile_stamp(fmt, "q51 mx4") <| $() {
+        r = tc == 256l ? tile_ensure_cm2l_cls() : (tc == 128l ? tile_ensure_cm2m_cls() : tile_ensure_cm2s_cls())
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        return khr_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (tc == CM2_TC_E) {
+        return cm2e_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.q51)) {
+        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        return set_q51_batch_cm2s_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.mx4)) {
+        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
+        return set_mx4_batch_cm2s_cls(bufs, sizes, gbits)
+    }
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt, "q51 mx4") <| $() {
+        if (tc == 256l) {
+            r = tile_set_cm2l_cls(bufs, sizes, gbits)
+        } elif (tc == 128l) {
+            r = tile_set_cm2m_cls(bufs, sizes, gbits)
+        } else {
+            r = tile_set_cm2s_cls(bufs, sizes, gbits)
+        }
+    }
+    return r
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (tc == CM2_TC_E) {
+        cm2e_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q51)) {
+        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.mx4)) {
+        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
+        enc_mx4_batch_cm2s_cls(raw, h, s, pc, groups)
+    } else {
+        kq_tile_stamp(fmt, "q51 mx4") <| $() {
+            if (tc == 256l) {
+                tile_enc_cm2l_cls(raw, h, s, pc, groups)
+            } elif (tc == 128l) {
+                tile_enc_cm2m_cls(raw, h, s, pc, groups)
+            } else {
+                tile_enc_cm2s_cls(raw, h, s, pc, groups)
+            }
+        }
+    }
+}
+
 //! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
 //! partial one when the remainder passes the s column (a remainder within it takes the s column)
 def sched_ladder_m_rows(c : uint) : uint {
@@ -8384,16 +8517,6 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
-[vk_dispatch(name = "q8_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Q8Cm2EBatch : Q8Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
 [vk_dispatch(name = "q51_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q51Cm2EBatch : Q51Cm2T {
     override BN = 128u
@@ -8406,66 +8529,6 @@ class Q51Cm2EBatch : Q51Cm2T {
 
 [vk_dispatch(name = "mx4_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Mx4Cm2EBatch : Mx4Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_k4_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class K4Cm2EBatch : K4Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_k6_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class K6Cm2EBatch : K6Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_k5_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class K5Cm2EBatch : K5Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_q40_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Q40Cm2EBatch : Q40Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_iq4xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Iq4xsCm2EBatch : Iq4xsCm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_k3_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class K3Cm2EBatch : K3Cm2T {
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -8494,26 +8557,6 @@ class Iq3xxsCm2EBatch : Iq3xxsCm2T {
     override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_iq4nl_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Iq4nlCm2EBatch : Iq4nlCm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f16_128x128
-    typedef ACCW = coopmatWgAcc_f32_128x128
-}
-
-[vk_dispatch(name = "kq_batch_k2_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class K2Cm2EBatch : K2Cm2T {
-    override BN = 128u
-    override STILE = true
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
 }

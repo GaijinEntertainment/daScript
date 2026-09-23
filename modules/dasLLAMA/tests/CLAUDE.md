@@ -323,7 +323,7 @@ expert schedule's e column (the format's own 128-row e stamp, whose k step is th
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
 32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; every
-arm runs through the prefill's tile ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
+arm runs through the classes file's tile ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
 `khr_cls_*`) in one shared loop (`tile_cell_arms` over a `tile_fixture` - the format's packed planes
 handed in, the activation plane and the device buffers built once - with the arms asked for and the
 format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map

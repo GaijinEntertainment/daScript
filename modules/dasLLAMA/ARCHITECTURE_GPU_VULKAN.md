@@ -25,12 +25,12 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 `dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
 `c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
-`dasllama_vulkan_classes.das` twice: for the KHR trio it requires `<Fmt>KhrBatch`, its
-`kq_batch_<fmt>_khr_cls` stamp and an arm in each of `khr_cls_ensure`, `khr_cls_set` and
-`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing none - the per-32 formats spell their stamps `<fmt>_batch_khr_cls`
-(`Q8KhrBatch`, `Q51KhrBatch`, `Mx4KhrBatch`), and the expert schedule rides that tile in mm mode;
-for the e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`<fmt>_batch_cm2e_cls` for the per-32
-formats) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
+`dasllama_vulkan_classes.das` twice and requires each trio's ladders there (`khr_cls_*`, `cm2e_cls_*`) stamped by
+`kq_tile_stamp` over their `tile_<verb>_<tail>` placeholder - the stamp walks every `KqFmt` member, so a format with
+no class fails the compile. The KHR trio needs `<Fmt>KhrBatch` and its `kq_batch_<fmt>_khr_cls` stamp (per-32:
+`<fmt>_batch_khr_cls` - `Q8KhrBatch`, `Q51KhrBatch`, `Mx4KhrBatch`; the expert schedule rides that tile in mm mode); the e
+trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp steps k by 64 is on it and ships no
+`<Fmt>Cm2EBatch` (its e column is the m stamp byte for byte), a 32-step one is off it and ships `<Fmt>Cm2EBatch` with its `kq_batch_<fmt>_cm2e_cls` (per-32 `<fmt>_batch_cm2e_cls`) stamp; none licensed.
 `check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates - in
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow

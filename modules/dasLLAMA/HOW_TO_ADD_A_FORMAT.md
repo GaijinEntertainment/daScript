@@ -310,17 +310,20 @@ On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile te
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
 verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in
 PAIR form - every shared read derived from `e & ~1u`, both elements computed, the element selected
-last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus four width
-stamps (the l, m and s columns and the expert schedule's e column - the m column at the format's k
-step; each names its `BN`, `STILE`, the k step `BK` where it is not the template's 64 with the
-unroll `UNR` that keeps the unrolled block at one superblock (`override UNR = 8u` beside
-`override BK = 32u`), and the `AT`/`BT`/`ACC`/`ACCW` tile types of that depth - copy k4's for a
-K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-codebook decode, and settle the k
-step on a whole-model MoE row, not the uniform probe alone), and arms in the `cm2_cls_ensure/set/enc`
-and `cm2e_cls_*` ladders. `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the
-enum member exists, so the ladder arms are due in the same change: `cm2_cls_ensure` ends in a verify
-that names a kq format falling through, because without it the prefill served the q8 tiles over
-the new planes - garbage text at full speed. A codebook format raises the `IQLUT` axis - a gated
+last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus its width
+stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column - the m
+column at the format's k step; each names its `BN`, `STILE`, the k step `BK` where it is not the
+template's 64 with the unroll `UNR` that keeps the unrolled block at one superblock (`override UNR
+= 8u` beside `override BK = 32u`), and the `AT`/`BT`/`ACC`/`ACCW` tile types of that depth - copy
+k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-codebook decode, and
+settle the k step on a whole-model MoE row, not the uniform probe alone). A 64-step format's e
+column is its m stamp byte for byte, so it ships no e stamp and joins `KQ_CM2E_ALIASES_M` in
+`dasllama_kqformat.das` instead; the gate holds that roster to every s stamp's k step. The class
+ladders (`cm2_cls_*`, `cm2e_cls_*`, `khr_cls_*`) take no arm: `kq_tile_stamp` walks every `KqFmt`
+member, so the tree fails to compile until every stamp the new member names exists - and it must,
+since `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the enum member exists,
+and a ladder that fell through served the q8 tiles over the new planes - garbage text at full
+speed. A codebook format raises the `IQLUT` axis - a gated
 `@workgroup` f16 table staged ahead of the tile loop (the reference build's `init_iq_shmem` form);
 never select codes out of a register vector per element inside a decode callback. A format whose
 sub-block scale takes an unpack per element raises the `SCACHE` axis and reads its sub-block's
@@ -350,8 +353,8 @@ it `abstract`, so a stamp without one fails to compile. The k4 override is the p
 decode methods' index math is the same, only read sixteen at a time. Then `<Fmt>KhrBatch :
 <Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the four cm2 typedefs the uncalled
 tensor body still names (`AT`, `BT`, `ACC`, `ACCW` - copy k4's), a
-`[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
-(`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its KHR arm (`ARM_KHR`, tile
+`[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]` (the `khr_cls_ensure/set/enc` ladders in
+`dasllama_vulkan_classes.das` pick it up by name - `kq_tile_stamp` walks the enum), and the format's kernel cell runs its KHR arm (`ARM_KHR`, tile
 128) wherever the device has KHR coopmat at subgroup 32 - on the 5060 Ti the same run covers the
 cm2 l/m/s/e tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
 arm, whose f16 accumulation sits inside the cell's 2e-2 relative bar.

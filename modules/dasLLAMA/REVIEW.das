@@ -816,7 +816,7 @@ def private check_image_layout_stamp {
 // ===== the Vulkan checklist's mechanical checks (REVIEW_GPU_VULKAN.md) =====
 
 let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
-let private VK_PREFILL = "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das"
+let private KQ_FORMAT = "modules/dasLLAMA/dasllama/dasllama_kqformat.das"
 let private VK_COMMON = "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das"
 let private BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_blocks.das"
 
@@ -937,6 +937,25 @@ def private cm2_dispatch_name(fmt, tail : string) : string {
     return fmt == "q8" || fmt == "q51" || fmt == "mx4" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
+//! the words of `let KQ_CM2E_ALIASES_M = "..."` in the kqformat module: the formats whose e column the m stamp serves
+def private kqformat_cm2e_aliases : array<string> {
+    let marker = "let KQ_CM2E_ALIASES_M = \""
+    for (line in split(strip_line_comments(fread(KQ_FORMAT)), "\n")) {
+        continue if (!(line |> starts_with(marker)))
+        let from = length(marker)
+        return <- split(slice(line, from, find(line, "\"", from)), " ")
+    }
+    gate_finding(KQ_FORMAT, "no `{marker}...\"` line - the e-column alias rule has no roster to read; keep the spelling or move this check with it")
+    var none : array<string>
+    return <- none
+}
+
+//! a stamp's k step off its class lines: the template's 64 unless the stamp overrides BK
+def private stamp_bk(lines : array<string>) : int {
+    let over = literal_after(lines, "override BK = ")
+    return over < 0 ? 64 : over
+}
+
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
     var inscope templates <- cm2_format_templates(exempt)
     if (empty(templates)) {
@@ -944,27 +963,50 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
         return
     }
     let classes = strip_line_comments(fread(VK_CLASSES))
-    var inscope ladders <- function_bodies(VK_PREFILL) $(header) {
+    var inscope ladders <- function_bodies(VK_CLASSES) $(header) {
         return header |> starts_with("def {trio.ladder}ensure") || header |> starts_with("def {trio.ladder}set") || header |> starts_with("def {trio.ladder}enc")
     }
     if (length(ladders) != 3) {
-        gate_finding(VK_PREFILL, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
+        gate_finding(VK_CLASSES, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
     }
+    for (f in ladders) {
+        let ladder = ident_prefix(slice(f.body, length("def ")))
+        let placeholder = "tile_{slice(ladder, length(trio.ladder))}_{trio.tail}("
+        if (find(f.body, "kq_tile_stamp(") < 0 || find(f.body, placeholder) < 0) {
+            gate_finding(VK_CLASSES, f.line, "{ladder} is not stamped by `kq_tile_stamp` over `{placeholder}` - the stamp walks every KqFmt member, so a format without the class fails the compile instead of {trio.why}")
+        }
+    }
+    let e_trio = trio.suffix == "Cm2EBatch"
+    var inscope aliases <- kqformat_cm2e_aliases()
     for (tpl in templates) {
         let pfx = slice(tpl, 0, length(tpl) - length("Cm2T"))
-        let dispatch = cm2_dispatch_name(to_lower(pfx), trio.tail)
+        let fmt = to_lower(pfx)
+        let dispatch = cm2_dispatch_name(fmt, trio.tail)
+        if (e_trio) {
+            //! the e column steps k as the s column does (32 on the grid-codebook formats), so the s stamp's BK says whether an e stamp would differ from the 64-step m stamp
+            var inscope slines <- class_lines(VK_CLASSES, "class {pfx}Cm2SBatch")
+            let has_m = !empty(class_lines(VK_CLASSES, "class {pfx}Cm2MBatch"))
+            let e_is_m = has_m && !empty(slines) && stamp_bk(slines) == 64
+            let aliased = find_index(aliases, fmt) >= 0
+            if (aliased && !has_m) {
+                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but the file has no `class {pfx}Cm2MBatch` for its e column to alias")
+            } elif (aliased && !e_is_m) {
+                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but its expert column steps k by {stamp_bk(slines)} (its s stamp's BK), not the m stamp's 64 - the format leaves the roster and keeps its own e stamp")
+            } elif (!aliased && e_is_m) {
+                gate_finding(VK_CLASSES, "{tpl}: its expert column steps k by 64 (its s stamp's BK), so its e stamp is the m stamp byte for byte - {fmt} joins KQ_CM2E_ALIASES_M in dasllama_kqformat.das and ships no e stamp")
+            }
+            if (aliased) {
+                if (find(classes, "class {pfx}{trio.suffix} : {tpl}") >= 0) {
+                    gate_finding(VK_CLASSES, "{tpl} keeps a `class {pfx}{trio.suffix}` its ladder never picks - {fmt} aliases the m stamp (KQ_CM2E_ALIASES_M); delete the stamp or take the format off the roster")
+                }
+                continue
+            }
+        }
         if (find(classes, "class {pfx}{trio.suffix} : {tpl}") < 0) {
             gate_finding(VK_CLASSES, "{tpl} has no `class {pfx}{trio.suffix} : {tpl}` - a format on the cm2 template ships its {trio.suffix} stamp in the same change, or {trio.why}")
         }
         if (find(classes, "name = \"{dispatch}\"") < 0) {
             gate_finding(VK_CLASSES, "{tpl} has no `[vk_dispatch(name = \"{dispatch}\"` stamp - its {trio.suffix} class has no dispatch")
-        }
-        for (f in ladders) {
-            let ladder = ident_prefix(slice(f.body, length("def ")))
-            let arm = "{slice(ladder, length(trio.ladder))}_{dispatch}("
-            if (find(f.body, arm) < 0) {
-                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - {trio.why}")
-            }
         }
     }
 }
