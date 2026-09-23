@@ -38,6 +38,8 @@ let g_intrin_lookup <- {
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add,
         "$::i_das_ptr_set_sub" => @@intrinsic_das_ptr_set_sub,
         "$::i_das_ptr_sub" => @@intrinsic_das_ptr_sub,
+        "$::i_das_ptr_inc" => @@intrinsic_das_ptr_inc,
+        "$::i_das_ptr_dec" => @@intrinsic_das_ptr_dec,
         "$::memcpy" => @@intrinsic_memcpy,
         "$::memmove" => @@intrinsic_memmove,
         "$::memset8" => @@intrinsic_memset8,
@@ -2000,6 +2002,23 @@ def intrinsic_das_ptr_set_add(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
 def intrinsic_das_ptr_set_sub(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var args := arguments
     args[1] = LLVMBuildNeg(ctx.builder, args[1], "")
+    return intrinsic_das_ptr_set_add(ctx, expr, args)
+}
+
+//! i_das_ptr_inc(ptr&, stride) is i_das_ptr_set_add(ptr&, 1, stride): the same load, GEP and store
+def intrinsic_das_ptr_inc(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    var args := arguments
+    var stride = args[1]
+    args |> push(stride)
+    args[1] = LLVMConstInt(ctx.types.t_int32, 1ul, 0)
+    return intrinsic_das_ptr_set_add(ctx, expr, args)
+}
+
+def intrinsic_das_ptr_dec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    var args := arguments
+    var stride = args[1]
+    args |> push(stride)
+    args[1] = LLVMConstInt(ctx.types.t_int32, 0xfffffffful, 1)
     return intrinsic_das_ptr_set_add(ctx, expr, args)
 }
 
