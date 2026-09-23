@@ -296,7 +296,26 @@ SET(AOT_DASLIB_FILES
     tests/daslib/test_sha_256.das
     tests/daslib/test_faker.das
     tests/daslib/test_tune_shells.das
+    tests/daslib/test_format_raw_assign.das
 )
+# tests/daslib is listed by hand, so a test file there is exactly one of: listed above, or
+# marked `options no_aot` because a module it requires keeps out of AOT. A file that is neither
+# fails every -use-aot run with error[50101]; one that is both is a contradiction. Both fail here.
+FILE(GLOB DASLIB_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/daslib/*.das")
+list(FILTER DASLIB_TEST_FILES EXCLUDE REGEX "tests/daslib/(_|failed_|cant_|invalid_)")
+FOREACH(_daslib_test ${DASLIB_TEST_FILES})
+    FILE(STRINGS ${PROJECT_SOURCE_DIR}/${_daslib_test} _test_lines REGEX "^\\[test\\]")
+    IF(NOT _test_lines)
+        CONTINUE()   # a fixture or helper, not a test program the -use-aot run links
+    ENDIF()
+    FILE(STRINGS ${PROJECT_SOURCE_DIR}/${_daslib_test} _no_aot_lines REGEX "^options[ \t]+no_aot")
+    LIST(FIND AOT_DASLIB_FILES ${_daslib_test} _listed_at)
+    IF(_no_aot_lines AND NOT _listed_at EQUAL -1)
+        MESSAGE(FATAL_ERROR "${_daslib_test} is listed in AOT_DASLIB_FILES and marked `options no_aot` - drop one: the option is only for a file a required module keeps out of AOT")
+    ELSEIF(NOT _no_aot_lines AND _listed_at EQUAL -1)
+        MESSAGE(FATAL_ERROR "${_daslib_test} is in neither AOT_DASLIB_FILES (tests/aot/CMakeLists.txt) nor marked `options no_aot` - list it, or mark it when a module it requires keeps out of AOT")
+    ENDIF()
+ENDFOREACH()
 
 FILE(GLOB AOT_MCP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/mcp/*.das")
 # Skip _fixture_*.das — those are subprocess targets spawned BY the tests,
