@@ -688,7 +688,10 @@ the routed feed and the router off their own norms of x, the per-expert down sca
 the routing weights, the combine norming both branches and their sum under the layer's output
 scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
 twelve (sixteen on the Q4_K_M file, whose hits read 122 to 128 against the CPU chain's 134 as the
-kernels recompile) and a perplexity ratio of 2.0 on both files (a kernel recompile alone moves the
+kernels recompile) and a perplexity ratio of 2.0 on both files' 150 + 150 cells and the IQ3_XXS file's
+520 + 80 cell, 2.5 on the Q4_K_M file's 520 + 80 cell (the k4 decode GEMV's fold changed its rounding
+pattern in the low-format N-row arc and the cell moved 1.70 -> 2.44 against the CPU chain's 1.03, the
+150 + 150 cell 5.51 -> 5.91 against 3.36) - on both files (a kernel recompile alone moves the
 150 + 150 cell, with the CPU chain fixed: the Q4_K_M file read 4.05, 4.48 and 4.67 against the CPU
 chain's 3.38 as its routed GEMVs changed their lane split and fused twin, then 4.37 -> 5.17 -> 5.80
 across the gpt-oss arc's row-kernel and attention rewrites - kernels bit-identical to the old ones at

@@ -26,10 +26,12 @@ the builder passes.
 **Two kernel bodies that compile to separate shader modules and that a test cell
 (`tests/test_vulkan_kernels.das`) or a regions file (`tests/test_gpu_resident_regions_*.das`)
 holds bit for bit against each other spell every multiply that feeds an add as `mad` in both, on
-the path the compare covers.** A driver decides per shader module whether to contract a
+the path the compare covers - except a product both bodies add from one shared method text, whose
+CPU oracle replays that text.** A driver decides per shader module whether to contract a
 multiply-add into one fma, so two bodies spelled alike round a ulp apart on a driver that
 contracts one and not the other; `mad` is the fused instruction by definition and leaves the
-driver nothing to choose.
+driver nothing to choose. The shared text is one source in both modules, and a `mad` there would
+be a fused multiply-add the CPU oracle's `mad` - a multiply, then an add - does not reproduce.
 
 **A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
 supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a

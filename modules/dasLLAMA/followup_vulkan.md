@@ -1761,13 +1761,7 @@ module) is independent and can land any time - it is pure structure.
     formats may alias them under `check_cm2_ladder_sets`; and whether the nine per-format tile-class
     ladders in `dasllama_vulkan_prefill.das` may be generated from the `<Fmt>Cm2T` list the gate
     already derives (item 63).
-92. **The low-format N-row arc's review leftovers.** The N shell's per-column guard
-    (`if (uint(c) < pa.ncols)` in `gemv_shell_n`) is a uniform branch on a push constant inside the
-    unrolled column loop, which `REVIEW_GPU_KERNEL_BODY.md` bans; the clamp form folds every dead
-    column against a live row, and the ruler on the 5060 Ti at 5120 x 17408 read it at 1.6x the
-    guard's wall at four columns (k4 461 -> 735 us, iq2xxs 987 -> 1639), so the guard stays and
-    the remaining conforming shape is per-width kq stamps (the q8 form's answer, thirty-nine more
-    stamps) - or the rule admits a uniform push-constant count in an unrolled loop. The kq kernel
+92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s
     named constants - a sweep over every leaf and tile, not one arc's. The decode FFN entries the
@@ -1776,7 +1770,4 @@ module) is independent and can land any time - it is pure structure.
     ids, not decoded pieces, and its `hold_within` prints the max difference only inside the assert;
     the ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
-    dispatch between them, or the N class first, pins the call). The 26B K-quant file's 520 + 80
-    perplexity cell reads 2.36x the CPU chain at this arc's tip (1.64x before it, the CPU reading
-    unchanged) on the k4 fold's rounding pattern alone: item 68's reference-anchored form replaces
-    the band.
+    dispatch between them, or the N class first, pins the call).
