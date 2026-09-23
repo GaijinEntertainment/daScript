@@ -40,8 +40,8 @@ of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it ne
 store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
 writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
 rather than as the released exe. A `-jit` reading is a wall or rate, or a ratio of two, that an
-instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is the backend arm a board cell runs - one the set
-`stored_row_leg` in `performance/profile_common.das` admits. A vehicle model is a real model file
+instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is the backend arm a board cell runs - metal, cpu, cpu + accel, and
+the image and asr arms of each - the pair `(backend, flavor)` a record row carries. A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
 **A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
@@ -101,8 +101,8 @@ ledger), with the flags that run took.** A box cannot mint the row when no rig l
 leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
 official` does not carry the model.
 
-**A diff that changes what the fat exe - a `DAS_TUNE_MODE=fat` exe
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
+**A diff that changes what the fat exe - a `DAS_TUNE_MODE=fat` exe, what `daspkg release --fat
+<class>` builds and a plain release is not (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
 body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
 or says the run printed none.**
 
@@ -126,8 +126,9 @@ beside it ranks nothing.
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
-exe or script that produced it.** A figure a committed board cell produced, or a committed record
-an instrument under `harness/` wrote, names the record and row instead.
+exe or script that produced it.** A figure a committed board cell produced, or a committed record a
+run of this repository wrote with its own provenance block - an instrument's record under
+`harness/`, a tune archive, a class profile - names the record and row instead.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

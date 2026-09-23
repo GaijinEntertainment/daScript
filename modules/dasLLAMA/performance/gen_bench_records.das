@@ -76,7 +76,7 @@ struct Args {
     npl : int = 4
 
     @clarg_name = "npl-cpu-plen"
-    @clarg_doc = "Prompt tokens of each batched-row stream on the cpu legs, both engines (default: 128) - at 512 the untimed prefill of four streams per rep was three quarters of a dense CPU cell"
+    @clarg_doc = "Prompt tokens of each batched-row stream on the cpu legs, both engines (default: 128) - at 512 the untimed prefill of four streams per rep dominated a dense CPU cell's wall"
     npl_cpu_plen : int = 128
 
     @clarg_name = "npl-cpu-reps"
@@ -197,6 +197,12 @@ def private das_args(exe : string; rest : array<string>) : array<string> {
 }
 
 //! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
+//! The cpu legs' batched shape is one shape for both engines: the das child reads a non-positive
+//! `--npl-plen` / `--npl-reps` as unset and takes the flat rows' -p / -r, while the reference exe
+//! takes the raw value as its -npp and its run count - so a batched row asks 1 or more of each
+def npl_cpu_shape_ok(npl, plen, reps : int) : bool
+    => npl <= 1 || (plen >= 1 && reps >= 1)
+
 //! the box stocks - the sweep form). False = a spelling the caller refuses.
 def catalog_known(catalog : string) : bool {
     return catalog == "official" || catalog == "all"
@@ -1469,6 +1475,10 @@ def main : int {
     }
     if (!catalog_known(cfg.catalog)) {
         to_log(LOG_ERROR, "gen_bench_records: --catalog {cfg.catalog} - official | all\n")
+        return 1
+    }
+    if (!npl_cpu_shape_ok(cfg.npl, cfg.npl_cpu_plen, cfg.npl_cpu_reps)) {
+        to_log(LOG_ERROR, "gen_bench_records: --npl-cpu-plen {cfg.npl_cpu_plen} --npl-cpu-reps {cfg.npl_cpu_reps} - both engines take the cpu legs' batched shape, so each is 1 or more\n")
         return 1
     }
     g_jit_bench = cfg.jit

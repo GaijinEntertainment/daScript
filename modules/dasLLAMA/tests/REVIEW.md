@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-**A cell, probe, or harness that dispatches or binds a kernel class - a `[metal_dispatch]` or
+**A cell - one `t |> run` subtest, or a `[test]` function with none - probe, or harness that dispatches or binds a kernel class - a `[metal_dispatch]` or
 `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das` - applies
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**

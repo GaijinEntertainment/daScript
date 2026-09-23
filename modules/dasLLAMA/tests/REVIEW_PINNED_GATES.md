@@ -26,7 +26,8 @@ softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare
 run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included, the
-llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal);
+llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal - and the
+batched reference row's argv, the leg's arms after the row's shape);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
 (which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
@@ -39,4 +40,6 @@ against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo 
 worker-local fork pools, shared queue policy.
 
 **A diff that adds a pinned test cell adds it to the pinned set above in the same change** - as
-a file when every cell of it pins, as a named cell otherwise.
+a file when every cell of it pins, as a named cell otherwise. A file entry's parenthetical names
+every axis its cells hold; a cell added to a whole-file entry whose axis the parenthetical lacks
+extends it in the same change.

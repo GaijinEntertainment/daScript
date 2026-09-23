@@ -532,7 +532,7 @@
 
 44. **The qwen25v (Qwen2.5-Omni/VL window ViT) portable-CPU encode reads 0.29 of mtmd on the
     M5 Max and 0.49 on the M4 Pro (release 16 board: 9108 / 5924 ms against 2619 / 2885),
-    while the same f32 GEMMs through Accelerate's sgemm read 2.81 / 1.36 and the Metal tower
+    while the same f32 GEMMs through Accelerate's sgemm read 2.84 / 1.36 and the Metal tower
     1.11 / 0.99 - the tower has no served CPU lane, only the exact f32 one.** The exact-only
     ruling (ARCHITECTURE_MEDIA.md 1.7b: a per-32-block activation requant cannot represent the
     tower's outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer measures less)

@@ -131,6 +131,13 @@ def test_catalog_scope(t : T?) {
         t |> success(!catalog_known("Official"), "the match is case-sensitive")
         t |> success(!catalog_known("sweep"), "a plausible-but-wrong spelling refuses instead of falling back to a default")
     }
+    t |> run("the cpu legs' batched shape is 1 or more on both axes, or there is no batched row") @(t : T?) {
+        t |> success(npl_cpu_shape_ok(4, 128, 3), "the shipped shape")
+        t |> success(npl_cpu_shape_ok(0, 0, 0), "no batched row - the shape is unread")
+        t |> success(!npl_cpu_shape_ok(4, 0, 3), "a zero prompt would run the das child on the flat -p and the reference on -npp 0")
+        t |> success(!npl_cpu_shape_ok(4, 128, 0), "a zero rep count would fold no reference run into the row")
+        t |> success(!npl_cpu_shape_ok(4, -1, 3), "a negative prompt refuses like a zero one")
+    }
 }
 
 [test]
