@@ -524,11 +524,8 @@ def private fill_plan_room(var p : ResidentPlan) {
 //! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
 def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
 
-def resident_binding_ctx(c : Config; dt : KVDtype; bcap : int64) : int64 {
-    var side = 0l
-    for (l in range64(c.n_layers)) {
-        side += kv_row_bytes(dt, layer_kv_dim(c, l))
-    }
+def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
+    let side = resident_kv_row_bytes(t, dt, dt).krow   //! the rows the mirror allocates: a shared-KV layer reads its donor's and adds none
     return (bcap > 0l && side > 0l) ? bcap / side : 0l
 }
 
@@ -582,7 +579,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         if (t.wo_offs[l] >= 0l) {
             p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
         }
-        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l) {   //! a pure MoE carries no dense FFN offsets at all
+        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l && !layer_is_moe(t, l)) {   //! a routed layer's dense triple (gemma-4's shared expert) is tallied with its routed block above, as the upload places it once
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
@@ -2485,7 +2482,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     var plan : ResidentPlan
     if (resident_try) {
-        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
+        let bctx = resident_binding_ctx(t, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
         seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {

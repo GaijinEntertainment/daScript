@@ -384,17 +384,21 @@ def test_resident_binding_ctx(t : T?) {
         hy.config.n_kv_heads = 8l
         hy.config.head_size = 128l
         t |> success(layer_is_recurrent(hy.config, 0l) && layer_kv_dim(hy.config, 0l) == 0l, "layer 0 is recurrent: its kv width reads 0")
-        t |> equal(resident_binding_ctx(hy.config, KVDtype.f16, bcap), 262143l, "the hybrid's ctx is the range over eight attention rows, not skipped for layer 0's zero width")
-        t |> equal(resident_binding_ctx(hy.config, KVDtype.f32, bcap), 131071l, "f32 rows halve it")
-        t |> equal(resident_binding_ctx(hy.config, KVDtype.f16, 0l), 0l, "no cap known reads 0")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f16, bcap), 262143l, "the hybrid's ctx is the range over eight attention rows, not skipped for layer 0's zero width")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f32, bcap), 131071l, "f32 rows halve it")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f16, 0l), 0l, "no cap known reads 0")
         delete hy
         var dense <- shell(32l, 0ul)
         dense.config.n_kv_heads = 8l
         dense.config.head_size = 128l
-        t |> equal(resident_binding_ctx(dense.config, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
+        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
+        for (k in range64(16l)) {   //! every odd layer reads its even neighbour's K/V: the mirror holds sixteen rows a position
+            dense.kv_src[2l * k + 1l] = 2l * k
+        }
+        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 131071l, "a shared-KV layer adds no row of its own: the cap divides by the sixteen rows the mirror allocates")
         delete dense
         var recr <- shell(4l, 0xFul)
-        t |> equal(resident_binding_ctx(recr.config, KVDtype.f16, bcap), 0l, "no attention layer reads 0")
+        t |> equal(resident_binding_ctx(recr, KVDtype.f16, bcap), 0l, "no attention layer reads 0")
         delete recr
     }
 }

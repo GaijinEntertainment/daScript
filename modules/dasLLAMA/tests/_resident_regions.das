@@ -92,7 +92,7 @@ def private hold_equal(t : T?; got, want : array<float>; what : string) {
 //! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it
 def private hold_within(t : T?; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
     log_peaks(what, got, want)
-    let bar = rel * logits_maxabs(want)
+    let bar = rel * live_maxabs(want)   //! a pinned id's logit would scale the bar past every difference
     let diff = logits_maxdiff(got, want)
     t |> success(diff <= bar, "{what}: within {bar} (maxdiff {diff})")
     let off = logits_maxdiff(got, control)

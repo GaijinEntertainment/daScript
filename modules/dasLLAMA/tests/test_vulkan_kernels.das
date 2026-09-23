@@ -8511,6 +8511,8 @@ def test_vkd_dn_family(t0 : T?) {
                 let sm2 = make_device_buf(sm_bytes)
                 let scd2 = make_device_buf(sc_bytes)
                 let qd2 = make_device_buf(q_bytes)
+                nan_sentinel_upload(scd2, sc_bytes)   //! a scale or quant the step never wrote reads as the sentinel, not as pool bytes
+                nan_sentinel_upload(qd2, q_bytes)
                 let of_bytes = int64(nvh * ds) * 4l
                 let ofd2 = make_device_buf(of_bytes)
                 var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes, true, [cached = true])
