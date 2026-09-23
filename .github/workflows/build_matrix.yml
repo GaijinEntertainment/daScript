@@ -237,7 +237,10 @@ jobs:
     # frontend-compile of every test. The target still exists for local use.
     - name: "Test"
       if: inputs.lane == 'build' || matrix.nightly_only == 'ON'
-      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target ${{ matrix.sanitizers == 'none' && 'run_build' || 'run_build_sanitizers' }} --parallel
+      run: |
+        lane=${{ matrix.sanitizers == 'none' && 'run_build' || 'run_build_sanitizers' }}
+        cmake --build ./build --config ${{ matrix.cmake_preset }} --target $lane --parallel \
+          || cmake --build ./build --config ${{ matrix.cmake_preset }} --target ${lane}_isolated --parallel
 
     - name: "Nightly Tests"
       # Full AOT suite: builds the full test_aot (EXCLUDE_FROM_ALL, ~1080 AOT

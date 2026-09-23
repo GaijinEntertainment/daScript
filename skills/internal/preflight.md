@@ -83,10 +83,14 @@ Per-lane steps: build -> JIT sweep (mints its own dll cache) -> interpreter swee
 -> `ctest -L small`. Per-PR lanes also build `test_aot_subset` (tests/language,
 part of ALL) as a compile+link gate, and run no AOT tests.
 
-**The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`) and, on the nightly
-lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** Which sweeps `run_tests_sweeps` runs is
-decided in cmake, not in the workflow: no JIT where dasLLVM is off (the sweep targets live under
-`if(NOT DAS_LLVM_DISABLED)`) or on Debug; no interpreter sweep under a sanitizer.
+**The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
+`run_build_isolated` (`run_tests_sweeps_isolated`, `test-small`) when it fails, and, on the nightly
+lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** The retry
+is the workflow's `||`, not a cmake target: the windows 64 Debug cell's first pass outgrows the
+1800 s watchdog every run, and the isolated pass is the one that finishes. Which sweeps
+`run_tests_sweeps` runs is decided in cmake, not in the workflow: no JIT where dasLLVM is off (the
+sweep targets live under `if(NOT DAS_LLVM_DISABLED)`) or on Debug; no interpreter sweep under a
+sanitizer.
 
 **The configure is one command for every cell.** The flags a cell varies by value -
 `CMAKE_BUILD_TYPE`, `DAS_LLVM_DISABLED`, `DAS_USE_SANITIZER`, `DAS_FAST_MATH` - are on that

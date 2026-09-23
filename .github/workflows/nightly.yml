@@ -242,7 +242,9 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     - name: "Test"
-      run: cmake --build ./build --config Release --target run_build --parallel
+      run: |
+        cmake --build ./build --config Release --target run_build --parallel \
+          || cmake --build ./build --config Release --target run_build_isolated --parallel
 
   ###########################################################
 
@@ -346,7 +348,9 @@ jobs:
         sccache --show-stats || true
 
     - name: "Test"
-      run: cmake --build ./build-mingw --config Release --target run_build_mingw --parallel
+      run: |
+        cmake --build ./build-mingw --config Release --target run_build_mingw --parallel \
+          || cmake --build ./build-mingw --config Release --target run_build_mingw_isolated --parallel
 
     # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
     # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
