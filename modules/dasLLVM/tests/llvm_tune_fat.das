@@ -19,8 +19,8 @@ require llvm/daslib/llvm_cpu_class
 
 def private tune_env_prefix(mode, baseline, pin : string) : string {
     return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE={mode}&& set DAS_JIT_BASELINE={baseline}&& set DAS_TUNE_FAT_CLASS={pin}&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& " :
-        "DAS_TUNE_MODE={mode} DAS_JIT_BASELINE={baseline} DAS_TUNE_FAT_CLASS={pin} DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= ")
+        "set DAS_TUNE_MODE={mode}&& set DAS_JIT_BASELINE={baseline}&& set DAS_TUNE_FAT_CLASS={pin}&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_LOG_LEVEL=info&& " :
+        "DAS_TUNE_MODE={mode} DAS_JIT_BASELINE={baseline} DAS_TUNE_FAT_CLASS={pin} DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_LOG_LEVEL=info ")
 }
 
 def private spawn_child(cmd : string; var lines : array<string>) : int {
