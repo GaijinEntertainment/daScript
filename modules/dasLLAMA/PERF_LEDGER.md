@@ -2633,3 +2633,51 @@ the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
   helpers left in `dasllama_bpe.das` took the M5's 1 KB row to 0.98 and left 4 to 16 KB at 0.93
   to 0.96. The SPM heap stays its own body, in the partition of the encode that runs it
   (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2a); the BPE side keeps the unshared form.
+
+### From the Vulkan low-format N-row arc (2026-09-23)
+
+Instruments as the hybrid rows section above: the pod (RTX PRO 4500, Linux), `daslang -jit
+benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2 arm
+under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1
+DAS_JOBQUE_THREADS=16`, the untuned tier; llama.cpp b10660's prebuilt Vulkan `llama-batched-bench
+-c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` the same hour, `external`, its
+second run of a file (the first compiles its pipelines inside the measurement: i1-IQ3_S read 57.9
+cold and 67.3 warm at four streams); every ratio `tg128@4` against the reference's `S_TG` at `-npl 4`
+[direction-grade - two processes]; a lever's pair is two commits in two processes [direction-grade -
+two commits]. The 5060 Ti rows (driver 616.56, Windows, the desktop holding 1.8 GB of the 16 GB)
+take the same command lines, the bench pinning its batched row's context so the plan homes four
+regions at 660 positions; the local llama.cpp is the same b10660 Vulkan build. The N-column ruler is
+`harness/vk_gemv_probe.das cols 5120 17408` (the 27B's FFN gate shape), its last column an N-column
+dispatch's wall over N one-column dispatches. The carriers are the three Qwen3.8-27B files whose
+dense planes sit in sub-4-bit formats (i1-IQ3_S: every plane IQ3_S; UD-Q3_K_XL and UD-IQ4_XS: Q3_K,
+Q2_K, IQ3_S, IQ3_XXS, IQ2_S, IQ2_XS, IQ2_XXS and IQ4_NL mixed across the planes, the UD-IQ4_XS's bulk
+IQ4_XS), 64 layers with attention every fourth, so a position costs 64 KB of f16 mirror and a region
+151 MB of DeltaNet state.
+
+- **The eight N-column leaves alone (commit 181398621: `KqGemv<Fmt>N` for k3, k2, iq3s, iq3xxs,
+  iq4nl, iq2s, iq2xs, iq2xxs on the shell's per-column `blk_contrib`), tg128@4 ours cm2 /
+  llama.cpp, then flat:** i1-IQ3_S 95.4 +/- 0.2 / 67.3 (1.42), flat 48.4 / 42.4; UD-Q3_K_XL 62.4 +/-
+  0.1 / 78.0 (**0.80**), flat 43.8 / 42.0; UD-IQ4_XS 55.0 +/- 0.1 / 84.9 (**0.65**), flat 41.1 / 40.5.
+  The rows form scaled 1.97x over flat on the IQ3_S file and 1.34x to 1.42x on the mixed files.
+- **The ruler at that tip, an N-column dispatch at four columns over four one-column ones:** q8
+  0.25, k4 0.28, k6 0.27, q40 0.26, k5 0.35, k3 0.48, k2 0.50, iq3s 0.61, iq3xxs 0.61, iq2s 0.71,
+  iq2xs 0.76, iq2xxs 0.78, iq4xs 1.06, iq4nl 1.06 - the shell re-ran each block's decode for every
+  column, so a codebook or grid leaf shared nothing and the one-column class at 1 column read 1.23x
+  the one form.
+- **Lever 1 - decode once, fold per column (commit f18cb9ffa: every leaf's `blk_decode` hands back
+  the block's packed int8 halves and four fold terms, one shared `blk_fold` dots them, `mad`
+  throughout):** the ruler at four columns q8 0.25, k4 0.26, k6 0.26, q40 0.26, k5 0.26, k3 0.31, k2
+  0.37, iq3s 0.35, iq3xxs 0.32, iq2s 0.44, iq2xs 0.41, iq2xxs 0.42, iq4xs 0.36, iq4nl 0.36; at eight
+  columns k4 0.18, iq4xs 0.22, iq3s 0.27, iq2s 0.33; the one-column rates within 1% of before
+  (iq4xs 196 us against 202). The rows: i1-IQ3_S 137.1 +/- 0.3 / 67.3 (**2.04**), flat 48.8;
+  UD-Q3_K_XL 123.8 +/- 0.2 / 78.0 (**1.59**), flat 44.6; UD-IQ4_XS 118.2 +/- 0.2 / 84.9 (**1.39**),
+  flat 41.7; pp512 1475 / 1559 / 1634. The kernel family, N-column and gate-up cells hold at the
+  tip on both boxes: the N form's every column is the one-column class's word for word.
+- **The 5060 Ti at the lever-1 tip, ours cm2 tg128@4 / tg128 with the reference's rows beside:**
+  i1-IQ3_S homes (11526 MB image, 165 MB mirror, 230 MB scratch): 89.5 +/- 0.9 / 28.3 (56.5 before
+  the lever) against llama.cpp's 2.5 / 2.6 - the reference pages the 12.6 GB file on this card at
+  those arguments (its first and second runs alike); UD-Q3_K_XL homes (11900 MB image): 80.9 +/- 2.4
+  / 25.7 (38.9 before) against 19.6 / 7.4, paging; UD-IQ4_XS declines the resident driver - 13295 MB
+  asked of 12422 MB usable, the weights alone 12899 MB with other processes holding 1835 MB - and the
+  per-op rails read 8.5 / 3.4 against the reference's 2.5 / 2.0, both paging. The IQ4_XS file on 16 GB
+  is `followup_vulkan.md` item 81's streamed-weights arm, not a kernel.
