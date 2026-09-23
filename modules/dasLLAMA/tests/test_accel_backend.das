@@ -61,6 +61,20 @@ def private t_accel_set_f16(on : bool) : bool {
     }
 }
 
+def private t_accel_engaged() : int64 {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        return dasllama_accelerate_engaged()
+    } else {
+        return 0l
+    }
+}
+
+def private t_accel_reset_engaged() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_reset_engaged()
+    }
+}
+
 // run the same mm twice — portable (override off) into yref, accelerate-armed into yacc
 def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : void>) : tuple<yref : array<float>; yacc : array<float>> {
     var res : tuple<yref : array<float>; yacc : array<float>>
@@ -129,6 +143,32 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
 }
 
+// the counter a driver reads to tell an armed run that served from one that fell through
+def private check_engaged_witness(t : T?) {
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    var x : array<float>
+    x |> resize(NTOK * N)
+    fill01(x, 7u)
+    var y : array<float>
+    y |> resize(NTOK * D)
+    t_accel_reset_engaged()
+    clear_float_batch_override()
+    matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(NTOK))
+    t |> equal(t_accel_engaged(), 0l, "the portable path serves no call")
+    t_accel_enable()
+    matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(NTOK))
+    t |> equal(t_accel_engaged(), 1l, "an armed batch call counts once")
+    var ys : array<float>
+    ys |> resize(SMALL_NTOK * D)
+    matmul_batch(ys, w, 0l, x, int64(N), int64(D), int64(SMALL_NTOK))
+    t |> equal(t_accel_engaged(), 1l, "a below-gate call falls through before the counter")
+    t_accel_disable()
+    t_accel_reset_engaged()
+    t |> equal(t_accel_engaged(), 0l, "the reset reads 0")
+}
+
 [test, unused_argument(t)]  // off-Apple the feint arm never reads t
 def test_accel_float_batch(t : T?) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
@@ -145,8 +185,9 @@ def test_accel_float_batch(t : T?) {
             t |> run("bf16 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
                 check_bf16(t, NTOK, true)
             }
-            t |> run("below-gate ntok falls through bit-exact") @(t : T?) {
+            t |> run("below-gate ntok falls through bit-exact, and the engagement witness counts what served") @(t : T?) {
                 check_fp32(t, SMALL_NTOK, true)
+                check_engaged_witness(t)
             }
             t |> run("fp32 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
                 check_fp32(t, NTOK, false, true)

@@ -37,7 +37,9 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included, the
 llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal - and the
 batched reference row's command line: the engine's extra flags follow `-npl N -fa on`, and a run
-that prints no row names why and reads 0);
+that prints no row names why and reads 0 - and the committed stores' batched receipts: the cpu
+legs' das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`, `--no-op-offload`
+on the stock cpu arm alone, the metal leg at `-npp 512` with neither);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
 (which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
