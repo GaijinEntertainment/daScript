@@ -97,6 +97,47 @@ class KqFmtStamp : AstCallMacro {
     }
 }
 
+[function_macro(name = "grid_words")]
+class GridWordsMacro : AstFunctionAnnotation {
+    //! ``[grid_words(of = "iq3s_grid")] def f(i : int) : uint {}`` gives ``f`` the body ``let tbl = <the table's literal>; return tbl[i]``:
+    //! the shader-side per-word form of a kqformat grid table, baked from this module's one literal when the kernel home
+    //! compiles (a shader function cannot return a fixed array, so the per-word form carries the literal inline)
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
+        let of = find_arg(args, "of")
+        if (!(of is tString)) {
+            errors := "[grid_words] takes of = \"<table function>\""
+            return false
+        }
+        if (length(func.arguments) != 1) {
+            errors := "[grid_words] {func.name}: one index argument expected"
+            return false
+        }
+        let tname = of as tString
+        var lit : ExpressionPtr
+        find_compiling_module("dasllama_kqformat") |> for_each_function(tname) $(var fn) {
+            if (fn.body is ExprBlock) {
+                var blk = fn.body as ExprBlock
+                if (length(blk.list) == 1 && blk.list[0] is ExprReturn) {
+                    var ret = blk.list[0] as ExprReturn
+                    lit := ret.subexpr
+                }
+            }
+        }
+        if (lit == null) {
+            errors := "[grid_words] {func.name}: no `def {tname}` in dasllama_kqformat whose body is one `return fixed_array<uint>(...)`"
+            return false
+        }
+        let argn = "{func.arguments[0].name}"
+        var qb <- qmacro_block() {
+            let tbl = $e(lit)
+            return tbl[$i(argn)]
+        }
+        qb |> force_at(func.at)
+        func.body <- qb
+        return true
+    }
+}
+
 // upstream (ggml) tensor data type ids - the subset the loader reads
 let GGML_TYPE_F32 = 0
 let GGML_TYPE_F16 = 1
