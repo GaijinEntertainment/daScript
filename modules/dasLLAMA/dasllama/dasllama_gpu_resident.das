@@ -2744,9 +2744,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     if (at_want) {
         let c = t.config
         // partial rotary implies NEOX per the loader, so the rope test admits it unroped
-        let arch_ok = (!c.v_norm && !c.attn_sinks && c.attn_logit_softcap == 0.0
-            && !c.pre_post_norm && !c.attn_out_bias
-            && (c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)))
+        let arch_ok = empty(attn_chain_unserved_features(c))
         var at_marked = 0l
         var at_stop = false
         var at_skips : WalkSkips

@@ -41,8 +41,6 @@ def half_at(a : array<uint>; hi : int) : float {
     return hi % 2 == 0 ? w.x : w.y
 }
 
-def half_bytes(a : array<uint>; i : int) : float => unpackHalf2x16(uint(byte_u8(a, i) | (byte_u8(a, i + 1) << 8))).x
-
 // q8 batch GEMM oracle over region records ([wblk0, row0, cnt, wg0] x nrec): per (row, col),
 // int dots per 32-block (exact) folded by the f16 weight scale and the f32 x scale in block
 // order — the device tiles reassociate, so approx bars

@@ -2144,6 +2144,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
                         mbuf, xqbuf, xsbuf, ybuf : uint64; xqbytes, xsbytes : int64; xbit, ybit : uint) : VkDescriptorSet {
     let sl = arena_slab_idx(blk)
     if (!key_exists(sets, sl)) {
+        verify(gemv_cls_ensure(fmt), "vulkan arena: the gemv class rail must engage on a live device")
         let p = arena_planes(fmt, blk)
         sets[sl] = gemv_cls_set(fmt,
             fixed_array(p.wq, p.ws, mbuf, xqbuf, xsbuf, ybuf),
@@ -2272,17 +2273,9 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
-    let sl = arena_slab_idx(blk)
     unsafe {
         var a & = g_gpu.arenas[fmt]
-        if (!key_exists(a.cls_sets, sl)) {   // dies with the arena on model drop — rebuilt over the new scratch
-            verify(gemv_cls_ensure(fmt), "vulkan arena: the gemv class rail must engage on a live device")
-            let p = arena_planes(fmt, blk)
-            a.cls_sets[sl] = gemv_cls_set(fmt,
-                fixed_array(p.wq, p.ws, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev),
-                fixed_array(p.wqb, p.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
-                fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
-        }
+        var s_cls = af_role_set(a.cls_sets, fmt, blk, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev, XQ_BYTES, XS_BYTES, 0u, VHG_YO)   // dies with the arena on model drop — rebuilt over the new scratch
         var mp = reinterpret<uint?>(a.meta.mapped)
         mp[0] = uint(arena_local_blk(blk))   // one region: the whole tensor at its slab base
         mp[1] = 0u          // activation block base
@@ -2293,7 +2286,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-        gemv_enc(fmt, raw, h, a.cls_sets[sl], pc, d)
+        gemv_enc(fmt, raw, h, s_cls, pc, d)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -3270,13 +3263,7 @@ def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
     } elif (sync) {
         submit_wait(raw)
     } else {
-        var submit = VkSubmitInfo()
-        submit.commandBufferCount = 1u
-        let nofence : VkFence
-        unsafe {
-            submit.pCommandBuffers = addr(raw)
-            vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), nofence), null)
-        }
+        submit_nofence(raw)
     }
 }
 
