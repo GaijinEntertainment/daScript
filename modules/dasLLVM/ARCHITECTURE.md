@@ -263,7 +263,10 @@ never into one rail. `math::log` is this estimate scaled by ln2 and `math::pow` 
 the exponent through a mask and therefore never produces -inf or NaN: log2(0) is -127 and
 log2(-x) == log2(|x|). The dropped sign travels into `pow` with the estimate - the base reaches the
 exponent as `log2_est(|x|)` - so `pow(-2, 3)` is +8, not libm's -8, and it is +8 on every tier.
-`tests/llvm_vector_math.das` pins the bounds and the special values.
+Off the rail (x64, sec.8's gate) the JIT keeps `@llvm.log2`'s libm specials - log2(0) is -inf,
+log2(-x) is NaN - and diverges from the interpreter's estimate there; the interpreter and AOT
+answer -127 and log2(|x|) on every target. `tests/llvm_vector_math.das` pins the bounds and
+each rail's own special values.
 
 ### 8.3 The hyperbolics have no interpreter twin {#vector-hyperbolic-divergence}
 
