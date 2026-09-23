@@ -11323,8 +11323,8 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
-//! the formats with an N-column leaf
-def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs)
+//! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert formats (q51, mx4) serve routed planes alone
+def gemv_cls_has_n(fmt : int) : bool => fmt != int(KqFmt.q51) && fmt != int(KqFmt.mx4)
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu
@@ -11354,6 +11354,22 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
         return ensure_kq_gemv_q40_n_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_gemv_iq4xs_n_cls()
+    } elif (fmt == int(KqFmt.k3)) {
+        return ensure_kq_gemv_k3_n_cls()
+    } elif (fmt == int(KqFmt.iq3s)) {
+        return ensure_kq_gemv_iq3s_n_cls()
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        return ensure_kq_gemv_iq3xxs_n_cls()
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        return ensure_kq_gemv_iq4nl_n_cls()
+    } elif (fmt == int(KqFmt.k2)) {
+        return ensure_kq_gemv_k2_n_cls()
+    } elif (fmt == int(KqFmt.iq2s)) {
+        return ensure_kq_gemv_iq2s_n_cls()
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        return ensure_kq_gemv_iq2xs_n_cls()
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        return ensure_kq_gemv_iq2xxs_n_cls()
     }
     panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
     return false
@@ -11404,6 +11420,22 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
         enc_kq_gemv_q40_n_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_gemv_iq4xs_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k3)) {
+        enc_kq_gemv_k3_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3s)) {
+        enc_kq_gemv_iq3s_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_kq_gemv_iq3xxs_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_kq_gemv_iq4nl_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k2)) {
+        enc_kq_gemv_k2_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq2s)) {
+        enc_kq_gemv_iq2s_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        enc_kq_gemv_iq2xs_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        enc_kq_gemv_iq2xxs_n_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
     }
@@ -11594,15 +11626,29 @@ class KqGemvIq3s : KqGemvBase {
         return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_cls_spv")]
-    def run {
+    //! the 2 KB grid into workgroup memory, visible before the shell's block walk
+    def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(8)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ3S + idx]
         }
-        barrier()   // the grid visible before the shell's block walk
+        barrier()
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_cls_spv")]
+    def run {
+        stage_grid()
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq3s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3sN : KqGemvIq3s {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_n_cls_spv")]
+    def override run {
+        stage_grid()
+        gemv_shell_n()
     }
 }
 
@@ -11640,15 +11686,29 @@ class KqGemvIq3xxs : KqGemvBase {
         return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_cls_spv")]
-    def run {
+    //! the 1 KB grid into workgroup memory, visible before the shell's block walk
+    def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(4)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ3XXS + idx]
         }
-        barrier()   // the grid visible before the shell's block walk
+        barrier()
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_cls_spv")]
+    def run {
+        stage_grid()
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq3xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3xxsN : KqGemvIq3xxs {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_n_cls_spv")]
+    def override run {
+        stage_grid()
+        gemv_shell_n()
     }
 }
 
@@ -11665,6 +11725,14 @@ class KqGemvIq4nl : KqGemvQ40 {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
     def override run {
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq4nl_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nlN : KqGemvIq4nl {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
     }
 }
 
@@ -11708,6 +11776,14 @@ class KqGemvK3 : KqGemvBase {
     }
 }
 
+[vk_dispatch(name = "kq_gemv_k3_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK3N : KqGemvK3 {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
+    }
+}
+
 // Q2_K: q = the unsigned 2-bit qs lane, per-16 sc/min NIBBLE pairs x d/dmin - the k4 d|dmin
 // fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
 [vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -11744,6 +11820,14 @@ class KqGemvK2 : KqGemvBase {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_cls_spv")]
     def run {
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_k2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2N : KqGemvK2 {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_n_cls_spv")]
+    def override run {
+        gemv_shell_n()
     }
 }
 
@@ -11872,15 +11956,29 @@ class KqGemvIq2s : KqGemvBase {
         return axs[xsb] * dd * float(isum)
     }
 
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2s_cls_spv")]
-    def run {
+    //! the 8 KB grid into workgroup memory, visible before the shell's block walk
+    def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(32)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2S + idx]
         }
-        barrier()   // the grid visible before the shell's block walk
+        barrier()
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2s_cls_spv")]
+    def run {
+        stage_grid()
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq2s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2sN : KqGemvIq2s {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2s_n_cls_spv")]
+    def override run {
+        stage_grid()
+        gemv_shell_n()
     }
 }
 
@@ -11921,15 +12019,29 @@ class KqGemvIq2xs : KqGemvBase {
         return axs[xsb] * dd * float(isum)
     }
 
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_cls_spv")]
-    def run {
+    //! the 4 KB grid into workgroup memory, visible before the shell's block walk
+    def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(16)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2XS + idx]
         }
-        barrier()   // the iq2xs grid visible before the shell's block walk
+        barrier()
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_cls_spv")]
+    def run {
+        stage_grid()
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq2xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xsN : KqGemvIq2xs {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_n_cls_spv")]
+    def override run {
+        stage_grid()
+        gemv_shell_n()
     }
 }
 
@@ -11967,14 +12079,28 @@ class KqGemvIq2xxs : KqGemvBase {
         return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_spv")]
-    def run {
+    //! the 2 KB grid into workgroup memory, visible before the shell's block walk
+    def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(8)) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2XXS + idx]
         }
-        barrier()   // the iq2xxs grid visible before the shell's block walk
+        barrier()
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_spv")]
+    def run {
+        stage_grid()
         gemv_shell()
+    }
+}
+
+[vk_dispatch(name = "kq_gemv_iq2xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxsN : KqGemvIq2xxs {
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_n_cls_spv")]
+    def override run {
+        stage_grid()
+        gemv_shell_n()
     }
 }

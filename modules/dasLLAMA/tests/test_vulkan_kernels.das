@@ -7544,13 +7544,14 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
 
 [test]
 def test_vkd_gemv_ncol(t0 : T?) {
-    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, k4, k6, k5, q40, iq4xs) == the one-column class, column for column") <| @(t : T?) {
+    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, every kq format) == the one-column class, column for column") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            for (f in fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)) {
+            for (f in fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs,
+                    KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
             }
