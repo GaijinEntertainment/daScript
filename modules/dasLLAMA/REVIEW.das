@@ -885,7 +885,7 @@ def private literal_after(lines : array<string>; marker : string) : int {
 def private check_ar_max_dim_triple {
     var inscope common_lines <- split(strip_line_comments(fread(VK_COMMON)), "\n")
     let constant = literal_after(common_lines, "let AR_MAX_DIM = ")
-    var inscope ar_lines <- class_lines(VK_CLASSES, "class ArBase")
+    var inscope ar_lines <- class_lines(VK_CLASSES, "class template ArBase")
     let slab = literal_after(ar_lines, "@workgroup row : float[")
     var gate = -1
     var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
@@ -899,7 +899,7 @@ def private check_ar_max_dim_triple {
         gate_finding(VK_COMMON, "no `let AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
     }
     if (slab < 0) {
-        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class ArBase` - the add+rms slab triple has no slab to compare")
+        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
     }
     if (gate < 0) {
         gate_finding(BLOCKS_FILE, "no `c.dim > N` inside attn_dec_shape_ok - the add+rms slab triple has no servability cap to compare")

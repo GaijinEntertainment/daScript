@@ -108,12 +108,93 @@ class RmsWgBase {
 
 // the add+rmsnorm core: x/a/w members, the row stash, and the shared workgroup reduce — leaves
 // add their output members + kernels
-class ArBase : RmsWgBase {
+[ |> template_struct_instance]
+class template ArBase : RmsWgBase {
+    @template_constant OUT_F32 : bool = false   //!< the normed row stored to `yo` as floats (the store leaves)
+    @template_constant OUT_F16 : bool = false   //!< ... to `outh` as halves
+    @template_constant OUT_Q8 : bool = false    //!< ... quantized to Q8_0 blocks: `outq` and the block scales `outs` (the requant leaves)
     @ssbo @binding = 0 xs : array<float>   // x rows, the residual stream — updated in place
     @ssbo @binding = 1 aa : array<float>   // the add partner rows
     @ssbo @binding = 2 wn : array<float>   // the norm weight row
+    @ssbo @binding = 3 @template_gate = OUT_F32 yo : array<float>
+    @ssbo @binding = 3 @template_gate = OUT_F16 outh : array<float16>
+    @ssbo @binding = 3 @template_gate = OUT_Q8 outq : array<int8>
+    @ssbo @binding = 10 @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
     @push_constant pa : ArArgs
     @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
+
+    //! the norm weight at `e`, one under `no_norm`
+    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+
+    //! the normed row out in the leaf's float form from `base`: four columns a round, every load issued before the stores (a one-workgroup row kernel is its load rounds)
+    def store_out(base : uint; inv : float) {
+        let last = pa.dim - 1u
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            static_if (OUT_F32) {
+                yo[base + k] = n0
+                if (k + 256u < pa.dim) {
+                    yo[base + k1] = n1
+                }
+                if (k + 512u < pa.dim) {
+                    yo[base + k2] = n2
+                }
+                if (k + 768u < pa.dim) {
+                    yo[base + k3] = n3
+                }
+            }
+            static_if (OUT_F16) {
+                outh[base + k] = float16(n0)
+                if (k + 256u < pa.dim) {
+                    outh[base + k1] = float16(n1)
+                }
+                if (k + 512u < pa.dim) {
+                    outh[base + k2] = float16(n2)
+                }
+                if (k + 768u < pa.dim) {
+                    outh[base + k3] = float16(n3)
+                }
+            }
+            k += 1024u
+        }
+    }
+
+    //! the normed row quantized out of the row stash into Q8_0 blocks from block `qb0`: 8 lanes per 32-block, 32 blocks per pass
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def quant32(qb0 : uint; inv : float) {
+        static_if (OUT_Q8) {
+            let tid = gl_LocalInvocationID.x
+            let nblk = pa.dim / 32u
+            let lane8 = tid % 8u
+            var b = tid / 8u
+            while (b < nblk) {
+                let base = b * 32u + lane8 * 4u
+                let v0 = nw(base) * (row[base] * inv)
+                let v1 = nw(base + 1u) * (row[base + 1u] * inv)
+                let v2 = nw(base + 2u) * (row[base + 2u] * inv)
+                let v3 = nw(base + 3u) * (row[base + 3u] * inv)
+                let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+                let d = m / 127.0
+                let id = d != 0.0 ? 1.0 / d : 0.0
+                if (lane8 == 0u) {
+                    outs[qb0 + b] = d
+                }
+                let qb = qb0 * 32u + base
+                outq[qb] = q8_quant1(v0, id)
+                outq[qb + 1u] = q8_quant1(v1, id)
+                outq[qb + 2u] = q8_quant1(v2, id)
+                outq[qb + 3u] = q8_quant1(v3, id)
+                b += 32u
+            }
+        }
+    }
 
     //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
     def apart(base, j : uint) : float => aa[base + j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
@@ -197,45 +278,22 @@ class ArBase : RmsWgBase {
 // ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
 [vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRms : ArBase {
-    @ssbo @binding = 3 yo : array<float>   // the normed output rows
+    override OUT_F32 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        let ss = accum_row(base)
-        let inv = rms_inv(ss)
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
-            yo[base + k] = n0
-            if (k + 256u < pa.dim) {
-                yo[base + k1] = n1
-            }
-            if (k + 512u < pa.dim) {
-                yo[base + k2] = n2
-            }
-            if (k + 768u < pa.dim) {
-                yo[base + k3] = n3
-            }
-            k += 1024u
-        }
+        store_out(base, rms_inv(accum_row(base)))
     }
 }
 
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
-class ArRqBase : ArBase {
-    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes, row-major blocks
-    @ssbo @binding = 4 outs : array<float>   // per-32-block scales
+[ |> template_struct_instance]
+class template ArRqBase : ArBase {
+    override OUT_Q8 = true
 
-    // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
+    // quantize the normed row instead of storing it
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
         let ss = accum_row(rbase)
@@ -246,35 +304,6 @@ class ArRqBase : ArBase {
     def row_inv(ss : float) : float {
         let inv = rms_inv(ss)
         return pa.no_norm != 0u ? 1.0 : inv
-    }
-
-    //! the norm weight at `e`, one under `no_norm`
-    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
-
-    def quant32(qb0 : uint; inv : float) {
-        let tid = gl_LocalInvocationID.x
-        let nblk = pa.dim / 32u
-        let lane8 = tid % 8u
-        var b = tid / 8u
-        while (b < nblk) {
-            let base = b * 32u + lane8 * 4u
-            let v0 = nw(base) * (row[base] * inv)
-            let v1 = nw(base + 1u) * (row[base + 1u] * inv)
-            let v2 = nw(base + 2u) * (row[base + 2u] * inv)
-            let v3 = nw(base + 3u) * (row[base + 3u] * inv)
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let d = m / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            if (lane8 == 0u) {
-                outs[qb0 + b] = d
-            }
-            let qb = qb0 * 32u + base
-            outq[qb] = q8_quant1(v0, id)
-            outq[qb + 1u] = q8_quant1(v1, id)
-            outq[qb + 2u] = q8_quant1(v2, id)
-            outq[qb + 3u] = q8_quant1(v3, id)
-            b += 32u
-        }
     }
 }
 
@@ -298,7 +327,7 @@ class ClsArAddRmsRqB : ArRqBase {
 class template ArRqT : ArRqBase {
     @template_constant KBLK : bool = false    //!< the quant form: Q8_K superblocks (a scale per 256) instead of Q8_0's 32-blocks
     @template_constant STOREX : bool = false  //!< the normed row stored to binding 5 as floats beside the quants
-    @ssbo @binding = 5 @template_gate = STOREX yo : array<float>   //! the normed row, for the consumers that read it as floats
+    @ssbo @binding = 11 @template_gate = STOREX ystore : array<float>   //! the normed row beside the quants, for the consumers that read it as floats - past `outs`, so the set order stays quants, scales, row
 
     //! the Q8_K superblocks of the stashed row at inv: a 32-lane block a 256-block, eight values a lane - the block by the invocation id, as the requant class maps it, so the amax fold's masks stay inside it on any subgroup width
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
@@ -335,7 +364,7 @@ class template ArRqT : ArRqBase {
         static_if (STOREX) {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
-                yo[k] = nw(k) * (row[k] * inv)
+                ystore[k] = nw(k) * (row[k] * inv)
                 k += 256u
             }
         }
@@ -363,7 +392,8 @@ class ArAddRmsRqKX : ArRqT {
     override STOREX = true
 }
 
-class ArCombBase : ArBase {
+[ |> template_struct_instance]
+class template ArCombBase : ArBase {
     @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights
     @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
@@ -466,112 +496,41 @@ class ArCombBase : ArBase {
 
 [vk_dispatch(name = "cls_ar_comb", grid = "nrows", params = "nrows : int64")]
 class ClsArComb : ArCombBase {
-    @ssbo @binding = 3 yo : array<float>   //! the normed output rows
+    override OUT_F32 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        let ss = accum_row(base)
-        let inv = rms_inv(ss)
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
-            yo[base + k] = n0
-            if (k + 256u < pa.dim) {
-                yo[base + k1] = n1
-            }
-            if (k + 512u < pa.dim) {
-                yo[base + k2] = n2
-            }
-            if (k + 768u < pa.dim) {
-                yo[base + k3] = n3
-            }
-            k += 1024u
-        }
+        store_out(base, rms_inv(accum_row(base)))
     }
 }
 
 //! the plain combine's quantizing twin (`ClsArCombG4Rq`'s form): the normed row into Q8_0 blocks at the combine's free bindings, so no requant dispatch follows
 [vk_dispatch(name = "cls_ar_comb_rq", grid = "nrows", params = "nrows : int64")]
 class ClsArCombRq : ArCombBase {
-    @ssbo @binding = 3 outq : array<int8>     //! the normed row's Q8_0 quants (the next layer's q feed)
-    @ssbo @binding = 10 outs : array<float>   //! ... and its block scales
+    override OUT_Q8 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        let ss = accum_row(base)
-        let inv = rms_inv(ss)
-        let tid = gl_LocalInvocationID.x
-        let nblk = pa.dim / 32u
-        let lane8 = tid % 8u
-        let qb0 = (gl_WorkGroupID.x + pa.row0) * nblk
-        var b = tid / 8u
-        while (b < nblk) {
-            let e = b * 32u + lane8 * 4u
-            let v0 = wn[pa.woff + e] * (row[e] * inv)
-            let v1 = wn[pa.woff + e + 1u] * (row[e + 1u] * inv)
-            let v2 = wn[pa.woff + e + 2u] * (row[e + 2u] * inv)
-            let v3 = wn[pa.woff + e + 3u] * (row[e + 3u] * inv)
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let dq = m / 127.0
-            let id = dq != 0.0 ? 1.0 / dq : 0.0
-            if (lane8 == 0u) {
-                outs[qb0 + b] = dq
-            }
-            let qb = qb0 * 32u + e
-            outq[qb] = q8_quant1(v0, id)
-            outq[qb + 1u] = q8_quant1(v1, id)
-            outq[qb + 2u] = q8_quant1(v2, id)
-            outq[qb + 3u] = q8_quant1(v3, id)
-            b += 32u
-        }
+        quant32((gl_WorkGroupID.x + pa.row0) * (pa.dim / 32u), rms_inv(accum_row(base)))
     }
 }
 
 [vk_dispatch(name = "cls_ar_comb_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArCombF16B : ArCombBase {
-    @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
+    override OUT_F16 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let rbase = gl_WorkGroupID.x * pa.dim
-        let ss = accum_row(rbase)
-        let inv = rms_inv(ss)
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
-            outh[rbase + k] = float16(n0)
-            if (k + 256u < pa.dim) {
-                outh[rbase + k1] = float16(n1)
-            }
-            if (k + 512u < pa.dim) {
-                outh[rbase + k2] = float16(n2)
-            }
-            if (k + 768u < pa.dim) {
-                outh[rbase + k3] = float16(n3)
-            }
-            k += 1024u
-        }
+        store_out(rbase, rms_inv(accum_row(rbase)))
     }
 }
 
 //! the gemma-4 MoE combine: x = (x + post3(post2(sum_j w_j d_j) + post1(dense))) * ascale, the dense row always on and ungated
-class ArCombG4Base : ArBase {
+[ |> template_struct_instance]
+class template ArCombG4Base : ArBase {
     @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights (the per-expert down scale folded in)
     @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
@@ -644,8 +603,9 @@ class ArCombG4Base : ArBase {
 
 [vk_dispatch(name = "cls_ar_comb_g4", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4 : ArCombG4Base {
-    @ssbo @binding = 3 yo : array<float>   //! the normed output rows
+    override OUT_F32 = true
 
+    //! one column a round: the gemma-4 combine's own store
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
@@ -661,108 +621,36 @@ class ClsArCombG4 : ArCombG4Base {
 
 [vk_dispatch(name = "cls_ar_comb_g4_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4F16B : ArCombG4Base {
-    @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
+    override OUT_F16 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
     def run {
         let rbase = gl_WorkGroupID.x * pa.dim
-        let ss = accum_row(rbase)
-        let inv = rms_inv(ss)
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
-            outh[rbase + k] = float16(n0)
-            if (k + 256u < pa.dim) {
-                outh[rbase + k1] = float16(n1)
-            }
-            if (k + 512u < pa.dim) {
-                outh[rbase + k2] = float16(n2)
-            }
-            if (k + 768u < pa.dim) {
-                outh[rbase + k3] = float16(n3)
-            }
-            k += 1024u
-        }
+        store_out(rbase, rms_inv(accum_row(rbase)))
     }
 }
 
-//! the gemma-4 combine that quantizes the next head's feed itself: the normed row into Q8_0 blocks (`ArRqBase.quant32`'s
-//! form at the combine's free bindings) instead of a float row a requant dispatch would read
+//! the gemma-4 combine that quantizes the next head's feed itself: the normed row into Q8_0 blocks (`ArBase.quant32`) instead
+//! of a float row a requant dispatch would read
 [vk_dispatch(name = "cls_ar_comb_g4_rq", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4Rq : ArCombG4Base {
-    @ssbo @binding = 3 outq : array<int8>    //! the normed row's Q8_0 quants (the next layer's q feed)
-    @ssbo @binding = 7 outs : array<float>   //! ... and its block scales
+    override OUT_Q8 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        let ss = accum_row(base)
-        let inv = rms_inv(ss)
-        let tid = gl_LocalInvocationID.x
-        let nblk = pa.dim / 32u
-        let lane8 = tid % 8u
-        let qb0 = (gl_WorkGroupID.x + pa.row0) * nblk
-        var b = tid / 8u
-        while (b < nblk) {
-            let e = b * 32u + lane8 * 4u
-            let v0 = wn[pa.woff + e] * (row[e] * inv)
-            let v1 = wn[pa.woff + e + 1u] * (row[e + 1u] * inv)
-            let v2 = wn[pa.woff + e + 2u] * (row[e + 2u] * inv)
-            let v3 = wn[pa.woff + e + 3u] * (row[e + 3u] * inv)
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let dq = m / 127.0
-            let id = dq != 0.0 ? 1.0 / dq : 0.0
-            if (lane8 == 0u) {
-                outs[qb0 + b] = dq
-            }
-            let qb = qb0 * 32u + e
-            outq[qb] = q8_quant1(v0, id)
-            outq[qb + 1u] = q8_quant1(v1, id)
-            outq[qb + 2u] = q8_quant1(v2, id)
-            outq[qb + 3u] = q8_quant1(v3, id)
-            b += 32u
-        }
+        quant32((gl_WorkGroupID.x + pa.row0) * (pa.dim / 32u), rms_inv(accum_row(base)))
     }
 }
 
 [vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsF16B : ArBase {
-    @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
+    override OUT_F16 = true
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let rbase = gl_WorkGroupID.x * pa.dim
-        let ss = accum_row(rbase)
-        let inv = rms_inv(ss)
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
-            outh[rbase + k] = float16(n0)
-            if (k + 256u < pa.dim) {
-                outh[rbase + k1] = float16(n1)
-            }
-            if (k + 512u < pa.dim) {
-                outh[rbase + k2] = float16(n2)
-            }
-            if (k + 768u < pa.dim) {
-                outh[rbase + k3] = float16(n3)
-            }
-            k += 1024u
-        }
+        store_out(rbase, rms_inv(accum_row(rbase)))
     }
 }
 
@@ -5052,10 +4940,11 @@ class Q8Batch : MoeCmBase {
 // compose, the scale stage, and the per-block FMA (float order contractual per format) differ —
 // each is an override, and the devirtualizer inlines the family back to four standalone kernels.
 
-// deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane (Q5_K —
-// the batch and gemv k5 variants share it)
+// deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane - the k5 and
+// q51 GEMVs and the k5 batch tile share it: one multiply spreads the four bits to their lanes
+// (the shifted copies never overlap, so no carry crosses a lane), one mask keeps bit 4 of each
 def private k5_dep(hb : uint) : uint {
-    return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
+    return ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 }
 
 // IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
@@ -7423,12 +7312,9 @@ class template Mx4Cm2T : KqCm2BatchT {
         let j = e & 15u
         let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
         let nib = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let mag = nib & 7u
-        let mag2 = mag < 4u ? mag : ((4u + ((mag & 1u) << 1u)) << (((mag >> 1u) - 2u) & 1u))
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        let v = float(mag2) * mx4_e8m0_half(ex)
-        return float16((nib & 8u) != 0u ? -v : v)
+        return float16(mx4_dec4(nib, mx4_e8m0_half(ex)).x)   //! the one nibble in the low byte: the packed decode's first lane
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -7700,10 +7586,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
             for [unroll_full] (i in range(4)) {
                 let l = (r0 >> 3u) + (uint(i) >> 1u)
                 let sidx = (aux >> (7u * l)) & 127u
-                var tt = sidx ^ (sidx >> 4u)
-                tt = tt ^ (tt >> 2u)
-                tt = tt ^ (tt >> 1u)
-                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq3x_gridc[(qsw >> (uint(i) * 8u)) & 0xFFu]
                 let g0 = float(gw & 0xFFu)
                 let g1 = float((gw >> 8u) & 0xFFu)
@@ -7728,10 +7611,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let ai = int(g * 2u)   //! sub-block g's aux32 as its two 16-bit lanes: four 7-bit ksigns indices
         let aux = (uint(int(blk.ax[ai])) & 0xFFFFu) | ((uint(int(blk.ax[ai + 1])) & 0xFFFFu) << 16u)
         let sidx = (aux >> (7u * l)) & 127u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgn = (sidx | ((tt & 1u) << 7u)) >> (r & 7u)
+        let sgn = ksign7(sidx) >> (r & 7u)
         let gw = iq3x_gridc[qb]
         let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
@@ -7755,10 +7635,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let ai = int(g * 2u)
         let aux = (uint(int(blk.ax[ai])) & 0xFFFFu) | ((uint(int(blk.ax[ai + 1])) & 0xFFFFu) << 16u)
         let sidx = (aux >> (7u * l)) & 127u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgb = ksign7(sidx)
         let gw = iq3x_gridc[qb]
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let d = unpackHalf2x16(ws[srow]).x
@@ -7880,10 +7757,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
             for [unroll_full] (i in range(4)) {
                 let w16 = (qw >> ((uint(i) >> 1u) * 16u)) & 0xFFFFu
                 let sidx = w16 >> 9u
-                var tt = sidx ^ (sidx >> 4u)
-                tt = tt ^ (tt >> 2u)
-                tt = tt ^ (tt >> 1u)
-                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq2xs_gridc[(w16 & 511u) * 2u + (uint(i) & 1u)]
                 let g0 = float(gw & 0xFFu)
                 let g1 = float((gw >> 8u) & 0xFFu)
@@ -7903,10 +7777,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let j = pair0 & 7u
         let w16 = uint(int(blk.qs[int(wi)])) & 0xFFFFu
         let sidx = w16 >> 9u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgn = (sidx | ((tt & 1u) << 7u)) >> j
+        let sgn = ksign7(sidx) >> j
         let gw = iq2xs_gridc[(w16 & 511u) * 2u + (j >> 2u)]
         let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
@@ -7926,10 +7797,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let j = e & 7u
         let w16 = uint(int(blk.qs[int(wi)])) & 0xFFFFu
         let sidx = w16 >> 9u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgb = ksign7(sidx)
         let gw = iq2xs_gridc[(w16 & 511u) * 2u + (j >> 2u)]
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dv = unpackHalf2x16(ws[srow]).x
@@ -7966,10 +7834,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
                 let l = l0 + li
                 let qb = (qsw >> (li * 8u)) & 0xFFu
                 let sidx = (aux >> (7u * l)) & 127u
-                var tt = sidx ^ (sidx >> 4u)
-                tt = tt ^ (tt >> 2u)
-                tt = tt ^ (tt >> 1u)
-                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq2xxs_gridc[qb * 2u + (uint(i) & 1u)]
                 let g0 = float(gw & 0xFFu)
                 let g1 = float((gw >> 8u) & 0xFFu)
@@ -7994,10 +7859,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let ai = int(g * 4u + 2u)   //! sub-block g's aux32 as its two 16-bit lanes: four 7-bit ksigns indices
         let aux = (uint(int(blk.qs[ai])) & 0xFFFFu) | ((uint(int(blk.qs[ai + 1])) & 0xFFFFu) << 16u)
         let sidx = (aux >> (7u * l)) & 127u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgn = (sidx | ((tt & 1u) << 7u)) >> j
+        let sgn = ksign7(sidx) >> j
         let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
         let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
@@ -8021,10 +7883,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let ai = int(g * 4u + 2u)
         let aux = (uint(int(blk.qs[ai])) & 0xFFFFu) | ((uint(int(blk.qs[ai + 1])) & 0xFFFFu) << 16u)
         let sidx = (aux >> (7u * l)) & 127u
-        var tt = sidx ^ (sidx >> 4u)
-        tt = tt ^ (tt >> 2u)
-        tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgb = ksign7(sidx)
         let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let dv = unpackHalf2x16(ws[srow]).x
@@ -10068,9 +9927,6 @@ class Q8GemvPleAct {
     }
 }
 
-//! the four fifth bits of a nibble word's elements as their byte's 0x10: nibble n (bits 0..3) spread to bits 4, 12, 20, 28
-def q51_hbits(n : uint) : uint => ((n & 0xFu) * 0x02040810u) & 0x10101010u
-
 //! Q5_1 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's five words (four
 //! nibble words, the qh word), the low and high nibbles raised to bytes with their fifth bit, sdot4 against the
 //! activation words; (d * isum + m * asum) * xs per block - `dot_q51q8_scalar`'s float order, reassociated by lane
@@ -10100,8 +9956,8 @@ class Q51GemvBase {
                     let w = wq[wbase + uint(c)]
                     let xl = xqw[xbase + uint(c)]
                     let xh = xqw[xbase + 4u + uint(c)]
-                    idot += sdot4((w & 0x0F0F0F0Fu) | q51_hbits(qh >> (uint(c) * 4u)), xl)
-                    idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | q51_hbits(qh >> (16u + uint(c) * 4u)), xh)
+                    idot += sdot4((w & 0x0F0F0F0Fu) | k5_dep(qh >> (uint(c) * 4u)), xl)
+                    idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | k5_dep(qh >> (16u + uint(c) * 4u)), xh)
                     asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
                 }
                 let dm = unpackHalf2x16(wsu[wb0 + b])
