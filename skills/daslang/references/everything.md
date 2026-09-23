@@ -959,9 +959,9 @@ The clipboard module provides synchronous access to the operating system's text 
 
 ### Structures
 
-- `ClipboardImage`
-- `ClipboardContent`
-- `ClipboardMemory`
+- `ClipboardImage` - Canonical transport image: straight-alpha RGBA8, top-to-bottom rows.
+- `ClipboardContent` - One atomic offer set.
+- `ClipboardMemory` - Deterministic in-memory transport for tests, tools, and applications that need clipboard semantics without touching the desktop session.
 
 ### UTF-8 system clipboard
 
@@ -970,14 +970,14 @@ The clipboard module provides synchronous access to the operating system's text 
 - `clipboard_clone_content`
 - `clipboard_content_has_data`
 - `clipboard_dispose_content`
-- `clipboard_get_content`
-- `clipboard_get_text`
+- `clipboard_get_content` - Take one native snapshot of every supported representation.
+- `clipboard_get_text` - Read UTF-8 text into `text`.
 - `clipboard_memory_clear`
 - `clipboard_memory_dispose`
 - `clipboard_memory_read`
 - `clipboard_memory_write`
-- `clipboard_set_content`
-- `clipboard_set_text`
+- `clipboard_set_content` - Replace the system clipboard with all selected representations while holding one native clipboard lock.
+- `clipboard_set_text` - Replace the system clipboard with UTF-8 text.
 - `clipboard_validate_content`
 
 ## stddlg
@@ -7714,36 +7714,36 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 ### Constants
 
-- `s_utf8d`
-- `UTF8_ACCEPT`
+- `s_utf8d` - Byte-class and state-transition table for the UTF-8 DFA decoder.
+- `UTF8_ACCEPT` - DFA accept state indicating a valid UTF-8 sequence.
 - `_UTF32_NON_WORD_RANGES`
 - `_UTF32_LATIN1_LOWER`
 
 ### Encoding and decoding
 
-- `decode_unicode_escape`
-- `utf16_to_utf32`
-- `utf8_decode`
-- `utf8_encode`
+- `decode_unicode_escape` - Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
+- `utf16_to_utf32` - Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
+- `utf8_decode` - Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+- `utf8_encode` - Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
 ### Iteration
 
-- `each_word`
+- `each_word` - Tokenizes UTF-8 into lower-cased word tokens (uses `utf32_is_word_char` for boundaries, `utf32_to_lower` for case fold).
 
 ### Length and measurement
 
-- `utf8_length`
+- `utf8_length` - Returns the number of characters in the UTF-8 string
 
 ### Validation
 
-- `contains_utf8_bom`
-- `is_first_byte_of_utf8_char`
-- `is_utf8_string_valid`
+- `contains_utf8_bom` - Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
+- `is_first_byte_of_utf8_char` - Returns true if the given byte is the first byte of a UTF-8 character.
+- `is_utf8_string_valid` - Returns true if the byte array contains a valid UTF-8 encoded string.
 
 ### Unicode word/case primitives
 
-- `utf32_is_word_char`
-- `utf32_to_lower`
+- `utf32_is_word_char` - ASCII `[A-Za-z0-9_]` fast path; otherwise consults a non-word range table.
+- `utf32_to_lower` - Lowercases a codepoint.
 
 ## validate_code
 

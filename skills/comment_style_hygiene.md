@@ -95,7 +95,7 @@ it in a name, a shape, or a test, or documents itself in the module's `.md`. Kep
 is earned: `//!` and `/** */` docs on a contract a CALLER must know - public API always, a
 non-public helper when callers inside the module need the contract - `NOLINT` /
 `clang-format` suppressions, the leading header block, and the bare section pointer
-`// <folder>/ARCHITECTURE.md#<anchor>` on the function that implements the section (C++ has no
+`// <folder>/ARCHITECTURE*.md#<anchor>` - the folder's `ARCHITECTURE.md` or an `ARCHITECTURE_<CONCERN>.md` companion - on the function that implements the section (C++ has no
 `[arch]` annotation, so the pointer is its citation; LINT026 resolves it exactly as a .das
 citation - the path is root-relative, walked up from the citing file, so a header under
 `include/` reaches the `src/` document that owns its mechanism - and a `sec.N` spelling is a

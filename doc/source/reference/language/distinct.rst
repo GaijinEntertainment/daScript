@@ -33,14 +33,15 @@ terms of another distinct type.
 Construction and Deref
 ----------------------
 
-The only way *in* is explicit construction from a value of exactly the underlying type — a
-pure compile-time relabel with no runtime cost:
+The way *in* is explicit construction from a value of exactly the underlying type — a
+pure compile-time relabel with no runtime cost — unless the module writes an ``operator =``
+for the pair (see `Assignment across types`_ below):
 
 .. code-block:: das
 
     var id = EntityId(5)
     var m : Meters = Meters(2.5)
-    // var bad : EntityId = 5      // error: no implicit conversion
+    // var bad : EntityId = 5      // error: no implicit conversion, unless an operator = (EntityId&, int) exists
 
 The only way *out* is the dereference operator ``*``, which peels exactly one distinct level
 and yields the underlying type as a reference. Constness flows from the handle: dereferencing

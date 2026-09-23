@@ -7,36 +7,45 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 An `ExprCopy` or `ExprMove` whose `no_promotion` flag is clear first looks for a user function
 named `=` or `<-` whose two parameters take the left type as a mutable reference and the right
 type, by the ordinary overload rules (`inferAssignOperator`); a match replaces the node with a
-call to it, and the built-in operation runs only when there is none. An `ExprClone` does the
-same through its own lookup of `clone`, the name `operator :=` declares. The raw forms `!==`,
-`!<-` and `!:=` set the flag. A lookup starts with `hasFunctionNamed`, a per-module name-table
-probe, so a program that declares no such operator pays no temporary call per copy or move.
-A copy or move the compiler manufactures - the inliner's return store, a `let` the stack
-allocator relocates into an assignment, a generator's yield store - carries the flag, and a
-generated variable's initializer is never promoted: the user's operator runs once, at the site
-the user wrote, in every build configuration. The built-in clone of a copyable type lowers to an `ExprCopy`, and that node
-inherits the flag, so a raw clone never re-enters `operator =`. The built-in clone of a
-non-copyable type is a call to a generated `clone` function, and a user `operator :=` on the
-exact pair is a `clone` function with the same signature that takes its place: a raw `!:=` on
-such a type has nothing to reach, so it is reported as an error instead of re-entering the
-overload (the `generated` flag on the matched function tells the two apart).
+call to it, and the built-in operation runs only when there is none. An `ExprClone` runs the
+same lookup for `clone`, the name `operator :=` declares. Each lookup starts with the module
+library's cached name probe (`hasFunctionOrGenericNamed`), so a program that declares no such
+operator pays no temporary call per copy or move, and it does not run while either operand's
+type is still unresolved, void, or an expression type.
 
-The call an overload becomes keeps the `_::` spelling in its name (`_::=`), the way the clone
-lookup does, never a plain `=`. Initialization lowers to the builtin generics `copy_to_move`
-and `move_to_move` (`daslib/builtin.das`), whose instance body assigns `copy_dest = copy_src`
-and is inferred from the builtin module: a plain name resolved there looks from `builtin` and
-never sees the caller's overload, while `_::` names the module being compiled
-(`getSearchModule("_")`).
+The raw forms `!==`, `!<-` and `!:=` set the flag, and a rewrite of a flagged node - the
+relaxed-assign move, the in-scope POD move, the `ExprCopy` the built-in clone of a copyable
+type lowers to - carries it over. A raw `!:=` still honors a clone the language itself
+provides: a C++-bound `clone`, a generic of the builtin module, a generated field-wise clone.
+It skips only a user-written `clone` on the pair; when such a function exists for a
+non-copyable type it has replaced the generated clone, nothing else can clone the type, and
+the raw form is reported as an error instead of re-entering the overload
+(`userCloneReplacesBuiltin`).
 
-Initialization - a local `let` or `var`, a global, a struct field default, a field in a
-make-struct - runs `promoteInitToAssign`. When an overload exists for the declared type and
-the initializer's type - a plain function or a generic, the same set `inferFunctionCall`
-consults for an assignment; two plain candidates select none, and the built-in operation runs,
-as an assignment's `tryOperator` lookup does - the initializer becomes `copy_to_move(init, type<T>)` (`move_to_move`
-for `<-`): a fresh `T` assigned through the overload and moved into the variable. The lookup
-drops the declared constness, because an initialization writes its destination whatever the
-declaration says. The variable is then move-initialized only when `T` cannot be copied: the
-call's result is a constant value, and a copyable type never move-initializes from a constant.
-`isAssignInitCall` keeps a promoted initializer from being promoted again on the next
-inference pass; it compares the generic's origin name, because a resolved instance carries a
-mangled one.
+A copy or move the compiler manufactures carries the flag: the inliner's return store and its
+split-ternary arm stores, a `let` the stack allocator relocates into an assignment, a
+generator's yield and loop-finally return stores, loop counters and control flags, a
+generator-local store whose initializer the compiler already promoted, and the copy into a
+lambda or generator capture (`visitMakeStructureField` skips a generated value). A generated
+variable's initializer is never promoted. The generated field-wise clone of a struct, tuple or
+variant clones each field with `:=`, which reaches the field type's own operators. Code a macro
+emits is user code: nothing marks a `qmacro`-built store as compiler-made.
+
+Initialization - a local `let` or `var`, typed or `auto`, a global, a struct or class field
+default, a field in a make-struct or `new` - runs `promoteInitToAssign`; an argument default, a
+`return` value, and an element of an array, tuple or variant literal are not init sites and copy
+with the built-in operation. When an overload exists for the declared type and the
+initializer's type, a plain function or a generic, the initializer becomes a call to a builtin
+generic (`daslib/builtin.das`): `copy_to_move(init, type<T>)` for `=` and `move_to_move` for
+`<-`, the `_ref` variants when the initializer is a variable so a scalar, pointer or string
+source reaches the operator by reference, and the const or `var` overload of each by the
+source's constness. Each helper is a fresh `T` assigned through the overload and moved out.
+Two plain candidates, or two generics with no plain candidate, select none, and the built-in
+operation runs, as an assignment's `tryOperator` lookup does. The lookup drops the declared
+constness, because an initialization writes its destination whatever the declaration says. The
+variable is then move-initialized only when `T` cannot be copied: a workhorse call result is a
+constant value, and a copyable type never move-initializes from a constant. Every promoted
+initializer call is marked `generated`, and `isAssignInitCall` reads that mark (and the helper
+names, `clone_to_move` and `clone_string` included) so an initializer the compiler already
+promoted is not promoted again on the next pass - a `:=` init lowered to `clone_to_move` would
+otherwise be promoted a second time through `<-`.

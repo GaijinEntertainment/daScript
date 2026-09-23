@@ -1,5 +1,6 @@
 options gen2
 require dastest/testing_boost public
+require _assign_operator_mod
 
 typedef distinct SoundHandle = uint
 
@@ -162,8 +163,8 @@ def test_init_reaches_generic_and_mutable_source_overloads(t : T?) {
         t |> equal(w.v, 30)
         w = 4
         t |> equal(w.v, 40)
-        let made = Sfx(hit = 1u, current = 9)
-        t |> equal(*made.current, 9u)
+        let made = WrapBox(w = 2.5f)
+        t |> equal(made.w.v, 20)
     }
     t |> run("an operator = taking var src sees the mutable source at init") @(t : T?) {
         var arr <- [1, 2]
@@ -205,6 +206,230 @@ def test_compiler_made_copies_stay_builtin(t : T?) {
         var src : Counted
         src.value = 9
         t |> equal(with_finally(src), 11)
+    }
+}
+
+struct WrapBox {
+    w : Wrap
+}
+
+struct Tracked {
+    value : int
+    log : int
+}
+
+def operator :=(var dst : Tracked&; src : Tracked) {
+    dst !:= src
+    dst.log += 100
+}
+
+def operator <-(var dst : Tracked&; var src : Tracked) {
+    dst !<- src
+    dst.log++
+}
+
+struct Node {
+    v : int
+}
+
+struct Owner {
+    p : Node?
+}
+
+def operator <-(var dst : Owner&; var src : Node?&) {
+    dst.p = src
+    src = null
+}
+
+struct Pt {
+    a : int
+    b : int
+}
+
+def operator <-(var dst : Sink&; src : Pt) {
+    dst.got = src.a + src.b
+}
+
+def count_in_generator(src : Counted) : int {
+    var total = -1
+    for (n in generator<int>() <| $() { // nolint:STYLE002 a generator source inside a for takes only the piped block form
+        var c : Counted = src
+        yield c.copies
+        return false
+    }) {
+        total = n
+    }
+    return total
+}
+
+def return_in_loop(src : Counted) : Counted {
+    for (_i in range(2)) {
+        {
+            return src
+        } finally {
+            g_finally_hits++
+        }
+    }
+    return src
+}
+
+var g_finally_hits = 0
+
+[test]
+def test_every_copy_the_compiler_makes_is_builtin(t : T?) {
+    t |> run("a clone init runs operator := and not operator <- after it") @(t : T?) {
+        var src : Tracked
+        src.value = 5
+        let viaOp : Tracked := src
+        t |> equal(viaOp.log, 100)
+        var glob : Tracked
+        glob := src
+        t |> equal(glob.log, 100)
+    }
+    t |> run("a generator local with a written type runs the operator once") @(t : T?) {
+        var src : Counted
+        src.value = 6
+        t |> equal(count_in_generator(src), 1)
+    }
+    t |> run("a ternary with an inlined arm runs the operator once") @(t : T?) {
+        var src : Counted
+        src.value = 7
+        let other = Counted()
+        let pick = src.value > 3
+        let got : Counted = pick ? pass_through(src) : other
+        t |> equal(got.value, 7)
+        t |> equal(got.copies, 1)
+    }
+    t |> run("a return inside a loop with finally stays a builtin copy") @(t : T?) {
+        var src : Counted
+        src.value = 8
+        let got : Counted = return_in_loop(src)
+        t |> equal(got.value, 8)
+        t |> equal(got.copies, 1)
+        t |> equal(g_finally_hits, 1)
+    }
+    t |> run("a lambda capture is a builtin copy") @(t : T?) {
+        var src : Counted
+        src.value = 9
+        let peek = @() : int {
+            return src.copies
+        }
+        t |> equal(invoke(peek), 0)
+    }
+}
+
+[test]
+def test_init_reaches_the_source_by_reference(t : T?) {
+    t |> run("a pointer source moved at init is emptied like at assignment") @(t : T?) {
+        var first = new Node(v = 1)
+        var owner : Owner <- first
+        t |> success(first == null)
+        t |> equal(owner.p.v, 1)
+        unsafe {
+            delete owner.p
+        }
+        var second = new Node(v = 2)
+        owner <- second
+        t |> success(second == null)
+        t |> equal(owner.p.v, 2)
+        unsafe {
+            delete owner.p
+        }
+    }
+    t |> run("an operator <- taking a const source serves init") @(t : T?) {
+        let pt = Pt(a = 1, b = 2)
+        let s : Sink <- pt
+        t |> equal(s.got, 3)
+    }
+}
+
+[test]
+def test_raw_forms_keep_builtin_clones(t : T?) {
+    t |> run("a raw clone still reaches the builtin generic clone of an array") @(t : T?) {
+        var src <- [1, 2, 3]
+        var dst : array<int>
+        dst !:= src
+        t |> equal(length(dst), 3)
+        t |> equal(length(src), 3)
+    }
+    t |> run("a raw move takes a table literal on the right") @(t : T?) {
+        var tab : table<int; int>
+        tab !<- { 1 => 2 } // nolint:PERF030,STYLE011 the raw move has no declaration form; the statement is the subject
+        t |> equal(length(tab), 1)
+    }
+}
+
+def operator <-(var dst : Box&; var src : Box) {
+    dst !<- src // nolint:PERF030 the raw move IS this operator's primitive; the test's targets hold no container contents
+    dst.moves += 10
+}
+
+[inline]
+def pick(src : Counted; other : Counted; first : bool) : Counted {
+    if (first) {
+        return src
+    }
+    return other
+}
+
+def with_finally_early_out(src : Counted; bail : bool) : int {
+    var total = 0
+    let held : Counted = src
+    {
+        if (bail) {
+            return -1
+        }
+        total += held.copies
+    } finally {
+        total += held.copies * 10
+    }
+    return total
+}
+
+[test]
+def test_more_compiler_made_copies(t : T?) {
+    t |> run("the raw move skips a same-type operator <- that the plain move takes") @(t : T?) {
+        var a : Box
+        var b : Box
+        b.moves = 5
+        a !<- b // nolint:PERF030 a is fresh; the raw move has no declaration form to fold into
+        t |> equal(a.moves, 5)
+        var c : Box
+        c.moves = 6
+        a <- c
+        t |> equal(a.moves, 16)
+    }
+    t |> run("an inlined function with two returns stores its result raw") @(t : T?) {
+        var src : Counted
+        src.value = 10
+        let other = Counted()
+        let got : Counted = pick(src, other, true)
+        t |> equal(got.value, 10)
+        t |> equal(got.copies, 1)
+    }
+    t |> run("a let used in a finally after an early out still runs the operator once") @(t : T?) {
+        var src : Counted
+        src.value = 11
+        t |> equal(with_finally_early_out(src, false), 11)
+        t |> equal(with_finally_early_out(src, true), -1)
+    }
+    t |> run("a yielded value is a builtin copy") @(t : T?) {
+        var src : Counted
+        src.value = 12
+        var seen = -1
+        for (c in generator<Counted>() <| $() { // nolint:STYLE002 a generator source inside a for takes only the piped block form
+            yield src
+            return false
+        }) {
+            seen = c.copies
+        }
+        t |> equal(seen, 0)
+    }
+    t |> run("an operator declared in another module serves init and assignment here") @(t : T?) {
+        var rm : Remote = 2
+        t |> equal(rm.r, 6)
+        rm = 3
+        t |> equal(rm.r, 9)
     }
 }
 

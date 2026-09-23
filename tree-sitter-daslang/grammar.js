@@ -332,7 +332,7 @@ module.exports = grammar({
         '<<<', '>>>', '<<<=', '>>>=',
         seq('[', ']', choice('=', '<-', ':=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '&&=', '||=', '^^=')),
         seq('[', ']'),
-        '=', '<-',  // def operator = / def operator <- — the copy and move overloads
+        '=', '<-',
         seq('?', '[', ']'),
         // Property operators — prefer longer matches via precedence
         prec(2, seq('.', $.identifier, ':=')),

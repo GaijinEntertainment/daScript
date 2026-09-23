@@ -70,8 +70,11 @@ Select-String -Path "doc\source\stdlib\handmade\*.rst" -Pattern "// stub" -Simpl
 
 To fix one (e.g. `function-strings_boost-capitalize-0x1747f4e995e14ba9.rst`): its **second line** is
 the signature - use it to locate the source; replace the **entire file content** with a plain-text
-description, 1-2 sentences, no RST directives. Bitfield typedefs are positional: first line
-describes the type, line N+1 describes the Nth flag. A distinct type (`typedef distinct Foo = int`)
+description, 1-2 sentences, no RST directives. Typedef, enumeration, structure and
+structure-annotation stubs are positional, paired FROM THE END: the last line describes the last
+member, and the lines left over at the top become the type description - so a stale extra line
+does not shift a member's text, it pollutes the type description, and a missing line leaves a
+member described by its predecessor's text. A distinct type (`typedef distinct Foo = int`)
 gets its stub at `typedef-<module>-Foo.rst`, the same file name a type alias gets. Regenerate, then
 `Select-String -Path "doc\source\stdlib\*.rst" -Pattern "// stub"` must return 0 matches.
 

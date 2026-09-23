@@ -744,7 +744,7 @@ namespace das {
             pCall->alwaysSafe = true;
             pCall->arguments.push_back(new ExprVar(expr->at, pVar->name));
             pCall->arguments.push_back(new ExprConstUInt(expr->at, expr->left->type->getSizeOf()));
-            auto pMove = new ExprMove(expr->at, new ExprVar(expr->at, pVar->name), expr->right->clone());
+            auto pMove = new ExprMove(expr->at, new ExprVar(expr->at, pVar->name), expr->right->clone(), expr->no_promotion);
             pMove->podDelete = true;
             pBlock->list.push_back(pLet);
             pBlock->list.push_back(pCall);
@@ -799,21 +799,42 @@ namespace das {
         markNoDiscard(expr->right);
     }
     // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
-    ExpressionPtr InferTypes::inferAssignOperator(const string &opN, ExprOp2 *expr) {
-        if (!hasFunctionNamed(opN)) return nullptr;
-        auto opName = "_::" + opN;
-        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
+    static bool assignOperandResolved(const ExpressionPtr &side) {
+        return side->type && !side->type->isAutoOrAlias() && !side->type->isVoid() && !side->type->isExprType();
+    }
+    static bool assignOperandsResolved(const ExprOp2 *expr) {
+        return assignOperandResolved(expr->left) && assignOperandResolved(expr->right);
+    }
+    ExpressionPtr InferTypes::inferAssignOperator(const string &opName, ExprOp2 *expr) {
+        if (!assignOperandsResolved(expr)) return nullptr;
+        if (!program->library.hasFunctionOrGenericNamed(opName)) return nullptr;
+        auto qualifiedName = "_::" + opName;
+        auto tempCall = new ExprLooksLikeCall(expr->at, qualifiedName);
         tempCall->arguments.push_back(expr->left);
         tempCall->arguments.push_back(expr->right);
         auto ffunc = inferFunctionCall(tempCall, InferCallError::tryOperator);
-        if (ffunc || opName != tempCall->name) {
+        if (ffunc || qualifiedName != tempCall->name) {
             reportAstChanged();
             auto opCall = new ExprCall(expr->at, tempCall->name);
+            opCall->alwaysSafe = expr->alwaysSafe;
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         }
         gc_free_now(tempCall);
         return nullptr;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+    bool InferTypes::userCloneReplacesBuiltin(ExprClone *expr) const {
+        MatchingFunctions fns, generics;
+        vector<TypeDeclPtr> argTypes = { expr->left->type, expr->right->type };
+        findMatchingFunctionsAndGenerics(fns, generics, "_::clone", argTypes, false, true);
+        for (auto & list : { &fns, &generics }) {
+            for (auto & fn : *list) {
+                const bool builtinClone = fn->builtIn || fn->generated || fn->module->name == "$" || fn->module->name == "builtin";
+                if (!builtinClone) return true;
+            }
+        }
+        return false;
     }
     ExpressionPtr InferTypes::visit(ExprCopy *expr) {
         if (auto nExpr = promoteAssignmentToProperty(expr)) {
@@ -861,7 +882,7 @@ namespace das {
                   "", "use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_type);
             if (canRelaxAssign(expr->right)) {
                 reportAstChanged();
-                return new ExprMove(expr->at, expr->left->clone(), expr->right->clone());
+                return new ExprMove(expr->at, expr->left->clone(), expr->right->clone(), expr->no_promotion);
             }
         }
         expr->type = new TypeDecl(); // we return nothing
@@ -967,17 +988,18 @@ namespace das {
             }
         }
         // lets infer clone call (and instance generic if need be)
-        if (!expr->no_promotion) {
-            auto opName = "_::clone";
-            auto tempCall = new ExprLooksLikeCall(expr->at, opName);
-            tempCall->arguments.push_back(expr->left);
-            tempCall->arguments.push_back(expr->right);
-            expr->func = inferFunctionCall(tempCall, InferCallError::tryOperator);
-            if (expr->func || opName != tempCall->name) { // this happens when the clone gets instanced
-                reportAstChanged();
-                auto opCall = new ExprCall(expr->at, tempCall->name);
-                opCall->arguments = das::move(tempCall->arguments);
-                return opCall;
+        bool rawCloneOfCopyable = false;
+        if (expr->no_promotion && expr->left->type && expr->right->type && userCloneReplacesBuiltin(expr)) {
+            rawCloneOfCopyable = expr->left->type->canCopy(expr->right->type->isTemp() || multiContext);
+            if (!rawCloneOfCopyable) {
+                error("raw clone !:= of " + describeType(expr->left->type) + ": an operator := on this pair replaces its built-in clone, and nothing else can clone it; clone the fields instead", "", "",
+                      expr->at, CompilationError::cant_clone);
+                return Visitor::visit(expr);
+            }
+        }
+        if (!rawCloneOfCopyable) {
+            if (auto opClone = inferAssignOperator("clone", expr)) {
+                return opClone;
             }
         }
         // infer
@@ -998,16 +1020,6 @@ namespace das {
                                      expr->right->type, expr->at);
         } else {
             auto cloneType = expr->left->type;
-            if (expr->no_promotion && !cloneType->isHandle() && !cloneType->isString()
-                && !cloneType->canCopy(expr->right->type->isTemp() || multiContext)) {
-                for (auto & userClone : getCloneFunc(cloneType, expr->right->type)) {
-                    if (!userClone->generated) {
-                        error("raw clone !:= of " + describeType(cloneType) + " is the generated field-wise clone, which its operator := replaces; clone the fields instead", "", "",
-                              expr->at, CompilationError::cant_clone);
-                        return Visitor::visit(expr);
-                    }
-                }
-            }
             if (cloneType->isHandle()) {
                 expr->type = new TypeDecl(); // we return nothing
                 return Visitor::visit(expr);

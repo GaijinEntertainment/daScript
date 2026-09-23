@@ -1,7 +1,7 @@
 # AST Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
+`ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`.
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping its scan of the prints in
   `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md` sec.1) or of the module-cache
@@ -68,3 +68,10 @@
   `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the
   same change.** The JIT's DLL cache key folds the codegen version and each function's AST hash,
   never the name an extern binds under, so a cached DLL binds the old name and crashes on the hit.
+
+- **A diff under this folder that builds an `ExprCopy`, `ExprMove` or `ExprClone` the user did
+  not write - a store the compiler manufactures to implement a language mechanism - passes
+  `true` as the node's `no_promo` constructor argument, or copies the flag from the node it
+  rewrites, in the same change (`ARCHITECTURE_INFER.md` sec.5).** A compiler-made copy that
+  runs the user's `operator =` runs it a second time, at a site the user never wrote, and
+  only in the build configuration that manufactures the store.

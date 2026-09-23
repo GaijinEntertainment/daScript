@@ -46,29 +46,29 @@ bitfield public ClipboardFormats {
 
 struct public ClipboardImage {
     //! Canonical transport image: straight-alpha RGBA8, top-to-bottom rows.
-    width : int = 0
-    height : int = 0
-    stride : int = 0
-    rgba8 : array<uint8>
+    width : int = 0     //! Width in pixels.
+    height : int = 0    //! Height in pixels.
+    stride : int = 0    //! Bytes per row, at least width * 4.
+    rgba8 : array<uint8>    //! Pixel bytes, RGBA8 straight alpha, rows top to bottom.
 }
 
 struct public ClipboardContent {
     //! One atomic offer set. Only fields selected by `formats` participate.
-    formats : ClipboardFormats
-    plain_text : string
-    markdown : string
+    formats : ClipboardFormats  //! Which of the representations below take part in the offer.
+    plain_text : string     //! UTF-8 plain text.
+    markdown : string       //! UTF-8 Markdown source.
     //! UTF-8 HTML fragment. Native transports add/remove platform wrappers.
     html : string
-    uri_list : string
-    image : ClipboardImage = ClipboardImage()
+    uri_list : string       //! Newline-separated URIs.
+    image : ClipboardImage = ClipboardImage()   //! The image representation.
 }
 
 struct public ClipboardMemory {
     //! Deterministic in-memory transport for tests, tools, and applications
     //! that need clipboard semantics without touching the desktop session.
-    content : ClipboardContent = ClipboardContent()
-    has_content : bool = false
-    revision : int = 0
+    content : ClipboardContent = ClipboardContent()     //! The offer currently held.
+    has_content : bool = false  //! Whether any offer is held.
+    revision : int = 0          //! Bumped on every write, so a reader can detect a change.
 }
 
 def public clipboard_content_has_data(content : ClipboardContent const) : bool {

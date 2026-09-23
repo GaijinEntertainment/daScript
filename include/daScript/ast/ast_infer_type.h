@@ -297,10 +297,10 @@ namespace das {
 
         MatchingFunctions getCloneFunc(const TypeDeclPtr &left, const TypeDeclPtr &right) const;
 
-        bool hasFunctionNamed(const string &funcName) const;
         MatchingFunctions getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right, MatchingFunctions &generics) const;
 
-        ExpressionPtr inferAssignOperator(const string &opN, ExprOp2 *expr);
+        ExpressionPtr inferAssignOperator(const string &opName, ExprOp2 *expr);
+        bool userCloneReplacesBuiltin(ExprClone *expr) const;
 
         ExpressionPtr promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at);
 

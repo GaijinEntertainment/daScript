@@ -271,12 +271,15 @@ def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.
 `=`, `<-` and `:=` overload on the pair of types (destination first, a `var T&`), and the overload
 the pair selects by the usual rules wins over the built-in copy, move or clone, like `operator .`
 over a field; a compiler-made copy (an inlined return, a yield) stays built-in.
-Initialization uses the same overload: `var x : T = src` lowers to `x <- copy_to_move(src, type<T>)`
-(`<-` init to `move_to_move`, `:=` init to `clone_to_move`); a generic overload (`src : auto(TT)`)
-serves init too. Inside the body, the raw form (`dst !== src`, `dst !<- src`, `dst !:= src`) is
-the built-in operation, so a same-pair overload does not call itself. Exception: a non-copyable
-type's built-in clone is a generated field-wise clone that an `operator :=` on the pair replaces,
-so `!:=` there is a compile error - clone the fields.
+Initialization uses the same overload: `var x : T = src` (a local, a global, a field default, a
+make-struct field) lowers to `copy_to_move(src, type<T>)` (`<-` init to `move_to_move`); a generic
+overload (`src : auto(TT)`) serves init too; a `:=` init reaches `operator :=` for the same type only.
+Not init sites: argument defaults, `return` values, array/tuple/variant literal elements, and every
+compiler-made copy (inlined return, yield, lambda capture) - those are built-in copies. Inside the
+body, the raw form (`dst !== src`, `dst !<- src`, `dst !:= src`) is the built-in operation, so a
+same-pair overload does not call itself; a property setter or `[]=` on the left side still runs.
+Exception: a non-copyable type's built-in clone (generated field-wise, or a builtin generic) is what
+an `operator :=` on the pair replaces, so `!:=` there is a compile error - clone the fields.
 
 ```das
 typedef distinct SoundHandle = uint

@@ -367,6 +367,7 @@ SET(AOT_SUBSET_DASLIB_MODULE_FILES
 
 # Language test module files (libraries required by tests)
 SET(AOT_LANGUAGE_MODULE_FILES
+    tests/language/_assign_operator_mod.das
     tests/language/_distinct_fixture.das
     tests/language/_glob.das
     tests/language/_helper_foo.das

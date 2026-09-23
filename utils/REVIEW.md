@@ -35,8 +35,8 @@ the change names that lane. One arm can hold assertions of both kinds.
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**
 
-**A `[test]` file that covers a tool lives in that tool's directory - a diff that adds one
-anywhere else moves it there, in the same change.**
+**A `[test]` file a diff adds to cover a change to a tool's files lives under that tool's
+directory - a diff that adds one anywhere else moves it there, in the same change.**
 
 **A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what
 identifies one - the fields that decide whether two `.dlim`s are the same image - answers to

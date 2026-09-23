@@ -1205,18 +1205,6 @@ namespace das {
     bool InferTypes::verifyCloneFunc(const MatchingFunctions &fnList, const LineInfo &at) const {
         return verifyAnyFunc(fnList, at);
     }
-    bool InferTypes::hasFunctionNamed(const string &funcName) const {
-        auto hFuncName = hash64z(funcName.c_str());
-        bool found = false;
-        program->library.foreach([&](Module *mod) -> bool {
-            if ( mod->functionsByName.find(hFuncName) || mod->genericsByName.find(hFuncName) ) {
-                found = true;
-                return false;
-            }
-            return true;
-        }, "*");
-        return found;
-    }
     MatchingFunctions InferTypes::getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right, MatchingFunctions &generics) const {
         auto leftRef = new TypeDecl(*left);
         leftRef->ref = true;
@@ -1229,22 +1217,30 @@ namespace das {
     }
     static bool isAssignInitCall ( Expression * init ) {
         if ( !init->rtti_isCall() ) return false;
+        if ( init->generated ) return true;
         auto call = static_cast<ExprCall *>(init);
-        const string & name = !call->func ? call->name
+        string name = !call->func ? call->name
             : call->func->fromGeneric ? call->func->getOrigin()->name : call->func->name;
-        return name == "copy_to_move" || name == "move_to_move"
-            || name == "_::copy_to_move" || name == "_::move_to_move";
+        auto qualifiedAt = name.rfind("::");
+        if ( qualifiedAt != string::npos ) name = name.substr(qualifiedAt + 2);
+        return name == "copy_to_move" || name == "move_to_move" || name == "copy_to_move_ref" || name == "move_to_move_ref"
+            || name == "clone_to_move" || name == "clone_string";
     }
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
     ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
-        if ( init->type && init->type->isAutoOrAlias() ) return nullptr;
+        if ( !init->type || init->type->isAutoOrAlias() || init->type->isVoid() || init->type->isExprType() ) return nullptr;
         if ( isAssignInitCall(init) ) return nullptr;
-        if ( !hasFunctionNamed(opName) ) return nullptr;
+        if ( !program->library.hasFunctionOrGenericNamed(opName) ) return nullptr;
         MatchingFunctions generics;
         auto fns = getAssignFunc(opName, varType, init->type, generics);
         if ( fns.empty() && generics.empty() ) return nullptr;
-        if ( fns.size() > 1 ) return nullptr;
+        if ( fns.size() > 1 || (fns.empty() && generics.size() > 1) ) return nullptr;
         reportAstChanged();
-        auto call = new ExprCall(at, opName == "<-" ? "_::move_to_move" : "_::copy_to_move");
+        const char * helper = opName == "<-"
+            ? (init->type->ref ? "_::move_to_move_ref" : "_::move_to_move")
+            : (init->type->ref ? "_::copy_to_move_ref" : "_::copy_to_move");
+        auto call = new ExprCall(at, helper);
+        call->generated = true;
         call->arguments.push_back(init);
         auto tdecl = new TypeDecl(*varType);
         tdecl->ref = false;

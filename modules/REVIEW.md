@@ -8,10 +8,11 @@
 declarations, and the structs their `@push_constant` members name - applies
 `REVIEW_SHADER_EMITTERS.md` (beside this file) together with its own folder's checklist.**
 
-**A changed `.das` under this folder that an `AOT_*_MODULE_FILES` variable of
-`tests/aot/CMakeLists.txt` (repo root) picks up, and that is not marked `options no_aot`, is
-green on the full `test_aot` lane.** Per-PR CI compiles only the language subset; the full suite
-runs nightly and in `preflight --full`.
+**A diff that changes a `.das` under this folder listed in its module's `*_AOT_FILES` in
+`modules/<M>/CMakeLists.txt`, or named in an `AOT_*_MODULE_FILES` variable of
+`tests/aot/CMakeLists.txt` (repo root), and not marked `options no_aot`, states in the PR body
+that the full `test_aot` lane (`preflight --full`, or the nightly lane) ran green on it.** Per-PR
+CI compiles only the language subset.
 
 **In its own `initDependencies`, a C++ module calls `Module::require("<name>")` for every in-tree
 module its CMake target links, and calls `initDependencies()` on each module that call returns -

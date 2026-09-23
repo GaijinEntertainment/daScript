@@ -2104,21 +2104,11 @@ expr_assign_no_bracket
     |   expr_no_bracket[left] LARROW[loc] make_table_decl[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left, $right); }
     |   expr_no_bracket[left] LARROW[loc] array_comprehension[right] { $$ = new ExprMove(tokAt(scanner,@loc),$left, $right); }
     |   expr_no_bracket[left] CLONEEQU[loc] expr_no_bracket[right] { $$ = new ExprClone(tokAt(scanner,@loc),$left, $right); }
-    |   expr_no_bracket[left] NOTEQUEQU[loc] expr_no_bracket[right] {
-        auto cpy = new ExprCopy(tokAt(scanner,@loc),$left,$right);
-        cpy->no_promotion = true;
-        $$ = cpy;
-    }
-    |   expr_no_bracket[left] NOTLARROW[loc] expr_no_bracket[right] {
-        auto mve = new ExprMove(tokAt(scanner,@loc),$left,$right);
-        mve->no_promotion = true;
-        $$ = mve;
-    }
-    |   expr_no_bracket[left] NOTCLONEEQU[loc] expr_no_bracket[right] {
-        auto cln = new ExprClone(tokAt(scanner,@loc),$left,$right);
-        cln->no_promotion = true;
-        $$ = cln;
-    }
+    |   expr_no_bracket[left] NOTEQUEQU[loc] expr_no_bracket[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] expr_no_bracket[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] make_table_decl[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] array_comprehension[right] { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTCLONEEQU[loc] expr_no_bracket[right] { $$ = new ExprClone(tokAt(scanner,@loc),$left,$right,true); }
     |   expr_no_bracket[left] ANDEQU[loc] expr_no_bracket[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"&=", $left, $right); }
     |   expr_no_bracket[left] OREQU[loc] expr_no_bracket[right]    { $$ = new ExprOp2(tokAt(scanner,@loc),"|=", $left, $right); }
     |   expr_no_bracket[left] XOREQU[loc] expr_no_bracket[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"^=", $left, $right); }

@@ -674,19 +674,23 @@ reference; the second is the source, of any type, a generic ``auto`` included:
     var raw : uint = handle             // operator = (uint&, SoundHandle)
 
 Initialization goes through the same overload: ``var x : T = src`` (a local, ``let`` or ``var``,
-a global, a struct field default, a field in ``S(x = src)``) becomes ``x <- copy_to_move(src, type<T>)``, a fresh ``T`` assigned
-through the operator and moved in, the way a ``:=`` init already resolves through ``clone``;
-``var x : T <- src`` uses ``move_to_move`` and ``operator <-``. A compiler-made copy - an
-inlined function's return, a generator's yield - is always the built-in one, so the operator
-runs once, where you wrote it.
+typed or ``auto``, a global, a struct or class field default, a field in ``S(x = src)`` or
+``new S(x = src)``) becomes ``copy_to_move(src, type<T>)``, a fresh ``T`` assigned through the
+operator that then initializes ``x``; ``var x : T <- src`` uses ``move_to_move`` and
+``operator <-``. A ``:=`` init resolves through ``operator :=`` for the same type only. An
+argument default, a ``return`` value and an element of an array, tuple or variant literal are
+not init sites: they copy with the built-in operation. So does every copy the compiler makes
+for you - an inlined function's return, a generator's yield, a lambda capture - so the operator
+runs once, where you wrote it. In a class, ``def operator = (src : U)`` takes ``self`` as the
+destination.
 
 Inside an operator body, spell the built-in operation with the raw form - ``dst !== src``,
 ``dst !<- src``, ``dst !:= src`` - so an overload on the same pair of types does not call
 itself. The raw forms are listed under :ref:`Original Operator Access <expressions>`. One
-raw form has no fallback: the built-in clone of a non-copyable type (a struct holding a
-container, an array, a table) is a generated field-wise clone, and an ``operator :=`` on that
-exact pair replaces it, so ``dst !:= src`` inside such an operator is a compile error - clone
-the fields instead.
+raw form has no fallback: a non-copyable type (a struct holding a container, an array, a
+table) is cloned by a function the language provides - a generated field-wise clone, or a
+generic of the builtin module - and an ``operator :=`` on that exact pair takes its place, so
+``dst !:= src`` inside such an operator is a compile error - clone the fields instead.
 
 ---------------------------------------------
 Compound assignment operators

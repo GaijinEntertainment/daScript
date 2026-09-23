@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
-`ARCHITECTURE_LINQ.md`, `ARCHITECTURE_CURSOR.md`.
+`ARCHITECTURE_LINQ.md`, `ARCHITECTURE_CURSOR.md`, `ARCHITECTURE_SYNTAX.md`.
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
 diff that changes compile-time AST-building code - a class deriving an `Ast*Annotation` or
 `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time, a
@@ -13,10 +13,10 @@ diff touching `daspkg.das` - the functions a `.das_package` manifest body calls 
 declarations both shader emitters compile - applies `modules/REVIEW_SHADER_EMITTERS.md` (repo
 root) too.
 
-**A changed `.das` here that an `AOT_*_MODULE_FILES` variable of `tests/aot/CMakeLists.txt`
-(repo root) picks up, and that is not marked `options no_aot`, is green on the full `test_aot`
-lane.** Per-PR CI compiles only the language subset; the full suite runs nightly and in
-`preflight --full`.
+**A diff that changes a `.das` here that an `AOT_*_MODULE_FILES` variable of
+`tests/aot/CMakeLists.txt` (repo root) picks up, and that is not marked `options no_aot`, states
+in the PR body that the full `test_aot` lane (`preflight --full`, or the nightly lane) ran green
+on it.** Per-PR CI compiles only the language subset.
 
 **A diff that changes the body of `perf_warning` (`perf_lint.das`), `style_warning`
 (`style_lint.das`), or `lint_error` (`lint.das`) runs the suppression check before the body
