@@ -9,12 +9,11 @@ module _resident_feed shared public
 
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
-require math
 require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
-require _model_tier   // logits_maxdiff, mirror_kv_dtype
+require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 
 //! the served tile arm, so a red names which prefill tile it came from
 def tile_arm_tag() : string {
@@ -35,20 +34,6 @@ def argmax_of(v : array<float>) : int64 {
         }
     }
     return bi
-}
-
-let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
-
-//! the largest |logit| among the live ones: a suppressed id (`SUPPRESSED_LOGIT`) would set a relative bar to nonsense
-def live_maxabs(v : array<float>) : float {
-    var m = 0.0
-    for (x in v) {
-        let a = abs(x)
-        if (a < -SUPPRESSED_LOGIT * 0.1 && a > m) {
-            m = a
-        }
-    }
-    return m
 }
 
 //! the prefill's logits, then each fed step's, through `s`

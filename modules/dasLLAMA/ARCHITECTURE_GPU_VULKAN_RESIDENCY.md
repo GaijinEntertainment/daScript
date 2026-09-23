@@ -31,7 +31,9 @@ cap's 6238 a region asks for more K/V than the weights leave.
 
 **The mirror's context is capped by the device's single-binding range before any byte is
 counted.** Each K/V side binds as one SSBO range, so `seq_cap` is at most `maxStorageBufferRange`
-over the side's bytes per position summed across the layers (`resident_binding_ctx`). The sum is
+over the side's bytes per position summed across the layers that hold rows of their own - a
+shared-KV layer reads its donor's rows and adds none (`resident_binding_ctx`, over the mirror's own
+row sum `resident_kv_row_bytes`). The sum is
 what makes a hybrid right: a recurrent layer's KV width is zero, so the stride counts the
 attention layers alone; read from layer 0 instead - recurrent on Qwen3.5 - the stride is zero,
 the cap is skipped, the plan sizes a mirror the device prepare refuses, and the whole driver

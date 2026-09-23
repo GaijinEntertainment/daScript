@@ -12,8 +12,8 @@ options _dasllama_internal = true
 // Args: <n> <d> (default 4096 12288, the Qwen3.5-9B FFN gate; 5120 17408 is the 27B's); `single` dispatches ONE
 // plane copy - the served size, L2-warm across the chain - so the row reads the dispatch's own floor past its
 // bytes at the streaming rate (the decode's small planes pay it once per GEMV).
-// ATTRIBUTION SWEEP - the `cols` mode: the N-column ruler, the batched decode step's formats (q8, k4, k6, k5, q40,
-// iq4xs) at their served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows,
+// ATTRIBUTION SWEEP - the `cols` mode: the N-column ruler, every format the batched decode step serves (q8 and the
+// thirteen kq leaves) at their served lanes, the one-column class beside the N-column class at 1, 2, 4 and 8 activation rows,
 // each dispatch's wall attributed to its class and width; the last column is the N-column dispatch's wall over N
 // one-column dispatches - under 1 the weight pass is shared, at 1 it is not. The chain alternates two output planes,
 // so consecutive dispatches overlap as the batched step's do. The q8 rows engage the row-pair stamps
@@ -225,7 +225,7 @@ def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double;
 //! take the two-rows-a-subgroup stamps past `g_q8_n2_min_n`, which `main` holds at 0 for the run unless `n2off`),
 //! every dispatch's output unread - timing only
 def private cols_ruler(n, d : int) {
-    let fmts = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)
+    let fmts <- kq_gemv_fmts()
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)) && gemv_cls_ensure_n(int(f)), "vk_gemv_probe: the ruler's gemv class rails must engage on a live device")
     }

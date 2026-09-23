@@ -22,7 +22,10 @@ the dispatch, and whose deciding value the host fixes before it records the disp
 defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
 guard, clamping the index so the guarded work runs on a live value and its result is never
 stored also conforms.** Stamped means the deciding value is a `@template_constant`, or - for a
-class no template instantiates - a module constant the class reads.
+class no template instantiates - a module constant the class reads. A branch on a push-constant
+count inside an `[unroll]` loop whose every live iteration runs the same body is not this defect:
+the driver reads it once per dispatch, and the clamp form folds every dead iteration against a live
+one, so it costs what the branch saves (the N-column GEMV shell's column guard).
 
 **A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
 a time and never checks for a partial last chunk - declares each alignment it assumes on a value
