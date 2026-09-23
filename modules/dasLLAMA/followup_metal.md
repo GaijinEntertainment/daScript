@@ -673,11 +673,11 @@ five kernels taking the row from that table - one dispatch a stage over every ro
 batched stack still has no hybrid form (`eval_batch_` steps them per row when no device driver
 is armed); the same rows shape applies there.
 
-## 23. The E4B batched row reads 0.90 of llama-batched-bench where the E2B reads 0.95
+## 23. The E4B batched row reads 0.93 of llama-batched-bench where the E2B reads 0.95
 
-The M5 board (`performance/records/m5.json`, the `tg128@4` cells of the Metal leg - the E4B das
-row at engine sha cc969d961, the E2B das row at 60b736faa): gemma-4-E4B Q8 259.6 against the
-reference's 290.1 tok/s, while the E2B - the same
+The M5 board (`performance/records/m5.json`, the `tg128@4` cells of the Metal leg; the release 16
+mint at engine sha 027907cc8 reads gemma-4-E4B Q8 268.5 against the reference's 290.2 tok/s - the
+release 15 rows, the E4B at cc969d961 and the E2B at 60b736faa, read 259.6 against 290.1, while the E2B - the same
 E-series batch arm, PLE rows form, shared-KV layers Q-only - reads 454.2 against 479.7 (0.95). The
 flat rows hold on both files (E4B tg128 90.0 vs 81.2). Whatever the E4B pays per step it pays
 only at four rows. The stage split (`harness/batch_rows_probe.das --bs 4 --knockouts --sameslab

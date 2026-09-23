@@ -131,6 +131,27 @@ def test_catalog_scope(t : T?) {
         t |> success(!catalog_known("Official"), "the match is case-sensitive")
         t |> success(!catalog_known("sweep"), "a plausible-but-wrong spelling refuses instead of falling back to a default")
     }
+    t |> run("the cpu legs' batched shape is 1 or more on both axes, or there is no batched row") @(t : T?) {
+        t |> success(npl_cpu_shape_ok(4, 128, 3), "the shipped shape")
+        t |> success(npl_cpu_shape_ok(0, 0, 0), "no batched row - the shape is unread")
+        t |> success(!npl_cpu_shape_ok(4, 0, 3), "a zero prompt would run the das child on the flat -p and the reference on -npp 0")
+        t |> success(!npl_cpu_shape_ok(4, 128, 0), "a zero rep count would fold no reference run into the row")
+        t |> success(!npl_cpu_shape_ok(4, -1, 3), "a negative prompt refuses like a zero one")
+    }
+    t |> run("the batched row's shape follows the leg: the cpu legs' own, the metal leg the flat rows'") @(t : T?) {
+        var cfg = Args()
+        cfg.plen = 256
+        cfg.reps = 2
+        cfg.npl_cpu_plen = 64
+        let cpu = npl_leg_shape(cfg, true)
+        t |> equal(cpu.plen, 64, "a cpu leg's streams start from --npl-cpu-plen")
+        t |> equal(cpu.reps, 3, "a cpu leg's row takes --npl-cpu-reps runs")
+        let metal = npl_leg_shape(cfg, false)
+        t |> equal(metal.plen, 256, "the metal leg's streams start from the flat rows' -p")
+        t |> equal(metal.reps, 2, "the metal leg's row takes the flat rows' -r runs")
+        let shipped = npl_leg_shape(Args(), true)
+        t |> success(shipped.plen == 128 && shipped.reps == 3, "the shipped cpu shape is 128 x 3 (METHODOLOGY.md)")
+    }
 }
 
 [test]

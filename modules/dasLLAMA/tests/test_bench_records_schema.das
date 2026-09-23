@@ -335,6 +335,48 @@ def test_image_chat_rows_pin_the_fixture(t : T?) {
 }
 
 [test]
+def test_batched_rows_carry_the_leg_shape(t : T?) {
+    t |> run("every committed batched row's receipt carries its leg's shape, both engines alike") @(t : T?) {
+        // the cpu legs' 128 x 3 shape and the stock cpu arm's --no-op-offload are what make a
+        // batched row comparable to the rest of the store (METHODOLOGY.md); a stored row shows
+        // them nowhere but its cmd receipt
+        var stores <- list_record_stores("modules/dasLLAMA/performance/records")
+        var rows = 0
+        for (path in stores) {
+            var models : array<BenchModel>
+            t |> success(read_bench_records(path, models), "{path} parses")
+            for (m in models) {
+                for (r in m.runs) {
+                    let das_batched = r.engine == "das" && find(r.cmd, " --npl ") >= 0
+                    let ref_batched = find(r.cmd, "llama-batched-bench") >= 0
+                    if (!das_batched && !ref_batched) {
+                        continue
+                    }
+                    rows++
+                    let at = "{base_name(path)} {m.gguf} {r.engine} {r.backend}/{r.flavor}"
+                    if (r.backend == "metal") {
+                        t |> success(find(r.cmd, "--npl-plen") < 0 && find(r.cmd, "--no-op-offload") < 0,
+                            "{at}: the metal leg's batched row rides the flat rows' shape and carries no cpu-only flag")
+                        t |> success(!ref_batched || find(r.cmd, "-npp 512 ") >= 0,
+                            "{at}: the metal reference's streams start from the flat rows' 512-token prompt")
+                    } else {
+                        t |> success(!das_batched || find(r.cmd, "--npl-plen 128 --npl-reps 3") >= 0,
+                            "{at}: the cpu leg's das child takes the 128 x 3 shape")
+                        t |> success(!ref_batched || find(r.cmd, "-npp 128 ") >= 0,
+                            "{at}: the cpu leg's reference streams start from 128-token prompts")
+                        t |> equal(find(r.cmd, "--no-op-offload") >= 0, r.flavor == "stock",
+                            "{at}: --no-op-offload rides the stock cpu arm alone")
+                    }
+                }
+            }
+            delete models
+        }
+        t |> success(rows > 0, "the sweep found batched rows to gate ({rows})")
+        delete stores
+    }
+}
+
+[test]
 def test_parse_mtmd_image(t : T?) {
     t |> run("the image ref parse: encode lines sum, MTMD_TIMING splits, counts carry") @(t : T?) {
         // fixture text from a live patched-mtmd run (m1, E2B metal) - two noise lines around it
@@ -383,6 +425,13 @@ def test_parse_llama_batched_bench(t : T?) {
         let garbage = "|   512 |    128 |    4 |   2560 |    0.190 | 10778.95 |    0.497 |     n/a |    0.687 |  3726.35 |\n"
         t |> numericEqual(float(llama_batched_bench_tg(garbage, 4l)), 0.0, "a cell that is not a number reads 0")
         t |> equal(llama_batched_bench_sibling("/no/such/dir/llama-bench"), "", "no sibling beside a missing reference = no batched exe")
+    }
+    t |> run("the batched reference row carries the leg's arms after the row's shape, and a dead exe reads no row") @(t : T?) {
+        let br = llama_batched_ref_row("/no/such/dir/llama-batched-bench", "m.gguf", 0, 6, 512l, 128l, 4l, 1,
+            ["--no-op-offload", "--cpu-strict", "1"])
+        t |> success(ends_with(br.cmd, "-npl 4 -fa on --no-op-offload --cpu-strict 1"), "the CPU leg's arms follow the shape: {br.cmd}")
+        t |> success(!empty(br.why), "a run that printed no row names why")
+        t |> numericEqual(float(br.row.tok_s), 0.0, "and its row reads 0")
     }
 }
 

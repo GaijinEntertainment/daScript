@@ -254,9 +254,10 @@ namespace das {
     }
 
 #if (defined(_WIN32) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    // Run a fully-formed linker command via popen, capture combined stdout/
-    // stderr into a 16KB buffer, then log success or a failure diagnostic
-    // (with the captured output) through the daslang Context.
+    // Run a fully-formed linker command via popen, drain it to EOF keeping the
+    // last 16KB of combined stdout/stderr (the diagnostic sits at the end; a
+    // reader that stops early kills the linker with SIGPIPE), then log success
+    // or a failure diagnostic (with the captured tail) through the daslang Context.
     //   cmd          — complete shell command, already includes 2>&1.
     //   artifactPath — output file path (logged on success/failure).
     //   artifactKind — short label for messages ("Library", "Wasm", ...).
@@ -267,18 +268,13 @@ namespace das {
             LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
             return false;
         }
-        static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
-        char buffer[1024], output[MAX_OUTPUT_SIZE];
-        output[0] = '\0';
-        size_t output_length = 0;
+        static constexpr size_t MAX_OUTPUT_SIZE = 16 * 1024;
+        char buffer[1024];
+        string output;
         while ( fgets(buffer, sizeof(buffer), fp) != NULL ) {
-            size_t buffer_length = strlen(buffer);
-            if ( output_length + buffer_length < MAX_OUTPUT_SIZE ) {
-                strcat(output, buffer);
-                output_length += buffer_length;
-            } else {
-                strncat(output, buffer, MAX_OUTPUT_SIZE - output_length - 1);
-                break;
+            output += buffer;
+            if ( output.size() > MAX_OUTPUT_SIZE ) {
+                output.erase(0, output.size() - MAX_OUTPUT_SIZE);
             }
         }
         auto li = LineInfoArg();

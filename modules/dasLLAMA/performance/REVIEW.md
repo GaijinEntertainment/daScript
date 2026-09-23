@@ -25,8 +25,18 @@ renames the file and repoints every `records/<box>.json` row whose `tune_sha` na
 name, in the same change.** The archive is content-addressed; a row left on the old name
 points at a file that no longer exists.
 
+**A diff that rewrites the rows of a `records/<box>.json` file under this folder - a re-mint -
+updates, in the same change, every checked-in number under `modules/dasLLAMA/` cited from a
+replaced row, or makes that citation name the replaced row's `sha` (a row with no `sha`: the
+checkout its provenance names).**
+
 **A diff that writes a run row carrying a `sha` to `records/<box>.json` stamps it with the build
 that timed every cell of the row - re-mint otherwise.**
+
+**A diff that writes a run row carrying a `sha` to `records/<box>.json` names, in the PR body, for
+each box it writes, the commit the timing exe was built at and when it was built** - the bench
+stamps the HEAD checked out when it runs, not the exe's build, so the diff alone cannot show which
+build timed the row.
 
 **A `das` row (a run row whose `engine` is `das`) carrying a `sha` is timed by the released
 `lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha` -

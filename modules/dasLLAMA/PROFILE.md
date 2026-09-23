@@ -116,11 +116,14 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   `LLAMA_BENCH_STOCK`, neon vs the ASR rig's CPU ref build; the cpu arms pin
   `--no-mmproj-offload` - without it the tower silently rides Metal). `-w image` runs just
   those cells; the oracle re-verifies the stored das rows the same way.
-- `-p 512 -n 128 -r 5` are the recorded shapes. Changing them makes the row incomparable to
-  every other row in the store.
+- `-p 512 -n 128 -r 5` are the recorded shapes of the flat rows, and the batched row's streams
+  start from 512-token prompts over 5 reps on Metal, 128-token prompts over 3 reps on the cpu
+  legs (`--npl-cpu-plen` / `--npl-cpu-reps`, both engines alike). Changing them makes the row
+  incomparable to every other row in the store.
 - `--settle <seconds>` (default 12) idles between passes; a dead child's multi-GB map reclaims
   asynchronously and short cells otherwise bench into that churn.
-- `--das-settle <seconds>` (default 180) idles before every das cell - a different mechanism
+- `--das-settle <seconds>` (default 180) idles before every das text and audio cell, and
+  `--image-settle` (default 60) before an image-chat cell - a different mechanism
   than `--settle`. das tuned kernels run near the package power ceiling; on a heat-soaked box
   they under-read with a CLEAN cv (gpt-oss tuned pp512 read -13.6% mid-board; 180 s of idle
   restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell - only

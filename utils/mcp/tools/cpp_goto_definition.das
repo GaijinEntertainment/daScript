@@ -78,7 +78,7 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string { // no
         return make_tool_result("No definition found for '{ident}'")
     }
     // Rank: same file > same dir > shorter path
-    let cursor_rel = make_relative_path(abs_path, get_das_root())
+    let cursor_rel = make_relative_path(abs_path, server_root())
     let cursor_dir = dir_name(cursor_rel)
     sort(candidates) $(a, b) {
         let af = a.file == cursor_rel ? 0 : 1

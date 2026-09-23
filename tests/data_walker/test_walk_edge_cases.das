@@ -90,6 +90,29 @@ def test_walk_lambda(t : T?) {
 
 
 // ============================================================
+// Blocks
+// ============================================================
+
+def walk_block_value(walker : LogWalker?; blk : block<(x : int) : int>) {
+    make_data_walker(walker) $(adapter) {
+        adapter |> walk_data(unsafe(addr(blk)), typeinfo rtti_typeinfo(blk))
+    }
+}
+
+[test]
+def test_walk_block(t : T?) {
+    t |> run("block fields read through the DapiBlock mirror") @(t : T?) {
+        var walker = new LogWalker()
+        walk_block_value(walker) $(x : int) : int {
+            return x + 1
+        }
+        t |> equal(walker.log, "Block:body=true,args=true\n")
+        unsafe { delete walker; }
+    }
+}
+
+
+// ============================================================
 // Edge values
 // ============================================================
 
