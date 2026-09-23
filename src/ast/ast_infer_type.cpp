@@ -1227,6 +1227,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->funcType->firstType = retT;
+            if (expr->funcType->isExprType()) {
+                return Visitor::visit(expr);
+            }
         }
         expr->func = nullptr;
         MatchingFunctions fns;
