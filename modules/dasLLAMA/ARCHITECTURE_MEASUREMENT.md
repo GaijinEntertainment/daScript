@@ -13,7 +13,7 @@ sections 2.21, 2.26 and 2.27. The Vulkan GEMM probe's arms, shapes and alternate
 boundaries, applied to our engine - so `pp` is one batched prefill of `-p` tokens from an empty
 cache per rep and `tg` is `-n` single-token forwards with no logit read, each row one untimed
 warmup plus `-r` timed reps; its `tg128@N` row (`--npl N`, its streams' prompt length `--npl-plen`
-and its rep count `--npl-reps`, each defaulting to the flat rows' -p and -r) mirrors the reference's batched bench
+and its rep count `--npl-reps`, defaulting to the flat rows' -p - 512 when the pp row is off - and -r) mirrors the reference's batched bench
 at that parallel count - N streams served together through the scheduler, device-home where a
 whole-model driver homes that many and host-cached otherwise (the Metal batched driver and the CPU
 batched stack take host-cached rows), the rate their served tokens summed over the step wall. The
