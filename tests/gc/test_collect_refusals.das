@@ -3,6 +3,7 @@ options indenting = 4
 options rtti
 options gc
 options persistent_heap
+options no_aot
 
 require dastest/testing_boost public
 require _stackwalk_common
@@ -51,6 +52,8 @@ def fc_wrap(b : block) {
     invoke(b)
 }
 
+var private g_one = 1
+
 [test]
 def test_collect_chains_stay_walkable(t : T?) {
     t |> run("the control: a same-shape non-carrier wrapper is frameless (fastcall)") @(t : T?) {
@@ -81,7 +84,7 @@ def test_collect_chains_stay_walkable(t : T?) {
         // the invoke edge is outside the static fastcall denial, so fc_wrap has no frame;
         // the walk above it is owner-mismatched, and the position owner check refuses
         // instead of gating locals with fc_wrap's numbering
-        let live = "must_stay_{length("x")}"
+        let live = "must_stay_{g_one}"
         var refused = false
         try {
             fc_wrap() {

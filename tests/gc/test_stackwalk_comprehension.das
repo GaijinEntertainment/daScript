@@ -3,6 +3,7 @@ options indenting = 4
 options rtti
 options gc
 options persistent_heap
+options no_aot
 options disable_auto_inline
 
 require dastest/testing_boost public

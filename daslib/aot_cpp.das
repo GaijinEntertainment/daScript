@@ -597,6 +597,22 @@ class public NoAotMarker : AstVisitor {
     }
 };
 
+def public report_unproven_collect_carriers(program : ProgramPtr; all_modules : bool) {
+    //! After NoAotMarker: reports every used function the AOT build compiles that reaches a heap collection without proof.
+    //! ``all_modules`` covers the foreign functions a standalone context compiles too.
+    let this_module = program.getThisModule
+    get_ptr(program) |> for_each_module() $(mod) {
+        if (!all_modules && mod != this_module) return
+        mod |> for_each_function("") $(fn) {
+            if (fn.flags.noAot || !is_used(program, fn)) return
+            let why = collect_carrier_violation(fn)
+            if (!empty(why)) {
+                macro_error(program, fn.at, "AOT: function '{fn.name}' can reach heap_collect, and {why}; mark it [no_aot] to keep it interpreted")
+            }
+        }
+    }
+}
+
 class public PrologueMarker : AstVisitor {
     //! AST visitor that marks functions requiring a prologue for AOT compilation.
     @do_not_delete func : Function? <- null;
@@ -4780,6 +4796,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                 make_visitor(*marker_vis) $(adapter_marker) {
                     visit(program, adapter_marker);
                 }
+                report_unproven_collect_carriers(program, false)
 
                 var coll = new BlockVariableCollector();
                 make_visitor(*coll) $(adapter_coll) {
@@ -4859,6 +4876,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
             make_visitor(*marker_vis) $(adapter_marker) {
                 visit(program, adapter_marker);
             }
+            report_unproven_collect_carriers(program, false)
 
             var coll = new BlockVariableCollector();
             make_visitor(*coll) $(adapter_coll) {

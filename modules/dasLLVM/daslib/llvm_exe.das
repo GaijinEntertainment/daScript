@@ -1046,6 +1046,11 @@ def public collect_standalone_functions(prog : Program?; strict : bool) : Standa
                     has_no_jit = true
                     to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")
                 }
+                let why = collect_carrier_violation(fun)
+                if (!empty(why)) {
+                    has_no_jit = true
+                    to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' can reach heap_collect, and {why}; a standalone build has no interpreter to fall back to\n")
+                }
                 if (fun.moreFlags.pinvoke) {
                     any_pinvoke = true
                 }

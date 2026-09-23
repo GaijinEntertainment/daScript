@@ -57,7 +57,7 @@ def private collect_if_due() {
 
 //! The exe host. The executable's resolved path locates the bundle: `watchdog.json` and the
 //! discovered program sit beside it, whatever symlink or PATH lookup started it.
-[export]
+[export, unsafe_heap_collect]
 def start(self_pid : int) : bool {
     let argv <- get_command_line_arguments()
     let args <- [for (i in range(1, length(argv))); argv[i]]
@@ -79,6 +79,7 @@ def start(self_pid : int) : bool {
 }
 
 //! the collect the supervisor runs before its stop record: the heaps it reports are the live set
+[unsafe_heap_collect]
 def private collect_now() {
     unsafe(heap_collect(true, false))
 }
@@ -135,7 +136,7 @@ def result() : int {
 }
 
 //! The interpreter host: the program directory is `--cwd`, or the current directory.
-[export]
+[export, unsafe_heap_collect]
 def main() : int {
     let args <- get_cli_arguments()
     var code = 0

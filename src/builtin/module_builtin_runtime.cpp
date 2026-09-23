@@ -168,6 +168,29 @@ namespace das
         };
     };
 
+    struct UnsafeHeapCollectAnnotation : MarkFunctionAnnotation {
+        UnsafeHeapCollectAnnotation() : MarkFunctionAnnotation("unsafe_heap_collect") { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
+            return true;
+        };
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string &) override {
+            return true;
+        };
+        virtual bool finalize(ExprBlock * block, ModuleGroup &, AnnotationArgumentList & args, const AnnotationArgumentList &, string &) override {
+            auto fn = block->inFunction;
+            if ( !fn || !fn->lambda ) return true;
+            for ( auto & ann : fn->annotations ) {
+                if ( ann->annotation == this ) return true;
+            }
+            auto decl = new AnnotationDeclaration();
+            decl->annotation = this;
+            decl->arguments = args;
+            decl->at = block->at;
+            fn->annotations.push_back(decl);
+            return true;
+        }
+    };
+
     // [arch(at="<doc>.md#<anchor>")] — binds this function to a section of an architecture
     // document; the LINT026 pass in utils/lint/main.das resolves the citation against the tree.
     // Same doctrine as the hot_path family above: a citation must not drag its checker into every
@@ -2321,6 +2344,7 @@ namespace das
         addAnnotation(new MacroFnFunctionAnnotation());
         addAnnotation(new CloneFunctionAnnotation());
         addAnnotation(new HotPathFunctionAnnotation("hot_path"));
+        addAnnotation(new UnsafeHeapCollectAnnotation());
         addAnnotation(new HotPathFunctionAnnotation("no_alloc"));
         addAnnotation(new HotPathFunctionAnnotation("no_env"));
         addAnnotation(new HotPathFunctionAnnotation("no_io"));

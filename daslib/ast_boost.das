@@ -1400,3 +1400,134 @@ def getVectorOffset(bt : Type; ident : string) {
     let count = getVectorElementCount(bt)
     return ofs >= count ? -1 : ofs
 }
+
+class private CarrierProof : AstVisitor {
+    //! Walks one carrier and keeps the first reason its frame is not proven clean.
+    why : string
+    statements : table<Expression?>
+    block_depth : int
+    dirty_for_depth : int
+    for_dirty : array<bool>
+
+    def fail(reason : string) {
+        if (empty(why)) {
+            why = reason
+        }
+    }
+    def check_variable(variable : VariablePtr; kind : string) {
+        if (variable._type != null && (variable._type.flags.ref || variable._type.gcFlags != 0)) {
+            fail("{kind} '{variable.name}' of type {describe(variable._type)} holds a value the collector must walk")
+        }
+    }
+    def check_call(expr : Expression?; callee : Function?) {
+        if (callee == null || !callee.moreFlags2.needCallerStackFrame) return
+        if (block_depth != 0) {
+            fail("a block reaches '{callee.name}', and whatever invokes the block has a frame the proof can't see")
+        } elif (dirty_for_depth != 0) {
+            fail("'{callee.name}' is called inside a for loop whose source keeps an iterator the collector can't see")
+        } elif (!(statements |> key_exists(expr))) {
+            fail("the call to '{callee.name}' sits inside an expression, whose temporaries the collector can't see")
+        }
+    }
+    def override preVisitFunctionArgument(fn : FunctionPtr; arg : VariablePtr; last : bool) {
+        check_variable(arg, "argument")
+    }
+    def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; last : bool) {
+        check_variable(arg, "local")
+    }
+    def override preVisitExprLetVariableInit(expr : ExprLet?; arg : VariablePtr; init : ExpressionPtr) {
+        statements |> insert(init)
+    }
+    def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr; last : bool) {
+        check_variable(arg, "block argument")
+    }
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) {
+        statements |> insert(expr)
+    }
+    def override preVisitExprReturn(expr : ExprReturn?) {
+        if (expr.subexpr != null) {
+            statements |> insert(expr.subexpr)
+        }
+    }
+    def override preVisitExprIfThenElse(expr : ExprIfThenElse?) {
+        statements |> insert(expr.cond)
+    }
+    def override preVisitExprWhile(expr : ExprWhile?) {
+        statements |> insert(expr.cond)
+    }
+    def override preVisitExprCopy(expr : ExprCopy?) {
+        if (expr.left.__rtti == "ExprVar") {
+            statements |> insert(expr.right)
+        }
+        check_call(expr, expr.func)
+    }
+    def override preVisitExprMove(expr : ExprMove?) {
+        if (expr.left.__rtti == "ExprVar") {
+            statements |> insert(expr.right)
+        }
+        check_call(expr, expr.func)
+    }
+    def override preVisitExprFor(expr : ExprFor?) {
+        var dirty = false
+        for (src in expr.sources) {
+            if (src._type == null || src._type.gcFlags == 0) continue
+            if (src.__rtti == "ExprVar") {
+                let flags = unsafe(reinterpret<ExprVar?>(src)).varFlags
+                if (!flags.local && !flags.argument && !flags._block) continue
+            }
+            dirty = true
+        }
+        for_dirty |> push(dirty)
+        if (dirty) {
+            dirty_for_depth++
+        }
+    }
+    def override preVisitExprForVariable(expr : ExprFor?; variable : VariablePtr; last : bool) {
+        check_variable(variable, "for-loop variable")
+    }
+    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (for_dirty |> back) {
+            dirty_for_depth--
+        }
+        for_dirty |> pop
+        return <- expr
+    }
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) {
+        block_depth++
+    }
+    def override visitExprMakeBlock(var expr : ExprMakeBlock?) : ExpressionPtr {
+        block_depth--
+        return <- expr
+    }
+    def override preVisitExprCall(expr : ExprCall?) {
+        check_call(expr, expr.func)
+    }
+    def override preVisitExprOp1(expr : ExprOp1?) {
+        check_call(expr, expr.func)
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) {
+        check_call(expr, expr.func)
+    }
+    def override preVisitExprOp3(expr : ExprOp3?) {
+        check_call(expr, expr.func)
+    }
+}
+
+def public collect_carrier_violation(var fn : Function?) : string {
+    //! Empty when ``fn`` cannot reach a heap collection or its frame provably holds nothing the collector walks;
+    //! ``[unsafe_heap_collect]`` skips the proof. Otherwise the reason the proof fails.
+    // carriers are needCallerStackFrame, whose closure can miss a function reaching a collect only through recursion
+    if (fn == null || fn.flags.builtIn || !fn.moreFlags2.needCallerStackFrame || find_annotation(fn, "unsafe_heap_collect") != null) return ""
+    if (fn.moreFlags.addressTaken) return "its address is taken, so it can be called from a frame the proof can't see"
+    if (fn.flags._lambda || fn.flags._generator) return "it is a lambda or generator body, invoked from a frame the proof can't see"
+    if (fn.flags.isClassMethod && !fn.moreFlags.isStaticClassMethod) return "it is a class method, called through a function field from a frame the proof can't see"
+    var proof = new CarrierProof()
+    make_visitor(*proof) $(adapter) {
+        visit(fn, adapter)
+    }
+    let why = proof.why
+    unsafe {
+        delete proof
+    }
+    return why
+}
