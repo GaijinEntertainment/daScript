@@ -106,13 +106,144 @@ class RmsWgBase {
     }
 }
 
+//! the residual step's one text - the add, the row stash and the sum-of-squares pass, then the Q8_0 requant of the normed
+//! row - over accessor overrides: the row kernels read `xs` / `aa` and stash the row in a slab, the q8 GEMV's epilogue reads
+//! `xres` / `y` and re-reads its row; each stamp's `pa` carries the step's fields under the same names
+[ |> template_struct_instance]
+class template ResidualT : RmsWgBase {
+    @template_constant OUT_Q8 : bool = false    //!< the normed row quantized to Q8_0 blocks: `outq` and the block scales `outs` (the requant leaves)
+
+    def abstract width : uint                         //! the row's width
+    def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
+    def abstract xout(i : uint; v : float) : void     //! ... written back
+    def abstract partner(i : uint) : float            //! the add partner's element `i`
+    def abstract stash(k : uint; v : float) : void    //! the row's column `k` kept for the re-read - a slab, or nothing where the row is re-read
+    def abstract stashed(k : uint) : float            //! ... read back
+    def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
+
+    //! the norm weight at `e`, one under `no_norm`
+    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+
+    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
+    def apart(base, j : uint) : float => partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+
+    // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
+    // partner is normed first (its own reduce, the row stash holding it meanwhile)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def accum_row(base : uint) : float {
+        let dim = width()
+        var ainv = 0.0
+        if (pa.pre_on != 0u && pa.add_on != 0u) {
+            var sa = 0.0
+            var j = gl_LocalInvocationID.x
+            while (j < dim) {
+                let a = apart(base, j)
+                stash(j, a)
+                sa += a * a
+                j += 256u
+            }
+            ainv = wg_rms_inv(sa, dim, pa.eps, 0u)
+        }
+        var ss = 0.0
+        var k = gl_LocalInvocationID.x
+        if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
+            while (k < dim) {
+                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
+                xout(base + k, vv)
+                stash(k, vv)
+                ss += vv * vv
+                k += 256u
+            }
+            return ss
+        }
+        let last = dim - 1u
+        while (k < dim) {   //! four columns a round, every load issued before the adds: a one-workgroup row kernel is its load rounds
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            var v0 = xin(base + k)
+            var v1 = xin(base + k1)
+            var v2 = xin(base + k2)
+            var v3 = xin(base + k3)
+            if (pa.add_on != 0u) {
+                let a0 = apart(base, k)
+                let a1 = apart(base, k1)
+                let a2 = apart(base, k2)
+                let a3 = apart(base, k3)
+                v0 = (v0 + a0) * pa.ascale
+                v1 = (v1 + a1) * pa.ascale
+                v2 = (v2 + a2) * pa.ascale
+                v3 = (v3 + a3) * pa.ascale
+            }
+            xout(base + k, v0)
+            stash(k, v0)
+            ss += v0 * v0
+            if (k + 256u < dim) {
+                xout(base + k1, v1)
+                stash(k1, v1)
+                ss += v1 * v1
+            }
+            if (k + 512u < dim) {
+                xout(base + k2, v2)
+                stash(k2, v2)
+                ss += v2 * v2
+            }
+            if (k + 768u < dim) {
+                xout(base + k3, v3)
+                stash(k3, v3)
+                ss += v3 * v3
+            }
+            k += 1024u
+        }
+        return ss
+    }
+
+    // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
+    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, width(), pa.eps, 1u)
+
+    //! the row's norm inverse - one under `no_norm` (the reduce still runs: its barrier is every thread's)
+    def row_inv(ss : float) : float {
+        let inv = rms_inv(ss)
+        return pa.no_norm != 0u ? 1.0 : inv
+    }
+
+    //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0`: 8 lanes per 32-block, 32 blocks per pass
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def quant32(qb0 : uint; inv : float) {
+        static_if (OUT_Q8) {
+            let tid = gl_LocalInvocationID.x
+            let nblk = width() / 32u
+            let lane8 = tid % 8u
+            var b = tid / 8u
+            while (b < nblk) {
+                let base = b * 32u + lane8 * 4u
+                let v0 = nw(base) * (stashed(base) * inv)
+                let v1 = nw(base + 1u) * (stashed(base + 1u) * inv)
+                let v2 = nw(base + 2u) * (stashed(base + 2u) * inv)
+                let v3 = nw(base + 3u) * (stashed(base + 3u) * inv)
+                let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+                let d = m / 127.0
+                let id = d != 0.0 ? 1.0 / d : 0.0
+                if (lane8 == 0u) {
+                    outs[qb0 + b] = d
+                }
+                let qb = qb0 * 32u + base
+                outq[qb] = q8_quant1(v0, id)
+                outq[qb + 1u] = q8_quant1(v1, id)
+                outq[qb + 2u] = q8_quant1(v2, id)
+                outq[qb + 3u] = q8_quant1(v3, id)
+                b += 32u
+            }
+        }
+    }
+}
+
 // the add+rmsnorm core: x/a/w members, the row stash, and the shared workgroup reduce — leaves
 // add their output members + kernels
 [ |> template_struct_instance]
-class template ArBase : RmsWgBase {
+class template ArBase : ResidualT {
     @template_constant OUT_F32 : bool = false   //!< the normed row stored to `yo` as floats (the store leaves)
     @template_constant OUT_F16 : bool = false   //!< ... to `outh` as halves
-    @template_constant OUT_Q8 : bool = false    //!< ... quantized to Q8_0 blocks: `outq` and the block scales `outs` (the requant leaves)
     @ssbo @binding = 0 xs : array<float>   // x rows, the residual stream — updated in place
     @ssbo @binding = 1 aa : array<float>   // the add partner rows
     @ssbo @binding = 2 wn : array<float>   // the norm weight row
@@ -123,8 +254,17 @@ class template ArBase : RmsWgBase {
     @push_constant pa : ArArgs
     @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
 
-    //! the norm weight at `e`, one under `no_norm`
-    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+    def override width : uint => pa.dim
+    def override xin(i : uint) : float => xs[i]
+    def override xout(i : uint; v : float) : void {
+        xs[i] = v
+    }
+    def override partner(i : uint) : float => aa[i]
+    def override stash(k : uint; v : float) : void {
+        row[k] = v
+    }
+    def override stashed(k : uint) : float => row[k]
+    def override pre_partner(base, k : uint) : float => row[k]
 
     //! the normed row out in the leaf's float form from `base`: four columns a round, every load issued before the stores (a one-workgroup row kernel is its load rounds)
     def store_out(base : uint; inv : float) {
@@ -166,113 +306,7 @@ class template ArBase : RmsWgBase {
         }
     }
 
-    //! the normed row quantized out of the row stash into Q8_0 blocks from block `qb0`: 8 lanes per 32-block, 32 blocks per pass
-    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def quant32(qb0 : uint; inv : float) {
-        static_if (OUT_Q8) {
-            let tid = gl_LocalInvocationID.x
-            let nblk = pa.dim / 32u
-            let lane8 = tid % 8u
-            var b = tid / 8u
-            while (b < nblk) {
-                let base = b * 32u + lane8 * 4u
-                let v0 = nw(base) * (row[base] * inv)
-                let v1 = nw(base + 1u) * (row[base + 1u] * inv)
-                let v2 = nw(base + 2u) * (row[base + 2u] * inv)
-                let v3 = nw(base + 3u) * (row[base + 3u] * inv)
-                let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-                let d = m / 127.0
-                let id = d != 0.0 ? 1.0 / d : 0.0
-                if (lane8 == 0u) {
-                    outs[qb0 + b] = d
-                }
-                let qb = qb0 * 32u + base
-                outq[qb] = q8_quant1(v0, id)
-                outq[qb + 1u] = q8_quant1(v1, id)
-                outq[qb + 2u] = q8_quant1(v2, id)
-                outq[qb + 3u] = q8_quant1(v3, id)
-                b += 32u
-            }
-        }
-    }
-
-    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
-    def apart(base, j : uint) : float => aa[base + j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
-
-    // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
-    // partner is normed first (its own reduce, the row stash holding it meanwhile)
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
-    def accum_row(base : uint) : float {
-        var ainv = 0.0
-        if (pa.pre_on != 0u && pa.add_on != 0u) {
-            var sa = 0.0
-            var j = gl_LocalInvocationID.x
-            while (j < pa.dim) {
-                let a = apart(base, j)
-                row[j] = a
-                sa += a * a
-                j += 256u
-            }
-            ainv = wg_rms_inv(sa, pa.dim, pa.eps, 0u)
-        }
-        var ss = 0.0
-        var k = gl_LocalInvocationID.x
-        if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
-            while (k < pa.dim) {
-                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], row[k] * ainv, xs[base + k]) * pa.ascale : xs[base + k]
-                xs[base + k] = vv
-                row[k] = vv
-                ss += vv * vv
-                k += 256u
-            }
-            return ss
-        }
-        let last = pa.dim - 1u
-        while (k < pa.dim) {   //! four columns a round, every load issued before the adds: a one-workgroup row kernel is its load rounds
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            var v0 = xs[base + k]
-            var v1 = xs[base + k1]
-            var v2 = xs[base + k2]
-            var v3 = xs[base + k3]
-            if (pa.add_on != 0u) {
-                let a0 = apart(base, k)
-                let a1 = apart(base, k1)
-                let a2 = apart(base, k2)
-                let a3 = apart(base, k3)
-                v0 = (v0 + a0) * pa.ascale
-                v1 = (v1 + a1) * pa.ascale
-                v2 = (v2 + a2) * pa.ascale
-                v3 = (v3 + a3) * pa.ascale
-            }
-            xs[base + k] = v0
-            row[k] = v0
-            ss += v0 * v0
-            if (k + 256u < pa.dim) {
-                xs[base + k1] = v1
-                row[k1] = v1
-                ss += v1 * v1
-            }
-            if (k + 512u < pa.dim) {
-                xs[base + k2] = v2
-                row[k2] = v2
-                ss += v2 * v2
-            }
-            if (k + 768u < pa.dim) {
-                xs[base + k3] = v3
-                row[k3] = v3
-                ss += v3 * v3
-            }
-            k += 1024u
-        }
-        return ss
-    }
-
     def normed(k : uint; inv : float) : float => wn[pa.woff + k] * (row[k] * inv)
-
-    // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
-    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, pa.dim, pa.eps, 1u)
 }
 
 // ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
@@ -298,12 +332,6 @@ class template ArRqBase : ArBase {
     def rq_row(rbase, qb0 : uint) {
         let ss = accum_row(rbase)
         quant32(qb0, row_inv(ss))
-    }
-
-    //! the row's norm inverse - one under `no_norm` (the reduce still runs: its barrier is every thread's)
-    def row_inv(ss : float) : float {
-        let inv = rms_inv(ss)
-        return pa.no_norm != 0u ? 1.0 : inv
     }
 }
 
@@ -9426,7 +9454,8 @@ struct GemvArArgs {
 //! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue: a subgroup a row, eight rows a
 //! workgroup, the rows into a `@coherent` y, the last workgroup to arrive running `ArRq`'s step and resetting the counter
 [vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvAr : RmsWgBase {
+class Q8GemvAr : ResidualT {
+    override OUT_Q8 = true
     @ssbo @binding = 0 wq4 : array<uint4>          // weight quant words, vec4 view
     @ssbo @binding = 1 wsh : array<float16>        // per-block f16 weight scales
     @ssbo @binding = 2 xqw : array<uint>           // the GEMV's activation quant words
@@ -9440,98 +9469,24 @@ class Q8GemvAr : RmsWgBase {
     @push_constant pa : GemvArArgs
     @workgroup arrived : uint[1]
 
-    //! the norm weight at `e`, one under `no_norm`
-    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+    def override width : uint => pa.d
+    def override xin(i : uint) : float => xres[i]
+    def override xout(i : uint; v : float) : void {
+        xres[i] = v
+    }
+    def override partner(i : uint) : float => y[i]
+    def override stash(k : uint; v : float) : void {}   //! the finished row is re-read from `xres`
+    def override stashed(k : uint) : float => xres[k]
+    def override pre_partner(base, k : uint) : float => apart(base, k)
 
-    //! the finished row's element `j`, its bias row added under `abias_on`
-    def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
-
-    //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
+    //! the residual step over the finished rows, `ArRqBase.rq_row`'s text on the workgroup's 256 threads
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
-    def epilogue {   // nolint:STYLE038 — one row pass: the sandwich column, the four-column round, the requant
-        let tid = gl_LocalInvocationID.x
-        var ainv = 0.0
-        if (pa.pre_on != 0u && pa.add_on != 0u) {
-            var sa = 0.0
-            var j = tid
-            while (j < pa.d) {
-                let a = ya(j)
-                sa += a * a
-                j += 256u
-            }
-            ainv = wg_rms_inv(sa, pa.d, pa.eps, 0u)
-        }
-        var ss = 0.0
-        var k = tid
-        if (pa.pre_on != 0u) {   //! the sandwich form, a column a round
-            while (k < pa.d) {
-                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], ya(k) * ainv, xres[k]) * pa.ascale : xres[k]
-                xres[k] = vv
-                ss += vv * vv
-                k += 256u
-            }
-        }
-        let last = pa.d - 1u
-        while (pa.pre_on == 0u && k < pa.d) {   //! four columns a round, every load issued before the adds
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            var v0 = xres[k]
-            var v1 = xres[k1]
-            var v2 = xres[k2]
-            var v3 = xres[k3]
-            if (pa.add_on != 0u) {
-                let a0 = ya(k)
-                let a1 = ya(k1)
-                let a2 = ya(k2)
-                let a3 = ya(k3)
-                v0 = (v0 + a0) * pa.ascale
-                v1 = (v1 + a1) * pa.ascale
-                v2 = (v2 + a2) * pa.ascale
-                v3 = (v3 + a3) * pa.ascale
-            }
-            xres[k] = v0
-            ss += v0 * v0
-            if (k + 256u < pa.d) {
-                xres[k1] = v1
-                ss += v1 * v1
-            }
-            if (k + 512u < pa.d) {
-                xres[k2] = v2
-                ss += v2 * v2
-            }
-            if (k + 768u < pa.d) {
-                xres[k3] = v3
-                ss += v3 * v3
-            }
-            k += 1024u
-        }
-        let inv0 = wg_rms_inv(ss, pa.d, pa.eps, 1u)
-        let inv = pa.no_norm != 0u ? 1.0 : inv0
+    def epilogue {
+        let inv = row_inv(accum_row(0u))
         memoryBarrierBuffer()   //! the row's writes reach the lanes that quantize them
         barrier()
-        let nblk = pa.d / 32u
-        let lane8 = tid % 8u
-        var b = tid / 8u
-        while (b < nblk) {
-            let base = b * 32u + lane8 * 4u
-            let v0 = nw(base) * (xres[base] * inv)
-            let v1 = nw(base + 1u) * (xres[base + 1u] * inv)
-            let v2 = nw(base + 2u) * (xres[base + 2u] * inv)
-            let v3 = nw(base + 3u) * (xres[base + 3u] * inv)
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let dq = m / 127.0
-            let id = dq != 0.0 ? 1.0 / dq : 0.0
-            if (lane8 == 0u) {
-                outs[b] = dq
-            }
-            outq[base] = q8_quant1(v0, id)
-            outq[base + 1u] = q8_quant1(v1, id)
-            outq[base + 2u] = q8_quant1(v2, id)
-            outq[base + 3u] = q8_quant1(v3, id)
-            b += 32u
-        }
-        if (tid == 0u) {
+        quant32(0u, inv)
+        if (gl_LocalInvocationID.x == 0u) {
             cnt[0] = 0u
         }
     }
