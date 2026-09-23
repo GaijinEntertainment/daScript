@@ -1702,3 +1702,63 @@ module) is independent and can land any time - it is pure structure.
     benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
     arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b
     2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` on the same file the same hour.
+88. **The kq kernel twins the tier still carries as separate bodies.** In
+    `dasllama_vulkan_classes.das`: the decode GEMV family's thirteen one-column / N-column stamp
+    pairs and its five per-class `stage_grid` methods are one `class template` over the shell
+    choice and the grid size (a `@template_gate`d `gridw` sized by a template constant, one
+    staging loop); the batch tile's `stage_w` bodies re-derive the GEMV leaves' `k3_quad`,
+    `k2_quad`, `k6_quad`, the K5 deposit and the grid formats' index-and-sign gathers - free
+    functions serve both families, as `iq4_word` does; the cm2 decodes spell the ksigns parity
+    nine times where `ksign7` exists, `q51_hbits` is `k5_dep`, and `Mx4Cm2T.decode` recomputes what
+    `mx4_dec4` returns; `DnStepFused.run`'s out-norm reduce is `RmsWgBase.wg_rms_inv`; the add+rms
+    leaves' six output stores, the two Q8_0 combine twins (whose shared `outs` sits at binding 10
+    on one and 7 on the other, the binding-shift defect of `REVIEW_GPU_KERNEL_CLASSES.md`), the
+    requant / act+requant four, the two decode combines, the two embedding gathers, `Q8Batch`
+    against the `KqBatchBase` shell, and `Q40Cm2T` / `Iq4nlCm2T` and `K4Cm2T` / `Iq4xsCm2T` on the
+    nibble value are each one template or one base shell. Every fold ships with its stamps'
+    SPIR-V byte-identical to the pre-fold tree (`DASLLAMA_VK_SPV_DUMP`), or the kernel cell that
+    pins the change; the unmeasured forks - the 8-row and 4-row flash Q-tiles, `RouterGemm` against
+    `DnBaGemm`, `MmBatchT`'s two tile edges, the hand-unrolled register blocks of `DnScan` and the
+    h128 batched attention - take a probe row first.
+89. **The Vulkan host code's twin walks.** `rq_enc` moves to `dasllama_vulkan_common.das` with an
+    `inbase` parameter and the prefill's three requant sites call it; a one-shot command helper
+    (reset, begin, the block, end, `submit_wait`) replaces the twelve hand-written brackets in the
+    decode and the seams (`run_cmd_sync` cannot serve them: it never waits on a pending transfer
+    copy); the deltanet smalls staging, the arena GEMV set (twenty `gemv_cls_set` sites over arena
+    planes) and the stack GEMV set (eleven) each take one helper; the one-row / N-row token submits
+    share one core over `nrows` and one landing; `read_kv` is `read_kv_bulk` at one row; the two
+    deltanet slot walks take a predicate; the plan and the upload read ONE `resident_planes(t)`
+    list in `dasllama_gpu_resident.das` (today two hand-written lists that the loader keeps in
+    step), the plan summing its bytes and the upload placing its blocks; `rdec_rows_ok` /
+    `rdec_blocks_for` and the arena's twins move down into `dasllama_kqformat.das`; `upload_zeros`
+    records `cmd_fill_zero` instead of pushing a host array; `find_host_mem` and `nonowning_buf`
+    take non-panicking and `uint64` forms in dasVulkan's `find_memory_type` and
+    `vk_value_to_boost`; the two host f32-to-f16 copies in the decode take `cvt_f32_to_f16` once
+    their rounding is shown equal; the one-row sets that bind a single row of a per-row plane
+    (`set_ar_rq_stamp`'s rq arms, `s_gu`, `s_wo_ar`, `s_down_ar`) bind the whole buffer, which the
+    whole-buffer rule of `REVIEW_GPU_VULKAN.md` already asks; and `gemv_cls_has_n` reads
+    `fmt == int(KqFmt.q8) || kq_sb(fmt)`.
+90. **The test rigs' private copies.** `logits_maxabs`, `logits_maxdiff`, `ids_equal`,
+    `read_wav_pcm16_mono` and `llama2c_dir` have copies in eleven test files and one harness
+    (`_model_tier.das` holds the originals); `hash_word` sits in `test_vulkan_kernels.das` and the
+    probe fixture, and needs a vulkan-free home both can require; `_vkd_oracles.das`'s mx4 and q51
+    row oracles are the engine's `dot_mx4q8_scalar` and `dot_q51q8_scalar`, its iq2 oracles rebuild
+    the ksigns byte the `KSIGNS_IQ2XS` table holds, its `actrq_oracle` is `requant_oracle` over the
+    act row, and its seven GEMV-float / f16-GEMM oracle pairs share one weight decode; in
+    `test_vulkan_kernels.das` the Q8_0 requant bar is written eight times (a `q8_blocks_bar`), the
+    submit-and-read-back tail 101 times where `vkd_run_copy` exists, the coopmat variant ladder once
+    where `q8_batch_cls_*` exists, the RMS-norm, NEOX rope and softcap oracles where `rmsnorm`,
+    `rope_scaled_neox_tab` and `softcap_exp` exist (the softcap needs a vulkan-free home), the
+    dn_family step records where `dn_step_rows_run` exists, and the f32-mirror / f16-mirror cell
+    pairs (`rope_b_pair`, `kv16_writers`, `kv16_readers` against `test_vkd_rope_family` and the
+    `da_attn` cells), the dn_ba pair, the fused residual epilogue pair and the thirteen per-format
+    tile plane builders each fold on their one axis; `test_gpu_resident_hybrid.das` re-implements
+    `_resident_feed.das` and needs a prefill-only hook there to reuse it.
+91. **Rulings the dedup sweep needs before four folds.** Whether the grid codebooks may live once
+    in `dasllama_kqformat.das` for both kernel homes (`ARCHITECTURE_GPU.md` sec.1.5 places tables
+    per home; today the same bytes sit in three files); whether `ARCHITECTURE_GPU_VULKAN_NROW.md`
+    sec.2.2ap's "word for word" means one shared text or two held copies (`ArRqBase.nw` and
+    `Q8GemvAr.nw`); whether the nine cm2 e stamps byte-identical to their m stamps on the BK-64
+    formats may alias them under `check_cm2_ladder_sets`; and whether the nine per-format tile-class
+    ladders in `dasllama_vulkan_prefill.das` may be generated from the `<Fmt>Cm2T` list the gate
+    already derives (item 63).
