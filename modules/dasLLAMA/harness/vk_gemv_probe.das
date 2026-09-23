@@ -225,8 +225,7 @@ def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double;
 //! take the two-rows-a-subgroup stamps past `g_q8_n2_min_n`, which `main` holds at 0 for the run unless `n2off`),
 //! every dispatch's output unread - timing only
 def private cols_ruler(n, d : int) {
-    let fmts = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs,
-        KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)
+    let fmts <- kq_gemv_fmts()
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)) && gemv_cls_ensure_n(int(f)), "vk_gemv_probe: the ruler's gemv class rails must engage on a live device")
     }

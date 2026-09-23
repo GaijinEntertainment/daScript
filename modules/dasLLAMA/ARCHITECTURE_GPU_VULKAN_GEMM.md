@@ -279,7 +279,9 @@ and the fold's four terms - a scale and a block-sum coefficient a 16-weight half
 skipped where a leaf's fold has none, `fold_reads_bsum`) and the family's one `blk_fold` dots the
 decoded block against an activation block, so the N-column form pays a block's codebook gathers,
 grid lookups and bit deposits once for every column where the one-column form pays them once a
-block; the two forms share the fold's every `mad`, so their sums match bit for bit. A lane takes
+block; the two forms compile one `blk_fold` text and add its result to their accumulator as a
+plain product (a fused multiply-add there would part from the CPU oracle's `mad`, a multiply then
+an add), so their sums match bit for bit. A lane takes
 one 32-block per step (`gemv_shell`), four steps straight-line so
 four blocks' loads are in flight before a sum waits on one (a rolled loop issued a block's loads
 after the last block's sum), the guarded single step as the tail; a row of nb blocks over 32

@@ -7,10 +7,10 @@ require dastest/testing_boost public
 require _resident_regions
 
 // Qwen3.8-27B i1-IQ3_S (large tier, DASLLAMA_PARITY_FULL=1): the batched-step cells of the rig on a deltanet hybrid whose
-// every attention, FFN and recurrent plane is IQ3_S - the grid format's N-column leaf under the rows form at every
-// site the one-row command runs its one-column class, with the Q8_K feed at every recurrent head. The rows hold the
-// split bar with the one-token-off control, not bit for bit (`../followup_vulkan.md` item 75). Skips off the JIT,
-// without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
+// FFN planes and attention q/k/o planes are IQ3_S (the recurrent qkv and the attention v planes Q4_K, the classifier
+// Q6_K) - the grid format's N-column leaf under the rows form beside the k4 leaf, with the Q8_K feed at every recurrent
+// head. The rows hold the split bar with the one-token-off control, not bit for bit (`../followup_vulkan.md` item 75).
+// Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "Qwen3.8-27B.i1-IQ3_S.gguf"
 
 [test]

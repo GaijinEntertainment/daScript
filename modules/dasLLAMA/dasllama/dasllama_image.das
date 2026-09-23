@@ -877,7 +877,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                 }
             } static_elif (typeinfo is_dim(field)) {
                 for (el, i in field, count()) {
-                    let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                    let fmt = kq_fmt_of_slot(i)
                     if (!kq_sb(fmt)) {
                         continue
                     }
@@ -1268,7 +1268,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
             }
         } static_elif (typeinfo is_dim(field)) {
             for (el, i in field, count()) {
-                let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
+                let fmt = kq_fmt_of_slot(i)
                 if (!kq_sb(fmt)) {
                     continue
                 }

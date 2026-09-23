@@ -13,6 +13,7 @@ require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
+require daslib/enum_trait   // kq_gemv_fmts walks the enum
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -10839,11 +10840,11 @@ class Mx4GemvGu : Mx4GemvBase {
     }
 }
 
-// ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
+// ===== the K-quant decode GEMV family: one base shell, per-format block decodes =====
 // ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block).
-// The formats share the region walk, the lane->block map, and the subgroup fold — only the
-// block's dot + scale fold differ, so each format is an override of blk_contrib and the
-// devirtualizer inlines the family back to standalone kernels at emission.
+// The formats share the region walk, the lane->block map, the fold and the subgroup reduce — only
+// the block's decode into packed int8 quads and fold terms differs, so each format is an override
+// of blk_decode and the devirtualizer inlines the family back to standalone kernels at emission.
 
 let private KQC_LOW = 0x0F0F0F0Fu   // nibble mask
 let private KQC_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
@@ -10921,17 +10922,20 @@ class KqGemvBase {
         return float4(dm.x * sc, -dm.y * mn, dm.x * sc, -dm.y * mn)
     }
 
-    def blk_fold(wl, wh : uint4; sc : float4; xsb, blk : uint) : float {
+    //! the decoded block's dot against activation block `xsb`; the one-column and N-column forms both add its result to
+    //! their accumulator as a plain product, so the two modules compile one text and sum bit for bit - a `mad` here
+    //! would be a fused multiply-add the CPU oracle's `mad` (a multiply, then an add) does not reproduce
+    def blk_fold(wl, wh : uint4; terms : float4; xsb, blk : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
         let xl = xq4[xb4]
         let xh = xq4[xb4 + 1u]
         let dlo = sdot4(wl.x, xl.x) + sdot4(wl.y, xl.y) + sdot4(wl.z, xl.z) + sdot4(wl.w, xl.w)
         let dhi = sdot4(wh.x, xh.x) + sdot4(wh.y, xh.y) + sdot4(wh.z, xh.z) + sdot4(wh.w, xh.w)
-        var f = mad(sc.z, float(dhi), sc.x * float(dlo))
+        var f = mad(terms.z, float(dhi), terms.x * float(dlo))
         if (fold_reads_bsum()) {
             let blo = sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES)
             let bhi = sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES)
-            f = mad(sc.w, float(bhi), mad(sc.y, float(blo), f))
+            f = mad(terms.w, float(bhi), mad(terms.y, float(blo), f))
         }
         return axs[xsb] * f
     }
@@ -10939,8 +10943,8 @@ class KqGemvBase {
     def blk_contrib(wsb, blk, xsb : uint) : float {
         var wl = uint4(0u)
         var wh = uint4(0u)
-        let sc = blk_decode(wsb, blk, wl, wh)
-        return blk_fold(wl, wh, sc, xsb, blk)
+        let terms = blk_decode(wsb, blk, wl, wh)
+        return blk_fold(wl, wh, terms, xsb, blk)
     }
 
     //! this lane's share of one row's dot: the row's `nsb` superblocks from weight superblock `wsb0` against the
@@ -11036,10 +11040,10 @@ class KqGemvBase {
                 let xsb = xsb0 + b0 / 8u
                 var wl = uint4(0u)
                 var wh = uint4(0u)
-                let sc = blk_decode(wsb, blk, wl, wh)
+                let terms = blk_decode(wsb, blk, wl, wh)
                 for [unroll] (c in range(8)) {
-                    if (uint(c) < pa.ncols) {
-                        acc[c] += blk_fold(wl, wh, sc, xsb + uint(c) * nsb, blk)
+                    if (uint(c) < pa.ncols) {   //! uniform on the push constant; the clamp form folds every dead column against a live row and costs 1.6x at four columns
+                        acc[c] += blk_fold(wl, wh, terms, xsb + uint(c) * nsb, blk)
                     }
                 }
                 b0 += lanes_per_row
@@ -11347,7 +11351,12 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
 //! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert GEMVs (q51, mx4) have no N form, so a dense plane in one steps a row at a time
-def gemv_cls_has_n(fmt : int) : bool => fmt != int(KqFmt.q51) && fmt != int(KqFmt.mx4)
+def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
+
+//! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
+def kq_gemv_fmts() : array<KqFmt> {
+    return <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
+}
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu

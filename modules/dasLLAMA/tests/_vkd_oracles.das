@@ -287,7 +287,7 @@ def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
 
 // Q3_K GEMV float oracle, INDEPENDENT of the class bit-math: w = d * sc16 * (q - 4) straight off
 // the plane bytes (qs lane at shift 2*(blk%4), hmask bit blk, k6's 5-word scale row), x off the
-// Q8_K bytes — the witness a wrong lane/mask pick in k3_dot cannot pass while staying self-consistent
+// Q8_K bytes — the witness a wrong lane/mask pick in k3_quad cannot pass while staying self-consistent
 def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                          regions : array<uint>; n, d, nreg : int) : array<float> {
     var y : array<float>
@@ -1111,7 +1111,7 @@ def mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb0, nb : 
 def gemv_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
     var y_ref : array<float>
     y_ref |> resize(d * ncol_max)
-    if (f == KqFmt.q8) {   //! the q8 GEMM oracle over one record of `ncol_max` activation rows lands column c's row at c x d + row, the walk's block order
+    if (f == KqFmt.q8) {   // the q8 GEMM oracle over one record of `ncol_max` activation rows lands column c's row at c x d + row, the walk's block order
         var rec <- [0u, 0u, uint(ncol_max), 0u]
         q8_gemm_oracle(wqh, wsh, xqh, xsh, rec, 1, n, d, y_ref)
         delete rec

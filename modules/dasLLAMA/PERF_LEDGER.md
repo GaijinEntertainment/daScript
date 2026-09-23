@@ -2340,7 +2340,8 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   (1.82 against Vulkan, 0.84 against CUDA), flat 130 / 61 / 127; Qwen3-30B-A3B UD-IQ2_XXS 237 +/- 1
   / 91 / 359 (2.61 / 0.66), flat 143 / 59 / 135. gemma-4-26B-A4B UD-IQ3_XXS fits no plan on this
   card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
-  the served weights alone to 15.4 GB; the per-op rails serve 16 summed) where the reference
+  the served weights alone to 15.4 GB - a plan figure that tallied each routed layer's dense shared
+  expert twice, the low-format N-row arc's section below; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
   0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
   expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
@@ -2639,20 +2640,28 @@ the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
 Instruments as the hybrid rows section above: the pod (RTX PRO 4500, Linux), `daslang -jit
 benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2 arm
 under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1
-DAS_JOBQUE_THREADS=16`, the untuned tier; llama.cpp b10660's prebuilt Vulkan `llama-batched-bench
--c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` the same hour, `external`, its
-second run of a file (the first compiles its pipelines inside the measurement: i1-IQ3_S read 57.9
-cold and 67.3 warm at four streams); every ratio `tg128@4` against the reference's `S_TG` at `-npl 4`
-[direction-grade - two processes]; a lever's pair is two commits in two processes [direction-grade -
-two commits]. The 5060 Ti rows (driver 616.56, Windows, the desktop holding 1.8 GB of the 16 GB)
-take the same command lines, the bench pinning its batched row's context so the plan homes four
-regions at 660 positions; the local llama.cpp is the same b10660 Vulkan build. The N-column ruler is
-`harness/vk_gemv_probe.das cols 5120 17408` (the 27B's FFN gate shape), its last column an N-column
-dispatch's wall over N one-column dispatches. The carriers are the three Qwen3.8-27B files whose
-dense planes sit in sub-4-bit formats (i1-IQ3_S: every plane IQ3_S; UD-Q3_K_XL and UD-IQ4_XS: Q3_K,
-Q2_K, IQ3_S, IQ3_XXS, IQ2_S, IQ2_XS, IQ2_XXS and IQ4_NL mixed across the planes, the UD-IQ4_XS's bulk
-IQ4_XS), 64 layers with attention every fourth, so a position costs 64 KB of f16 mirror and a region
-151 MB of DeltaNet state.
+DAS_JOBQUE_THREADS=16`, the untuned tier, every figure below the mean of the three repetitions with
+its standard deviation; llama.cpp b10660's prebuilt Vulkan `llama-batched-bench -c 4096 -b 2048
+-ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` the same hour, `external`, its second run of a
+file; every ratio `tg128@4` against the reference's `S_TG` at `-npl 4` [direction-grade - two
+processes]; a lever's pair is two commits in two processes [direction-grade - two commits]. The
+5060 Ti rows (driver 616.56, Windows, the desktop holding 1.8 GB of the 16 GB) take the same command
+lines, the bench pinning its batched row's context so the plan homes four regions at 660 positions;
+the local llama.cpp is the same b10660 Vulkan build. The N-column ruler is
+`daslang -jit harness/vk_gemv_probe.das -- cols 5120 17408` (the 27B's FFN gate shape) on the pod
+under the same environment, the untuned tier in cm2 mode, its last column an N-column dispatch's
+wall over N one-column dispatches, each wall the mean of its dispatch ring [direction-grade - two
+commits].
+
+The reference's first run of a file compiles its pipelines inside the measurement: i1-IQ3_S read
+57.9 cold and 67.3 warm at four streams. The carriers are the three Qwen3.8-27B files whose dense
+planes sit in sub-4-bit formats: i1-IQ3_S's FFN and attention q/k/o planes are IQ3_S, its recurrent
+qkv and attention v planes Q4_K and its classifier Q6_K (440 IQ3_S tensors, 65 Q4_K, 1 Q6_K);
+UD-Q3_K_XL mixes IQ4_XS (156 tensors, its most common), Q8_0 (98), Q4_K through Q6_K (69) and the
+eight low-bit formats Q3_K, Q2_K, IQ3_S, IQ3_XXS, IQ2_S, IQ2_XS, IQ2_XXS and IQ4_NL across the
+planes; UD-IQ4_XS is IQ4_XS in bulk with the same eight mixed in. All three have 64 layers with
+attention every fourth, so a position costs 64 KB of f16 mirror and a region 151 MB of DeltaNet
+state.
 
 - **The eight N-column leaves alone (commit 181398621: `KqGemv<Fmt>N` for k3, k2, iq3s, iq3xxs,
   iq4nl, iq2s, iq2xs, iq2xxs on the shell's per-column `blk_contrib`), tg128@4 ours cm2 /
@@ -2671,8 +2680,10 @@ IQ4_XS), 64 layers with attention every fourth, so a position costs 64 KB of f16
   columns k4 0.18, iq4xs 0.22, iq3s 0.27, iq2s 0.33; the one-column rates within 1% of before
   (iq4xs 196 us against 202). The rows: i1-IQ3_S 137.1 +/- 0.3 / 67.3 (**2.04**), flat 48.8;
   UD-Q3_K_XL 123.8 +/- 0.2 / 78.0 (**1.59**), flat 44.6; UD-IQ4_XS 118.2 +/- 0.2 / 84.9 (**1.39**),
-  flat 41.7; pp512 1475 / 1559 / 1634. The kernel family, N-column and gate-up cells hold at the
-  tip on both boxes: the N form's every column is the one-column class's word for word.
+  flat 41.7 (flat tg128 48.80 +/- 0.02, 44.58 +/- 0.07, 41.66 +/- 0.07); pp512 1475 +/- 5 / 1559
+  +/- 4 / 1634 +/- 7. The KHR arm the same hour: tg128@4 137.3 +/- 0.1 / 124.0 +/- 0.2 / 118.0 +/-
+  0.2, pp512 1394 +/- 5 / 1377 +/- 5 / 1394 +/- 4. The kernel family, N-column and gate-up cells
+  hold at the tip on both boxes: the N form's every column is the one-column class's word for word.
 - **The 5060 Ti at the lever-1 tip, ours cm2 tg128@4 / tg128 with the reference's rows beside:**
   i1-IQ3_S homes (11526 MB image, 165 MB mirror, 230 MB scratch): 89.5 +/- 0.9 / 28.3 (56.5 before
   the lever) against llama.cpp's 2.5 / 2.6 - the reference pages the 12.6 GB file on this card at

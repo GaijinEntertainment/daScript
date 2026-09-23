@@ -392,10 +392,10 @@ def test_resident_binding_ctx(t : T?) {
         dense.config.n_kv_heads = 8l
         dense.config.head_size = 128l
         t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
-        for (k in range64(16l)) {
-            dense.kv_src[2l * k + 1l] = 2l * k
+        for (k in range64(8l)) {   //! every fourth layer shares the K/V of the layer below it: eight sharers, twenty-four owners
+            dense.kv_src[4l * k + 1l] = 4l * k
         }
-        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 131071l, "a shared-KV layer adds no row of its own: the cap divides by the sixteen rows the mirror allocates")
+        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 87381l, "a shared-KV layer adds no row of its own: the cap divides by the twenty-four rows the mirror allocates, not the thirty-two layers")
         delete dense
         var recr <- shell(4l, 0xFul)
         t |> equal(resident_binding_ctx(recr, KVDtype.f16, bcap), 0l, "no attention layer reads 0")

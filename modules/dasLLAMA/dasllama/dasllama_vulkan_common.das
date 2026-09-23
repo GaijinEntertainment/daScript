@@ -3376,7 +3376,7 @@ def private alloc_cmd_in(pool : CommandPool) : VkCommandBuffer {
     return raw
 }
 
-//! a one-shot command (the KV readback rails) its caller frees through `free_transient_cmd`: registering it in model_cmds would grow that list per hydration until the next model drop
+//! a one-shot command (the KV readback rails, the seams, the arena's per-call chains) its caller frees through `free_transient_cmd` after its fence: registering it in model_cmds would grow that list per call until the next model drop
 def alloc_transient_cmd : VkCommandBuffer => alloc_cmd_in(g_gpu.pool)
 
 def free_transient_cmd(var raw : VkCommandBuffer) {

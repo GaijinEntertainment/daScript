@@ -519,15 +519,15 @@ def private fill_plan_room(var p : ResidentPlan) {
     p.others_bytes = room.others
 }
 
-//! 0 = no cap known, or no attention layer.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 //! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
 
+//! the positions one mirror side's binding holds under the device's range cap; 0 = no cap known, or no attention layer
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
-    let mirror_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
-    return (bcap > 0l && mirror_row_bytes > 0l) ? bcap / mirror_row_bytes : 0l
+    let side_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
+    return (bcap > 0l && side_row_bytes > 0l) ? bcap / side_row_bytes : 0l
 }
 
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's)
@@ -2418,7 +2418,7 @@ def attn_chain_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
     name_list_add(names, c.pre_post_norm, "pre/post norms")
     name_list_add(names, c.attn_out_bias, "attention output bias")
-    name_list_add(names, !(c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)), "interleaved (non-NEOX) rope")
+    name_list_add(names, !(c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)), "interleaved (non-NEOX) rope")   //! a partial rotary is NEOX per the loader, so it passes unroped
     return names
 }
 
@@ -2741,7 +2741,6 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.attn)
     if (at_want) {
         let c = t.config
-        // partial rotary implies NEOX per the loader, so the rope test admits it unroped
         let arch_ok = empty(attn_chain_unserved_features(c))
         var at_marked = 0l
         var at_stop = false

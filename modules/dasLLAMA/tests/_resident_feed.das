@@ -13,7 +13,7 @@ require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
-require _model_tier   // logits_maxdiff, mirror_kv_dtype
+require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 
 //! the served tile arm, so a red names which prefill tile it came from
 def tile_arm_tag() : string {

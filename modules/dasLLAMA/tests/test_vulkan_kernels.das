@@ -1600,11 +1600,10 @@ let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
-    var ok = true
     for (f in KQ_LEAF_FMTS) {
-        ok = ok && invoke(ensure, f)
+        if (!invoke(ensure, f)) return false
     }
-    return ok
+    return true
 }
 
 [test]
@@ -1619,11 +1618,8 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
-            let nfmt = 13
-            let fmts = KQ_LEAF_FMTS
-            for (fi in range(nfmt)) {
-                let fmt = fmts[fi]
-                let sb_words = int(kq_qsb(kq_fmt_of_code(fmt)) / 4l)
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let nwsb = rows * nsb                       // region r's weights at r*d*nsb
                 let wq_words = nwsb * sb_words
                 let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
@@ -2600,11 +2596,8 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let wgs1 = ((cnt1 + 31) / 32) * wtiles
             let wgs = wgs0 + wgs1
             let totsb = 2 * d * nsb   // superblocks across both regions
-            let nfmt = 13
-            let pipes = KQ_LEAF_FMTS
-            for (fi in range(nfmt)) {
-                let fmt = pipes[fi]
-                let sb_words = int(kq_qsb(kq_fmt_of_code(fmt)) / 4l)
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 var wqh : array<uint>
                 var wsh : array<uint>
                 var xqh : array<uint>
@@ -2664,6 +2657,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                     var sc = set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2),
                         fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes),
                         fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    nan_sentinel_upload(yd2, y_bytes)   //! a row the tile never stores keeps the sentinel, never a zeroed page near the oracle's value
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -7346,6 +7340,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
                     var s_cls = set_q8_gemv_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd2),
                         fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes),
                         fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    nan_sentinel_upload(yd2, y_bytes)   //! a row the GEMV never stores keeps the sentinel
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -7490,10 +7485,12 @@ def test_vkd_gemv_ncol(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            for (f in fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs,
-                    KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
+            let fmts <- kq_gemv_fmts()
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the family's roster is q8 and the thirteen kq leaves")
+            for (f in fmts) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
+                gemv_ncol_arm(t, f, 4096, 90)   //! a wider reduction at a row count off the lane splits' multiples
             }
         } else {
             t |> skip("dasVulkan not present")

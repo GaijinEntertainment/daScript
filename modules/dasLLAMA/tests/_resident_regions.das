@@ -101,7 +101,10 @@ def private hold_within(t : T?; got, want, control : array<float>; what : string
 
 def private load_regions(t : T?; file : string; regions : int64) : Model {
     set_gpu_resident_regions_(regions)
+    let route0 = gpu_want_resident()   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
+    set_gpu_resident_route(true)
     var tr <- load_model_(path_join(models_dir(), file), QuantMode.q8)
+    set_gpu_resident_route(route0)
     set_gpu_resident_regions_(1l)
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
@@ -886,6 +889,8 @@ def cell_driver_reports(t : T?; file : string) {
         t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
         let held = gpu_tier_status_().vram_bytes
         t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
+        let weights_held = held - two.kv_bytes
+        t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
         delete tr
     }
     t |> run("a load under a switched-off whole-model route says it was never attempted") @(t : T?) {

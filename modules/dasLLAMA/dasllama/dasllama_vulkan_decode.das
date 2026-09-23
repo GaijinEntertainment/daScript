@@ -3140,7 +3140,7 @@ def private rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescript
 def private span_meta_base(woff : int64; si : int; fmt : int) : uint {
     let unit = fmt_unit(fmt)
     let rel = woff - g_gpu.stacks[si].base
-    assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned expert plane offset")
+    assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned expert or classifier plane offset")
     return uint(rel / unit)
 }
 
