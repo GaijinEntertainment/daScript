@@ -18,13 +18,18 @@ def info_raw(msg : string | #) {
     print("{msg}")
 }
 
+//! a per-file progress record: printed at DAS_LOG_LEVEL=info and below, dropped at the default floor
 def info(msg : string | #) {
-    return if (empty(get_env_variable("DAS_DEBUG_LEVEL")))
     if (!verbose) {
-        print("{msg}\n")
+        to_log(LOG_INFO, "{msg}\n")
     } else {
-        print("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n")
+        to_log(LOG_INFO, "{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n")
     }
+}
+
+//! the run's verdict line: always printed, whatever the log floor
+def verdict(msg : string | #) {
+    print("{msg}\n")
 }
 
 

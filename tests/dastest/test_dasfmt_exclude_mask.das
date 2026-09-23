@@ -19,9 +19,10 @@ def test_dasfmt_exclude_mask(t : T?) {
     t |> success(fwrite(path_join(root, "clean.das"), "options gen2\n\n[export]\ndef main \{\n    var x = 1\n    print(\"\{x\}\\n\")\n\}\n"), "wrote formatted file")
     t |> success(fwrite(path_join(root, "build/gen.das"), "options gen2\n\n[export]\ndef main \{\n    var x=1\n    print(\"\{x\}\\n\")\n\}\n"), "wrote unformatted generated file")
 
-    set_env_variable("DAS_DEBUG_LEVEL", "INFO")
+    let log_level = get_env_variable("DAS_LOG_LEVEL")
+    set_env_variable("DAS_LOG_LEVEL", "info")
     defer() {
-        set_env_variable("DAS_DEBUG_LEVEL", "")
+        set_env_variable("DAS_LOG_LEVEL", log_level)
     }
     var out = ""
     let rcNoMask = run_and_capture([exe, tool, "--", "--path", root, "--verify"], out, 120.0)
