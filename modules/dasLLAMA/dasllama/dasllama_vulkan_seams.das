@@ -46,7 +46,7 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         if (add) {
             upload_region_at(g_gpu.ar_a_dev, 0l, addr<uint8 const?>(a[0]), bytes)
         }
-        var raw = alloc_cmd()
+        var raw = alloc_transient_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
@@ -56,13 +56,15 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
+        free_transient_cmd(raw)
         memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
         // x is the residual stream: read the updated row back too
-        var raw2 = alloc_cmd()
+        var raw2 = alloc_transient_cmd()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         cmd_copy_whole(raw2, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
         vk_check(vkEndCommandBuffer(raw2), null)
         submit_wait(raw2)
+        free_transient_cmd(raw2)
         memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
     }
 }
@@ -108,7 +110,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
-        var raw = alloc_cmd()
+        var raw = alloc_transient_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
@@ -122,6 +124,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
+        free_transient_cmd(raw)
         memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
         memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
         memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
@@ -157,7 +160,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
         tm.cnt = uint(cnt)
         tm.mirbase = 0u   //! the seam's mirror starts at 0: the attention adds the row's base to its push
-        var raw = alloc_cmd()
+        var raw = alloc_transient_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
@@ -168,6 +171,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
         submit_wait(raw)
+        free_transient_cmd(raw)
         memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
     }
 }

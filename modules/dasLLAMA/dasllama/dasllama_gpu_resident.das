@@ -519,17 +519,15 @@ def private fill_plan_room(var p : ResidentPlan) {
     p.others_bytes = room.others
 }
 
-//! 0 = no cap known, or no attention layer.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 //! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
 
-def resident_binding_ctx(c : Config; dt : KVDtype; bcap : int64) : int64 {
-    var side = 0l
-    for (l in range64(c.n_layers)) {
-        side += kv_row_bytes(dt, layer_kv_dim(c, l))
-    }
-    return (bcap > 0l && side > 0l) ? bcap / side : 0l
+//! the positions one mirror side's binding holds under the device's range cap; 0 = no cap known, or no attention layer
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
+    let side_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
+    return (bcap > 0l && side_row_bytes > 0l) ? bcap / side_row_bytes : 0l
 }
 
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's)
@@ -582,7 +580,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         if (t.wo_offs[l] >= 0l) {
             p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
         }
-        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l) {   //! a pure MoE carries no dense FFN offsets at all
+        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l && !layer_is_moe(t, l)) {   // a routed layer's dense triple (gemma-4's shared expert) is tallied with its routed block above, as the upload places it once
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
@@ -2420,7 +2418,7 @@ def attn_chain_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
     name_list_add(names, c.pre_post_norm, "pre/post norms")
     name_list_add(names, c.attn_out_bias, "attention output bias")
-    name_list_add(names, !(c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)), "interleaved (non-NEOX) rope")
+    name_list_add(names, !(c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)), "interleaved (non-NEOX) rope")   //! a partial rotary is NEOX per the loader, so it passes unroped
     return names
 }
 
@@ -2485,7 +2483,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     }
     var plan : ResidentPlan
     if (resident_try) {
-        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
+        let bctx = resident_binding_ctx(t, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
         seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
         plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
@@ -2743,10 +2741,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.attn)
     if (at_want) {
         let c = t.config
-        // partial rotary implies NEOX per the loader, so the rope test admits it unroped
-        let arch_ok = (!c.v_norm && !c.attn_sinks && c.attn_logit_softcap == 0.0
-            && !c.pre_post_norm && !c.attn_out_bias
-            && (c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)))
+        let arch_ok = empty(attn_chain_unserved_features(c))
         var at_marked = 0l
         var at_stop = false
         var at_skips : WalkSkips

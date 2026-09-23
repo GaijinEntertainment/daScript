@@ -1323,20 +1323,14 @@ def vk_moe_init : bool {
         xpci.queueFamilyIndex = uint(xfam)
         xpci.flags.reset_command_buffer = true
         g_gpu.xfer_pool <- create_command_pool(g_gpu.device, xpci)
-        var xai = VkCommandBufferAllocateInfo()
-        xai.commandPool = boost_value_to_vk(g_gpu.xfer_pool)
-        xai.level = VkCommandBufferLevel.PRIMARY
-        xai.commandBufferCount = 1u
+        g_gpu.xfer_cmd = alloc_cmd_in(g_gpu.xfer_pool)
         var tci = VkSemaphoreTypeCreateInfo()
         tci.semaphoreType = VkSemaphoreType.TIMELINE
         tci.initialValue = 0ul
         var sci = VkSemaphoreCreateInfo()
-        unsafe {
-            vk_check(vkAllocateCommandBuffers(dev_raw(), xai, addr(g_gpu.xfer_cmd)), null)
-            sci.pNext = addr<void?>(tci)
-            vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
-            vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
-        }
+        sci.pNext = unsafe(addr<void?>(tci))
+        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
+        vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
         to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
     }
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
@@ -2965,14 +2959,6 @@ def hz_set_bits(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint) {
     g_set_bits[intptr(set_)] = sb
 }
 
-def hz_set_bits(set_ : VkDescriptorSet; gbits : uint[6]) {
-    var sb : SetBits
-    for (i in range(6)) {
-        sb.b[i] = gbits[i]
-    }
-    g_set_bits[intptr(set_)] = sb
-}
-
 def hz_pipe_register(pipe : Pipeline; kernel : string) {
     if (!key_exists(g_kernel_access, kernel)) {
         panic("dasLLAMA vulkan tier: no derived access for kernel {kernel}")
@@ -3390,7 +3376,7 @@ def private alloc_cmd_in(pool : CommandPool) : VkCommandBuffer {
     return raw
 }
 
-//! a one-shot command (the KV readback rails) its caller frees through `free_transient_cmd`: registering it in model_cmds would grow that list per hydration until the next model drop
+//! a one-shot command (the KV readback rails, the seams, the arena's per-call chains) its caller frees through `free_transient_cmd` after its fence: registering it in model_cmds would grow that list per call until the next model drop
 def alloc_transient_cmd : VkCommandBuffer => alloc_cmd_in(g_gpu.pool)
 
 def free_transient_cmd(var raw : VkCommandBuffer) {
