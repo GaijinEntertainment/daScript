@@ -247,7 +247,7 @@ file.
    tier on the scalar `sdot4` fallback - slower than the portable backend's auto-vectorized
    `dot_q8q8`; whether the `[init]` backend gates should also consult the exe's feature rail is a
    stage-2 question, alongside the same shape under AOT. Gates: `tests/jit_tests/aarch64_neon.das`
-   (hardware vs reference per intrinsic), the baseline probe in `tests/jit_tests/exe_host_cpu.das`
+   (hardware vs reference per intrinsic), the baseline probe in `modules/dasLLVM/tests/exe_host_cpu.das`
    (red on the pre-fix emitter), and `test_exe_smoke` under `DAS_TUNE_POLICY=reference`.
 
 **Exit:** a `-DDAS_LLVM_DISABLED=ON` tree compiles the engine and its suite; a `-jit` run with

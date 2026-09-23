@@ -79,7 +79,7 @@ its target flags *with* host features and targets the host machine; the decision
 in `run_jit` (`exe_host_cpu`) before the flag pass and reused at `init_jit_target_flags`,
 `init_jit` and `write_exe`. Flags and machine must never diverge - host-F16C flags on a
 generic machine lower fp16 to libcalls msvcrt does not link. Witness: `g_target_host_features`
-plus the `llvm_code_selftest::host_features` probe in `tests/jit_tests/exe_host_cpu.das`.
+plus the `llvm_code_selftest::host_features` probe in `modules/dasLLVM/tests/exe_host_cpu.das`.
 
 ## The fat mode
 

@@ -54,6 +54,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT: build + verify + optimize the module (print it with --jit-dump), then stop — no artifact written, no DLL loaded, no jitted function installed; the program runs interpreted. The cross-emission smoke rail (e.g. --jit-target=x86_64-unknown-linux-gnu with DAS_JIT_X64_FORCE_FEATURES)."
     compile_only : Option<bool>
 
+    @clarg_name = "jit-dump-to"
+    @clarg_doc = "JIT: write the --jit-dump IR to this file instead of the log"
+    dump_ir_path : Option<string>
+
     @clarg_name = "jit-runtime-lib"
     @clarg_doc = "JIT: explicit path to libDaScript_runtime.a (wasm cross-compile); overrides auto-locate under web/output/lib/"
     runtime_lib : Option<string>
