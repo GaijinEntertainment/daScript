@@ -458,7 +458,7 @@ def operator =(var dst : Keyed&; src : Keyed) {
 [test]
 def test_init_resolution_matches_assignment(t : T?) {
     t |> run("two generic overloads resolve by specialization at init as at assignment") @(t : T?) {
-        var arr <- [1, 2, 3]
+        let arr <- [1, 2, 3]
         var w : Wide = arr
         t |> equal(w.tag, 5)
         w = 4

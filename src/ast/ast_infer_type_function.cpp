@@ -1219,6 +1219,10 @@ namespace das {
     ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
         if ( !init->type || init->type->isAutoOrAlias() || init->type->isVoid() || init->type->isExprType() ) return nullptr;
         if ( isPromotedInitCall(init) ) return nullptr;
+        if ( init->rtti_isVar() ) {
+            auto initVar = static_cast<ExprVar *>(init)->variable;
+            if ( initVar && initVar->generated ) return nullptr;
+        }
         if ( !program->library.hasFunctionOrGenericNamed(opName) ) return nullptr;
         MatchingFunctions generics;
         auto fns = getAssignFunc(opName, varType, init->type, generics);

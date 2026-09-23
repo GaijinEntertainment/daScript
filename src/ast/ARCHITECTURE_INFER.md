@@ -27,7 +27,12 @@ split-ternary arm stores, a `let` the stack allocator relocates into an assignme
 generator's yield and loop-finally return stores, loop counters and control flags, a
 generator-local store whose initializer the compiler already promoted, and the copy into a
 lambda or generator capture (`visitMakeStructureField` skips a generated value). A generated
-variable's initializer is never promoted. The generated field-wise clone of a struct, tuple or
+variable's initializer is never promoted, and neither is an initializer that reads a generated
+variable - the inliner's result temp, which stands where a promoted call already ran the
+operator; the helpers are `[inline]`, so in a function body the init reads that temp after
+inlining, while a global or field-default initializer, which no inliner visits, keeps the call:
+the lint that refuses an `[inline]` call there exempts a call marked `generated`. The
+generated field-wise clone of a struct, tuple or
 variant clones each field with `:=`, which reaches the field type's own operators. Code a macro
 emits is user code: nothing marks a `qmacro`-built store as compiler-made.
 
