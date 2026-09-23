@@ -196,13 +196,13 @@ def private das_args(exe : string; rest : array<string>) : array<string> {
     return <- das_child_args(exe, g_jit_bench, rest)
 }
 
-//! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
 //! The cpu legs' batched shape is one shape for both engines: the das child reads a non-positive
 //! `--npl-plen` / `--npl-reps` as unset and takes the flat rows' -p / -r, while the reference exe
 //! takes the raw value as its -npp and its run count - so a batched row asks 1 or more of each
 def npl_cpu_shape_ok(npl, plen, reps : int) : bool
     => npl <= 1 || (plen >= 1 && reps >= 1)
 
+//! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
 //! the box stocks - the sweep form). False = a spelling the caller refuses.
 def catalog_known(catalog : string) : bool {
     return catalog == "official" || catalog == "all"
