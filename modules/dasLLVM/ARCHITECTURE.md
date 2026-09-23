@@ -209,22 +209,22 @@ correctly; the `llvm_boost` wrapper's `inbounds` default rides that builder.
 
 `math::exp`, `sin`, `cos`, `tan`, `exp2`, `log2`, `log`, `pow` and the three hyperbolics on a
 float VECTOR type are emitted as inline IR by the `build_vector_*` emitters in
-`llvm_jit_intrin.das`, all behind one gate (`vmath_poly_gate`). The default lowering is
-`@llvm.<op>.vNf32`, which scalarizes to N libm calls on any target without a vector libm -
-Darwin-ARM and most others. Each emitter replaces that call with the SAME polynomial the
-interpreter and AOT already run (vecmath, `include/vecmath/`), written as generic vector IR
-(`fmuladd`, `trunc`, `roundeven`, `fptosi.sat`, integer masks and selects) that the backend lowers
-to one NEON instruction apiece - so the three rails agree instead of merely being close; the
-one family that cannot mirror vecmath is sec.8.3. sin and cos mirror `v_sincos` (quadrant =
-round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan mirrors
-`v_tan` (4/pi octants, three reduction constants, its own minimax - not sin over cos); exp2,
-log2, log and pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`; pow takes the rail on
-every target, since `SimPolicy` runs the estimate for it. The gate is otherwise aarch64 by
-measurement, not by portability: on x64 the always-computed guard branches of these kernels
-cost more than they save. Scalar float and double keep the libm intrinsic on every target -
-libm is correctly rounded and one scalar call carries no scalarization penalty. exp keeps the
-ggml polynomial it had and differs from the interpreter by 3.9e-6 relative; routing it through
-the exp2 emitter is the one change that would make it exact.
+`llvm_jit_intrin.das`. The default lowering is `@llvm.<op>.vNf32`, which scalarizes to N libm
+calls on any target without a vector libm - all of ours. Each emitter replaces that call with
+the SAME polynomial the interpreter and AOT already run (vecmath, `include/vecmath/`), written
+as generic vector IR (`fmuladd`, `trunc`, `roundeven`, `fptosi.sat`, integer masks and selects)
+that the backend lowers to one vector instruction apiece - so the three rails agree instead of
+merely being close (sec.8.3 is the one family that cannot). sin and cos mirror `v_sincos`
+(quadrant = round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan
+mirrors `v_tan` (4/pi octants, three reduction constants, its own minimax); exp2, log2, log and
+pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`. Two gates: log2 and log take the
+rail on every target (`vmath_vector_float`) - masks and Horner steps with no guard branch; on
+x64 `log2(float4)` runs in 2.4 ns per vector against 15-20 ns for four scalarized `log2f` calls
+(`log` 2.8 against 17-19) - and pow always did, riding that log2 plus exp2's clamp; the rest
+is aarch64-only (`vmath_aarch64_poly_gate`) by measurement, since the range guards of `exp2`,
+`sin`, `cos` and `tan` cost more on x64 than the scalar calls they replace. Scalar float and double keep the libm intrinsic on every target: libm is correctly
+rounded and one scalar call carries no scalarization penalty. exp keeps its ggml polynomial
+(3.9e-6 relative off the interpreter); routing it through the exp2 emitter would make it exact.
 
 ### 8.1 Fusion is part of the polynomial {#vector-poly-fusion}
 
@@ -252,17 +252,17 @@ JIT answers NaN for `exp(NaN)` where the interpreter answers inf.
 
 ### 8.2 log2 is an estimate, and its specials are not IEEE {#vector-log2-estimate}
 
-`build_vector_log2` mirrors vecmath's `v_log2_est_p5` (`dag_vecMath_common.h`): the exponent
-field gives the integer part, the mantissa is forced into [1,2) and fed to a degree-5 minimax,
-and the `p*(m-1)` shape is what makes log2(1) exactly 0. It is an ESTIMATE, materially looser
-than libm - about 3.7e-5 relative at its worst, just below x == 1 where that combine cancels -
-and the interpreter and AOT have always used it, so the JIT matching it is the point: the
-tiers agreeing is the property that wins, and a better log2 goes into vecmath for every tier,
-never into one rail. `math::log` is this estimate scaled by ln2 and `math::pow` is
-`exp2(log2_est(x) * y)`, so both inherit the error, pow amplified by |y|. The estimate reads
-the exponent through a mask and therefore never produces -inf or NaN: log2(0) is -127 and
-log2(-x) == log2(|x|). The dropped sign travels into `pow` with the estimate - the base reaches the
-exponent as `log2_est(|x|)` - so `pow(-2, 3)` is +8, not libm's -8, and it is +8 on every tier.
+`build_vector_log2` mirrors vecmath's `v_log2_est_p5`: the exponent field gives the integer part,
+the mantissa is forced into [1,2) and fed to a degree-5 minimax, and the `p*(m-1)` shape is what
+makes log2(1) exactly 0. It is an ESTIMATE (3.7e-5 relative at worst, just below x == 1 where that
+combine cancels) the interpreter and AOT have always used, so the JIT matching it is the point: the
+tiers agreeing is the property that wins, and a better log2 goes into vecmath for every tier, never
+into one rail. `math::log` is it scaled by ln2 and `math::pow` is `exp2(log2_est(x) * y)`, so both
+inherit the error, pow amplified by |y|. The estimate reads the exponent through a mask and never
+produces -inf or NaN: log2(0) is -127 and log2(-x) == log2(|x|); `pow_est(-2, 3)` is +8 for the
+same reason, and `pow` puts the sign back for an odd integer exponent (`v_pow_signed`, the
+emitter's XOR) to answer libm's -8 - all on every tier and target, since the three take the rail
+everywhere; a caller that needs IEEE's -inf and NaN has the scalar `log2`.
 `tests/llvm_vector_math.das` pins the bounds and the special values.
 
 ### 8.3 The hyperbolics have no interpreter twin {#vector-hyperbolic-divergence}

@@ -30,10 +30,11 @@ there.
   script.** A child writes its caches relative to the cwd otherwise, which is the tree two
   concurrent runs share.
 
-- **A diff that adds or changes a branch keyed on the target triple, or changes code only a
-  cross target's arm of such a branch reaches, records in its PR body the
-  `-exe --jit-target=<triple>` build for that target that exercised the behavior.** The suite runs on the host, so a target-triple branch is checked
-  only by the artifact built for that target.
+- **A diff that changes which arm of a branch keyed on the target triple a non-host triple
+  selects - a key added, changed or removed - or changes code only a cross target's arm reaches,
+  records in its PR body the `-exe --jit-target=<triple>` build for that target that exercised
+  the behavior; the host's own triple is discharged by the module-owned suite.** The suite runs
+  on the host, so any other target's arm is checked only by the artifact built for it.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) or `run_jit_linked` (`daslib/llvm_jit_link.das`) executes - its
@@ -170,9 +171,11 @@ there.
   sign-alternating chain moves the last few bits of the result, and the interpreter and AOT
   answers do not move with it.
 
-- **A diff that changes the machine code an emitter whose daslang body is the reference
-  implementation produces - its body, which of its arms a call selects, or the feature set its
-  output is lowered under - ships a cell comparing the emitted result with the interpreted result
+- **A diff that changes the machine code an emitter the interpreter has a twin for produces -
+  a das body, or the builtin the interpreter calls: every `build_vector_*` in
+  `daslib/llvm_jit_intrin.das`, every `[llvm_code]` generator - its body, which of its arms a
+  call selects, or the feature set its output is lowered under - ships a cell comparing the
+  emitted result with the interpreted result
   over the operand range that emitter serves (every vector width for a vector emitter, the full
   int8 lattice for a dot), added in the same change when no cell covers that range.** An IR-shape
   test names the instruction and never a number.
