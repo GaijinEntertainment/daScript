@@ -2296,7 +2296,7 @@ struct DnStepArgs {
 }
 
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
-class DnStepFused {
+class DnStepFused : RmsWgBase {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
     @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
@@ -2312,7 +2312,7 @@ class DnStepFused {
     @workgroup dout : float[128]
     @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
     @workgroup partq : float[256]   //! ... and q.S
-    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k), re-used for the out-norm's after the second barrier
+    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k); the out-norm's reduce is `RmsWgBase`'s
     @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
@@ -2460,25 +2460,11 @@ class DnStepFused {
         if (tid < ds) {
             po = dout[tid] * dout[tid]
         }
-        let so = subgroupAdd(po)
-        if (gl_SubgroupInvocationID == 0u) {
-            sg_sumsq[gl_SubgroupID] = so
-        }
-        barrier()
-        if (tid == 0u) {
-            var sum = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                sum += sg_sumsq[sgi]
-                sgi++
-            }
-            ds8[5u] = 1.0 / sqrt(sum / float(ds) + pa.eps)
-        }
-        barrier()
+        let oinv = wg_rms_inv(po, ds, pa.eps, 0u)   //! every thread sums the partials in one order: the out-norm's inverse without a broadcast slot
         e = tid
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
-            let xn = dout[e] * ds8[5u] * smalls[pa.wnorm_off + e]
+            let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
             dout[e] = xn * (zv / (1.0 + exp(-zv)))
             e += 256u
         }
@@ -4781,7 +4767,27 @@ let SCHED_NONE = 0xFFFFFFFFu   //! the per-wg map's sentinel: a tile workgroup p
 
 class MoeCmBase {
     @ssbo @binding = 2 sched : array<uint>   // region records + per-wg map (bulk schedule data)
+    @ssbo @binding = 5 y : array<float>      //! the output rows, [rows x d]
     @push_constant pa : BatchArgs
+
+    //! the 32x32 sdot4 tiles' store: this thread's four columns of its row, each guarded at the row's end
+    def store_y(xrow, cnt, row0, wt, word : uint; f : float4) {
+        if (xrow < cnt) {
+            let yb = (row0 + xrow) * pa.d + wt * 32u + word
+            if (wt * 32u + word < pa.d) {
+                y[yb] = f.x
+            }
+            if (wt * 32u + word + 8u < pa.d) {
+                y[yb + 8u] = f.y
+            }
+            if (wt * 32u + word + 16u < pa.d) {
+                y[yb + 16u] = f.z
+            }
+            if (wt * 32u + word + 24u < pa.d) {
+                y[yb + 24u] = f.w
+            }
+        }
+    }
 
     def region_rec : uint4 {
         let rid = sched[pa.map_off + gl_WorkGroupID.x]
@@ -4801,7 +4807,6 @@ class Q8Batch : MoeCmBase {
     @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
     @workgroup xw4 : uint4[544]   // x tile: 32 rows x 16 uint4 chunks, stride 17 (bank-spread)
     @workgroup ww4 : uint4[544]   // w tile: 32 cols x 16 chunks, stride 17
     @workgroup xsw : float[256]   // x scales per (block, row)
@@ -4888,21 +4893,7 @@ class Q8Batch : MoeCmBase {
             barrier()
             s++
         }
-        if (xrow < cnt) {
-            let yb = (row0 + xrow) * pa.d + wt * 32u + word
-            if (wt * 32u + word < pa.d) {
-                y[yb] = f0
-            }
-            if (wt * 32u + word + 8u < pa.d) {
-                y[yb + 8u] = f1
-            }
-            if (wt * 32u + word + 16u < pa.d) {
-                y[yb + 16u] = f2
-            }
-            if (wt * 32u + word + 24u < pa.d) {
-                y[yb + 24u] = f3
-            }
-        }
+        store_y(xrow, cnt, row0, wt, word, float4(f0, f1, f2, f3))
     }
 }
 
@@ -4917,6 +4908,78 @@ class Q8Batch : MoeCmBase {
 def private k5_dep(hb : uint) : uint {
     return ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 }
+
+//! the K-quant word composes the decode GEMV leaves and the batch tiles share, one uint4 of four packed words each:
+//! Q5_K - the nibble half at `sh` (0 or 4) of four words with the 5th bits deposited from the block's qh byte lanes
+def private k5_quad(r : uint4; qh, sh : uint) : uint4 {
+    return uint4(((r.x >> sh) & KQC_LOW) | k5_dep(qh >> sh), ((r.y >> sh) & KQC_LOW) | k5_dep(qh >> (8u + sh)),
+                 ((r.z >> sh) & KQC_LOW) | k5_dep(qh >> (16u + sh)), ((r.w >> sh) & KQC_LOW) | k5_dep(qh >> (24u + sh)))
+}
+
+//! Q6_K - the nibble lanes with the 2-bit high lanes of `qh` at `shift` composed above them
+def private k6_quad(nib, qh : uint4; shift : uint) : uint4 {
+    let m2 = 0x03030303u
+    return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
+                 nib.z | (((qh.z >> shift) & m2) << 4u), nib.w | (((qh.w >> shift) & m2) << 4u))
+}
+
+//! Q3_K - the 2-bit qs lanes at `sh` with the hmask bit `bit` of each lane above them
+def private k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
+    let m2 = 0x03030303u
+    let m1 = 0x01010101u
+    return uint4(((q.x >> sh) & m2) | (((h.x >> bit) & m1) << 2u), ((q.y >> sh) & m2) | (((h.y >> bit) & m1) << 2u),
+                 ((q.z >> sh) & m2) | (((h.z >> bit) & m1) << 2u), ((q.w >> sh) & m2) | (((h.w >> bit) & m1) << 2u))
+}
+
+//! Q2_K - the unsigned 2-bit qs lanes at `sh`
+def private k2_quad(q : uint4; sh : uint) : uint4 {
+    let m2 = 0x03030303u
+    return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
+}
+
+//! the grid formats' index-and-sign picks the decode GEMV leaves and the batch tiles share: the four grid words a lane pair
+//! reads (a two-word format's entry pair as i, i + 1) and their four sign nibbles; the class gathers them through its own
+//! grid slab and `iq3s_signed`. The sign nibbles of two sign bytes, low nibble first
+def private sgn4(sg0, sg1 : uint) : uint4 => uint4(sg0 & 15u, sg0 >> 4u, sg1 & 15u, sg1 >> 4u)
+
+//! IQ3_S: 9-bit indices from the qs word and the block's qh byte at lane pair `l0` (0 or 2)
+def private iq3s_idx4(qsw, qh, l0 : uint) : uint4 {
+    return uint4((qsw & 255u) | ((qh << (8u - 2u * l0)) & 256u), ((qsw >> 8u) & 255u) | ((qh << (7u - 2u * l0)) & 256u),
+                 ((qsw >> 16u) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 256u), (qsw >> 24u) | ((qh << (7u - 2u * (l0 + 1u))) & 256u))
+}
+
+//! IQ3_S and IQ2_S: the two sign bytes of lane pair `l0` out of the block's sign word
+def private sign_word_sgn4(sgw, l0 : uint) : uint4 => sgn4((sgw >> (l0 * 8u)) & 255u, (sgw >> (l0 * 8u + 8u)) & 255u)
+
+//! IQ3_XXS: the qs word's four byte indices; the signs from the aux word's 7-bit ksigns at lane pair `l0`, the parity bit recomputed
+def private iq3xxs_idx4(qsw : uint) : uint4 => uint4(qsw & 255u, (qsw >> 8u) & 255u, (qsw >> 16u) & 255u, qsw >> 24u)
+
+def private iq3xxs_sgn4(aux, l0 : uint) : uint4 => sgn4(ksign7((aux >> (7u * l0)) & 127u), ksign7((aux >> (7u * l0 + 7u)) & 127u))
+
+//! IQ2_XXS: the grid word's two byte indices at half `hu` into the two-word grid; the aux word's ksigns at 14 hu
+def private iq2xxs_idx4(gw, hu : uint) : uint4 {
+    let b0 = ((gw >> (16u * hu)) & 255u) * 2u
+    let b1 = ((gw >> (16u * hu + 8u)) & 255u) * 2u
+    return uint4(b0, b0 + 1u, b1, b1 + 1u)
+}
+
+def private iq2xxs_sgn4(aux, hu : uint) : uint4 => sgn4(ksign7((aux >> (14u * hu)) & 127u), ksign7((aux >> (14u * hu + 7u)) & 127u))
+
+//! IQ2_S: the 10-bit qs | qh indices of lane pair `l0` into the two-word grid
+def private iq2s_idx4(qw, qh, l0 : uint) : uint4 {
+    let i0 = (((qw >> (l0 * 8u)) & 255u) | ((qh << (8u - 2u * l0)) & 0x300u)) * 2u
+    let i1 = (((qw >> (l0 * 8u + 8u)) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 0x300u)) * 2u
+    return uint4(i0, i0 + 1u, i1, i1 + 1u)
+}
+
+//! IQ2_XS: each u16 of the qs word is a 9-bit index into the two-word grid and a 7-bit ksigns index
+def private iq2xs_idx4(qw : uint) : uint4 {
+    let i0 = (qw & 511u) * 2u
+    let i1 = ((qw >> 16u) & 511u) * 2u
+    return uint4(i0, i0 + 1u, i1, i1 + 1u)
+}
+
+def private iq2xs_sgn4(qw : uint) : uint4 => sgn4(ksign7((qw & 0xFFFFu) >> 9u), ksign7(qw >> 25u))
 
 // IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
 // SIGNED int8 lanes (kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it.
@@ -4996,7 +5059,6 @@ class KqBatchBase : MoeCmBase {
     @ssbo @binding = 1 wsu : array<uint>       // scale planes (5-word superblock layout)
     @ssbo @binding = 3 xqw : array<uint>       // Q8_K activation words (64 per row-superblock)
     @ssbo @binding = 4 axs : array<float>      // one Q8_K d per (row, superblock)
-    @ssbo @binding = 5 y : array<float>
     @workgroup xw4 : uint4[544]
     @workgroup ww4 : uint4[544]
     @workgroup xsw : float[256]
@@ -5072,24 +5134,6 @@ class KqBatchBase : MoeCmBase {
         let wsb2 = float4(wsw2[bu * 32u + word], wsw2[bu * 32u + word + 8u],
             wsw2[bu * 32u + word + 16u], wsw2[bu * 32u + word + 24u])
         return xscl * (ws * float4(i) - wsb2 * float(bs))
-    }
-
-    def store_y(xrow, cnt, row0, wt, word : uint; f : float4) {
-        if (xrow < cnt) {
-            let yb = (row0 + xrow) * pa.d + wt * 32u + word
-            if (wt * 32u + word < pa.d) {
-                y[yb] = f.x
-            }
-            if (wt * 32u + word + 8u < pa.d) {
-                y[yb + 8u] = f.y
-            }
-            if (wt * 32u + word + 16u < pa.d) {
-                y[yb + 16u] = f.z
-            }
-            if (wt * 32u + word + 24u < pa.d) {
-                y[yb + 24u] = f.w
-            }
-        }
     }
 
     // the variant points — every [spirv_kernel] leaf overrides stage_w; q40/k6 also stage_ws/blk_fma
@@ -5278,16 +5322,9 @@ class KqBatchIq3s : KqBatchGridBase {
                 let wsb = wsb0 + wcol * nsb + s
                 let qsw = wq[wsb * 26u + bu * 2u + hh]
                 let qh = (wq[wsb * 26u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
-                let sgw = wq[wsb * 26u + 18u + bu]
-                let l0 = hh * 2u
-                let sg0 = (sgw >> (l0 * 8u)) & 255u
-                let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-                let i0 = (qsw & 255u) | ((qh << (8u - 2u * l0)) & 256u)
-                let i1 = ((qsw >> 8u) & 255u) | ((qh << (7u - 2u * l0)) & 256u)
-                let i2 = ((qsw >> 16u) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 256u)
-                let i3 = (qsw >> 24u) | ((qh << (7u - 2u * (l0 + 1u))) & 256u)
-                wv = uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i1], sg0 >> 4u),
-                    iq3s_signed(gridw[i2], sg1 & 15u), iq3s_signed(gridw[i3], sg1 >> 4u))
+                let i = iq3s_idx4(qsw, qh, hh * 2u)
+                let sg = sign_word_sgn4(wq[wsb * 26u + 18u + bu], hh * 2u)
+                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5318,13 +5355,9 @@ class KqBatchIq3xxs : KqBatchGridBase {
             var wv = uint4(0u)
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
-                let qsw = wq[wsb * 24u + bu * 2u + hh]
-                let aux = wq[wsb * 24u + 16u + bu]
-                let l0 = hh * 2u
-                let sg0 = ksign7((aux >> (7u * l0)) & 127u)
-                let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
-                wv = uint4(iq3s_signed(gridw[qsw & 255u], sg0 & 15u), iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u),
-                    iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u), iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u))
+                let i = iq3xxs_idx4(wq[wsb * 24u + bu * 2u + hh])
+                let sg = iq3xxs_sgn4(wq[wsb * 24u + 16u + bu], hh * 2u)
+                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5355,14 +5388,9 @@ class KqBatchIq2xxs : KqBatchGridBase {
             var wv = uint4(0u)
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
-                let gw = wq[wsb * 16u + bu * 2u]
-                let aux = wq[wsb * 16u + bu * 2u + 1u]
-                let b0 = (gw >> (16u * hh)) & 255u
-                let b1 = (gw >> (16u * hh + 8u)) & 255u
-                let sg0 = ksign7((aux >> (14u * hh)) & 127u)
-                let sg1 = ksign7((aux >> (14u * hh + 7u)) & 127u)
-                wv = uint4(iq3s_signed(gridw[b0 * 2u], sg0 & 15u), iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u),
-                    iq3s_signed(gridw[b1 * 2u], sg1 & 15u), iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u))
+                let i = iq2xxs_idx4(wq[wsb * 16u + bu * 2u], hh)
+                let sg = iq2xxs_sgn4(wq[wsb * 16u + bu * 2u + 1u], hh)
+                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5412,22 +5440,7 @@ class KqBatchK5 : KqBatchBase {
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
                 let rb4 = wsb * 40u + bu * 4u
-                let r0 = wq[rb4]
-                let r1 = wq[rb4 + 1u]
-                let r2 = wq[rb4 + 2u]
-                let r3 = wq[rb4 + 3u]
-                let hbw = wq[wsb * 40u + 32u + bu]
-                let h0 = hbw & 0xFF
-                let h1 = (hbw >> 8u) & 0xFF
-                let h2 = (hbw >> 16u) & 0xFF
-                let h3 = (hbw >> 24u) & 0xFF
-                if (hh == 0u) {
-                    wv = uint4((r0 & 0x0F0F0F0F) | k5_dep(h0 & 0xF), (r1 & 0x0F0F0F0F) | k5_dep(h1 & 0xF),
-                        (r2 & 0x0F0F0F0F) | k5_dep(h2 & 0xF), (r3 & 0x0F0F0F0F) | k5_dep(h3 & 0xF))
-                } else {
-                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | k5_dep(h0 >> 4u), ((r1 >> 4u) & 0x0F0F0F0F) | k5_dep(h1 >> 4u),
-                        ((r2 >> 4u) & 0x0F0F0F0F) | k5_dep(h2 >> 4u), ((r3 >> 4u) & 0x0F0F0F0F) | k5_dep(h3 >> 4u))
-                }
+                wv = k5_quad(uint4(wq[rb4], wq[rb4 + 1u], wq[rb4 + 2u], wq[rb4 + 3u]), wq[wsb * 40u + 32u + bu], hh * 4u)
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5452,27 +5465,10 @@ class KqBatchK6 : KqBatchBase {
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
                 let rb4 = wsb * 48u + bu * 4u
-                let r0 = wq[rb4]
-                let r1 = wq[rb4 + 1u]
-                let r2 = wq[rb4 + 2u]
-                let r3 = wq[rb4 + 3u]
                 let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u
-                let q0 = wq[qb4]
-                let q1 = wq[qb4 + 1u]
-                let q2 = wq[qb4 + 2u]
-                let q3 = wq[qb4 + 3u]
-                let shift = (bu % 4u) * 2u
-                if (hh == 0u) {
-                    wv = uint4((r0 & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
-                        (r1 & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
-                        (r2 & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
-                        (r3 & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
-                } else {
-                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
-                        ((r1 >> 4u) & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
-                        ((r2 >> 4u) & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
-                        ((r3 >> 4u) & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
-                }
+                let sh = hh * 4u
+                let nib = uint4((wq[rb4] >> sh) & KQC_LOW, (wq[rb4 + 1u] >> sh) & KQC_LOW, (wq[rb4 + 2u] >> sh) & KQC_LOW, (wq[rb4 + 3u] >> sh) & KQC_LOW)
+                wv = k6_quad(nib, uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5551,11 +5547,7 @@ class KqBatchK3 : KqBatchK6 {
                 let wsb = wsb0 + wcol * nsb + s
                 let qb4 = wsb * 24u + (bu / 4u) * 8u + hh * 4u
                 let hb4 = wsb * 24u + 16u + hh * 4u
-                let shift = (bu % 4u) * 2u
-                wv = uint4(((wq[qb4] >> shift) & 0x03030303) | (((wq[hb4] >> bu) & 0x01010101) << 2u),
-                    ((wq[qb4 + 1u] >> shift) & 0x03030303) | (((wq[hb4 + 1u] >> bu) & 0x01010101) << 2u),
-                    ((wq[qb4 + 2u] >> shift) & 0x03030303) | (((wq[hb4 + 2u] >> bu) & 0x01010101) << 2u),
-                    ((wq[qb4 + 3u] >> shift) & 0x03030303) | (((wq[hb4 + 3u] >> bu) & 0x01010101) << 2u))
+                wv = k3_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), uint4(wq[hb4], wq[hb4 + 1u], wq[hb4 + 2u], wq[hb4 + 3u]), (bu % 4u) * 2u, bu)
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5585,9 +5577,7 @@ class KqBatchK2 : KqBatchK6 {
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
                 let qb4 = wsb * 16u + (bu / 4u) * 8u + hh * 4u
-                let shift = (bu % 4u) * 2u
-                wv = uint4((wq[qb4] >> shift) & 0x03030303, (wq[qb4 + 1u] >> shift) & 0x03030303,
-                    (wq[qb4 + 2u] >> shift) & 0x03030303, (wq[qb4 + 3u] >> shift) & 0x03030303)
+                wv = k2_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5718,16 +5708,10 @@ class KqBatchIq2s : KqBatchIq2Base {
             var wv = uint4(0u)
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
-                let qsw = wq[wsb * 18u + bu]
-                let sgw = wq[wsb * 18u + 8u + bu]
                 let qh = (wq[wsb * 18u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
-                let l0 = hh * 2u
-                let sg0 = (sgw >> (l0 * 8u)) & 255u
-                let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-                let i0 = (((qsw >> (l0 * 8u)) & 255u) | ((qh << (8u - 2u * l0)) & 0x300u)) * 2u
-                let i1 = (((qsw >> (l0 * 8u + 8u)) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 0x300u)) * 2u
-                wv = uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
-                    iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
+                let i = iq2s_idx4(wq[wsb * 18u + bu], qh, hh * 2u)
+                let sg = sign_word_sgn4(wq[wsb * 18u + 8u + bu], hh * 2u)
+                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5758,14 +5742,9 @@ class KqBatchIq2xs : KqBatchIq2Base {
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
                 let qw = wq[wsb * 16u + k]
-                let wa = qw & 0xFFFFu
-                let wb = qw >> 16u
-                let sg0 = ksign7(wa >> 9u)
-                let sg1 = ksign7(wb >> 9u)
-                let i0 = (wa & 511u) * 2u
-                let i1 = (wb & 511u) * 2u
-                wv = uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
-                    iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
+                let i = iq2xs_idx4(qw)
+                let sg = iq2xs_sgn4(qw)
+                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5796,7 +5775,6 @@ let private KHR_KHALF_WORDS = 8u   // the 16 k halves one thread stages per step
 class CmF16Base : MoeCmBase {
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
     @workgroup cm_as : float16[8192]   // 32 local rows x 256 k, row-major stride 256 (f16 dequant A)
     @workgroup cm_bs : float16[8192]   // 256 k x 32 cols, row-major stride 32 (f16 dequant B)
     @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bounds-checked write-out)
@@ -5918,7 +5896,6 @@ class CmI8Batch : MoeCmBase {
     @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
     @ssbo @binding = 3 xq8 : array<int8>       // int8 view of the activation quant bytes
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
     @workgroup cmi_s32 : int[1024]     // 4 subgroups x 16x16 s32 spill
     @workgroup cmi_acc : float[1024]   // 4 subgroups x 16x16 f32 accumulator
 
@@ -5986,7 +5963,6 @@ class template MmBatchT : MoeCmBase {
     @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
     @template_constant BT : uint = 128u        // the tile edge: 128 = the aligned-L geometry (BM=BN=128 BK=32, 4 warps 2x2 with 16 f16acc fragments each), 64 = the M twin (2x2 fragments each, routed in when cnt or d <= 64)
     @template_constant EDGE : bool = true      // rows past d / cnt exist: guarded staging, bounced stores; the aligned-L leaf runs with it off, its own pipeline for d and every cnt 128-multiples
     @workgroup cml_a : uint[int(BT * CML_SST)]   // A tile: BT weight rows x one block (32 K) as f16 pairs
@@ -6466,7 +6442,6 @@ class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 3 @role = "alias" xf16w4 : array<uint4>    // the same plane as 16-byte words: the KHR arm's activation stage
     @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wq4 : array<uint4>
     @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wqw : array<uint>
-    @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
     @workgroup wg_m0 : uint                               //! the tile's first weight row: the scale caches index a row by its offset from it (a partial last tile starts off the 128 grid)
     @template_constant BN : uint = 256u                   // the token column
@@ -10688,6 +10663,15 @@ class template KqGemvLeafT : KqGemvBase {
         }
     }
 
+    //! the four staged grid words at `i`, sign-applied by the nibbles `sg` (a grid format's leaf; the pick helpers name the words)
+    def grid4(i, sg : uint4) : uint4 {
+        static_if (GRID) {
+            return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
+        } else {
+            return uint4(0u)
+        }
+    }
+
     [spirv_kernel(local_size_x = 64)]
     def run {
         static_if (GRID) {
@@ -10831,14 +10815,7 @@ class template Iq3sGemvT : KqGemvLeafT {
     override GRID_WORDS = 512u
     override GRID_OFF = 3584u
 
-    def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 {
-        let sg0 = (sgw >> (l0 * 8u)) & 255u
-        let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-        return uint4(iq3s_signed(gridw[(qsw & 255u) | ((qh << (8u - 2u * l0)) & 256u)], sg0 & 15u),
-                     iq3s_signed(gridw[((qsw >> 8u) & 255u) | ((qh << (7u - 2u * l0)) & 256u)], sg0 >> 4u),
-                     iq3s_signed(gridw[((qsw >> 16u) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 256u)], sg1 & 15u),
-                     iq3s_signed(gridw[(qsw >> 24u) | ((qh << (7u - 2u * (l0 + 1u))) & 256u)], sg1 >> 4u))
-    }
+    def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 => grid4(iq3s_idx4(qsw, qh, l0), sign_word_sgn4(sgw, l0))
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qb = wsb * 26u + blk * 2u
@@ -10869,12 +10846,7 @@ class template Iq3xxsGemvT : KqGemvLeafT {
     override GRID_WORDS = 256u
     override GRID_OFF = 4096u
 
-    def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 {
-        let sg0 = ksign7((aux >> (7u * l0)) & 127u)
-        let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
-        return uint4(iq3s_signed(gridw[qsw & 255u], sg0 & 15u), iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u),
-                     iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u), iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u))
-    }
+    def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 => grid4(iq3xxs_idx4(qsw), iq3xxs_sgn4(aux, l0))
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qb = wsb * 24u + blk * 2u
@@ -10920,13 +10892,6 @@ class KqGemvIq4nlN : Iq4nlGemvT {
 // the offset 4 over the k3 planes (6 uint4 per superblock: qs 0..3, hmask 4..5)
 [ |> template_struct_instance]
 class template K3GemvT : KqGemvLeafT {
-    def k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
-        let m2 = 0x03030303u
-        let m1 = 0x01010101u
-        return uint4(((q.x >> sh) & m2) | (((h.x >> bit) & m1) << 2u), ((q.y >> sh) & m2) | (((h.y >> bit) & m1) << 2u),
-                     ((q.z >> sh) & m2) | (((h.z >> bit) & m1) << 2u), ((q.w >> sh) & m2) | (((h.w >> bit) & m1) << 2u))
-    }
-
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let q4 = wsb * 6u + (blk / 4u) * 2u
         let sh = (blk % 4u) * 2u
@@ -10954,11 +10919,6 @@ class KqGemvK3N : K3GemvT {
 // fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
 [ |> template_struct_instance]
 class template K2GemvT : KqGemvLeafT {
-    def k2_quad(q : uint4; sh : uint) : uint4 {
-        let m2 = 0x03030303u
-        return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
-    }
-
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let q4 = wsb * 4u + (blk / 4u) * 2u
         let sh = (blk % 4u) * 2u
@@ -10988,14 +10948,8 @@ class template K5GemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 10u + blk]
         let qh = wq[wsb * 40u + 32u + blk]
-        let h0 = qh & 0xFFu
-        let h1 = (qh >> 8u) & 0xFFu
-        let h2 = (qh >> 16u) & 0xFFu
-        let h3 = (qh >> 24u) & 0xFFu
-        wl = uint4((wv.x & KQC_LOW) | k5_dep(h0 & 0xFu), (wv.y & KQC_LOW) | k5_dep(h1 & 0xFu),
-                   (wv.z & KQC_LOW) | k5_dep(h2 & 0xFu), (wv.w & KQC_LOW) | k5_dep(h3 & 0xFu))
-        wh = uint4(((wv.x >> 4u) & KQC_LOW) | k5_dep(h0 >> 4u), ((wv.y >> 4u) & KQC_LOW) | k5_dep(h1 >> 4u),
-                   ((wv.z >> 4u) & KQC_LOW) | k5_dep(h2 >> 4u), ((wv.w >> 4u) & KQC_LOW) | k5_dep(h3 >> 4u))
+        wl = k5_quad(wv, qh, 0u)
+        wh = k5_quad(wv, qh, 4u)
         return dm_terms(wsb, blk)
     }
 
@@ -11014,12 +10968,6 @@ class KqGemvK5N : K5GemvT {
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
 [ |> template_struct_instance]
 class template K6GemvT : KqGemvLeafT {
-    def k6_quad(nib, qh : uint4; shift : uint) : uint4 {
-        let m2 = 0x03030303u
-        return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
-                     nib.z | (((qh.z >> shift) & m2) << 4u), nib.w | (((qh.w >> shift) & m2) << 4u))
-    }
-
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qh4 = wsb * 12u + 8u + (blk / 4u) * 2u
         let shift = (blk % 4u) * 2u
@@ -11055,14 +11003,7 @@ class template Iq2sGemvT : KqGemvLeafT {
     override GRID_WORDS = 2048u
     override GRID_OFF = 0u
 
-    def iq2s_quad(qw, qh, sgw, l0 : uint) : uint4 {
-        let sg0 = (sgw >> (l0 * 8u)) & 255u
-        let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-        let i0 = (((qw >> (l0 * 8u)) & 255u) | ((qh << (8u - 2u * l0)) & 0x300u)) * 2u
-        let i1 = (((qw >> (l0 * 8u + 8u)) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 0x300u)) * 2u
-        return uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
-                     iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
-    }
+    def iq2s_quad(qw, qh, sgw, l0 : uint) : uint4 => grid4(iq2s_idx4(qw, qh, l0), sign_word_sgn4(sgw, l0))
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qw = wq[wsb * 18u + blk]
@@ -11096,16 +11037,7 @@ class template Iq2xsGemvT : KqGemvLeafT {
     override GRID_WORDS = 1024u
     override GRID_OFF = 2048u
 
-    def iq2xs_quad(qw : uint) : uint4 {
-        let wa = qw & 0xFFFFu
-        let wb = qw >> 16u
-        let sg0 = ksign7(wa >> 9u)
-        let sg1 = ksign7(wb >> 9u)
-        let i0 = (wa & 511u) * 2u
-        let i1 = (wb & 511u) * 2u
-        return uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
-                     iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
-    }
+    def iq2xs_quad(qw : uint) : uint4 => grid4(iq2xs_idx4(qw), iq2xs_sgn4(qw))
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         wl = iq2xs_quad(wq[wsb * 16u + blk * 2u])
@@ -11136,14 +11068,7 @@ class template Iq2xxsGemvT : KqGemvLeafT {
     override GRID_WORDS = 512u
     override GRID_OFF = 3072u
 
-    def iq2xxs_quad(gw, aux, hu : uint) : uint4 {
-        let b0 = (gw >> (16u * hu)) & 255u
-        let b1 = (gw >> (16u * hu + 8u)) & 255u
-        let sg0 = ksign7((aux >> (14u * hu)) & 127u)
-        let sg1 = ksign7((aux >> (14u * hu + 7u)) & 127u)
-        return uint4(iq3s_signed(gridw[b0 * 2u], sg0 & 15u), iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u),
-                     iq3s_signed(gridw[b1 * 2u], sg1 & 15u), iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u))
-    }
+    def iq2xxs_quad(gw, aux, hu : uint) : uint4 => grid4(iq2xxs_idx4(gw, hu), iq2xxs_sgn4(aux, hu))
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let gw = wq[wsb * 16u + blk * 2u]

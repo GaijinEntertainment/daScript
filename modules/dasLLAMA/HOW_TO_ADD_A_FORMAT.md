@@ -259,7 +259,11 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
    `xscl * ws * idot` (q40's without the `- 8 * bsum`). A class child is declared after its
    parent in the file - the class rail resolves parents in declaration order and reports
-   "parent structure not found" otherwise.
+   "parent structure not found" otherwise. The word compose the GEMV leaf's `blk_decode` and the
+   tile's `stage_w` both need is ONE free function beside `k5_dep` - a k-lattice format's
+   `<fmt>_quad` over a `uint4` of packed words, a grid format's `<fmt>_idx4` / `<fmt>_sgn4` pick
+   (the four grid words and their sign nibbles; the class gathers them through its own grid slab,
+   the leaf through `grid4`) - never a second spelling in the tile.
 4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
    `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
 5. The decode GEMV's lanes per row (`dasllama/dasllama_vulkan_classes.das`): join
