@@ -530,16 +530,20 @@
     per-file env plumbing) or a cold-mint arm in the tier-1 gates, so a loader mutation reds
     on any box.
 
-44. **The qwen25v (Qwen2.5-Omni/VL window ViT) CPU encode stays ~4.6x behind mtmd's clip
-    (released `lcpp_bench --image` vs patched llama-mtmd-cli, CPU, --image-think, r=3, t=8,
-    M1 Max) -
-    the tower is ruled exact-only (ARCHITECTURE_MEDIA.md 1.7b: per-32-block activation requant
-    cannot represent its outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer
-    measures less).** Two honest paths if that encode ever matters: the Metal tower for the
-    qwen ViT families (the same slice the qwen3v towers await), or outlier-aware activation
-    quant (SmoothQuant-style per-channel folds baked at stage - needs a calibration set and
-    its own gate design). Done = either path serving the Omni-3B encode with a
-    poison-discriminating tier-1 gate.
+44. **The qwen25v (Qwen2.5-Omni/VL window ViT) portable-CPU encode reads 0.29 of mtmd on the
+    M5 Max and 0.49 on the M4 Pro (release 16 board: 9108 / 5924 ms against 2619 / 2885),
+    while the same f32 GEMMs through Accelerate's sgemm read 2.81 / 1.36 and the Metal tower
+    1.11 / 0.99 - the tower has no served CPU lane, only the exact f32 one.** The exact-only
+    ruling (ARCHITECTURE_MEDIA.md 1.7b: a per-32-block activation requant cannot represent the
+    tower's outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer measures less)
+    is LIFTED as a serving rule: the exact f32 lane stays as the REFERENCE lane the tier-1 gate
+    holds every served lane against, and a served CPU lane is open work. The candidates, in
+    cost order: a bf16/f16 WEIGHT lane on the portable GEMMs (half the weight bandwidth, f32
+    accumulate, no activation quant - the outlier rows stay intact; `dot_bf16` and the bf16
+    widen path exist), then outlier-aware activation quant (SmoothQuant-style per-channel
+    folds baked at stage - a calibration set and its own gate design). Not scheduled. Done =
+    a served lane on the Omni-3B encode with a poison-discriminating tier-1 gate against the
+    exact lane, and the board's cpu row reading it.
 
 45. **RESOLVED (2026-08-30, the release-remint arc) - the fixture/assert sync is a
     `modules/dasMetal/REVIEW.das` cell.** `check_fail_closed_sync` walks
