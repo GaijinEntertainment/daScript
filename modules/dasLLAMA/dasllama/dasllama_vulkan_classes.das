@@ -778,6 +778,23 @@ class Q8kRequant : RqPlainT {
     override KBLK = true
 }
 
+//! the requant of `elems` floats from element `inbase` of a `rq_cls` set into the feed a plane reads: Q8_K superblocks where
+//! `kq` (a `kq_sb` format), Q8_0 blocks otherwise - the one spelling of the pair every host requant site records
+def rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; kq : bool; inbase, elems : int64) {
+    if (kq) {
+        var pcr = RqArgs(inbase = uint(inbase), nblk = uint(elems / 256l))
+        enc_cls_q8k_rq(raw, h, rq_set, pcr, (elems / 8l + 255l) / 256l)
+    } else {
+        var pcr = RqArgs(inbase = uint(inbase), nblk = uint(elems / 32l))
+        enc_cls_dn_rq(raw, h, rq_set, pcr, (elems / 4l + 255l) / 256l)
+    }
+}
+
+//! the same from element 0 into the feed of a plane in format `fmt` (the decode's per-plane sites)
+def rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; fmt : int; elems : int64) {
+    rq_enc(raw, h, rq_set, kq_sb(fmt), 0l, elems)
+}
+
 // ===== act + requant (the FFN mid-chain elementwise family) =====
 
 struct ActArgs {

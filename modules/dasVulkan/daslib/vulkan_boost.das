@@ -58,18 +58,27 @@ def public select_graphics_queue_family(phys : VkPhysicalDevice) : uint {
     return 0u
 }
 
-def public find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryPropertyFlags) : uint {
+//! the first memory type among `type_bits` carrying every flag of `want`, or -1 when the device has none: the form a caller with a fallback asks
+def public try_find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryPropertyFlags) : int {
     var mp : VkPhysicalDeviceMemoryProperties
     vkGetPhysicalDeviceMemoryProperties(phys, mp)
     for (i in range(int(mp.memoryTypeCount))) {
         let supported = (type_bits & (1u << uint(i))) != 0u
         let has = (uint(mp.memoryTypes[i].propertyFlags) & uint(want)) == uint(want)
         if (supported && has) {
-            return uint(i)
+            return i
         }
     }
-    panic("no suitable memory type")
-    return 0u
+    return -1
+}
+
+//! the same, a missing type a panic
+def public find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryPropertyFlags) : uint {
+    let i = try_find_memory_type(phys, type_bits, want)
+    if (i < 0) {
+        panic("no suitable memory type")
+    }
+    return uint(i)
 }
 
 // ===== composite creators (CreateInfo skipped by the generator) =====

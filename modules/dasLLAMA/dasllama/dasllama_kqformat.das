@@ -347,6 +347,28 @@ def kq_block32(f : KqFmt) : bool => !kq_sb(f)
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
 def kq_block32(fmt : int) : bool => !kq_sb(fmt)
 
+//! the block a device plane of the format strides its rows and activations by: 32 elements on the Q8_0-form planes, 256 on
+//! the superblock forms - by the format, or by its arena slot
+def kq_unit(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
+
+def kq_unit(fmt : int) : int64 => kq_block32(fmt) ? 32l : 256l
+
+//! a row of `n` elements is placeable on a device plane when the unit divides it; a caller DECLINES the other rows to the CPU
+def kq_rows_ok(n : int64; f : KqFmt) : bool => n % kq_unit(f) == 0l
+
+def kq_rows_ok(n : int64; fmt : int) : bool => n % kq_unit(fmt) == 0l
+
+//! the blocks `rows` placeable rows of `n` elements take on the plane
+def kq_blocks_for(n, rows : int64; f : KqFmt) : int64 {
+    verify(kq_rows_ok(n, f), "dasLLAMA: a kq row length must be a block multiple of its format")
+    return rows * (n / kq_unit(f))
+}
+
+def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
+    verify(kq_rows_ok(n, fmt), "dasLLAMA: a kq row length must be a block multiple of its format")
+    return rows * (n / kq_unit(fmt))
+}
+
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
 let KQ_FMT_COUNT = int(KqFmt.mx4) + 1
 

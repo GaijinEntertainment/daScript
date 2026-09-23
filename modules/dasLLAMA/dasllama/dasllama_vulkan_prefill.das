@@ -333,12 +333,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     if (o6) {
         var pco = ActArgs(nelem = uint(wlen * di), nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
-    } elif (kq_sb(L.fout)) {
-        var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 256l))
-        enc_cls_q8k_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 8l + 255l) / 256l)
     } else {
-        var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 32l))
-        enc_cls_dn_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 4l + 255l) / 256l)
+        rq_enc(raw, h, g_rd.pf_dnrq_set, kq_sb(L.fout), DN_O_OFF, wlen * di)
     }
     pfq_ts(raw)
     let pout = arena_planes(L.fout, L.bout)
@@ -535,9 +531,9 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
         map_off = uint(PF_MOE_MAP_OFF), map_off_mgu = map_m_gu, map_off_mdn = map_m_dn,
         bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn), bound_mgu = uint(bounds.mgu), bound_mdn = uint(bounds.mdn),
-        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
-        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
-        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)))
+        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / kq_unit(L.fe1)),
+        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / kq_unit(L.fe3)),
+        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)))
     enc_moe_sched_cls(raw, h, L.pf_sched_set, pcs, 1l)
     pfq_ts(raw)
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
@@ -616,13 +612,7 @@ def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt 
     }
     if (next_fused) {   //! the Q8 feed's requant, the next layer's own quant_xb set
         let nb = int((l + 1l) * PF_ROLES)
-        if (kq_sb(g_rd.layers[l + 1l].fq)) {
-            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-            enc_cls_q8k_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 8l + 255l) / 256l)
-        } else {
-            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-            enc_cls_dn_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 4l + 255l) / 256l)
-        }
+        rq_enc(raw, h, g_rd.pf_sets[nb], kq_sb(g_rd.layers[l + 1l].fq), 0l, wlen * dim)
     }
 }
 
@@ -1253,12 +1243,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     if (fq6) {
                         var pc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
-                    } elif (fqk) {
-                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
                     } else {
-                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                        rq_enc(raw, h, g_rd.pf_sets[b + 0], fqk, 0l, wlen * dim)
                     }
                 }
                 pfq_ts(raw)
@@ -1359,12 +1345,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         var pc6 = ActArgs(nelem = uint(wlen * qd), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
                     }
-                } elif (fok) {
-                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 8l + 255l) / 256l)
                 } else {
-                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                    rq_enc(raw, h, g_rd.pf_sets[b + 6], fok, 0l, wlen * qd)
                 }
                 pfq_ts(raw)
                 let po = arena_planes(g_rd.layers[l].fo, g_rd.layers[l].bo)
@@ -1394,12 +1376,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     if (feed_read && gu6) {
                         var pc9 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
-                    } elif (feed_read && guk) {
-                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
                     } elif (feed_read) {
-                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                        rq_enc(raw, h, g_rd.pf_sets[b + 9], guk, 0l, wlen * dim)
                     }
                 }
                 pfq_ts(raw)
@@ -1466,13 +1444,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
             }
             if (last) {
-                if (kq_sb(g_rd.cls_fmt_marker)) {
-                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 8l + 255l) / 256l)
-                } else {
-                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
-                }
+                rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), (wlen - 1l) * dim, dim)
                 pfq_ts(raw)
                 var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
                 gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
@@ -1709,7 +1681,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     verify(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f2)
-    let xunit = fmt_unit(f1)
+    let xunit = kq_unit(f1)
     let dkq = !kq_block32(f2)
     var gate_set = af_role_set(g_gpu.af_gate_sets, f1, blk1, g_gpu.af_meta_g.buf,
         g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev, XQ_BYTES, XS_BYTES, 0u, VHG_Y1)
@@ -1724,28 +1696,23 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         fill_gemv_regions(g_gpu.af_meta_d, blk2)
         memcpy(g_gpu.af_xq.mapped, addr<void?>(xq[0]), n)
         memcpy(g_gpu.af_xs.mapped, addr<void?>(xs[0]), (n / xunit) * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
-        gemv_enc(f1, raw, h, gate_set, pcg, nfe)
-        gemv_enc(f3, raw, h, up_set, pcg, nfe)
-        // the requant form follows the DOWN plane — its GEMV consumes hq/hs
-        var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(nfe / (dkq ? 256l : 32l)))
-        let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
-            enc_q8k_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
-        } else {
-            enc_q8_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
+            gemv_enc(f1, raw, h, gate_set, pcg, nfe)
+            gemv_enc(f3, raw, h, up_set, pcg, nfe)
+            // the requant form follows the DOWN plane — its GEMV consumes hq/hs
+            var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(nfe / (dkq ? 256l : 32l)))
+            let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
+            if (dkq) {
+                enc_q8k_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+            } else {
+                enc_q8_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+            }
+            var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
+            gemv_enc(f2, raw, h, down_set, pcd, n)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         }
-        var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
-        gemv_enc(f2, raw, h, down_set, pcd, n)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
         memcpy(addr<void?>(y[0]), g_gpu.af_yo_host.mapped, n * 4l)
     }
 }
@@ -1794,17 +1761,12 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         let groups = fill_arena_batch_sched(a.batch_meta, d, blk, npos, fmt)
         upload_region_at(g_gpu.batch_xq_dev, 0l, addr<uint8 const?>(xq[0]), npos * n)
         upload_region_at(g_gpu.batch_xs_dev, 0l, addr<uint8 const?>(xs[0]), npos * (n / 32l) * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[skey], pc, int64(groups))
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+            q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[skey], pc, int64(groups))
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
+        }
         memcpy(addr<void?>(y[0]), g_gpu.batch_y1.mapped, npos * d * 4l)
     }
 }
@@ -1817,7 +1779,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = fmt_unit(fmt)   // q8 takes 32-block Q8_0 activations
+    let unit = kq_unit(fmt)   // q8 takes 32-block Q8_0 activations
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
@@ -1829,17 +1791,12 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         mp[1] = 0u          // activation block base
         memcpy(a.xq.mapped, reinterpret<void?>(xqp), n)   // one int8 quant per weight
         memcpy(a.xs.mapped, reinterpret<void?>(xsp), nb * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-        gemv_enc(fmt, raw, h, s_cls, pc, d)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+            gemv_enc(fmt, raw, h, s_cls, pc, d)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
+        }
         memcpy(reinterpret<void?>(yp), a.y.mapped, d * 4l)
     }
 }
@@ -1942,7 +1899,7 @@ def private cmd_copy_batch_acts(raw : VkCommandBuffer; xq_bytes, xs_bytes : int6
 [unused_argument(n), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, d : int64; r0, r1 : int64; cm2 : bool = false) : uint {
     let fmt = g_gpu.stacks[si].fmt
-    let unit = fmt_unit(fmt)
+    let unit = kq_unit(fmt)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.stacks[si].batch_meta.mapped)
         var nrc = 0l
@@ -2126,8 +2083,8 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let kq_in = !kq_block32(f1)
     verify(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
-    let xunit_in = fmt_unit(f1)
-    let xunit_mid = fmt_unit(f2)
+    let xunit_in = kq_unit(f1)
+    let xunit_mid = kq_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
     ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
@@ -2207,7 +2164,7 @@ def private record_dense_cmd(si : int; nwg : uint; n, d, y_bytes : int64; axq_by
 //! the FFN arm; activations arrive pre-quantized in the plane's own form.
 def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d, nrows : int64; fmt : int) {
     let si = find_stack(woff, fmt, "dense batch")
-    let xunit = fmt_unit(fmt)
+    let xunit = kq_unit(fmt)
     ensure_batch_state()
     ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
     var chunk = min(BATCH_XQ_BYTES / n, BATCH_XS_BYTES / ((n / xunit) * 4l))
@@ -2497,7 +2454,7 @@ def private ensure_at_fa_state(hs : int64) {
 // o requant, wo tile, y DMA
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
-                          rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
+                          rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul : int64;
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa, hasb : bool;
                           eps, scale : float; woq : int64) {
     let raw = g_gpu.batch_cmd
@@ -2567,13 +2524,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         enc_at_attn_cls(raw, h, g_gpu.at_attn_set, pca, n_heads * ((rows + 7l) / 8l))
     }
     pfq_ts(raw)
-    var pcr = RqArgs(inbase = 0u, nblk = uint(o_nblk))
-    let rqwgs = (rows * qd / (o_kq ? 8l : 4l) + 255l) / 256l
-    if (o_kq) {
-        enc_cls_q8k_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
-    } else {
-        enc_cls_dn_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
-    }
+    rq_enc(raw, h, g_gpu.at_rq_set, o_kq, 0l, rows * qd)
     pfq_ts(raw)
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     pfq_ts(raw)
@@ -2687,7 +2638,6 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         let ts1 = ref_time_ticks()
         record_at_cmd(s_q, s_k, s_v, s_o, nwg_q, nwg_k, nwg_v, nwg_o,
             rows, r0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul,
-            rows * qd / (fo != 0 ? 256l : 32l),
             rows * dim, rows * (dim / xunit) * 4l, (AT_SM_COS + 2l * rows * half) * 4l,
             fo != 0, gated, qknorm, fa, hasb, eps, scale, woq)
         submit_wait(g_gpu.batch_cmd)

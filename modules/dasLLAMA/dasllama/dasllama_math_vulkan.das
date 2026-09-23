@@ -17,6 +17,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
 require dasllama/dasllama_config
+require dasllama/dasllama_kqformat   // kq_rows_ok — the plane sizing's row check
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
@@ -248,7 +249,7 @@ def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 def private vk_binding_cap(regions : int64) : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l * regions : 0l
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
-    if (!arena_rows_ok(n, fmt)) {
+    if (!kq_rows_ok(n, fmt)) {
         return 0l   // unplaceable row length — the plane can never upload, it costs nothing
     }
     let pb = stack_plane_bytes(n, rows, fmt)

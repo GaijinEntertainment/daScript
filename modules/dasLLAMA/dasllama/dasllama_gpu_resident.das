@@ -16,7 +16,6 @@ require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_math
 require dasllama/dasllama_rope        // build_rope_row_packed — the one source for every resident rope row
-require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS / KQ_SUPERBLOCK_ELEMS — device block sizing
 require dasllama/dasllama_gguf        // kq_disk_bytes - the file bytes a device plane is measured against
 require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
 require daslib/enum_trait
@@ -764,17 +763,10 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
 
 let private RDEC_PLE_TBL_PIECE_ROWS = 65_536l   //! a token-table piece: 65536 rows of the E4B's 10752 stay under the host gather's 2 GB array
 
-def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
-    rows * (n / (kq_block32(f) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
-
-// row-length servability twin of the tier's arena_rows_ok (this module is backend-agnostic)
-def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
-    n % (kq_block32(f) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
-
 // a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
 def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0
 
-def private rdec_dn_fmt_ok(f : KqFmt; n : int64) : bool => (f == KqFmt.q8 || kq_sb(f)) && rdec_rows_ok(n, f)
+def private rdec_dn_fmt_ok(f : KqFmt; n : int64) : bool => (f == KqFmt.q8 || kq_sb(f)) && kq_rows_ok(n, f)
 
 def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
     return (fq = fmt_at(t.wq_fmt, l), fk = fmt_at(t.wk_fmt, l), fv = fmt_at(t.wv_fmt, l),
@@ -863,7 +855,7 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
     if (rdec_quant_class(s1) != rdec_quant_class(s3)) {
         return "layer {l}'s shared expert gate and up planes mix activation-quant forms ({int(s1)}/{int(s3)}) - one feed serves both"
     }
-    if (!rdec_rows_ok(c.n_ff_shexp, s2)) {
+    if (!kq_rows_ok(c.n_ff_shexp, s2)) {
         return "layer {l}'s shared width {c.n_ff_shexp} is not a block multiple of its down plane's format {int(s2)}"
     }
     return ""
@@ -887,7 +879,7 @@ def resident_layer_decline(t : Model; l : int64) : string {
         if (kq_sb(fe1) != kq_sb(fe3)) {
             return "layer {l}'s expert gate and up stacks mix activation-quant forms ({int(fe1)}/{int(fe3)}) - one feed serves both"
         }
-        if (!rdec_rows_ok(c.n_ff_exp, fe2)) {
+        if (!kq_rows_ok(c.n_ff_exp, fe2)) {
             return "layer {l}'s expert width {c.n_ff_exp} is not a block multiple of its down plane's format {int(fe2)}"
         }
         let shexp_why = resident_shexp_decline(t, l)
@@ -1164,14 +1156,14 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
     }
     for (pl in planes) {
-        if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
+        if (!kq_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
             let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"   // pl refers into planes: read it before the delete
             delete planes
             delete need
             return rdec_decline(why)
         }
         let fi = int(pl.f)
-        need[fi] = (need?[fi] ?? 0l) + rdec_blocks_for(pl.n, pl.rows, pl.f)
+        need[fi] = (need?[fi] ?? 0l) + kq_blocks_for(pl.n, pl.rows, pl.f)
     }
     log_resident_image(planes, plan, seq_cap)
     delete planes
@@ -1234,7 +1226,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             if (row == 0l) {
                 bpt0 = bpt
             }
-            contiguous = bpt >= 0l && bpt == bpt0 + rdec_blocks_for(all, row, KqFmt.q8)
+            contiguous = bpt >= 0l && bpt == bpt0 + kq_blocks_for(all, row, KqFmt.q8)
             row += prows
         }
         ple_tbl_placed = contiguous && rdec_set_ple_table(bpt0)
