@@ -166,8 +166,10 @@ add_dependencies(run_daspkg_tests run_tests_daspkg)
 if(NOT DAS_SQLITE_DISABLED)
     set(BENCH_STAND_OUT ${CMAKE_BINARY_DIR}/bench-stand CACHE PATH "Where run_bench_stand writes runs/ and site/")
     set(BENCH_STAND_ARGS "" CACHE STRING "Extra benchctl run arguments, e.g. --filter core/math/ --repeat 1")
+    # the jit lane runs `daslang -jit`; a linked test_llvm_aot host is picked up when a box built
+    # one, but the night never builds it - its LLVM-AOT corpus batches same-named modules
     set(_bench_stand_deps daslang)
-    foreach(_t test_aot_subset test_llvm_aot dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
+    foreach(_t test_aot_subset dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
             dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
         if(TARGET ${_t})
             list(APPEND _bench_stand_deps ${_t})
