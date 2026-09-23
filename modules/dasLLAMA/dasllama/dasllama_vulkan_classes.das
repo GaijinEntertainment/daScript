@@ -11617,7 +11617,7 @@ class KqGemvIq4xsN : KqGemvIq4xs {
 // over the 26-word rows; the 2 KB grid stages into workgroup memory ahead of the shell.
 [vk_dispatch(name = "kq_gemv_iq3s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3s : KqGemvBase {
-    @workgroup gridw : uint[512]
+    @workgroup gridw : uint[int(KQ_GRID_IQ3S_WORDS)]
 
     //! one 16-weight half's four signed grid words: qs word `qsw`, its two ninth bits out of `qh` at `l0`, its sign bytes at `l0` of `sgw`
     def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 {
@@ -11642,7 +11642,7 @@ class KqGemvIq3s : KqGemvBase {
     //! the 2 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
-        for (k in range(8)) {
+        for (k in range(int(KQ_GRID_IQ3S_WORDS / 64u))) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ3S + idx]
         }
@@ -11671,7 +11671,7 @@ class KqGemvIq3sN : KqGemvIq3s {
 // into workgroup memory ahead of the shell.
 [vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3xxs : KqGemvBase {
-    @workgroup gridw : uint[256]
+    @workgroup gridw : uint[int(KQ_GRID_IQ3XXS_WORDS)]
 
     //! one 16-weight half's four signed grid words: qs word `qsw`, its two 7-bit ksigns indices out of `aux` at `l0`
     def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 {
@@ -11693,7 +11693,7 @@ class KqGemvIq3xxs : KqGemvBase {
     //! the 1 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
-        for (k in range(4)) {
+        for (k in range(int(KQ_GRID_IQ3XXS_WORDS / 64u))) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ3XXS + idx]
         }
@@ -11900,7 +11900,7 @@ class KqGemvK6N : KqGemvK6 {
 // strips (1 + 2s) keep split lo/hi dots under the eighth-ed d. The 8 KB grid stages ahead.
 [vk_dispatch(name = "kq_gemv_iq2s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2s : KqGemvBase {
-    @workgroup gridw : uint[2048]
+    @workgroup gridw : uint[int(KQ_GRID_IQ2S_WORDS)]
 
     //! one 16-weight half's four signed grid words: two 8-bit indices out of `qw` at `l0` with their ninth and tenth bits out of `qh`,
     //! two staged u64 words each, the sign bytes at `l0` of `sgw`
@@ -11929,7 +11929,7 @@ class KqGemvIq2s : KqGemvBase {
     //! the 8 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
-        for (k in range(32)) {
+        for (k in range(int(KQ_GRID_IQ2S_WORDS / 64u))) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2S + idx]
         }
@@ -11957,7 +11957,7 @@ class KqGemvIq2sN : KqGemvIq2s {
 // recomputes (no sign plane, no qh); per-16 UNSIGNED strips under the eighth-ed d.
 [vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xs : KqGemvBase {
-    @workgroup gridw : uint[1024]
+    @workgroup gridw : uint[int(KQ_GRID_IQ2XS_WORDS)]
 
     //! one 16-weight half's four signed grid words: the two u16 qs words of `qw`, each a 9-bit index (two staged words) and a 7-bit ksigns index
     def iq2xs_quad(qw : uint) : uint4 {
@@ -11984,7 +11984,7 @@ class KqGemvIq2xs : KqGemvBase {
     //! the 4 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
-        for (k in range(16)) {
+        for (k in range(int(KQ_GRID_IQ2XS_WORDS / 64u))) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2XS + idx]
         }
@@ -12012,7 +12012,7 @@ class KqGemvIq2xsN : KqGemvIq2xs {
 // (1 + 2s) strip under the eighth-ed d reads exactly through the shared signed extract.
 [vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxs : KqGemvBase {
-    @workgroup gridw : uint[512]
+    @workgroup gridw : uint[int(KQ_GRID_IQ2XXS_WORDS)]
 
     //! one 16-weight half's four signed grid words: two byte indices out of `gw` at half `hu` (two staged words each), their 7-bit ksigns out of `aux`
     def iq2xxs_quad(gw, aux, hu : uint) : uint4 {
@@ -12036,7 +12036,7 @@ class KqGemvIq2xxs : KqGemvBase {
     //! the 2 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
-        for (k in range(8)) {
+        for (k in range(int(KQ_GRID_IQ2XXS_WORDS / 64u))) {
             let idx = lid + uint(k) * 64u
             gridw[idx] = gridb[KQ_GRID_IQ2XXS + idx]
         }
