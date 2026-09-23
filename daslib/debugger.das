@@ -92,6 +92,7 @@ struct DapiBlock {
     argumentsOffset : uint
     body : void?
     aotFunction : void?
+    jitFunction : void?
     functionArguments : float4?
     info : FuncInfo?
 }
