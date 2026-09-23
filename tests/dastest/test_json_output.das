@@ -24,7 +24,11 @@ struct JsonReport {
 def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let das_root = get_das_root()
     let dastest_path = "{das_root}/dastest/dastest.das"
-    let json_file = "{das_root}/tests/dastest/_temp_{fixture}.json"
+    let temp = create_temp_file_result("dastest_{fixture}", ".json")
+    if (!(temp is value)) {
+        panic("Failed to create a temporary JSON report file: {temp as error}")
+    }
+    let json_file = unsafe(temp.value)
     let test_file = "{das_root}/tests/dastest/_fixture_{fixture}.das"
     // argv, not a shell command line: cmd.exe /c strips the first and last quote
     // of a line that starts with one, which unquotes the interpreter path
