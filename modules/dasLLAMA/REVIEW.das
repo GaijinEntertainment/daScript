@@ -913,14 +913,40 @@ def private check_ar_max_dim_triple {
 var private CM2_KHR_EXEMPT : table<string>   //! every format on the cm2 template owns a KHR arm today; a per-32 format the feed never admits in mm mode would join here
 var private CM2_NO_EXEMPT : table<string>
 
+//! every `class template <Fmt>Cm2T` on the cm2 base - directly, or through another format's template (`Iq4nlCm2T : Q40Cm2T`)
 def private cm2_format_templates(exempt : table<string>) : array<string> {
     var out : array<string>
     for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
         continue if (!(line |> starts_with("class template ")))
         let name = ident_prefix(slice(line, length("class template ")))
-        if (name |> ends_with("Cm2T") && find(line, ": KqCm2BatchT") >= 0 && !key_exists(exempt, name)) {
+        let base = cm2_template_base(line)
+        if (name |> ends_with("Cm2T") && (base == "KqCm2BatchT" || base |> ends_with("Cm2T")) && !key_exists(exempt, name)) {
             out |> push(name)
         }
+    }
+    return <- out
+}
+
+//! the base a `class template X : Y {` line names, "" when the line names none
+def private cm2_template_base(line : string) : string {
+    let colon = find(line, " : ")
+    return colon < 0 ? "" : ident_prefix(slice(line, colon + 3))
+}
+
+//! a cm2 format template's class lines, then its bases' up to the cm2 base: an override inherited from a parent template counts
+def private cm2_template_chain_lines(name : string) : array<string> {
+    var out : array<string>
+    var cur = name
+    while (!empty(cur) && cur != "KqCm2BatchT") {
+        out |> push_from(class_lines(VK_CLASSES, "class template {cur}"))
+        var next = ""
+        for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+            if (line |> starts_with("class template {cur} ")) {
+                next = cm2_template_base(line)
+                break
+            }
+        }
+        cur = next
     }
     return <- out
 }
@@ -1087,7 +1113,7 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
     if (bk * unr != d.bk * d.unr) {
         gate_finding(path, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({d.bk * d.unr} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {d.bk * d.unr / 32}u` and a 64-deep one none")
     }
-    var inscope tlines <- class_lines(VK_CLASSES, "class template {st.base}")
+    var inscope tlines <- cm2_template_chain_lines(st.base)
     if (ident_after(tlines, "override SCACHE = ") == "true") {
         let blkw_over = literal_after(tlines, "override BLKW = ")
         let blkw = blkw_over < 0 ? d.blkw : blkw_over

@@ -7055,19 +7055,31 @@ class template K4Cm2T : KqCm2BatchT {
     override DECV4 = true
     override SCACHE = true
 
+    //! the nibble's value under the cached scale pair: the iq4xs codebook's x d sc under IQLUT (SCIQ4 fills the cache off the two-word row, no minuend), else k4's d sc x q - dmin mn
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
             let g = e0 >> 5u
             let sh = ((e0 >> 4u) & 1u) * 4u   //! the low or the high nibbles of sub-block g's 16 bytes
             let w4 = wq4[blk * 8u + g]
-            let srow = blk * 5u
-            let dm = unpackHalf2x16(ws[srow])
-            let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-            let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-            for [unroll_full] (c in range(4)) {
-                let w = w4[c] >> sh
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
+            static_if (IQLUT) {
+                let srow = blk * 2u
+                let w0 = ws[srow]
+                let ds = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, ws[srow + 1u], g))
+                for [unroll_full] (c in range(4)) {
+                    let w = w4[c] >> sh
+                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)])))
+                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(iq4lut[int((w >> 16u) & 0xFu)]), ds * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                }
+            } else {
+                let srow = blk * 5u
+                let dm = unpackHalf2x16(ws[srow])
+                let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+                let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+                for [unroll_full] (c in range(4)) {
+                    let w = w4[c] >> sh
+                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn))
+                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
+                }
             }
         }
     }
@@ -7080,7 +7092,11 @@ class template K4Cm2T : KqCm2BatchT {
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
         let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
-        return float16(sc_pair.x * float(q) - sc_pair.y)
+        static_if (IQLUT) {
+            return float16(sc_pair.x * float(iq4lut[int(q)]))
+        } else {
+            return float16(sc_pair.x * float(q) - sc_pair.y)
+        }
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -7091,9 +7107,15 @@ class template K4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
-        return half4(float4(sc_pair.x * float((l0 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l0 >> (sh + 8u)) & 0xFu) - sc_pair.y,
-            sc_pair.x * float((l1 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l1 >> (sh + 8u)) & 0xFu) - sc_pair.y))
+        static_if (IQLUT) {
+            let ds = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)].x
+            return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
+                ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
+        } else {
+            let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
+            return half4(float4(sc_pair.x * float((l0 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l0 >> (sh + 8u)) & 0xFu) - sc_pair.y,
+                sc_pair.x * float((l1 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l1 >> (sh + 8u)) & 0xFu) - sc_pair.y))
+        }
     }
 }
 
@@ -7270,12 +7292,18 @@ class template Q40Cm2T : KqCm2BatchT {
             let d = (g & 1u) == 0u ? dp.x : dp.y
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * (float(w & 0xFu) - 8.0), d * (float((w >> 8u) & 0xFu) - 8.0)))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * (float((w >> 16u) & 0xFu) - 8.0), d * (float((w >> 24u) & 0xFu) - 8.0)))
+                static_if (IQLUT) {
+                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)])))
+                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                } else {
+                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * (float(w & 0xFu) - 8.0), d * (float((w >> 8u) & 0xFu) - 8.0)))
+                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * (float((w >> 16u) & 0xFu) - 8.0), d * (float((w >> 24u) & 0xFu) - 8.0)))
+                }
             }
         }
     }
 
+    //! the nibble's value: the iq4nl codebook's under IQLUT, q40's centered nibble otherwise
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
@@ -7286,7 +7314,11 @@ class template Q40Cm2T : KqCm2BatchT {
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
         let d = (g & 1u) == 0u ? dp.x : dp.y
-        return float16(d * (float(q) - 8.0))
+        static_if (IQLUT) {
+            return float16(d * float(iq4lut[int(q)]))
+        } else {
+            return float16(d * (float(q) - 8.0))
+        }
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -7300,8 +7332,13 @@ class template Q40Cm2T : KqCm2BatchT {
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
         let d = (g & 1u) == 0u ? dp.x : dp.y
-        return half4(float4(d * (float((l0 >> sh) & 0xFu) - 8.0), d * (float((l0 >> (sh + 8u)) & 0xFu) - 8.0),
-            d * (float((l1 >> sh) & 0xFu) - 8.0), d * (float((l1 >> (sh + 8u)) & 0xFu) - 8.0)))
+        static_if (IQLUT) {
+            return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]), d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
+                d * float(iq4lut[int((l1 >> sh) & 0xFu)]), d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
+        } else {
+            return half4(float4(d * (float((l0 >> sh) & 0xFu) - 8.0), d * (float((l0 >> (sh + 8u)) & 0xFu) - 8.0),
+                d * (float((l1 >> sh) & 0xFu) - 8.0), d * (float((l1 >> (sh + 8u)) & 0xFu) - 8.0)))
+        }
     }
 }
 
@@ -7430,53 +7467,9 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
 }
 
 [ |> template_struct_instance]
-class template Iq4xsCm2T : KqCm2BatchT {
-    typedef BLK = VkK4Blk   // the iq4xs plane is the k/k+16 pairing verbatim - the k4 lane view fits
-    typedef ST = uint
+class template Iq4xsCm2T : K4Cm2T {   //! k4's nibble plane and cached-scale tile verbatim, the nibble read through the codebook and the cache filled off the two-word row
     override IQLUT = true
-    override DECV4 = true
-    override SCACHE = true
     override SCIQ4 = true
-
-    def override khr_stage16(blk, e0, sbase : uint) : void {
-        static_if (KHR) {
-            let g = e0 >> 5u
-            let sh = ((e0 >> 4u) & 1u) * 4u
-            let w4 = wq4[blk * 8u + g]
-            let srow = blk * 2u
-            let w0 = ws[srow]
-            let ds = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, ws[srow + 1u], g))
-            for [unroll_full] (c in range(4)) {
-                let w = w4[c] >> sh
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)])))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(iq4lut[int((w >> 16u) & 0xFu)]), ds * float(iq4lut[int((w >> 24u) & 0xFu)])))
-            }
-        }
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
-        return float16(sc_pair.x * float(iq4lut[int(q)]))
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let li = int((g * 16u + (e & 15u)) >> 1u)
-        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
-        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let ds = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)].x
-        return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
-            ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
-    }
 }
 
 [ |> template_struct_instance]
@@ -7782,54 +7775,8 @@ class template Iq3xxsCm2T : KqCm2BatchT {
 }
 
 [ |> template_struct_instance]
-class template Iq4nlCm2T : KqCm2BatchT {
-    typedef BLK = VkK4Blk   // q40's nibble plane verbatim - the k4 lane view fits
-    typedef ST = uint
+class template Iq4nlCm2T : Q40Cm2T {   //! q40's nibble plane and tile verbatim, the nibble read through the codebook
     override IQLUT = true
-    override DECV4 = true
-
-    def override khr_stage16(blk, e0, sbase : uint) : void {
-        static_if (KHR) {
-            let g = e0 >> 5u
-            let sh = ((e0 >> 4u) & 1u) * 4u
-            let w4 = wq4[blk * 8u + g]
-            let dp = unpackHalf2x16(ws[blk * 5u + (g >> 1u)])
-            let d = (g & 1u) == 0u ? dp.x : dp.y
-            for [unroll_full] (c in range(4)) {
-                let w = w4[c] >> sh
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)])))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
-            }
-        }
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
-        let d = (g & 1u) == 0u ? dp.x : dp.y
-        return float16(d * float(iq4lut[int(q)]))
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let li = int((g * 16u + (e & 15u)) >> 1u)
-        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
-        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
-        let d = (g & 1u) == 0u ? dp.x : dp.y
-        return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]), d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
-            d * float(iq4lut[int((l1 >> sh) & 0xFu)]), d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
-    }
 }
 
 [ |> template_struct_instance]
