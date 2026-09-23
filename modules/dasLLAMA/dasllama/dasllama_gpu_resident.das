@@ -402,27 +402,6 @@ def private resident_hidden(t : Model) : int64 {
     return w > 0l ? w : t.config.n_ff_exp
 }
 
-//! an MoE layer's device bytes: the expert triple and the shared expert's q8 triple when it has one
-def private resident_moe_layer_bytes(t : Model; l : int64) : int64 {
-    let c = t.config
-    let ne = c.n_expert
-    let nfe = c.n_ff_exp
-    var bytes = moe_gpu_plane_bytes(c.dim, ne * nfe, int(rdec_efmt(t, t.we1_fmt, l)))
-    bytes += moe_gpu_plane_bytes(c.dim, ne * nfe, int(rdec_efmt(t, t.we3_fmt, l)))
-    bytes += moe_gpu_plane_bytes(nfe, ne * c.dim, int(rdec_efmt(t, t.we2_fmt, l)))
-    if (c.moe_dense_shexp) {
-        let hid = layer_hidden(t, l)
-        bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
-        bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
-        bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
-    } elif (c.n_ff_shexp > 0l) {
-        bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 1).f))
-        bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 3).f))
-        bytes += moe_gpu_plane_bytes(c.n_ff_shexp, c.dim, int(resident_shexp_plane(t, l, 2).f))
-    }
-    return bytes
-}
-
 //! the shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the K-quant plane where the
 //! loader kept one, else the q8 transcode the CPU chain reads
 def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64> {
@@ -439,26 +418,100 @@ def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : K
     return (f = KqFmt.q8, off = t.wsh2_off + l * she)
 }
 
+//! the deltanet geometry of the driver's recurrent layers; the zero record on a model with none
+def private rdec_dn_geom(t : Model) : RdecDnGeom {
+    let c = t.config
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l)) {
+            return RdecDnGeom(cd = dn_conv_dim(c), kd = dn_key_dim(c), di = c.ssm_d_inner, nvh = c.ssm_dt_rank,
+                              nkh = c.ssm_n_group, ds = c.ssm_d_state, dconv = c.ssm_d_conv, ba_f32 = t.dn_ba_f32)
+        }
+    }
+    return RdecDnGeom()
+}
+
+//! the device planes the resident driver places, one row per plane (its row length, row count and format): the plan sums
+//! their bytes and the upload reserves and places them from the same list, so the two cannot drift; `ple_tbl` adds the
+//! token table the plan admitted
+def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array<tuple<n : int64; rows : int64; f : KqFmt>> {
+    let c = t.config
+    let dim = c.dim
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
+    var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
+    planes |> reserve(c.n_layers * 11l + 1l)
+    for (l in range64(c.n_layers)) {
+        let lf = resident_layer_fmts(t, l)
+        if (layer_is_moe(t, l)) {
+            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we1_fmt, l)))
+            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we3_fmt, l)))
+            planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = rdec_efmt(t, t.we2_fmt, l)))
+            if (c.moe_dense_shexp) {
+                let hid_l = layer_hidden(t, l)
+                planes |> push((n = dim, rows = hid_l, f = lf.f1))
+                planes |> push((n = dim, rows = hid_l, f = lf.f3))
+                planes |> push((n = hid_l, rows = dim, f = lf.f2))
+            } elif (c.n_ff_shexp > 0l) {
+                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 1).f))
+                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 3).f))
+                planes |> push((n = c.n_ff_shexp, rows = dim, f = resident_shexp_plane(t, l, 2).f))
+            }
+        }
+        if (layer_is_recurrent(c, l)) {
+            planes |> push((n = dim, rows = dng.cd, f = fmt_at(t.dnqkv_fmt, l)))
+            planes |> push((n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l)))
+            planes |> push((n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l)))
+            if (!dng.ba_f32) {
+                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
+                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
+            }
+        } else {
+            let qd_l = layer_qd(c, l)
+            let kvd_l = layer_kv_dim(c, l)
+            planes |> push((n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq))
+            if (t.kv_src[l] == l) {
+                planes |> push((n = dim, rows = kvd_l, f = lf.fk))
+                if (!resident_v_from_k(c, l)) {
+                    planes |> push((n = dim, rows = kvd_l, f = lf.fv))
+                }
+            }
+            planes |> push((n = qd_l, rows = dim, f = lf.fo))
+        }
+        if (!layer_is_moe(t, l)) {
+            let hid_l = resident_dense_width(t, l)
+            planes |> push((n = dim, rows = hid_l, f = lf.f1))
+            planes |> push((n = dim, rows = hid_l, f = lf.f3))
+            planes |> push((n = hid_l, rows = dim, f = lf.f2))
+        }
+        if (has_ple(c)) {   //! the ple gate and proj planes are q8 whatever the file's format
+            planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
+            planes |> push((n = c.n_embd_per_layer, rows = dim, f = KqFmt.q8))
+        }
+    }
+    planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
+    if (ple_tbl) {
+        planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
+    }
+    return <- planes
+}
+
+//! the recurrent layers' f32 beta / alpha rows on the f32 arm: device rows beside the planes, no arena block
+def private resident_dn_ba_f32_bytes(t : Model) : int64 {
+    let c = t.config
+    if (!t.dn_ba_f32) {
+        return 0l
+    }
+    var n = 0l
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l)) {
+            n++
+        }
+    }
+    return n * 2l * c.ssm_dt_rank * c.dim * 4l
+}
+
 //! the router planes: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated, and the f16 mirror the cm2 route's window GEMM reads (counted whatever the route, the plan's other terms run high too)
 def private resident_router_bytes(c : Config; n_moe : int64) : int64 => (
     n_moe * (c.n_expert + (c.n_ff_shexp > 0l && c.moe_shexp_gated ? 1l : 0l)) * c.dim * 6l)
-
-//! a layer's per-layer-embedding device bytes: the gate [dim x ple] and proj [ple x dim] planes on the q8 arena; 0 where the model has none
-def private resident_ple_layer_bytes(c : Config) : int64
-    => has_ple(c) ? 2l * moe_gpu_plane_bytes(c.dim, c.n_embd_per_layer, int(KqFmt.q8)) : 0l
-
-//! a recurrent layer's device bytes: the deltanet triple and the beta/alpha rows (f16 on the f32 arm, q8 planes otherwise); 0 on an attention layer
-def private resident_dn_layer_bytes(t : Model; l : int64) : int64 {
-    let c = t.config
-    if (!(layer_is_recurrent(c, l) && l < long_length(t.dnqkv_offs) && t.dnqkv_offs[l] >= 0l)) {
-        return 0l
-    }
-    var bytes = moe_gpu_plane_bytes(c.dim, dn_conv_dim(c), int(fmt_at(t.dnqkv_fmt, l)))
-    bytes += moe_gpu_plane_bytes(c.dim, c.ssm_d_inner, int(fmt_at(t.dngate_fmt, l)))
-    bytes += moe_gpu_plane_bytes(c.ssm_d_inner, c.dim, int(fmt_at(t.dnout_fmt, l)))
-    bytes += t.dn_ba_f32 ? 2l * c.ssm_dt_rank * c.dim * 4l : 2l * moe_gpu_plane_bytes(c.dim, c.ssm_dt_rank, int(KqFmt.q8))
-    return bytes
-}
 
 // the driver's device allocations past weights + KV — the prefill window buffers dominate.
 // An estimate, deliberately a touch high; the flat term carries the decode/batch smalls.
@@ -543,7 +596,7 @@ def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : 
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
-def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {   // nolint:STYLE037 — one tally of every plane class the card must hold, then the two optional planes on what is left
+def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
     let c = t.config
     var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
     if (p.budget_bytes <= 0l) {
@@ -560,35 +613,15 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     fill_plan_room(p)
     var n_moe = 0l
     for (l in range64(c.n_layers)) {
-        let qd = layer_qd(c, l)
-        let kvd = layer_kv_dim(c, l)
-        let hid = layer_hidden(t, l)
         if (layer_is_moe(t, l)) {
-            p.weight_bytes += resident_moe_layer_bytes(t, l)
             n_moe++
         }
-        if (t.wq_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, qd * (c.q_gated ? 2l : 1l), int(fmt_at(t.wq_fmt, l)))
-        }
-        if (t.wk_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, kvd, int(fmt_at(t.wk_fmt, l)))
-        }
-        if (t.wv_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, kvd, int(fmt_at(t.wv_fmt, l)))
-        }
-        if (t.wo_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
-        }
-        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l && !layer_is_moe(t, l)) {   // a routed layer's dense triple (gemma-4's shared expert) is tallied with its routed block above, as the upload places it once
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
-            p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
-        }
-        p.weight_bytes += resident_dn_layer_bytes(t, l)
-        p.weight_bytes += resident_ple_layer_bytes(c)
     }
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
+    var inscope planes <- resident_planes(t, rdec_dn_geom(t), false)   //! the list the upload places: the plan's bytes are its planes' bytes
+    for (pl in planes) {
+        p.weight_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
+    }
+    p.weight_bytes += resident_dn_ba_f32_bytes(t)
     p.weight_bytes += resident_router_bytes(c, n_moe)
     let total = p.weight_bytes + p.kv_bytes + p.scratch_bytes
     let usable = p.usable_bytes
@@ -1092,68 +1125,15 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     let cos_elems = resident_cos_elems(c)
-    var dng = RdecDnGeom()
-    if (n_recurrent > 0l) {
-        dng = RdecDnGeom(cd = dn_conv_dim(c), kd = dn_key_dim(c), di = c.ssm_d_inner, nvh = c.ssm_dt_rank,
-                         nkh = c.ssm_n_group, ds = c.ssm_d_state, dconv = c.ssm_d_conv, ba_f32 = t.dn_ba_f32)
-    }
+    let dng = rdec_dn_geom(t)
     // tally arena blocks per format
     var need : table<int; int64>
-    var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(c.n_layers * 11l + 1l)
+    var planes <- resident_planes(t, dng, plan.ple_tbl_bytes > 0l)
     var n_moe = 0l
     for (l in range64(c.n_layers)) {
-        let lf = resident_layer_fmts(t, l)
         if (layer_is_moe(t, l)) {
-            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we1_fmt, l)))
-            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we3_fmt, l)))
-            planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = rdec_efmt(t, t.we2_fmt, l)))
-            if (c.moe_dense_shexp) {
-                let hid_l = layer_hidden(t, l)
-                planes |> push((n = dim, rows = hid_l, f = lf.f1))
-                planes |> push((n = dim, rows = hid_l, f = lf.f3))
-                planes |> push((n = hid_l, rows = dim, f = lf.f2))
-            } elif (c.n_ff_shexp > 0l) {
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 1).f))
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 3).f))
-                planes |> push((n = c.n_ff_shexp, rows = dim, f = resident_shexp_plane(t, l, 2).f))
-            }
             n_moe++
         }
-        if (layer_is_recurrent(c, l)) {
-            planes |> push((n = dim, rows = dng.cd, f = fmt_at(t.dnqkv_fmt, l)))
-            planes |> push((n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l)))
-            planes |> push((n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l)))
-            if (!dng.ba_f32) {
-                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
-                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
-            }
-        } else {
-            let qd_l = layer_qd(c, l)
-            let kvd_l = layer_kv_dim(c, l)
-            planes |> push((n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq))
-            if (t.kv_src[l] == l) {
-                planes |> push((n = dim, rows = kvd_l, f = lf.fk))
-                if (!resident_v_from_k(c, l)) {
-                    planes |> push((n = dim, rows = kvd_l, f = lf.fv))
-                }
-            }
-            planes |> push((n = qd_l, rows = dim, f = lf.fo))
-        }
-        if (!layer_is_moe(t, l)) {
-            let hid_l = resident_dense_width(t, l)
-            planes |> push((n = dim, rows = hid_l, f = lf.f1))
-            planes |> push((n = dim, rows = hid_l, f = lf.f3))
-            planes |> push((n = hid_l, rows = dim, f = lf.f2))
-        }
-        if (has_ple(c)) {   //! the ple gate and proj planes are q8 whatever the file's format
-            planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
-            planes |> push((n = c.n_embd_per_layer, rows = dim, f = KqFmt.q8))
-        }
-    }
-    planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
-    if (plan.ple_tbl_bytes > 0l) {
-        planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
     }
     for (pl in planes) {
         if (!kq_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)

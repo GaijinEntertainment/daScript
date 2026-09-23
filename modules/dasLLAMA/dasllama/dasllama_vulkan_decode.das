@@ -11,6 +11,7 @@ require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard 
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
 require dasllama/dasllama_common
+require dasllama/dasllama_convert   // cvt_f32_to_f16: the f16 host copies of the router, the beta/alpha rows and the K/V mirrors
 require dasllama/dasllama_par   // maybe_parallel_for: the N-row logits land a row a lane
 require vulkan
 require vulkan/vulkan_boost
@@ -305,7 +306,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim, (dim / 32l) * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),   //! the whole per-row feed planes: the one-row stamp reads row 0
             fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
     }
     // down GEMV -> ffnout
@@ -542,9 +543,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         var half : array<float16>
         half |> reserve(long_length(router))
         half |> resize(long_length(router))
-        for (v, hv in router, half) {
-            hv = float16(v)
-        }
+        cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(router[0])), long_length(router))
         r.router16_bytes = long_length(half) * 2l
         r.router16_dev = make_device_buf(r.router16_bytes)
         upload_region_at(r.router16_dev, 0l, unsafe(addr<uint8 const?>(half[0])), r.router16_bytes)
@@ -930,9 +929,7 @@ def vk_rdec_upload_dn_ba(rows : array<float>) {
     var half : array<float16>
     half |> reserve(long_length(rows))
     half |> resize(long_length(rows))
-    for (r, hv in rows, half) {
-        hv = float16(r)
-    }
+    cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(rows[0])), long_length(rows))
     g_rd.dn_ba_bytes = long_length(half) * 2l
     g_rd.dn_ba_dev = make_device_buf(g_rd.dn_ba_bytes)
     upload_region_at(g_rd.dn_ba_dev, 0l, unsafe(addr<uint8 const?>(half[0])), g_rd.dn_ba_bytes)
@@ -1209,22 +1206,19 @@ def private rq_stamp(kfmt : int; storex : bool) : RqStamp {
 def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs : uint64) : VkDescriptorSet {
     let dim = g_rd.dim
     let nb = g_rd.norms_bytes
-    if (stamp == RqStamp.rq) {
-        return set_cls_ar_rq(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs),
-            fixed_array(dim * 4l, dim * 4l, nb, dim, (dim / 32l) * 4l), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ))
-    } elif (stamp == RqStamp.rq_b) {
-        let rows = g_rd.nb
-        return set_cls_ar_rq_b(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs),
-            fixed_array(dim * 4l * rows, dim * 4l * rows, nb, dim * rows, (dim / 32l) * 4l * rows), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ))
-    } elif (stamp == RqStamp.rqx) {
-        return set_cls_ar_rqx(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev),
-            fixed_array(dim * 4l, dim * 4l, nb, dim, (dim / 32l) * 4l, dim * 4l), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB))
-    } elif (stamp == RqStamp.rqk) {
-        return set_cls_ar_rqk(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs),
-            fixed_array(dim * 4l, dim * 4l, nb, dim, (dim / 32l) * 4l), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ))
-    }
-    return set_cls_ar_rqkx(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev),
-        fixed_array(dim * 4l, dim * 4l, nb, dim, (dim / 32l) * 4l, dim * 4l), fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB))
+    let rows = g_rd.nb
+    let xbytes = dim * 4l * rows   //! every arm binds the whole per-row planes: a one-row stamp reads row 0 of a buffer sized for the regions
+    let bufs = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs)
+    let sizes = fixed_array(xbytes, xbytes, nb, dim * rows, (dim / 32l) * 4l * rows)
+    let bits = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ)
+    if (stamp == RqStamp.rq) return set_cls_ar_rq(bufs, sizes, bits)
+    if (stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
+    if (stamp == RqStamp.rqk) return set_cls_ar_rqk(bufs, sizes, bits)
+    let bufs_x = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev)
+    let sizes_x = fixed_array(xbytes, xbytes, nb, dim * rows, (dim / 32l) * 4l * rows, xbytes)
+    let bits_x = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB)
+    if (stamp == RqStamp.rqx) return set_cls_ar_rqx(bufs_x, sizes_x, bits_x)
+    return set_cls_ar_rqkx(bufs_x, sizes_x, bits_x)
 }
 
 def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
@@ -1292,8 +1286,9 @@ def private rd_ensure_fused_sets {
         L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
+            let nb = g_rd.nb   //! the whole per-row planes bound: the one-row epilogue reads row 0
             L.s_wo_ar = set_q8_gemv_ar_cls(fixed_array(po.wq, po.ws, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
-                fixed_array(po.wqb, po.wsb, L.qd, (L.qd / 32l) * 4l, dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l, 16l),
+                fixed_array(po.wqb, po.wsb, L.qd * nb, (L.qd / 32l) * 4l * nb, dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * nb, (dim / 32l) * 4l * nb, 16l),
                 fixed_array(0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB2))
         }
         if (!L.moe) {
@@ -1302,8 +1297,9 @@ def private rd_ensure_fused_sets {
             L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
+                let rows = g_rd.nb   //! the whole per-row planes bound: the one-row epilogue reads row 0
                 L.s_down_ar = set_q8_gemv_ar_cls(fixed_array(p2.wq, p2.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
-                    fixed_array(p2.wqb, p2.wsb, BATCH_HQ_BYTES, BATCH_HS_BYTES, dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l, 16l),
+                    fixed_array(p2.wqb, p2.wsb, BATCH_HQ_BYTES, BATCH_HS_BYTES, dim * 4l * rows, dim * 4l * rows, g_rd.norms_bytes, dim * rows, (dim / 32l) * 4l * rows, 16l),
                     fixed_array(0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_FFO))
             }
         }
@@ -3684,15 +3680,9 @@ def vk_moe_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8
     } elif (npos > 0l) {
         g_dat_h16 |> resize(npos * kvd)
         unsafe {
-            let kf = reinterpret<float const?>(kp)
-            let vf = reinterpret<float const?>(vp)
-            for (i in range64(npos * kvd)) {
-                g_dat_h16[i] = float16(clamp(kf[i], -65504.0, 65504.0))
-            }
+            cvt_f32_to_f16(addr<uint16?>(g_dat_h16[0]), reinterpret<float const?>(kp), npos * kvd)
             upload_region_at(L.k_mir, 0l, addr<uint8 const?>(g_dat_h16[0]), npos * kvd * 2l)
-            for (i in range64(npos * kvd)) {
-                g_dat_h16[i] = float16(clamp(vf[i], -65504.0, 65504.0))
-            }
+            cvt_f32_to_f16(addr<uint16?>(g_dat_h16[0]), reinterpret<float const?>(vp), npos * kvd)
             upload_region_at(L.v_mir, 0l, addr<uint8 const?>(g_dat_h16[0]), npos * kvd * 2l)
         }
     }
