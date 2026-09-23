@@ -10966,7 +10966,42 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
 // Every kq format shares family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves every
 // pipeline (identical inherited members), each leaf keeping its own ensure_/enc_ names.
-class KqGemvK4Base : KqGemvBase {
+//! every decode GEMV leaf's shape: the format's decode on a `<Fmt>GemvT` template, its one-column and N-column stamps
+//! two overrides of `NCOL`, and a grid format's codebook staged into workgroup memory ahead of either shell
+[ |> template_struct_instance]
+class template KqGemvLeafT : KqGemvBase {
+    @template_constant NCOL : bool = false      //!< the N-column shell (`gemv_shell_n`) in place of the one-column one
+    @template_constant GRID : bool = false      //!< a grid-codebook format: `GRID_WORDS` words of `gridb` from `GRID_OFF` stage into `gridw` ahead of the shell
+    @template_constant GRID_WORDS : uint = 64u  //!< the codebook's words and its first word in `gridb` - literals (template constants), held equal to the format's `KQ_GRID_<FMT>_WORDS` / `KQ_GRID_<FMT>` by REVIEW.das
+    @template_constant GRID_OFF : uint = 0u
+    @workgroup @template_gate = GRID gridw : uint[int(GRID_WORDS)]
+
+    def stage_grid {
+        static_if (GRID) {
+            let lid = gl_LocalInvocationID.x
+            for (k in range(int(GRID_WORDS / 64u))) {
+                let idx = lid + uint(k) * 64u
+                gridw[idx] = gridb[GRID_OFF + idx]
+            }
+            barrier()
+        }
+    }
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        static_if (GRID) {
+            stage_grid()
+        }
+        static_if (NCOL) {
+            gemv_shell_n()
+        } else {
+            gemv_shell()
+        }
+    }
+}
+
+[ |> template_struct_instance]
+class template K4GemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         nib_split(wq4[wsb * 8u + blk], wl, wh)
         return dm_terms(wsb, blk)
@@ -10976,25 +11011,17 @@ class KqGemvK4Base : KqGemvBase {
 }
 
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK4 : KqGemvK4Base {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k4_cls_spv")]
-    def run {
-        gemv_shell()
-    }
-}
+class KqGemvK4 : K4GemvT {}
 
 [vk_dispatch(name = "kq_gemv_k4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK4N : KqGemvK4Base {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k4_n_cls_spv")]
-    def run {
-        gemv_shell_n()
-    }
+class KqGemvK4N : K4GemvT {
+    override NCOL = true
 }
 
 //! the routed experts' Q4_K gate and up GEMVs, the activation and its Q8_0 requant in one dispatch (`Q8GemvGu`'s form
 //! over the slot regions): the gate stack's regions at binding 2, the up stack's at 7, the one feed row
-[vk_dispatch(name = "kq_gemv_k4_gu_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK4Gu : KqGemvK4Base {
+[vk_dispatch(name = "kq_gemv_k4_gu_cls", kernel = "run_gu", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4Gu : K4GemvT {
     @ssbo @binding = 7 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
     @ssbo @binding = 8 outq : array<int8>       // the activated hidden rows' Q8_0 quants (the down GEMV's feed)
     @ssbo @binding = 9 outs : array<float>      // ... and their per-block scales
@@ -11002,7 +11029,7 @@ class KqGemvK4Gu : KqGemvK4Base {
     @workgroup wg_u : float[32]   //! ... and up dots
 
     [spirv_kernel(local_size_x = 256, name = "kq_gemv_k4_gu_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
-    def run {
+    def run_gu {
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
         let row_lane = lane % lanes_per_row
@@ -11050,8 +11077,8 @@ class KqGemvK4Gu : KqGemvK4Base {
 }
 
 // Q4_0: w = d*(q - 8) — the k4 nibble tiling with no min plane; -8 folds against the block sum
-[vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvQ40 : KqGemvBase {
+[ |> template_struct_instance]
+class template Q40GemvT : KqGemvLeafT {
     def q40_d(wsb, blk : uint) : float {
         let dp = unpackHalf2x16(wsu[wsb * 5u + blk / 2u])
         return blk % 2u == 0u ? dp.x : dp.y
@@ -11064,52 +11091,44 @@ class KqGemvQ40 : KqGemvBase {
     }
 
     def override fold_reads_bsum : bool => true
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvQ40 : Q40GemvT {}
+
 [vk_dispatch(name = "kq_gemv_q40_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvQ40N : KqGemvQ40 {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvQ40N : Q40GemvT {
+    override NCOL = true
 }
 
 // IQ4_XS: w = d*sc*LUT[q] — the q40 nibble tiling decoded through the codebook into signed
 // lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
-[vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq4xs : KqGemvBase {
+[ |> template_struct_instance]
+class template Iq4xsGemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         iq4_split(wq4[wsb * 8u + blk], wl, wh)
         let w0 = wsu[wsb * 2u]
         let a = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], blk))
         return float4(a, 0.0, a, 0.0)
     }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xs : Iq4xsGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq4xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq4xsN : KqGemvIq4xs {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvIq4xsN : Iq4xsGemvT {
+    override NCOL = true
 }
 
 // IQ3_S: grid gather (8-bit index | qh ninth bit -> 4 magnitudes per word), the block's own
 // sign bytes flip them, per-32 signed (1 + 2s) sub-scale x d - iq4xs's fold (no bsum term)
 // over the 26-word rows; the 2 KB grid stages into workgroup memory ahead of the shell.
-[vk_dispatch(name = "kq_gemv_iq3s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq3s : KqGemvBase {
-    @workgroup gridw : uint[int(KQ_GRID_IQ3S_WORDS)]
+[ |> template_struct_instance]
+class template Iq3sGemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 512u
+    override GRID_OFF = 3584u
 
     def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 {
         let sg0 = (sgw >> (l0 * 8u)) & 255u
@@ -11129,39 +11148,25 @@ class KqGemvIq3s : KqGemvBase {
         let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
         return float4(a, 0.0, a, 0.0)
     }
-
-    def stage_grid {
-        let lid = gl_LocalInvocationID.x
-        for (k in range(int(KQ_GRID_IQ3S_WORDS / 64u))) {
-            let idx = lid + uint(k) * 64u
-            gridw[idx] = gridb[KQ_GRID_IQ3S + idx]
-        }
-        barrier()
-    }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_cls_spv")]
-    def run {
-        stage_grid()
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq3s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s : Iq3sGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq3s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq3sN : KqGemvIq3s {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_n_cls_spv")]
-    def override run {
-        stage_grid()
-        gemv_shell_n()
-    }
+class KqGemvIq3sN : Iq3sGemvT {
+    override NCOL = true
 }
 
 // IQ3_XXS: halved-grid gather (bare 8-bit index -> 4 magnitudes per word), signs from the
 // aux32's four 7-bit ksigns indices (bit 7 = parity, computed - no table), per-32 (2ls + 1)
 // sub-scale x halved d - iq3s's fold exactly, over the 24-word rows; the 1 KB grid stages
 // into workgroup memory ahead of the shell.
-[vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq3xxs : KqGemvBase {
-    @workgroup gridw : uint[int(KQ_GRID_IQ3XXS_WORDS)]
+[ |> template_struct_instance]
+class template Iq3xxsGemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 256u
+    override GRID_OFF = 4096u
 
     def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 {
         let sg0 = ksign7((aux >> (7u * l0)) & 127u)
@@ -11179,35 +11184,20 @@ class KqGemvIq3xxs : KqGemvBase {
         return float4(a, 0.0, a, 0.0)
     }
 
-    def stage_grid {
-        let lid = gl_LocalInvocationID.x
-        for (k in range(int(KQ_GRID_IQ3XXS_WORDS / 64u))) {
-            let idx = lid + uint(k) * 64u
-            gridw[idx] = gridb[KQ_GRID_IQ3XXS + idx]
-        }
-        barrier()
-    }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_cls_spv")]
-    def run {
-        stage_grid()
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3xxs : Iq3xxsGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq3xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq3xxsN : KqGemvIq3xxs {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_n_cls_spv")]
-    def override run {
-        stage_grid()
-        gemv_shell_n()
-    }
+class KqGemvIq3xxsN : Iq3xxsGemvT {
+    override NCOL = true
 }
 
 // IQ4_NL: iq4xs's codebook dot (iq4_word, pure ALU) folded by q40's per-block f16 d - no
 // sub-scales, no bsum term; the rows are q40's 32-word planes verbatim.
-[vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq4nl : KqGemvQ40 {
+[ |> template_struct_instance]
+class template Iq4nlGemvT : Q40GemvT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         iq4_split(wq4[wsb * 8u + blk], wl, wh)
         let d = q40_d(wsb, blk)
@@ -11215,25 +11205,20 @@ class KqGemvIq4nl : KqGemvQ40 {
     }
 
     def override fold_reads_bsum : bool => false
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
-    def override run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nl : Iq4nlGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq4nl_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq4nlN : KqGemvIq4nl {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvIq4nlN : Iq4nlGemvT {
+    override NCOL = true
 }
 
 // Q3_K: q = 2-bit qs lane | hmask bit << 2, minus 4, per-16 SIGNED sub-scales x d — k6's fold with
 // the offset 4 over the k3 planes (6 uint4 per superblock: qs 0..3, hmask 4..5)
-[vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK3 : KqGemvBase {
+[ |> template_struct_instance]
+class template K3GemvT : KqGemvLeafT {
     def k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
         let m2 = 0x03030303u
         let m1 = 0x01010101u
@@ -11254,25 +11239,20 @@ class KqGemvK3 : KqGemvBase {
     }
 
     def override fold_reads_bsum : bool => true
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK3 : K3GemvT {}
+
 [vk_dispatch(name = "kq_gemv_k3_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK3N : KqGemvK3 {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvK3N : K3GemvT {
+    override NCOL = true
 }
 
 // Q2_K: q = the unsigned 2-bit qs lane, per-16 sc/min NIBBLE pairs x d/dmin - the k4 d|dmin
 // fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
-[vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK2 : KqGemvBase {
+[ |> template_struct_instance]
+class template K2GemvT : KqGemvLeafT {
     def k2_quad(q : uint4; sh : uint) : uint4 {
         let m2 = 0x03030303u
         return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
@@ -11291,24 +11271,19 @@ class KqGemvK2 : KqGemvBase {
     }
 
     def override fold_reads_bsum : bool => true
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2 : K2GemvT {}
+
 [vk_dispatch(name = "kq_gemv_k2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK2N : KqGemvK2 {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvK2N : K2GemvT {
+    override NCOL = true
 }
 
 // Q5_K: the k4 fold with the 5th bit deposited from the block's qh word
-[vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK5 : KqGemvBase {
+[ |> template_struct_instance]
+class template K5GemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 10u + blk]
         let qh = wq[wsb * 40u + 32u + blk]
@@ -11324,25 +11299,20 @@ class KqGemvK5 : KqGemvBase {
     }
 
     def override fold_reads_bsum : bool => true
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k5_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK5 : K5GemvT {}
+
 [vk_dispatch(name = "kq_gemv_k5_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK5N : KqGemvK5 {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k5_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvK5N : K5GemvT {
+    override NCOL = true
 }
 
 // Q6_K: q = (ql | qh<<4) - 32 with per-16 SIGNED int8 sub-scales; the lo/hi nibble halves of a
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
-[vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK6 : KqGemvBase {
+[ |> template_struct_instance]
+class template K6GemvT : KqGemvLeafT {
     def k6_quad(nib, qh : uint4; shift : uint) : uint4 {
         let m2 = 0x03030303u
         return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
@@ -11365,27 +11335,24 @@ class KqGemvK6 : KqGemvBase {
     }
 
     def override fold_reads_bsum : bool => true
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_cls_spv")]
-    def run {
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK6 : K6GemvT {}
+
 [vk_dispatch(name = "kq_gemv_k6_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK6N : KqGemvK6 {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_n_cls_spv")]
-    def override run {
-        gemv_shell_n()
-    }
+class KqGemvK6N : K6GemvT {
+    override NCOL = true
 }
 
 // IQ2_S: the iq3s gather widened to the u64 grid - a 10-bit qs|qh index picks TWO grid words
 // (eight magnitudes {8, 25, 43}), the block's own sign bytes flip them; per-16 UNSIGNED
 // strips (1 + 2s) keep split lo/hi dots under the eighth-ed d. The 8 KB grid stages ahead.
-[vk_dispatch(name = "kq_gemv_iq2s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2s : KqGemvBase {
-    @workgroup gridw : uint[int(KQ_GRID_IQ2S_WORDS)]
+[ |> template_struct_instance]
+class template Iq2sGemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 2048u
+    override GRID_OFF = 0u
 
     def iq2s_quad(qw, qh, sgw, l0 : uint) : uint4 {
         let sg0 = (sgw >> (l0 * 8u)) & 255u
@@ -11409,37 +11376,24 @@ class KqGemvIq2s : KqGemvBase {
         return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
-    def stage_grid {
-        let lid = gl_LocalInvocationID.x
-        for (k in range(int(KQ_GRID_IQ2S_WORDS / 64u))) {
-            let idx = lid + uint(k) * 64u
-            gridw[idx] = gridb[KQ_GRID_IQ2S + idx]
-        }
-        barrier()
-    }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2s_cls_spv")]
-    def run {
-        stage_grid()
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq2s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2s : Iq2sGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq2s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2sN : KqGemvIq2s {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2s_n_cls_spv")]
-    def override run {
-        stage_grid()
-        gemv_shell_n()
-    }
+class KqGemvIq2sN : Iq2sGemvT {
+    override NCOL = true
 }
 
 // IQ2_XS: the iq2s u64-grid walk with ksigns-by-parity - each u16 qs word carries a 9-bit
 // grid index (TWO staged words) and a 7-bit KSIGNS_IQ2XS index whose sign byte ksign7
 // recomputes (no sign plane, no qh); per-16 UNSIGNED strips under the eighth-ed d.
-[vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2xs : KqGemvBase {
-    @workgroup gridw : uint[int(KQ_GRID_IQ2XS_WORDS)]
+[ |> template_struct_instance]
+class template Iq2xsGemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 1024u
+    override GRID_OFF = 2048u
 
     def iq2xs_quad(qw : uint) : uint4 {
         let wa = qw & 0xFFFFu
@@ -11462,37 +11416,24 @@ class KqGemvIq2xs : KqGemvBase {
         return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
-    def stage_grid {
-        let lid = gl_LocalInvocationID.x
-        for (k in range(int(KQ_GRID_IQ2XS_WORDS / 64u))) {
-            let idx = lid + uint(k) * 64u
-            gridw[idx] = gridb[KQ_GRID_IQ2XS + idx]
-        }
-        barrier()
-    }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_cls_spv")]
-    def run {
-        stage_grid()
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xs : Iq2xsGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq2xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2xsN : KqGemvIq2xs {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_n_cls_spv")]
-    def override run {
-        stage_grid()
-        gemv_shell_n()
-    }
+class KqGemvIq2xsN : Iq2xsGemvT {
+    override NCOL = true
 }
 
 // IQ2_XXS: the iq3xxs GEMV shell over the two-word u64 grid - block b's grid word carries
 // four BYTE indices (two staged words each), its aux32 the parity-derived ksigns; the per-32
 // (1 + 2s) strip under the eighth-ed d reads exactly through the shared signed extract.
-[vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2xxs : KqGemvBase {
-    @workgroup gridw : uint[int(KQ_GRID_IQ2XXS_WORDS)]
+[ |> template_struct_instance]
+class template Iq2xxsGemvT : KqGemvLeafT {
+    override GRID = true
+    override GRID_WORDS = 512u
+    override GRID_OFF = 3072u
 
     def iq2xxs_quad(gw, aux, hu : uint) : uint4 {
         let b0 = (gw >> (16u * hu)) & 255u
@@ -11512,27 +11453,12 @@ class KqGemvIq2xxs : KqGemvBase {
         return float4(a, 0.0, a, 0.0)
     }
 
-    def stage_grid {
-        let lid = gl_LocalInvocationID.x
-        for (k in range(int(KQ_GRID_IQ2XXS_WORDS / 64u))) {
-            let idx = lid + uint(k) * 64u
-            gridw[idx] = gridb[KQ_GRID_IQ2XXS + idx]
-        }
-        barrier()
-    }
-
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_spv")]
-    def run {
-        stage_grid()
-        gemv_shell()
-    }
 }
 
+[vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxs : Iq2xxsGemvT {}
+
 [vk_dispatch(name = "kq_gemv_iq2xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq2xxsN : KqGemvIq2xxs {
-    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_n_cls_spv")]
-    def override run {
-        stage_grid()
-        gemv_shell_n()
-    }
+class KqGemvIq2xxsN : Iq2xxsGemvT {
+    override NCOL = true
 }

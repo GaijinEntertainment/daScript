@@ -236,14 +236,16 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
    (`6 -> 44`). This is the third id space at its Vulkan seam; without the arm the arena plan
    panics on the first iq4xs stack.
-2. `KqGemvIq4xs : KqGemvBase` - `def override blk_decode`: the block decoded once into its lo
+2. `class template Iq4xsGemvT : KqGemvLeafT` - `def override blk_decode`: the block decoded once into its lo
    and hi packed quads (the q40 nibble tiling, `wq4[wsb * 8 + blk]`, each nibble word decoded
    through `iq4_word` into SIGNED lanes for `sdot4` - OpSDot, signed x signed, so the block-sum
    trick of q40/k4 does not apply: `fold_reads_bsum` stays false) and the fold's terms `(d * sc, 0, d *
    sc, 0)` with `sc` decoded by `iq4xs_sc` off the two-word device row (`scales_h` above d in
    word 0, the `scales_l` nibbles in word 1); the family's `blk_fold` dots the decoded block
-   against each column, and a `KqGemvIq4xsN` stamp whose `run` calls `gemv_shell_n` is the
-   N-column leaf. `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
+   against each column. The two stamps are `KqGemvIq4xs : Iq4xsGemvT {}` and `KqGemvIq4xsN` with
+   `override NCOL = true` - the template's `run` picks the shell; a grid format's template adds
+   `override GRID = true` with its literal `GRID_WORDS` / `GRID_OFF` (REVIEW.das holds them to the
+   `KQ_GRID_<FMT>` chain). `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
    `gemv_cls_ensure_n` / `gemv_cls_enc_n` take one arm each, or the first batched step on a model
    carrying the format panics; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
    which the ncol cell holds against the family's roster `kq_gemv_fmts`, and its N stamp joins the
@@ -299,9 +301,11 @@ does.
 
 A grid format adds one more: its table joins the family's grid buffer (`kq_grid_dev` - a
 `KQ_GRID_<FMT>` word offset, `KQ_GRID_WORDS` / `KQ_GRID_BYTES` grown, the accessor called
-once per word into the host image) and the GEMV's `stage_grid`, which both `run` forms call first, stages `gridb[KQ_GRID_<FMT> + idx]`
-into its `@workgroup` table - never the `*_grid_word` accessor, which the batch and cm2 tiles
-keep (`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+once per word into the host image) and its GEMV template sets `override GRID = true` with the
+literal `GRID_WORDS` / `GRID_OFF` twins of that chain (`check_kq_gemv_grid_literals` holds them), so
+`KqGemvLeafT`'s `stage_grid` stages `gridb[GRID_OFF + idx]` into its `@workgroup` table ahead of
+either shell - never the `*_grid_word` accessor, which the batch and cm2 tiles keep
+(`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
 ### 6b. The cm2 prefill tile - a decode method on the template
 

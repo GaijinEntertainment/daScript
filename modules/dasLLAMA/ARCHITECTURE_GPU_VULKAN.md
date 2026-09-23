@@ -19,7 +19,7 @@ sections 2.2n-2.2o and 2.2an, and the N-row token command a batched step's rows 
 `ARCHITECTURE_GPU_VULKAN_NROW.md`'s 2.2ao-2.2ap. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
 sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
-The module gate's six Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
+The module gate's seven Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
 `khr_stage16` is declared abstract. `check_ar_max_dim_triple` reads `AR_MAX_DIM` in
 `dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
@@ -35,7 +35,7 @@ trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow
 its `BK` and `BN`, an e or s stamp's `BN` to equal `SCHED_M_ROWS` or `SCHED_S_ROWS`, and a
-scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_vk_extension_roster`
+scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_kq_gemv_grid_literals` holds every grid format's `<Fmt>GemvT` literal `GRID_WORDS` / `GRID_OFF` to the `KQ_GRID_<FMT>` chain the host fill reads (sec.2.2ab). `check_vk_extension_roster`
 walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` probe
 `modules/dasVulkan/daslib/vulkan_boost.das` declares, and requires each inside `vk_ext_roster` in
 `dasllama_vulkan_common.das`, licensing no names.
@@ -158,9 +158,9 @@ family's device creator enables.
 
 The grid formats' codebooks (iq2s, iq2xs, iq2xxs, iq3s, iq3xxs) live in one 17 KB model-owned
 device buffer, bound at binding 6 of the kq GEMV family and built on the family's first set
-(`kq_grid_dev`); each format's table sits at a fixed word offset (`KQ_GRID_<FMT>`), and a grid
-format's GEMV stages its table into workgroup memory from that buffer - a coalesced 256 B read
-per 64 lanes. The tables also exist as per-index accessors over a `fixed_array` local
+(`kq_grid_dev`); each format's table sits at a fixed word offset (`KQ_GRID_<FMT>`), and a grid format's GEMV template
+(`<Fmt>GemvT : KqGemvLeafT`, `override GRID = true`, its `GRID_WORDS` / `GRID_OFF` literals held to that chain by
+`check_kq_gemv_grid_literals`) stages its table into workgroup memory from that buffer - a coalesced 256 B read per 64 lanes. The tables also exist as per-index accessors over a `fixed_array` local
 (`iq2s_grid_word` and kin), which the batch and cm2 tiles stage from, because a tile amortizes
 one stage over 128 rows x 64 columns. A per-row kernel cannot: the emitter lowers such an
 accessor to a constant composite stored into a Function variable, the driver serves the

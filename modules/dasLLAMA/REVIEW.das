@@ -1116,6 +1116,51 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
     }
 }
 
+//! a grid format's GEMV leaf template carries its codebook's words and first word as literal template constants
+//! (`override GRID_WORDS` / `override GRID_OFF`): each held to the `let KQ_GRID_<FMT>_WORDS` line and the
+//! `let KQ_GRID_<FMT> = KQ_GRID_<PREV> + KQ_GRID_<PREV>_WORDS` chain the host fill (`kq_grid_dev`) reads
+def private check_kq_gemv_grid_literals {
+    var inscope lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
+    var words : table<string; int>
+    var offs : table<string; int>
+    var templates : array<string>
+    for (line in lines) {
+        if (line |> starts_with("let KQ_GRID_")) {
+            let name = ident_prefix(slice(line, length("let ")))
+            continue if (name == "KQ_GRID_WORDS" || name == "KQ_GRID_BYTES")
+            let rhs = strip(slice(line, find(line, "=") + 1))
+            if (name |> ends_with("_WORDS")) {
+                words[slice(name, length("KQ_GRID_"), length(name) - length("_WORDS"))] = literal_after([line], "= ")
+            } elif (is_number(first_character(rhs))) {
+                offs[slice(name, length("KQ_GRID_"))] = literal_after([line], "= ")
+            } else {
+                let prev = slice(ident_prefix(rhs), length("KQ_GRID_"))
+                offs[slice(name, length("KQ_GRID_"))] = (offs?[prev] ?? -1) + (words?[prev] ?? -1)
+            }
+        } elif (line |> starts_with("class template ") && find(line, "GemvT : KqGemvLeafT") >= 0) {
+            templates |> push(ident_prefix(slice(line, length("class template "))))
+        }
+    }
+    if (empty(templates)) {
+        gate_finding(VK_CLASSES, "no `class template <Fmt>GemvT : KqGemvLeafT` found - the grid literal rule has no templates to walk; keep the spelling or move this check with it")
+        return
+    }
+    for (tpl in templates) {
+        var inscope body <- class_lines(VK_CLASSES, "class template {tpl}")
+        continue if (ident_after(body, "override GRID = ") != "true")
+        let fmt = to_upper(slice(tpl, 0, length(tpl) - length("GemvT")))
+        let want_words = words?[fmt] ?? -1
+        let want_off = offs?[fmt] ?? -1
+        let got_words = literal_after(body, "override GRID_WORDS = ")
+        let got_off = literal_after(body, "override GRID_OFF = ")
+        if (want_words < 0 || want_off < 0) {
+            gate_finding(VK_CLASSES, "{tpl}: no `let KQ_GRID_{fmt}_WORDS` / `let KQ_GRID_{fmt}` for its grid - the host fill and the stamp read the codebook from different rosters")
+        } elif (got_words != want_words || got_off != want_off) {
+            gate_finding(VK_CLASSES, "{tpl}: `override GRID_WORDS = {got_words}u` / `override GRID_OFF = {got_off}u` against KQ_GRID_{fmt}_WORDS = {want_words} at word {want_off} - a template constant is a literal, so the stamp's copy moves with the `let` chain in the same change")
+        }
+    }
+}
+
 def private check_cm2_stamp_tiles {
     var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
     var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
@@ -1417,6 +1462,7 @@ def main() : int {
     check_ar_max_dim_triple()
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
+    check_kq_gemv_grid_literals()
     check_vk_extension_roster()
     check_no_hand_pipelines()
     check_test_file_placement()
