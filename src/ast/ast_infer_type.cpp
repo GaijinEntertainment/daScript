@@ -1227,6 +1227,9 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->funcType->firstType = retT;
+            if (expr->funcType->isExprType()) {
+                return Visitor::visit(expr);
+            }
         }
         expr->func = nullptr;
         MatchingFunctions fns;
@@ -2605,6 +2608,11 @@ namespace das {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->isVectorType());
             } else if (expr->trait == "vector_dim") {
+                if (!expr->typeexpr->isVectorType()) {
+                    error("typeinfo(vector_dim non_vector) is prohibited, " + describeType(expr->typeexpr), "", "",
+                          expr->at, CompilationError::invalid_typeinfo_dim);
+                    return Visitor::visit(expr);
+                }
                 reportAstChanged();
                 return new ExprConstInt(expr->at, expr->typeexpr->getVectorDim());
             } else if (expr->trait == "is_array") {

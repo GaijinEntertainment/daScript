@@ -561,6 +561,7 @@ class public NoAotMarker : AstVisitor {
     //! Run it before anything reads `flags.noAot`. It also mutates the AST: `invoke` of a
     //! block literal gets `aotSkipMakeBlock`, and a surviving `quote()` logs an error.
     @do_not_delete func : Function? <- null;
+    interpretCollectCarriers : bool = true
 
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
         if (func != null && !typeDecl.canAot) {
@@ -569,6 +570,10 @@ class public NoAotMarker : AstVisitor {
     }
     def override preVisitFunction(var f : FunctionPtr) {
         func = f;
+        if (interpretCollectCarriers && func.moreFlags2.needCallerStackFrame && !func.flags.noAot) {
+            func.flags.noAot = true
+            to_log(LOG_INFO, "AOT: '{func.name}' can reach heap_collect - keeping interpreter mode\n")
+        }
     }
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
         var tmp := func
