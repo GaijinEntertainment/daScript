@@ -20,10 +20,11 @@ JIT never takes that path - so coverage lost there reports green on every lane.
 
 **A changed `.das` file under this folder that sits in an `AOT_*_FILES` variable of
 `tests/aot/CMakeLists.txt` (by glob or by name) and is not marked `options no_aot` passes its
-`dastest` run and `test_aot` (and `test_aot_subset` too when it sits under `language/`), and
-the PR body names the run that showed the `test_aot` pass: a local `preflight --full`, a
-`--target run_tests_aot` build, or a CI job link.** Per-PR CI builds `test_aot_subset` only, so
-the PR's own checks do not prove `test_aot`.
+`dastest` run and `test_aot` (and the per-PR AOT subset binary too when it sits under
+`language/`), and the PR body names the run that showed the `test_aot` pass: a local
+`preflight --full`, a `--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only
+the AOT subset binary (`tests/aot/CMakeLists.txt`), so the PR's own checks do not prove
+`test_aot`.
 
 **A new `.das` file under `tests/` that a glob in `tests/aot/CMakeLists.txt` puts in an
 `AOT_*_FILES` variable and that does not compile on its suite's `test_aot` lane is filtered out
