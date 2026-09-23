@@ -496,6 +496,26 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         remove(path_join(out_dir, "_standalone_fio_fixture.das.h"))
     }
 
+    t |> run("a default C++ module only a compile-time macro loaded is not registered") @(t : T?) {
+        let input = path_join(get_das_root(), "tests/aot/_standalone_macro_fixture.das")
+        var names : array<string>
+        using() $(var cop : CodeOfPolicies) {
+            standalone_cop(cop)
+            ast_gc_guard() {
+                standalone_aot(input, out_dir, false, false, cop) $(var program : ProgramPtr) {
+                    for (entry in standaloneModuleRegistration(program)) {
+                        names |> push(string(entry.mod.name))
+                    }
+                }
+            }
+        }
+        t |> success((names |> find_index("strings")) >= 0, "the fixture reaches strings, so the registration walk ran")
+        t |> success((names |> find_index("rtti_core")) < 0, "rtti_core, loaded for the macro module's daslib/ast, is not registered")
+        t |> success((names |> find_index("ast_core")) < 0, "ast_core, loaded for the macro module's daslib/ast, is not registered")
+        remove(path_join(out_dir, "_standalone_macro_fixture.das.cpp"))
+        remove(path_join(out_dir, "_standalone_macro_fixture.das.h"))
+    }
+
     t |> run("DEFAULT_MODULE_ORDER mirrors register_builtin_modules_impl") @(t : T?) {
         var registrar : array<string>
         fopen(path_join(get_das_root(), "src/builtin/modules.cpp"), "rb") $(fr) {
