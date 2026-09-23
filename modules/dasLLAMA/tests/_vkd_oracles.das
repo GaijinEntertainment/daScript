@@ -1111,32 +1111,21 @@ def mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb0, nb : 
 def gemv_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
     var y_ref : array<float>
     y_ref |> resize(d * ncol_max)
-    let xblk = f == KqFmt.q8 ? n / 32 : n / 256
+    if (f == KqFmt.q8) {   //! the q8 GEMM oracle over one record of `ncol_max` activation rows lands column c's row at c x d + row, the walk's block order
+        var rec <- [0u, 0u, uint(ncol_max), 0u]
+        q8_gemm_oracle(wqh, wsh, xqh, xsh, rec, 1, n, d, y_ref)
+        delete rec
+        return <- y_ref
+    }
+    let xblk = n / 256
     for (c in range(ncol_max)) {
-        if (f == KqFmt.q8) {
-            for (row in range(d)) {
-                var acc = 0.0
-                for (b in range(xblk)) {
-                    let wb = row * xblk + b
-                    let xb = c * xblk + b
-                    var idot = 0
-                    for (j in range(8)) {
-                        idot += sdot4(wqh[wb * 8 + j], xqh[xb * 8 + j])
-                    }
-                    let ws16 = wb % 2 == 0 ? unpackHalf2x16(wsh[wb / 2]).x : unpackHalf2x16(wsh[wb / 2]).y
-                    acc += float(idot) * ws16 * xsh[xb]
-                }
-                y_ref[c * d + row] = acc
-            }
-        } else {
-            var regs <- [0u, uint(c * xblk)]
-            var y_c <- kq_gemv_oracle(int(f), wqh, wsh, xqh, xsh, regs, n, d, 1)
-            for (row in range(d)) {
-                y_ref[c * d + row] = y_c[row]
-            }
-            delete y_c
-            delete regs
+        var regs <- [0u, uint(c * xblk)]
+        var y_c <- kq_gemv_oracle(int(f), wqh, wsh, xqh, xsh, regs, n, d, 1)
+        for (row in range(d)) {
+            y_ref[c * d + row] = y_c[row]
         }
+        delete y_c
+        delete regs
     }
     return <- y_ref
 }
