@@ -687,50 +687,34 @@ struct RqArgs {
     nblk : uint     // block / superblock count
 }
 
-// straight Q8_0 requant of f32 rows (the deltanet chain's quantize step)
-[vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
-class DnRequant {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<int8>
-    @ssbo @binding = 2 outs : array<float>
-    @push_constant pa : RqArgs
+//! the Q8 requant of a plane's elements: Q8_0 32-blocks (a subgroup per four, eight lanes a block, the xor amax fold) or,
+//! under `KBLK`, Q8_K superblocks (a subgroup per 256, eight values a lane, the five-shuffle amax) - the element load is the
+//! stamp's: a float plane from its base, or the activation of a gate / up pair
+[ |> template_struct_instance]
+class template RqT {
+    @template_constant KBLK : bool = false   //!< Q8_K superblocks instead of Q8_0's 32-blocks
 
-    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let sg = gid / 32u
-        let lane = gid % 32u
-        let b = sg * 4u + lane / 8u
-        if (b < pa.nblk) {
-            let eb = pa.inbase + sg * 128u + lane * 4u
-            let lane8 = lane % 8u
-            let v0 = src[eb]
-            let v1 = src[eb + 1u]
-            let v2 = src[eb + 2u]
-            let v3 = src[eb + 3u]
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let d = m / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            if (lane8 == 0u) {
-                outs[b] = d
-            }
-            let qb = b * 32u + lane8 * 4u
-            outq[qb] = q8_quant1(v0, id)
-            outq[qb + 1u] = q8_quant1(v1, id)
-            outq[qb + 2u] = q8_quant1(v2, id)
-            outq[qb + 3u] = q8_quant1(v3, id)
+    def abstract load4(eb : uint) : float4   //! the four elements from `eb` (the 32-block form)
+    def abstract load1(e : uint) : float     //! element `e` (the superblock form)
+
+    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def blk_store(b, lane8 : uint; v : float4) {
+        let m = q8_amax3(max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w))))
+        let d = m / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        if (lane8 == 0u) {
+            outs[b] = d
         }
+        let qb = b * 32u + lane8 * 4u
+        outq[qb] = q8_quant1(v.x, id)
+        outq[qb + 1u] = q8_quant1(v.y, id)
+        outq[qb + 2u] = q8_quant1(v.z, id)
+        outq[qb + 3u] = q8_quant1(v.w, id)
     }
-}
 
-// straight Q8_K requant of f32 rows (the K-quant chains' mid-step re-quantize)
-[vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
-class Q8kRequant {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<int8>
-    @ssbo @binding = 2 outs : array<float>
-    @push_constant pa : RqArgs
-
+    //! the superblock's scale to outs[b] from the subgroup's amax, its inverse back
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def blk_scale(b, lane : uint; m0 : float) : float {
         let d = q8k_amax5(m0) / 127.0
         if (lane == 0u) {
@@ -739,26 +723,59 @@ class Q8kRequant {
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
-        let b = gid / 32u
         let lane = gid % 32u
-        if (b < pa.nblk) {
-            let base = pa.inbase + b * 256u
-            var vals : float[8]
-            var m = 0.0
-            for [unroll] (r in range(8)) {
-                let v = src[base + uint(r) * 32u + lane]
-                vals[r] = v
-                m = max(m, abs(v))
+        static_if (KBLK) {
+            let b = gid / 32u
+            if (b < pa.nblk) {
+                let base = b * 256u
+                var vals : float[8]
+                var m = 0.0
+                for [unroll] (r in range(8)) {
+                    let v = load1(base + uint(r) * 32u + lane)
+                    vals[r] = v
+                    m = max(m, abs(v))
+                }
+                let id = blk_scale(b, lane, m)
+                for [unroll] (r in range(8)) {
+                    outq[base + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
+                }
             }
-            let id = blk_scale(b, lane, m)
-            for [unroll] (r in range(8)) {
-                outq[b * 256u + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
+        } else {
+            let sg = gid / 32u
+            let b = sg * 4u + lane / 8u
+            if (b < pa.nblk) {
+                blk_store(b, lane % 8u, load4(sg * 128u + lane * 4u))
             }
         }
     }
+}
+
+//! the straight requant of a float plane from `inbase`
+[ |> template_struct_instance]
+class template RqPlainT : RqT {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<int8>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : RqArgs
+
+    def override load4(eb : uint) : float4 {
+        let e = pa.inbase + eb
+        return float4(src[e], src[e + 1u], src[e + 2u], src[e + 3u])
+    }
+    def override load1(e : uint) : float => src[pa.inbase + e]
+}
+
+// straight Q8_0 requant of f32 rows (the deltanet chain's quantize step)
+[vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
+class DnRequant : RqPlainT {}
+
+// straight Q8_K requant of f32 rows (the K-quant chains' mid-step re-quantize)
+[vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
+class Q8kRequant : RqPlainT {
+    override KBLK = true
 }
 
 // ===== act + requant (the FFN mid-chain elementwise family) =====
@@ -797,8 +814,9 @@ def private act_mul_sel(v, u : float; act : uint) : float {
         : (v / (1.0 + exp(-v))) * u)
 }
 
-// members shared by the act/requant kernels
-class ActRqMembers {
+//! the act + requant of a gate / up pair on `RqT`: the element load is the activation
+[ |> template_struct_instance]
+class template ActRqT : RqT {
     @ssbo @binding = 0 gate : array<float>     // gate rows (act's v side)
     @ssbo @binding = 1 up : array<float>       // up rows (act's u side)
     @ssbo @binding = 2 outq : array<int8>      // quantized bytes out
@@ -806,49 +824,27 @@ class ActRqMembers {
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.act)
+
+    //! the up element paired with gate element `eb` (the 32-block form): with `ustride` the rows of `ulen` elements sit `ustride` apart
+    def up_at(eb : uint) : uint {
+        let ul = max(pa.ulen, 1u)   //! the select evaluates both arms: the flat form's ulen is 0, and a modulo by it is a fault under GPU-assisted validation
+        return pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
+    }
+
+    def override load4(eb : uint) : float4 {
+        let ue = up_at(eb)
+        return float4(act_mul(gate[eb], up[ue]), act_mul(gate[eb + 1u], up[ue + 1u]), act_mul(gate[eb + 2u], up[ue + 2u]), act_mul(gate[eb + 3u], up[ue + 3u]))
+    }
+    def override load1(e : uint) : float => act_mul(gate[e], up[e])
 }
 
 // fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
-class Q8ActRq : ActRqMembers {
-    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b]
-    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def blk_store(b, lane8 : uint; v0, v1, v2, v3 : float) {
-        let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane8 == 0u) {
-            outs[b] = d
-        }
-        let qb = b * 32u + lane8 * 4u
-        outq[qb] = q8_quant1(v0, id)
-        outq[qb + 1u] = q8_quant1(v1, id)
-        outq[qb + 2u] = q8_quant1(v2, id)
-        outq[qb + 3u] = q8_quant1(v3, id)
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let sg = gid / 32u
-        let lane = gid % 32u
-        let b = sg * 4u + lane / 8u
-        if (b < pa.nblk) {
-            let eb = sg * 128u + lane * 4u
-            let ul = max(pa.ulen, 1u)   //! the select evaluates both arms: the flat form's ulen is 0, and a modulo by it is a fault under GPU-assisted validation
-            let ub = pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
-            let v0 = act_mul(gate[eb], up[ub])
-            let v1 = act_mul(gate[eb + 1u], up[ub + 1u])
-            let v2 = act_mul(gate[eb + 2u], up[ub + 2u])
-            let v3 = act_mul(gate[eb + 3u], up[ub + 3u])
-            blk_store(b, lane % 8u, v0, v1, v2, v3)
-        }
-    }
-}
+class Q8ActRq : ActRqT {}
 
 //! the biased twin of the fused act + Q8_0 requant: element e's row (e / brow) names the expert whose gate and up bias rows join before the activation
 [vk_dispatch(name = "q8_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class Q8ActRqB : Q8ActRq {
+class Q8ActRqB : ActRqT {
     @ssbo @binding = 4 @role = "weight" gb : array<float>   //! the gate-bias plane
     @ssbo @binding = 5 @role = "weight" ub : array<float>   //! the up-bias plane
     @ssbo @binding = 6 rex : array<uint>     //! row -> its expert
@@ -860,57 +856,20 @@ class Q8ActRqB : Q8ActRq {
         return float2(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[ue] + ub[pa.uboff + ex * pa.brow + c])
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_actrq_b_cls_spv")]
-    def override run {
-        let gid = gl_GlobalInvocationID.x
-        let sg = gid / 32u
-        let lane = gid % 32u
-        let b = sg * 4u + lane / 8u
-        if (b < pa.nblk) {
-            let eb = sg * 128u + lane * 4u
-            let ul = max(pa.ulen, 1u)
-            let ub0 = pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb
-            let p0 = biased(eb, ub0)
-            let p1 = biased(eb + 1u, ub0 + 1u)
-            let p2 = biased(eb + 2u, ub0 + 2u)
-            let p3 = biased(eb + 3u, ub0 + 3u)
-            blk_store(b, lane % 8u, act_mul(p0.x, p0.y), act_mul(p1.x, p1.y), act_mul(p2.x, p2.y), act_mul(p3.x, p3.y))
-        }
+    def override load4(eb : uint) : float4 {
+        let ue = up_at(eb)
+        let p0 = biased(eb, ue)
+        let p1 = biased(eb + 1u, ue + 1u)
+        let p2 = biased(eb + 2u, ue + 2u)
+        let p3 = biased(eb + 3u, ue + 3u)
+        return float4(act_mul(p0.x, p0.y), act_mul(p1.x, p1.y), act_mul(p2.x, p2.y), act_mul(p3.x, p3.y))
     }
 }
 
 // the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax
 [vk_dispatch(name = "q8k_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
-class Q8kActRq : ActRqMembers {
-    def blk_scale(b, lane : uint; m0 : float) : float {
-        let d = q8k_amax5(m0) / 127.0
-        if (lane == 0u) {
-            outs[b] = d
-        }
-        return d != 0.0 ? 1.0 / d : 0.0
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let b = gid / 32u
-        let lane = gid % 32u
-        if (b < pa.nblk) {
-            let base = b * 256u
-            var vals : float[8]
-            var m = 0.0
-            for [unroll] (r in range(8)) {
-                let e = base + uint(r) * 32u + lane
-                let v = act_mul(gate[e], up[e])
-                vals[r] = v
-                m = max(m, abs(v))
-            }
-            let id = blk_scale(b, lane, m)
-            for [unroll] (r in range(8)) {
-                outq[base + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
-            }
-        }
-    }
+class Q8kActRq : ActRqT {
+    override KBLK = true
 }
 
 // act straight to the f16 hidden plane (the cm2 route — no quantization)
@@ -986,51 +945,49 @@ struct EmbArgs {
     embed_scale : float
 }
 
-[vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
-class EmbGather {
-    @ssbo @binding = 0 @role = "weight" wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 @role = "weight" wsh : array<float16>    // per-block weight scales
+//! the token-embedding gather, four elements a thread: the q8 table dequantized then scaled (the CPU's order), or under `WF`
+//! the f32 table scaled; `ids` and `xout` sit at 2 and 3 on both stamps
+[ |> template_struct_instance]
+class template EmbGatherT {
+    @template_constant WF : bool = false   //!< the f32 table instead of the q8 one
+    @ssbo @binding = 0 @role = "weight" @template_gate = "!WF" wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 @role = "weight" @template_gate = "!WF" wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 0 @role = "weight" @template_gate = WF wf : array<float>          // the f32 embd table, vocab x dim rows
     @ssbo @binding = 2 ids : array<uint>       // one token id per row
     @ssbo @binding = 3 xout : array<float>
     @push_constant pa : EmbArgs
 
-    [spirv_kernel(local_size_x = 256, name = "emb_gather_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.npos * pa.dim) {
             let row = e / pa.dim
             let col = e % pa.dim
-            let ib = pa.wblk0 + ids[row] * (pa.dim / 32u) + col / 32u
-            let lw = (col % 32u) / 4u
-            let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale   // dequant then scale - the CPU's order
-            xout[e] = v.x
-            xout[e + 1u] = v.y
-            xout[e + 2u] = v.z
-            xout[e + 3u] = v.w
+            static_if (WF) {
+                let src = ids[row] * pa.dim + col
+                xout[e] = wf[src] * pa.embed_scale
+                xout[e + 1u] = wf[src + 1u] * pa.embed_scale
+                xout[e + 2u] = wf[src + 2u] * pa.embed_scale
+                xout[e + 3u] = wf[src + 3u] * pa.embed_scale
+            } else {
+                let ib = pa.wblk0 + ids[row] * (pa.dim / 32u) + col / 32u
+                let lw = (col % 32u) / 4u
+                let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale
+                xout[e] = v.x
+                xout[e + 1u] = v.y
+                xout[e + 2u] = v.z
+                xout[e + 3u] = v.w
+            }
         }
     }
 }
 
-[vk_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
-class EmbGatherF32 {
-    @ssbo @binding = 0 @role = "weight" wf : array<float>       // the f32 embd table, vocab x dim rows
-    @ssbo @binding = 2 ids : array<uint>       // one token id per row (binding 1 unused: ids/xout sit where the q8 twin binds them)
-    @ssbo @binding = 3 xout : array<float>
-    @push_constant pa : EmbArgs
+[vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGather : EmbGatherT {}
 
-    [spirv_kernel(local_size_x = 256, name = "emb_gather_f32_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.npos * pa.dim) {
-            let row = e / pa.dim
-            let col = e % pa.dim
-            let src = ids[row] * pa.dim + col
-            xout[e] = wf[src] * pa.embed_scale
-            xout[e + 1u] = wf[src + 1u] * pa.embed_scale
-            xout[e + 2u] = wf[src + 2u] * pa.embed_scale
-            xout[e + 3u] = wf[src + 3u] * pa.embed_scale
-        }
-    }
+[vk_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGatherF32 : EmbGatherT {
+    override WF = true
 }
 
 struct ClsEpiArgs {
@@ -1217,51 +1174,25 @@ class MoeCombine {
 }
 
 struct DecCombineArgs {
-    n : uint    // row width
-    k : uint    // routed slots
-}
-
-[vk_dispatch(name = "dec_combine_cls", grid = "wgs", params = "wgs : int64")]
-class DecCombine {
-    @ssbo @binding = 0 xin : array<float>        // the residual row before the FFN
-    @ssbo @binding = 1 w : array<float>          // the k routing weights
-    @ssbo @binding = 2 down_rows : array<float>  // the down GEMV's k rows
-    @ssbo @binding = 3 xout : array<float>       // the residual row after the FFN
-    @push_constant pa : DecCombineArgs
-
-    [spirv_kernel(local_size_x = 256, name = "dec_combine_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
-    def run {
-        let i = gl_GlobalInvocationID.x
-        if (i < pa.n) {
-            var acc = 0.0
-            var j = 0u
-            while (j < pa.k) {
-                acc += w[j] * down_rows[j * pa.n + i]
-                j++
-            }
-            xout[i] = xin[i] + acc
-        }
-    }
-}
-
-struct DecCombineShArgs {
     n : uint      //! row width
     k : uint      //! routed slots
-    gidx : uint   //! the shared expert's gate logit index in `gate`
-    gated : uint
+    gidx : uint   //! the shared expert's gate logit index in `gate` (the shared-row stamp)
+    gated : uint  //! ... and whether that gate applies
 }
 
-[vk_dispatch(name = "dec_combine_sh_cls", grid = "wgs", params = "wgs : int64")]
-class DecCombineSh {
+//! the decode MoE combine, x + sum_j w_j d_j over the k routed rows; under `SH` the shared expert's row joins, gated by its logit
+[ |> template_struct_instance]
+class template DecCombineT {
+    @template_constant SH : bool = false
     @ssbo @binding = 0 xin : array<float>        //! the residual row before the FFN
     @ssbo @binding = 1 w : array<float>          //! the k routing weights
     @ssbo @binding = 2 down_rows : array<float>  //! the routed down GEMV's k rows
-    @ssbo @binding = 3 sh_row : array<float>     //! the shared expert's down GEMV row
-    @ssbo @binding = 4 gate : array<float>       //! the logits row carrying the gate at pa.gidx
-    @ssbo @binding = 5 xout : array<float>       //! the residual row after the FFN
-    @push_constant pa : DecCombineShArgs
+    @ssbo @binding = 3 @template_gate = SH sh_row : array<float>   //! the shared expert's down GEMV row
+    @ssbo @binding = 4 @template_gate = SH gate : array<float>     //! the logits row carrying the gate at pa.gidx
+    @ssbo @binding = 5 xout : array<float>       //! the residual row after the FFN - past the shared-row members, one set order for both stamps
+    @push_constant pa : DecCombineArgs
 
-    [spirv_kernel(local_size_x = 256, name = "dec_combine_sh_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         let i = gl_GlobalInvocationID.x
         if (i < pa.n) {
@@ -1271,10 +1202,22 @@ class DecCombineSh {
                 acc += w[j] * down_rows[j * pa.n + i]
                 j++
             }
-            let g = pa.gated != 0u ? 1.0 / (1.0 + exp(-gate[pa.gidx])) : 1.0
-            xout[i] = xin[i] + acc + g * sh_row[i]
+            static_if (SH) {
+                let g = pa.gated != 0u ? 1.0 / (1.0 + exp(-gate[pa.gidx])) : 1.0
+                xout[i] = xin[i] + acc + g * sh_row[i]
+            } else {
+                xout[i] = xin[i] + acc
+            }
         }
     }
+}
+
+[vk_dispatch(name = "dec_combine_cls", grid = "wgs", params = "wgs : int64")]
+class DecCombine : DecCombineT {}
+
+[vk_dispatch(name = "dec_combine_sh_cls", grid = "wgs", params = "wgs : int64")]
+class DecCombineSh : DecCombineT {
+    override SH = true
 }
 
 struct RouterArgs {
