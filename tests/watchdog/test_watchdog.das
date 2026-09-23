@@ -387,7 +387,7 @@ def test_tray_shutdown_over_private_bus(t : T?) {
                 let tooltip = dbus_send_to(address, dest, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:ToolTip"])
                 dump_has(t, tooltip, "wdtray - running", "the tooltip carries the same line")
                 dbus_send_to(address, dest, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:{TRAY_SHUTDOWN_ID}", "string:clicked", "variant:int32:0", "uint32:0"])
-                t |> equal(wait_exit_draining(wd, guard(30.0)), 0, "supervision ended with 0 after the tray's Shutdown")
+                t |> equal(wait_exit_draining(wd, guard(120.0)), 0, "supervision ended with 0 after the tray's Shutdown")
                 let events <- read_events(tray_log_path(root))
                 t |> equal(count_event(events, "tray_started"), 1)
                 t |> equal(count_event(events, "tray_shutdown_requested"), 1)

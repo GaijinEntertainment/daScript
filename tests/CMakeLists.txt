@@ -32,13 +32,13 @@ if(NOT DAS_TOOLS_DISABLED)
     endforeach()
 
     add_das_target(run_tests_interpreter
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
         DEPENDS ${_DAS_TEST_HOSTS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
     )
     add_das_target(run_tests_interpreter_isolated
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
         DEPENDS ${_DAS_TEST_HOSTS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter, isolated retry)"
