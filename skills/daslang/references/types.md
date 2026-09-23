@@ -273,6 +273,9 @@ as array elements, struct fields, and tuple/variant members. Printing and RTTI s
 underlying value.
 For a distinct over a pointer, `*` peels the distinct, not the pointer.
 `typedef private distinct Foo = int` limits visibility to the declaring module.
+The wall opens only through an operator you write: `def operator = (var dst : EntityId&; src : int)`
+makes `var id : EntityId = 0`, `id = 0` and a field default `id : EntityId = 0` compile (see
+"Copy, move and clone" in functions.md); `def operator != (a : EntityId; z : int)` covers `id != 0`.
 
 ## Type aliases
 

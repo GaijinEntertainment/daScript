@@ -596,6 +596,8 @@ namespace das {
                                             const TBlock<void,char *,char*,TypeDecl *,uint32_t> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
     DAS_CC_API TypeDeclPtr getUnderlyingValueType ( TypeDecl * type, Context * context, LineInfoArg * at );
+    DAS_CC_API TypeDeclPtr getDistinctUnderlyingType ( const Annotation & annotation, Context * context, LineInfoArg * at );
+    DAS_CC_API bool isDistinctTypePrivate ( const Annotation & annotation, Context * context, LineInfoArg * at );
     DAS_CC_API uint32_t getHandledTypeFieldOffset ( TypeAnnotationPtr type, char * name, Context * context, LineInfoArg * at );
     DAS_CC_API void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
                                         const TBlock<void,char *,char*,TypeDecl *,uint32_t> & block, Context * context, LineInfoArg * at );

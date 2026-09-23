@@ -609,8 +609,10 @@ The following table lists all operators that can be overloaded in Daslang:
      - ``?[]``
    * - Dot
      - ``.``  ``?.``  ``. name``  ``. name :=``  ``. name +=``  etc.
+   * - Assignment
+     - ``=`` (copy)  ``<-`` (move)  ``:=`` (clone)
    * - Type
-     - ``:=`` (clone)  ``delete`` (finalize)  ``is``  ``as``  ``?as``
+     - ``delete`` (finalize)  ``is``  ``as``  ``?as``
    * - Null coalesce
      - ``??``
    * - Interval
@@ -646,6 +648,49 @@ In the parser, ``++operator`` is the prefix form and ``operator++`` is the postf
     }
 
 The same pattern applies to ``--``.
+
+---------------------------------------------
+Copy, move and clone operators
+---------------------------------------------
+
+``=``, ``<-`` and ``:=`` overload like any other operator, and the overload the pair of types
+selects, by the usual overload rules, wins over the built-in copy, move or clone - the same
+rule as ``operator .`` over field access. The first parameter is the destination, a mutable
+reference; the second is the source, of any type, a generic ``auto`` included:
+
+.. das-doc: given typedef distinct SoundHandle = uint
+.. code-block:: das
+
+    def operator = (var dst : SoundHandle&; src : int) {
+        dst !== SoundHandle(uint(src))
+    }
+
+    def operator = (var dst : uint&; src : SoundHandle) {
+        dst !== *src
+    }
+
+    var handle : SoundHandle = 0        // operator = (SoundHandle&, int)
+    handle = 0                          // the same overload
+    var raw : uint = handle             // operator = (uint&, SoundHandle)
+
+Initialization goes through the same overload: ``var x : T = src`` (a local, ``let`` or ``var``,
+typed or ``auto``, a global, a struct or class field default, a field in ``S(x = src)`` or
+``new S(x = src)``) becomes ``copy_to_move(src, type<T>)``, a fresh ``T`` assigned through the
+operator that then initializes ``x``; ``var x : T <- src`` uses ``move_to_move`` and
+``operator <-``. A ``:=`` init resolves through ``operator :=`` for the same type only. An
+argument default, a ``return`` value and an element of an array, tuple or variant literal are
+not init sites: they copy with the built-in operation. So does every copy the compiler makes
+for you - an inlined function's return, a generator's yield, a lambda capture - so the operator
+runs once, where you wrote it. In a class, ``def operator = (src : U)`` takes ``self`` as the
+destination.
+
+Inside an operator body, spell the built-in operation with the raw form - ``dst !== src``,
+``dst !<- src``, ``dst !:= src`` - so an overload on the same pair of types does not call
+itself. The raw forms are listed under :ref:`Original Operator Access <expressions>`. One
+raw form has no fallback: a non-copyable type (a struct holding a container, an array, a
+table) is cloned by a function the language provides - a generated field-wise clone, or a
+generic of the builtin module - and an ``operator :=`` on that exact pair takes its place, so
+``dst !:= src`` inside such an operator is a compile error - clone the fields instead.
 
 ---------------------------------------------
 Compound assignment operators

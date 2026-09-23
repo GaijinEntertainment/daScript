@@ -82,6 +82,8 @@ var private pageless_ref_modules : table<string>
 
 var private nosearch_symbols : table<string>
 
+var private hook_hidden_labels : table<string>
+
 struct private MdRow {
     at : int
     name : string
@@ -259,6 +261,11 @@ def public mark_module_pageless(name : string) {
 
 def has_ref_page(mod) : bool {
     return !key_exists(pageless_ref_modules, module_name(mod))
+}
+
+def has_handle_entry(ann) : bool {
+    //! True when the page run documents `ann` under its `handle-` label, so a signature may link it.
+    return has_ref_page(ann._module) && !key_exists(hook_hidden_labels, handle_label_name(ann))
 }
 
 def alias_label_name(td : TypeDeclPtr) {
@@ -624,7 +631,13 @@ def describe_type(td : TypeDecl?) { // nolint:STYLE038 — the full type-writer:
                 write(writer, ",")
                 write(writer, parts[2])
                 write(writer, ">")
-            } elif (has_ref_page(td.annotation._module)) {
+            } elif (has_handle_entry(td.annotation)) {
+                write(writer, make_ref(handle_label_name(td.annotation), "{td.annotation.name}"))
+            } else {
+                write(writer, "{td.annotation.name}")
+            }
+        } elif (baseType == Type.tDistinct) {
+            if (has_handle_entry(td.annotation) && is_public_distinct_type(*td.annotation)) {
                 write(writer, make_ref(handle_label_name(td.annotation), "{td.annotation.name}"))
             } else {
                 write(writer, "{td.annotation.name}")
@@ -1168,6 +1181,39 @@ def document_typedefs(doc_file : file; mods : array<Module?>) {
     }
 }
 
+def is_public_distinct_type(value) : bool {
+    return value.isDistinctTypeAnnotation && !is_distinct_type_private(value)
+}
+
+def document_distinct_type(doc_file : file; mod : Module?; value) {
+    let name = string(value.name)
+    let underlying = describe_type(get_distinct_underlying_type(value))
+    fwrite(doc_file, make_label(handle_label_name(value)))
+    fwrite(doc_file, make_domain("das:attribute"))
+    fwrite(doc_file, "{name} = distinct {underlying}\n\n")
+    document_topic(doc_file, topic("typedef", mod, name), "typedef distinct {name} = {underlying}")
+    md_row(name, topic("typedef", mod, name))
+}
+
+def document_distinct_types(doc_file : file; mods : array<Module?>; hook : DocsHook) {
+    var any = false
+    for (mod in mods) {
+        if (any) break
+        module_for_each_annotation(mod) $(value) {
+            if (any || !is_public_distinct_type(value) || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
+            any = true
+        }
+    }
+    if (!any) return
+    fwrite(doc_file, make_group("Distinct types"))
+    for (mod in mods) {
+        module_for_each_annotation(mod) $(value) {
+            if (!is_public_distinct_type(value) || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
+            document_distinct_type(doc_file, mod, value)
+        }
+    }
+}
+
 def document_global_constant(doc_file : file; mod : Module?; value : VariablePtr) {
     fwrite(doc_file, make_label(global_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
@@ -1398,6 +1444,18 @@ def is_trivial_ctor(func : FunctionPtr) {
     return false
 }
 
+def is_written_ctor(mod : Module?; value : Structure?; func : FunctionPtr) {
+    //! A constructor of `value` its author wrote: the generated wrapper at a written `def Class(...)`'s location.
+    if (!func.flags.isClassMethod || func.classParent != value || func.name != value.name || is_trivial_ctor(func)) return false
+    var written = false
+    for_each_function(mod, "{value.name}`{value.name}") $(method) {
+        return if (written)
+        written = (!method.flags.generated && method.at.fileInfo == func.at.fileInfo
+            && method.at.line == func.at.line && method.at.column == func.at.column)
+    }
+    return written
+}
+
 def is_class_method(value; fld : FieldDeclaration&) {
     return fld.flags.classMethod
 }
@@ -1474,23 +1532,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
                     document_class_method(doc_file, mod, value, fld)
                 }
             }
-            var first = true
-            var annT = new TypeDecl(baseType = Type.tStructure, structType = value)
-            for_each_function(mod, "") $(func) {
-                if (func.flags.isClassMethod && !func.flags.generated && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {
-                    document_function(doc_file, mod, func, 0, "{value.name}-", "das:function")
-                    return
-                }
-                if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || empty(func.arguments)) return
-                let fna = string(func.name)
-                if (!fna |> starts_with(".`") || length(fna) <= 2
-                        || !is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
-                if (first) {
-                    fwrite(doc_file, ":Properties:\n\n")
-                    first = false
-                }
-                document_function(doc_file, mod, func, 1, "{value.name}-", "das:operator")
-            }
+            document_ctors_and_properties(doc_file, mod, value)
         }
     }
 }
@@ -1599,11 +1641,14 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         }
         document_struct_method(doc_file, mod, value, func)
     }
+    document_ctors_and_properties(doc_file, mod, value)
+}
 
+def document_ctors_and_properties(doc_file : file; mod : Module?; var value : Structure?) {
     var annT = new TypeDecl(baseType = Type.tStructure, structType = value)
     var first = true
     for_each_function(mod, "") $(func) {
-        if (func.flags.isClassMethod && !func.flags.generated && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {
+        if (is_written_ctor(mod, value, func)) {
             document_function(doc_file, mod, func, 0, "{value.name}-", "das:function")
             return
         }
@@ -1617,6 +1662,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         }
         document_function(doc_file, mod, func, 1, "{value.name}-", "das:operator")
     }
+    unsafe(delete_type(annT))
 }
 
 def document_structures(doc_file : file; mods : array<Module?>) {
@@ -1790,6 +1836,11 @@ def document_annotations(doc_file : file; mods : array<Module?>; hook = DocsHook
     }
 }
 
+def is_structure_macro(value) : bool {
+    return !(value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation
+        || value.isFunctionAnnotation || value.isDistinctTypeAnnotation)
+}
+
 def document_structure_macro(doc_file : file; mod : Module?; value) {
     fwrite(doc_file, make_label(handle_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
@@ -1803,7 +1854,7 @@ def document_structure_macros(doc_file : file; mods : array<Module?>) {
     for (mod in mods) {
         if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (any || value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) return
+            if (any || !is_structure_macro(value)) return
             any = true
         }
     }
@@ -1811,7 +1862,7 @@ def document_structure_macros(doc_file : file; mods : array<Module?>) {
     fwrite(doc_file, make_group("Structure macros"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) return
+            if (!is_structure_macro(value)) return
             document_structure_macro(doc_file, mod, value)
         }
     }
@@ -2217,6 +2268,8 @@ def private generate_module_stubs(var tab : table<string>; stub_file : file; mod
             generate_topic_stub(tab, stub_file, topic("structure_annotation", mod, string(value.name)))
         } elif (value.isTypeAnnotation) {
             generate_topic_stub(tab, stub_file, topic("annotation", mod, string(value.name)))
+        } elif (is_public_distinct_type(value)) {
+            generate_topic_stub(tab, stub_file, topic("typedef", mod, string(value.name)))
         }
     }
     for_each_global(mod) $(value) {
@@ -2268,6 +2321,18 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     documents(name, mods, fname, groups, hook, none)
 }
 
+def private collect_hook_hidden_labels(mods : array<Module?>; hook : DocsHook) {
+    clear(hook_hidden_labels)
+    if (hook.annotationFilter == null) return
+    for (mod in mods) {
+        module_for_each_annotation(mod) $(value) {
+            if (!hook.annotationFilter |> invoke(value)) {
+                hook_hidden_labels |> insert(handle_label_name(value))
+            }
+        }
+    }
+}
+
 def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; hook : DocsHook; nosearch : array<string>){ // nolint:STYLE037 - flat DocumentBlock dispatch ladder
     //! Same as `documents`, plus `nosearch`: symbol names whose value/field tables are
     //! excluded from the search index (the symbol and its description stay indexed).
@@ -2276,6 +2341,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     for (n in nosearch) {
         nosearch_symbols |> insert(n)
     }
+    collect_hook_hidden_labels(mods, hook)
     static_if (log_documentation) {
         print("Documenting {name} into {fname}\n")
     }
@@ -2308,6 +2374,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     for (docBlock in doc_block_order) {
         if (docBlock == DocumentBlock.Typedefs) {
             document_typedefs(doc_file, mods)
+            document_distinct_types(doc_file, mods, hook)
         } elif (docBlock == DocumentBlock.GlobalConstants) {
             document_global_constants(doc_file, mods)
         } elif (docBlock == DocumentBlock.Enumerations) {

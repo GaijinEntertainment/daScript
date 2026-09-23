@@ -332,6 +332,7 @@ module.exports = grammar({
         '<<<', '>>>', '<<<=', '>>>=',
         seq('[', ']', choice('=', '<-', ':=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '&&=', '||=', '^^=')),
         seq('[', ']'),
+        '=', '<-',
         seq('?', '[', ']'),
         // Property operators — prefer longer matches via precedence
         prec(2, seq('.', $.identifier, ':=')),
@@ -619,6 +620,7 @@ module.exports = grammar({
       field('left', $._expression),
       field('operator', choice(
         '=', '<-', ':=',
+        '!==', '!<-', '!:=',  // raw (original) copy/move/clone, bypass operator =, <-, := overloads
         '+=', '-=', '*=', '/=', '%=',
         '&=', '|=', '^=',
         '&&=', '||=', '^^=',

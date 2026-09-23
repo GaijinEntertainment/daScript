@@ -6,12 +6,16 @@ lives here today: it reads the manifest the playground ships
 entry file with the host binary's own compiler, in process. Every listed file
 must exist; a sample that fails names itself and carries the compiler's message.
 
+## Generated samples {#generated-samples}
+
 The dasImgui showcase samples (fourier, path tracer, physarum) have no
 committed copies - `web/stage_playground_imgui_samples.cmake` generates them
-into the staged site tree from canonical `examples/graphics` sources. For those
+into the staged site tree from canonical sources under `examples/`. For those
 entries the verifier compiles the canonical source in its real directory
-instead, via the mapping in `verify_core.das` (kept in lockstep with the cmake
-script - see `REVIEW.md`).
+instead, via the `GENERATED_SAMPLES` table in `verify_core.das`. That table and
+the stage script agree entry by entry: the script stages each generated sample
+from the source the table names, and neither side names a sample or a source
+the other lacks. `REVIEW.das` checks this.
 
 ## Run
 

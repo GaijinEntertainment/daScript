@@ -44,6 +44,15 @@ def fixture_args(var out : int; spare : int) : int { // nolint:LINT012 - spare i
     return out
 }
 
+[never_inline]
+def fixture_raw_assign(var out : int; src : int) : int {
+    var tmp : int
+    out !== src
+    tmp !<- out
+    out !:= tmp
+    return out
+}
+
 def printed_fixture(t : T?; name : string) : string {
     var txt = ""
     compiling_module() |> for_each_function(name) $(var func) {
@@ -79,6 +88,18 @@ def test_ast_print_let_var(t : T?) {
         ""), "\n")
     t |> run("locals and closure arguments print their own mutability") @(t : T?) {
         t |> equal(printed_fixture(t, "fixture_shape"), golden)
+    }
+}
+
+[test]
+def test_ast_print_raw_assignments(t : T?) {
+    t |> run("the raw copy, move and clone print their own spelling") @(t : T?) {
+        let out = 0
+        t |> equal(fixture_raw_assign(out, 5), 5)
+        let txt = printed_fixture(t, "fixture_raw_assign")
+        t |> success(find(txt, " !== ") >= 0, "raw copy printed: {txt}")
+        t |> success(find(txt, " !<- ") >= 0, "raw move printed: {txt}")
+        t |> success(find(txt, "out !== tmp") >= 0, "a raw clone of a copyable type lowers to a raw copy and prints as one: {txt}")
     }
 }
 

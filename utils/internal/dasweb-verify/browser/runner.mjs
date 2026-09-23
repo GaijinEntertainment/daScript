@@ -123,6 +123,18 @@ class WedgeError extends Error {
     }
 }
 
+export function collectPageErrors(page, cfg, pageErrors) {
+    page.on('pageerror', (e) => pageErrors.push(String(e && e.message ? e.message : e)));
+    page.on('console', (msg) => {
+        // Chrome writes the WHY of a rejected GL call to its own console
+        // ("WebGL: INVALID_ENUM: <api>: <reason>") and nothing else can read
+        // it — including the page. --console is how a failing sample gets
+        // diagnosed without reproducing it by hand.
+        if (cfg.console) process.stderr.write(`  [${msg.type()}] ${msg.text()}\n`);
+        if (P.isConsolePageError(msg.type(), msg.text())) pageErrors.push(msg.text());
+    });
+}
+
 // ── the playground tab ────────────────────────────────────────────────────
 
 class Playground {
@@ -139,25 +151,7 @@ class Playground {
         // Before any page script: the probe must not race the program's start.
         await this.context.addInitScript(installProbe, { pollGl: false });
         this.page = await this.context.newPage();
-        this.page.on('pageerror', (e) => this.pageErrors.push(String(e && e.message ? e.message : e)));
-        this.page.on('console', (msg) => {
-            // Chrome writes the WHY of a rejected GL call to its own console
-            // ("WebGL: INVALID_ENUM: <api>: <reason>") and nothing else can read
-            // it — including the page. --console is how a failing sample gets
-            // diagnosed without reproducing it by hand.
-            if (this.cfg.console) process.stderr.write(`  [${msg.type()}] ${msg.text()}\n`);
-            // A failed request is NOT a program failure here: the playground
-            // probes `<sample>.das.assets.json` for every sample and only two
-            // have one, so a 404 per run is the designed normal case. Assets
-            // that fail once a run frame does want them surface as an
-            // `asset <url>: …` line in the output pane, which the verdict reads.
-            // "[das:err] " console lines are the run frame's mirror of program
-            // stderr — already judged via the output pane, never a page error.
-            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())
-                && !P.isProgramStderrEcho(msg.text())) {
-                this.pageErrors.push(msg.text());
-            }
-        });
+        collectPageErrors(this.page, this.cfg, this.pageErrors);
         await this.page.goto(`${this.cfg.baseUrl}/playground/index.html`, { waitUntil: 'load', timeout: PAGE_READY_MS });
         // The interpreter engine gates Run on the local runtime finishing its
         // load; the wasm radio unlocks only once the build service answers.
@@ -318,20 +312,7 @@ export class Artifacts {
         this.context = await this.browser.newContext({ viewport: { width: 1280, height: 900 } });
         await this.context.addInitScript(installProbe, { pollGl: true });
         this.page = await this.context.newPage();
-        this.page.on('pageerror', (e) => this.pageErrors.push(String(e && e.message ? e.message : e)));
-        this.page.on('console', (msg) => {
-            // Chrome writes the WHY of a rejected GL call to its own console
-            // ("WebGL: INVALID_ENUM: <api>: <reason>") and nothing else can read
-            // it — including the page. --console is how a failing sample gets
-            // diagnosed without reproducing it by hand.
-            if (this.cfg.console) process.stderr.write(`  [${msg.type()}] ${msg.text()}\n`);
-            // "[das:err] " console lines are the run frame's mirror of program
-            // stderr — already judged via the output pane, never a page error.
-            if (msg.type() === 'error' && !/^Failed to load resource:/.test(msg.text())
-                && !P.isProgramStderrEcho(msg.text())) {
-                this.pageErrors.push(msg.text());
-            }
-        });
+        collectPageErrors(this.page, this.cfg, this.pageErrors);
     }
 
     async close() {

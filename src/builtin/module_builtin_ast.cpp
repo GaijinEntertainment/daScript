@@ -930,6 +930,19 @@ namespace das {
         return type->annotation->makeValueType();
     }
 
+    static const DistinctTypeAnnotation & asDistinctType ( const Annotation & annotation, Context * context, LineInfoArg * at ) {
+        if ( !annotation.rtti_isDistinctTypeAnnotation() ) context->throw_error_at(at, "%s is not a distinct type", annotation.name.c_str());
+        return static_cast<const DistinctTypeAnnotation &>(annotation);
+    }
+
+    TypeDeclPtr getDistinctUnderlyingType ( const Annotation & annotation, Context * context, LineInfoArg * at ) {
+        return asDistinctType(annotation, context, at).underlyingType;
+    }
+
+    bool isDistinctTypePrivate ( const Annotation & annotation, Context * context, LineInfoArg * at ) {
+        return asDistinctType(annotation, context, at).isPrivate;
+    }
+
     TypeInfo * getHandledTypeFieldType ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
@@ -1782,6 +1795,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(getUnderlyingValueType)>(*this, lib,  "get_underlying_value_type",
             SideEffects::none, "getUnderlyingValueType")
                 ->args({"type","context","line"});
+        addExtern<DAS_BIND_FUN(getDistinctUnderlyingType)>(*this, lib,  "get_distinct_underlying_type",
+            SideEffects::none, "getDistinctUnderlyingType")
+                ->args({"annotation","context","line"});
+        addExtern<DAS_BIND_FUN(isDistinctTypePrivate)>(*this, lib,  "is_distinct_type_private",
+            SideEffects::none, "isDistinctTypePrivate")
+                ->args({"annotation","context","line"});
         addExtern<DAS_BIND_FUN(getHandledTypeFieldOffset)>(*this, lib,  "get_handled_type_field_offset",
             SideEffects::none, "getHandledTypeFieldOffset")
                 ->args({"type","field","context","line"});

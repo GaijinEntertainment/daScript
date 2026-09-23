@@ -80,6 +80,7 @@ def private payload_key(expr : Expression?) : string {   // nolint:STYLE037 - `i
     if (expr is ExprOp3) return "{(expr as ExprOp3.op)}"
     if (expr is ExprCopy) return "{(expr as ExprCopy.copy_flags)}"
     if (expr is ExprMove) return "{(expr as ExprMove.move_flags)}"
+    if (expr is ExprClone) return "{(expr as ExprClone.clone_flags)}"
     if (expr is ExprCall) return "{(expr as ExprCall.name)}:{func_key((expr as ExprCall.func))}"
     if (expr is ExprNamedCall) return "{(expr as ExprNamedCall.name)}:{(expr as ExprNamedCall.nonNamedArguments) |> length}"
     if (expr is ExprCallMacro) return "{(expr as ExprCallMacro.name)}"

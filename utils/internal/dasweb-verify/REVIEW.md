@@ -4,29 +4,33 @@
 `README.md`. A `.mjs` file or `expectations.json`, wherever the diff puts it, answers to
 `browser/REVIEW.md`.
 
-**A diff that adds or changes a core behavior also adds a dastest test for it in this
-directory, in the same change.** `main.das` is thin argv and exit-code glue over tested
-pieces, so it needs no test of its own.
+**A `[test]` file here requires its siblings by bare name (`require verify_core`), never by a
+path.**
 
-**Never put a `[test]` file outside this directory, and never register one in any
-`CMakeLists.txt` - keep it here and require its siblings by bare name.**
+**A diff that adds a `[test]` file here also adds it to the `run_tests_dasweb_verify` target in
+`utils/CMakeLists.txt` (repo root), in the same change.**
 
-**Never add a test that touches the filesystem outside a `temp_directory`-rooted path, or
-that leaves behind what it creates.**
+**A test here writes files only under a directory it made with `create_temp_directory`, and
+removes that directory before it returns.**
 
-**A file under this tool that lists, adds, or omits samples is a defect - take the sample list
-only from the manifest the playground ships (`web/examples/ui/samples/data.json`, repo
-root).** A file carrying per-sample data keyed by manifest name is not such a list.
+**A diff that makes `main.das` or `verify_core.das` choose which samples get checked - by a
+sample list of its own, or by a hardcoded name added to or removed from the manifest's list - is
+a defect; take the set only from the manifest the playground ships
+(`web/examples/ui/samples/data.json`, repo root).**
 
-**A diff that changes either the generated-sample mapping in `verify_core.das` or
-`web/stage_playground_imgui_samples.cmake` also updates the other, in the same change.**
+**Weakening a `test_verify_core.das` case that feeds `load_manifest` a missing or unparseable
+manifest, or a sample that lists no files, is a defect: dropping the case, dropping the missing
+case's check that the error names the path, dropping the no-files case's check that the error
+names the sample, or dropping any of the three's check that no entries come back.**
 
-**Weakening the fail-closed cases in `test_verify_core.das` is a defect** - a missing,
-unparseable, or degenerate manifest or sample entry still raises a named error and returns no
-entries, and `main.das` still maps that to a non-zero exit.
+**A diff that makes `main.das` exit 0 after `load_manifest` sets an error is a defect.**
 
-**A diff that adds or changes a failure line puts the sample name and the underlying message
-in that line.** A failure a reader cannot act on from the log alone is a defect.
+**A diff to `main.das` or `verify_core.das` after which the line `main.das` logs for a failed
+sample lacks the sample's manifest `name`, or lacks the message of the step that failed, is a
+defect.** The CI log is all a reader gets.
+
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a
+check compares, or rewriting a finding text so it no longer names what failed.**
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**
@@ -35,4 +39,5 @@ its line here, with its tests, in the same change.**
   manifest parsing, no compilation.
 - `verify_core.das` - manifest parsing, generated-sample resolution, and compile execution.
   Zero network.
-- `browser/` - the browser leg; its files answer to `browser/REVIEW.md`.
+- `REVIEW.das` - the gate pairing `GENERATED_SAMPLES` with the stage script's reads and writes.
+- `browser/` - the browser leg.

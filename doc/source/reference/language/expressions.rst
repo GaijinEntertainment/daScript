@@ -542,6 +542,18 @@ matching overload (or a variant macro) exists:
 +--------------+---------------------------------------------------+
 | ``a !?as x`` | safe variant access (skips ``operator ?as``)      |
 +--------------+---------------------------------------------------+
+| ``a !== b``  | copy (skips ``operator =``)                       |
++--------------+---------------------------------------------------+
+| ``a !<- b``  | move (skips ``operator <-``)                      |
++--------------+---------------------------------------------------+
+| ``a !:= b``  | clone (skips ``operator :=``)                     |
++--------------+---------------------------------------------------+
+
+``a !== b`` is the raw copy, one token: it is not ``!`` in front of ``==``, and it is not the
+inequality some other languages spell that way. The three raw assignments skip only the
+user's ``operator =`` / ``<-`` / ``:=`` on the pair; a property setter on the left side and
+an ``operator []=`` / ``[]<-`` on an indexed left side still run - ``a![i] = v`` is the form
+that bypasses the indexer.
 
 Generated and generic code uses these forms to guarantee the language's own
 semantics no matter what overloads a user module brings into scope.

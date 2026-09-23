@@ -4171,6 +4171,8 @@ namespace das
                 fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
         }
+        vector<pair<int,uint64_t>> misses;
+        das_hash_map<Module *,int> linkedPerModule;
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
@@ -4186,18 +4188,31 @@ namespace das
                         auto fcb = (SimNode_CallBase *) fn.code;
                         fn.aotFunction = fcb->aotFunction;
                     }
+                    linkedPerModule[fnn[fni]->module] += 1;
                     if ( logIt ) logs << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
-                    TextWriter tp;
-                    tp << "semantic hash is " << HEX << semHash << DEC << "\n";
-                    tp << "did you forget to add this file (or a module it requires) to the AOT build?\n";
-                    tp << "otherwise the AOT artifact (C++ or LLVM object) is stale; regenerate it and rebuild\n";
-                    tp << "// " << getAotHashComment(fnn[fni]) << "\n";
-                    printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
-                    linkError(string(fn.mangledName), tp.str() );
+                    misses.emplace_back(fni, semHash);
                 }
             }
+        }
+        for ( auto & miss : misses ) {
+            int fni = miss.first;
+            SimFunction & fn = context.functions[fni];
+            auto fnModule = fnn[fni]->module;
+            TextWriter tp;
+            tp << "semantic hash is " << HEX << miss.second << DEC << "\n";
+            if ( linkedPerModule.find(fnModule) == linkedPerModule.end() ) {
+                tp << "no AOT stub links for any function of module '" << fnModule->name << "': its file is not in the AOT build, or its artifact predates every function in it\n";
+                tp << "list it in tests/aot/CMakeLists.txt (a tests/daslib file goes in AOT_DASLIB_FILES, one file per line; other test folders glob)\n";
+                tp << "options no_aot is only for a file a required module keeps out of AOT, and a file cannot be both listed and no_aot\n";
+            } else {
+                tp << "other functions of module '" << fnModule->name << "' link, so its AOT artifact (C++ or LLVM object) is stale for this one\n";
+                tp << "regenerate the artifact and rebuild (skills/internal/aot_hash_desync_debugging.md)\n";
+            }
+            tp << "// " << getAotHashComment(fnn[fni]) << "\n";
+            printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
+            linkError(string(fn.mangledName), tp.str() );
         }
     }
 }

@@ -476,8 +476,8 @@ namespace das
     // this copies one object to the other
     struct DAS_API ExprCopy : ExprOp2 {
         ExprCopy () { __rtti = "ExprCopy"; };
-        ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
-            : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; };
+        ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r, bool no_promo = false )
+            : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void dispatch( Visitor & vis ) override;
@@ -488,6 +488,7 @@ namespace das
                 bool allowCopyTemp : 1;
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
+                bool no_promotion : 1;
             };
             uint32_t copyFlags = 0;
         };
@@ -496,8 +497,8 @@ namespace das
     // this moves one object to the other
     struct DAS_API ExprMove : ExprOp2 {
         ExprMove () { __rtti = "ExprMove"; };
-        ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
-            : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; };
+        ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r, bool no_promo = false )
+            : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void dispatch( Visitor & vis ) override;
@@ -507,6 +508,7 @@ namespace das
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
                 bool podDelete : 1;
+                bool no_promotion : 1;
             };
             uint32_t moveFlags = 0;
         };
@@ -515,13 +517,19 @@ namespace das
     // this clones one object to the other
     struct DAS_API ExprClone : ExprOp2 {
         ExprClone () { __rtti = "ExprClone"; };
-        ExprClone ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
-            : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; };
+        ExprClone ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r, bool no_promo = false )
+            : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; no_promotion = no_promo; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual bool rtti_isClone() const override { return true; }
+        union {
+            struct {
+                bool no_promotion : 1;
+            };
+            uint32_t cloneFlags = 0;
+        };
     };
 
     // this only exists during parsing, and can't be

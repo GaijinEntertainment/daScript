@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 216;   // 216: a record header carries the module's compile-time macro registration flag
+            return 217;   // 217: ExprClone carries its flags word (no_promotion for the raw !:= form)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

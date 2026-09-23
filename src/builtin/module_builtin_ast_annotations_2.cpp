@@ -126,6 +126,13 @@ namespace das {
         }
     };
 
+    struct AstExprCloneAnnotation : AstExprOp2Annotation<ExprClone> {
+        AstExprCloneAnnotation(ModuleLibrary & ml)
+            :  AstExprOp2Annotation<ExprClone> ("ExprClone", ml) {
+            addFieldEx ( "clone_flags", "cloneFlags", offsetof(ExprClone, cloneFlags), makeExprCloneFlags() );
+        }
+    };
+
     struct AstExprWithAnnotation : AstExpressionAnnotation<ExprWith> {
         AstExprWithAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprWith> ("ExprWith", ml) {
@@ -272,7 +279,7 @@ namespace das {
         addExpressionAnnotation(new AstExprOp3Annotation(lib))->from("ExprOp");
         addExpressionAnnotation(new AstExprCopyAnnotation(lib))->from("ExprOp2");
         addExpressionAnnotation(new AstExprMoveAnnotation(lib))->from("ExprOp2");
-        addExpressionAnnotation(new AstExprOp2Annotation<ExprClone>("ExprClone",lib))->from("ExprOp2");
+        addExpressionAnnotation(new AstExprCloneAnnotation(lib))->from("ExprOp2");
         addExpressionAnnotation(new AstExprWithAnnotation(lib))->from("Expression");
         addExpressionAnnotation(new AstExprAssumeAnnotation(lib))->from("Expression");
         addExpressionAnnotation(new AstExprWhileAnnotation(lib))->from("Expression");

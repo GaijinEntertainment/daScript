@@ -462,16 +462,16 @@ class PrintVisitor : AstVisitor {
         write(*writer, " : ");
     }
     def override preVisitExprCopyRight(expr : ExprCopy?; right : ExpressionPtr) {
-        //! Prints the copy assignment operator (=).
-        write(*writer, " = ");
+        //! Prints the copy assignment operator (=), or its raw form (!==).
+        write(*writer, expr.copy_flags.no_promotion ? " !== " : " = ");
     }
     def override preVisitExprMoveRight(expr : ExprMove?; right : ExpressionPtr) {
-        //! Prints the move operator (<-).
-        write(*writer, " <- ");
+        //! Prints the move operator (<-), or its raw form (!<-).
+        write(*writer, expr.move_flags.no_promotion ? " !<- " : " <- ");
     }
     def override preVisitExprCloneRight(expr : ExprClone?; right : ExpressionPtr) {
-        //! Prints the clone operator (:=).
-        write(*writer, " := ");
+        //! Prints the clone operator (:=), or its raw form (!:=).
+        write(*writer, expr.clone_flags.no_promotion ? " !:= " : " := ");
     }
     def override preVisitExprWith(expr : ExprWith?) {
         //! Prints the 'with' keyword of a with-expression.

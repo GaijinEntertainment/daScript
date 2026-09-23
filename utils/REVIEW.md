@@ -4,26 +4,42 @@
 doc: `CLAUDE.md` (repo root).
 
 A tool is a directory holding a program and the files only that program uses. A directory is
-a tool when `utils/CMakeLists.txt` (beside this file) or the repo root's `CMakeLists.txt`
-builds or ships a program in it, or when `utils/CMakeLists.txt` runs a `DAS_UTILS_TO_TEST`
-suite against a program in it, wherever that directory sits; a directory under `utils/` is
-also a tool when its `.das_package` declares a program with `release_main` (its own) or
-`release_program` (a companion). A tool is shipped when `cmake --install` puts it in the
-bundle: a `DAS_UTILS_SHIPPED_EXES` entry or a C++ executable target in `utils/CMakeLists.txt`
-(beside this file), a C++ executable target in the repo root's `CMakeLists.txt`, or an entry
-point an `install(FILES ...)` rule in the repo root's `CMakeLists.txt` copies as source. A
-change under `common/` (beside this file) is a change to every tool that requires it. An arm
-is one test case `dastest` runs - a `[test]` function, or one `t |> run(...)` case inside one.
-An arm's load-bearing assertions are the ones that prove the change, never a skip-path
-assertion.
+a tool when `CMakeLists.txt` (beside this file) or the repo root's `CMakeLists.txt` builds or
+ships a program it holds, or when `CMakeLists.txt` (beside this file) runs a `DAS_UTILS_TO_TEST`
+suite against such a program, wherever that directory sits; a directory under `utils/` is also
+a tool when its `.das_package` declares a program with `release_main` (its own) or
+`release_program` (a companion), or when a CMake target or a `.github/workflows/` step (repo
+root) names in its command a program it holds. A directory holds a program when the program's
+entry file sits in it - or sits in a child folder of it, when the directory itself holds a
+`README.md`. A change under `common/` (beside this file) is a change to every tool that requires
+it.
+
+A tool is shipped when an `install(...)` rule in `CMakeLists.txt` (beside this file) or the
+repo root's `CMakeLists.txt` puts its program in the bundle - a built executable
+(`install(PROGRAMS ...)` for a `DAS_UTILS_SHIPPED_EXES` entry, `install(TARGETS ...)` for a
+C++ target), or the entry file copied as source (`install(FILES ...)` or
+`install(DIRECTORY ...)`).
+
+An arm is one test case that a test runner executes and reports pass or fail for on its own,
+in any language: a `dastest` `[test]` function and each `t |> run(...)` case inside that
+function are arms, and so is each `test(...)` case of a JavaScript runner (`node:test`,
+Playwright). An arm's load-bearing assertions are the ones that prove the change, never a
+skip-path assertion.
+
 A CI row is a workflow step whose command runs the arm, directly or through a process it
-spawns. An assertion no CI row can run is one where either no CI row runs the arm, or the arm
-returns or skips before the assertion. An arm that skips unless a host tool is present has
+spawns. An assertion no CI row can run is one that needs something no pull-request lane's
+runner image provides - a GPU, a host tool the image does not carry, a network service, a
+credential - or one the arm returns or skips before on every such runner; whether a row runs
+the arm today does not decide it. An arm that skips unless a host tool is present has
 assertions a CI row can run when the pull-request lane's runner image carries that tool, and
 the change names that lane. One arm can hold assertions of both kinds.
 
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**
+
+**A diff that adds a `[test]` file covering a change to a tool puts that file under the tool's
+directory; a test covering a change under `common/` goes under `common/`, and a test covering
+two tools goes under either one.**
 
 **A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what
 identifies one - the fields that decide whether two `.dlim`s are the same image - answers to

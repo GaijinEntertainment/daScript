@@ -329,6 +329,9 @@
 %token  NOTBRA              "!["
 %token  NOTQBRA             "!?["
 %token  NOTQQ               "!??"
+%token  NOTEQUEQU           "!=="
+%token  NOTLARROW           "!<-"
+%token  NOTCLONEEQU         "!:="
 %token  NOTIS               "!is"
 %token  NOTAS               "!as"
 %token  NOTQAS              "!?as"
@@ -570,7 +573,7 @@
 /* operation precedence*/
 %left       ','
 %nonassoc    DOTDOT MAPTO
-%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU ANDANDEQU XORXOREQU OROREQU
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU ANDANDEQU XORXOREQU OROREQU NOTEQUEQU NOTLARROW NOTCLONEEQU
 %right      '?' ':'
 %left       OROR
 %left       XORXOR
@@ -1400,6 +1403,8 @@ function_name
         $$ = $name;
     }
     |   DAS_OPERATOR '!'     { $$ = new string("!"); }
+    |   DAS_OPERATOR '='     { $$ = new string("="); }
+    |   DAS_OPERATOR LARROW  { $$ = new string("<-"); }
     |   DAS_OPERATOR '~'     { $$ = new string("~"); }
     |   DAS_OPERATOR ADDEQU  { $$ = new string("+="); }
     |   DAS_OPERATOR SUBEQU  { $$ = new string("-="); }
@@ -2099,6 +2104,11 @@ expr_assign_no_bracket
     |   expr_no_bracket[left] LARROW[loc] make_table_decl[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left, $right); }
     |   expr_no_bracket[left] LARROW[loc] array_comprehension[right] { $$ = new ExprMove(tokAt(scanner,@loc),$left, $right); }
     |   expr_no_bracket[left] CLONEEQU[loc] expr_no_bracket[right] { $$ = new ExprClone(tokAt(scanner,@loc),$left, $right); }
+    |   expr_no_bracket[left] NOTEQUEQU[loc] expr_no_bracket[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] expr_no_bracket[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] make_table_decl[right]   { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTLARROW[loc] array_comprehension[right] { $$ = new ExprMove(tokAt(scanner,@loc),$left,$right,true); }
+    |   expr_no_bracket[left] NOTCLONEEQU[loc] expr_no_bracket[right] { $$ = new ExprClone(tokAt(scanner,@loc),$left,$right,true); }
     |   expr_no_bracket[left] ANDEQU[loc] expr_no_bracket[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"&=", $left, $right); }
     |   expr_no_bracket[left] OREQU[loc] expr_no_bracket[right]    { $$ = new ExprOp2(tokAt(scanner,@loc),"|=", $left, $right); }
     |   expr_no_bracket[left] XOREQU[loc] expr_no_bracket[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"^=", $left, $right); }
@@ -3200,12 +3210,21 @@ alias_declaration
 // `distinct` is NOT a keyword; the NAME is validated in the action, so the identifier
 // stays free everywhere else (daslib/linq's distinct() etc.)
 distinct_alias
-    :   optional_public_or_private_alias[pubA] NAME[kw] NAME[name] '=' type_declaration[tdecl] {
+    :   optional_public_or_private_alias[pubA] NAME[kw] NAME[name] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeAlias(pubename);
+        }
+    } '=' type_declaration[tdecl] {
         if ( *$kw != "distinct" ) {
             das2_yyerror(scanner,"expected 'distinct', got '"+*$kw+"'",tokAt(scanner,@kw),
                 CompilationError::invalid_distinct_type);
         } else {
             ast_distinctDeclaration(scanner,$name,tokAt(scanner,@name),!$pubA,$tdecl);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@tdecl);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterAlias($name->c_str(),pubename);
         }
         delete $kw;
         delete $name;

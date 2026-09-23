@@ -8,8 +8,8 @@
   `strings` and `jit`. What the scan enforces, and which shared generic helpers it exempts, is
   read from the scan itself.
 
-- **A diff that adds or changes a bind - any `addExtern*` call - in a module the scan covers
-  rebuilds the binary from that diff before the folder's gate runs** - the scan reads the binds
+- **A diff that adds or changes a bind - any `addExtern*` call - under this folder rebuilds
+  the binary from that diff before the folder's gate runs** - the scan reads the binds
   compiled into the running binary, so a stale binary is a false green.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
@@ -67,14 +67,15 @@
 
 - **A diff that changes how an `[extern]` call reaches its bind - the wrapper tables, the
   `systemV_extra` list, the arm64 layout, the `das_arm64_call` trampoline, or when and from
-  what the `__dasbind__` proxy is registered and the call retargeted - updates section 3 of
-  `ARCHITECTURE.md` in the same change.** Comments in `module_builtin_dasbind.cpp` cite that
+  what the `__dasbind__` proxy is registered and the call retargeted - updates
+  `ARCHITECTURE.md#interpreter-extern-call` in the same change.** Comments in `module_builtin_dasbind.cpp` cite that
   section instead of restating it, so a stale section is what the next reader trusts.
 
 - **A diff that changes what `ModuleFileCache::defaultPath` or `ModuleFileCache::embeddedHostOptions`
   folds into the module-cache key - the binary, the command line, the environment names, or
-  which script arguments count - updates section 2 of `ARCHITECTURE.md` in the same change.** The key is what stops a native-compiled
-  module serving a cross compile, so a wrong description of it gets trusted.
+  which script arguments count - updates `ARCHITECTURE.md#default-module-cache-path` in the
+  same change.** The key is what stops a native-compiled module serving a cross compile, so a
+  wrong description of it gets trusted.
 
 - **A diff that adds a `std::filesystem` call in `module_builtin_fio.cpp` passes every path into
   it through `das_to_path` and every path out of it through `path_to_das`.** On Windows a path

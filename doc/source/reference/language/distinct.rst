@@ -33,14 +33,15 @@ terms of another distinct type.
 Construction and Deref
 ----------------------
 
-The only way *in* is explicit construction from a value of exactly the underlying type — a
-pure compile-time relabel with no runtime cost:
+The way *in* is explicit construction from a value of exactly the underlying type — a
+pure compile-time relabel with no runtime cost — unless the module writes an ``operator =``
+for the pair (see `Assignment across types`_ below):
 
 .. code-block:: das
 
     var id = EntityId(5)
     var m : Meters = Meters(2.5)
-    // var bad : EntityId = 5      // error: no implicit conversion
+    // var bad : EntityId = 5      // error: no implicit conversion, unless an operator = (EntityId&, int) exists
 
 The only way *out* is the dereference operator ``*``, which peels exactly one distinct level
 and yields the underlying type as a reference. Constness flows from the handle: dereferencing
@@ -80,6 +81,40 @@ A distinct type keys a table when its underlying type can: the key hashes as the
 value, and the nominal wall still holds, so ``table<EntityId; string>`` refuses a plain ``int``
 key and a key of any other distinct type over ``int`` at compile time. Arrays, struct fields,
 tuple and variant fields all work as well.
+
+-----------------------
+Assignment across types
+-----------------------
+
+The wall between a distinct type and everything else is opened only by an operator you write.
+``=`` and ``<-`` overload on the pair of types (see :ref:`Functions <functions>`), and every
+init or assignment of that pair - a local, a global, a struct field default, a field in
+``Sfx(current = 0)``, a plain assignment - goes through it. Code that predates a distinct type, such as
+``handle : SoundHandle = 0`` and ``handle = 0``, keeps compiling once the module defines the
+pair it uses:
+
+.. code-block:: das
+
+    typedef distinct SoundHandle = uint
+
+    def operator = (var dst : SoundHandle&; src : int) {
+        dst !== SoundHandle(uint(src))
+    }
+
+    def operator != (h : SoundHandle; z : int) : bool => *h != uint(z)
+
+    struct Sfx {
+        current : SoundHandle = 0       // the operator, at field-default time
+    }
+
+    def stop(var sfx : Sfx) {
+        if (sfx.current != 0) {
+            sfx.current = 0             // the operator again
+        }
+    }
+
+The raw form ``dst !== src`` inside the operator body is the built-in copy, so an overload on
+the same pair never recurses into itself.
 
 ---------
 Overloads

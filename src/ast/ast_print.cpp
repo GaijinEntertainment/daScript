@@ -1222,15 +1222,15 @@ namespace das {
     // copy & move, clone
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            ss << " = ";
+            ss << (that->no_promotion ? " !== " : " = ");
         }
         virtual void preVisitRight ( ExprMove * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            ss << " <- ";
+            ss << (that->no_promotion ? " !<- " : " <- ");
         }
         virtual void preVisitRight ( ExprClone * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            ss << " := ";
+            ss << (that->no_promotion ? " !:= " : " := ");
         }
     // return
         virtual void preVisit ( ExprReturn * expr ) override {
