@@ -4550,7 +4550,7 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 6 --json-path modules/dasLLAMA/performance/records/_cell_m5.json",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -4565,39 +4565,39 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":148.62200000000001,
+            "ms":158.75800000000001,
             "audio_s":11,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":439.19600000000003,
+            "ms":463.91399999999999,
             "audio_s":33,
             "text":"And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4284.366,
+            "ms":4311.2650000000003,
             "audio_s":198.734375,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7154.1599999999999,
+            "ms":7174.3140000000003,
             "audio_s":273.28724999999997,
             "text":"Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia Henry F. Phillips 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausa Drive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April 2008 at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
           },
           "asr:hp0x2.wav":{
-            "ms":25920.294000000002,
+            "ms":25591.439999999999,
             "audio_s":546.57449999999994,
             "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausadrive Supa Drive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html Henry F Phillips from Wikipedia the free encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936 US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips crosshead Pausadrive SuperDrive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8",
         "env":"DASLLAMA_BOX=m5",
@@ -4646,7 +4646,7 @@
         "flavor":"accel",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 6 --json-path modules/dasLLAMA/performance/records/_cell_m5.json --accel",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -4661,39 +4661,39 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":149.92500000000001,
+            "ms":152.25899999999999,
             "audio_s":11,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":457.96699999999998,
+            "ms":459.15199999999999,
             "audio_s":33,
             "text":"And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4248.7669999999998,
+            "ms":4226.0050000000001,
             "audio_s":198.734375,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7121.442,
+            "ms":7079.9610000000002,
             "audio_s":273.28724999999997,
             "text":"Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia Henry F. Phillips 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausa Drive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April 2008 at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
           },
           "asr:hp0x2.wav":{
-            "ms":25867.477999999999,
+            "ms":25464.573,
             "audio_s":546.57449999999994,
             "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausadrive Supa Drive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html Henry F Phillips from Wikipedia the free encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936 US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips crosshead Pausadrive SuperDrive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8",
         "env":"DASLLAMA_BOX=m5",
@@ -4742,7 +4742,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"../whisper.cpp/build/bin/parakeet-cli -m ../whisper.cpp/models/ggml-parakeet-tdt-0.6b-v2-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 6 -ng",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -4757,19 +4757,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":159.54000000000002
+            "ms":159.52000000000004
           },
           "asr:jfk3.wav":{
-            "ms":478.90999999999997
+            "ms":483.94
           },
           "asr:gb1.wav":{
-            "ms":5499.2200000000003
+            "ms":5426.8099999999995
           },
           "asr:hp0.wav":{
-            "ms":9187.2399999999998
+            "ms":9070.9200000000001
           },
           "asr:hp0x2.wav":{
-            "ms":31095.27
+            "ms":30620.689999999999
           }
         },
         "workload":"asr",
@@ -4821,7 +4821,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant v2-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 6 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -4836,25 +4836,25 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":339.08699999999999,
+            "ms":331.18200000000002,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":725.16800000000001,
+            "ms":723.202,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":5024.018,
+            "ms":4948.2269999999999,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":7689.192,
+            "ms":7738.9859999999999,
             "audio_s":273.28699999999998
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0 (requirements-onnx.txt)",
         "exec_fmt":"int8",
         "files":[
           {
@@ -4911,43 +4911,43 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":157.405,
+            "ms":157.99100000000001,
             "audio_s":11,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":468.733,
+            "ms":473.99700000000001,
             "audio_s":33,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4327.6360000000004,
+            "ms":4351.0799999999999,
             "audio_s":198.734375,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families, and make out may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7232.4809999999998,
+            "ms":7245.6679999999997,
             "audio_s":273.28724999999997,
             "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN.wikipedia.org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three, US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PauseDrive SupaDrive Torx Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five oh one C three Tax Deductible Nonprofit Charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html."
           },
           "asr:hp0x2.wav":{
-            "ms":25503.141,
+            "ms":25660.776000000002,
             "audio_s":546.57449999999994,
             "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot Wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PausaDrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All Text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead Pausa Drive SupaDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML."
           },
           "asr:librispeech25":{
-            "ms":3574.0349999999999,
+            "ms":3584.8269999999998,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8",
         "env":"DASLLAMA_BOX=m5",
@@ -5161,43 +5161,43 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":154.43199999999999,
+            "ms":180.88,
             "audio_s":11,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":465.928,
+            "ms":475.70999999999998,
             "audio_s":33,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4336.442,
+            "ms":4312.1559999999999,
             "audio_s":198.734375,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families, and make out may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7156.1149999999998,
+            "ms":7249.0720000000001,
             "audio_s":273.28724999999997,
             "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN.wikipedia.org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three, US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PauseDrive SupaDrive Torx Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five oh one C three Tax Deductible Nonprofit Charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html."
           },
           "asr:hp0x2.wav":{
-            "ms":25663.983,
+            "ms":25685.143,
             "audio_s":546.57449999999994,
             "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot Wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PausaDrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All Text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead Pausa Drive SupaDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML."
           },
           "asr:librispeech25":{
-            "ms":3522.1440000000002,
+            "ms":3569.1319999999996,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8",
         "env":"DASLLAMA_BOX=m5",
@@ -5411,22 +5411,22 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":162.50999999999999
+            "ms":162.31
           },
           "asr:jfk3.wav":{
-            "ms":487.75000000000006
+            "ms":487.04999999999995
           },
           "asr:gb1.wav":{
-            "ms":5466.5999999999995
+            "ms":5496.8400000000001
           },
           "asr:hp0.wav":{
-            "ms":9244.4699999999993
+            "ms":9166.5799999999999
           },
           "asr:hp0x2.wav":{
-            "ms":30951.59
+            "ms":31121.919999999998
           },
           "asr:librispeech25":{
-            "ms":3634.0699999999997
+            "ms":3628
           }
         },
         "workload":"asr",
@@ -5643,29 +5643,29 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":358.60700000000003,
+            "ms":347.89999999999998,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":721.298,
+            "ms":723.59699999999998,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":5052.924,
+            "ms":5044.9449999999997,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":7693.1080000000002,
+            "ms":7673.2879999999996,
             "audio_s":273.28699999999998
           },
           "asr:librispeech25":{
-            "ms":7155.6990000000005,
+            "ms":6974.1319999999996,
             "audio_s":215.91500000000005
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0 (requirements-onnx.txt)",
         "exec_fmt":"int8",
         "files":[
           {
@@ -5872,44 +5872,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":66.626000000000005,
+            "ms":66.117000000000004,
             "audio_s":11,
-            "encode_ms":46.500999999999998,
+            "encode_ms":46.429000000000002,
             "text":" And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":149.22,
+            "ms":149.26499999999999,
             "audio_s":33,
-            "encode_ms":93.349000000000004,
+            "encode_ms":93.090000000000003,
             "text":" And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":727.71299999999997,
+            "ms":719.23599999999999,
             "audio_s":198.734375,
-            "encode_ms":372.82299999999998,
+            "encode_ms":373.07499999999999,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control and Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. And board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Cooltna Chavla, and Elon Ramon, a Colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock in grief. You're not alone. Our entire nation agrees with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Man kind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens who created all these, He who brings out the story hosts one by one and calls them each by name, because of His great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America. [BLANK_AUDIO]"
           },
           "asr:hp0.wav":{
-            "ms":931.17899999999997,
+            "ms":912.16499999999996,
             "audio_s":273.28724999999997,
-            "encode_ms":519.428,
+            "encode_ms":518.54100000000005,
             "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html."
           },
           "asr:hp0x2.wav":{
-            "ms":1872.3340000000001,
+            "ms":1842.8320000000001,
             "audio_s":546.57449999999994,
-            "encode_ms":1048.8810000000001,
+            "encode_ms":1043.932,
             "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html. Henry F Phillips from Wikipedia, the free The Korean Cyclopedia at EN. Wikipedia.org Henry F. Phillips From Wikipedia, the Korean Cyclopedia Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Philips' head screw and screwdriver named after him. The importance of the cross head screw design lies in its self-centering property, useful on automated production lines that use powered screw drivers. Philips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343, US patents 2,046,837 to 2,046,847, 840. It was so widely copied that by 1949, Phillips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw. As distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pawsadrive screw which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article caption \"Philips Screwhead\". The following is an info box which accompanies this article. In a info box part of the series on screw drive types. Slaughted, commonly, erroneously, flat head. Phillips, cross head. Paws of Drive, Super Drive. Torx, Hex, Allen, Robertson, Tri-wing, Torxet, Spannerhead, Triple Square, XZN, Others, Polydrive, Spline Drive, Double Hacks, Many images accompanied this infobox. This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the Gnue-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Inc. a US registered 501c3 tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License. Available at www.gnu.org/copyleft/fdl.a THTML"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -5973,44 +5973,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":66.489999999999995,
+            "ms":66.608000000000004,
             "audio_s":11,
-            "encode_ms":46.381999999999998,
+            "encode_ms":46.640000000000001,
             "text":" And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":148.36600000000001,
+            "ms":148.66900000000001,
             "audio_s":33,
-            "encode_ms":93.231999999999999,
+            "encode_ms":93.311000000000007,
             "text":" And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":722.21100000000001,
+            "ms":722.89700000000005,
             "audio_s":198.734375,
-            "encode_ms":372.94299999999998,
+            "encode_ms":374.52300000000002,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control and Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. And board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Cooltna Chavla, and Elon Ramon, a Colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock in grief. You're not alone. Our entire nation agrees with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Man kind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens who created all these, He who brings out the story hosts one by one and calls them each by name, because of His great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America. [BLANK_AUDIO]"
           },
           "asr:hp0.wav":{
-            "ms":928.17200000000003,
+            "ms":925.61400000000003,
             "audio_s":273.28724999999997,
-            "encode_ms":518.904,
+            "encode_ms":518.14499999999998,
             "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html."
           },
           "asr:hp0x2.wav":{
-            "ms":1870.633,
+            "ms":1861.799,
             "audio_s":546.57449999999994,
-            "encode_ms":1047.336,
+            "encode_ms":1042.6099999999999,
             "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html. Henry F Phillips from Wikipedia, the free The Korean Cyclopedia at EN. Wikipedia.org Henry F. Phillips From Wikipedia, the Korean Cyclopedia Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Philips' head screw and screwdriver named after him. The importance of the cross head screw design lies in its self-centering property, useful on automated production lines that use powered screw drivers. Philips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343, US patents 2,046,837 to 2,046,847, 840. It was so widely copied that by 1949, Phillips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw. As distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pawsadrive screw which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article caption \"Philips Screwhead\". The following is an info box which accompanies this article. In a info box part of the series on screw drive types. Slaughted, commonly, erroneously, flat head. Phillips, cross head. Paws of Drive, Super Drive. Torx, Hex, Allen, Robertson, Tri-wing, Torxet, Spannerhead, Triple Square, XZN, Others, Polydrive, Spline Drive, Double Hacks, Many images accompanied this infobox. This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the Gnue-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Inc. a US registered 501c3 tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License. Available at www.gnu.org/copyleft/fdl.a THTML"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6074,44 +6074,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":36.517000000000003,
+            "ms":34.768999999999998,
             "audio_s":11,
-            "encode_ms":17.716999999999999,
+            "encode_ms":18.687999999999999,
             "text":" And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":80.387,
+            "ms":86.671000000000006,
             "audio_s":33,
-            "encode_ms":32.865000000000002,
+            "encode_ms":35.045000000000002,
             "text":" And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":487.42700000000002,
+            "ms":508.22500000000002,
             "audio_s":198.734375,
-            "encode_ms":169.136,
+            "encode_ms":184.029,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control and Houston lost contact with our Space Shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. our no survivors. On board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McHool, Dr. Kultner Chavla, and Elon Ramon, a Colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers and they faced them willingly. knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock in grief. You're not alone. Our entire nation agrees with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. in the skies today, we saw destruction and tragedy. As farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens, who created all these, he who brings out the story hosts one by one, and calls them each by name, because of his great power and mighty strength, not one of them is missing. The same creator who names the stars, also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families. and make out what may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":561.29700000000003,
+            "ms":571.58399999999995,
             "audio_s":273.28724999999997,
-            "encode_ms":228.70099999999999,
+            "encode_ms":202.53,
             "text":" Henry F. Phillips from Wikipedia, the Free Encyclopedia, at EN.Wikipedia.org. Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used powered screwdrivers. Phillips major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343,000 U.S. patents, 2,046,837 to 2,046,840. It was so widely copied that by 1949, Philips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the positive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-Wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompany this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A US registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html."
           },
           "asr:hp0x2.wav":{
-            "ms":1082.038,
+            "ms":1164.951,
             "audio_s":546.57449999999994,
-            "encode_ms":413.17000000000002,
+            "encode_ms":439.428,
             "text":" Henry F. Phillips from Wikipedia, the Free Encyclopedia, at EN.Wikipedia.org. Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used powered screwdrivers. Phillips major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343,000 U.S. patents, 2,046,837 to 2,046,840. It was so widely copied that by 1949, Philips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the positive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-Wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompany this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A US registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html. Henry F Phillips from Wikipedia, the free The Korean Cyclopedia at EN. Wikipedia.org Henry F. Phillips From Wikipedia, the Korean Cyclopedia Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Philips' head screw and screwdriver named after him. The importance of the cross head screw design lies in its self-centering property, useful on automated production lines that use powered screw drivers. Philips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343, US patents 2,046,837 to 2,046,847 840. It was so widely copied that by 1949, Phillips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw. As distinct from the simple mild slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pawsadrive screw which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article caption \"Philips Screwhead\". The following is an info box which accompanies this article. In the info box part of the series on screw drive types. Slaughted, commonly, erroneously, flat head. Phillips, cross head. Paws of Drive, Super Drive. Torx, Hex, Allen, Robertson, Tri-wing, Torxet, Spannerhead, Triple Square, XZN, Others, Polydrive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the Gnue-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Inc. a US registered 501c3 tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License. Available at www.gnu.org/copyleft/fdl.a THTML"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"f32/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6175,19 +6175,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":73.480000000000004
+            "ms":73.739999999999995
           },
           "asr:jfk3.wav":{
-            "ms":168.94999999999999
+            "ms":168.50999999999999
           },
           "asr:gb1.wav":{
-            "ms":889.42999999999995
+            "ms":884.63999999999999
           },
           "asr:hp0.wav":{
-            "ms":1229.52
+            "ms":1226.1299999999999
           },
           "asr:hp0x2.wav":{
-            "ms":2460.46
+            "ms":2446.8900000000003
           }
         },
         "workload":"asr",
@@ -6254,19 +6254,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":42.909999999999997
+            "ms":45.36999999999999
           },
           "asr:jfk3.wav":{
-            "ms":89.299999999999997
+            "ms":89.709999999999994
           },
           "asr:gb1.wav":{
-            "ms":506.37000000000006
+            "ms":505.59000000000003
           },
           "asr:hp0.wav":{
-            "ms":586.34999999999991
+            "ms":582.85000000000002
           },
           "asr:hp0x2.wav":{
-            "ms":1165.9400000000001
+            "ms":1157.97
           }
         },
         "workload":"asr",
@@ -6333,13 +6333,13 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":290.82299999999998,
+            "ms":278.625,
             "audio_s":11
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0 (requirements-onnx.txt)",
         "exec_fmt":"int8",
         "files":[
           {
@@ -6378,44 +6378,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1845.164,
+            "ms":1836.29,
             "audio_s":11,
-            "encode_ms":1755.857,
+            "encode_ms":1749.9169999999999,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":3798.8139999999999,
+            "ms":3770.607,
             "audio_s":33,
-            "encode_ms":3578.5729999999999,
+            "encode_ms":3570.6489999999999,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":16175.127,
+            "ms":16122.710999999999,
             "audio_s":198.734375,
-            "encode_ms":14710.284,
+            "encode_ms":14687.165999999999,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kultna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when spaceflight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens who created all these. He who brings out the starry hosts one by one and calls them each by name. Because of His great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America. Thank you."
           },
           "asr:hp0.wav":{
-            "ms":23649.625,
+            "ms":23639.154999999999,
             "audio_s":273.28724999999997,
-            "encode_ms":21888.935000000001,
+            "encode_ms":21914.095000000001,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           },
           "asr:hp0x2.wav":{
-            "ms":45866.438000000002,
+            "ms":45837.108999999997,
             "audio_s":546.57449999999994,
-            "encode_ms":42506.394,
+            "encode_ms":42456.695,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, Available at www.gnu.org slash copyleft slash fdl.html Henry F. Phillips From Wikipedia, the free encyclopedia at en.wikipedia.org Henry F. Phillips, 1890-1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross-head concept forward, to the point where it was adopted by screw-makers and automobile companies. Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex Allen, Robertson, Tri-Wing, Torxet, Spannerhead, Triple Square, XZN. Others, Poly Drive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6479,44 +6479,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1828.077,
+            "ms":1828.7339999999999,
             "audio_s":11,
-            "encode_ms":1743.5540000000001,
+            "encode_ms":1738.2850000000001,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":3740.3490000000002,
+            "ms":3745.2759999999998,
             "audio_s":33,
-            "encode_ms":3544.9740000000002,
+            "encode_ms":3546.0439999999999,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":15987.938,
+            "ms":15930.964,
             "audio_s":198.734375,
-            "encode_ms":14649.897000000001,
+            "encode_ms":14638.339,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kultna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when spaceflight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens who created all these. He who brings out the starry hosts one by one and calls them each by name. Because of His great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America. Thank you."
           },
           "asr:hp0.wav":{
-            "ms":23578.231,
+            "ms":23591.214,
             "audio_s":273.28724999999997,
-            "encode_ms":21838.988000000001,
+            "encode_ms":21868.594000000001,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torx set. Spanner head. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           },
           "asr:hp0x2.wav":{
-            "ms":45689.896000000001,
+            "ms":45708.351000000002,
             "audio_s":546.57449999999994,
-            "encode_ms":42314.358,
+            "encode_ms":42300.669999999998,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torx set. Spanner head. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, Available at www.gnu.org slash copyleft slash fdl.html Henry F. Phillips From Wikipedia, the free encyclopedia at en.wikipedia.org Henry F. Phillips, 1890-1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross-head concept forward, to the point where it was adopted by screw-makers and automobile companies. Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex Allen, Robertson, Tri-Wing, Torxet, Spannerhead, Triple Square, XZN. Others, Poly Drive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6580,44 +6580,44 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":140.00899999999999,
+            "ms":139.648,
             "audio_s":11,
-            "encode_ms":100.26000000000001,
+            "encode_ms":100.104,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":312.58100000000002,
+            "ms":311.93599999999998,
             "audio_s":33,
-            "encode_ms":200.489,
+            "encode_ms":199.636,
             "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":1469.9559999999999,
+            "ms":1468.098,
             "audio_s":198.734375,
-            "encode_ms":799.36500000000001,
+            "encode_ms":797.19299999999998,
             "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kultna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when spaceflight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens, who created all these. He who brings out the starry hosts one by one and calls them each by name. Because of His great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America. Thank you."
           },
           "asr:hp0.wav":{
-            "ms":2004.646,
+            "ms":1999.721,
             "audio_s":273.28724999999997,
-            "encode_ms":1217.0260000000001,
+            "encode_ms":1208.355,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips 1890 to 1958 a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           },
           "asr:hp0x2.wav":{
-            "ms":3858.1149999999998,
+            "ms":3860.2979999999998,
             "audio_s":546.57449999999994,
-            "encode_ms":2314.7249999999999,
+            "encode_ms":2304.7379999999998,
             "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips 1890 to 1958 a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, Available at www.gnu.org slash copyleft slash fdl.html Henry F. Phillips From Wikipedia, the free encyclopedia at en.wikipedia.org Henry F. Phillips, 1890-1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward, to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex Allen, Robertson, Tri-Wing, Torxet, Spannerhead, Triple Square, XZN. Others, Poly Drive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"f32/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6681,19 +6681,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2113.8499999999999
+            "ms":2116.3000000000002
           },
           "asr:jfk3.wav":{
-            "ms":4398.6099999999997
+            "ms":4403.7599999999993
           },
           "asr:gb1.wav":{
-            "ms":21957.43
+            "ms":21943.809999999998
           },
           "asr:hp0.wav":{
-            "ms":28102.269999999997
+            "ms":28030.900000000001
           },
           "asr:hp0x2.wav":{
-            "ms":60572.809999999998
+            "ms":60482.059999999998
           }
         },
         "workload":"asr",
@@ -6760,19 +6760,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":153.44999999999999
+            "ms":153.38000000000002
           },
           "asr:jfk3.wav":{
-            "ms":325.91999999999996
+            "ms":328.41000000000003
           },
           "asr:gb1.wav":{
-            "ms":1850.4300000000001
+            "ms":1843.9200000000001
           },
           "asr:hp0.wav":{
-            "ms":2699.1400000000003
+            "ms":2701.4200000000001
           },
           "asr:hp0x2.wav":{
-            "ms":5185.5900000000001
+            "ms":5180.6999999999998
           }
         },
         "workload":"asr",
@@ -6839,13 +6839,13 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1879.8320000000001,
+            "ms":1946.482,
             "audio_s":11
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0",
+        "versions":"onnx-asr 0.11.0 / onnxruntime 1.27.0 (requirements-onnx.txt)",
         "exec_fmt":"int8",
         "files":[
           {
@@ -6884,32 +6884,32 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":303.91899999999998,
+            "ms":321.988,
             "audio_s":11,
-            "encode_ms":190.66399999999999,
+            "encode_ms":209.85599999999999,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:jfk3.wav":{
-            "ms":886.61400000000003,
+            "ms":892.68399999999997,
             "audio_s":33,
-            "encode_ms":552.26900000000001,
+            "encode_ms":552.85299999999995,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":6473.1199999999999,
+            "ms":6502.0730000000003,
             "audio_s":198.734375,
-            "encode_ms":5838.7049999999999,
+            "encode_ms":5862.0429999999997,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"f32/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -6952,7 +6952,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 6 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -6967,21 +6967,21 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2462.511,
+            "ms":2431.04,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":6068.6760000000004,
+            "ms":6037.7790000000005,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":19244.220000000001,
+            "ms":20763.351999999999,
             "audio_s":199
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1 (requirements-nemo.txt)",
         "exec_fmt":"bf16",
         "files":[
           {
@@ -7010,7 +7010,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-22",
+        "date":"2026-09-23",
         "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --device mps --threads 6 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -7025,21 +7025,21 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1036.1510000000001,
+            "ms":525.35799999999995,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":1787.9860000000001,
+            "ms":1807.086,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":4371.1959999999999,
+            "ms":4362.5110000000004,
             "audio_s":199
           }
         },
         "workload":"asr",
         "source":"official",
-        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1",
+        "versions":"nemo 3.1.0+06312c963 / torch 2.12.1 (requirements-nemo.txt)",
         "exec_fmt":"bf16",
         "files":[
           {
@@ -7083,32 +7083,32 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":689.12,
+            "ms":706.24599999999998,
             "audio_s":11,
-            "encode_ms":322.57299999999998,
+            "encode_ms":318.863,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:jfk3.wav":{
-            "ms":2126.9839999999999,
+            "ms":2144.009,
             "audio_s":33,
-            "encode_ms":880.49599999999998,
+            "encode_ms":889.01599999999996,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":14122.136,
+            "ms":14025.975,
             "audio_s":198.734375,
-            "encode_ms":7983.9769999999999,
+            "encode_ms":7905.143,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
@@ -7166,32 +7166,32 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":703.35199999999998,
+            "ms":688.91399999999999,
             "audio_s":11,
-            "encode_ms":314.35899999999998,
+            "encode_ms":317.42899999999997,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:jfk3.wav":{
-            "ms":2125.8510000000001,
+            "ms":2144.1280000000002,
             "audio_s":33,
-            "encode_ms":883.90200000000004,
+            "encode_ms":893.87300000000005,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":13729.361999999999,
+            "ms":13773.071,
             "audio_s":198.734375,
-            "encode_ms":7672.3729999999996,
+            "encode_ms":7769.2470000000003,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"9c5f93d3e",
+        "sha":"ea5747c91",
         "version":"0.6.4",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"6d5bf9ab95592fac7fea5787a29645835383e29f1aab7e70864f1f16549cdfe7",
+        "tune_sha":"5bb0cdbbe45233cc8ea5a048c6a9239940308c1dcce98291e1dd702421f3d3f8",
         "noise":"ok",
         "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=m5",
