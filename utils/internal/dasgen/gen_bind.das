@@ -8,12 +8,13 @@ require daslib/ast
 require daslib/debugger
 require daslib/ast_boost
 require daslib/cpp_bind
+require strings
 
 
 [export]
 def main {
     let root = get_das_root() + "/include/daScript/builtin/"
-    fopen(root + "ast_gen.inc", "wb") $(cpp_file) {
+    fwrite_if_changed(root + "ast_gen.inc", build_string() $(var cpp_file) {
         ast_gc_guard() {
             log_cpp_class_adapter(cpp_file, "AstFunctionAnnotation_Adapter", typeinfo ast_typedecl(type<AstFunctionAnnotation>))
             log_cpp_class_adapter(cpp_file, "AstBlockAnnotation_Adapter", typeinfo ast_typedecl(type<AstBlockAnnotation>))
@@ -31,14 +32,14 @@ def main {
             log_cpp_class_adapter(cpp_file, "AstTypeInfoMacro_Adapter", typeinfo ast_typedecl(type<AstTypeInfoMacro>))
             log_cpp_class_adapter(cpp_file, "AstVisitor_Adapter", typeinfo ast_typedecl(type<AstVisitor>))
         }
-    }
-    fopen(root + "debugapi_gen.inc", "wb") $(cpp_file) {
+    })
+    fwrite_if_changed(root + "debugapi_gen.inc", build_string() $(var cpp_file) {
         ast_gc_guard() {
             log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo ast_typedecl(type<DapiDataWalker>))
             log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo ast_typedecl(type<DapiDebugAgent>))
             log_cpp_class_adapter(cpp_file, "DapiStackWalker_Adapter", typeinfo ast_typedecl(type<DapiStackWalker>))
         }
-    }
+    })
     return true
 }
 
