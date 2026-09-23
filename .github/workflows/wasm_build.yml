@@ -162,7 +162,7 @@ jobs:
         # --experimental-wasm-exnref flag). System Node may be older or use
         # a different spelling for the EH proposal flag.
         source ./emsdk/emsdk_env.sh
-        cmake --build web/cmake_temp --target run_web_tests
+        cmake --build web/cmake_temp --target run_web_tests --parallel
 
   ###########################################################
   wasm_cross:

@@ -61,11 +61,7 @@ jobs:
       - name: "Set up sccache"
         uses: mozilla-actions/sccache-action@v0.0.10
 
-      - name: "Build daslang + shared modules"
-        id: build
-        # Broadest module set this runner can build — every module missing here
-        # moves its .das files from "linted" to the skipped count, so never
-        # shrink this list without saying why here.
+      - name: "Configure"
         run: |
           set -eux
           cmake --no-warn-unused-cli -B./build \
@@ -78,37 +74,9 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja
-          cmake --build ./build --parallel --target \
-            daslang \
-            dasModuleLiveHost dasModuleGlfw dasModuleHV dasModuleClipboard \
-            dasModulePUGIXML dasModuleStbImage dasModuleSQLITE \
-            dasModuleAudio dasModuleMinfft dasModuleTerminal \
-            dasModuleTreeSitter dasModuleUnitTest \
-            dasModuleImgui imguiApp imguiAppHeadless
-          sccache --show-stats
 
-      - name: "Fast rule pass (parallel, LINT019 off)"
-        run: |
-          set -eux
-          ./bin/daslang utils/lint/main.das -- \
-            daslib utils modules tutorials examples tests src \
-            -q --silent -j 0 --disable LINT019
-
-      - name: "Stale-nolint pass (single process)"
-        # The two passes find different defect classes, so a finding in the first
-        # must not hide the second: run whenever there is a binary to run, and let
-        # the job fail on either. always() is load-bearing — an `if` with no status
-        # function gets an implicit success() and would skip after a red pass 1.
-        # outcome, not conclusion: outcome is the build's real result, while
-        # conclusion reports success for a failed step that continue-on-error waved
-        # through - and a waved-through build leaves no binary to lint with.
-        if: always() && steps.build.outcome == 'success'
-        # -j 1 is load-bearing: the nolint-consumption ledger is per-process.
-        run: |
-          set -eux
-          ./bin/daslang utils/lint/main.das -- \
-            daslib utils modules tutorials examples tests src \
-            -q --silent -j 1
+      - name: "Lint the whole tree"
+        run: cmake --build ./build --target check_lint_tree
 
   nightly_issue:
     needs: [lint]

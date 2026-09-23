@@ -83,7 +83,7 @@ jobs:
       - name: "Set up sccache"
         uses: mozilla-actions/sccache-action@v0.0.10
 
-      - name: "Build daslang + daslang-live + shared modules"
+      - name: "Configure"
         run: |
           set -eux
           cmake --no-warn-unused-cli -B./build \
@@ -95,16 +95,6 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             -G Ninja
-          # daslang + daslang-live plus the shared modules daslang-live dlopens
-          # at runtime: LiveHost (lifecycle API), Glfw (dlopened, no glfw call
-          # under --headless), HV (the live HTTP API), Clipboard/PUGIXML/
-          # StbImage (rendering deps), and the dasImgui trio.
-          cmake --build ./build --parallel --target \
-            daslang daslang-live \
-            dasModuleLiveHost dasModuleGlfw dasModuleHV dasModuleClipboard \
-            dasModulePUGIXML dasModuleStbImage \
-            dasModuleImgui imguiApp imguiAppHeadless
-          sccache --show-stats
 
       - name: "Run integration tests (headless)"
         # ubuntu: --isolated-mode, 4 workers on ports 9090-9093 (dastest brands
@@ -121,22 +111,7 @@ jobs:
           # missing-prerequisite cascade in dastest output.
           DAS_TRACE_MODULE_LOAD: "1"
           DASLIVE_HV_LOG_LEVEL: DEBUG
-        run: |
-          set -eux
-          DASTEST_TIMEOUT=600
-          ISOLATED="--isolated-mode --isolated-mode-threads 4"
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            ISOLATED=""          # serial: one daslang-live at a time, no host starvation
-            DASTEST_TIMEOUT=1800 # serial is slower than 4-way; give the sweep headroom
-          fi
-          ./bin/daslang dastest/dastest.das -- \
-            --test modules/dasImgui/tests \
-            --timeout $DASTEST_TIMEOUT \
-            $ISOLATED \
-            --exclude glfw_synth \
-            --exclude key_hud \
-            --exclude embedded_terminal \
-            --headless
+        run: cmake --build ./build --target run_tests_imgui_integration
 
   nightly_issue:
     needs: [integration]

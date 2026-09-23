@@ -55,7 +55,7 @@ jobs:
       run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 18 2026"
 
     - name: Build CMake
-      run: cmake --build ${{ env.CONFIG_DIR }} --config ${{ matrix.cmake_configuration }}
+      run: cmake --build ${{ env.CONFIG_DIR }} --config ${{ matrix.cmake_configuration }} --parallel
 
     - name: Initialize MSVC Code Analysis
       uses: microsoft/msvc-code-analysis-action@v0.1.1

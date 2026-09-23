@@ -95,6 +95,10 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
         IF(NOT EMSCRIPTEN)
             ADD_DAS_SHARED_MODULE_LIB(dasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
             SETUP_VULKAN(dasModuleVulkan)
+            IF(DAS_VULKAN_COMPILE_JOBS)
+                SET_PROPERTY(GLOBAL APPEND PROPERTY JOB_POOLS das_vulkan_compile=${DAS_VULKAN_COMPILE_JOBS})
+                SET_TARGET_PROPERTIES(dasModuleVulkan PROPERTIES JOB_POOL_COMPILE das_vulkan_compile)
+            ENDIF()
             IF(APPLE)
                 TARGET_LINK_LIBRARIES(dasModuleVulkan PRIVATE "-framework Cocoa" "-framework QuartzCore")
             ENDIF()
@@ -126,6 +130,28 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
             DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VULKAN_HEADERS.LICENSE)
         INSTALL(FILES ${DAS_VULKAN_DIR}/vendor/volk/LICENSE.md
             DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VOLK.LICENSE)
+        IF(NOT DAS_TOOLS_DISABLED AND NOT EMSCRIPTEN)
+            SET(_vk_deps daslang dasModuleVulkan)
+            add_custom_target(check_vulkan
+                COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+                    -DOUT=${CMAKE_BINARY_DIR}/vk_regen -P ${DAS_VULKAN_DIR}/generator/check_generated.cmake
+                COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/lint/main.das -- modules/dasVulkan -q -j 0
+                DEPENDS ${_vk_deps}
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                COMMENT "Regenerating dasVulkan against the committed output, then linting it")
+            das_lane_dastest_target(run_tests_vulkan COMMENT "Testing dasVulkan offscreen and its tutorial pixel oracles"
+                FILES modules/dasVulkan/tests/integration modules/dasVulkan/tutorials
+                ARGS --timeout 600 --isolated-mode --isolated-mode-threads 4
+                DEPENDS ${_vk_deps})
+            add_custom_target(run_vulkan COMMENT "Every dasVulkan check")
+            add_dependencies(run_vulkan check_vulkan run_tests_vulkan)
+            add_custom_target(run_vulkan_smoke
+                COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+                    -P ${DAS_VULKAN_DIR}/examples/smoke_check.cmake
+                DEPENDS daslang dasModuleVulkan
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                COMMENT "dasVulkan loader-discovery smoke")
+        ENDIF()
     ELSE()
         # DASLANG_DIR must point to the daslang SDK root
         if(NOT DEFINED DASLANG_DIR)

@@ -81,7 +81,7 @@ endif()
 
 set(DAS_EXTENDED_MODULES
     run_tests_dasllama_env_registry run_tests_llvm_env_registry run_tests_glfw_touch
-    run_tests_dasllama_facade_lint run_tests_boulder_dash run_tests_daspkg
+    run_tests_dasllama_facade_lint run_tests_boulder_dash
     run_tests_mcp_tools run_tests_dasweb_verify run_tests_dasllama_ladder
     run_tests_dasweb_buildd run_tests_dasweb_playground run_sequence_smoke
     run_tests_dasllama_server run_tests_serdeser run_tests_static)
@@ -108,7 +108,13 @@ das_lane_group(run_extended_all "Running every extended check"
 das_lane_group(run_build "Running the build lane"
     run_tests_sweeps test-small)
 das_lane_group(run_build_nightly "Running the build lane's nightly sweeps"
-    run_tests_slow run_backend_sweeps)
+    run_tests_slow run_backend_sweeps test_aot_subset)
+das_lane_group(run_build_sanitizers "Running the sanitizer lane"
+    run_tests_interpreter test-small)
+das_lane_group(run_build_clangcl "Running the clang-cl lane"
+    run_build run_tests_aot)
+das_lane_group(run_build_mingw "Running the mingw lane"
+    run_build run_tests_aot check_clangbind_fresh run_tests_cbind_const_preproc)
 das_lane_group(run_site "Running the site lane's checks"
     run_imgui2rst run_vulkan2rst stage_doc_assets)
 das_lane_group(run_nightly "Running everything CI runs only on the cron"

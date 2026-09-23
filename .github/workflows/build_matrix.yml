@@ -1,0 +1,254 @@
+name: build matrix
+
+on:
+  workflow_call:
+    inputs:
+      lane:
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci
+      - id: matrix
+        # two statements: a substitution inside echo would hide the script's exit code
+        run: |
+          set -eu
+          matrix=$(python3 ci/ci_matrix.py '${{ inputs.lane }}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }})"
+    runs-on: ${{ matrix.runner }}
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
+    env:
+      das_dll_build: 'NO'
+      das_llvm_disabled: 'OFF'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - if: runner.os == 'Windows'
+      uses: ilammy/setup-nasm@v1 # need nasm for openssl
+
+    - name: "Set up MSVC environment (Windows)"
+      if: runner.os == 'Windows'
+      # cl.exe on PATH so the bash build step drives Ninja with MSVC. arch
+      # follows the matrix (x86 for the 32-bit job). MUST run BEFORE the vcpkg
+      # openssl step: msvc-dev-cmd's vcvars sets VCPKG_ROOT to the VS-bundled
+      # vcpkg, so the openssl step has to write our VCPKG_ROOT last.
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.architecture == 32 && 'x86' || 'x64' }}
+
+    # Restore here, save below on master only. A plain actions/cache also SAVES,
+    # and a save from a PR run is scoped to refs/pull/N/merge, where no sibling PR
+    # can read it — so the cache looked populated (6 entries, ~836MB of quota) while
+    # every Windows job still missed and rebuilt openssl from source, 8.5 min a run.
+    # This job is the SEEDER for both arch keys; every other Windows job in the repo
+    # is restore-only, so there is exactly one writer per key and no save race.
+    # Not on the cron: nightlies consume no cache (they are not a show-stopper),
+    # so the scheduled run builds openssl from source and then re-seeds below.
+    - name: "Restore vcpkg + openssl"
+      if: runner.os == 'Windows' && github.event_name != 'schedule'
+      uses: actions/cache/restore@v4
+      with:
+        # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Build
+        # intermediates (buildtrees/downloads/packages) are trimmed pre-save below.
+        path: vcpkg
+        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
+
+    - name: "Install openssl windows"
+      if: runner.os == 'Windows'
+      run: |
+        echo "/c/Strawberry/perl/bin" >> $GITHUB_PATH
+        if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+            git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        fi
+        ./vcpkg/vcpkg install openssl:${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows --binarycaching
+        echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+        echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+        # Drop build intermediates so the saved cache holds only installed/ — ~1.2GiB -> ~0.1GiB.
+        rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+    # Master only, so the entry lands on refs/heads/master where every branch and
+    # PR can read it. One writer per arch key: the Release cell of each Windows
+    # architecture (Debug shares the x64 key and would otherwise race it —
+    # "Unable to reserve cache with key ..., another job may be creating this cache").
+    - name: "Save vcpkg + openssl"
+      if: runner.os == 'Windows' && github.ref == 'refs/heads/master' && matrix.cmake_preset == 'Release'
+      uses: actions/cache/save@v4
+      with:
+        path: vcpkg
+        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
+
+    - name: "Install: Required Dev Packages"
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          darwin15arm64|darwin26arm64)
+            brew install bison
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib"
+            ;;
+          darwin1564|darwin2664)
+            brew install bison
+            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
+            ;;
+        esac
+
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          linux64)
+            echo "MARCH=64" >> $GITHUB_ENV
+            sudo bash ci/apt_install.sh --no-install-recommends \
+              libatomic-ops-dev \
+              libglu1-mesa-dev \
+              freeglut3-dev \
+              mesa-common-dev \
+              libglfw3-dev \
+              libfreetype6-dev \
+              libudev-dev \
+              libopenal-dev \
+              libvorbis-dev \
+              libflac-dev \
+              libclang-dev \
+              libx11-dev \
+              libdbus-1-dev \
+              libxrandr-dev \
+              libxcursor-dev \
+              libxinerama-dev \
+              libxi-dev
+            ;;
+        esac
+
+    # sccache with LOCAL-DISK backend, wrapped in ONE actions/cache entry per
+    # matrix config. The GHA backend writes one cache item per TU (~40k items,
+    # quota fragmentation, ~74% concurrent-write failures); local disk keeps
+    # all objects in $SCCACHE_DIR and we persist it as a single tarball.
+    # Windows is on Ninja now (honors CMAKE_*_COMPILER_LAUNCHER); its MSVC
+    # compiles are cacheable because daslang builds with /Z7 (CMakeCommon.txt) —
+    # debug info embedded in the .obj. sccache refuses to cache /Zi (separate
+    # shared PDB) output.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+    - run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        # Non-Windows: export the launcher via env (also wraps the GLFW/libhv
+        # ExternalProject sub-builds — harmless on gcc/clang). Windows must NOT
+        # export it: CMake seeds CMAKE_<LANG>_COMPILER_LAUNCHER from the env
+        # into the sub-cmakes, where sccache + MSVC /Zi (those sub-builds keep
+        # /Zi) + parallel Ninja collide on the shared glfw.pdb (C1041). Windows
+        # instead passes the launcher as -D on the MAIN configure only (Build
+        # step), scoping sccache to daslang's own /Z7 TUs.
+        if [ "$RUNNER_OS" != "Windows" ]; then
+          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        fi
+    # Stable per-config key, one fixed slot. On master, delete + re-save the
+    # same key after Build so the slot is overwritten with fresh objects (GHA
+    # caches are immutable — plain save under an existing key is a no-op, so we
+    # delete first). PRs read-only. Bounded footprint: N configs × one tarball,
+    # no run_id pileup. The cron does NOT restore — nightlies consume no cache
+    # and build cold by policy — but its save still lands a complete fresh
+    # object set, and that save is the seeder every PR lane warms from (master
+    # PUSH runs are usually pre_job-skipped as same-content duplicates).
+    - name: "Restore sccache objects"
+      if: github.event_name != 'schedule'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+
+    - name: "Override das_llvm_disabled for LLVM-free matrix cells"
+      if: (matrix.target == 'windows' && matrix.architecture == 32) || matrix.llvm_disabled == 'ON'
+      shell: bash
+      run: echo "das_llvm_disabled=ON" >> $GITHUB_ENV
+
+    - name: "Build: Daslang"
+      run: |
+        set -eux
+        cmake --no-warn-unused-cli -B build -G "${{ matrix.cmake_generator }}" \
+          -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
+          -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+          -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} \
+          -DDAS_FAST_MATH=${{ matrix.fast_math }} \
+          ${{ matrix.cmake_extra }}
+
+    # A nightly-only cell saves no slot: nothing restores it (the cron does not
+    # restore, and no PR lane runs the cell), so the tarball would only hold quota.
+    - name: "Refresh sccache slot"
+      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+
+    # NOTE: the "Prewarm JIT cache" step (jit_cache_all_tests, ~17 min on the
+    # win64 lane) is GONE: the JIT sweep now runs isolated-PARALLEL and mints
+    # the dll cache itself — cold-cache parallel measured faster than the old
+    # warm sequential sweep, so a separate prewarm only duplicated the
+    # frontend-compile of every test. The target still exists for local use.
+    - name: "Test"
+      if: inputs.lane == 'build' || matrix.nightly_only == 'ON'
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build --parallel
+
+    - name: "Nightly Tests"
+      # Full AOT suite: builds the full test_aot (EXCLUDE_FROM_ALL, ~1080 AOT
+      # TUs — the single biggest CI cost) via the run_tests_aot dependency and
+      # sweeps all of tests/. Nightly + manual dispatch only; per-PR lanes get
+      # the test_aot_subset compile+link gate from the Build step instead.
+      # Then the big C++ tests (tests-cpp/big): a generated standalone context
+      # linked and run, the nano context, concurrent init, the C API split init.
+      # Their binaries are in the default build every lane makes, but every
+      # per-PR ctest is -L small, so only this step executes a generated
+      # context. memory_model_4gb allocates a real 4 GB chunk and stays
+      # local-only.
+      if: matrix.cmake_preset == 'Release' && inputs.lane == 'build_nightly'
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build_nightly --parallel

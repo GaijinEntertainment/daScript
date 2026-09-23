@@ -17,31 +17,8 @@ if(NOT DEFINED DASLANG_NANO_ROOT)
     get_filename_component(DASLANG_NANO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 endif()
 
-set(NANO_OWN_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_context.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_format.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_nothrow.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_stubs.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_string_writer.cpp
-)
-
-set(NANO_SHARED_SRC
-    ${DASLANG_NANO_ROOT}/src/misc/hal.cpp
-    ${DASLANG_NANO_ROOT}/src/misc/memory_model.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/aot_library.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/builtin_array_ops.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/builtin_runtime_ops.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/data_walker.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/debug_info.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/escape_string.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/heap.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/name_lookup.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/runtime_array.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/runtime_iterator.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/runtime_table.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/simulate_gc_pod.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/standalone_ctx_utils.cpp
-)
+set(NANO_SOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+include(${CMAKE_CURRENT_SOURCE_DIR}/sources.cmake)
 
 add_library(libDaScriptNano STATIC ${NANO_OWN_SRC} ${NANO_SHARED_SRC})
 
@@ -61,7 +38,11 @@ endif()
 
 if(NOT DAS_TOOLS_DISABLED AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_custom_target(check_nano_arm
-        COMMAND ${PROJECT_SOURCE_DIR}/ci/nano_arm_build.sh $<TARGET_FILE:daslang>
+        COMMAND ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_SOURCE_DIR}/arm -B ${CMAKE_BINARY_DIR}/nano-arm
+            -G "${CMAKE_GENERATOR}"
+            -DCMAKE_TOOLCHAIN_FILE=${PROJECT_SOURCE_DIR}/cmake/arm-none-eabi.cmake
+            -DDASLANG_HOST_EXE=$<TARGET_FILE:daslang>
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/nano-arm
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Cross-compiling nano for cortex-m4"

@@ -1,0 +1,25 @@
+set(NANO_OWN_SRC
+    ${NANO_SOURCES_DIR}/src/nano_context.cpp
+    ${NANO_SOURCES_DIR}/src/nano_format.cpp
+    ${NANO_SOURCES_DIR}/src/nano_nothrow.cpp
+    ${NANO_SOURCES_DIR}/src/nano_stubs.cpp
+    ${NANO_SOURCES_DIR}/src/nano_string_writer.cpp
+)
+
+set(NANO_SHARED_SRC
+    ${DASLANG_NANO_ROOT}/src/misc/hal.cpp
+    ${DASLANG_NANO_ROOT}/src/misc/memory_model.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/aot_library.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/builtin_array_ops.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/builtin_runtime_ops.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/data_walker.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/debug_info.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/escape_string.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/heap.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/name_lookup.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/runtime_array.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/runtime_iterator.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/runtime_table.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/simulate_gc_pod.cpp
+    ${DASLANG_NANO_ROOT}/src/simulate/standalone_ctx_utils.cpp
+)

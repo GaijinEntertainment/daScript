@@ -60,7 +60,7 @@ def test_macro_dep_invalidate(t : T?) {
     // absent -> present, through a RELATIVE dep path: the case the architecture doc calls the
     // one that matters most (a first mint has no sidecar), plus the builtin's cwd-absolutize
     // arm - a relative registration must still validate from the reader's cwd
-    let depRel = "._mc_dep_probe_rel.txt"
+    let depRel = "._mc_dep_probe_rel_{ref_time_ticks()}.txt"
     remove(depRel)
     // a FRESH cache: the phase-1 cache still validates its own (existing) dep and would serve clean
     let cmd2 = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc2.bin\" \"{root}/tests/module_cache/_fixtures/mc_dep_drv.das\""

@@ -1,0 +1,464 @@
+name: nightly
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: nightly-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+
+  pre_job:
+    runs-on: ubuntu-latest
+    outputs:
+      nightly: ${{ steps.nightly.outputs.nightly }}
+    steps:
+      - id: nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          nightly=false
+          case "${{ github.event_name }}" in
+            schedule)
+              if [ '${{ github.repository }}' = 'GaijinEntertainment/daScript' ]; then nightly=true; fi ;;
+            workflow_dispatch) nightly=true ;;
+            pull_request)
+              if gh api graphql -f owner='${{ github.repository_owner }}' -f name='${{ github.event.repository.name }}' \
+                   -F number=${{ github.event.pull_request.number }} -f query='
+                     query($owner:String!,$name:String!,$number:Int!){
+                       repository(owner:$owner,name:$name){
+                         pullRequest(number:$number){
+                           body
+                           labels(first:100){nodes{name}}
+                           closingIssuesReferences(first:20){nodes{labels(first:100){nodes{name}}}}
+                         }}}' \
+                   --jq '.data.repository.pullRequest
+                         | [ (.labels.nodes[].name),
+                             (.closingIssuesReferences.nodes[].labels.nodes[].name) ] as $tags
+                         | if ($tags | index("nightly-failure"))
+                              or ($tags | index("run-nightly"))
+                              or (((.body // "") | test("#nightly"; "i")))
+                           then "armed" else empty end' | grep -q .
+              then
+                nightly=true
+              fi
+              ;;
+          esac
+          echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/build_matrix.yml
+    with:
+      lane: build_nightly
+  build_windows_relwithdebinfo_nightly:
+  ###########################################################
+    # RelWithDebInfo is useful as the leak-enabled Windows diagnostic, but it
+    # duplicates the Release/Debug compile and interpreter coverage on every
+    # PR. Keep it on the canonical nightly and explicit full-workflow runs.
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      das_dll_build: 'NO'
+      das_llvm_disabled: 'OFF'
+      SCCACHE_GHA_ENABLED: 'false'
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Windows Defender"
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - uses: ilammy/setup-nasm@v1
+
+    - name: "Set up MSVC environment"
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # Restore-only: the PR matrix job above is the single seeder for this key.
+    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
+    - name: "Restore vcpkg + openssl"
+      if: github.event_name != 'schedule'
+      uses: actions/cache/restore@v4
+      with:
+        path: vcpkg
+        key: vcpkg-x64-windows-v2
+
+    - name: "Install openssl windows"
+      run: |
+        if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+            git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        fi
+        ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
+        echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+        rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+    - uses: mozilla-actions/sccache-action@v0.0.10
+
+    - name: "Configure sccache"
+      run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+
+    # NOT persisted across runs, deliberately. This slot held 564MB of the repo's
+    # 10GB cache quota, and this job is nightly-only — nothing waits on it. That
+    # quota is contended: a Windows object cache is ~4.4GB (920 TUs x ~4.8MB,
+    # /Z7 embeds debug info in every .obj), and the PR-facing slots kept evicting
+    # each other, which is what left every PR building cold. Paying ~15 min once a
+    # night here is the cheapest quota we can free. Re-add a restore/save pair on
+    # key sccache-windows-64-RelWithDebInfo-none if the repo cache limit is raised.
+
+    - name: "Build: Daslang RelWithDebInfo"
+      run: |
+        set -eux
+        export PATH="/c/Strawberry/perl/bin:$PATH"
+        cmake --no-warn-unused-cli -B./build -G Ninja \
+          -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+          -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+          -DDAS_TEST_TIMEOUT=3600 \
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+    # No isolated retry on this lane, and a doubled watchdog on the one pass it
+    # does run. This is the DAS_TRACK_ALLOC build with the free list off, so its
+    # sweep costs about twice a plain Release one, and the hosted Windows runner
+    # swings another ~1.4x night to night: the same ~12.9k tests came in at 1092s
+    # in July and were still only 9472 deep when the 1800s watchdog fired in
+    # August. Isolated mode fares far worse — 1339 worker subprocesses over 6
+    # threads got ~44% through in 6453s, so a retry there cannot finish inside any
+    # budget worth granting it; every firing so far burned ~1.8h and still went
+    # red. One pass with room to finish is the signal; a flake here is re-run by
+    # hand.
+    - name: "Test"
+      run: cmake --build ./build --config RelWithDebInfo --target run_build_sanitizers --parallel
+
+  ###########################################################
+
+  build_windows_release_llvm_nightly:
+  ###########################################################
+    # Preserve the former PR Win64 Release configuration as a nightly signal:
+    # LLVM enabled, full JIT + interpreter sweeps, and the small C++ tests.
+    # The regular matrix cell is the fast LLVM-free MSVC gate. Its scheduled
+    # run still owns the full AOT suite, so do not duplicate that sweep here.
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      das_dll_build: 'NO'
+      das_llvm_disabled: 'OFF'
+      SCCACHE_GHA_ENABLED: 'false'
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Windows Defender"
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - uses: ilammy/setup-nasm@v1
+
+    - name: "Set up MSVC environment"
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # Restore-only: the PR matrix job above is the single seeder for this key.
+    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
+    - name: "Restore vcpkg + openssl"
+      if: github.event_name != 'schedule'
+      uses: actions/cache/restore@v4
+      with:
+        path: vcpkg
+        key: vcpkg-x64-windows-v2
+
+    - name: "Install openssl windows"
+      run: |
+        if [ ! -x vcpkg/vcpkg.exe ] && [ ! -x vcpkg/vcpkg ]; then
+            git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        fi
+        ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
+        echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+        rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+    - uses: mozilla-actions/sccache-action@v0.0.10
+
+    - name: "Configure sccache"
+      run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+
+    # NOT persisted across runs — same quota reasoning as the RelWithDebInfo
+    # nightly above. This slot held another 758MB for a job nobody waits on.
+
+    - name: "Build: Daslang Release with LLVM"
+      run: |
+        set -eux
+        export PATH="/c/Strawberry/perl/bin:$PATH"
+        cmake --no-warn-unused-cli -B./build -G Ninja \
+          -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+          -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+    - name: "Test"
+      run: cmake --build ./build --config Release --target run_build --parallel
+
+  ###########################################################
+
+  build_windows_mingw:
+  ###########################################################
+  # Catches clang-mingw64 toolchain regressions NIGHTLY (moved off per-PR CI —
+  # it's a ~26min long pole and alt-toolchain coverage, lowest per-PR signal).
+  # The mingw path
+  # diverges from MSVC in src/hal/debug_break.cpp, src/hal/project_specific_crash_handler.cpp,
+  # and src/builtin/module_jit.cpp (PR #2838). Without this job, a Windows-touching
+  # change that compiles under MSVC but breaks mingw would only surface when a
+  # maintainer rebuilds locally. Same runner pool as the MSVC matrix
+  # (windows-latest), separate top-level job so mingw churn doesn't risk
+  # the much-larger MSVC entries.
+  #
+  # dasClangBind is enabled here — find_package(Clang 22.1) matches msys2's
+  # libclang 22.1.x and POST_BUILD copies the libclang+libLLVM+libc++ chain
+  # next to daslang.exe so the .shared_module dlopen resolves at runtime.
+  ###########################################################
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Deliberately does NOT
+    # gate on pre_job.should_skip — a nightly run must fire even when master is
+    # unchanged (skip-duplicate-actions would otherwise skip it and we'd never
+    # catch a toolchain/runner regression on an idle day).
+    # scheduled cron runs the toolchains only on the canonical repo, so forks
+    # don't run (and fail) the nightly — that would email every fork owner.
+    # Manual workflow_dispatch still runs them anywhere.
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+    - name: "Install MSYS2 + clang-mingw64 toolchain"
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANG64
+        # cache:false — this job is nightly/dispatch-only and nightlies consume
+        # no cache; the msys2 pkg snapshot alone was ~1.65GiB of quota.
+        update: false
+        cache: false
+        install: >-
+          mingw-w64-clang-x86_64-toolchain
+          mingw-w64-clang-x86_64-cmake
+          mingw-w64-clang-x86_64-ninja
+          mingw-w64-clang-x86_64-openssl
+          mingw-w64-clang-x86_64-glfw
+          mingw-w64-clang-x86_64-sccache
+          bison
+          git
+
+    # sccache (compiler cache) for the mingw lane. mingw builds on Ninja, which
+    # honors CMAKE_<LANG>_COMPILER_LAUNCHER (the VS-generator clang-cl lane can't,
+    # which is why only this lane gets it). Use the msys2-NATIVE sccache (installed
+    # above), not the hostedtoolcache one: a native-Windows sccache fails to
+    # CreateProcess msys2's clang.exe (the compiler's runtime DLLs aren't on
+    # sccache's PATH). Local-disk backend in one actions/cache slot, same approach
+    # as the build matrix. Fixed key (single config); PRs restore read-only, master
+    # refreshes the slot after Build.
+    - name: "Configure sccache (local-disk backend)"
+      shell: bash
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+    # No slot restore/save: this job is nightly/dispatch-only and nightlies
+    # consume no cache. sccache stays as a per-run local-disk launcher only.
+    - name: "Build: Daslang (clang-mingw64)"
+      run: |
+        set -eux
+        mkdir -p build-mingw
+        cmake --no-warn-unused-cli -B./build-mingw -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+          -DDAS_CLANG_BIND_DISABLED=OFF \
+          -DDAS_LLVM_DISABLED=OFF
+        sccache --show-stats || true
+
+    - name: "Test"
+      run: cmake --build ./build-mingw --config Release --target run_build_mingw --parallel
+
+    # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
+    # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
+    # `fatal error: 'float.h' file not found`; needs explicit -resource-dir /
+    # -isystem injection). Until that lands, dasImgui binding freshness is a
+    # local-regen discipline (run bind/bind_imgui.das before committing a bump),
+    # like it was in the module's standalone-repo era.
+
+  build_windows_clangcl:
+  ###########################################################
+  # Catches clang-cl build regressions. Builds with Ninja driving clang-cl directly
+  # (msvc-dev-cmd's vcvars puts clang-cl + INCLUDE/LIB on PATH) — NOT the VS "ClangCL"
+  # toolset. clang-cl sets CMake's MSVC=TRUE but uses clang's resource headers; dasHV
+  # builds OpenSSL from source with plain cl, which rejects clang's #include_next
+  # <stdint.h> (C1021) — modules/dasHV/scrub_clang_include.cmake strips the clang dir
+  # from INCLUDE so cl falls back to MSVC's stdint.h. Without this job that fix — and
+  # clang-cl buildability generally — could silently rot.
+  #
+  # Ninja (not the VS generator) is deliberate: under the VS generator the test-sweep
+  # custom targets run through MSBuild's CustomBuild wrapper, which reports the command
+  # as "exited with code -1" (MSB8066) for the heavy threaded sweep even though daslang
+  # itself exits 0 and every test passes — a false red unique to the VS generator (its
+  # ToolTask/pipe handling of a threaded child), reproduced and root-caused locally.
+  # Ninja runs daslang.exe directly (like every other Windows lane), so the sweep's real
+  # exit code is honored. Same runner pool as the MSVC matrix; separate top-level job.
+  # Runs NIGHTLY (off per-PR CI — alt-toolchain, lowest per-PR signal).
+  ###########################################################
+    # NIGHTLY ONLY (+ manual dispatch): off per-PR/push CI. Does NOT gate on
+    # pre_job.should_skip — a nightly run must fire even when master is unchanged.
+    # scheduled cron runs the toolchains only on the canonical repo, so forks
+    # don't run (and fail) the nightly — that would email every fork owner.
+    # Manual workflow_dispatch still runs them anywhere.
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    runs-on: windows-latest
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Exclude workspace from Windows Defender"
+      if: runner.os == 'Windows'
+      shell: pwsh
+      continue-on-error: true
+      # Defender real-time scan of freshly-written .obj/.exe/.dll slows the build
+      # and can momentarily lock a just-linked exe (the "Access is denied" deploy
+      # race). Exclude the workspace + toolchain writers and try to disable RTP;
+      # the status dump records whether the runner image actually honored it
+      # (managed Defender / Tamper Protection may silently no-op).
+      # continue-on-error: a managed-Defender runner must not fail the job.
+      run: |
+        Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+        foreach ($p in 'daslang.exe','daslang_static.exe','test_aot.exe','cl.exe','link.exe','lld-link.exe','mt.exe','vctip.exe','mspdbsrv.exe','vcpkg.exe') {
+          Add-MpPreference -ExclusionProcess $p -ErrorAction SilentlyContinue
+        }
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, IsTamperProtected
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+    - name: "Install nasm (OpenSSL asm)"
+      uses: ilammy/setup-nasm@v1
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Set up MSVC + clang-cl environment"
+      # vcvars puts cl.exe AND clang-cl.exe (VC\Tools\Llvm\x64\bin) on PATH plus
+      # INCLUDE/LIB, so Ninja can drive clang-cl directly without the VS generator.
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    # dasHV builds OpenSSL from source here (the path the scrub fix targets), and
+    # nmake is serial — ~7 min. Cache the install so only the first run (or a dasHV
+    # CMakeLists change) pays it; on a hit find_package(OpenSSL) finds it and the
+    # from-source ExternalProject is skipped. (On Ninja CMAKE_<LANG>_COMPILER_LAUNCHER
+    # now works, so sccache could be added here later; OpenSSL from-source is unchanged.)
+    # Skipped on the cron: nightlies consume no cache, so the scheduled run
+    # builds OpenSSL from source (~8 min, budgeted). Dispatch still caches.
+    - name: "Cache OpenSSL (clang-cl from-source build)"
+      if: github.event_name != 'schedule'
+      uses: actions/cache@v4
+      with:
+        path: |
+          build-clangcl/openssl/include
+          build-clangcl/openssl/lib
+          build-clangcl/openssl/bin
+        key: openssl-clangcl-${{ runner.os }}-${{ hashFiles('modules/dasHV/CMakeLists.txt') }}
+
+    - name: "Build: Daslang (Ninja + clang-cl)"
+      shell: pwsh
+      # Ninja + clang-cl (from vcvars PATH). No VS-generator, so no VS-major pinning
+      # to the runner image and no MSBuild CustomBuild sweep wrapper (see job header).
+      run: |
+        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Test"
+      shell: pwsh
+      run: |
+        cmake --build ./build-clangcl --config Release --target run_build_clangcl --parallel
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  nightly_issue:
+    needs:
+      - build
+      - build_windows_relwithdebinfo_nightly
+      - build_windows_release_llvm_nightly
+      - build_windows_mingw
+      - build_windows_clangcl
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly.yml
