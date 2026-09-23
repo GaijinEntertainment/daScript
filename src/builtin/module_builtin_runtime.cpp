@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/misc/env_cfg.h"
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_serializer.h"
@@ -1839,7 +1840,20 @@ namespace das
         }
     }
 
+    static int logMinLevel () {
+        const char * env = get_dasenv_log_level();
+        if ( !env || !env[0] ) return int(LogLevel::warning);
+        if ( strcmp(env,"trace")==0 )    return int(LogLevel::trace);
+        if ( strcmp(env,"debug")==0 )    return int(LogLevel::debug);
+        if ( strcmp(env,"info")==0 )     return int(LogLevel::info);
+        if ( strcmp(env,"warning")==0 )  return int(LogLevel::warning);
+        if ( strcmp(env,"error")==0 )    return int(LogLevel::error);
+        if ( strcmp(env,"critical")==0 ) return int(LogLevel::critical);
+        return atoi(env);
+    }
+
     void toLog ( int level, const char * text, Context * context, LineInfoArg * at ) {
+        if ( level < logMinLevel() ) return;
         context->to_out(at, level, text);
     }
 

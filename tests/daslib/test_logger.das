@@ -5,6 +5,7 @@ options no_unused_block_arguments = false
 require dastest/testing_boost
 require daslib/logger
 require daslib/json_boost
+require daslib/defer
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -204,6 +205,10 @@ def private run_child(cmd : string; var output : string&) : int {
 // a dead agent behind for the harness's next line.
 [test]
 def test_hook_at_field_decimal(t : T?) {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    defer() {
+        set_env_variable("DAS_LOG_LEVEL", "")
+    }
     t |> run("the hook's at field names the call site's line in decimal") @(t : T?) {
         let p = temp_log_path()
         var out : string

@@ -1194,6 +1194,14 @@ def run_probes(require_lines : table<string; bool>; file_mods : table<string>; c
     return <- failures
 }
 
+def private log_page_status(rep : PageReport; verbose : bool) {
+    if (rep.status == "red") {
+        to_log(LOG_ERROR, "  [red] {rep.page}\n")
+    } elif (verbose) {
+        to_log(LOG_INFO, "  [{rep.status}] {rep.page}\n")
+    }
+}
+
 def report_page(page_path : string; cfg : Config) : PageReport {
     let page <- parse_page(page_path)
     var rep = PageReport(page = to_generic_path(page_path), das_blocks = length(page.blocks))
@@ -1293,9 +1301,7 @@ def main() : int {
         } else {
             sweep.no_blocks++
         }
-        if (cfg.verbose || rep.status == "red") {
-            to_log(LOG_INFO, "  [{rep.status}] {rep.page}\n")
-        }
+        log_page_status(rep, cfg.verbose)
         if ((i + 1) % 25 == 0) {
             to_log(LOG_INFO, "  ... {i + 1}/{length(pages)}\n")
         }
@@ -1304,6 +1310,7 @@ def main() : int {
 
     let json_path = empty(cfg.json) ? path_join(cfg.out, "report.json") : cfg.json
     fwrite(json_path, sprint_json(sweep, true))
-    to_log(LOG_INFO, "doc-verify: {sweep.green} green, {sweep.red} red, {sweep.no_blocks} without das blocks; report: {json_path}\n")
+    to_log(sweep.red > 0 ? LOG_ERROR : LOG_INFO,
+        "doc-verify: {sweep.green} green, {sweep.red} red, {sweep.no_blocks} without das blocks; report: {json_path}\n")
     return sweep.red > 0 ? 1 : 0
 }

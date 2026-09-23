@@ -3,6 +3,7 @@ options gen2
 require dastest/testing_boost public
 require strings
 require math
+require daslib/defer
 require daslib/fio
 require daslib/command_line
 require daslib/json_boost
@@ -1495,6 +1496,10 @@ def export_daslib_corpus(t : T?; workers : string; out : string) : string {
 // code rather than a fixture.
 [test]
 def test_export_daslib_parallel_equals_sequential(t : T?) {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    defer() {
+        set_env_variable("DAS_LOG_LEVEL", "")
+    }
     let out_par = make_temp_export_path(t)
     let out_seq = make_temp_export_path(t)
     if (empty(out_par) || empty(out_seq)) return

@@ -453,7 +453,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
                     return if (program._options |> find_arg("rtti") ?as tBool ?? false)
                     let program_module = program |> get_this_module()
                     let program_file = program_module != null ? string(program_module.fileName) : "<no module>"
-                    log::info("deser {i + 1:d}/{count:d}: {program_file}")
+                    to_log(LOG_INFO, "deser {i + 1:d}/{count:d}: {program_file}\n")
                     simulate(program) $(sok, context, serrors) {
                         if (!sok) {
                             log::error("Failed to simulate program {i}\n{serrors}")

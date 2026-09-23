@@ -411,7 +411,7 @@ class public Emitter {
             }
         }
         if (tee) {
-            print("{line}\n")
+            to_log(LOG_INFO, "{line}\n")
         }
     }
 }

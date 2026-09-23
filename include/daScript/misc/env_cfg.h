@@ -38,6 +38,7 @@ namespace das {
     DAS_API const char * get_dasenv_team_prof ();
     DAS_API const char * get_dasenv_trace_module_load ();
     DAS_API const char * get_dasenv_module_cache_limit ();
+    DAS_API const char * get_dasenv_log_level ();
     DAS_API const char * get_dasenv_depfile ();
     DAS_API const char * get_dasenv_depfile_target ();
     DAS_API const char * get_dasenv_depfile_exclude ();

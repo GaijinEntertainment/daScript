@@ -3,6 +3,7 @@ options no_aot
 
 require strings
 require dastest/testing_boost
+require daslib/defer
 require daslib/fio
 
 [test]
@@ -18,6 +19,10 @@ def test_dasfmt_exclude_mask(t : T?) {
     t |> success(fwrite(path_join(root, "clean.das"), "options gen2\n\n[export]\ndef main \{\n    var x = 1\n    print(\"\{x\}\\n\")\n\}\n"), "wrote formatted file")
     t |> success(fwrite(path_join(root, "build/gen.das"), "options gen2\n\n[export]\ndef main \{\n    var x=1\n    print(\"\{x\}\\n\")\n\}\n"), "wrote unformatted generated file")
 
+    set_env_variable("DAS_DEBUG_LEVEL", "INFO")
+    defer() {
+        set_env_variable("DAS_DEBUG_LEVEL", "")
+    }
     var out = ""
     let rcNoMask = run_and_capture([exe, tool, "--", "--path", root, "--verify"], out, 120.0)
     t |> success(rcNoMask != 0, "unmasked verify fails on the generated file")

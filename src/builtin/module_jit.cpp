@@ -281,16 +281,16 @@ namespace das {
                 break;
             }
         }
-        auto li = LineInfo();
+        auto li = LineInfoArg();
         if ( int status = pclose(fp); status != 0 ) {
             string msg = string("Failed to link ") + artifactKind + " " + artifactPath + ", command '" + cmd + "'\n";
-            context->to_out(&li, LogLevel::error, msg.c_str());
+            toLog(LogLevel::error, msg.c_str(), context, &li);
             string err = string("Output:\n") + output;
-            context->to_out(&li, LogLevel::error, err.c_str());
+            toLog(LogLevel::error, err.c_str(), context, &li);
             return false;
         }
         string msg = string(artifactKind) + " " + artifactPath + " linked - ok\n";
-        context->to_out(&li, LogLevel::info, msg.c_str());
+        toLog(LogLevel::info, msg.c_str(), context, &li);
         return true;
     }
 
@@ -474,12 +474,12 @@ namespace das {
         auto getErrMsg = (GetErrMsgFn) fnGetErrorMessage;
         auto disposeErrMsg = (DisposeFn) fnDisposeErrorMessage;
         auto disposeMsg = (DisposeFn) fnDisposeMessage;
-        auto li = LineInfo();
+        auto li = LineInfoArg();
         // the das caller validates each symbol by name first; this is the complete backstop so a
         // future caller can't run workers that leak diagnostics through null dispose/message fns
         if ( !runPasses || !verifyModule || !emitToFile || !getErrMsg || !disposeErrMsg || !disposeMsg
                 || g_jitParEmitJobs.empty() ) {
-            context->to_out(&li, LogLevel::error, "jit_par_emit_run: missing entry points or no jobs\n");
+            toLog(LogLevel::error, "jit_par_emit_run: missing entry points or no jobs\n", context, &li);
             g_jitParEmitJobs.clear();
             return false;
         }
@@ -537,11 +537,11 @@ namespace das {
             if ( !job.error.empty() ) {
                 ok = false;
                 string msg = string("LLVM JIT: parallel emit: ") + job.error + "\n";
-                context->to_out(&li, LogLevel::error, msg.c_str());
+                toLog(LogLevel::error, msg.c_str(), context, &li);
             } else if ( logTimes ) {
                 auto msg = fmt::format(FMT_STRING("LLVM JIT time: job {} passes {:.6f} emit {:.6f}\n"),
                     job.objPath.c_str(), job.passesSec, job.emitSec);
-                context->to_out(&li, LogLevel::info, msg.c_str());
+                toLog(LogLevel::info, msg.c_str(), context, &li);
             }
         }
         g_jitParEmitJobs.clear();

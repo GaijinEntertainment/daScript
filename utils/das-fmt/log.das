@@ -19,6 +19,7 @@ def info_raw(msg : string | #) {
 }
 
 def info(msg : string | #) {
+    return if (empty(get_env_variable("DAS_DEBUG_LEVEL")))
     if (!verbose) {
         print("{msg}\n")
     } else {

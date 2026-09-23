@@ -60,7 +60,7 @@ def private f4_fields(v : float4) : string {
 def sg_ir_reset() {
     //! Begin a fresh shader graph.
     return if (sg_ir_want_sgir_dump() || sg_ir_want_ast_dump())
-    print(";; ---- begin shader graph ----\n")
+    to_log(LOG_DEBUG, ";; ---- begin shader graph ----\n")
 }
 
 def sg_ir_set_contract(stage : string; contract : string) {
@@ -70,7 +70,7 @@ def sg_ir_set_contract(stage : string; contract : string) {
         return
     }
     return if (sg_ir_want_ast_dump())
-    print(";; contract: stage={stage} type={contract}\n")
+    to_log(LOG_DEBUG, ";; contract: stage={stage} type={contract}\n")
 }
 
 def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaultTexture : string) {
@@ -82,9 +82,9 @@ def sg_ir_add_property(name : string; ptype : int; defaultValue : float4; defaul
     }
     return if (sg_ir_want_ast_dump())
     if (empty(defaultTexture)) {
-        print(";; property {name} : {type_name(ptype)} = {defaultValue}\n")
+        to_log(LOG_DEBUG, ";; property {name} : {type_name(ptype)} = {defaultValue}\n")
     } else {
-        print(";; property {name} : {type_name(ptype)} = \"{defaultTexture}\"\n")
+        to_log(LOG_DEBUG, ";; property {name} : {type_name(ptype)} = \"{defaultTexture}\"\n")
     }
 }
 
@@ -101,7 +101,7 @@ def sg_ir_begin_node(id : int; typeId : string; kind : int; constValue : float4;
     } elif (kind == 4) {   // Var
         extra = "  prop#{propertyIndex}"
     }
-    print("node {id}  {typeId}  [{kind_name(kind)}]{extra}\n")
+    to_log(LOG_DEBUG, "node {id}  {typeId}  [{kind_name(kind)}]{extra}\n")
 }
 
 def sg_ir_add_input_pin(id : int; ptype : int) {
@@ -110,7 +110,7 @@ def sg_ir_add_input_pin(id : int; ptype : int) {
         return
     }
     return if (sg_ir_want_ast_dump())
-    print("    in   pin {id} : {type_name(ptype)}\n")
+    to_log(LOG_DEBUG, "    in   pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_output_pin(id : int; ptype : int) {
@@ -119,7 +119,7 @@ def sg_ir_add_output_pin(id : int; ptype : int) {
         return
     }
     return if (sg_ir_want_ast_dump())
-    print("    out  pin {id} : {type_name(ptype)}\n")
+    to_log(LOG_DEBUG, "    out  pin {id} : {type_name(ptype)}\n")
 }
 
 def sg_ir_add_link(fromPin : int; toPin : int) {
@@ -128,7 +128,7 @@ def sg_ir_add_link(fromPin : int; toPin : int) {
         return
     }
     return if (sg_ir_want_ast_dump())
-    print("link  pin {fromPin} -> pin {toPin}\n")
+    to_log(LOG_DEBUG, "link  pin {fromPin} -> pin {toPin}\n")
 }
 
 def sg_ir_want_ast_dump() : bool {

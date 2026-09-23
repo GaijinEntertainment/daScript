@@ -65,7 +65,6 @@ def test_pilot_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [path_join(fixture, "utils/REVIEW.das")])
     t |> equal(0, green.rc, "consistent fixture is green: {green.out}")
-    t |> success(find(green.out, "REVIEW.das utils: OK") >= 0, "green verdict printed")
 
     // one violation per check class
     write_at(t, fixture, "utils/internal/Bad_Name/x.txt", "x\n")
@@ -186,7 +185,6 @@ def test_dasllama_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(0, green.rc, "covered fixture is green: {green.out}")
-    t |> success(find(green.out, "REVIEW.das dasllama: OK") >= 0, "green verdict printed")
 
     // a line after a `def ... => expr` one-liner is outside the layout closure - the window
     // ends on the header, so the stamp does not move
@@ -280,7 +278,6 @@ def test_vulkan_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasVulkan/REVIEW.das")])
     t |> equal(0, green.rc, "covered fixture is green (category + DLL-class tokens ignored): {green.out}")
-    t |> success(find(green.out, "REVIEW.das dasvulkan: OK") >= 0, "green verdict printed")
 
     write_at(t, fixture, "modules/dasVulkan/daslib/vulkan_unlisted.das", "options gen2\n")
     write_at(t, fixture, "modules/dasVulkan/.das_module",
@@ -327,7 +324,6 @@ def test_llvm_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLVM/REVIEW.das")])
     t |> equal(0, green.rc, "temp-copy fixture is green (the tracked dir is read, never written): {green.out}")
-    t |> success(find(green.out, "REVIEW.das dasLLVM: OK") >= 0, "green verdict printed")
 
     // one violation per way a write reaches the tracked dir, one file each so the finding's
     // path names which way fired
@@ -384,7 +380,6 @@ def test_server_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
     t |> equal(0, green.rc, "consistent fixture is green: {green.out}")
-    t |> success(find(green.out, "REVIEW.das dasllama-server: OK") >= 0, "green verdict printed")
 
     // one violation per direction - the needle list is the census
     write_at(t, fixture, "utils/dasllama-server/openai_server.das",

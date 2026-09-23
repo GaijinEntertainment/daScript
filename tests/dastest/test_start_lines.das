@@ -2,6 +2,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost
+require daslib/defer
 require daslib/fio
 require daslib/strings_boost
 
@@ -9,6 +10,10 @@ require daslib/strings_boost
 // --failures-only, in both modes, and not depend on the run finishing
 
 def run_dastest_capturing(t : T?; mode_args : array<string>) : string {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    defer() {
+        set_env_variable("DAS_LOG_LEVEL", "")
+    }
     let das_root = get_das_root()
     var args <- [
         get_command_line_arguments()[0],

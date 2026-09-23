@@ -153,7 +153,6 @@ def public env_config_text(name : string) : Option<string> {
     if (empty(name) || !has_env_variable(name)) return none(type<string>)
     let v = get_env_variable(name)
     if (empty(v)) {
-        to_log(LOG_WARNING, "env {name} is set but empty - treated as unset (use {name}=0 to disable a flag)\n")
         return none(type<string>)
     }
     return some(v)
