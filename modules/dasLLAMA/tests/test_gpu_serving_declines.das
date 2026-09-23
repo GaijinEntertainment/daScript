@@ -392,7 +392,7 @@ def test_resident_binding_ctx(t : T?) {
         dense.config.n_kv_heads = 8l
         dense.config.head_size = 128l
         t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
-        for (k in range64(16l)) {   //! every odd layer reads its even neighbour's K/V: the mirror holds sixteen rows a position
+        for (k in range64(16l)) {
             dense.kv_src[2l * k + 1l] = 2l * k
         }
         t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 131071l, "a shared-KV layer adds no row of its own: the cap divides by the sixteen rows the mirror allocates")

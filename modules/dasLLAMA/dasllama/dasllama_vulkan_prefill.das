@@ -2275,7 +2275,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
     unsafe {
         var a & = g_gpu.arenas[fmt]
-        var s_cls = af_role_set(a.cls_sets, fmt, blk, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev, XQ_BYTES, XS_BYTES, 0u, VHG_YO)   // dies with the arena on model drop — rebuilt over the new scratch
+        var s_cls = af_role_set(a.cls_sets, fmt, blk, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev, XQ_BYTES, XS_BYTES, 0u, VHG_YO)   // the cached set dies with the arena on model drop and rebuilds over the new scratch
         var mp = reinterpret<uint?>(a.meta.mapped)
         mp[0] = uint(arena_local_blk(blk))   // one region: the whole tensor at its slab base
         mp[1] = 0u          // activation block base

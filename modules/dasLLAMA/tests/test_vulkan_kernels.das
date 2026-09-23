@@ -1599,7 +1599,7 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
 let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
-def private kq_leaf_rails(ensure : block<(fmt : int) : bool>) : bool {
+def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
     var ok = true
     for (f in KQ_LEAF_FMTS) {
         ok = ok && invoke(ensure, f)
@@ -1611,7 +1611,7 @@ def private kq_leaf_rails(ensure : block<(fmt : int) : bool>) : bool {
 def test_vkd_kq_gemv_family(t0 : T?) {
     t0 |> run("kq GEMV class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!kq_leaf_rails() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
@@ -1623,9 +1623,9 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             let fmts = KQ_LEAF_FMTS
             for (fi in range(nfmt)) {
                 let fmt = fmts[fi]
-                let stride4 = int(kq_qsb(kq_fmt_of(fmt)) / 4l)   // uint words per superblock (iq3s/iq3xxs/iq2s are not uint4-aligned)
+                let sb_words = int(kq_qsb(kq_fmt_of_code(fmt)) / 4l)
                 let nwsb = rows * nsb                       // region r's weights at r*d*nsb
-                let wq_words = nwsb * stride4
+                let wq_words = nwsb * sb_words
                 let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var wqh : array<uint>
                 var wsh : array<uint>
@@ -2585,7 +2585,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 def test_vkd_kq_batch_family(t0 : T?) {
     t0 |> run("kq batch tile class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!kq_leaf_rails() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
                 return
             }
@@ -2604,17 +2604,17 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let pipes = KQ_LEAF_FMTS
             for (fi in range(nfmt)) {
                 let fmt = pipes[fi]
-                let wstride = int(kq_qsb(kq_fmt_of(fmt)) / 4l)   // uint words per superblock
+                let sb_words = int(kq_qsb(kq_fmt_of_code(fmt)) / 4l)
                 var wqh : array<uint>
                 var wsh : array<uint>
                 var xqh : array<uint>
                 var xsh : array<float>
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
-                wqh |> resize(totsb * wstride)
+                wqh |> resize(totsb * sb_words)
                 wsh |> resize(wswords)
                 xqh |> resize(rows * nsb * 64)
                 xsh |> resize(rows * nsb)
-                for (i in range(totsb * wstride)) {
+                for (i in range(totsb * sb_words)) {
                     wqh[i] = hash_word(uint(i) + uint(fmt) * 131u)
                 }
                 for (i in range(wswords)) {
@@ -2626,7 +2626,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 for (i in range(rows * nsb)) {
                     xsh[i] = 0.3 + float(i % 11) * 0.05
                 }
-                let wq_bytes = int64(totsb * wstride) * 4l
+                let wq_bytes = int64(totsb * sb_words) * 4l
                 let ws_bytes = int64(wswords) * 4l
                 let xq_bytes = int64(rows * nsb) * 256l
                 let xs_bytes = int64(rows * nsb) * 4l
@@ -7358,7 +7358,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
                     submit_wait(raw2)
                     memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
                 }
-                // oracle: every region's rows against the one activation row - the q8 GEMM oracle over one record of one row, the weight rows the regions' rows end to end
+                // the q8 GEMM oracle over one record of one activation row: the regions' weight rows lie end to end
                 var y_ref : array<float>
                 y_ref |> resize(rows)
                 var rec <- [0u, 0u, 1u, 0u]
@@ -8451,7 +8451,7 @@ def test_vkd_dn_family(t0 : T?) {
                 let sm2 = make_device_buf(sm_bytes)
                 let scd2 = make_device_buf(sc_bytes)
                 let qd2 = make_device_buf(q_bytes)
-                nan_sentinel_upload(scd2, sc_bytes)   //! a scale or quant the step never wrote reads as the sentinel, not as pool bytes
+                nan_sentinel_upload(scd2, sc_bytes)
                 nan_sentinel_upload(qd2, q_bytes)
                 let of_bytes = int64(nvh * ds) * 4l
                 let ofd2 = make_device_buf(of_bytes)

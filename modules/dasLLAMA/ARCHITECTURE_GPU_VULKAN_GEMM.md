@@ -276,7 +276,7 @@ a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on
 **A subgroup of the kq GEMV family takes one, two or four output rows, each row's lanes a cluster
 of the fold.** A leaf decodes a block once (`blk_decode`: the block's lo and hi packed int8 quads
 and the fold's four terms - a scale and a block-sum coefficient a 16-weight half, the block sums
-skipped where a leaf's fold has none, `blk_bsum`) and the family's one `blk_fold` dots the
+skipped where a leaf's fold has none, `fold_reads_bsum`) and the family's one `blk_fold` dots the
 decoded block against an activation block, so the N-column form pays a block's codebook gathers,
 grid lookups and bit deposits once for every column where the one-column form pays them once a
 block; the two forms share the fold's every `mad`, so their sums match bit for bit. A lane takes

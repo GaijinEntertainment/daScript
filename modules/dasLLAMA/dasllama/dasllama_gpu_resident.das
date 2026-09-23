@@ -524,9 +524,10 @@ def private fill_plan_room(var p : ResidentPlan) {
 //! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
 def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
-    let side = resident_kv_row_bytes(t, dt, dt).krow   //! the rows the mirror allocates: a shared-KV layer reads its donor's and adds none
-    return (bcap > 0l && side > 0l) ? bcap / side : 0l
+    let mirror_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
+    return (bcap > 0l && mirror_row_bytes > 0l) ? bcap / mirror_row_bytes : 0l
 }
 
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's)
@@ -579,7 +580,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         if (t.wo_offs[l] >= 0l) {
             p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
         }
-        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l && !layer_is_moe(t, l)) {   //! a routed layer's dense triple (gemma-4's shared expert) is tallied with its routed block above, as the upload places it once
+        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l && !layer_is_moe(t, l)) {   // a routed layer's dense triple (gemma-4's shared expert) is tallied with its routed block above, as the upload places it once
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))

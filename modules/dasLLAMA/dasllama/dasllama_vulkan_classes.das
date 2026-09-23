@@ -10896,28 +10896,24 @@ class KqGemvBase {
     @ssbo @binding = 6 @role = "weight" gridb : array<uint>   // the grid codebooks (kq_grid_dev; the grid formats stage from it)
     @push_constant pa : GemvArgs
 
-    //! the block decoded once - its lo and hi packed int8 quads (against x's lo and hi words) and the fold's four terms
-    //! (A_lo, B_lo, A_hi, B_hi): a block contributes axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi); every leaf overrides
+    //! fills wl / wh with the lo / hi int8 quads (x's lo / hi words), returns (A_lo, B_lo, A_hi, B_hi): the block adds axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi)
     def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         return float4(0.0)
     }
 
     //! the fold carries B terms (a min or an offset against the block sums): the k-lattice leaves; the codebook and grid leaves skip the sums
-    def blk_bsum : bool => false
+    def fold_reads_bsum : bool => false
 
-    //! the 4-bit split: weight word j's LOW nibbles against x word j, its HIGH nibbles against x word j+4
     def nib_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
         wl = uint4(wv.x & KQC_LOW, wv.y & KQC_LOW, wv.z & KQC_LOW, wv.w & KQC_LOW)
         wh = uint4((wv.x >> 4u) & KQC_LOW, (wv.y >> 4u) & KQC_LOW, (wv.z >> 4u) & KQC_LOW, (wv.w >> 4u) & KQC_LOW)
     }
 
-    //! the codebook split: the LUT-decoded low nibbles of the block's words in `wl`, the high in `wh`
     def iq4_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
         wl = uint4(iq4_word(wv.x & KQC_LOW), iq4_word(wv.y & KQC_LOW), iq4_word(wv.z & KQC_LOW), iq4_word(wv.w & KQC_LOW))
         wh = uint4(iq4_word((wv.x >> 4u) & KQC_LOW), iq4_word((wv.y >> 4u) & KQC_LOW), iq4_word((wv.z >> 4u) & KQC_LOW), iq4_word((wv.w >> 4u) & KQC_LOW))
     }
 
-    //! the Q4_K/Q5_K fold terms: d x sc on the dots, -dmin x mn on the block sums
     def dm_terms(wsb, blk : uint) : float4 {
         let dm = unpackHalf2x16(wsu[wsb * 5u])
         let sc = float((wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFFu)
@@ -10925,8 +10921,6 @@ class KqGemvBase {
         return float4(dm.x * sc, -dm.y * mn, dm.x * sc, -dm.y * mn)
     }
 
-    //! a decoded block against activation superblock `xsb`'s block `blk`: the halves' dots, the block sums where the fold has B terms, `axs` last;
-    //! `mad` throughout, since the one-column and N-column modules hold this sum bit for bit
     def blk_fold(wl, wh : uint4; sc : float4; xsb, blk : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
         let xl = xq4[xb4]
@@ -10934,7 +10928,7 @@ class KqGemvBase {
         let dlo = sdot4(wl.x, xl.x) + sdot4(wl.y, xl.y) + sdot4(wl.z, xl.z) + sdot4(wl.w, xl.w)
         let dhi = sdot4(wh.x, xh.x) + sdot4(wh.y, xh.y) + sdot4(wh.z, xh.z) + sdot4(wh.w, xh.w)
         var f = mad(sc.z, float(dhi), sc.x * float(dlo))
-        if (blk_bsum()) {
+        if (fold_reads_bsum()) {
             let blo = sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES)
             let bhi = sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES)
             f = mad(sc.w, float(bhi), mad(sc.y, float(blo), f))
@@ -10942,7 +10936,6 @@ class KqGemvBase {
         return axs[xsb] * f
     }
 
-    //! one 32-block's scaled contribution, the one-column form: decode, then fold against the row's own activation block
     def blk_contrib(wsb, blk, xsb : uint) : float {
         var wl = uint4(0u)
         var wh = uint4(0u)
@@ -11353,7 +11346,7 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
-//! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert formats (q51, mx4) serve routed planes alone
+//! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert GEMVs (q51, mx4) have no N form, so a dense plane in one steps a row at a time
 def gemv_cls_has_n(fmt : int) : bool => fmt != int(KqFmt.q51) && fmt != int(KqFmt.mx4)
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
@@ -11480,7 +11473,7 @@ class KqGemvK4Base : KqGemvBase {
         return dm_terms(wsb, blk)
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 }
 
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -11571,7 +11564,7 @@ class KqGemvQ40 : KqGemvBase {
         return float4(d, -8.0 * d, d, -8.0 * d)
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_cls_spv")]
     def run {
@@ -11619,7 +11612,6 @@ class KqGemvIq4xsN : KqGemvIq4xs {
 class KqGemvIq3s : KqGemvBase {
     @workgroup gridw : uint[int(KQ_GRID_IQ3S_WORDS)]
 
-    //! one 16-weight half's four signed grid words: qs word `qsw`, its two ninth bits out of `qh` at `l0`, its sign bytes at `l0` of `sgw`
     def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 {
         let sg0 = (sgw >> (l0 * 8u)) & 255u
         let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
@@ -11639,7 +11631,6 @@ class KqGemvIq3s : KqGemvBase {
         return float4(a, 0.0, a, 0.0)
     }
 
-    //! the 2 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(int(KQ_GRID_IQ3S_WORDS / 64u))) {
@@ -11673,7 +11664,6 @@ class KqGemvIq3sN : KqGemvIq3s {
 class KqGemvIq3xxs : KqGemvBase {
     @workgroup gridw : uint[int(KQ_GRID_IQ3XXS_WORDS)]
 
-    //! one 16-weight half's four signed grid words: qs word `qsw`, its two 7-bit ksigns indices out of `aux` at `l0`
     def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 {
         let sg0 = ksign7((aux >> (7u * l0)) & 127u)
         let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
@@ -11690,7 +11680,6 @@ class KqGemvIq3xxs : KqGemvBase {
         return float4(a, 0.0, a, 0.0)
     }
 
-    //! the 1 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(int(KQ_GRID_IQ3XXS_WORDS / 64u))) {
@@ -11726,7 +11715,7 @@ class KqGemvIq4nl : KqGemvQ40 {
         return float4(d, 0.0, d, 0.0)
     }
 
-    def override blk_bsum : bool => false
+    def override fold_reads_bsum : bool => false
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
     def override run {
@@ -11746,7 +11735,6 @@ class KqGemvIq4nlN : KqGemvIq4nl {
 // the offset 4 over the k3 planes (6 uint4 per superblock: qs 0..3, hmask 4..5)
 [vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3 : KqGemvBase {
-    //! one 16-weight half's four words: the 2-bit qs lane at `sh` with the hmask bit `bit` deposited as bit 2
     def k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
         let m2 = 0x03030303u
         let m1 = 0x01010101u
@@ -11766,7 +11754,7 @@ class KqGemvK3 : KqGemvBase {
         return float4(dd * slo, -4.0 * dd * slo, dd * shi, -4.0 * dd * shi)
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_spv")]
     def run {
@@ -11786,7 +11774,6 @@ class KqGemvK3N : KqGemvK3 {
 // fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
 [vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK2 : KqGemvBase {
-    //! one 16-weight half's four words: the unsigned 2-bit qs lane at `sh`
     def k2_quad(q : uint4; sh : uint) : uint4 {
         let m2 = 0x03030303u
         return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
@@ -11804,7 +11791,7 @@ class KqGemvK2 : KqGemvBase {
         return float4(dm.x * float(b0 & 15u), -dm.y * float(b0 >> 4u), dm.x * float(b1 & 15u), -dm.y * float(b1 >> 4u))
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_cls_spv")]
     def run {
@@ -11837,7 +11824,7 @@ class KqGemvK5 : KqGemvBase {
         return dm_terms(wsb, blk)
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k5_cls_spv")]
     def run {
@@ -11857,7 +11844,6 @@ class KqGemvK5N : KqGemvK5 {
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
 [vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6 : KqGemvBase {
-    //! one 16-weight half's four words: the split nibbles with the qh pair at `shift` deposited as bits 4 and 5
     def k6_quad(nib, qh : uint4; shift : uint) : uint4 {
         let m2 = 0x03030303u
         return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
@@ -11879,7 +11865,7 @@ class KqGemvK6 : KqGemvBase {
         return float4(dd * slo, -32.0 * dd * slo, dd * shi, -32.0 * dd * shi)
     }
 
-    def override blk_bsum : bool => true
+    def override fold_reads_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_cls_spv")]
     def run {
@@ -11902,8 +11888,6 @@ class KqGemvK6N : KqGemvK6 {
 class KqGemvIq2s : KqGemvBase {
     @workgroup gridw : uint[int(KQ_GRID_IQ2S_WORDS)]
 
-    //! one 16-weight half's four signed grid words: two 8-bit indices out of `qw` at `l0` with their ninth and tenth bits out of `qh`,
-    //! two staged u64 words each, the sign bytes at `l0` of `sgw`
     def iq2s_quad(qw, qh, sgw, l0 : uint) : uint4 {
         let sg0 = (sgw >> (l0 * 8u)) & 255u
         let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
@@ -11926,7 +11910,6 @@ class KqGemvIq2s : KqGemvBase {
         return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
-    //! the 8 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(int(KQ_GRID_IQ2S_WORDS / 64u))) {
@@ -11959,7 +11942,6 @@ class KqGemvIq2sN : KqGemvIq2s {
 class KqGemvIq2xs : KqGemvBase {
     @workgroup gridw : uint[int(KQ_GRID_IQ2XS_WORDS)]
 
-    //! one 16-weight half's four signed grid words: the two u16 qs words of `qw`, each a 9-bit index (two staged words) and a 7-bit ksigns index
     def iq2xs_quad(qw : uint) : uint4 {
         let wa = qw & 0xFFFFu
         let wb = qw >> 16u
@@ -11981,7 +11963,6 @@ class KqGemvIq2xs : KqGemvBase {
         return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
-    //! the 4 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(int(KQ_GRID_IQ2XS_WORDS / 64u))) {
@@ -12014,7 +11995,6 @@ class KqGemvIq2xsN : KqGemvIq2xs {
 class KqGemvIq2xxs : KqGemvBase {
     @workgroup gridw : uint[int(KQ_GRID_IQ2XXS_WORDS)]
 
-    //! one 16-weight half's four signed grid words: two byte indices out of `gw` at half `hu` (two staged words each), their 7-bit ksigns out of `aux`
     def iq2xxs_quad(gw, aux, hu : uint) : uint4 {
         let b0 = (gw >> (16u * hu)) & 255u
         let b1 = (gw >> (16u * hu + 8u)) & 255u
@@ -12033,7 +12013,6 @@ class KqGemvIq2xxs : KqGemvBase {
         return float4(a, 0.0, a, 0.0)
     }
 
-    //! the 2 KB grid into workgroup memory, visible before the shell's block walk
     def stage_grid {
         let lid = gl_LocalInvocationID.x
         for (k in range(int(KQ_GRID_IQ2XXS_WORDS / 64u))) {
