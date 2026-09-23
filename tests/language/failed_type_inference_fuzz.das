@@ -2,7 +2,7 @@
 // an exact multiset: an error that stops being reported fails this file just as loudly as a
 // new one, which is what keeps a crash from being traded for a silent accept.
 options gen2
-expect 30107, 30109, 30110:2, 30192, 30320, 30805, 30821, 30826, 30832
+expect 30107, 30109, 30110:2, 30192, 30268, 30320, 30805, 30821, 30826, 30832
 
 // A void expression handed to debug().
 def v {
@@ -49,4 +49,9 @@ enum AddrDim {
 
 def address_of_expr_typed_argument {
     var x = @@ < (a : int[AddrDim.a]) > address_of_expr_typed_argument
+}
+
+// typeinfo vector_dim of a type that is not a vector.
+def vector_dim_of_non_vector {
+    let d = typeinfo vector_dim(1)
 }
