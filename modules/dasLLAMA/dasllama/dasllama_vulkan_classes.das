@@ -10896,31 +10896,58 @@ class KqGemvBase {
     @ssbo @binding = 6 @role = "weight" gridb : array<uint>   // the grid codebooks (kq_grid_dev; the grid formats stage from it)
     @push_constant pa : GemvArgs
 
-    // per-format: one 32-block's scaled contribution — every [spirv_kernel] variant overrides
-    def blk_contrib(wsb, blk, xsb : uint) : float {
-        return 0.0
+    //! the block decoded once - its lo and hi packed int8 quads (against x's lo and hi words) and the fold's four terms
+    //! (A_lo, B_lo, A_hi, B_hi): a block contributes axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi); every leaf overrides
+    def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        return float4(0.0)
     }
 
-    // a block's activation sum (the min/offset terms fold against it)
-    def blk_sum(xl, xh : uint4) : int {
-        let bs = sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES)
-        return bs + sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES)
+    //! the fold carries B terms (a min or an offset against the block sums): the k-lattice leaves; the codebook and grid leaves skip the sums
+    def blk_bsum : bool => false
+
+    //! the 4-bit split: weight word j's LOW nibbles against x word j, its HIGH nibbles against x word j+4
+    def nib_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
+        wl = uint4(wv.x & KQC_LOW, wv.y & KQC_LOW, wv.z & KQC_LOW, wv.w & KQC_LOW)
+        wh = uint4((wv.x >> 4u) & KQC_LOW, (wv.y >> 4u) & KQC_LOW, (wv.z >> 4u) & KQC_LOW, (wv.w >> 4u) & KQC_LOW)
     }
 
-    // a 4-bit block's dot: weight word j's LOW nibbles hit x word j, its HIGH nibbles x word j+4
-    def blk_dot4(wv, xl, xh : uint4) : int {
-        var idot = sdot4(wv.x & KQC_LOW, xl.x) + sdot4(wv.y & KQC_LOW, xl.y)
-        idot += sdot4(wv.z & KQC_LOW, xl.z) + sdot4(wv.w & KQC_LOW, xl.w)
-        idot += sdot4((wv.x >> 4u) & KQC_LOW, xh.x) + sdot4((wv.y >> 4u) & KQC_LOW, xh.y)
-        return idot + sdot4((wv.z >> 4u) & KQC_LOW, xh.z) + sdot4((wv.w >> 4u) & KQC_LOW, xh.w)
+    //! the codebook split: the LUT-decoded low nibbles of the block's words in `wl`, the high in `wh`
+    def iq4_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
+        wl = uint4(iq4_word(wv.x & KQC_LOW), iq4_word(wv.y & KQC_LOW), iq4_word(wv.z & KQC_LOW), iq4_word(wv.w & KQC_LOW))
+        wh = uint4(iq4_word((wv.x >> 4u) & KQC_LOW), iq4_word((wv.y >> 4u) & KQC_LOW), iq4_word((wv.z >> 4u) & KQC_LOW), iq4_word((wv.w >> 4u) & KQC_LOW))
     }
 
-    // the Q4_K/Q5_K per-block scale fold: d*sc*idot - dmin*mn*bsum, int products kept exact
-    def dm_fold(wsb, blk : uint; idot, bs : int) : float {
+    //! the Q4_K/Q5_K fold terms: d x sc on the dots, -dmin x mn on the block sums
+    def dm_terms(wsb, blk : uint) : float4 {
         let dm = unpackHalf2x16(wsu[wsb * 5u])
-        let sc = int((wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-        let mn = int((wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-        return dm.x * float(sc * idot) - dm.y * float(mn * bs)
+        let sc = float((wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFFu)
+        let mn = float((wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFFu)
+        return float4(dm.x * sc, -dm.y * mn, dm.x * sc, -dm.y * mn)
+    }
+
+    //! a decoded block against activation superblock `xsb`'s block `blk`: the halves' dots, the block sums where the fold has B terms, `axs` last;
+    //! `mad` throughout, since the one-column and N-column modules hold this sum bit for bit
+    def blk_fold(wl, wh : uint4; sc : float4; xsb, blk : uint) : float {
+        let xb4 = xsb * 16u + blk * 2u
+        let xl = xq4[xb4]
+        let xh = xq4[xb4 + 1u]
+        let dlo = sdot4(wl.x, xl.x) + sdot4(wl.y, xl.y) + sdot4(wl.z, xl.z) + sdot4(wl.w, xl.w)
+        let dhi = sdot4(wh.x, xh.x) + sdot4(wh.y, xh.y) + sdot4(wh.z, xh.z) + sdot4(wh.w, xh.w)
+        var f = mad(sc.z, float(dhi), sc.x * float(dlo))
+        if (blk_bsum()) {
+            let blo = sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES)
+            let bhi = sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES)
+            f = mad(sc.w, float(bhi), mad(sc.y, float(blo), f))
+        }
+        return axs[xsb] * f
+    }
+
+    //! one 32-block's scaled contribution, the one-column form: decode, then fold against the row's own activation block
+    def blk_contrib(wsb, blk, xsb : uint) : float {
+        var wl = uint4(0u)
+        var wh = uint4(0u)
+        let sc = blk_decode(wsb, blk, wl, wh)
+        return blk_fold(wl, wh, sc, xsb, blk)
     }
 
     //! this lane's share of one row's dot: the row's `nsb` superblocks from weight superblock `wsb0` against the
@@ -11014,9 +11041,12 @@ class KqGemvBase {
                 let wsb = wsb0 + b0 / 8u
                 let blk = b0 % 8u
                 let xsb = xsb0 + b0 / 8u
+                var wl = uint4(0u)
+                var wh = uint4(0u)
+                let sc = blk_decode(wsb, blk, wl, wh)
                 for [unroll] (c in range(8)) {
                     if (uint(c) < pa.ncols) {
-                        acc[c] += blk_contrib(wsb, blk, xsb + uint(c) * nsb)
+                        acc[c] += blk_fold(wl, wh, sc, xsb + uint(c) * nsb, blk)
                     }
                 }
                 b0 += lanes_per_row
@@ -11445,13 +11475,12 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 // Every kq format shares family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves every
 // pipeline (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 class KqGemvK4Base : KqGemvBase {
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        let idot = blk_dot4(wq4[wsb * 8u + blk], xl, xh)
-        return axs[xsb] * dm_fold(wsb, blk, idot, blk_sum(xl, xh))
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        nib_split(wq4[wsb * 8u + blk], wl, wh)
+        return dm_terms(wsb, blk)
     }
+
+    def override blk_bsum : bool => true
 }
 
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -11528,14 +11557,6 @@ class KqGemvK4Gu : KqGemvK4Base {
     }
 }
 
-//! the codebook nibble dot: eight sdot4 over the LUT-decoded low and high nibbles of a 32-quant block
-def iq4_dot(wv, xl, xh : uint4) : int {
-    var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
-    idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
-    idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
-    return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
-}
-
 // Q4_0: w = d*(q - 8) — the k4 nibble tiling with no min plane; -8 folds against the block sum
 [vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvQ40 : KqGemvBase {
@@ -11544,13 +11565,13 @@ class KqGemvQ40 : KqGemvBase {
         return blk % 2u == 0u ? dp.x : dp.y
     }
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        let idot = blk_dot4(wq4[wsb * 8u + blk], xl, xh)
-        return axs[xsb] * q40_d(wsb, blk) * float(idot - 8 * blk_sum(xl, xh))
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        nib_split(wq4[wsb * 8u + blk], wl, wh)
+        let d = q40_d(wsb, blk)
+        return float4(d, -8.0 * d, d, -8.0 * d)
     }
+
+    def override blk_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_cls_spv")]
     def run {
@@ -11570,12 +11591,11 @@ class KqGemvQ40N : KqGemvQ40 {
 // lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
 [vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4xs : KqGemvBase {
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        iq4_split(wq4[wsb * 8u + blk], wl, wh)
         let w0 = wsu[wsb * 2u]
-        let dd = unpackHalf2x16(w0).x
-        return axs[xsb] * dd * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], blk) * idot)
+        let a = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], blk))
+        return float4(a, 0.0, a, 0.0)
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
@@ -11599,31 +11619,24 @@ class KqGemvIq4xsN : KqGemvIq4xs {
 class KqGemvIq3s : KqGemvBase {
     @workgroup gridw : uint[512]
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
+    //! one 16-weight half's four signed grid words: qs word `qsw`, its two ninth bits out of `qh` at `l0`, its sign bytes at `l0` of `sgw`
+    def iq3s_quad(qsw, qh, sgw, l0 : uint) : uint4 {
+        let sg0 = (sgw >> (l0 * 8u)) & 255u
+        let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
+        return uint4(iq3s_signed(gridw[(qsw & 255u) | ((qh << (8u - 2u * l0)) & 256u)], sg0 & 15u),
+                     iq3s_signed(gridw[((qsw >> 8u) & 255u) | ((qh << (7u - 2u * l0)) & 256u)], sg0 >> 4u),
+                     iq3s_signed(gridw[((qsw >> 16u) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 256u)], sg1 & 15u),
+                     iq3s_signed(gridw[(qsw >> 24u) | ((qh << (7u - 2u * (l0 + 1u))) & 256u)], sg1 >> 4u))
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qb = wsb * 26u + blk * 2u
         let qh = (wq[wsb * 26u + 16u + blk / 4u] >> ((blk % 4u) * 8u)) & 255u
         let sgw = wq[wsb * 26u + 18u + blk]
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        var isum = 0
-        for (l in range(2)) {
-            let qsw = wq[qb + uint(l)]
-            let l0 = uint(l) * 2u
-            let sg0 = (sgw >> (l0 * 8u)) & 255u
-            let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-            let w0 = iq3s_signed(gridw[(qsw & 255u) | ((qh << (8u - 2u * l0)) & 256u)], sg0 & 15u)
-            let w1 = iq3s_signed(gridw[((qsw >> 8u) & 255u) | ((qh << (7u - 2u * l0)) & 256u)], sg0 >> 4u)
-            let w2 = iq3s_signed(gridw[((qsw >> 16u) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 256u)], sg1 & 15u)
-            let w3 = iq3s_signed(gridw[(qsw >> 24u) | ((qh << (7u - 2u * (l0 + 1u))) & 256u)], sg1 >> 4u)
-            if (l == 0) {
-                isum += sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w)
-            } else {
-                isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
-            }
-        }
-        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
-        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
+        wl = iq3s_quad(wq[qb], qh, sgw, 0u)
+        wh = iq3s_quad(wq[qb + 1u], qh, sgw, 2u)
+        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
+        return float4(a, 0.0, a, 0.0)
     }
 
     //! the 2 KB grid into workgroup memory, visible before the shell's block walk
@@ -11660,30 +11673,21 @@ class KqGemvIq3sN : KqGemvIq3s {
 class KqGemvIq3xxs : KqGemvBase {
     @workgroup gridw : uint[256]
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
+    //! one 16-weight half's four signed grid words: qs word `qsw`, its two 7-bit ksigns indices out of `aux` at `l0`
+    def iq3xxs_quad(qsw, aux, l0 : uint) : uint4 {
+        let sg0 = ksign7((aux >> (7u * l0)) & 127u)
+        let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
+        return uint4(iq3s_signed(gridw[qsw & 255u], sg0 & 15u), iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u),
+                     iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u), iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u))
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qb = wsb * 24u + blk * 2u
         let aux = wq[wsb * 24u + 16u + blk]
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        var isum = 0
-        for (l in range(2)) {
-            let qsw = wq[qb + uint(l)]
-            let l0 = uint(l) * 2u
-            let sg0 = ksign7((aux >> (7u * l0)) & 127u)
-            let sg1 = ksign7((aux >> (7u * l0 + 7u)) & 127u)
-            let w0 = iq3s_signed(gridw[qsw & 255u], sg0 & 15u)
-            let w1 = iq3s_signed(gridw[(qsw >> 8u) & 255u], sg0 >> 4u)
-            let w2 = iq3s_signed(gridw[(qsw >> 16u) & 255u], sg1 & 15u)
-            let w3 = iq3s_signed(gridw[qsw >> 24u], sg1 >> 4u)
-            if (l == 0) {
-                isum += sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w)
-            } else {
-                isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
-            }
-        }
-        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
-        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
+        wl = iq3xxs_quad(wq[qb], aux, 0u)
+        wh = iq3xxs_quad(wq[qb + 1u], aux, 2u)
+        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
+        return float4(a, 0.0, a, 0.0)
     }
 
     //! the 1 KB grid into workgroup memory, visible before the shell's block walk
@@ -11716,11 +11720,13 @@ class KqGemvIq3xxsN : KqGemvIq3xxs {
 // sub-scales, no bsum term; the rows are q40's 32-word planes verbatim.
 [vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4nl : KqGemvQ40 {
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
-        return axs[xsb] * q40_d(wsb, blk) * float(idot)
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        iq4_split(wq4[wsb * 8u + blk], wl, wh)
+        let d = q40_d(wsb, blk)
+        return float4(d, 0.0, d, 0.0)
     }
+
+    def override blk_bsum : bool => false
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
     def override run {
@@ -11740,35 +11746,27 @@ class KqGemvIq4nlN : KqGemvIq4nl {
 // the offset 4 over the k3 planes (6 uint4 per superblock: qs 0..3, hmask 4..5)
 [vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3 : KqGemvBase {
-    // (ilo, ihi, blo, bhi) — an int4, since a shader function cannot return a tuple
-    def k3_dot(ql, qh, xl, xh, hl, hh : uint4; sh, bit : uint) : int4 {
+    //! one 16-weight half's four words: the 2-bit qs lane at `sh` with the hmask bit `bit` deposited as bit 2
+    def k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
         let m2 = 0x03030303u
         let m1 = 0x01010101u
-        let l0 = ((ql.x >> sh) & m2) | (((hl.x >> bit) & m1) << 2u)
-        let l1 = ((ql.y >> sh) & m2) | (((hl.y >> bit) & m1) << 2u)
-        let l2 = ((ql.z >> sh) & m2) | (((hl.z >> bit) & m1) << 2u)
-        let l3 = ((ql.w >> sh) & m2) | (((hl.w >> bit) & m1) << 2u)
-        let h0 = ((qh.x >> sh) & m2) | (((hh.x >> bit) & m1) << 2u)
-        let h1 = ((qh.y >> sh) & m2) | (((hh.y >> bit) & m1) << 2u)
-        let h2 = ((qh.z >> sh) & m2) | (((hh.z >> bit) & m1) << 2u)
-        let h3 = ((qh.w >> sh) & m2) | (((hh.w >> bit) & m1) << 2u)
-        return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
-                    sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
-                    sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES),
-                    sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES))
+        return uint4(((q.x >> sh) & m2) | (((h.x >> bit) & m1) << 2u), ((q.y >> sh) & m2) | (((h.y >> bit) & m1) << 2u),
+                     ((q.z >> sh) & m2) | (((h.z >> bit) & m1) << 2u), ((q.w >> sh) & m2) | (((h.w >> bit) & m1) << 2u))
     }
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let q4 = wsb * 6u + (blk / 4u) * 2u
-        let dot = k3_dot(wq4[q4], wq4[q4 + 1u], xq4[xb4], xq4[xb4 + 1u],
-            wq4[wsb * 6u + 4u], wq4[wsb * 6u + 5u], (blk % 4u) * 2u, blk)
+        let sh = (blk % 4u) * 2u
+        wl = k3_quad(wq4[q4], wq4[wsb * 6u + 4u], sh, blk)
+        wh = k3_quad(wq4[q4 + 1u], wq4[wsb * 6u + 5u], sh, blk)
         let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
-        let slo = (blk % 2u) == 0u ? s4.x : s4.z
-        let shi = (blk % 2u) == 0u ? s4.y : s4.w
+        let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
+        let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
         let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
-        return axs[xsb] * dd * float(slo * (dot.x - 4 * dot.z) + shi * (dot.y - 4 * dot.w))
+        return float4(dd * slo, -4.0 * dd * slo, dd * shi, -4.0 * dd * shi)
     }
+
+    def override blk_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_spv")]
     def run {
@@ -11788,34 +11786,25 @@ class KqGemvK3N : KqGemvK3 {
 // fold at k6's granularity over the 16-word rows (4 uint4 of qs; scale row [d|dmin][16 pair bytes])
 [vk_dispatch(name = "kq_gemv_k2_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK2 : KqGemvBase {
-    // (ilo, ihi, blo, bhi) - an int4, since a shader function cannot return a tuple
-    def k2_dot(ql, qh, xl, xh : uint4; sh : uint) : int4 {
+    //! one 16-weight half's four words: the unsigned 2-bit qs lane at `sh`
+    def k2_quad(q : uint4; sh : uint) : uint4 {
         let m2 = 0x03030303u
-        let l0 = (ql.x >> sh) & m2
-        let l1 = (ql.y >> sh) & m2
-        let l2 = (ql.z >> sh) & m2
-        let l3 = (ql.w >> sh) & m2
-        let h0 = (qh.x >> sh) & m2
-        let h1 = (qh.y >> sh) & m2
-        let h2 = (qh.z >> sh) & m2
-        let h3 = (qh.w >> sh) & m2
-        return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
-                    sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
-                    sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES),
-                    sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES))
+        return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
     }
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let q4 = wsb * 4u + (blk / 4u) * 2u
-        let dot = k2_dot(wq4[q4], wq4[q4 + 1u], xq4[xb4], xq4[xb4 + 1u], (blk % 4u) * 2u)
+        let sh = (blk % 4u) * 2u
+        wl = k2_quad(wq4[q4], sh)
+        wh = k2_quad(wq4[q4 + 1u], sh)
         let w = wsu[wsb * 5u + 1u + blk / 2u]
         let b0 = (w >> ((blk % 2u) * 16u)) & 255u
         let b1 = (w >> ((blk % 2u) * 16u + 8u)) & 255u
         let dm = unpackHalf2x16(wsu[wsb * 5u])
-        return axs[xsb] * (dm.x * float(int(b0 & 15u) * dot.x + int(b1 & 15u) * dot.y)
-            - dm.y * float(int(b0 >> 4u) * dot.z + int(b1 >> 4u) * dot.w))
+        return float4(dm.x * float(b0 & 15u), -dm.y * float(b0 >> 4u), dm.x * float(b1 & 15u), -dm.y * float(b1 >> 4u))
     }
+
+    def override blk_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k2_cls_spv")]
     def run {
@@ -11834,28 +11823,21 @@ class KqGemvK2N : KqGemvK2 {
 // Q5_K: the k4 fold with the 5th bit deposited from the block's qh word
 [vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : KqGemvBase {
-    def k5_dot(wv, xl, xh : uint4; qh : uint) : int {
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        let wv = wq4[wsb * 10u + blk]
+        let qh = wq[wsb * 40u + 32u + blk]
         let h0 = qh & 0xFFu
         let h1 = (qh >> 8u) & 0xFFu
         let h2 = (qh >> 16u) & 0xFFu
         let h3 = (qh >> 24u) & 0xFFu
-        var idot = sdot4((wv.x & KQC_LOW) | k5_dep(h0 & 0xFu), xl.x)
-        idot += sdot4((wv.y & KQC_LOW) | k5_dep(h1 & 0xFu), xl.y)
-        idot += sdot4((wv.z & KQC_LOW) | k5_dep(h2 & 0xFu), xl.z)
-        idot += sdot4((wv.w & KQC_LOW) | k5_dep(h3 & 0xFu), xl.w)
-        idot += sdot4(((wv.x >> 4u) & KQC_LOW) | k5_dep(h0 >> 4u), xh.x)
-        idot += sdot4(((wv.y >> 4u) & KQC_LOW) | k5_dep(h1 >> 4u), xh.y)
-        idot += sdot4(((wv.z >> 4u) & KQC_LOW) | k5_dep(h2 >> 4u), xh.z)
-        return idot + sdot4(((wv.w >> 4u) & KQC_LOW) | k5_dep(h3 >> 4u), xh.w)
+        wl = uint4((wv.x & KQC_LOW) | k5_dep(h0 & 0xFu), (wv.y & KQC_LOW) | k5_dep(h1 & 0xFu),
+                   (wv.z & KQC_LOW) | k5_dep(h2 & 0xFu), (wv.w & KQC_LOW) | k5_dep(h3 & 0xFu))
+        wh = uint4(((wv.x >> 4u) & KQC_LOW) | k5_dep(h0 >> 4u), ((wv.y >> 4u) & KQC_LOW) | k5_dep(h1 >> 4u),
+                   ((wv.z >> 4u) & KQC_LOW) | k5_dep(h2 >> 4u), ((wv.w >> 4u) & KQC_LOW) | k5_dep(h3 >> 4u))
+        return dm_terms(wsb, blk)
     }
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        let idot = k5_dot(wq4[wsb * 10u + blk], xl, xh, wq[wsb * 40u + 32u + blk])
-        return axs[xsb] * dm_fold(wsb, blk, idot, blk_sum(xl, xh))
-    }
+    def override blk_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k5_cls_spv")]
     def run {
@@ -11875,34 +11857,29 @@ class KqGemvK5N : KqGemvK5 {
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
 [vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6 : KqGemvBase {
-    // (ilo, ihi, blo, bhi) — an int4, since a shader function cannot return a tuple
-    def k6_dot(wv, xl, xh, qhl, qhh : uint4; shift : uint) : int4 {
+    //! one 16-weight half's four words: the split nibbles with the qh pair at `shift` deposited as bits 4 and 5
+    def k6_quad(nib, qh : uint4; shift : uint) : uint4 {
         let m2 = 0x03030303u
-        let l0 = (wv.x & KQC_LOW) | (((qhl.x >> shift) & m2) << 4u)
-        let l1 = (wv.y & KQC_LOW) | (((qhl.y >> shift) & m2) << 4u)
-        let l2 = (wv.z & KQC_LOW) | (((qhl.z >> shift) & m2) << 4u)
-        let l3 = (wv.w & KQC_LOW) | (((qhl.w >> shift) & m2) << 4u)
-        let h0 = ((wv.x >> 4u) & KQC_LOW) | (((qhh.x >> shift) & m2) << 4u)
-        let h1 = ((wv.y >> 4u) & KQC_LOW) | (((qhh.y >> shift) & m2) << 4u)
-        let h2 = ((wv.z >> 4u) & KQC_LOW) | (((qhh.z >> shift) & m2) << 4u)
-        let h3 = ((wv.w >> 4u) & KQC_LOW) | (((qhh.w >> shift) & m2) << 4u)
-        return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
-                    sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
-                    sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES),
-                    sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES))
+        return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
+                     nib.z | (((qh.z >> shift) & m2) << 4u), nib.w | (((qh.w >> shift) & m2) << 4u))
     }
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qh4 = wsb * 12u + 8u + (blk / 4u) * 2u
-        let xb4 = xsb * 16u + blk * 2u
-        let dot = k6_dot(wq4[wsb * 12u + blk], xq4[xb4], xq4[xb4 + 1u],
-            wq4[qh4], wq4[qh4 + 1u], (blk % 4u) * 2u)
+        let shift = (blk % 4u) * 2u
+        var nl = uint4(0u)
+        var nh = uint4(0u)
+        nib_split(wq4[wsb * 12u + blk], nl, nh)
+        wl = k6_quad(nl, wq4[qh4], shift)
+        wh = k6_quad(nh, wq4[qh4 + 1u], shift)
         let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
-        let slo = (blk % 2u) == 0u ? s4.x : s4.z
-        let shi = (blk % 2u) == 0u ? s4.y : s4.w
+        let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
+        let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
         let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
-        return axs[xsb] * dd * float(slo * (dot.x - 32 * dot.z) + shi * (dot.y - 32 * dot.w))
+        return float4(dd * slo, -32.0 * dd * slo, dd * shi, -32.0 * dd * shi)
     }
+
+    def override blk_bsum : bool => true
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k6_cls_spv")]
     def run {
@@ -11925,35 +11902,28 @@ class KqGemvK6N : KqGemvK6 {
 class KqGemvIq2s : KqGemvBase {
     @workgroup gridw : uint[2048]
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
+    //! one 16-weight half's four signed grid words: two 8-bit indices out of `qw` at `l0` with their ninth and tenth bits out of `qh`,
+    //! two staged u64 words each, the sign bytes at `l0` of `sgw`
+    def iq2s_quad(qw, qh, sgw, l0 : uint) : uint4 {
+        let sg0 = (sgw >> (l0 * 8u)) & 255u
+        let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
+        let i0 = (((qw >> (l0 * 8u)) & 255u) | ((qh << (8u - 2u * l0)) & 0x300u)) * 2u
+        let i1 = (((qw >> (l0 * 8u + 8u)) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 0x300u)) * 2u
+        return uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
+                     iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let qw = wq[wsb * 18u + blk]
         let sgw = wq[wsb * 18u + 8u + blk]
         let qh = (wq[wsb * 18u + 16u + blk / 4u] >> ((blk % 4u) * 8u)) & 255u
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
+        wl = iq2s_quad(qw, qh, sgw, 0u)
+        wh = iq2s_quad(qw, qh, sgw, 2u)
         let sw = wsu[wsb * 5u + 1u + blk / 2u]
-        let s0 = int((sw >> ((blk % 2u) * 16u)) & 255u)
-        let s1 = int((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
-        var isum = 0
-        for (h in range(2)) {
-            let l0 = uint(h) * 2u
-            let sg0 = (sgw >> (l0 * 8u)) & 255u
-            let sg1 = (sgw >> (l0 * 8u + 8u)) & 255u
-            let i0 = (((qw >> (l0 * 8u)) & 255u) | ((qh << (8u - 2u * l0)) & 0x300u)) * 2u
-            let i1 = (((qw >> (l0 * 8u + 8u)) & 255u) | ((qh << (8u - 2u * (l0 + 1u))) & 0x300u)) * 2u
-            let w0 = iq3s_signed(gridw[i0], sg0 & 15u)
-            let w1 = iq3s_signed(gridw[i0 + 1u], sg0 >> 4u)
-            let w2 = iq3s_signed(gridw[i1], sg1 & 15u)
-            let w3 = iq3s_signed(gridw[i1 + 1u], sg1 >> 4u)
-            if (h == 0) {
-                isum += s0 * (sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w))
-            } else {
-                isum += s1 * (sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w))
-            }
-        }
+        let s0 = float((sw >> ((blk % 2u) * 16u)) & 255u)
+        let s1 = float((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
         let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(isum)
+        return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
     //! the 8 KB grid into workgroup memory, visible before the shell's block walk
@@ -11989,34 +11959,26 @@ class KqGemvIq2sN : KqGemvIq2s {
 class KqGemvIq2xs : KqGemvBase {
     @workgroup gridw : uint[1024]
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
+    //! one 16-weight half's four signed grid words: the two u16 qs words of `qw`, each a 9-bit index (two staged words) and a 7-bit ksigns index
+    def iq2xs_quad(qw : uint) : uint4 {
+        let wa = qw & 0xFFFFu
+        let wb = qw >> 16u
+        let sg0 = ksign7(wa >> 9u)
+        let sg1 = ksign7(wb >> 9u)
+        let i0 = (wa & 511u) * 2u
+        let i1 = (wb & 511u) * 2u
+        return uint4(iq3s_signed(gridw[i0], sg0 & 15u), iq3s_signed(gridw[i0 + 1u], sg0 >> 4u),
+                     iq3s_signed(gridw[i1], sg1 & 15u), iq3s_signed(gridw[i1 + 1u], sg1 >> 4u))
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
+        wl = iq2xs_quad(wq[wsb * 16u + blk * 2u])
+        wh = iq2xs_quad(wq[wsb * 16u + blk * 2u + 1u])
         let sw = wsu[wsb * 5u + 1u + blk / 2u]
-        let s0 = int((sw >> ((blk % 2u) * 16u)) & 255u)
-        let s1 = int((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
-        var isum = 0
-        for (h in range(2)) {
-            let qw = wq[wsb * 16u + blk * 2u + uint(h)]
-            let wa = qw & 0xFFFFu
-            let wb = qw >> 16u
-            let sg0 = ksign7(wa >> 9u)
-            let sg1 = ksign7(wb >> 9u)
-            let i0 = (wa & 511u) * 2u
-            let i1 = (wb & 511u) * 2u
-            let w0 = iq3s_signed(gridw[i0], sg0 & 15u)
-            let w1 = iq3s_signed(gridw[i0 + 1u], sg0 >> 4u)
-            let w2 = iq3s_signed(gridw[i1], sg1 & 15u)
-            let w3 = iq3s_signed(gridw[i1 + 1u], sg1 >> 4u)
-            if (h == 0) {
-                isum += s0 * (sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w))
-            } else {
-                isum += s1 * (sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w))
-            }
-        }
+        let s0 = float((sw >> ((blk % 2u) * 16u)) & 255u)
+        let s1 = float((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
         let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(isum)
+        return float4(dd * s0, 0.0, dd * s1, 0.0)
     }
 
     //! the 4 KB grid into workgroup memory, visible before the shell's block walk
@@ -12052,31 +12014,23 @@ class KqGemvIq2xsN : KqGemvIq2xs {
 class KqGemvIq2xxs : KqGemvBase {
     @workgroup gridw : uint[512]
 
-    def override blk_contrib(wsb, blk, xsb : uint) : float {
+    //! one 16-weight half's four signed grid words: two byte indices out of `gw` at half `hu` (two staged words each), their 7-bit ksigns out of `aux`
+    def iq2xxs_quad(gw, aux, hu : uint) : uint4 {
+        let b0 = (gw >> (16u * hu)) & 255u
+        let b1 = (gw >> (16u * hu + 8u)) & 255u
+        let sg0 = ksign7((aux >> (14u * hu)) & 127u)
+        let sg1 = ksign7((aux >> (14u * hu + 7u)) & 127u)
+        return uint4(iq3s_signed(gridw[b0 * 2u], sg0 & 15u), iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u),
+                     iq3s_signed(gridw[b1 * 2u], sg1 & 15u), iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u))
+    }
+
+    def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let gw = wq[wsb * 16u + blk * 2u]
         let aux = wq[wsb * 16u + blk * 2u + 1u]
-        let xb4 = xsb * 16u + blk * 2u
-        let xl = xq4[xb4]
-        let xh = xq4[xb4 + 1u]
-        var isum = 0
-        for (h in range(2)) {
-            let hu = uint(h)
-            let b0 = (gw >> (16u * hu)) & 255u
-            let b1 = (gw >> (16u * hu + 8u)) & 255u
-            let sg0 = ksign7((aux >> (14u * hu)) & 127u)
-            let sg1 = ksign7((aux >> (14u * hu + 7u)) & 127u)
-            let w0 = iq3s_signed(gridw[b0 * 2u], sg0 & 15u)
-            let w1 = iq3s_signed(gridw[b0 * 2u + 1u], sg0 >> 4u)
-            let w2 = iq3s_signed(gridw[b1 * 2u], sg1 & 15u)
-            let w3 = iq3s_signed(gridw[b1 * 2u + 1u], sg1 >> 4u)
-            if (h == 0) {
-                isum += sdot4(w0, xl.x) + sdot4(w1, xl.y) + sdot4(w2, xl.z) + sdot4(w3, xl.w)
-            } else {
-                isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
-            }
-        }
-        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
-        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
+        wl = iq2xxs_quad(gw, aux, 0u)
+        wh = iq2xxs_quad(gw, aux, 1u)
+        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
+        return float4(a, 0.0, a, 0.0)
     }
 
     //! the 2 KB grid into workgroup memory, visible before the shell's block walk
