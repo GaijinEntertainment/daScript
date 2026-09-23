@@ -3,9 +3,10 @@ options gen2
 require dastest/testing_boost
 require math
 
-// Accuracy and rail-consistency contract for the inline vector transcendentals the aarch64 JIT
-// emits instead of @llvm.<op>.vNf32 (which scalarize to N libm calls on Darwin-ARM) - the
-// build_vector_* emitters in daslib/llvm_jit_intrin.das.
+// Accuracy and rail-consistency contract for the inline vector transcendentals the JIT emits
+// instead of @llvm.<op>.vNf32 (which scalarize to N libm calls on every target of ours) - the
+// build_vector_* emitters in daslib/llvm_jit_intrin.das. log2, log and pow take the rail on
+// every target; the rest is aarch64-only (`on_aarch64`).
 // Two questions per function, and they are different questions:
 //   - vs libm: how good is the ALGORITHM. Several of these mirror vecmath estimates that are far
 //     from correctly rounded; the bound records what the algorithm actually delivers, it is not
@@ -48,12 +49,16 @@ struct private ErrReport {
 // written before sampling so the samples cannot fold to constants at compile time
 var private g_offset = 0.0
 
-def private on_poly_rail : bool {
+def private on_aarch64 : bool {
     return get_architecture_name() == "arm64"
 }
 
+def private op_on_poly_rail(which : int) : bool {
+    return on_aarch64() || which == OP_LOG2 || which == OP_LOG || which == OP_POW
+}
+
 def private bound(tightValue : float) : float {
-    return on_poly_rail() ? tightValue : COARSE_REL
+    return on_aarch64() ? tightValue : COARSE_REL
 }
 
 def private ramp(lo, hi : float; n : int) : array<float4> {
@@ -188,8 +193,12 @@ def private report_rel(t : T?; what : string; r : ErrReport; relBound : float; w
 // the two run different algorithms by design (JIT keeps @llvm.*, interp keeps vecmath), and
 // without -jit BOTH workers are the interpreter, so the comparison only says something where the
 // emitters actually run - everywhere else it is reported as not applicable rather than green.
-def private rail_applicable : bool {
-    return jit_enabled() && on_poly_rail()
+def private rail_applicable(onRail : bool) : bool {
+    return jit_enabled() && onRail
+}
+
+def private not_applicable_reason(what : string) : string {
+    return jit_enabled() ? "{what} is not on the polynomial rail on {get_architecture_name()}" : "{what}: not jitted"
 }
 
 def private report_div(t : T?; what : string; r : ErrReport; relBound : float; wantLanes : int) {
@@ -198,8 +207,8 @@ def private report_div(t : T?; what : string; r : ErrReport; relBound : float; w
 }
 
 def private report_divergence(t : T?; what : string; xs, ys : array<float4>; which : int; relBound : float; relFloor : float = 1.0e-20) {
-    if (!rail_applicable()) {
-        t |> success(true, "{what}: rail consistency not applicable off the jitted aarch64 rail")
+    if (!rail_applicable(op_on_poly_rail(which))) {
+        t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
         return
     }
     report_div(t, what, op_divergence(xs, ys, which, relFloor), relBound, length(xs) * 4)
@@ -311,8 +320,8 @@ def private sincos_divergence(xs : array<float4>; dim : int; wantCos : bool) : E
 }
 
 def private report_sincos_divergence(t : T?; what : string; xs : array<float4>; dim : int; wantCos : bool) {
-    if (!rail_applicable()) {
-        t |> success(true, "{what}: rail consistency not applicable off the jitted aarch64 rail")
+    if (!rail_applicable(on_aarch64())) {
+        t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
         return
     }
     report_div(t, what, sincos_divergence(xs, dim, wantCos), 0.0, length(xs) * dim)
@@ -467,19 +476,78 @@ def test_vector_log_special_values(t : T?) {
         float4(1.0e-38, 3.4e38, 1.0e-45, 8.0)]          // the ends of the normal range
     let ys <- ramp(-4.0, 4.0, length(xs))
     let got <- apply_op(xs, ys, OP_LOG2)
-    if (on_poly_rail() || !jit_enabled()) {
-        t |> equal(got[0][0], -127.0, "log2(0) is the exponent floor, not -inf")
-        t |> equal(got[0][2], 2.0, "log2(-4) reads the magnitude")
-    } else {
-        // a jitted run off the rail lowers to @llvm.log2, which is libm: IEEE specials, a
-        // divergence from the interpreter's estimate (-127 and 2) this test pins as such
-        t |> success(!is_finite(double(got[0][0])) && got[0][0] < 0.0, "log2(0) off the rail is libm's -inf")
-        t |> success(is_nan(got[0][2]), "log2(-4) off the rail is libm's NaN")
-    }
+    t |> equal(got[0][0], -127.0, "log2(0) is the exponent floor, not -inf, on every tier and target")
+    t |> equal(got[0][2], 2.0, "log2(-4) reads the magnitude")
     t |> equal(got[1][0], 0.0, "log2(1) is exactly 0")
     t |> equal(got[1][1], 1.0, "log2(2) is exactly 1")
     report_divergence(t, "log2(float4) special values", xs, ys, OP_LOG2, 0.0)
     report_divergence(t, "log(float4) special values", xs, ys, OP_LOG, 0.0)
+}
+
+// the emitter is width-generic, so float2 and float3 are emissions of their own; each pair below
+// carries the SAME body, only [no_jit] separates the two
+def private apply_log_narrow(xs, ys : array<float4>; which, dim : int) : array<float4> {
+    var r : array<float4>
+    r |> reserve(length(xs))
+    for (v, y in xs, ys) {
+        if (dim == 2) {
+            let a = float2(v.x, v.y)
+            let b = which == OP_LOG2 ? log2(a) : which == OP_LOG ? log(a) : pow(a, float2(y.x, y.y))
+            r |> push(float4(b.x, b.y, 0.0, 0.0))
+        } else {
+            let a = float3(v.x, v.y, v.z)
+            let b = which == OP_LOG2 ? log2(a) : which == OP_LOG ? log(a) : pow(a, float3(y.x, y.y, y.z))
+            r |> push(float4(b.x, b.y, b.z, 0.0))
+        }
+    }
+    return <- r
+}
+
+[no_jit, never_inline]
+def private apply_log_narrow_interp(xs, ys : array<float4>; which, dim : int) : array<float4> {
+    var r : array<float4>
+    r |> reserve(length(xs))
+    for (v, y in xs, ys) {
+        if (dim == 2) {
+            let a = float2(v.x, v.y)
+            let b = which == OP_LOG2 ? log2(a) : which == OP_LOG ? log(a) : pow(a, float2(y.x, y.y))
+            r |> push(float4(b.x, b.y, 0.0, 0.0))
+        } else {
+            let a = float3(v.x, v.y, v.z)
+            let b = which == OP_LOG2 ? log2(a) : which == OP_LOG ? log(a) : pow(a, float3(y.x, y.y, y.z))
+            r |> push(float4(b.x, b.y, b.z, 0.0))
+        }
+    }
+    return <- r
+}
+
+def private log_divergence_narrow(xs, ys : array<float4>; which, dim : int) : ErrReport {
+    var r : ErrReport
+    let got <- apply_log_narrow(xs, ys, which, dim)
+    let ref <- apply_log_narrow_interp(xs, ys, which, dim)
+    for (g, e, x in got, ref, xs) {
+        for (l in range(dim)) {
+            track(r, g[l], e[l], x[l], 1.0e-20)
+        }
+    }
+    return r
+}
+
+[test]
+def test_vector_log_narrow_widths(t : T?) {
+    g_offset = 0.0
+    let xs <- log_mantissa_sweep()
+    let ys <- ramp(-4.0, 4.0, length(xs))
+    for (which, name in [OP_LOG2, OP_LOG, OP_POW], ["log2", "log", "pow"]) {
+        for (dim in [2, 3]) {
+            let what = "{name}(float{dim})"
+            if (!rail_applicable(op_on_poly_rail(which))) {
+                t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
+                continue
+            }
+            report_div(t, what, log_divergence_narrow(xs, ys, which, dim), 0.0, length(xs) * dim)
+        }
+    }
 }
 
 // ===== pow =====
@@ -617,7 +685,7 @@ def test_vector_tanh_saturates(t : T?) {
         float4(88.0, -88.0, 1.0e30, -1.0e30)]           // past where exp(2x) would overflow
     let ys <- ramp(-4.0, 4.0, length(xs))
     let got <- apply_op(xs, ys, OP_TANH)
-    let emitted = jit_enabled() && on_poly_rail()
+    let emitted = rail_applicable(on_aarch64())
     for (g, x in got, xs) {
         for (l in range(4)) {
             let a = abs(g[l])

@@ -1208,7 +1208,7 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 
 // ===== the inline-polynomial rail =====
 [arch(at = "../ARCHITECTURE.md#vector-poly-rail")]
-def private vmath_poly_gate(opType : TypeDeclPtr) : bool {
+def private vmath_aarch64_poly_gate(opType : TypeDeclPtr) : bool {
     return g_target_is_aarch64 && vmath_vector_float(opType)
 }
 
@@ -1303,7 +1303,7 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
 // libm is correctly rounded and a single scalar call carries no scalarization penalty.
 def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(opType)) {
         return build_vector_expf(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp", ctx.builder, expr, arguments)
@@ -1358,7 +1358,7 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
 def intrinsic_math_sincos(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let func_name = string(expr.func.name)
-    if (vmath_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(opType)) {
         return build_vector_sincos(ctx, opType, arguments[0], func_name == "cos")
     }
     return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
@@ -1404,7 +1404,7 @@ def private build_vector_tan(ctx : JitCtx; opType : TypeDeclPtr; ang : LLVMOpaqu
 
 def intrinsic_math_tan(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(opType)) {
         return build_vector_tan(ctx, opType, arguments[0])
     }
     var sin_a = intrinsic_math_any_float_op1("sin", ctx.builder, expr, arguments)
@@ -1439,7 +1439,7 @@ def private build_vector_exp2(ctx : JitCtx; opType : TypeDeclPtr; x0 : LLVMOpaqu
 
 def intrinsic_math_exp2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(opType)) {
         return build_vector_exp2(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp2", ctx.builder, expr, arguments)
@@ -1467,7 +1467,7 @@ def private build_vector_log2(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
 
 def intrinsic_math_log2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_poly_gate(opType)) {
+    if (vmath_vector_float(opType)) {
         return build_vector_log2(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("log2", ctx.builder, expr, arguments)
@@ -1476,7 +1476,7 @@ def intrinsic_math_log2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
 // v_log is v_log2_est_p5 scaled by ln2 - the natural log inherits the estimate's error
 def intrinsic_math_log(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_poly_gate(opType)) {
+    if (vmath_vector_float(opType)) {
         return LLVMBuildFMul(ctx.builder, build_vector_log2(ctx, opType, arguments[0]),
             vmath_fsplat(ctx, opType, 0.6931471805599453lf), "")
     }
@@ -1554,7 +1554,7 @@ def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqu
 def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let func_name = string(expr.func.name)
-    if (vmath_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(opType)) {
         return build_vector_hyper(ctx, opType, arguments[0], func_name)
     }
     return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
