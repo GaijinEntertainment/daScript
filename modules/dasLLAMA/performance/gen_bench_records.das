@@ -471,8 +471,11 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
         args |> push_from(["--ngl", "99"])
     }
     if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
-        let shape = npl_leg_shape(cfg, be != "metal")
-        args |> push_from(["--npl", "{cfg.npl}", "--npl-plen", "{shape.plen}", "--npl-reps", "{shape.reps}"])
+        args |> push_from(["--npl", "{cfg.npl}"])
+        if (be != "metal") {   //! the cpu legs' own shape; the metal child takes the flat rows' -p / -r on its own, and its receipt carries no cpu-only flag
+            let shape = npl_leg_shape(cfg, true)
+            args |> push_from(["--npl-plen", "{shape.plen}", "--npl-reps", "{shape.reps}"])
+        }
     }
     if (accel) {
         args |> push("--accel")
