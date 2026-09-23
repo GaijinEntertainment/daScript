@@ -1,4 +1,5 @@
 options gen2
+options no_aot
 require dastest/testing_boost public
 require daslib/das_source_formatter
 require strings
