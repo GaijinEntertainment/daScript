@@ -1,41 +1,9 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options _dasllama_internal = true
 
 require dastest/testing_boost public
 require ../benchmarks/lcpp_bench.das   // tok_read_seed — file-relative require, explicit .das
-require dasllama/dasllama_common
-require dasllama/dasllama_load
-require dasllama/dasllama_bench
-require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_env
-require daslib/jobque_boost
 require daslib/fio
-
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
-let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
-
-// a pp row on a session sized to `seq_len`: under the prompt it must refuse before it writes,
-// at or over it the row runs
-def private pp_row_panics(var tr : Model; seq_len, plen : int64; warm : bool) : bool {
-    tr.config.seq_len = seq_len
-    var s <- make_run_state(tr.config)
-    var tripped = false
-    try {
-        if (warm) {
-            bench_pp_warm(tr, s, plen)
-        } else {
-            bench_pp_rep(tr, s, plen, 1l)
-        }
-    } recover {
-        tripped = true
-    }
-    delete s
-    return tripped
-}
 
 // The --tok corpus reader's header walk, model-free: leading '#' lines are provenance headers and
 // come off the seed; everything from the first non-'#' line on is corpus bytes, '#' included.
@@ -115,19 +83,6 @@ def test_flat_row_plen(t : T?) {
         t |> equal(rows_ctx_need(64l, 4l, 8l, 4, 1l), 64l, "the flat rows' need wins at every scale")
         t |> equal(rows_ctx_need(512l, 128l, 512l, 0, 1l), 512l, "no batched row: the flat rows alone")
         t |> equal(rows_ctx_need(0l, 128l, 128l, 4, 3l), 548l, "the self-speculative streams take depth + 1 rows a tick")
-    }
-    t |> run("the pp rows refuse a session sized under their prompt (needs stories15M)") @(t : T?) {
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            t |> success(!pp_row_panics(tr, 16l, 8l, true), "a session that fits runs the warmup")
-            t |> success(pp_row_panics(tr, 4l, 8l, true), "the warmup prefill checks the cap before it writes")
-            t |> success(pp_row_panics(tr, 4l, 8l, false), "a timed rep checks the cap before it writes")
-        }
     }
 }
 

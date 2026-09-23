@@ -409,6 +409,9 @@ the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
 (`fa_tile_run`, `fa_h256_softcap_run`) through the KHR flash tile wherever the device has KHR
 cooperative matrices at subgroup 32, so a coopmat2 card covers both families.
+`test_bench_rows.das` - stocked (stories15M, skips without it): the bench rows' contracts on a
+real model - the pp rows' capacity refusal (a warmup or a timed rep on a session sized under its
+prompt panics before it writes; a session that fits runs the row).
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -861,9 +864,7 @@ fields are absent from the text.
 read back, a longer flat prompt kept, the llama-bench sizing with no real row) and its
 `rows_ctx_need` seam (the rows' context cap: the batched streams' need - prompt, window, a
 slot a stream, the margin, times the self-speculative rows - never under the flat rows' own
-need, and the flat rows alone with no batched row) and the pp rows' capacity refusal (on
-stories15M: a warmup or a timed rep on a session sized under its prompt panics before it
-writes, a session that fits runs the row; skips without the checkpoint), required
+need, and the flat rows alone with no batched row), required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
