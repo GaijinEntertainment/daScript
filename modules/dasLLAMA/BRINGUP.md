@@ -286,7 +286,8 @@ bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
 - Thread policy is automatic: `min(16, physical performance cores)`, both engines, pinned on
   x86. Intel hybrid boxes fail loudly until P/E pinning exists - do not work around the panic.
 - One model process at a time, das cell and its reference adjacent, 12 s settle between passes,
-  180 s cool slot (`--das-settle`) before every das cell - the driver owns all of it. das tuned
+  180 s cool slot (`--das-settle`) before every das text and audio cell and 60 s (`--image-settle`)
+  before an image-chat cell - the driver owns all of it. das tuned
   kernels run near the package power ceiling and under-read with a clean cv on a heat-soaked
   box; the references are insensitive. Wall-clock: hours; run under a keep-awake and off-hours.
 - On a laptop, sleep the display first (`pmset displaysleepnow` on macOS): a lit screen with an

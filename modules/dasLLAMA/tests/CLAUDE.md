@@ -409,6 +409,9 @@ the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
 (`fa_tile_run`, `fa_h256_softcap_run`) through the KHR flash tile wherever the device has KHR
 cooperative matrices at subgroup 32, so a coopmat2 card covers both families.
+`test_bench_rows.das` - stocked (stories15M, skips without it): the bench rows' contracts on a
+real model - the pp rows' capacity refusal (a warmup or a timed rep on a session sized under its
+prompt panics before it writes; a session that fits runs the row).
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -417,7 +420,12 @@ store lister admitting `records/{box}.json` alone) and the record rig's shared s
 upstream image-reference parser `parse_mtmd_image` - encode summing, the MTMD_TIMING split,
 its refusal arms; the batched reference parser `llama_batched_bench_tg` - the `S_TG` cell of
 the row at `npl` alone, 0 on a missing row, a missing table or a cell that is not a number -
-and `llama_batched_bench_sibling` reading "" beside a missing reference); plus the committed-records sweeps: image-chat receipts match their
+and `llama_batched_bench_sibling` reading "" beside a missing reference; the batched
+reference row `llama_batched_ref_row` - the leg's arms follow the row's shape on its argv, and
+a dead exe names why and reads 0); plus the committed-records sweeps: every batched row's receipt
+carries its leg's shape (the cpu legs' das child at `--npl-plen 128 --npl-reps 3`, its reference at
+`-npp 128`, `--no-op-offload` on the stock cpu arm alone; the metal leg at `-npp 512` with
+neither), image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
 resolves to its committed generation archive.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
@@ -853,7 +861,10 @@ against the committed `site/files/dasllama/bench_records.json` and its first-pai
 fields are absent from the text.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk and its
 `flat_row_plen` seam (the flat session's prompt rows beside a tg-real row: the real row's cap
-read back, a longer flat prompt kept, the llama-bench sizing with no real row), required
+read back, a longer flat prompt kept, the llama-bench sizing with no real row) and its
+`rows_ctx_need` seam (the rows' context cap: the batched streams' need - prompt, window, a
+slot a stream, the margin, times the self-speculative rows - never under the flat rows' own
+need, and the flat rows alone with no batched row), required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
@@ -874,7 +885,9 @@ pybench args builder's per-tool arms (onnx carries the `--out` recovery file and
 nemo forwards `--device`), the `asr_gpu_pair_tool` roster, the `records_run_verdict` ZERO-cells
 refusal, the `argv_receipt` form (every element shell-quoted where it must be, every home
 directory spelled `~` outside the quotes), the rig's `--catalog` scope (`official | all`, every
-other spelling refused), the two guards on `records/<box>.json` (`--jit` and `--catalog all` each
+other spelling refused), the cpu legs' batched shape (`npl_cpu_shape_ok`: 1 or more on both
+axes, or no batched row; `npl_leg_shape`: a cpu leg reads `--npl-cpu-plen` / `--npl-cpu-reps`,
+the metal leg the flat rows' -p / -r, the shipped cpu shape 128 x 3), the two guards on `records/<box>.json` (`--jit` and `--catalog all` each
 need an explicit `--store`, each with its store-given control and the board-mint control), the
 das child's argv spelling on both arms (released exe vs the `--jit` bench source with
 `--for-debug-purposes`), and the cold/warm retry verdict - `cell_rates` folding a cell's das rows

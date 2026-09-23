@@ -10,13 +10,22 @@ artifact's form, a roster, a knob list - wherever the value is written; a value 
 claim defines is not pinned.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
-axis gained or lost - updates that cell's entry in the pinned set below in the same change.**
+axis gained or lost - updates that cell's entry in the pinned set below in the same change.** An
+axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
+order.
 
 **A pinned test cell's coverage never shrinks: a diff that removes one of its asserts, loosens
 one of its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
 predicate answers on an input the cell already asserts on is not a shrink; dropping the input is.
 A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
-that is not a shrink. The pinned set, each with what it pins:
+that is not a shrink.
+
+**A diff that adds a pinned test cell adds it to the pinned set below in the same change** - as a
+named cell; or, when every cell of its file pins, as that file's entry naming what it pins, or,
+when the file already has an entry, by adding each axis the new cell asserts to that entry's
+parenthetical where it is missing.
+
+**The pinned set - a cell listed here, or every cell of a listed file, is a pinned test cell:**
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
 intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
@@ -26,7 +35,11 @@ softcap, sink (`hass`) and span cells; `test_site_records.das` (the byte-compare
 run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included, the
-llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal);
+llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal - and the
+batched reference row's command line: the engine's extra flags follow `-npl N -fa on`, and a run
+that prints no row names why and reads 0 - and the committed stores' batched receipts: the cpu
+legs' das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`, `--no-op-offload`
+on the stock cpu arm alone, the metal leg at `-npp 512` with neither);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
 (which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
@@ -37,6 +50,3 @@ against the arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`,
 against the f16 load-time quants, the kq lane against the q8 lane, the served lane's quiet floor
 against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -
 worker-local fork pools, shared queue policy.
-
-**A diff that adds a pinned test cell adds it to the pinned set above in the same change** - as
-a file when every cell of it pins, as a named cell otherwise.

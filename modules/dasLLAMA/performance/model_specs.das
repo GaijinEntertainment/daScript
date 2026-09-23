@@ -688,7 +688,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "Qwen3.5-9B-IQ4_XS.gguf", display = "Qwen3.5-9B-iq4xs", quant_label = "iq4_xs",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true])),
-        ModelSpec(file = "Qwen3.8-27B-UD-IQ4_XS.gguf", display = "Qwen3.8-27B-iq4xs", quant_label = "iq4_xs",
+        // the 27B at the size a 16 GB card holds whole: the official board's i-quant row
+        ModelSpec(file = "Qwen3.8-27B-UD-IQ4_XS.gguf", display = "Qwen3.8-27B-iq4xs", quant_label = "iq4_xs", official = true,
+            url = "{HF}/unsloth/Qwen3.8-27B-GGUF/resolve/27af057ecb382ddfea5d12837360a8980560e3ed/Qwen3.8-27B-UD-IQ4_XS.gguf",
+            bytes = 14252845984l, sha256 = "40fac4050e940397dbf13087afd50f4734a11805bf9d65ef8ddd7483470e6199",
             parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "Qwen3.8-27B-UD-Q3_K_XL.gguf", display = "Qwen3.8-27B-q3kxl", quant_label = "q3_k_xl",
             parity <- ev_qwen_count([dn_chunked = true])),

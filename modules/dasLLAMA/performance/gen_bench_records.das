@@ -24,6 +24,8 @@ require math
 //   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps the ref's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
+//   each text leg's tg128@4 rides its das child (--npl) and answers to the llama-batched-bench
+//           beside that leg's llama-bench, under the same -ngl / op-offload / affinity arms
 //   image : das cpu/accel/metal (lcpp_bench --image)  vs patched llama-mtmd-cli ("image-chat":
 //           metal/amx vs the stock build, neon vs the CPU ref build — llama-bench itself has no
 //           image mode; the picture is the pinned fixture)
@@ -70,8 +72,20 @@ struct Args {
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK); its sibling llama-mtmd-cli serves as the metal/amx image-chat reference"
     ref_stock : string
 
-    @clarg_doc = "Streams of the metal leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through llama-batched-bench beside --ref-stock; 0 = no batched row (default: 4)"
+    @clarg_doc = "Streams of every leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through the llama-batched-bench beside the leg's llama-bench, under its -ngl, op-offload and affinity arms; 0 = no batched row (default: 4)"
     npl : int = 4
+
+    @clarg_name = "npl-cpu-plen"
+    @clarg_doc = "Prompt tokens of each batched-row stream on the cpu legs, both engines (default: 128) - at 512 the untimed prefill of four streams per rep dominated a dense CPU cell's wall"
+    npl_cpu_plen : int = 128
+
+    @clarg_name = "npl-cpu-reps"
+    @clarg_doc = "Timed repetitions of the batched row on the cpu legs, both engines (default: 3)"
+    npl_cpu_reps : int = 3
+
+    @clarg_name = "image-settle"
+    @clarg_doc = "Seconds to idle before each image-chat cell (default: 60) - one image turn runs seconds, the text cells' --das-settle is sized for minutes-long cells"
+    image_settle : int = 60
 
     @clarg_name = "ref-no-affinity"
     @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
@@ -181,6 +195,17 @@ def das_child_args(exe : string; jit : bool; rest : array<string>) : array<strin
 def private das_args(exe : string; rest : array<string>) : array<string> {
     return <- das_child_args(exe, g_jit_bench, rest)
 }
+
+//! The batched row's shape on a leg, both engines alike: the cpu legs' `--npl-cpu-plen` /
+//! `--npl-cpu-reps`, the metal leg the flat rows' own -p and -r
+def npl_leg_shape(cfg : Args; cpu : bool) : tuple<plen : int; reps : int>
+    => cpu ? (plen = cfg.npl_cpu_plen, reps = cfg.npl_cpu_reps) : (plen = cfg.plen, reps = cfg.reps)
+
+//! The cpu legs' batched shape is one shape for both engines: the das child reads a non-positive
+//! `--npl-plen` / `--npl-reps` as unset and takes the flat rows' -p / -r, while the reference exe
+//! takes the raw value as its -npp and its run count - so a batched row asks 1 or more of each
+def npl_cpu_shape_ok(npl, plen, reps : int) : bool
+    => npl <= 1 || (plen >= 1 && reps >= 1)
 
 //! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
 //! the box stocks - the sweep form). False = a spelling the caller refuses.
@@ -444,8 +469,12 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
                                "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (be == "metal") {
         args |> push_from(["--ngl", "99"])
-        if (cfg.npl > 1) {   //! the batched row rides the metal leg's own child: on Metal --npl reshapes nothing, so the flat rows stay the board's
-            args |> push_from(["--npl", "{cfg.npl}"])
+    }
+    if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
+        args |> push_from(["--npl", "{cfg.npl}"])
+        if (be != "metal") {   //! the cpu legs' own shape; the metal child takes the flat rows' -p / -r on its own, and its receipt carries no cpu-only flag
+            let shape = npl_leg_shape(cfg, true)
+            args |> push_from(["--npl-plen", "{shape.plen}", "--npl-reps", "{shape.reps}"])
         }
     }
     if (accel) {
@@ -934,17 +963,17 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     }
     let backend = ngl != 0 ? "metal" : "cpu"
     let t0 = ref_time_ticks()
+    var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
+    if (ngl == 0 && !cfg.ref_no_affinity) {
+        refPin |> push_from(lcpp_affinity_argv(threads))
+    }
     var args <- [bin, "-m", path, "-ngl", "{ngl}"]
     // -nopo 1 = --no-op-offload: without it a stock build at -ngl 0 still ships big-batch ops
     // with host weights to Metal (26B: MTL0 193MB, +33% pp) — not a CPU number
     if (nopo) {
         args |> push_from(["-nopo", "1"])
     }
-    args |> push_from(["-t", "{threads}"])
-    if (ngl == 0 && !cfg.ref_no_affinity) {
-        args |> push_from(lcpp_affinity_argv(threads))
-    }
-    args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
+    args |> push_from(["-t", "{threads}"], refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
     let cmd = argv_line(args)
     to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
@@ -980,12 +1009,18 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
         rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))
     }
-    if (ngl != 0 && cfg.npl > 1) {   //! the metal leg's batched row: the das child measured tg@npl, the batched exe answers it
+    if (cfg.npl > 1) {   //! the leg's batched row: the das child measured tg@npl, the batched exe answers it under the flat reference's arms
         let batched_bin = llama_batched_bench_sibling(bin)
         if (empty(batched_bin)) {
             to_log(LOG_WARNING, "gen_bench_records: no llama-batched-bench beside {bin} - {file} ref {flavor} {backend} carries no tg{cfg.ngen}@{cfg.npl} row (setup_lcpp_ref builds it)\n")
         } else {
-            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(cfg.plen), int64(cfg.ngen), int64(cfg.npl), cfg.reps)
+            var extra : array<string>
+            if (nopo) {
+                extra |> push("--no-op-offload")
+            }
+            extra |> push_from(refPin)
+            let shape = npl_leg_shape(cfg, ngl == 0)
+            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(shape.plen), int64(cfg.ngen), int64(cfg.npl), shape.reps, extra)
             if (empty(br.why)) {
                 rr.tests |> insert("tg{cfg.ngen}@{cfg.npl}", br.row)
                 rr.cmd = "{cmd} ; {br.cmd}"
@@ -1445,6 +1480,10 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: --catalog {cfg.catalog} - official | all\n")
         return 1
     }
+    if (!npl_cpu_shape_ok(cfg.npl, cfg.npl_cpu_plen, cfg.npl_cpu_reps)) {
+        to_log(LOG_ERROR, "gen_bench_records: --npl-cpu-plen {cfg.npl_cpu_plen} --npl-cpu-reps {cfg.npl_cpu_reps} - both engines take the cpu legs' batched shape, so each is 1 or more\n")
+        return 1
+    }
     g_jit_bench = cfg.jit
     let storeRefusal = board_store_refusal(cfg.catalog, cfg.jit, cfg.store)
     if (!empty(storeRefusal)) {
@@ -1595,22 +1634,22 @@ def main : int {
             // CPU build (kernel vs kernel — stock ggml op-offloads to Metal even at -ngl 0);
             // amx vs stock -ngl 0 --no-op-offload
             if (legMetal) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "metal")
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legNeon) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed)
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 let cpuMtmd = mtmd_bin()
                 image_ref_pass(file, path, mmPath, picPath, stat(cpuMtmd).is_valid ? cpuMtmd : "", "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legAmx) {
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "accel")
-                settle(cfg.das_settle)
+                settle(cfg.image_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
         }
