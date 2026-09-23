@@ -690,7 +690,7 @@ def flat_row_plen(plen, ngen, row_ctx : int64; real_row : bool) : int64
 //! the flat rows' own need - the flat session has no capacity check on its prefill path, so a cap
 //! under `plen` is a prefill written past the cache
 def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int64
-    => max(npl > 1 ? bplen + (ngen + int64(npl) + 8l) * spec_rows : 0l, max(plen, ngen))
+    => max(npl > 1 ? bplen + bench_stream_rows(ngen, int64(npl), spec_rows) : 0l, max(plen, ngen))
 
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
 // Non-private: tests/test_tok_seed.das gates the header walk.

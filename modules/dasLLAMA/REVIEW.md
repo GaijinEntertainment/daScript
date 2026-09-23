@@ -95,10 +95,10 @@ global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-l
 kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
 count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
-**A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites the maintainer's
-release ruling in the PR body - the ruling that bench comparability is broken; a change that
-needs per-change invalidation bumps `IMAGE_VERSION` or `layout_fingerprint()`
-(`dasllama/dasllama_image.das`) instead, never the release.**
+**A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
+maintainer's ruling that rows measured before it can no longer be compared with rows after it; a
+change that only invalidates images bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) instead.**
+Every recorded row, tune sidecar and exchange entry carries the release, so a bump voids them all.
 
 **A function-typed global a serialized exe must re-establish, or that a job (a forked context)
 invokes, lands in a `dasllama/` file beside the `[init]` that establishes it at boot, and that
@@ -193,8 +193,7 @@ parses. A console-only diagnostic is not user-facing.
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
 checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites. A re-mint falsifies every checked-in number cited from the re-minted records
-file, unless the citation pins its engine sha as history.
+`[arch]` cites.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

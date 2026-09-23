@@ -40,8 +40,11 @@ of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it ne
 store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
 writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
 rather than as the released exe. A `-jit` reading is a wall or rate, or a ratio of two, that an
-instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is the backend arm a board cell runs - metal, cpu, cpu + accel, and
-the image and asr arms of each - the pair `(backend, flavor)` a record row carries. A vehicle model is a real model file
+instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is a das run
+`performance/gen_bench_records.das` spawns as a child cell, named by the `(backend, flavor)` pair
+of the record row it writes, whose `engine` is `das`; a text, `image-chat`, `asr` or
+`audio-chat` row of that pair is the same leg, and a reference row (`stock`, `clean-cpu`) is not
+a rig leg. A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
 
 **A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
@@ -101,10 +104,10 @@ ledger), with the flags that run took.** A box cannot mint the row when no rig l
 leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
 official` does not carry the model.
 
-**A diff that changes what the fat exe - a `DAS_TUNE_MODE=fat` exe, what `daspkg release --fat
-<class>` builds and a plain release is not (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - runs at startup or while serving names, in the PR
-body, the `sanity:` lines of its `lcpp_bench` run, and the `tune gate:` line that run printed -
-or says the run printed none.**
+**A diff that changes what a fat exe runs at startup or while serving copies into the PR body
+the `sanity:` lines and the `tune gate:` line of an `lcpp_bench` run of the fat exe the diff
+builds, or says that run printed none.** A fat exe is what `daspkg release --fat <class>` builds
+(`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,
@@ -127,8 +130,8 @@ beside it ranks nothing.
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
 exe or script that produced it.** A figure a committed board cell produced, or a committed record a
-run of this repository wrote with its own provenance block - an instrument's record under
-`harness/`, a tune archive, a class profile - names the record and row instead.
+run of this repository wrote with its own provenance block, names the record file and the row or
+key the figure sits under instead.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

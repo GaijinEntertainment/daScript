@@ -196,6 +196,11 @@ def private das_args(exe : string; rest : array<string>) : array<string> {
     return <- das_child_args(exe, g_jit_bench, rest)
 }
 
+//! The batched row's shape on a leg, both engines alike: the cpu legs' `--npl-cpu-plen` /
+//! `--npl-cpu-reps`, the metal leg the flat rows' own -p and -r
+def npl_leg_shape(cfg : Args; cpu : bool) : tuple<plen : int; reps : int>
+    => cpu ? (plen = cfg.npl_cpu_plen, reps = cfg.npl_cpu_reps) : (plen = cfg.plen, reps = cfg.reps)
+
 //! The cpu legs' batched shape is one shape for both engines: the das child reads a non-positive
 //! `--npl-plen` / `--npl-reps` as unset and takes the flat rows' -p / -r, while the reference exe
 //! takes the raw value as its -npp and its run count - so a batched row asks 1 or more of each
@@ -466,10 +471,8 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
         args |> push_from(["--ngl", "99"])
     }
     if (cfg.npl > 1) {   //! the batched row rides every leg's own child: on Metal and the CPU stack --npl reshapes nothing, so the flat rows stay the board's
-        args |> push_from(["--npl", "{cfg.npl}"])
-        if (be != "metal") {
-            args |> push_from(["--npl-plen", "{cfg.npl_cpu_plen}", "--npl-reps", "{cfg.npl_cpu_reps}"])
-        }
+        let shape = npl_leg_shape(cfg, be != "metal")
+        args |> push_from(["--npl", "{cfg.npl}", "--npl-plen", "{shape.plen}", "--npl-reps", "{shape.reps}"])
     }
     if (accel) {
         args |> push("--accel")
@@ -957,17 +960,17 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     }
     let backend = ngl != 0 ? "metal" : "cpu"
     let t0 = ref_time_ticks()
+    var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
+    if (ngl == 0 && !cfg.ref_no_affinity) {
+        refPin |> push_from(lcpp_affinity_argv(threads))
+    }
     var args <- [bin, "-m", path, "-ngl", "{ngl}"]
     // -nopo 1 = --no-op-offload: without it a stock build at -ngl 0 still ships big-batch ops
     // with host weights to Metal (26B: MTL0 193MB, +33% pp) — not a CPU number
     if (nopo) {
         args |> push_from(["-nopo", "1"])
     }
-    args |> push_from(["-t", "{threads}"])
-    if (ngl == 0 && !cfg.ref_no_affinity) {
-        args |> push_from(lcpp_affinity_argv(threads))
-    }
-    args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
+    args |> push_from(["-t", "{threads}"], refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
     let cmd = argv_line(args)
     to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
@@ -1012,12 +1015,9 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
             if (nopo) {
                 extra |> push("--no-op-offload")
             }
-            if (ngl == 0 && !cfg.ref_no_affinity) {
-                extra |> push_from(lcpp_affinity_argv(threads))
-            }
-            let bplen = ngl == 0 ? cfg.npl_cpu_plen : cfg.plen
-            let breps = ngl == 0 ? cfg.npl_cpu_reps : cfg.reps
-            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(bplen), int64(cfg.ngen), int64(cfg.npl), breps, extra)
+            extra |> push_from(refPin)
+            let shape = npl_leg_shape(cfg, ngl == 0)
+            let br = llama_batched_ref_row(batched_bin, path, ngl, threads, int64(shape.plen), int64(cfg.ngen), int64(cfg.npl), shape.reps, extra)
             if (empty(br.why)) {
                 rr.tests |> insert("tg{cfg.ngen}@{cfg.npl}", br.row)
                 rr.cmd = "{cmd} ; {br.cmd}"

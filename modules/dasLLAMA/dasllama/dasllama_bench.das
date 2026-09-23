@@ -46,6 +46,11 @@ def public llama_batched_bench_args(bin, mpath : string; ngl, threads : int; ple
                "-npp", "{plen}", "-ntg", "{ngen}", "-npl", "{npl}", "-fa", "on"]
 }
 
+//! the positions one batched-row stream decodes past its prompt: the window, a slot a stream for the
+//! admits and the margin, `spec_rows` times under the self-speculative arm - the driver caps the
+//! context on it and the row budgets each stream by it
+def public bench_stream_rows(ngen, npl, spec_rows : int64) : int64 => (ngen + npl + 8l) * spec_rows
+
 //! mean and sample standard deviation of the per-rep rates (tok/s, MB/s - whatever the row measures),
 //! under the row's tag; an empty rep list reads 0, and a driver that reached it measured nothing
 def public bench_row(tag : string; tps : array<double>) : BenchRow {
@@ -107,18 +112,10 @@ def public bench_session(var t : Model; plen, ngen : int64; kdt, vdt : KVDtype) 
     return <- make_run_state(t.config, kdt, vdt)
 }
 
-//! the pp row refuses a prompt its session cannot hold: the prefill path checks no capacity, and a
-//! prompt past `seq_len` is written past the cache - garbage logits when the box is lucky, a crash otherwise
-def private bench_pp_fits(t : Model; plen : int64) {
-    if (plen > t.config.seq_len) {
-        panic("bench: a pp row of {plen} tokens on a session of {t.config.seq_len} positions - the driver capped the context under its own prompt")
-    }
-}
-
 //! the pp row's untimed warmup: one full-size prefill, as llama-bench does before timing
 [cold_path]   // a driver over the annotated forward_* entries; it allocates its prompt per call
 def public bench_pp_warm(t : Model; var s : Session; plen : int64) {
-    bench_pp_fits(t, plen)
+    kv_capacity_check(t, plen, 0l)   //! the driver sized the session; a cap under the prompt is a prefill written past the cache
     let warm <- bench_prompt(plen, BENCH_WARM_SEED)
     forward_prefill(t, s, warm, plen, 0l)
 }
@@ -126,7 +123,7 @@ def public bench_pp_warm(t : Model; var s : Session; plen : int64) {
 //! one timed pp rep: `plen` synthetic ids prefilled from an empty cache; returns tok/s
 [cold_path]
 def public bench_pp_rep(t : Model; var s : Session; plen, seed : int64) : double {
-    bench_pp_fits(t, plen)
+    kv_capacity_check(t, plen, 0l)
     let prompt <- bench_prompt(plen, seed)
     let t0 = ref_time_ticks()
     forward_prefill(t, s, prompt, plen, 0l)
@@ -203,7 +200,7 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : 
     var events : array<SchedEvent>
     for (i in range64(npl)) {
         //! a self-speculative stream may emit depth + 1 tokens a tick, so its budget covers the timed ticks that many times over
-        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = (ngen + npl + 8l) * (mtp ? get_mtp_depth() + 1l : 1l))
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = bench_stream_rows(ngen, npl, mtp ? get_mtp_depth() + 1l : 1l))
         verify(submit(t, sch, req), "bench_tg_batched_rep: the queue holds the row's streams")
     }
     var why = ""

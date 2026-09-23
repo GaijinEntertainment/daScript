@@ -10,7 +10,9 @@ artifact's form, a roster, a knob list - wherever the value is written; a value 
 claim defines is not pinned.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
-axis gained or lost - updates that cell's entry in the pinned set below in the same change.**
+axis gained or lost - updates that cell's entry in the pinned set below in the same change.** An
+axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
+order.
 
 **A pinned test cell's coverage never shrinks: a diff that removes one of its asserts, loosens
 one of its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
@@ -27,7 +29,8 @@ run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and th
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included, the
 llama-batched-bench table parse - which cell at which `npl`, 0 on every refusal - and the
-batched reference row's argv, the leg's arms after the row's shape);
+batched reference row's command line: the engine's extra flags follow `-npl N -fa on`, and a run
+that prints no row names why and reads 0);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
 (which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
@@ -40,6 +43,5 @@ against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo 
 worker-local fork pools, shared queue policy.
 
 **A diff that adds a pinned test cell adds it to the pinned set above in the same change** - as
-a file when every cell of it pins, as a named cell otherwise. A file entry's parenthetical names
-every axis its cells hold; a cell added to a whole-file entry whose axis the parenthetical lacks
-extends it in the same change.
+a named cell, or, when every cell of its file pins, by adding each axis the new cell asserts to
+that file's parenthetical where it is missing.
