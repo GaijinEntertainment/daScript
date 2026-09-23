@@ -35,8 +35,8 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard 
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
-require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on
-require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, live_maxabs, SUPPRESSED_LOGIT, argmax_of, feed_logits
+require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
+require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, argmax_of, feed_logits
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same

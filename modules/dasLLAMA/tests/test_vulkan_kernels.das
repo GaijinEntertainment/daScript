@@ -1494,9 +1494,6 @@ def private fill_upload(dev; off, bytes : int64; word : uint) {
     delete s
 }
 
-//! `bytes` of zero words into `dev` at `off`: the split attention's arrival counters start at rest
-def private zero_upload(dev; off, bytes : int64) => fill_upload(dev, off, bytes, 0u)
-
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def private nan_sentinel_upload(dev; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
 
@@ -1598,11 +1595,22 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
     delete sc
 }
 
+//! the thirteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs))
+
+//! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
+def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
+    for (f in KQ_LEAF_FMTS) {
+        if (!invoke(ensure, f)) return false
+    }
+    return true
+}
+
 [test]
 def test_vkd_kq_gemv_family(t0 : T?) {
     t0 |> run("kq GEMV class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls() && ensure_kq_gemv_iq4xs_cls() && ensure_kq_gemv_k3_cls() && ensure_kq_gemv_iq3s_cls() && ensure_kq_gemv_iq3xxs_cls() && ensure_kq_gemv_iq4nl_cls() && ensure_kq_gemv_k2_cls() && ensure_kq_gemv_iq2s_cls() && ensure_kq_gemv_iq2xs_cls() && ensure_kq_gemv_iq2xxs_cls())) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
@@ -1610,14 +1618,10 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
-            let nfmt = 13
-            let fmts = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs))
-            let stride4s = fixed_array(32, 32, 40, 48, 32, 24, 26, 24, 32, 16, 18, 16, 16)   // uint WORDS per superblock (iq3s/iq3xxs/iq2s are not uint4-aligned)
-            for (fi in range(nfmt)) {
-                let fmt = fmts[fi]
-                let stride4 = stride4s[fi]
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let nwsb = rows * nsb                       // region r's weights at r*d*nsb
-                let wq_words = nwsb * stride4
+                let wq_words = nwsb * sb_words
                 let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var wqh : array<uint>
                 var wsh : array<uint>
@@ -1679,33 +1683,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                         vk_check(vkBeginCommandBuffer(raw2, begin), null)
                         var h2 : VkHaz
                         var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row)
-                        if (fmt == int(KqFmt.k4)) {
-                            enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.q40)) {
-                            enc_kq_gemv_q40_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.k5)) {
-                            enc_kq_gemv_k5_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq4xs)) {
-                            enc_kq_gemv_iq4xs_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.k3)) {
-                            enc_kq_gemv_k3_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq3s)) {
-                            enc_kq_gemv_iq3s_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq3xxs)) {
-                            enc_kq_gemv_iq3xxs_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq4nl)) {
-                            enc_kq_gemv_iq4nl_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.k2)) {
-                            enc_kq_gemv_k2_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq2s)) {
-                            enc_kq_gemv_iq2s_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq2xs)) {
-                            enc_kq_gemv_iq2xs_cls(raw2, h2, s_cls, pc, wgs)
-                        } elif (fmt == int(KqFmt.iq2xxs)) {
-                            enc_kq_gemv_iq2xxs_cls(raw2, h2, s_cls, pc, wgs)
-                        } else {
-                            enc_kq_gemv_k6_cls(raw2, h2, s_cls, pc, wgs)
-                        }
+                        gemv_cls_enc(fmt, raw2, h2, s_cls, pc, wgs)
                         vhz_dep(raw2, h2, 32u, 0u, true)
                         cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
                         vk_check(vkEndCommandBuffer(raw2), null)
@@ -2133,10 +2111,8 @@ def test_vkd_act_family(t0 : T?) {
                 for (e in range(nb)) {
                     h_ref[e] = float(float16(act_mul_ref(gh2[e], uh2[e], ACT_OAI)))
                 }
-                for (i in range(nb / 2)) {
-                    let pr = unpackHalf2x16(h_cls[i])
-                    h_got[2 * i] = pr.x
-                    h_got[2 * i + 1] = pr.y
+                for (i in range(nb)) {
+                    h_got[i] = half_at(h_cls, i)
                 }
                 let badh = mismatch_bars(h_got, h_ref, 2.0e-3, 2.0e-3 * max_abs(h_ref))
                 t |> success(badh == 0, "the biased f16 act under the clamped swiglu matches the oracle within the half's rounding ({badh} of {nb} off)")
@@ -2605,7 +2581,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 def test_vkd_kq_batch_family(t0 : T?) {
     t0 |> run("kq batch tile class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_kq_batch_k4_cls() && ensure_kq_batch_q40_cls() && ensure_kq_batch_k5_cls() && ensure_kq_batch_k6_cls() && ensure_kq_batch_iq4xs_cls() && ensure_kq_batch_k3_cls() && ensure_kq_batch_iq3s_cls() && ensure_kq_batch_iq3xxs_cls() && ensure_kq_batch_iq4nl_cls() && ensure_kq_batch_k2_cls() && ensure_kq_batch_iq2s_cls() && ensure_kq_batch_iq2xs_cls() && ensure_kq_batch_iq2xxs_cls())) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
                 return
             }
@@ -2620,22 +2596,18 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let wgs1 = ((cnt1 + 31) / 32) * wtiles
             let wgs = wgs0 + wgs1
             let totsb = 2 * d * nsb   // superblocks across both regions
-            let nfmt = 13
-            let wstrides = fixed_array(32, 32, 40, 48, 32, 24, 26, 24, 32, 16, 18, 16, 16)   // uint words per superblock: k4 q40 k5 k6 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs
-            let pipes = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs))
-            for (fi in range(nfmt)) {
-                let fmt = pipes[fi]
-                let wstride = wstrides[fi]
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 var wqh : array<uint>
                 var wsh : array<uint>
                 var xqh : array<uint>
                 var xsh : array<float>
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
-                wqh |> resize(totsb * wstride)
+                wqh |> resize(totsb * sb_words)
                 wsh |> resize(wswords)
                 xqh |> resize(rows * nsb * 64)
                 xsh |> resize(rows * nsb)
-                for (i in range(totsb * wstride)) {
+                for (i in range(totsb * sb_words)) {
                     wqh[i] = hash_word(uint(i) + uint(fmt) * 131u)
                 }
                 for (i in range(wswords)) {
@@ -2647,7 +2619,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 for (i in range(rows * nsb)) {
                     xsh[i] = 0.3 + float(i % 11) * 0.05
                 }
-                let wq_bytes = int64(totsb * wstride) * 4l
+                let wq_bytes = int64(totsb * sb_words) * 4l
                 let ws_bytes = int64(wswords) * 4l
                 let xq_bytes = int64(rows * nsb) * 256l
                 let xs_bytes = int64(rows * nsb) * 4l
@@ -2685,38 +2657,13 @@ def test_vkd_kq_batch_family(t0 : T?) {
                     var sc = set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2),
                         fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes),
                         fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    nan_sentinel_upload(yd2, y_bytes)   //! a row the tile never stores keeps the sentinel, never a zeroed page near the oracle's value
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (fmt == int(KqFmt.k4)) {
-                        enc_kq_batch_k4_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.q40)) {
-                        enc_kq_batch_q40_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.k5)) {
-                        enc_kq_batch_k5_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq4xs)) {
-                        enc_kq_batch_iq4xs_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.k3)) {
-                        enc_kq_batch_k3_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq3s)) {
-                        enc_kq_batch_iq3s_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq3xxs)) {
-                        enc_kq_batch_iq3xxs_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq4nl)) {
-                        enc_kq_batch_iq4nl_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.k2)) {
-                        enc_kq_batch_k2_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq2s)) {
-                        enc_kq_batch_iq2s_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq2xs)) {
-                        enc_kq_batch_iq2xs_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (fmt == int(KqFmt.iq2xxs)) {
-                        enc_kq_batch_iq2xxs_cls(raw2, h2, sc, pc, int64(wgs))
-                    } else {
-                        enc_kq_batch_k6_cls(raw2, h2, sc, pc, int64(wgs))
-                    }
+                    kq_batch_cls_enc_for(fmt, false, raw2, h2, sc, pc, int64(wgs))
                     vhz_dep(raw2, h2, 32u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
                     vk_check(vkEndCommandBuffer(raw2), null)
@@ -3939,7 +3886,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
             upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             nan_sentinel_upload(yd, q_bytes)
             nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-            zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+            upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
             nan_sentinel_upload(aqd, int64(qdim))
             nan_sentinel_upload(asd, s_bytes)
             var tokb = make_host_buf(TOK_META_BYTES, true)
@@ -4184,7 +4131,7 @@ def test_vkd_da_attn(t0 : T?) {
             let partd = make_device_buf(p_bytes)
             unsafe {
                 nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-                zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+                upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                 nan_sentinel_upload(yd2, q_bytes)
                 var tokb4 = make_host_buf(TOK_META_BYTES, true)
                 var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
@@ -4245,7 +4192,7 @@ def test_vkd_da_attn(t0 : T?) {
                     upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
                     nan_sentinel_upload(yd2, q_bytes)
                     nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-                    zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+                    upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                     var tokb5 = make_host_buf(TOK_META_BYTES, true)
                     var tmc5 = reinterpret<TokMeta?>(tokb5.mapped)
                     tmc5.cnt = uint(cnt)
@@ -4300,7 +4247,7 @@ def test_vkd_da_attn(t0 : T?) {
                         upload_region_at(vd16, 0l, addr<uint8 const?>(v16[0]), m16_bytes)
                         nan_sentinel_upload(yd2, q_bytes)
                         nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-                        zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+                        upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
                         var tokb6 = make_host_buf(TOK_META_BYTES, true)
                         var tmc6 = reinterpret<TokMeta?>(tokb6.mapped)
                         tmc6.cnt = uint(cnt)
@@ -4395,7 +4342,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
             upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             nan_sentinel_upload(yd, q_bytes)
             nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-            zero_upload(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+            upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
             var tokb = make_host_buf(tok_bytes, true)
             var tm = reinterpret<TokMeta?>(tokb.mapped)
             for (r in range(nrows)) {
@@ -7393,6 +7340,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
                     var s_cls = set_q8_gemv_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd2),
                         fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes),
                         fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    nan_sentinel_upload(yd2, y_bytes)   //! a row the GEMV never stores keeps the sentinel
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -7405,25 +7353,12 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
                     submit_wait(raw2)
                     memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
                 }
-                // oracle: per-block int dot x per-block scales, sequential block order
+                // the q8 GEMM oracle over one record of one activation row: the regions' weight rows lie end to end
                 var y_ref : array<float>
                 y_ref |> resize(rows)
-                for (r in range(nreg)) {
-                    for (row in range(d)) {
-                        let w0 = r * d * nb + row * nb
-                        var acc = 0.0
-                        for (b in range(nb)) {
-                            var idot = 0
-                            for (j in range(8)) {
-                                idot += sdot4(wqh[(w0 + b) * 8 + j], xqh[b * 8 + j])
-                            }
-                            let ws16 = ((w0 + b) % 2 == 0 ? unpackHalf2x16(wsh[(w0 + b) / 2]).x
-                                : unpackHalf2x16(wsh[(w0 + b) / 2]).y)
-                            acc += float(idot) * ws16 * xsh[b]
-                        }
-                        y_ref[r * d + row] = acc
-                    }
-                }
+                var rec <- [0u, 0u, 1u, 0u]
+                q8_gemm_oracle(wqh, wsh, xqh, xsh, rec, 1, nb * 32, rows, y_ref)
+                delete rec
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "q8 GEMV matches the CPU oracle ({bad} of {rows} rows off)")
                 delete regs
@@ -7544,15 +7479,18 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
 
 [test]
 def test_vkd_gemv_ncol(t0 : T?) {
-    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, k4, k6, k5, q40, iq4xs) == the one-column class, column for column") <| @(t : T?) {
+    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, every kq format) == the one-column class, column for column") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            for (f in fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k6, KqFmt.k5, KqFmt.q40, KqFmt.iq4xs)) {
+            let fmts <- kq_gemv_fmts()
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the family's roster is q8 and the thirteen kq leaves")
+            for (f in fmts) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
+                gemv_ncol_arm(t, f, 4096, 90)   //! a wider reduction at a row count off the lane splits' multiples
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -8510,6 +8448,8 @@ def test_vkd_dn_family(t0 : T?) {
                 let sm2 = make_device_buf(sm_bytes)
                 let scd2 = make_device_buf(sc_bytes)
                 let qd2 = make_device_buf(q_bytes)
+                nan_sentinel_upload(scd2, sc_bytes)
+                nan_sentinel_upload(qd2, q_bytes)
                 let of_bytes = int64(nvh * ds) * 4l
                 let ofd2 = make_device_buf(of_bytes)
                 var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes, true, [cached = true])
@@ -10138,12 +10078,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 }
                 let bad_g2 = mismatch_approx(y_g2, y_ref)
                 t |> success(bad_g2 == 0, "da_attn_f16_g2 at head {hs} matches the CPU oracle ({bad_g2} of {nheads * hs} off)")
-                var apart = 0
-                for (i in range(nheads * hs)) {
-                    if (y_g2[i] != y_cls[i]) {
-                        apart++
-                    }
-                }
+                let apart = mismatch_exact(y_g2, y_cls)
                 t |> success(apart == 0, "da_attn_f16_g2 at head {hs} is da_attn_f16 bit for bit ({apart} of {nheads * hs} apart)")
                 y_ref[hs / 2] += 0.5
                 t |> equal(mismatch_approx(y_g2, y_ref), 1, "da_attn_f16_g2 at head {hs}: the bar reds one poisoned element")
@@ -11280,10 +11215,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         t |> success(bad_y == 0, "the combine-folded residual step ({arm}): the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
         var got_yf : array<float>
         got_yf |> resize(npos * n)
-        for (i in range(npos * n / 2)) {
-            let pr = unpackHalf2x16(got_h[i])
-            got_yf[2 * i] = pr.x
-            got_yf[2 * i + 1] = pr.y
+        for (i in range(npos * n)) {
+            got_yf[i] = half_at(got_h, i)
         }
         //! the f16 bar: a half rounds to 2^-11 of the value (4.9e-4 relative); the bar is four halves of
         //! that, and the same fraction of the row's largest value as the floor the near-zero elements read
@@ -11481,10 +11414,8 @@ def private moe_ar_comb_g4_arm(t : T?) {
         t |> success(bad_y == 0, "the gemma-4 combine step: the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
         var got_yf : array<float>
         got_yf |> resize(npos * n)
-        for (i in range(npos * n / 2)) {
-            let pr = unpackHalf2x16(got_h[i])
-            got_yf[2 * i] = pr.x
-            got_yf[2 * i + 1] = pr.y
+        for (i in range(npos * n)) {
+            got_yf[i] = half_at(got_h, i)
         }
         let f16_bar = 2.0e-3
         let bad_h = mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y))

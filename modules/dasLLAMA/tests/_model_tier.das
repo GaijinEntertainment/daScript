@@ -48,6 +48,20 @@ def logits_maxabs(a : array<float>) : float {
     return m
 }
 
+let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
+
+//! the largest |logit| among the live ones: a suppressed id (`SUPPRESSED_LOGIT`) would set a relative bar to nonsense
+def live_maxabs(v : array<float>) : float {
+    var m = 0.0
+    for (x in v) {
+        let a = abs(x)
+        if (a < -SUPPRESSED_LOGIT * 0.1 && a > m) {
+            m = a
+        }
+    }
+    return m
+}
+
 //! Element-for-element equality of two id lists.
 def ids_equal(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {

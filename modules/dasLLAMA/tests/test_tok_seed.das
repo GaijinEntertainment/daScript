@@ -77,6 +77,13 @@ def test_flat_row_plen(t : T?) {
         t |> equal(flat_row_plen(512l, 128l, 310l, true), 512l, "a flat prompt longer than the real row's cap keeps its own length")
         t |> equal(flat_row_plen(0l, 32l, 4096l, false), 0l, "no real row: the flat session sizes as llama-bench does, plen + ngen")
     }
+    t |> run("the rows' context cap covers the flat rows whatever the batched streams' prompts") @(t : T?) {
+        t |> equal(rows_ctx_need(512l, 128l, 512l, 4, 1l), 652l, "the batched streams' need: prompt + window + a slot a stream + the margin")
+        t |> equal(rows_ctx_need(512l, 128l, 128l, 4, 1l), 512l, "short batched prompts never cap the context under the pp row's prompt")
+        t |> equal(rows_ctx_need(64l, 4l, 8l, 4, 1l), 64l, "the flat rows' need wins at every scale")
+        t |> equal(rows_ctx_need(512l, 128l, 512l, 0, 1l), 512l, "no batched row: the flat rows alone")
+        t |> equal(rows_ctx_need(0l, 128l, 128l, 4, 3l), 548l, "the self-speculative streams take depth + 1 rows a tick")
+    }
 }
 
 [test]

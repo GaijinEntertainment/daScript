@@ -269,7 +269,7 @@ def do_outline(file, glob_filter : string) : string {
             let line_num = start != null ? get_json_int(start, "line") + 1 : 0
             let name = extract_name_from_text(text, kind)
             if (empty(name)) continue  // skip block-form globals like "let private {"
-            let display_path = make_relative_path(file_path, das_root)
+            let display_path = make_relative_path(file_path, server_root())
             let idx = length(entries)
             entries |> emplace(OutlineEntry(kind = kind, name = name, line = line_num, text = get_first_line(text)))
             if (!key_exists(by_file, display_path)) {
