@@ -69,3 +69,19 @@ def test_the_floor_moves_both_ways(t : T?) {
     t |> success(find(high, "E") >= 0, "and keeps error")
     t |> success(find(high, "P") >= 0, "print is never filtered")
 }
+
+[test]
+def test_the_level_name_is_case_insensitive(t : T?) {
+    let script = emitter(t)
+    if (empty(script)) return
+    defer() {
+        var e : string
+        remove(script, e)
+    }
+    let high = run_at("ERROR", script)
+    t |> success(find(high, "W") < 0, "DAS_LOG_LEVEL=ERROR reads as error, not as a level of 0:\n{high}")
+    t |> success(find(high, "E") >= 0, "and keeps error")
+    let mixed = run_at("Info", script)
+    t |> success(find(mixed, "I") >= 0, "DAS_LOG_LEVEL=Info lets info through")
+    t |> success(find(mixed, "D") < 0, "and still drops debug")
+}

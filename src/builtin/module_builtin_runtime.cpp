@@ -1841,8 +1841,12 @@ namespace das
     }
 
     static int logMinLevel () {
-        const char * env = get_dasenv_log_level();
-        if ( !env || !env[0] ) return int(LogLevel::warning);
+        const char * envRaw = get_dasenv_log_level();
+        if ( !envRaw || !envRaw[0] ) return int(LogLevel::warning);
+        char env[16];
+        size_t n = 0;
+        for ( ; envRaw[n] && n < sizeof(env)-1; ++n ) env[n] = char(tolower(uint8_t(envRaw[n])));
+        env[n] = 0;
         if ( strcmp(env,"trace")==0 )    return int(LogLevel::trace);
         if ( strcmp(env,"debug")==0 )    return int(LogLevel::debug);
         if ( strcmp(env,"info")==0 )     return int(LogLevel::info);
