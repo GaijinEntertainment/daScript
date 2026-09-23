@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
-A cell is one `t |> run` subtest, a `[test]` function that runs no subtest, or a helper that
-asserts on `t`.
+A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
+asserts belong to every cell that calls it.
 
 **A cell, probe, or harness that dispatches or binds a kernel class - a `[metal_dispatch]` or
 `[vk_dispatch]` class, or a CPU kernel in `../dasllama/dasllama_math*.das` - applies
@@ -34,10 +34,6 @@ function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile
 whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its header and joins the
 exempt list of `test_run_suites.das`'s suite-membership gate in the same change; weakening that
 gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
-
-**Invoking dastest directly on a test file that no `run.das` suite lists under `model-free` or
-`stocked`, and that `test_run_suites.das`'s suite-membership gate does not name as its
-exemption, is a defect - run it through `run.das`.**
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
 touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
@@ -142,13 +138,15 @@ claims about what the cell exercises is asserted in that cell.** A cap, a resize
 showing the path ran is not evidence the number was reached; a device's geometry (subgroup width,
 SM count) is no coverage claim.
 
-**A freeform token-parity cell whose two sides can round differently - different lanes,
-backends, batch shapes or kernel forms - is a defect: use the forced-feed logits-tolerance
+**A token-parity cell over a text-generation prompt whose continuation can tie - a freeform
+cell - whose two sides can round differently - different lanes, backends, batch shapes or kernel
+forms - is a defect: use the forced-feed logits-tolerance
 form, the same fixed tokens fed to both sides and logits compared within a bar.** A counting
 cell - one whose prompt forces a continuation that cannot tie, so greedy tokens are fixed -
 stays token-exact.
 
-**A token-exact freeform compare states in the cell what makes its two sides one code path -
+**A token-exact compare over a text-generation prompt whose continuation can tie - a freeform
+compare - states in the cell what makes its two sides one code path -
 the shared entry point, or an assert pinning the lane.**
 
 **An ASR family with no token-for-token oracle cell is a defect** - the cell compares a
@@ -170,7 +168,9 @@ defect.**
 `set_*` / `pin_*` call in `dasllama/` that changes the driver's route, the serving lane or the
 engage mode for the rest of the process - whose value the cell's claim depends on, even when
 the claim needs it at its DEFAULT value; a family serving-lane pin is the cell's own, never the
-file's `[init]`, and a claim that needs the lane unset establishes it with `reset_<family>_q8`.**
+file's `[init]`, and a claim that needs the lane unset establishes it with the family's own unset
+call - `reset_<family>_q8`, canary's `reset_canary_enc_q8`, whisper's `set_asr_fp32(false)` and
+`set_asr_tower_fp32(false)`.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 other driver setter it touched back where it found it; the unset call is the family's own -

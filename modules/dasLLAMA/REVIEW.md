@@ -97,15 +97,14 @@ count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it; a
-change that only invalidates images bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) instead.**
-Every recorded row, tune sidecar and exchange entry carries the release, so a bump voids them all.
+change that invalidates only images never bumps it.** Every recorded row, tune sidecar and
+exchange entry carries the release, so a bump voids them all.
 
-**A function-typed global a serialized exe must re-establish, or that a job (a forked context)
-invokes, lands in a `dasllama/` file beside the `[init]` that establishes it at boot, and that
-`[init]` re-establishes it when it reads null.** A serialized exe and a forked context restore
-globals as data, so a declaration initializer alone arrives null and dies at the first invoke
-while every `-jit` gate stays green; a global only the main context invokes, armed by another
-file's `[init]`, may carry its null default as the declared "no hook".
+**A function-typed global that a job (a forked context) invokes, or that a serialized exe must
+re-establish and no other file's `[init]` arms, lands in a `dasllama/` file beside the `[init]`
+that establishes it, and that `[init]` re-establishes it when it reads null.** A serialized exe
+and a forked context restore globals as data, so a declaration initializer alone arrives null and
+dies at the first invoke while every `-jit` gate stays green.
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
@@ -159,9 +158,7 @@ apart from the ad-hoc profiling an engine file may not carry.
 **A change to `encode`/`bpe_encode`, or to a function they call at encode time (not one that only
 supplies a metadata default at load) in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das`
 or `dasllama/dasllama_pretok.das` - `encode` being `dasllama_spm.das`'s and `bpe_encode`
-`dasllama_bpe.das`'s; the dispatcher in `dasllama/dasllama_tokenizer.das` owes a
-`tests/test_tokenizer.das` run, not rows - ships before/after `--tok` rows
-(`benchmarks/lcpp_bench.das`) at
+`dasllama_bpe.das`'s - ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) at
 two or more input sizes on a model using that tokenizer; a time growing faster than linearly with
 input size is a defect.**
 
@@ -228,7 +225,7 @@ companion section carrying the charter of the feature the check guards - not the
 sit in; never `ARCHITECTURE.md` - in the same change.** The
 line names the check and the names it licenses; when the check licenses no names, the line says so.
 
-**Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language - that
+**Checked-in text - docs, comments, or string data, any language - that
 describes a reference-build mechanism, or names that build, its binaries or symbols, wherever the
 diff puts it - and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 

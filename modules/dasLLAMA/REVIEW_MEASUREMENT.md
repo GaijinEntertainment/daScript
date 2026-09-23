@@ -40,15 +40,11 @@ of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it ne
 store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
 writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
 rather than as the released exe. A `-jit` reading is a wall or rate, or a ratio of two, that an
-instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is a das run
-`performance/gen_bench_records.das` spawns as a child cell, named by the `(backend, flavor)` pair
-of the record row it writes, whose `engine` is `das`; a text, `image-chat`, `asr` or
-`audio-chat` row of that pair is the same leg, and a reference row (`stock`, `clean-cpu`) is not
-a rig leg. A vehicle model is a real model file
+instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is a child cell
+`performance/gen_bench_records.das` spawns whose record row has `engine` `das`; it is named by
+that row's `(backend, flavor)` pair, whatever the row's `workload` (text rows carry none; others
+are `image-chat`, `asr`, `audio-chat`). A vehicle model is a real model file
 a harness run drives; a harness is the `harness/` script that drove a run, where one did.
-
-**A served-turn leg's rate written in `PERF_LEDGER.md` names the flags of the run that produced
-it.**
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
@@ -129,9 +125,9 @@ beside it ranks nothing.
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
-exe or script that produced it.** A figure a committed board cell produced, or a committed record a
-run of this repository wrote with its own provenance block, names the record file and the row or
-key the figure sits under instead.
+exe or script that produced it - or names the committed record file and the row or key it sits
+under, when that record is a board record or its own fields name that harness, flags, box and
+exe.**
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

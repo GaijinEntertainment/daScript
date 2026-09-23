@@ -18,7 +18,14 @@ order.
 one of its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
 predicate answers on an input the cell already asserts on is not a shrink; dropping the input is.
 A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
-that is not a shrink. The pinned set, each with what it pins:
+that is not a shrink.
+
+**A diff that adds a pinned test cell adds it to the pinned set below in the same change** - as a
+named cell; or, when every cell of its file pins, as that file's entry naming what it pins, or,
+when the file already has an entry, by adding each axis the new cell asserts to that entry's
+parenthetical where it is missing.
+
+**The pinned set - a cell listed here, or every cell of a listed file, is a pinned test cell:**
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
 intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
@@ -41,7 +48,3 @@ against the arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`,
 against the f16 load-time quants, the kq lane against the q8 lane, the served lane's quiet floor
 against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -
 worker-local fork pools, shared queue policy.
-
-**A diff that adds a pinned test cell adds it to the pinned set above in the same change** - as
-a named cell, or, when every cell of its file pins, by adding each axis the new cell asserts to
-that file's parenthetical where it is missing.
