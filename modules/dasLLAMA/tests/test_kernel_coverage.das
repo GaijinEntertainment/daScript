@@ -778,11 +778,14 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // test_vkd_dn_family in test_vulkan_kernels.das
     "dn_ba_cls_spv",
     // the N-column decode GEMV leaves serving cannot reach: the q8 row-pair stamps (the pair form serves only past
-    // `g_q8_n2_min_n`, off until a box's token command proves it) and the K-quant N leaves (the zoo's batched row is the
+    // `g_q8_n2_min_n`, off until a box's token command proves it) and the kq N leaves (the zoo's batched row is the
     // Q8_0 tinyllama; the q8 n2/n4/n8 stamps ride its 2-, 4- and 8-row steps); their coverage is test_vkd_gemv_ncol
-    // in test_vulkan_kernels.das
+    // in test_vulkan_kernels.das, and the low-bit leaves' stocked carriers are the Qwen3.8-27B regions files
+    // (test_gpu_resident_regions_hybrid_iq3s.das for iq3s, test_gpu_resident_regions_hybrid_q3kxl.das for the eight)
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv",
+    "kq_gemv_k3_n_cls_spv", "kq_gemv_k2_n_cls_spv", "kq_gemv_iq3s_n_cls_spv", "kq_gemv_iq3xxs_n_cls_spv", "kq_gemv_iq4nl_n_cls_spv",
+    "kq_gemv_iq2s_n_cls_spv", "kq_gemv_iq2xs_n_cls_spv", "kq_gemv_iq2xxs_n_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
