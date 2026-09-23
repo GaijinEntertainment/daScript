@@ -4,8 +4,8 @@ options rtti = true
 // shapes, and describe() output, which would rename hash-keyed doc files per run
 options auto_inline_functions = false
 
-require daslib/rst
 require daslib/rst_comment
+require daslib/rst
 require daslib/fio
 require clipboard/clipboard
 require stddlg

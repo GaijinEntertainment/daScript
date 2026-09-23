@@ -95,10 +95,11 @@ it in a name, a shape, or a test, or documents itself in the module's `.md`. Kep
 is earned: `//!` and `/** */` docs on a contract a CALLER must know - public API always, a
 non-public helper when callers inside the module need the contract - `NOLINT` /
 `clang-format` suppressions, the leading header block, and the bare section pointer
-`// <folder>/ARCHITECTURE*.md#<anchor>` - the folder's `ARCHITECTURE.md` or an `ARCHITECTURE_<CONCERN>.md` companion - on the function that implements the section (C++ has no
-`[arch]` annotation, so the pointer is its citation; LINT026 resolves it exactly as a .das
-citation - the path is root-relative, walked up from the citing file, so a header under
-`include/` reaches the `src/` document that owns its mechanism - and a `sec.N` spelling is a
+`// <folder>/ARCHITECTURE*.md#<anchor>` (`<folder>`'s `ARCHITECTURE.md` or an
+`ARCHITECTURE_<CONCERN>.md` companion there) on the function that implements the section;
+C++ has no `[arch]` annotation, so the pointer is its citation, and LINT026 resolves it
+exactly as a .das citation - the path is root-relative, walked up from the citing file, so a
+header under `include/` reaches the `src/` document that owns its mechanism - and a `sec.N` spelling is a
 number nothing checks). Existing comments answer to the
 deletion test; editing one so it stays true is not a new comment, and the edited comment
 answers to that test as a whole.

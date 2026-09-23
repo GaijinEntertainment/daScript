@@ -18,13 +18,14 @@ functions or any of its assertions from `dasbind/test_extern_abi.das` is a defec
 check of which register or stack slot an interpreted `[extern]` call puts each argument in - the
 JIT never takes that path - so coverage lost there reports green on every lane.
 
-**A change to a `.das` file under this folder that it leaves in any `AOT_*_FILES` variable of
-`tests/aot/CMakeLists.txt` - by glob or by name - and not marked `options no_aot` is green on
-the `dastest` run and on `test_aot` (`test_aot_subset` too for `tests/language`, the per-PR
-lane), and the PR body says where the AOT run was seen.** Per-PR CI compiles only the language
-subset; the full `test_aot` runs nightly and in `preflight --full`.
+**A changed `.das` file under this folder that sits in an `AOT_*_FILES` variable of
+`tests/aot/CMakeLists.txt` (by glob or by name) and is not marked `options no_aot` passes its
+`dastest` run and `test_aot` (and `test_aot_subset` too when it sits under `language/`), and
+the PR body names the run that showed the `test_aot` pass: a local `preflight --full`, a
+`--target run_tests_aot` build, or a CI job link.** Per-PR CI builds `test_aot_subset` only, so
+the PR's own checks do not prove `test_aot`.
 
 **A new `.das` file under `tests/` that a glob in `tests/aot/CMakeLists.txt` puts in an
 `AOT_*_FILES` variable and that does not compile on its suite's `test_aot` lane is filtered out
-of that variable in the same change, with the reason in a comment beside the filter.** The glob
-picks a new file up silently.
+of that variable or marked `options no_aot`, in the same change, with the reason in a comment
+beside the filter or the option.** The glob picks a new file up silently.

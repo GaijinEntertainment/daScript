@@ -19,14 +19,13 @@ file, a command, a flag, an API, a `.das_package` name - states, in the PR body,
 exists and works at merge, and where that was checked** - the build proves the page renders,
 never that what it points a reader at is there.
 
-**A diff that touches the `require` list of `reflections/das2rst.das` keeps `require daslib/rst`
-and `require daslib/rst_comment` as its first two requires** - the comment reader is installed
-when `rst_comment` compiles, and a module compiled before it, directly or through another
-require's dependencies, is documented with no `//!` comments at all (its own dependencies are
-documented from `source/stdlib/handmade/`).
+**A diff that touches the `require` list of `reflections/das2rst.das` keeps
+`require daslib/rst_comment` ahead of every other require** - the `//!` comment reader
+(`rst_comment`'s `[comment_reader]`) is installed when `rst_comment` compiles, and a module
+compiled before it, as an earlier require or as a dependency of one, gets no `//!` comments on
+its page.
 
-**A diff that changes a generator or a grouping under `reflections/` states, in the PR body,
-that every name the generator newly places on a page resolves in the tree, and where that was
-checked** - a name the generator lists is a name a reader will type. The page-placing code
-itself, `daslib/rst.das` and `daslib/rst_comment.das`, answers to `daslib/REVIEW.md` (repo
-root).
+**A diff that changes a generator under `reflections/` (a file there, its `group_by_regex`
+calls included) states, in the PR body, that every name the generator newly places on a page
+resolves in the tree, and where that was checked** - a name the generator lists is a name a
+reader will type.
