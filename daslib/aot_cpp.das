@@ -4605,8 +4605,8 @@ def private cppDependencyDepth(linked : table<Module?>; var visiting : table<Mod
 
 def public collectLinkedModules(program : ProgramPtr) : table<Module?> {
     //! Modules a standalone context links: what the runtime program uses, and - once that reaches a
-    //! C++ module beyond the builtin one - the default C++ modules the compiler loaded plus every
-    //! linked C++ module's dependencies, because module constructors require those by name.
+    //! C++ module beyond the builtin one - every linked C++ module's dependencies, because module
+    //! constructors require those by name; a default module the program never reaches stays out.
     var linked <- collectUsedModules(program)
     var reachesCpp = false
     for (mod in keys(linked)) {
@@ -4625,8 +4625,7 @@ def public collectLinkedModules(program : ProgramPtr) : table<Module?> {
     })
     var visited : table<Module?>
     for (mod in cppModules) {
-        let isDefault = DEFAULT_MODULE_ORDER |> find_index(string(mod.cppClassName)) >= 0
-        if ((isDefault || (linked |> key_exists(mod))) && canAotModule(mod)) {
+        if ((linked |> key_exists(mod)) && canAotModule(mod)) {
             insertWithDependencies(linked, visited, mod)
         }
     }
