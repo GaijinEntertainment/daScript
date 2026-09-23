@@ -236,11 +236,14 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
    (`6 -> 44`). This is the third id space at its Vulkan seam; without the arm the arena plan
    panics on the first iq4xs stack.
-2. `KqGemvIq4xs : KqGemvBase` - `def override blk_contrib`: the q40 nibble tiling
-   (`wq4[wsb * 8 + blk]`), each nibble word decoded through `iq4_word` into SIGNED lanes for
-   `sdot4` (OpSDot, signed x signed - the block-sum trick of q40/k4 does not apply and is not
-   needed), scale `d * sc` with `sc` decoded by `iq4xs_sc` off the two-word device row
-   (`scales_h` above d in word 0, the `scales_l` nibbles in word 1). A codebook is packed into
+2. `KqGemvIq4xs : KqGemvBase` - `def override blk_decode`: the block decoded once into its lo
+   and hi packed quads (the q40 nibble tiling, `wq4[wsb * 8 + blk]`, each nibble word decoded
+   through `iq4_word` into SIGNED lanes for `sdot4` - OpSDot, signed x signed, so the block-sum
+   trick of q40/k4 does not apply: `blk_bsum` stays false) and the fold's terms `(d * sc, 0, d *
+   sc, 0)` with `sc` decoded by `iq4xs_sc` off the two-word device row (`scales_h` above d in
+   word 0, the `scales_l` nibbles in word 1); the family's `blk_fold` dots the decoded block
+   against each column, and a `KqGemvIq4xsN` stamp whose `run` calls `gemv_shell_n` is the
+   N-column leaf (`gemv_cls_has_n` / `_ensure_n` / `_enc_n` take one arm each). A codebook is packed into
    four `uint4` words and selected with a dynamic vector index plus a byte shift
    (`(tbl[q >> 2] >> ((q & 3) * 8)) & 0xFF`): a `fixed_array` local indexed per nibble lowers
    to Function storage the driver spills, and decodes at a third of the speed
