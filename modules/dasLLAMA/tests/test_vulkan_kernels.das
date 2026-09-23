@@ -10370,6 +10370,148 @@ def test_vkd_emb_gather_pair(t0 : T?) {
 }
 
 [test]
+def test_vkd_dec_combine_pair(t0 : T?) {
+    t0 |> run("decode combine class kernels (routed, routed + shared gated and ungated) == the CPU sum") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_dec_combine_cls() || !ensure_dec_combine_sh_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let n = 300                  // two workgroups of 256 and a guarded tail
+            let k = 5
+            let ngate = 8
+            let gidx = 6
+            var xin : array<float>
+            var w : array<float>
+            var down : array<float>
+            var sh : array<float>
+            var gate : array<float>
+            xin |> resize(n)
+            w |> resize(k)
+            down |> resize(k * n)
+            sh |> resize(n)
+            gate |> resize(ngate)
+            for (i in range(n)) {
+                xin[i] = float(int(hash_word(uint(i) + 11u) % 2001u)) * 0.001 - 1.0
+                sh[i] = float(int(hash_word(uint(i) + 23u) % 2001u)) * 0.001 - 1.0
+            }
+            for (j in range(k)) {
+                w[j] = 0.05 + float(j) * 0.07
+            }
+            for (i in range(k * n)) {
+                down[i] = float(int(hash_word(uint(i) + 37u) % 2001u)) * 0.001 - 1.0
+            }
+            for (i in range(ngate)) {
+                gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
+            }
+            let x_bytes = int64(n) * 4l
+            let w_bytes = int64(k) * 4l
+            let d_bytes = int64(k * n) * 4l
+            let g_bytes = int64(ngate) * 4l
+            let xd = make_device_buf(x_bytes)
+            let wd = make_device_buf(w_bytes)
+            let dd = make_device_buf(d_bytes)
+            let shd = make_device_buf(x_bytes)
+            let gd = make_device_buf(g_bytes)
+            let od = make_device_buf(x_bytes)
+            let osd = make_device_buf(x_bytes)
+            let oud = make_device_buf(x_bytes)
+            var host = make_host_buf(x_bytes * 3l, true, [cached = true])
+            var y_r : array<float>
+            var y_s : array<float>
+            var y_u : array<float>
+            y_r |> resize(n)
+            y_s |> resize(n)
+            y_u |> resize(n)
+            unsafe {
+                upload_region_at(xd, 0l, addr<uint8 const?>(xin[0]), x_bytes)
+                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), w_bytes)
+                upload_region_at(dd, 0l, addr<uint8 const?>(down[0]), d_bytes)
+                upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
+                upload_region_at(gd, 0l, addr<uint8 const?>(gate[0]), g_bytes)
+                nan_sentinel_upload(od, x_bytes)
+                nan_sentinel_upload(osd, x_bytes)
+                nan_sentinel_upload(oud, x_bytes)
+                var sr = set_dec_combine_cls(fixed_array(xd, wd, dd, od),
+                    fixed_array(x_bytes, w_bytes, d_bytes, x_bytes),
+                    fixed_array(1u, 2u, 4u, 8u))
+                var ss = set_dec_combine_sh_cls(fixed_array(xd, wd, dd, shd, gd, osd),
+                    fixed_array(x_bytes, w_bytes, d_bytes, x_bytes, g_bytes, x_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 32u, 8u))
+                var su = set_dec_combine_sh_cls(fixed_array(xd, wd, dd, shd, gd, oud),
+                    fixed_array(x_bytes, w_bytes, d_bytes, x_bytes, g_bytes, x_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 32u, 8u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                let wgs = int64((n + 255) / 256)
+                var pcr = DecCombineArgs(n = uint(n), k = uint(k))
+                enc_dec_combine_cls(raw, h, sr, pcr, wgs)
+                var pcs = DecCombineShArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 1u)
+                enc_dec_combine_sh_cls(raw, h, ss, pcs, wgs)
+                var pcu = DecCombineShArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 0u)
+                enc_dec_combine_sh_cls(raw, h, su, pcu, wgs)
+                vhz_dep(raw, h, 8u, 0u, true)
+                cmd_copy_range(raw, od, 0l, host.buf, 0l, x_bytes)
+                cmd_copy_range(raw, osd, 0l, host.buf, x_bytes, x_bytes)
+                cmd_copy_range(raw, oud, 0l, host.buf, x_bytes * 2l, x_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(y_r[0]), host.mapped, x_bytes)
+                memcpy(addr<void?>(y_s[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+                memcpy(addr<void?>(y_u[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes * 2l)), x_bytes)
+            }
+            var r_ref : array<float>
+            var s_ref : array<float>
+            var u_ref : array<float>
+            r_ref |> resize(n)
+            s_ref |> resize(n)
+            u_ref |> resize(n)
+            let g = 1.0 / (1.0 + exp(-gate[gidx]))
+            for (i in range(n)) {
+                var acc = 0.0
+                for (j in range(k)) {
+                    acc += w[j] * down[j * n + i]
+                }
+                r_ref[i] = xin[i] + acc
+                s_ref[i] = xin[i] + acc + g * sh[i]
+                u_ref[i] = xin[i] + acc + sh[i]
+            }
+            //! the bar: both sides sum k f32 products in the same order over operands under 1, so only the driver's fma contraction and the device exp separate them - a few ulp of 1
+            let bad_r = rel_mismatches(y_r, r_ref, 0, n)
+            t |> success(bad_r == 0, "routed combine matches the CPU sum ({bad_r} of {n} off)")
+            let bad_s = rel_mismatches(y_s, s_ref, 0, n)
+            t |> success(bad_s == 0, "routed + gated shared combine matches the CPU sum ({bad_s} of {n} off)")
+            let bad_u = rel_mismatches(y_u, u_ref, 0, n)
+            t |> success(bad_u == 0, "routed + ungated shared combine matches the CPU sum ({bad_u} of {n} off)")
+            var moved = 0
+            for (i in range(n)) {
+                moved++ if (y_s[i] != y_u[i])
+            }
+            t |> success(moved > 0, "gate control: the gate moves the shared row's weight off 1 ({moved} of {n})")
+            var s_poison := s_ref
+            s_poison[n - 1] += 0.01   // the bar's control: one element pushed past the bar must red
+            t |> success(rel_mismatches(y_s, s_poison, 0, n) == 1, "combine control: the bar reds one poisoned element")
+            delete xin
+            delete w
+            delete down
+            delete sh
+            delete gate
+            delete y_r
+            delete y_s
+            delete y_u
+            delete r_ref
+            delete s_ref
+            delete u_ref
+            delete s_poison
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_vkd_ar_rq_fused(t0 : T?) {
     t0 |> run("fused batch ar+rq == the split cls_ar + cls_dn_rq pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

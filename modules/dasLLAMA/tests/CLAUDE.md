@@ -330,6 +330,9 @@ format's oracle passed in), which dispatches two workgroups past its schedule ov
 words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
 match; the q8 fmt-0 cells (`q8_planes` for their planes) and the q51 cell run the same loop over
 their own arm lists;
+`test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
+sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
+grid, with the gate's move and a poisoned element as its controls;
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot
