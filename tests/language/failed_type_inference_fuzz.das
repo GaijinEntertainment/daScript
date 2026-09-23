@@ -2,7 +2,7 @@
 // an exact multiset: an error that stops being reported fails this file just as loudly as a
 // new one, which is what keeps a crash from being traded for a silent accept.
 options gen2
-expect 30107, 30109, 30110, 30192, 30320, 30805, 30821, 30826, 30832
+expect 30107, 30109, 30110:2, 30192, 30320, 30805, 30821, 30826, 30832
 
 // A void expression handed to debug().
 def v {
@@ -39,4 +39,14 @@ def f9 : int {
 def for_source_of_expr_type {
     for (x in @@(a : int[f9()]) => 1) {
     }
+}
+
+// A function address whose argument type carries a dim that never reduces to a constant: the
+// typed lookup must wait for the dim instead of matching against the unresolved type.
+enum AddrDim {
+    a
+}
+
+def address_of_expr_typed_argument {
+    var x = @@ < (a : int[AddrDim.a]) > address_of_expr_typed_argument
 }
