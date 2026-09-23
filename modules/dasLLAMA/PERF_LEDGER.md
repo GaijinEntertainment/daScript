@@ -2684,6 +2684,12 @@ state.
   +/- 4 / 1634 +/- 7. The KHR arm the same hour: tg128@4 137.3 +/- 0.1 / 124.0 +/- 0.2 / 118.0 +/-
   0.2, pp512 1394 +/- 5 / 1377 +/- 5 / 1394 +/- 4. The kernel family, N-column and gate-up cells
   hold at the tip on both boxes: the N form's every column is the one-column class's word for word.
+- **llama.cpp's CUDA build of the same b10660 checkout on the pod (`external`, a reference row and
+  not a target; `-DGGML_CUDA=ON`, nvcc 12.8, the Vulkan reference's command line, second run):**
+  tg128@4 125.9 / 132.6 / 125.9 (i1-IQ3_S / UD-Q3_K_XL / UD-IQ4_XS), tg128 51.0 / 50.9 / 48.8,
+  pp512 1811 / 1863 / 1906 - ours at the lever-1 tip reads 1.09x / 0.93x / 0.94x of it batched and
+  0.96x / 0.88x / 0.85x flat [direction-grade - two processes]. CUDA's batched rate hardly moves
+  with the format (126 to 133) where ours follows the decode cost of the leaves.
 - **The 5060 Ti at the lever-1 tip, ours cm2 tg128@4 / tg128 with the reference's rows beside:**
   i1-IQ3_S homes (11526 MB image, 165 MB mirror, 230 MB scratch): 89.5 +/- 0.9 / 28.3 (56.5 before
   the lever) against llama.cpp's 2.5 / 2.6 - the reference pages the 12.6 GB file on this card at
