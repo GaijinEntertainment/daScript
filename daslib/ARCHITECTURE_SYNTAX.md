@@ -19,7 +19,9 @@ test - so the record here is what keeps the two together.
   `move_to_move_ref` generics** are the names inference emits for a promoted initializer - an
   initializer that inference rewrites into a call through the user's `operator =` or
   `operator <-`. The other side is `src/ast/ast_infer_type_function.cpp` (repo root):
-  `promoteInitToAssign` picks the helper by the source's shape (the `_ref` variant for a
-  variable, the plain one for a value; the const or `var` overload by the source's constness),
-  and `isAssignInitCall` recognizes these names, `clone_to_move` and `clone_string`, so an
-  initializer already promoted is not promoted again on the next inference pass.
+  `promoteInitToAssign` picks the helper by whether the source's type is a reference (the
+  `_ref` variant for a reference, the plain one for a value), overload resolution then picks
+  the const or `var` overload by the source's constness,
+  and `isPromotedInitCall` (`src/ast/ast_generate.cpp`, repo root) recognizes these names,
+  `clone_to_move` and `clone_string`, so an initializer already promoted is not promoted again
+  on the next inference pass.

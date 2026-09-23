@@ -27,8 +27,10 @@ Playwright). An arm's load-bearing assertions are the ones that prove the change
 skip-path assertion.
 
 A CI row is a workflow step whose command runs the arm, directly or through a process it
-spawns. An assertion no CI row can run is one where either no CI row runs the arm, or the arm
-returns or skips before the assertion. An arm that skips unless a host tool is present has
+spawns. An assertion no CI row can run is one that needs something no pull-request lane's
+runner image provides - a GPU, a host tool the image does not carry, a network service, a
+credential - or one the arm returns or skips before on every such runner; whether a row runs
+the arm today does not decide it. An arm that skips unless a host tool is present has
 assertions a CI row can run when the pull-request lane's runner image carries that tool, and
 the change names that lane. One arm can hold assertions of both kinds.
 

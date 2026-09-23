@@ -55,7 +55,9 @@ must agree with records the pair in an `ARCHITECTURE*.md` of this folder, naming
 whenever nothing fails on a mismatch: no lint, no compile error, no default-suite test (what
 `dastest` runs over `tests/` (repo root) with no flags).** The second site can sit anywhere,
 inside or outside this repository. The section a daslib file's pair lands in is the one that
-holds that file, or a new one in `ARCHITECTURE.md` or a companion when none does.
+holds that file, or a new one in `ARCHITECTURE.md` or a companion when none does; a pair whose
+two sides are one syntax's spellings lands in `ARCHITECTURE_SYNTAX.md` with the other pairs of
+that syntax.
 
 **When a diff changes the daslib side of a recorded pair so the two no longer match, it changes
 the other side in the same diff.** A change to the other side is reviewed under that side's

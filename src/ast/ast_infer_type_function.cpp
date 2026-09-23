@@ -1215,26 +1215,41 @@ namespace das {
         applyLSP(argDummy, fns);
         return fns;
     }
-    static bool isAssignInitCall ( Expression * init ) {
-        if ( !init->rtti_isCall() ) return false;
-        if ( init->generated ) return true;
-        auto call = static_cast<ExprCall *>(init);
-        string name = !call->func ? call->name
-            : call->func->fromGeneric ? call->func->getOrigin()->name : call->func->name;
-        auto qualifiedAt = name.rfind("::");
-        if ( qualifiedAt != string::npos ) name = name.substr(qualifiedAt + 2);
-        return name == "copy_to_move" || name == "move_to_move" || name == "copy_to_move_ref" || name == "move_to_move_ref"
-            || name == "clone_to_move" || name == "clone_string";
-    }
     // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
     ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
         if ( !init->type || init->type->isAutoOrAlias() || init->type->isVoid() || init->type->isExprType() ) return nullptr;
-        if ( isAssignInitCall(init) ) return nullptr;
+        if ( isPromotedInitCall(init) ) return nullptr;
         if ( !program->library.hasFunctionOrGenericNamed(opName) ) return nullptr;
         MatchingFunctions generics;
         auto fns = getAssignFunc(opName, varType, init->type, generics);
         if ( fns.empty() && generics.empty() ) return nullptr;
-        if ( fns.size() > 1 || (fns.empty() && generics.size() > 1) ) return nullptr;
+        if ( fns.size() > 1 ) return nullptr;
+        if ( fns.empty() && generics.size() > 1 ) {
+            auto leftRef = new TypeDecl(*varType);
+            leftRef->ref = true;
+            leftRef->constant = false;
+            auto probe = new ExprLooksLikeCall(at, "_::" + opName);
+            auto leftProbe = new ExprConstInt(at, 0);
+            leftProbe->type = leftRef;
+            auto rightProbe = new ExprConstInt(at, 0);
+            rightProbe->type = init->type;
+            probe->arguments.push_back(leftProbe);
+            probe->arguments.push_back(rightProbe);
+            das_stable_sort(generics.data(), generics.data() + generics.size(), [&](const FunctionPtr &f1, const FunctionPtr &f2) { return copmareFunctionSpecialization(f1, f2, probe); });
+            const bool oneWins = copmareFunctionSpecialization(generics.front(), generics[1], probe);
+            probe->arguments.clear();
+            gc_free_now(leftProbe);
+            gc_free_now(rightProbe);
+            gc_free_now(probe);
+            if ( !oneWins ) return nullptr;
+            generics.resize(1);
+        }
+        const FunctionPtr &chosen = fns.empty() ? generics.front() : fns.front();
+        if ( chosen->unsafeOperation && !unsafeDepth ) {
+            error("unsafe call '" + opName + "' must be inside the 'unsafe' block", "", "",
+                  at, CompilationError::unsafe_function_call);
+            return nullptr;
+        }
         reportAstChanged();
         const char * helper = opName == "<-"
             ? (init->type->ref ? "_::move_to_move_ref" : "_::move_to_move")

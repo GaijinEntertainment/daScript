@@ -104,6 +104,7 @@ namespace das {
         ...
     */
     DAS_CC_API FunctionPtr makeClone ( Structure * str );
+    bool isPromotedInitCall ( Expression * init );
 
     /*
      def clone(var a:tuple<...>; var b:tuple<...>)

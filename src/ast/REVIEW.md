@@ -1,8 +1,9 @@
 # AST Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-`ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`. A diff touching `promoteInitToAssign` or
-`isAssignInitCall` (`ast_infer_type_function.cpp`) applies `daslib/REVIEW.md` (repo root) too -
+`ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`. A diff touching `promoteInitToAssign`
+(`ast_infer_type_function.cpp`) or `isPromotedInitCall` (`ast_generate.cpp`) applies
+`daslib/REVIEW.md` (repo root) too -
 the `builtin.das` helpers they name are the other side of a recorded pair
 (`daslib/ARCHITECTURE_SYNTAX.md`).
 

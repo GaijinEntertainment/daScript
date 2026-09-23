@@ -40,12 +40,17 @@ generic (`daslib/builtin.das`): `copy_to_move(init, type<T>)` for `=` and `move_
 `<-`, the `_ref` variants when the initializer is a variable so a scalar, pointer or string
 source reaches the operator by reference, and the const or `var` overload of each by the
 source's constness. Each helper is a fresh `T` assigned through the overload and moved out.
-Two plain candidates, or two generics with no plain candidate, select none, and the built-in
-operation runs, as an assignment's `tryOperator` lookup does. The lookup drops the declared
-constness, because an initialization writes its destination whatever the declaration says. The
-variable is then move-initialized only when `T` cannot be copied: a workhorse call result is a
-constant value, and a copyable type never move-initializes from a constant. Every promoted
-initializer call is marked `generated`, and `isAssignInitCall` reads that mark (and the helper
-names, `clone_to_move` and `clone_string` included) so an initializer the compiler already
-promoted is not promoted again on the next pass - a `:=` init lowered to `clone_to_move` would
-otherwise be promoted a second time through `<-`.
+Two plain candidates select none, and the built-in operation runs, as an assignment's
+`tryOperator` lookup does; among generics the most specialized one wins by the same
+`copmareFunctionSpecialization` ordering an assignment uses, and a tie selects none. An
+operator marked `[unsafe_operation]` is reported at the initialization site outside an
+`unsafe` block, as the call would be at an assignment, because the helper's own `unsafe`
+block would otherwise hide it. The lookup drops the declared constness, because an
+initialization writes its destination whatever the declaration says. The variable is then
+move-initialized only when `T` cannot be copied: a workhorse call result is a constant value,
+and a copyable type never move-initializes from a constant. `isPromotedInitCall`
+(`ast_generate.cpp`) names the helpers - `clone_to_move` and `clone_string` included - so an
+initializer the compiler already promoted is not promoted again on the next pass, and a
+generator-local store of such an initializer is raw; it matches names, not the `generated`
+mark, because a table read with field defaults is a generated call too and its initializer
+still reaches the operator.

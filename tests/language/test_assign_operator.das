@@ -433,6 +433,51 @@ def test_more_compiler_made_copies(t : T?) {
     }
 }
 
+struct Wide {
+    tag : int
+}
+
+def operator =(var dst : Wide&; src : auto(TT)) {
+    dst.tag = 1
+}
+
+def operator =(var dst : Wide&; src : array<auto(TT)>) {
+    dst.tag = 2 + length(src)
+}
+
+struct Keyed {
+    value : int = 0
+    copies : int = 0
+}
+
+def operator =(var dst : Keyed&; src : Keyed) {
+    dst !== src
+    dst.copies++
+}
+
+[test]
+def test_init_resolution_matches_assignment(t : T?) {
+    t |> run("two generic overloads resolve by specialization at init as at assignment") @(t : T?) {
+        var arr <- [1, 2, 3]
+        var w : Wide = arr
+        t |> equal(w.tag, 5)
+        w = 4
+        t |> equal(w.tag, 1)
+        let w2 : Wide = 7
+        t |> equal(w2.tag, 1)
+    }
+    t |> run("an init from a table read of a type with field defaults still runs the operator") @(t : T?) {
+        var tab : table<int; Keyed>
+        tab[1].value = 9
+        let got : Keyed = tab[1]
+        t |> equal(got.value, 9)
+        t |> equal(got.copies, 1)
+        var again = Keyed()
+        again = tab[1]
+        t |> equal(again.copies, 1)
+    }
+}
+
 [test]
 def test_class_operator(t : T?) {
     t |> run("an operator = declared in a class takes self as the destination") @(t : T?) {

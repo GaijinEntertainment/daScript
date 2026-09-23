@@ -6,6 +6,18 @@
 
 namespace das {
 
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+    bool isPromotedInitCall ( Expression * init ) {
+        if ( !init || !init->rtti_isCall() ) return false;
+        auto call = static_cast<ExprCall *>(init);
+        string name = !call->func ? call->name
+            : call->func->fromGeneric ? call->func->getOrigin()->name : call->func->name;
+        auto qualifiedAt = name.rfind("::");
+        if ( qualifiedAt != string::npos ) name = name.substr(qualifiedAt + 2);
+        return name == "copy_to_move" || name == "move_to_move" || name == "copy_to_move_ref" || name == "move_to_move_ref"
+            || name == "clone_to_move" || name == "clone_string";
+    }
+
     bool isExpressionVariable(ExpressionPtr expr, const string & name) {
         if (expr->rtti_isVar()) {
             auto var = static_cast<ExprVar*>(expr);
@@ -1187,7 +1199,7 @@ namespace das {
                     arini->alwaysSafe = true;
                     rini = arini;
                 }
-                const bool rawStore = var->init->generated;    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+                const bool rawStore = isPromotedInitCall(var->init);
                 if ( var->init_via_clone ) {
                     auto cln = new ExprClone(var->at, lvar, rini, rawStore);
                     blk->list.push_back(cln);
