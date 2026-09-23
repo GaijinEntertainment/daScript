@@ -1798,11 +1798,11 @@ def mtmd_versions(bin : string = "") : string {
 }
 
 def onnx_versions() : string {
-    return run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__)\" 2>&1", true)
+    return run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__, '(requirements-onnx.txt)')\" 2>&1", true)
 }
 
 def nemo_versions() : string {
-    return run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__)\" 2>&1", true)
+    return run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__, '(requirements-nemo.txt)')\" 2>&1", true)
 }
 
 //! The version line for one reference tool — dispatch by catalog tool name.

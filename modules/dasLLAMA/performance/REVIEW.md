@@ -26,7 +26,8 @@ name, in the same change.** The archive is content-addressed; a row left on the 
 points at a file that no longer exists.
 
 **A diff that writes a run row carrying a `sha` to `records/<box>.json` stamps it with the build
-that timed every cell of the row - re-mint otherwise.**
+that timed every cell of the row - re-mint otherwise - and names, in the PR body, each box's rig
+build commit and time: the bench stamps the HEAD of its run, so the diff alone cannot show it.**
 
 **A `das` row (a run row whose `engine` is `das`) carrying a `sha` is timed by the released
 `lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha` -
