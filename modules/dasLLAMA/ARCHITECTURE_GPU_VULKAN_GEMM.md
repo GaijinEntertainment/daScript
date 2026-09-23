@@ -274,7 +274,13 @@ a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on
 ### 2.2ah The decode GEMV family splits a subgroup across rows by the row length {#kq-gemv-lanes}
 
 **A subgroup of the kq GEMV family takes one, two or four output rows, each row's lanes a cluster
-of the fold.** A lane takes one 32-block per step (`gemv_shell`), four steps straight-line so
+of the fold.** A leaf decodes a block once (`blk_decode`: the block's lo and hi packed int8 quads
+and the fold's four terms - a scale and a block-sum coefficient a 16-weight half, the block sums
+skipped where a leaf's fold has none, `blk_bsum`) and the family's one `blk_fold` dots the
+decoded block against an activation block, so the N-column form pays a block's codebook gathers,
+grid lookups and bit deposits once for every column where the one-column form pays them once a
+block; the two forms share the fold's every `mad`, so their sums match bit for bit. A lane takes
+one 32-block per step (`gemv_shell`), four steps straight-line so
 four blocks' loads are in flight before a sum waits on one (a rolled loop issued a block's loads
 after the last block's sum), the guarded single step as the tail; a row of nb blocks over 32
 lanes has nb / 32 blocks per lane: four at K 4096, two at K 2048, under one at a MoE's expert rows
