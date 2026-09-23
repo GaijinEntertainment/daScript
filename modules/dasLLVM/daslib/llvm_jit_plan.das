@@ -189,6 +189,7 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ uint64(CONTEXT_OFFSET_OF_SHARED)) * JIT_FNV_PRIME
     h = (h ^ uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)) * JIT_FNV_PRIME
     h = (h ^ uint64(CONTEXT_OFFSET_OF_EVAL_TOP)) * JIT_FNV_PRIME
+    h = (h ^ uint64(SIMFUNCTION_OFFSET_OF_JIT_FUNCTION)) * JIT_FNV_PRIME
     // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()
