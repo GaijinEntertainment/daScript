@@ -1,7 +1,7 @@
 options gen2
 options persistent_heap
 
-require _common public
+require _sort_common public
 require daslib/sort_boost
 
 // partial_sort(arr, N) — sort just the first N elements; remainder unspecified.

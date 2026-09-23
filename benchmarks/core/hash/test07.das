@@ -8,7 +8,7 @@ options persistent_heap
 
 require dastest/testing_boost
 
-require _common
+require _hash_common
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 
@@ -23,7 +23,7 @@ typedef FlatHashMap_test = $TFlatHashTable < int; Value >
 def insert_and_increment(hmap : auto(HashMapType); randomNumbers : array<int>) {
     var hashMap : HashMapType
     static_if (!typeinfo is_table(type<HashMapType>)) {
-        hashMap <- HashMapType()
+        hashMap <- HashMapType()   // nolint:PERF030 - hashMap is fresh, declared on the line above; static_if keeps the built-in table out of the move
     }
     for (num in randomNumbers) {
         unsafe(hashMap[num]).val ++

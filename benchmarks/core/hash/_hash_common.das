@@ -7,7 +7,7 @@ options no_unused_function_arguments = false
 // Provides deterministic random number generation and shuffling utilities
 // used across multiple hash benchmark files.
 
-module _common shared public
+module _hash_common shared public
 
 require daslib/random
 require math
@@ -21,7 +21,7 @@ def public generate_unique_positive_random_numbers(kNumberOfItems : int = TOTAL_
     data |> reserve(kNumberOfItems)
     var seed = random_seed(13)
     var set : table<int>
-    for (r in range(kNumberOfItems)) {
+    for (_r in range(kNumberOfItems)) {
         var n = random_big_int(seed)
         while (set |> key_exists(n)) {
             n = random_big_int(seed)
