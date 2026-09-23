@@ -1,17 +1,22 @@
 # daslib Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
-`ARCHITECTURE_LINQ.md`, `ARCHITECTURE_CURSOR.md`.
+docs: `ARCHITECTURE.md` and its `ARCHITECTURE_<CONCERN>.md` companions in this folder.
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
 diff that changes compile-time AST-building code - a class deriving an `Ast*Annotation` or
 `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time, a
 `[macro_function]`, or any function that calls `qmacro*`, `apply_template`, `macro_error`, or
 `macro_sticky_error` - applies `REVIEW_MACROS.md` too. A
 diff touching `daspkg.das` - the functions a `.das_package` manifest body calls - applies
-`utils/daspkg/REVIEW.md` (repo root) too; the folder walk never opens it for a `daslib/` diff. A
-diff touching `shader_lingua_franca.das` - the declarations both shader emitters compile -
-applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too, for the same reason.
+`utils/daspkg/REVIEW.md` (repo root) too. A diff touching `shader_lingua_franca.das` - the
+declarations both shader emitters compile - applies `modules/REVIEW_SHADER_EMITTERS.md` (repo
+root) too.
+
+**A diff that changes a `.das` here that an `AOT_*_MODULE_FILES` variable of
+`tests/aot/CMakeLists.txt` (repo root) picks up, and that is not marked `options no_aot`, states
+in the PR body that the full `test_aot` lane (`preflight --full`, or a manual dispatch of
+`build.yml` on the branch) ran green on the diff's head commit.** Per-PR CI compiles only the
+language subset.
 
 **A diff that changes the body of `perf_warning` (`perf_lint.das`), `style_warning`
 (`style_lint.das`), or `lint_error` (`lint.das`) runs the suppression check before the body
@@ -46,14 +51,17 @@ a stack, never in a bare scalar.** A saved value kept in a scalar survives into 
 construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - that a second site
-must agree with records the pair in this folder's architecture doc, naming both sides, whenever
-nothing fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest` runs
-over `tests/` (repo root) with no flags).** The second site can sit anywhere, inside or outside
-this repository. The section a daslib file's pair lands in is the one that holds that file, or a
-new one in `ARCHITECTURE.md` when none does.
+must agree with records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides,
+whenever nothing fails on a mismatch: no lint, no compile error, no default-suite test (what
+`dastest` runs over `tests/` (repo root) with no flags).** The second site can sit anywhere,
+inside or outside this repository. The section a daslib file's pair lands in is the one that
+holds that file, or a new one in `ARCHITECTURE.md` or a companion when none does; a pair whose
+two sides are one syntax's spellings lands in `ARCHITECTURE_SYNTAX.md` with the other pairs of
+that syntax.
 
-**When a diff changes one side of a recorded pair so the two no longer match, it changes the
-other side in the same diff.**
+**When a diff changes the daslib side of a recorded pair so the two no longer match, it changes
+the other side in the same diff.** A change to the other side is reviewed under that side's
+checklist, which routes here.
 
 **A diff that renames or deletes a daslib name an `ARCHITECTURE*.md` in this folder spells, or
 changes what that name names so that the entry's claim stops holding, changes that entry in the
@@ -253,9 +261,18 @@ the first appearance moves it, and skipping the clone gives one node two parents
 
 **A diff that adds or changes a site in `rst.das` that spells a symbol's RST label (the
 `.. _name:` target) or topic key (the `|detail/...|` / `|handmade/...|` substitution name) keeps
-every site in `rst.das` that spells the label or key of that same symbol byte-for-byte equal;
-how a key resolves to a file is not the key.** When two such sites diverge, the page prints a
-bare signature and the symbol re-stubs.
+every site in `rst.das` that spells the label or key of that same symbol byte-for-byte equal.**
+When two such sites diverge, the page prints a bare signature and the symbol re-stubs.
+
+**A diff that changes the category or the name a topic key carries - in `rst.das`'s `topic()`
+sites or in `rst_comment.das`'s `write_to_detail` names - makes the same change on the other
+side, in the same change.** The reader writes a detail file under one key and the page reads
+under the other; a mismatch is a bare signature.
+
+**A diff that changes what `rst.das` or `rst_comment.das` places on a page states, in the PR
+body, that every name the generator newly places names a symbol, module or file that exists in
+the repository at merge, and where that was checked** - a name the generator lists is a name a
+reader will type.
 
 **A diff that adds a numeric value form to the toml lexer routes it through `rewind_to_bare`
 on a bare-key character.** Without the rewind, a bare key that starts like a number lexes as

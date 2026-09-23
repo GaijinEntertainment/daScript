@@ -1,9 +1,10 @@
 # Simulate Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. A diff that changes the layout of a public struct or class under this folder -
-a member added, removed, reordered, renamed or retyped, including in any struct declared in
-`debug_info.h` - applies `skills/internal/abi_break_sweep.md` too. A diff that changes what a name under this folder
+`ARCHITECTURE.md`. A layout change to a struct or class is a member added, removed, reordered,
+renamed or retyped, or a base changed. A diff that makes a layout change to a public struct or
+class under this folder, any struct declared in `debug_info.h` included, applies
+`skills/internal/abi_break_sweep.md` too. A diff that changes what a name under this folder
 resolves to for a `daslib/*.das` caller - a rename, a removal, or a new overload of a struct or
 member the AOT C++ emitter writes into generated code, or of a flag or field a daslib predicate
 reads - applies `daslib/REVIEW.md` too; checklist discovery walks changed paths only, so the
@@ -31,12 +32,11 @@ the same reason.
 - **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`) states
   in its own PR description which key types change hash value.**
 
-- **A `cvt_*` inline in `aot.h` takes and returns `vec4f`, and none of them is overloaded.**
-  `vec4f` is the SIMD register; the `vec2`/`vec3`/`vec4` types are structs of scalars, so a
-  concrete return spills the lanes through `v_extract_*` and the next conversion reloads them.
-  Overloading is what forced that once: every flavor converts from `vec4f`, so an overload set
-  fed a `vec4f` result is ambiguous - the emitter writes `cvt_pass(cvt_uint3(..))` for
-  `x |> uint3 |> int3`. One name per conversion, `vec4f` throughout, keeps both.
+- **A diff that adds or changes a `cvt_*` inline in `aot.h` returns `vec4f` from it and gives it
+  a name no other `cvt_*` has - never an overload.** `vec4f` is the SIMD register; the
+  `vec2`/`vec3`/`vec4` types are structs of scalars, so a concrete return spills the lanes
+  through `v_extract_*` and the next conversion reloads them, and an overload set fed a `vec4f`
+  result is ambiguous - the emitter writes `cvt_pass(cvt_uint3(..))` for `x |> uint3 |> int3`.
 
 - **A diff that makes the hot path cost more per evaluated expression in the build the repo
   ships is a defect.** The hot path is a `SimNode::eval*` method, any helper such a method
@@ -59,9 +59,8 @@ the same reason.
   added work, even at no measured cost. A change that costs more only under a relaxed-math or
   otherwise non-default compiler flag states which flavor and how much in its PR description.
 
-- **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
-  reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no
-  change needed / rebuild required) in its own PR description: for the rtti binding
+- **A diff that makes a layout change to a `debug_info.h` struct states a per-consumer verdict
+  (updated / no change needed / rebuild required) in its own PR description: for the rtti binding
   (`src/builtin/module_builtin_rtti.cpp`), for the AST serializer
   (`src/builtin/module_builtin_ast_serialize.cpp`), for the das-side readers of the struct,
   and for external-module rebuilds.**

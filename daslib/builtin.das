@@ -1246,6 +1246,86 @@ def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
+[inline]
+def copy_to_move(copy_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
+    //! A fresh `TT` assigned from `copy_src` through `operator =`, returned by move: what `var x : TT = copy_src` lowers to when an `operator =` takes the pair.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+[inline]
+def copy_to_move(var copy_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
+    //! The `copy_to_move` for a mutable source, so an `operator =` taking `var src` is the one the init reaches.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+[inline]
+def copy_to_move_ref(copy_src : auto(SS)& ==const; _t : type<auto(TT)>) : TT -const -# {
+    //! The `copy_to_move` for a source that is a variable: it reaches the operator by reference, so a scalar, pointer or string source is the caller's own.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+[inline]
+def copy_to_move_ref(var copy_src : auto(SS)& ==const; _t : type<auto(TT)>) : TT -const -# {
+    //! The `copy_to_move_ref` for a mutable variable, so an `operator =` taking `var src` writes the caller's variable.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var copy_dest : TT -#
+        copy_dest = copy_src
+        return <- copy_dest
+    }
+}
+
+[inline]
+def move_to_move(move_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
+    //! A fresh `TT` moved from `move_src` through `operator <-`, returned by move: what `var x : TT <- move_src` lowers to when an `operator <-` takes the pair.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var move_dest : TT -#
+        move_dest <- move_src
+        return <- move_dest
+    }
+}
+
+[inline]
+def move_to_move(var move_src : auto(SS) ==const | #; _t : type<auto(TT)>) : TT -const -# {
+    //! The `move_to_move` for a mutable source, so an `operator <-` taking `var src` is the one the init reaches.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var move_dest : TT -#
+        move_dest <- move_src
+        return <- move_dest
+    }
+}
+
+[inline]
+def move_to_move_ref(move_src : auto(SS)& ==const; _t : type<auto(TT)>) : TT -const -# {
+    //! The `move_to_move` for a source that is a variable: it reaches the operator by reference.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var move_dest : TT -#
+        move_dest <- move_src
+        return <- move_dest
+    }
+}
+
+[inline]
+def move_to_move_ref(var move_src : auto(SS)& ==const; _t : type<auto(TT)>) : TT -const -# {
+    //! The `move_to_move_ref` for a mutable variable, so an `operator <-` taking `var src` empties the caller's variable.
+    unsafe {   // nolint:STYLE025 var-decl of TT -# is sometimes unsafe (is_unsafe_when_uninitialized types)
+        var move_dest : TT -#
+        move_dest <- move_src
+        return <- move_dest
+    }
+}
+
 def clone_dim(var a; b : auto | #) {
     static_if (typeinfo is_dim(a) && typeinfo is_dim(b) && typeinfo dim(a) == typeinfo dim(b)) {
         static_if (typeinfo is_pod(a)) {

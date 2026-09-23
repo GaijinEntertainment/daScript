@@ -1527,10 +1527,10 @@ namespace das {
                             auto right = var->init->clone();
                             ExpressionPtr assign = nullptr;
                             if ( var->init_via_move ) {
-                                assign = new ExprMove(expr->at, left, right);
+                                assign = new ExprMove(expr->at, left, right, true);
                                 ((ExprMove *)assign)->allowConstantLValue = true;
                             } else {
-                                assign = new ExprCopy(expr->at, left, right);
+                                assign = new ExprCopy(expr->at, left, right, true);
                                 ((ExprCopy *)assign)->allowConstantLValue = true;
                             }
                             assign->alwaysSafe = true;

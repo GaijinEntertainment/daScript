@@ -692,6 +692,13 @@ namespace das {
                         return Visitor::visitMakeStructureField(expr, index, decl, last);
                     }
                 }
+                if (!field->type->ref && !decl->cloneSemantics && !decl->value->generated) {
+                    if (auto viaAssign = promoteInitToAssign(decl->moveSemantics ? "<-" : "=", field->type, decl->value, decl->value->at)) {
+                        decl->value = viaAssign;
+                        decl->moveSemantics = !field->type->canCopy();
+                        return Visitor::visitMakeStructureField(expr, index, decl, last);
+                    }
+                }
                 if (!canCopyOrMoveType(copyFieldType, decl->value->type, TemporaryMatters::yes, decl->value,
                                        "can't initialize field " + decl->name, CompilationError::cant_copy, decl->value->at)) {
                 } else if (decl->value->type->isTemp(true, false)) {

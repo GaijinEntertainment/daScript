@@ -959,9 +959,9 @@ The clipboard module provides synchronous access to the operating system's text 
 
 ### Structures
 
-- `ClipboardImage`
-- `ClipboardContent`
-- `ClipboardMemory`
+- `ClipboardImage` - Canonical transport image: straight-alpha RGBA8, top-to-bottom rows.
+- `ClipboardContent` - One atomic offer set.
+- `ClipboardMemory` - Deterministic in-memory transport for tests, tools, and applications that need clipboard semantics without touching the desktop session.
 
 ### UTF-8 system clipboard
 
@@ -970,14 +970,14 @@ The clipboard module provides synchronous access to the operating system's text 
 - `clipboard_clone_content`
 - `clipboard_content_has_data`
 - `clipboard_dispose_content`
-- `clipboard_get_content`
-- `clipboard_get_text`
+- `clipboard_get_content` - Take one native snapshot of every supported representation.
+- `clipboard_get_text` - Read UTF-8 text into `text`.
 - `clipboard_memory_clear`
 - `clipboard_memory_dispose`
 - `clipboard_memory_read`
 - `clipboard_memory_write`
-- `clipboard_set_content`
-- `clipboard_set_text`
+- `clipboard_set_content` - Replace the system clipboard with all selected representations while holding one native clipboard lock.
+- `clipboard_set_text` - Replace the system clipboard with UTF-8 text.
 - `clipboard_validate_content`
 
 ## stddlg
@@ -2298,17 +2298,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
-- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
-- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
-- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
-- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
-- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
-- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
-- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
-- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
-- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
-- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
+- `render_bd`
+- `render_cowbell`
+- `render_cp`
+- `render_crash`
+- `render_hh`
+- `render_oh`
+- `render_ride`
+- `render_rimshot`
+- `render_sd`
+- `render_tambourine`
+- `render_tom`
 
 ### Oscillator type
 
@@ -3689,6 +3689,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `ExprMakeBlockFlags` - properties of the `ExprMakeBlock` object.
 - `CopyFlags` - properties of the `ExprCopy` object.
 - `MoveFlags` - Properties of the `ExprMove` object.
+- `CloneFlags` - Properties of the `ExprClone` object.
 - `IfFlags` - properties of the `ExprIf` object.
 - `StringBuilderFlags` - properties of the `ExprStringBuilder` object.
 - `ExpressionPtr` - Smart pointer to an `Expression` object.
@@ -4744,6 +4745,7 @@ The ARCHIVE module implements general-purpose serialization infrastructure. It p
 - `MemSerializer.extractData` - Extract the data from the serializer.
 - `MemSerializer.getCopyOfData` - Returns copy of the data from the serializer.
 - `MemSerializer.getLastError` - Returns last serialization error.
+- `MemSerializer.MemSerializer` - Initialize the serializer for reading or writing.
 
 ### Serialization
 
@@ -5003,6 +5005,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `CursorVisitor.generated_variable`
 - `CursorVisitor.on_field_name`
 - `CursorVisitor.cursor_on_token`
+- `CursorVisitor.CursorVisitor`
 
 ### Cursor queries
 
@@ -5525,7 +5528,7 @@ The DECS module implements a Data-oriented Entity Component System. Entities are
 
 ### Constants
 
-- `INVALID_ENTITY_ID`
+- `INVALID_ENTITY_ID` - Entity ID which represents invalid entity.
 
 ### Structures
 
@@ -5676,10 +5679,12 @@ C#-like multicast delegate (multicast callback) via type macro. Generates a stru
 - `DelegateReturn.clone`
 - `DelegateReturn.`
 - `DelegateReturn.each`
+- `DelegateReturn.DelegateReturn`
 - `DelegateVoid`
 - `DelegateVoid.clone`
 - `DelegateVoid.`
 - `DelegateVoid.each`
+- `DelegateVoid.DelegateVoid`
 
 ### Delegate type macro
 
@@ -6162,11 +6167,11 @@ The JSON-RPC module is a transport-agnostic JSON-RPC 2.0 implementation (https:/
 
 ### Constants
 
-- `PARSE_ERROR`
-- `INVALID_REQUEST`
-- `METHOD_NOT_FOUND`
-- `INVALID_PARAMS`
-- `INTERNAL_ERROR`
+- `PARSE_ERROR` - < Invalid JSON received.
+- `INVALID_REQUEST` - < Not a valid request object.
+- `METHOD_NOT_FOUND` - < Method does not exist or is not available.
+- `INVALID_PARAMS` - < Invalid method params.
+- `INTERNAL_ERROR` - < Internal JSON-RPC error.
 
 ### Structures
 
@@ -6952,8 +6957,8 @@ The RANDOM module implements pseudo-random number generation using a linear cong
 
 ### Constants
 
-- `LCG_RAND_MAX`
-- `LCG_RAND_MAX_BIG`
+- `LCG_RAND_MAX` - maximum possible output of random number generator
+- `LCG_RAND_MAX_BIG` - maximum possible output of random_big_int
 
 ### Seed and basic generators
 
@@ -7709,8 +7714,8 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 ### Constants
 
-- `s_utf8d`
-- `UTF8_ACCEPT`
+- `s_utf8d` - Byte-class and state-transition table for the UTF-8 DFA decoder.
+- `UTF8_ACCEPT` - DFA accept state indicating a valid UTF-8 sequence.
 - `_UTF32_NON_WORD_RANGES`
 - `_UTF32_LATIN1_LOWER`
 

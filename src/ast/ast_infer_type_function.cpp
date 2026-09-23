@@ -1205,6 +1205,69 @@ namespace das {
     bool InferTypes::verifyCloneFunc(const MatchingFunctions &fnList, const LineInfo &at) const {
         return verifyAnyFunc(fnList, at);
     }
+    MatchingFunctions InferTypes::getAssignFunc(const string &opName, const TypeDeclPtr &left, const TypeDeclPtr &right, MatchingFunctions &generics) const {
+        auto leftRef = new TypeDecl(*left);
+        leftRef->ref = true;
+        leftRef->constant = false;
+        vector<TypeDeclPtr> argDummy = {leftRef, right};
+        MatchingFunctions fns;
+        findMatchingFunctionsAndGenerics(fns, generics, "_::" + opName, argDummy, false, true);
+        applyLSP(argDummy, fns);
+        return fns;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+    ExpressionPtr InferTypes::promoteInitToAssign(const string &opName, const TypeDeclPtr &varType, const ExpressionPtr &init, const LineInfo &at) {
+        if ( !init->type || init->type->isAutoOrAlias() || init->type->isVoid() || init->type->isExprType() ) return nullptr;
+        if ( isPromotedInitCall(init) ) return nullptr;
+        if ( init->rtti_isVar() ) {
+            auto initVar = static_cast<ExprVar *>(init)->variable;
+            if ( initVar && initVar->generated ) return nullptr;
+        }
+        if ( !program->library.hasFunctionOrGenericNamed(opName) ) return nullptr;
+        MatchingFunctions generics;
+        auto fns = getAssignFunc(opName, varType, init->type, generics);
+        if ( fns.empty() && generics.empty() ) return nullptr;
+        if ( fns.size() > 1 ) return nullptr;
+        if ( fns.empty() && generics.size() > 1 ) {
+            auto leftRef = new TypeDecl(*varType);
+            leftRef->ref = true;
+            leftRef->constant = false;
+            auto probe = new ExprLooksLikeCall(at, "_::" + opName);
+            auto leftProbe = new ExprConstInt(at, 0);
+            leftProbe->type = leftRef;
+            auto rightProbe = new ExprConstInt(at, 0);
+            rightProbe->type = init->type;
+            probe->arguments.push_back(leftProbe);
+            probe->arguments.push_back(rightProbe);
+            das_stable_sort(generics.data(), generics.data() + generics.size(), [&](const FunctionPtr &f1, const FunctionPtr &f2) { return copmareFunctionSpecialization(f1, f2, probe); });
+            const bool oneWins = copmareFunctionSpecialization(generics.front(), generics[1], probe);
+            probe->arguments.clear();
+            gc_free_now(leftProbe);
+            gc_free_now(rightProbe);
+            gc_free_now(probe);
+            if ( !oneWins ) return nullptr;
+            generics.resize(1);
+        }
+        const FunctionPtr &chosen = fns.empty() ? generics.front() : fns.front();
+        if ( chosen->unsafeOperation && !unsafeDepth ) {
+            error("unsafe call '" + opName + "' must be inside the 'unsafe' block", "", "",
+                  at, CompilationError::unsafe_function_call);
+            return nullptr;
+        }
+        reportAstChanged();
+        const char * helper = opName == "<-"
+            ? (init->type->ref ? "_::move_to_move_ref" : "_::move_to_move")
+            : (init->type->ref ? "_::copy_to_move_ref" : "_::copy_to_move");
+        auto call = new ExprCall(at, helper);
+        call->generated = true;
+        call->arguments.push_back(init);
+        auto tdecl = new TypeDecl(*varType);
+        tdecl->ref = false;
+        tdecl->constant = false;
+        tdecl->temporary = false;
+        call->arguments.push_back(new ExprTypeDecl(at, tdecl));
+        return call;
+    }
     MatchingFunctions InferTypes::getFinalizeFunc(const TypeDeclPtr &subexpr) const {
         vector<TypeDeclPtr> argDummy = {subexpr};
         auto fins = findMatchingFunctions("*", thisModule, "finalize", argDummy); // "_::finalize"

@@ -2334,6 +2334,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprClone * expr ) {
         serializeOp2(expr);
+        ser << expr->cloneFlags;
     }
 
     void SerializeVisitor::preVisit ( ExprOp3 * expr ) {

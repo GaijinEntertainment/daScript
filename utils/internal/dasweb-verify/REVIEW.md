@@ -4,14 +4,11 @@
 `README.md`. A `.mjs` file or `expectations.json`, wherever the diff puts it, answers to
 `browser/REVIEW.md`.
 
-**Never put a `[test]` file for this tool outside this directory - keep it here.**
-
 **A `[test]` file here requires its siblings by bare name (`require verify_core`), never by a
 path.**
 
 **A diff that adds a `[test]` file here also adds it to the `run_tests_dasweb_verify` target in
-`utils/CMakeLists.txt` (repo root), in the same change; a diff that names a test file from here
-in any other `CMakeLists.txt` is a defect.**
+`utils/CMakeLists.txt` (repo root), in the same change.**
 
 **A test here writes files only under a directory it made with `create_temp_directory`, and
 removes that directory before it returns.**
@@ -21,10 +18,10 @@ sample list of its own, or by a hardcoded name added to or removed from the mani
 a defect; take the set only from the manifest the playground ships
 (`web/examples/ui/samples/data.json`, repo root).**
 
-**Weakening a `test_verify_core.das` case that feeds `load_manifest` a missing, unparseable, or
-empty manifest, or a sample that lists no files, is a defect: dropping the case, dropping its
-check that the error names the file or sample at fault, or dropping its check that no entries
-come back.**
+**Weakening a `test_verify_core.das` case that feeds `load_manifest` a missing or unparseable
+manifest, or a sample that lists no files, is a defect: dropping the case, dropping the missing
+case's check that the error names the path, dropping the no-files case's check that the error
+names the sample, or dropping any of the three's check that no entries come back.**
 
 **A diff that makes `main.das` exit 0 after `load_manifest` sets an error is a defect.**
 

@@ -16,3 +16,4 @@ Stack top at the point of call, if temporary variable allocation is needed
 Name of the operator
 Left operand expression
 Right operand expression
+Flags specific to clone operation

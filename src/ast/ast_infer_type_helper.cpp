@@ -1289,6 +1289,7 @@ namespace das {
         var->init_via_clone = false;
         var->init_via_move = true;
         auto c2m = new ExprCall(var->at, "clone_to_move");
+        c2m->generated = true;
         c2m->arguments.push_back(var->init);
         return c2m;
     }
@@ -1298,6 +1299,7 @@ namespace das {
         var->init_via_clone = false;
         var->init_via_move = false;
         auto cloneString = new ExprCall(var->at, "clone_string");
+        cloneString->generated = true;
         cloneString->arguments.push_back(var->init);
         return cloneString;
     }

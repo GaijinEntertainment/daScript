@@ -321,3 +321,93 @@ def test() {
         condition: (boolean_literal)
         body: (block
           (pass_statement))))))
+
+================================================================================
+Raw copy, move and clone
+================================================================================
+
+def raw_forms() {
+  a !== b
+  c !<- d
+  e !:= f
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (function_name
+      (identifier))
+    (function_argument_list)
+    (block
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (identifier)))
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (identifier)))
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (identifier))))))
+
+================================================================================
+Copy and move operator overloads
+================================================================================
+
+def operator = (var dst : Handle&; src : int) {
+  dst !== Handle(uint(src))
+}
+
+def operator <- (var dst : Handle&; var src : Payload) {
+  dst !<- src.handle
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (function_name
+      (operator_name))
+    (function_argument_list
+      (function_argument
+        (identifier)
+        (ref_type
+          (named_type
+            (identifier))))
+      (function_argument
+        (identifier)
+        (basic_type)))
+    (block
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (call_expression
+            (identifier)
+            (argument_list
+              (call_expression
+                (basic_type)
+                (argument_list
+                  (identifier)))))))))
+  (function_declaration
+    (function_name
+      (operator_name))
+    (function_argument_list
+      (function_argument
+        (identifier)
+        (ref_type
+          (named_type
+            (identifier))))
+      (function_argument
+        (identifier)
+        (named_type
+          (identifier))))
+    (block
+      (expression_statement
+        (assignment_expression
+          (identifier)
+          (field_expression
+            (identifier)
+            (identifier)))))))

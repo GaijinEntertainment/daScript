@@ -1319,9 +1319,9 @@ namespace das {
                     && !ret->subexpr->type->ref
                     && ret->subexpr->type->canCopy();
                 if ( ret->moveSemantics && !storeAsCopy ) {
-                    return new ExprMove(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                    return new ExprMove(ret->at, new ExprVar(ret->at, resName), ret->subexpr, true);
                 }
-                return new ExprCopy(ret->at, new ExprVar(ret->at, resName), ret->subexpr);
+                return new ExprCopy(ret->at, new ExprVar(ret->at, resName), ret->subexpr, true);
             }
         protected:
             // ----- terminality prescan (read-only) -----
@@ -1413,7 +1413,7 @@ namespace das {
                 return new ExprVar(at, flagName);
             }
             Expression * flagSet ( const LineInfo & at ) const {
-                return new ExprCopy(at, new ExprVar(at, flagName), new ExprConstBool(at, true));
+                return new ExprCopy(at, new ExprVar(at, flagName), new ExprConstBool(at, true), true);
             }
             // in a loop:  S_ret; REST   =>   S_ret'; if (_ret) { break }; REST
             // elsewhere:  S_ret; TAIL   =>   S_ret'; if (!_ret) { TAIL }
@@ -2398,7 +2398,7 @@ namespace das {
                         auto & list = site.anchor.block->list;
                         auto thenBlk = new ExprBlock();
                         thenBlk->at = sop->at;
-                        thenBlk->list.push_back(new ExprCopy(sop->at, sop->left->clone(), sop->right));
+                        thenBlk->list.push_back(new ExprCopy(sop->at, sop->left->clone(), sop->right, true));
                         ExpressionPtr cond = sop->left->clone();
                         if ( sop->op=="||=" ) cond = new ExprOp1(sop->at, "!", cond);
                         list[anchorIndex] = new ExprIfThenElse(sop->at, cond, thenBlk, nullptr);
@@ -2462,8 +2462,8 @@ namespace das {
                 replacement.push_back(makeUninitDecl(site.stmt->at, rootVar->name, condOp->type));
                 auto readT = [&]() { return new ExprVar(site.stmt->at, rootVar->name); };
                 auto armStore = [&]( const LineInfo & at, Expression * src ) -> Expression * {   // mirror the hoist's own init semantics
-                    if ( rootVar->init_via_move ) return new ExprMove(at, readT(), src);
-                    return new ExprCopy(at, readT(), src);
+                    if ( rootVar->init_via_move ) return new ExprMove(at, readT(), src, true);
+                    return new ExprCopy(at, readT(), src, true);
                 };
                 if ( condOp->rtti_isOp3() ) {
                     // let t = c ? A : call()   =>   var t; if (c) { t = A } else { t = call() }

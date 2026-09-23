@@ -16,10 +16,10 @@ report=${SCRATCH:-/tmp}/woodpecker.md
 log=${SCRATCH:-/tmp}/woodpecker.log
 
 # a branch against its base (the normal PR shape)
-codex exec --sandbox read-only -o "$report" review --base origin/master 2>&1 | tee "$log"
+codex exec --sandbox read-only -m gpt-5.6-sol -o "$report" review --base origin/master 2>&1 | tee "$log"
 # one commit
 sha=$(git rev-parse HEAD)
-codex exec --sandbox read-only -o "$report" review --commit "$sha" 2>&1 | tee "$log"
+codex exec --sandbox read-only -m gpt-5.6-sol -o "$report" review --commit "$sha" 2>&1 | tee "$log"
 
 # either of these means the round never ran - disclose it as skipped
 [ -s "$report" ] || echo "EMPTY REPORT - no round"
@@ -33,6 +33,9 @@ The report answers "what did it find", the log answers "did it look".
 - Global flags go BEFORE the `review` subcommand. `--base` / `--commit` cannot be combined
   with a custom prompt - a custom prompt runs the generic agent, not the native reviewer;
   prefer native.
+- The round always runs on `gpt-5.6-sol` (`-m gpt-5.6-sol`), whatever `~/.codex/config.toml`
+  defaults to. The id is the catalog slug: `sol` or `gpt-6-sol` alone is rejected with a
+  misleading "not supported when using Codex with a ChatGPT account".
 - The base is `origin/master`, never local `master` - the `make_pr` checklist rebases
   branches onto `origin/master` and leaves local `master` stale, so a stale base sweeps
   unrelated upstream commits into the review.

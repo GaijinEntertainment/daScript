@@ -409,7 +409,7 @@ namespace das {
             ExprCallFunc * found = nullptr;
         protected:
             void check ( ExprCallFunc * expr ) {
-                if ( !found && expr->func && expr->func->mustInline ) found = expr;
+                if ( !found && expr->func && expr->func->mustInline && !expr->generated ) found = expr;
             }
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
             virtual void preVisit ( ExprCall * expr ) override { Visitor::preVisit(expr); check(expr); }

@@ -1,7 +1,11 @@
 # AST Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
+`ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`. A diff touching `promoteInitToAssign`
+(`ast_infer_type_function.cpp`) or `isPromotedInitCall` (`ast_generate.cpp`) applies
+`daslib/REVIEW.md` (repo root) too -
+the `builtin.das` helpers they name are the other side of a recorded pair
+(`daslib/ARCHITECTURE_SYNTAX.md`).
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping its scan of the prints in
   `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md` sec.1) or of the module-cache
@@ -28,8 +32,9 @@
 - **A diff that changes what a manifest written by an earlier binary replays to - what
   `read_manifest` and `write_manifest` (`dyn_modules.cpp`) carry, in what order, in what encoding,
   a key line the manifest did not carry before, or a change to what an existing row registers -
-  bumps the version in `MANIFEST_HEADER` in the same change.** A reader accepts a manifest whose first line equals `MANIFEST_HEADER`, so without the
-  bump an older manifest decodes the changed bytes as a wrong registration with no diagnostic.
+  bumps the version in `MANIFEST_HEADER` in the same change.** A reader accepts a manifest whose
+  first line equals `MANIFEST_HEADER`, so without the bump an older manifest decodes the changed
+  bytes as a wrong registration with no diagnostic.
 
 - **A diff that gives `read_manifest` a new kind of row - one it pushes into `rows` - gives the
   replay loop in `init_dyn_modules` (`dyn_modules.cpp`) a branch for it in the same change.** The
@@ -68,3 +73,12 @@
   `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the
   same change.** The JIT's DLL cache key folds the codegen version and each function's AST hash,
   never the name an extern binds under, so a cached DLL binds the old name and crashes on the hit.
+
+- **A diff that builds an `ExprCopy`, `ExprMove` or `ExprClone` standing in for no `=`, `<-`
+  or `:=` the user wrote - an inliner result store, a `let` relocated into an assignment, a
+  loop counter or control flag, a yield, finally-return or capture store - passes `true` as the
+  constructor's `no_promo` argument, or sets `no_promotion` from the node it rewrites
+  (`ARCHITECTURE_INFER.md` sec.5).** A store that performs a user-written `:=` one field at a
+  time, as a generated clone does, is the user's store and passes no flag. A compiler-made
+  store that reaches the user's `operator =` runs it at a site the user never wrote, and only
+  in the build configuration that builds the store.

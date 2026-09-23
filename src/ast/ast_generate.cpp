@@ -6,6 +6,18 @@
 
 namespace das {
 
+    // src/ast/ARCHITECTURE_INFER.md#assign-operator-lookup
+    bool isPromotedInitCall ( Expression * init ) {
+        if ( !init || !init->rtti_isCall() ) return false;
+        auto call = static_cast<ExprCall *>(init);
+        string name = !call->func ? call->name
+            : call->func->fromGeneric ? call->func->getOrigin()->name : call->func->name;
+        auto qualifiedAt = name.rfind("::");
+        if ( qualifiedAt != string::npos ) name = name.substr(qualifiedAt + 2);
+        return name == "copy_to_move" || name == "move_to_move" || name == "copy_to_move_ref" || name == "move_to_move_ref"
+            || name == "clone_to_move" || name == "clone_string";
+    }
+
     bool isExpressionVariable(ExpressionPtr expr, const string & name) {
         if (expr->rtti_isVar()) {
             auto var = static_cast<ExprVar*>(expr);
@@ -459,7 +471,7 @@ namespace das {
         }
         auto THISB = new ExprVar(at, "__this");    // *THIS = null
         auto NULLP = new ExprConstPtr(at);
-        auto SETB = new ExprCopy(at, THISB, NULLP);
+        auto SETB = new ExprCopy(at, THISB, NULLP, true);
         ifb->list.push_back(SETB);
         auto ife = new ExprIfThenElse(at, NEQ, ifb, nullptr);
         auto fb = new ExprBlock();
@@ -1020,7 +1032,7 @@ namespace das {
             blk->isCollapseable = true;
             auto flg = new ExprVar(expr->at, breakFlag);
             auto trv = new ExprConstBool(expr->at, true);
-            auto cpy = new ExprCopy(expr->at, flg, trv);
+            auto cpy = new ExprCopy(expr->at, flg, trv, true);
             blk->list.push_back(cpy);
             blk->list.push_back(new ExprGoto(expr->at, breakGoto));
             return blk;
@@ -1041,12 +1053,12 @@ namespace das {
             blk->isCollapseable = true;
             if ( expr->subexpr && !returnValueName.empty() ) {
                 auto rv = new ExprVar(expr->at, returnValueName);
-                auto cpy = new ExprCopy(expr->at, rv, expr->subexpr->clone());
+                auto cpy = new ExprCopy(expr->at, rv, expr->subexpr->clone(), true);
                 blk->list.push_back(cpy);
             }
             auto flg = new ExprVar(expr->at, returnFlag);
             auto trv = new ExprConstBool(expr->at, true);
-            auto cpy2 = new ExprCopy(expr->at, flg, trv);
+            auto cpy2 = new ExprCopy(expr->at, flg, trv, true);
             blk->list.push_back(cpy2);
             blk->list.push_back(new ExprGoto(expr->at, returnGoto));
             return blk;
@@ -1115,7 +1127,7 @@ namespace das {
             // result <- a
             auto mto = new ExprVar(expr->at, yarg->name);
             auto mfr = expr->subexpr->clone();
-            auto mve = new ExprMove(expr->at, mto, mfr);
+            auto mve = new ExprMove(expr->at, mto, mfr, true);
             blk->list.push_back(mve);
         } else {
             // result = a
@@ -1125,14 +1137,14 @@ namespace das {
                 cfr = new ExprRef2Ptr(expr->at, cfr);
                 cfr->alwaysSafe = true;
             }
-            auto cpy = new ExprCopy(expr->at, cto, cfr);
+            auto cpy = new ExprCopy(expr->at, cto, cfr, true);
             cpy->allowCopyTemp = true;  // this is for generators which return temp# values
             blk->list.push_back(cpy);
         }
         // yield = X
         auto yyx = new ExprVar(expr->at, "__yield");
         auto clx = new ExprConstInt(expr->at, LabelX);
-        auto cpy = new ExprCopy(expr->at, yyx, clx);
+        auto cpy = new ExprCopy(expr->at, yyx, clx, true);
         blk->list.push_back(cpy);
         // return true
         auto btr = new ExprConstBool(expr->at, true);
@@ -1187,14 +1199,15 @@ namespace das {
                     arini->alwaysSafe = true;
                     rini = arini;
                 }
+                const bool rawStore = isPromotedInitCall(var->init);
                 if ( var->init_via_clone ) {
-                    auto cln = new ExprClone(var->at, lvar, rini);
+                    auto cln = new ExprClone(var->at, lvar, rini, rawStore);
                     blk->list.push_back(cln);
                 } else if ( var->init_via_move ) {
-                    auto mve = new ExprMove(var->at, lvar, rini);
+                    auto mve = new ExprMove(var->at, lvar, rini, rawStore);
                     blk->list.push_back(mve);
                 } else {
-                    auto cpy = new ExprCopy(var->at, lvar, rini);
+                    auto cpy = new ExprCopy(var->at, lvar, rini, rawStore);
                     blk->list.push_back(cpy);
                 }
             } else {
@@ -1646,11 +1659,11 @@ namespace das {
             blk->list.push_back(veqt);
             if ( plainRange ) {
                 blk->list.push_back(new ExprCopy(expr->at, makeCounterRef(expr->at, pVarName, iterv->type),
-                    new ExprField(expr->at, new ExprVar(expr->at, srcName), "x")));
+                    new ExprField(expr->at, new ExprVar(expr->at, srcName), "x"), true));
                 auto rlt = new ExprOp2(expr->at, "<", new ExprVar(expr->at, srcVarName),
                     new ExprField(expr->at, new ExprVar(expr->at, srcName), "y"));
                 blk->list.push_back(new ExprCopy(expr->at, new ExprVar(expr->at, loopVar),
-                    new ExprOp2(expr->at, "&&", rlt, new ExprVar(expr->at, loopVar))));
+                    new ExprOp2(expr->at, "&&", rlt, new ExprVar(expr->at, loopVar)), true));
                 continue;
             }
             // loop = _builtin_iterator_first(it0,pvar0) && loop
@@ -1664,7 +1677,7 @@ namespace das {
             auto land = new ExprOp2(expr->at,"&&",
                                               cbif,new ExprVar(expr->at,loopVar));
             auto lande = new ExprCopy(expr->at,
-                                              new ExprVar(expr->at,loopVar),land);
+                                              new ExprVar(expr->at,loopVar),land, true);
             blk->list.push_back(lande);
         }
         auto bll = new ExprLabel(expr->at, begin_loop_label,
@@ -1734,7 +1747,7 @@ namespace das {
                     }
                 }();
                 blk->list.push_back(new ExprCopy(expr->at, makeCounterRef(expr->at, pVarName, iterv->type),
-                    new ExprOp2(expr->at, "+", new ExprVar(expr->at, expr->iterators[si]), typedOne)));
+                    new ExprOp2(expr->at, "+", new ExprVar(expr->at, expr->iterators[si]), typedOne), true));
                 auto rne = new ExprOp2(expr->at, "!=", new ExprVar(expr->at, expr->iterators[si]),
                     new ExprField(expr->at, new ExprVar(expr->at, srcName), "y"));
                 blk->list.push_back(new ExprOp2(expr->at, "&&=", new ExprVar(expr->at, loopVar), rne));
