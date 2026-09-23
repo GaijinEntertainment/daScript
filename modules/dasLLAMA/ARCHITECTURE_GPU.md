@@ -133,8 +133,7 @@ that a question answered for one backend has an obvious address in the other. Th
   format's dequant pass and its mul_mm twins keep one set layout and one host bind path; and the Vulkan
   `kq_gemv_cls` family binds `gridb` (the grid formats' codebook plane, `kq_grid_dev`) at binding 6 on
   every stamp, one set layout for the family - the grid stamps (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s) and
-  their N leaves read it, every other stamp (k2, k3, k4, k5, k6, q40, iq4xs, iq4nl) and its N leaf bind
-  it unread.
+  their N leaves read it, every other stamp (k2, k3, k4, k5, k6, q40, iq4xs, iq4nl) binds it unread.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots, route/mark/want/status
   state, engine-facing forwarders. Vulkan implements it (per-op offload plus resident plumbing, and the decode-era
   seats it alone fills: the cm2 expert chain `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
