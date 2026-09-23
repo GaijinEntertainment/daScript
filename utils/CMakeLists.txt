@@ -163,6 +163,27 @@ add_custom_target(run_daspkg_tests
 )
 add_dependencies(run_daspkg_tests run_tests_daspkg)
 
+if(NOT DAS_SQLITE_DISABLED)
+    set(BENCH_STAND_OUT ${CMAKE_BINARY_DIR}/bench-stand CACHE PATH "Where run_bench_stand writes runs/ and site/")
+    set(BENCH_STAND_ARGS "" CACHE STRING "Extra benchctl run arguments, e.g. --filter core/math/ --repeat 1")
+    set(_bench_stand_deps daslang)
+    foreach(_t test_aot_subset test_llvm_aot dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
+            dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
+        if(TARGET ${_t})
+            list(APPEND _bench_stand_deps ${_t})
+        endif()
+    endforeach()
+    add_custom_target(run_bench_stand
+        COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+                -DOUT=${BENCH_STAND_OUT} "-DARGS=${BENCH_STAND_ARGS}"
+                -P ${PROJECT_SOURCE_DIR}/utils/internal/bench-stand/stand.cmake
+        DEPENDS ${_bench_stand_deps}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Benchmarking the tree into ${BENCH_STAND_OUT}"
+        USES_TERMINAL
+    )
+endif()
+
 das_lane_dastest_target(run_tests_mcp_tools
     COMMENT "Testing the MCP tools"
     FILES utils/mcp/test_tools.das utils/mcp/test_crosstree_guard.das utils/mcp/test_setup.das

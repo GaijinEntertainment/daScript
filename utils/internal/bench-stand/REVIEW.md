@@ -23,7 +23,7 @@ is the directory, the id is the path without `.das`.
 line here, with its tests, in the same change.**
 
 - `site/` - the viewer. Zero dependencies, zero build step.
-- `run_stand.sh` - one pass on a ref: checkout, build, run, report, publish. Cron calls it.
+- `stand.cmake` - one pass over the current tree: run, report, publish. The `run_bench_stand` target runs it.
 - `caddy.snippet` - the public route, and the only place a route is written down.
 
 The tool this box runs is `utils/benchctl` - its modules, verbs and tests answer to
