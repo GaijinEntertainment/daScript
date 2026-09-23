@@ -19,7 +19,7 @@ let CPP_RULES_FILE = "tree-sitter-daslang/cpp_outline_rules.yml"
 let private CPP_SEARCH_CONFIG_PATH = "utils/mcp/cpp_search_config.das"
 
 struct CppMatch {
-    file : string         // relative to das_root, generic-path
+    file : string         // relative to server_root(), generic-path
     line : int            // 1-based start line
     end_line : int        // 1-based end line (inclusive); equals `line` for single-line matches
     kind : string         // function/class/struct/enum/union/typedef/namespace/macro
@@ -30,8 +30,11 @@ struct CppMatch {
     text : string         // first line of declaration (kept for fallback rendering)
 }
 
+[arch(at="../README.md#cpp-index-roots")]
 def cpp_default_search_dirs() : array<string> {
     let root = get_das_root()
+    let served = server_root()
+    if (served != root && served_tree_is_project(served)) return <- [served]
     var dirs : array<string>
     dirs |> reserve(length(CPP_SEARCH_DIRS))
     for (d in CPP_SEARCH_DIRS) {
@@ -619,7 +622,7 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
             let sig = cpp_extract_signature(lines, kind)
             let tmpl = cpp_extract_template_args(lines, kind, pair._1)
             entries |> emplace(CppMatch(
-                file = make_relative_path(file_path, das_root),
+                file = make_relative_path(file_path, server_root()),
                 line = line_num,
                 end_line = end_line_num,
                 kind = kind,

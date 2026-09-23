@@ -249,9 +249,7 @@ def get_string_array_arg(args : JsonValue?; name : string) : array<string> {
     let v = (args.value as _object)?[name] ?? null
     if (v == null || !(v.value is _array)) return <- result
     result |> reserve(length(v.value as _array))
-    // Filter out non-string and empty-string elements so callers don't have
-    // to re-validate. Empty path entries would otherwise resolve to das_root
-    // downstream (resolve_path("") -> get_das_root()) and load it as a module.
+    //! Drops empty and non-string entries: `resolve_path("")` is the served tree, which a caller would load as a module
     for (elem in v.value as _array) {
         if (elem != null && elem.value is _string) {
             let s = elem.value as _string

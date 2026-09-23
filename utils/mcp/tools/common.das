@@ -520,16 +520,28 @@ def make_temp_das_file() : string {
 
 // ── File path utilities ──────────────────────────────────────────────
 
+[arch(at="../README.md#served-tree")]
+def server_root() : string {
+    return to_generic_path(getcwd())
+}
+
+//! the files that make a served tree a project: one of them at its root is what the C++ index follows
+let CPP_PROJECT_MARKERS = fixed_array(".git", "CMakeLists.txt", ".mcp.json", "compile_commands.json")
+
+[arch(at="../README.md#cpp-index-roots")]
+def served_tree_is_project(served : string) : bool {
+    for (marker in CPP_PROJECT_MARKERS) {
+        if (stat(path_join(served, marker)).is_valid) return true
+    }
+    return false
+}
+
 def resolve_path(path : string) : string {
-    if (empty(path)) return get_das_root()
-    // `find(path, ":") == 1` preserves Windows drive-relative paths (`C:foo`):
-    // std::filesystem doesn't classify them as absolute (no trailing separator),
-    // so they'd otherwise be joined under das_root and produce an invalid path.
+    //! `""` and `"."` both give the bare served root: a trailing `/.` makes ast-grep's `--globs` match nothing
+    if (empty(path) || path == ".") return server_root()
+    //! `C:foo` is drive-relative, which std::filesystem does not call absolute, so it passes through unjoined
     if (is_absolute(path) || find(path, ":") == 1) return path
-    // Deliberately NOT normalize()d: lexically_normal rewrites every separator to the
-    // platform preferred one, so on Windows it would turn the forward slashes of
-    // get_das_root() into backslashes and break callers that compare against it.
-    return path_join(get_das_root(), path)
+    return path_join(server_root(), path)
 }
 
 def make_relative_path(path, root : string) : string {
