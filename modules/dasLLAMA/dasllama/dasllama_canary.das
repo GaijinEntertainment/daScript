@@ -896,10 +896,9 @@ def canary_enc_serves_q8() : bool {
     return !canary_gpu_serves()
 }
 
-// the lane changes what a load mints and serves, so the load says which and why. The caller
-// hands the lane in, so this names ITS pick and the policy that would have been asked for it.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private cn_announce_lane(q8 : bool) {
-    var why = "the CPU default (no Metal FastConformer driver serving)"
+    var why = "the CPU default (DASLLAMA_METAL_TOWER off, or no Metal FastConformer driver)"
     if (g_cn_pin != CnLane.unset) {
         why = "pinned via set_canary_enc_q8"
     } elif (canary_gpu_serves()) {
@@ -1156,7 +1155,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     }
 
     var gpu_served = false
-    if (g_cn_gpu_set && !m.q8) {   //! the driver reads the f32 blob; a q8 encoder stays CPU
+    if (g_cn_gpu_set) {
         gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
     }
     if (!gpu_served) {

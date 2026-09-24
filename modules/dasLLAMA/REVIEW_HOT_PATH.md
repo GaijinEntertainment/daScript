@@ -33,6 +33,8 @@ region entry is a defect - move it to the entry; an interior function carries on
 only from a load, stage, bake, or convert path - it is no region entry; it carries `[cold_path]`
 or nothing.**
 
-**A function reachable only from this module's `tests/`, `harness/`, `benchmarks/` or
-`performance/` that calls into a region entry (the outermost function re-entered each serving
-step) carries `[cold_path]` if it is the outermost such caller; its callees carry none.**
+**A function a diff adds or changes under this module's `tests/`, `harness/`, `benchmarks/` or
+`performance/` that is not a `[test]` and calls into a region entry (the outermost function the
+runtime re-enters each serving step) carries `[cold_path]` if no other such non-`[test]` function
+calls it, and no annotation otherwise; the diff removes `[cold_path]` from a caller it pushes below
+the outermost.**

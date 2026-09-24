@@ -16,6 +16,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
+require daslib/defer
 require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
@@ -314,6 +315,7 @@ def test_parakeet_oracle(t : T?) {
             return
         }
         // through the uniform ASR surface: the sniff routes a small-vocab ggml bin to parakeet
+        reset_parakeet_q8()   // the default-lane claim below needs the lane unpinned
         var inscope m <- load_asr_model(path)
         let c <- caps(m)
         t |> equal(length(c.languages), 1, "English-only")
@@ -339,20 +341,19 @@ def test_parakeet_oracle(t : T?) {
             t |> success(segs[0].text == "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.", "text")
             t |> equal(s.detected_lang, "en")
 
-            // the default load above ran the Q8 fast path — pin that set_asr_fp32 gives the
-            // bit-exact fp32 route AND that both routes stay token-identical (jfk; gb1 was
-            // verified 786/786 at the q8 landing)
-            set_asr_fp32(true)
-            var inscope mf <- load_asr_model(path)
-            set_asr_fp32(false)
-            t |> success(!mf.pk.q8, "knob forces fp32")
-            t |> success(m.pk.q8, "default load is q8")
+            t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
+            // the other lane, minted in memory so no image is baked under a lane the box does not serve
+            var inscope mf = AsrModel(kind = AsrKind.parakeet)
+            var inscope stg <- stage_parakeet_model(path, !m.pk.q8)
+            mint_parakeet_model(stg, mf.pk, !m.pk.q8)
+            t |> equal(mf.pk.q8, !m.pk.q8, "the mint takes the other lane")
             var inscope sf <- create_session(mf)
             var inscope fsegs : array<TranscribeSegment>
             transcribe(mf, sf, samples) $(seg) {
                 fsegs |> push_clone(seg)
             }
             t |> equal(length(fsegs), 1)
+            to_log(LOG_INFO, "parakeet-v2 jfk other-lane eyeball: '{fsegs[0].text}'\n")
             t |> equal(length(fsegs[0].tokens), length(segs[0].tokens), "q8/fp32 token count")
             for (a, b in fsegs[0].tokens, segs[0].tokens) {
                 t |> equal(a, b, "q8/fp32 token")
@@ -376,11 +377,12 @@ def test_parakeet_v3_oracle(t : T?) {
             return
         }
         // the 8192-piece SPM vocab routes to parakeet AND flips the multilingual caps
+        reset_parakeet_q8()   // the default-lane claim below needs the lane unpinned
         var inscope m <- load_asr_model(path)
         let c <- caps(m)
         t |> equal(length(c.languages), 25, "25 languages")
         t |> equal(m.pk.n_vocab, 8192l, "vocab")
-        t |> success(m.pk.q8, "default load is q8")
+        t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
@@ -388,9 +390,7 @@ def test_parakeet_v3_oracle(t : T?) {
             transcribe(m, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
-            // parakeet-cli -ng -ps (CPU, f32 self-convert): 38 tokens; the q8 default stays
-            // id-exact on jfk (durations too — gb1's 16/655 duration-only flips are the known
-            // q8 divergence, ids/text exact there as well)
+            //! parakeet-cli -ng -ps (CPU, f32 self-convert) gives these 38 tokens; either lane stays id-exact on jfk
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 38, "token count")

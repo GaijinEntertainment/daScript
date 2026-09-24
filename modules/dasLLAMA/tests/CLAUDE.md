@@ -200,12 +200,14 @@ twin-knob freeze and whisper's own wblob-ONLY poison that must CHANGE the GPU tr
 (both legs are whisper's alone; qwen3a carries neither), the gemma4a Metal
 Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-rms + counter deltas -
 the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
-same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), plus
+same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), the
+parakeet Metal FastConformer cell (the same chain over parakeet's f32 blob, minted in memory;
+transcript equality CPU vs GPU + the encoder rows' rel-rms + counter deltas), plus
 the tower q8-decline - a q8 whisper encoder never dispatches and records the `quant_mode`
 decline, and the whisper serving default IS q8 unless `set_asr_fp32` / `set_asr_tower_fp32`
-asks for f32 (whisper carries no lane policy). Canary and gemma4a do: un-pinned, their lane
-follows whether the Metal tower would serve.
-Then the required-mode panic and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+asks for f32 (whisper carries no lane policy). Canary, parakeet and gemma4a do: un-pinned,
+their lane follows whether the Metal tower would serve.
+Then the required-mode panic cell; the arm's DECODER half is the `test_whisper_metal_cross_kv`
 cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
 against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
 required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a
@@ -831,7 +833,7 @@ canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed 
 mels across calls); its ungated cells are the model-free half.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
-gemma4a / canary: the un-pinned default against the predicate the policy itself consults, both
+gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
 `test_mtp_gemma_drafter.das` - stocked suite AND the `mtp` suite: the gemma-4 assistant
 drafter (`dasllama/dasllama_mtp_gemma`); only `mtp-gdraft-refuse` runs with no model, the other

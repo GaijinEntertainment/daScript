@@ -1,3 +1,4 @@
+// The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it.
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -20,6 +21,7 @@ require dasllama/dasllama_gemma3v   // the cov_tower SigLIP row (the head-restri
 require dasllama/dasllama_qwen3a    // the cov_tower conv2d + GPU-mel carrier
 require dasllama/dasllama_gemma4a   // the cov_tower Conformer whole-chunk row
 require dasllama/dasllama_canary    // the cov_tower FastConformer row
+require dasllama/dasllama_parakeet  // the cov_tower parakeet row
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
@@ -476,6 +478,26 @@ def private cov_tower_canary(t : T?; samples : array<float>) {
     }
 }
 
+//! reaches the tap-major depthwise stamp (enc_pk_dw), which the canary row does not
+[unused_argument(t, samples)]   // off-Apple the gated body is empty
+def private cov_tower_parakeet(t : T?; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let pkpath = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
+        if (family_on(t, "parakeet") && model_available(t, pkpath) && !empty(samples)) {
+            var inscope pstg <- stage_parakeet_model(pkpath, false)
+            var inscope pm = ParakeetModel()
+            mint_parakeet_model(pstg, pm, false)
+            var pst = ParakeetState()
+            with_job_que() {
+                setup_dasllama_jobque()
+                parakeet_log_mel(samples, pm, pst)
+                parakeet_encode(pm, pst)
+            }
+            delete pst
+        }
+    }
+}
+
 // the gemma4v row of cov_tower: a 96x96 canvas through the E2B ViT tower on the file's planes
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_gemma4v(t : T?) {
@@ -569,6 +591,7 @@ def private cov_tower(t : T?) {
         }
         cov_tower_gemma4a(t, samples)
         cov_tower_canary(t, samples)
+        cov_tower_parakeet(t, samples)
         delete samples
         cov_tower_gemma4uv(t)
         cov_tower_gemma4v(t)

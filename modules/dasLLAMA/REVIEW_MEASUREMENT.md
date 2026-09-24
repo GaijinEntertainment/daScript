@@ -21,7 +21,8 @@ after it up to the next heading or the next provenance line. A tag (`external`,
 `direction-grade`, `out-of-process`, `debug-jit`) covers the figures of the sentence or bullet it
 sits in, or, on a provenance line, the figures that line covers.
 
-A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
+A served turn is one whole request an engine serves, whatever the modality; a turn wall is its
+wall. A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -50,10 +51,10 @@ whatever the row's `workload` (text rows carry none; others are `image-chat`, `a
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
-or as the `-jit` script - or a board cell did.** A served turn is one whole request an engine
-serves, whatever the modality; a turn wall is its wall. A served-turn rate an instrument under
-`harness/` prints stays in that run's log: the ledger entry carries what the instrument decided -
-served, declined, how many rows it counted - never that rate.
+or as the `-jit` script - or a board cell did.** A served-turn rate printed by an instrument that
+is neither `benchmarks/lcpp_bench.das` nor a board cell stays in that run's log: the ledger entry
+carries what the instrument decided - served, declined, how many rows it counted - never that
+rate.
 
 **A pair of `-jit` readings held against each other keeps each arm's absolute wall or rate in the
 commit message or PR body that states the pair.**
@@ -76,9 +77,10 @@ benchmark process.**
 **A diff that writes a `-jit` reading outside `PERF_LEDGER.md` tags it `debug-jit`, and cites the
 committed board row of the same model, served-turn leg and backend where one exists.**
 
-**A figure tagged `external` in `PERF_LEDGER.md` names where it came from: a published figure
-names its source and the report; a figure a third-party exe produced names that exe, its build,
-and the command line it ran under.**
+**A figure in `PERF_LEDGER.md` no cell, script, or exe of this repository produced names where
+it came from: a published figure names its source and the report; a figure a third-party program
+produced (an exe or a script) names that program, its build or version, and the command line it
+ran under.**
 
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
@@ -90,8 +92,8 @@ recorded to justify adopting code the change does not land.** That timing settle
 decision in the PR that lands the kernel. A negative result whose winner is the committed path is
 an entry, not a selection timing.
 
-**A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
-mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
+**A diff that routes a served turn onto a code path no board cell exercises mints that cell in
+the same change.** A route is the end-to-end code path such a turn takes,
 including the path a run with no flags and no environment overrides takes.
 
 **A change that owes a board row no box of the author's can mint names instead, in the same

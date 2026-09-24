@@ -836,6 +836,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `ftell` - Returns the current byte offset of the file pointer for the given FILE, equivalent to C ftell.
 - `funbuffered` - Turns off the C stream buffer on the stream, so every read goes to the descriptor and `fpoll` sees every byte the stream holds: nothing waits in a stdio buffer the poll cannot see.
 - `fwrite` - Writes raw binary data from a POD value to a file.
+- `fwrite_if_changed`
 - `getchar` - Reads and returns the next character from standard input as an integer, equivalent to C getchar.
 - `is_reparse_point` - Returns true if the path is a symbolic link — and on Windows, any reparse point: a junction, a mount point, or a less common flavor such as a cloud-file placeholder.
 - `is_reparse_point_result`

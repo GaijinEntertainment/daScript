@@ -32,17 +32,19 @@ checklist.**
 family ships more than one arm lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one
 of the coopmat forms a family ships (cm2, KHR).
 
-**A host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from its
-push-constant and shape arguments alone lands in `dasllama/dasllama_vulkan_classes.das`.** A
-stamp is one class stamped from a kernel class template; a predicate over shape values alone is
-the classes file's, whoever calls it.
+**A Vulkan host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from
+its push-constant and shape arguments alone lands in `dasllama/dasllama_vulkan_classes.das`.** A
+stamp is one class stamped from a kernel class template.
 
-**A host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
-`RLayer` field - lands in `dasllama/dasllama_vulkan_decode.das` for a decode-time chain,
-`dasllama/dasllama_vulkan_prefill.das` for a batch one.**
+**A Vulkan predicate over shape values alone lands in `dasllama/dasllama_vulkan_classes.das`,
+whichever file calls it.**
 
-**A host-side ensure/set/encode chain that only switches on a stamp it is handed lands in the
-file of the function that decides that stamp.**
+**A Vulkan host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
+`RLayer` field - lands in `dasllama/dasllama_vulkan_decode.das` when the decode step calls it,
+and in `dasllama/dasllama_vulkan_prefill.das` when the prefill pass calls it.**
+
+**A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
+lands in the file of the function that decides that stamp.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
@@ -71,11 +73,13 @@ of, or a function a `register_kernel_backend` call names - lands in a tier file,
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**
 
-**A branch keyed on a `Config` flag only one model architecture sets, or a special case only one
-backend driver needs, lands in that architecture's or driver's file - unless it is one arm of a
-kernel two or more architectures share, in which case the arm lands beside the kernel and the
-flag is named in that file's charter line.** A family arm in another family's file is a defect
-either way.
+**A branch only one model family takes lands in that model family's file.**
+
+**A special case only one backend driver needs lands in that driver's file.**
+
+**A branch that is one model family's branch of a kernel two or more model families share lands
+in the kernel's file, and that file's charter line names the condition that selects the
+branch.**
 
 **Logic or a named constant that two files in one folder both use lands in a file both already
 require - a new file of its own when they require none in common - never as a second copy.** Two

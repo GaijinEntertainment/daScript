@@ -309,10 +309,10 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            //! only families with a Metal tower driver (AudioTower + the gemma4a Conformer) -
-            //! canary/parakeet encoders are CPU by design
+            //! only families with a Metal tower driver (AudioTower, the gemma4a Conformer, the canary / parakeet FastConformer)
             let tower_kind = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
-                || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a)
+                || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a
+                || m.kind == AsrKind.canary || m.kind == AsrKind.parakeet)
             if (gpu && tower_kind && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
                 leg_ok = false

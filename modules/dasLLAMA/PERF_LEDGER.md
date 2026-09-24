@@ -11,6 +11,41 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-24) - the FastConformer Metal chain's rel-pos attention rides the f32 GEMM
+  builder per head (`ARCHITECTURE_GPU_TOWER.md` sec.2.2x), where the per-row kernel it replaced
+  was most of the encode and lost to the CPU q8 lane past a minute of audio.** Box: the M5 Max,
+  every figure below `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json`
+  (its runtime section applied, the kernel winners on their fallback bodies - the sidecar
+  predates the binary), no other overrides unless named. Encode alone, parakeet-TDT v3 f32,
+  gb1 (199 s of audio, 2485 frames), `harness/asr_stage_probe.das -m
+  ggml-parakeet-tdt-0.6b-v3-f32.bin -w gb1.wav --reps 2`, its `pk.encode_total` bucket per
+  pass, `direction-grade` (three processes): the GEMM-built chain 652 ms; the CPU q8 lane
+  (`DASLLAMA_METAL_TOWER=0`) 2306 ms; the CPU f32 lane (`DASLLAMA_METAL_TOWER=0 --fp32`)
+  9687 ms. The per-row kernel's chain read 3.39 / 3.40 s on the same clip, and that chain with
+  its attention dispatch skipped by a local edit 0.46 s - the share the rework closed - both
+  from a scratch timer around `parakeet_encode`, `direction-grade`. Served cells, `debug-jit`,
+  `benchmarks/lcpp_bench.das --asr -m <model> -r 2 -t 6 --ngl 99 --for-debug-purposes` with
+  `DASLLAMA_ALLOW_UNTUNED=1`, one value per clip (the bench prints the best of its reps),
+  `direction-grade` against the board's 2026-09-23 rows: parakeet v3 jfk 61 ms, jfk3 161 ms,
+  gb1 0.96 s, hp0 1.37 s, hp0x2 3.33 s, librispeech25 1.36 s - the board's das q8 CPU rows
+  158 ms / 4.35 s / 25.7 s on jfk / gb1 / hp0x2 (`performance/records/m5.json`, `-t 6`);
+  canary jfk 275 ms, jfk3 763 ms, gb1 3.22 s - the board's Metal row 322 ms / 6.50 s on the
+  per-row kernel. `external`, whisper.cpp at 6fc7c33 built on this box,
+  `~/Work/whisper.cpp/build/bin/parakeet-cli -m models/ggml-parakeet-tdt-0.6b-v3-{f32,q8_0}.bin
+  -f <clip> -t 6` (its default Metal arm; the records rig passes `-ng`), the sum of its
+  `mel time` + `encode time` + `decode time` + `predict time` print lines, f32 / q8_0: jfk
+  82 / 86 ms, gb1 1.06 / 1.02 s, hp0 1.63 / 1.59 s, hp0x2 4.68 / 4.59 s; its `encode time`
+  print (`t_encode_us`) alone 0.63-0.64 s at gb1 and 3.52-3.53 s at hp0x2. `external`, the
+  board's NeMo `--device mps` row: canary jfk 525 ms, gb1 4.36 s. The board's reference roster
+  wants parakeet-cli's Metal arm beside the `-ng` one - the run above, v3 f32, `-t 6`, no env.
+  What remains of the encode is the block GEMM chain on the f32 builder (the chain less its
+  attention, about 0.47 s at gb1 by the same local edit) and the shift-add the softmax row
+  folds. The chain's per-encode scratch grows with the frame count T and has no cap (mp = T
+  to 32, nkp = T to 64, wwpad = 2T-1 to 64, all f32): the two score slabs mp x nkp and mp x
+  wwpad plus the probability slab mp x nkp, and the AV rows heads x mp x hs - at gb1 (T =
+  2485) 25 + 50 + 25 + 10 MB, at hp0x2 (T = 6800) 187 + 373 + 187 + 28 MB. The lanes' own
+  distance: on gb1 the q8 lane flips 16 of 655 TDT durations against the f32 planes, token
+  ids and text exact.
 - **The resident plan and upload read one plane list (`resident_planes`,
   `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The list is built twice per load - once
   for the plan's byte sum, once for the upload's reserve - and holds one 24-byte record per

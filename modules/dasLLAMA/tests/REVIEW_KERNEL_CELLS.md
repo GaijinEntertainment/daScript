@@ -34,20 +34,27 @@ that cell, or - where the cell compares two kernel forms against each other - in
 same file that dispatches one of those two forms at the same shapes.** A CPU oracle is the same
 computation written in plain code and run on the CPU. Two forms can be bit-equal and both wrong.
 
-**A diff that changes a `[vk_dispatch]` or `[metal_dispatch]` class's branch selection - a
-branch added, or a predicate widened or narrowed, so that a different set of kargs values, or of
-sentinel values in a bound buffer, reaches a path - ships a kernel-unit cell that dispatches that
-class at a value the change moved onto or off that path, or names the existing cell that already
-does.** Each stamp of a template is its own class; a sibling stamp's cell counts only where the
-template constants the two stamps differ on appear nowhere in the moved path. At every value the
-change left where it was the kernel computes what it did before, so a cell that dispatches only
-those values passes whether the change is right or wrong.
+**A diff that changes an existing `[vk_dispatch]` or `[metal_dispatch]` class's branch
+selection - a branch added, or a predicate widened or narrowed, so that a different set of kargs
+values, or of sentinel values in a bound buffer, reaches a path; a loop whose trip count a kargs
+value sets has one path per trip-count regime, a regime being zero trips, one trip, a whole number
+of workgroup strides, or a partial tail - ships a kernel-unit cell that dispatches that class at a
+value the change moved onto or off that path, or names the existing cell that already does.** Each
+stamp of a template is its own class; a sibling stamp's cell counts only where the template
+constants the two stamps differ on appear nowhere in the moved path. At every value the change
+left where it was the kernel computes what it did before, so a cell that dispatches only those
+values passes whether the change is right or wrong.
+
+**A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
+dispatches it on every path its body has - each kargs-selected branch, each sentinel-selected
+branch, and each trip-count regime of each kargs-bounded loop.** A path no cell reaches is one a
+merge can drop and every cell still passes.
 
 **Before every kernel run - a dispatch or a CPU kernel call - whose output a kernel-unit cell
-reads, directly or through a later run in the same cell, the cell fills with a sentinel every
-range of that run's output buffers the run writes without reading.** An unprefilled output can
-pass by staying stale - the previous run's values, or garbage that happens to sit inside the
-tolerance bar.
+reads in an assert that must pass, directly or through a later run in the same cell, the cell
+fills with a sentinel every range of that run's output buffers the run writes without reading.**
+An unprefilled output can pass by staying stale - the previous run's values, or garbage that
+happens to sit inside the tolerance bar.
 
 **A bit-identity assert whose result each side computes with floating-point arithmetic, in an
 operation order the cell does not fix on both sides and on operands that do not make every
@@ -62,7 +69,7 @@ differs from the input at a known index.** An in-place kernel that never ran lea
 which can wrongly satisfy a tolerant compare.
 
 **A kernel-unit cell that adds a compare - on a class, or at a kargs value, no cell compared
-before - ships a control for it, in the same change.** A control is an extra
+before - ships a control for each such compare, in the same change.** A control is an extra
 assert in the same cell proving the compare can fail - a poisoned input or a poisoned expectation
 that must land outside the bar, a mechanism unhooked whose result must miss, or a second
 independent lane the result must agree with; the cell's own reference is never its control.

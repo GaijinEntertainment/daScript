@@ -44,12 +44,13 @@ a base-shell derivative - sets only `@template_constant`s its own body resolves 
 `static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site
 reads is a defect - move it to the template whose body reads it, or make the body read it.
 
-**A diff that changes a stamp's generated source - through the class's own body, the template or
-base shell it stamps, or a helper its body splices - carries in the PR body, for each affected
-stamp, its generated source diffed against the pre-change tree (the `*_msl` global, or the `.spv`
-files `DASLLAMA_VK_SPV_DUMP=<dir>` writes).** The evidence is one of three: an empty diff; the
-difference named with the compile-time choice that carries it; or the behaviour change named with
-the test cell that pins it.
+**A diff that changes an existing stamp's generated source - through the class's own body, the
+template or base shell it stamps, or a helper its body splices - carries in the PR body, for each
+affected stamp, its generated source diffed against the pre-change tree (the `*_msl` global, or the
+`.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes).** The evidence is one of four: an empty diff; a
+difference confined to whitespace, scoping braces, parentheses or identifier names, with every
+changed line paired against its pre-change line in the PR body; the difference named with the
+compile-time choice that carries it; or the behaviour change named with the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer to a
@@ -113,9 +114,9 @@ binding a column tile of a wider row would leave the rest of each row outside th
 hazard range.
 
 **A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
-diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
-builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body
-does not state why the generated builder cannot serve that site is a defect.** A body that only picks,
+diff adds anywhere - a buffer or kargs field bound by literal number instead of through the builder
+the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
+state why the generated builder cannot serve that site is a defect.** A body that only picks,
 defaults or composes generated builders binds nothing.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
@@ -123,8 +124,8 @@ and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=
 only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` - never reaches
 the device, so it does not count.
 
-**Never bind a scalar that the other bound scalars already determine - derive it in the
-builder instead.** Binding it separately adds a second place to get it wrong.
+**Never bind a scalar that the other bound scalars already determine - derive it in the kernel
+body instead.** Binding it separately adds a second place to get it wrong.
 
 **A kernel-class method whose call sits nested inside a larger expression - as an argument, an
 operand or a subscript, but not as the whole right-hand side of a `let` or an assignment -

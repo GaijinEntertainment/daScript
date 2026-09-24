@@ -3,12 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`.
 
-**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_asr.das`,
-`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_tower.das` (with `REVIEW_VISION.md` - the
-shared encoder-tower home serves both), `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
-`dasllama/dasllama_vad.das`, or an ASR family file - one `dasllama/dasllama_<family>.das`
-holding a single speech-recognition family - applies this list with `REVIEW.md`'s.**
+**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
+`REVIEW.md`'s.**
 
 **In `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das` - the union
 carriers that route each facade function to one family - a family arm that does anything but
@@ -17,8 +13,12 @@ family check that picks the arm is the dispatch, not an arm. A diff that adds a 
 the carrier only at the union field, the finalize line, the kind value, and the one-line arms;
 a prompt, a decode loop, a caps value, or a language rule in the carrier is a defect.
 
-**A GEMM in an ASR family file that does not go through a `*_mm` wrapper or `mm_blob_b` is a
-defect, hand-written dot-product loops included.**
+**A GEMM against model weights in an ASR family file - one `dasllama/dasllama_<family>.das`
+holding a single speech-recognition family - that does not go through a `*_mm` wrapper or
+`mm_blob_b` is a defect, hand-written dot-product loops included.**
+
+**An activation-by-activation product in an ASR family file that does not go through
+`gemm_f32_jo` is a defect, hand-written loops included.**
 
 **A buffer reused across encodes in `dasllama/dasllama_tower.das`,
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_embedder.das`, or an ASR family file
@@ -36,6 +36,7 @@ table from `dasllama/dasllama_audio.das` (`build_dft_twiddles`, or `build_fft_pl
 **Never accept a `create_session` or `transcribe` option that the model's `caps()` does not
 declare - panic at the call site instead.**
 
-**A caller that pins a family tower's lane (`set_*_q8`) around a load resets it
-(`reset_*_q8`) before returning, on every path out, panics included - pin through `defer()`.**
-A pin that outlives its load silently changes the lane of the next tower loaded in the process.
+**A caller that pins a family tower's lane - whether its weights run the q8 path or the float
+path (`set_*_q8`) - without a `defer()` that resets it (`reset_*_q8`) is a defect; `defer()`
+covers every path out, panics included.** A pin still set after its caller returns silently
+changes the lane of the next tower loaded in the process.
