@@ -9,7 +9,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_math_default   // dot_kq, the K-quant leaf per row
 require dasllama/dasllama_convert   // kq_transcode_superblock, quantize_q8_k_into_ptr
 require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
-require daslib/f16_cvt
+require _q4k_disk
 require daslib/jobque_boost
 require daslib/defer
 require daslib/rtti   // this_context().last_exception: a refusal read as text
@@ -535,27 +535,6 @@ def private linear_case_q8(nin, nout : int64) : BlockCase {
 }
 
 // ===== the K-quant lane against the leaf per row =====
-
-def private put_f16(var b : array<uint8>; off : int64; v : float) {
-    let bits = f32_to_f16(v)
-    b[off] = uint8(bits & 0xFFu)
-    b[off + 1l] = uint8(bits >> 8u)
-}
-
-//! one Q4_K superblock in the GGUF's disk layout: two f16 scales, 12 bytes of 6-bit sub-scales, 128 bytes of nibbles
-def private q4k_disk_superblock() : array<uint8> {
-    var b : array<uint8>
-    b |> resize(144l)
-    put_f16(b, 0l, 0.375)
-    put_f16(b, 2l, 0.125)
-    for (i in range64(12l)) {
-        b[4l + i] = uint8((i * 37l + 13l) % 256l)
-    }
-    for (i in range64(128l)) {
-        b[16l + i] = uint8((i * 29l + 7l) % 256l)
-    }
-    return <- b
-}
 
 //! [rows][n] of Q4_K planes as the GGUF transcoder writes them: the one superblock everywhere, its nibbles salted per row
 def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; seed : uint) {

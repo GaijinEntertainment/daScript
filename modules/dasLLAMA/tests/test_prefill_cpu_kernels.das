@@ -12,6 +12,7 @@ require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require _kq_dot   // dot_kq on the run-time format
+require _q4k_disk
 require daslib/f16_cvt
 require math
 
@@ -42,20 +43,6 @@ def private put_f16(var b : array<uint8>; off : int64; v : float) {
     let bits = f32_to_f16(v)
     b[off] = uint8(bits & 0xFFu)
     b[off + 1l] = uint8(bits >> 8u)
-}
-
-def private build_q4k_disk() : array<uint8> {
-    var b : array<uint8>
-    b |> resize(144l)
-    put_f16(b, 0l, 0.375)
-    put_f16(b, 2l, 0.125)
-    for (i in range64(12l)) {
-        b[4l + i] = uint8((i * 37l + 13l) % 256l)
-    }
-    for (i in range64(128l)) {
-        b[16l + i] = uint8((i * 29l + 7l) % 256l)
-    }
-    return <- b
 }
 
 def private build_q6k_disk() : array<uint8> {
@@ -89,7 +76,7 @@ def private build_kq_region(fmt : int; var kq : array<uint8>; var ks : array<uin
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    let blk <- fmt == 4 ? build_q4k_disk() : (fmt == 40 ? build_q40_disk() : build_q6k_disk())
+    let blk <- fmt == 4 ? q4k_disk_superblock() : (fmt == 40 ? build_q40_disk() : build_q6k_disk())
     kq |> resize(rows * nsb * qsb)
     ks |> resize(rows * nsb * ssb)
     for (r in range64(rows)) {

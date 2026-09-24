@@ -14,6 +14,7 @@ require spirv/spirv_shader
 require spirv/spirv_builtins public
 require daslib/fio
 require math
+require _coopmat_probe_fixture
 
 let SPV_PATH = "D:/Work/llama.cpp/build-vulkan/ggml/src/ggml-vulkan/vulkan-shaders.spv/matmul_q8_0_f32_f16acc_cm1.spv"
 
@@ -183,85 +184,10 @@ def private f32_of(buf : array<uint8>; i : int) : float {
     return unsafe(reinterpret<float>(w))
 }
 
-def private put_f32(var buf : array<uint8>; i : int; v : float) {
-    let w = unsafe(reinterpret<uint>(v))
-    buf[i * 4] = uint8(w & 0xFFu)
-    buf[i * 4 + 1] = uint8((w >> 8u) & 0xFFu)
-    buf[i * 4 + 2] = uint8((w >> 16u) & 0xFFu)
-    buf[i * 4 + 3] = uint8((w >> 24u) & 0xFFu)
-}
-
 def private put_half_at(var buf : array<uint8>; byte_off : int; v : float) {
     let bits = packHalf2x16(float2(v, 0.0)) & 0xFFFFu
     buf[byte_off] = uint8(bits & 0xFFu)
     buf[byte_off + 1] = uint8((bits >> 8u) & 0xFFu)
-}
-
-struct DevBuf {
-    buf : Buffer
-    mem : DeviceMemory
-    bytes : int
-}
-
-def private make_dev_buf(var device : Device; phys : VkPhysicalDevice; bytes : int) : DevBuf {
-    var r : DevBuf
-    r.bytes = bytes
-    var bci : BufferCreateInfo
-    bci.size = uint64(bytes)
-    bci.usage.storage_buffer = true
-    bci.usage.transfer_dst = true
-    bci.usage.transfer_src = true
-    r.buf <- create_buffer(device, bci)
-    var req : VkMemoryRequirements
-    vkGetBufferMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(r.buf), req)
-    var want : VkMemoryPropertyFlags
-    want.device_local = true
-    let mai = MemoryAllocateInfo(allocationSize = req.size, memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
-    r.mem <- allocate_memory(device, mai)
-    vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(r.buf), boost_value_to_vk(r.mem), 0ul), null)
-    return <- r
-}
-
-def private staging_roundtrip(var device : Device; phys : VkPhysicalDevice; var pool : CommandPool;
-                              queue : VkQueue; var db : DevBuf; var host : array<uint8>; upload : bool) {
-    var bci : BufferCreateInfo
-    bci.size = uint64(db.bytes)
-    bci.usage.transfer_src = true
-    bci.usage.transfer_dst = true
-    var inscope stage <- create_buffer(device, bci)
-    var req : VkMemoryRequirements
-    vkGetBufferMemoryRequirements(boost_value_to_vk(device), boost_value_to_vk(stage), req)
-    var want : VkMemoryPropertyFlags
-    want.host_visible = true
-    want.host_coherent = true
-    let mai = MemoryAllocateInfo(allocationSize = req.size, memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
-    var inscope smem <- allocate_memory(device, mai)
-    vk_check(vkBindBufferMemory(boost_value_to_vk(device), boost_value_to_vk(stage), boost_value_to_vk(smem), 0ul), null)
-    var mapped : void? = null
-    let mf : VkMemoryMapFlags
-    if (upload) {
-        unsafe {
-            vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(smem), 0ul, uint64(db.bytes), mf, addr(mapped)), null)
-            memcpy(mapped, addr<void?>(host[0]), db.bytes)
-        }
-        vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(smem))
-        run_cmd_sync(device, pool, queue) $(cmd) {
-            var region : VkBufferCopy
-            region.size = uint64(db.bytes)
-            vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(stage), boost_value_to_vk(db.buf), 1u, unsafe(addr(region)))
-        }
-    } else {
-        run_cmd_sync(device, pool, queue) $(cmd) {
-            var region : VkBufferCopy
-            region.size = uint64(db.bytes)
-            vkCmdCopyBuffer(boost_value_to_vk(cmd), boost_value_to_vk(db.buf), boost_value_to_vk(stage), 1u, unsafe(addr(region)))
-        }
-        unsafe {
-            vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(smem), 0ul, uint64(db.bytes), mf, addr(mapped)), null)
-            memcpy(addr<void?>(host[0]), mapped, db.bytes)
-        }
-        vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(smem))
-    }
 }
 
 def private record_chain(rawcmd : VkCommandBuffer; rpipe : VkPipeline; rlayout : VkPipelineLayout;

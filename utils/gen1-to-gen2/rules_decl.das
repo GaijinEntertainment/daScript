@@ -158,19 +158,6 @@ def public rule_typedef_block(src : Source; lex : Lexical; headerOffset : int; v
 }
 
 
-def private skip_back_blank(src : Source; from : int) : int {
-    var i = from
-    peek_data(src.text) $(bytes) {
-        while (i > 0) {
-            let c = int(bytes[i - 1])
-            if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break
-            i--
-        }
-    }
-    return i
-}
-
-
 def private find_back(src : Source; lex : Lexical; from : int; token : string) : int {
     let n = length(token)
     var found = -1
