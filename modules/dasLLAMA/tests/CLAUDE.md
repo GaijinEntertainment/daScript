@@ -301,8 +301,12 @@ through its registry.
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128
 on the cm2 and KHR arms) against `attn_row_oracle` over every key, the causal twin as the control
 that the mask switch moves the output while the last row agrees, sentinel slack rows past kvlen as
-the tail-mask control, and the poisoned-element control on the bar; the tower-only classes join it
-as the arc lands them.
+the tail-mask control, and the poisoned-element control on the bar; and the tower row classes - the
+weighted rms, the in-place clamp, the clamp-and-f16 and clamp-and-Q8_0 feeds, the two-axis neox
+rope, the post-add with its next pre-norm, and the clamped GEGLU-quick - each against the CPU tower
+helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
+`add_inplace_rows`) or its closed form, over one command buffer, with a poisoned-element control per
+bar; the attention and GEMM classes the towers ride are the kernel file's.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit

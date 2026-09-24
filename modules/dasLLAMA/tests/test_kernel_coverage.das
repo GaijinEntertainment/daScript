@@ -750,6 +750,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // 128): their carriers are the vision mmprojs, no zoo row; their coverage is test_vkt_fa_bidir in
     // test_vulkan_tower_kernels.das
     "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
+    // the vision towers' row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the same
+    // carriers, no zoo row; their coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
+    "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
+    "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

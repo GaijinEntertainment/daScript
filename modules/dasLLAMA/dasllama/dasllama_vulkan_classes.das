@@ -8855,6 +8855,237 @@ class QkRms : RmsWgBase {
     }
 }
 
+// ===== the vision tower classes: the Vulkan tower driver's own dispatches over compact f32 rows =====
+
+struct TowerRowArgs {
+    d : uint        // the row width
+    rows : uint     // rows in the dispatch (one workgroup each)
+    woff : uint     // the norm weight row's base in wn
+    eps : float
+    ln_on : uint    // TowerPostAdd: the next pre-norm's weight row at `lnoff` norms the updated row into xb
+    lnoff : uint
+}
+
+//! rms rows against a weight row: out[r] = rmsnorm(x[r]) . w in the CPU `rmsnorm`'s (x . inv) . w order - one workgroup
+//! a row; a per-head norm is this with `d` = the head width and `rows` = tokens x heads (a weightless one reads a ones row)
+[vk_dispatch(name = "tower_rms_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRms : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 outx : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerRowArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rms_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let v = x[base + i]
+            ss += v * v
+            i += 256u
+        }
+        let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
+        i = tid
+        while (i < pa.d) {
+            outx[base + i] = (x[base + i] * inv) * wn[pa.woff + i]
+            i += 256u
+        }
+    }
+}
+
+struct TowerClampArgs {
+    nelem : uint    // a 4-multiple (every tower width is a 64-multiple)
+    lo : float
+    hi : float
+}
+
+//! rows clamped in place to [lo, hi] - a gemma4v ClippableLinear's output bounds
+[vk_dispatch(name = "tower_clamp_cls", grid = "wgs", params = "wgs : int64")]
+class TowerClamp {
+    @ssbo @binding = 0 x : array<float>
+    @push_constant pa : TowerClampArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            x[e] = clamp(x[e], pa.lo, pa.hi)
+            x[e + 1u] = clamp(x[e + 1u], pa.lo, pa.hi)
+            x[e + 2u] = clamp(x[e + 2u], pa.lo, pa.hi)
+            x[e + 3u] = clamp(x[e + 3u], pa.lo, pa.hi)
+        }
+    }
+}
+
+//! the f16 feed of a clamped GEMM input: outh = f16(clamp(src, lo, hi)) - the input bounds applied on the way into the
+//! tile, so the normed rows stay whole for the next GEMM's own bounds
+[vk_dispatch(name = "tower_clamp_cvt_cls", grid = "wgs", params = "wgs : int64")]
+class TowerClampCvt {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outh : array<float16>
+    @push_constant pa : TowerClampArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cvt_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            outh[e] = float16(clamp(src[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 1u] = float16(clamp(src[e + 1u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 2u] = float16(clamp(src[e + 2u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 3u] = float16(clamp(src[e + 3u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+        }
+    }
+}
+
+struct TowerClampRqArgs {
+    inbase : uint
+    nblk : uint
+    lo : float
+    hi : float
+}
+
+//! the Q8_0 feed of a clamped GEMM input: the requant over the clamped elements (the mm and KHR modes' tile feed)
+[ |> template_struct_instance]
+class template TowerClampRqT : RqT {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<int8>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : TowerClampRqArgs
+
+    def override load4(eb : uint) : float4 {
+        let e = pa.inbase + eb
+        return float4(clamp(src[e], pa.lo, pa.hi), clamp(src[e + 1u], pa.lo, pa.hi), clamp(src[e + 2u], pa.lo, pa.hi), clamp(src[e + 3u], pa.lo, pa.hi))
+    }
+    def override load1(e : uint) : float => clamp(src[pa.inbase + e], pa.lo, pa.hi)
+}
+
+[vk_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClampRq : TowerClampRqT {}
+
+struct TowerRopeArgs {
+    d : uint        // the row width (heads x hs)
+    nheads : uint
+    hs : uint
+    pairs : uint    // rotated pairs per axis = hs / 4: one packed table row is [cx | sx | cy | sy], `pairs` each
+    rows : uint
+}
+
+//! the 2D neox rope over q or k rows in place, the CPU `rope_neox_2d_rows`'s form: per head the x axis rotates the
+//! pairs (j, j + pairs) of its first half against the row's x table, the y axis the same pairs of its second half
+//! against the y table - one thread per (row, head, pair), both axes
+[vk_dispatch(name = "tower_rope2d_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRope2d {
+    @ssbo @binding = 0 v : array<float>
+    @ssbo @binding = 1 tabs : array<float>
+    @push_constant pa : TowerRopeArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rope2d_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let per_row = pa.nheads * pa.pairs
+        if (gid < pa.rows * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let base = row * pa.d + (hp / pa.pairs) * pa.hs
+            let j = hp % pa.pairs
+            let tb = row * 4u * pa.pairs
+            let x0 = v[base + j]
+            let x1 = v[base + j + pa.pairs]
+            let cx = tabs[tb + j]
+            let sx = tabs[tb + pa.pairs + j]
+            v[base + j] = x0 * cx - x1 * sx
+            v[base + j + pa.pairs] = x0 * sx + x1 * cx
+            let yb = base + pa.hs / 2u
+            let y0 = v[yb + j]
+            let y1 = v[yb + j + pa.pairs]
+            let cy = tabs[tb + 2u * pa.pairs + j]
+            let sy = tabs[tb + 3u * pa.pairs + j]
+            v[yb + j] = y0 * cy - y1 * sy
+            v[yb + j + pa.pairs] = y0 * sy + y1 * cy
+        }
+    }
+}
+
+//! the residual seam of a tower block: x[r] += rmsnorm(y[r]) . wpost (the branch's post-norm, `woff`), then under `ln_on`
+//! xb[r] = rmsnorm(x[r]) . wln (the next branch's pre-norm, `lnoff`) - the CPU loop's post-norm, add and pre-norm in one workgroup a row
+[vk_dispatch(name = "tower_post_add_cls", grid = "wgs", params = "wgs : int64")]
+class TowerPostAdd : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>    // the residual stream, updated in place
+    @ssbo @binding = 1 y : array<float>    // the branch's rows
+    @ssbo @binding = 2 xb : array<float>   // the next pre-norm's rows (written under ln_on)
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @push_constant pa : TowerRowArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_post_add_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let v = y[base + i]
+            ss += v * v
+            i += 256u
+        }
+        let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
+        var ss2 = 0.0
+        i = tid
+        while (i < pa.d) {
+            let xv = x[base + i] + (y[base + i] * inv) * wn[pa.woff + i]
+            x[base + i] = xv
+            ss2 += xv * xv
+            i += 256u
+        }
+        if (pa.ln_on != 0u) {
+            let inv2 = wg_rms_inv(ss2, pa.d, pa.eps, 1u)
+            i = tid
+            while (i < pa.d) {
+                xb[base + i] = (x[base + i] * inv2) * wn[pa.lnoff + i]
+                i += 256u
+            }
+        }
+    }
+}
+
+struct TowerGegluArgs {
+    nelem : uint    // a 4-multiple
+    glo : float     // the gate GEMM's output bounds
+    ghi : float
+    ulo : float     // the up GEMM's
+    uhi : float
+    dlo : float     // the down GEMM's input bounds
+    dhi : float
+}
+
+//! GEGLU-quick with the gemma4v bounds: g = clamp(gelu_quick(clamp(g)) * clamp(u)) in place over the gate rows -
+//! gelu_quick(x) = x . sigmoid(1.702 x), the CPU LUT's closed form (the LUT rounds through f16, so approx bars)
+[vk_dispatch(name = "tower_geglu_cls", grid = "wgs", params = "wgs : int64")]
+class TowerGeglu {
+    @ssbo @binding = 0 g : array<float>
+    @ssbo @binding = 1 u : array<float>
+    @push_constant pa : TowerGegluArgs
+
+    def geglu(gv0, uv0 : float) : float {
+        let gv = clamp(gv0, pa.glo, pa.ghi)
+        let uv = clamp(uv0, pa.ulo, pa.uhi)
+        let a = gv * (1.0 / (1.0 + exp(-1.702 * gv)))
+        return clamp(a * uv, pa.dlo, pa.dhi)
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_geglu_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            g[e] = geglu(g[e], u[e])
+            g[e + 1u] = geglu(g[e + 1u], u[e + 1u])
+            g[e + 2u] = geglu(g[e + 2u], u[e + 2u])
+            g[e + 3u] = geglu(g[e + 3u], u[e + 3u])
+        }
+    }
+}
+
 struct RopeKvArgs {
     qd : uint       // query width (the kv rows start here in kvsrc)
     kvd : uint      // kv width (v rows start at qd + kvd)
