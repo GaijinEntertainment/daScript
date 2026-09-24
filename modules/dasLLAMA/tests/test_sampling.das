@@ -7,17 +7,11 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_env
+require _model_tier   // models_dir
 
 // Phase-3 sampling API. Greedy (SamplingParams default: temp=0, penalty=1.0) must reproduce the
 // frozen greedy oracle bit-for-bit; temp>0 sampling must be deterministic under a fixed seed.
 // GGUF models are gitignored, so each case skips cleanly when its model is absent.
-
-// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 
 // gemma-2-2b-it Q8_0, "1, 2, 3, 4, 5, 6, 7," (BOS=2) — same frozen oracle as test_parity.das
 // (re-frozen to the counting prompt with the cls_q8 tied classifier; see the note there).

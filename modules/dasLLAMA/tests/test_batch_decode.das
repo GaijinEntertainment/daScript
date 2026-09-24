@@ -24,10 +24,6 @@ require _model_tier   // model_available: the stocked-carrier gate (shards, the 
 // (a tokenizer for the scheduler's streams) and the JIT; it skips without either. The deltanet
 // hybrid cells need Qwen3.5-0.8B-Q8_0.gguf under models_dir() and the JIT, and the MoE hybrid's
 // cell Qwen3.6-35B-A3B-UD-Q4_K_M.gguf under the large tier; they skip without either.
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 // ragged prompts (raw stories15M token ids, BOS-first — no tokenizer.bin dependency)
@@ -512,6 +508,7 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
         let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!model_available(t, path)) return
         var tr <- load_model_(path, QuantMode.q8)   //! the engine load: the scheduler's streams detokenize through the model's own tokenizer
+        moe_gpu_drop_model()   //! the claim is the CPU batched stack's refusal: an armed whole-model driver would home the streams and refuse by its own region count instead
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         let prev_rope = get_rope_table_mode()

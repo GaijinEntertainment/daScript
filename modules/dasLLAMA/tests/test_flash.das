@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require _model_tier   // llama2c_dir, the logits compares
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -15,36 +16,14 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
-require dasllama/dasllama_env
 
 // Flash prefill attention is online-softmax (NOT bit-exact vs classic — the FP sums reorder), so it
 // is gated on (a) the predicted next token matching classic on a confident prompt and (b) the full
 // logit vector staying within a small relative tolerance of classic. The token-for-token oracle for
 // flash is covered by test_parity / test_forward, which run through flash as the default mode.
 // Needs llama2.c's stories15M.bin (gitignored); skips cleanly when absent.
-// override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
-
-def private maxdiff(a, b : array<float>) : float {
-    var m = 0.0
-    for (i in range(min(length(a), length(b)))) {
-        m = max(m, abs(a[i] - b[i]))
-    }
-    return m
-}
-
-def private maxabs(a : array<float>) : float {
-    var m = 0.0
-    for (x in a) {
-        m = max(m, abs(x))
-    }
-    return m
-}
 
 def private argmax(a : array<float>) : int {
     var bi = 0
@@ -81,7 +60,7 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
         let tailf <- [for (p in range64(start_pos, n)); prompt[p]]
         forward_prefill(tr, sf, tailf, n - start_pos, start_pos)
         set_prefill_attn_mode(AttnPrefillMode.flash)
-        let rel = maxdiff(sc.logits, sf.logits) / max(maxabs(sc.logits), 1.0e-6)
+        let rel = logits_maxdiff(sc.logits, sf.logits) / max(logits_maxabs(sc.logits), 1.0e-6)
         t |> success(rel < REL_TOL, "flash logits within {REL_TOL} rel of classic (sp={start_pos}, got {rel})")
         if (confident) {
             t |> success(argmax(sf.logits) == argmax(sc.logits), "flash predicts the same next token as classic")

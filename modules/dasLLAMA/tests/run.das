@@ -162,7 +162,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_tune_interrupt.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
-                    "modules/dasLLAMA/tests/test_vad.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
@@ -244,6 +243,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tts_kokoro.das",
                     "modules/dasLLAMA/tests/test_tts_pocket.das",
                     "modules/dasLLAMA/tests/test_tts_facade.das",
+                    "modules/dasLLAMA/tests/test_vad.das",
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]

@@ -157,7 +157,7 @@ defect.** A stocked artifact is anything the test reads out of `models_dir()` th
 build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
 Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `model_specs.das` in `../performance/`; for an oracle dump, the mint script stocked
+script beside `../performance/model_specs.das`; for an oracle dump, the mint script stocked
 beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header -

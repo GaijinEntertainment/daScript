@@ -5,6 +5,8 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama   // moe_gpu_drop_model: the Q8 cell serves both sides on the CPU lane under an armed tier
+require _model_tier   // llama2c_dir
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -14,17 +16,12 @@ require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
-require dasllama/dasllama_env
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
 // prefill that continues an already-populated cache (start_pos > 0, the multi-turn-chat path).
 // Needs llama2.c's stories15M.bin (gitignored, 60MB); skips cleanly when absent.
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 
@@ -141,6 +138,7 @@ def test_prefill_q8(t : T?) {
         pin_kernel_backend("portable")
         var tr <- load_checkpoint(MODEL_PATH)
         quantize_weights(tr)
+        moe_gpu_drop_model()   //! the claim is the CPU layer loop against forward(): an armed per-op tier would serve the Q8 planes' batched GEMMs on the device
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]

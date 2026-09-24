@@ -5,19 +5,15 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
+require _model_tier   // llama2c_dir
 require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
-require dasllama/dasllama_env
 
 // End-to-end oracle: needs llama2.c's stories15M.bin + tokenizer.bin (gitignored, 60MB).
 // Skips cleanly when absent (e.g. in CI), so it's a real regression locally and a no-op elsewhere.
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 // llama2.c greedy (-t 0.0): empty-prompt IDs, and encode("Once upon a time", bos).

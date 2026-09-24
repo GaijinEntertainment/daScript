@@ -7,29 +7,11 @@ require dasllama/dasllama   // the public facade — public-path tests exercise 
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/fio
-require dasllama/dasllama_env
+require _model_tier   // models_dir, ids_equal
 
 // The unified tokenizer facade (encode/decode/piece over auto-selected SPM/BPE) must produce
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.
 // GGUF models are gitignored multi-GB files; each case skips cleanly when its model is absent.
-
-// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
-
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (va, vb in a, b) {
-        if (va != vb) {
-            return false
-        }
-    }
-    return true
-}
 
 // Regression (Copilot #3340): SPM encode/decode must use the per-model bos_id/eos_id loaded from
 // GGUF, not the struct defaults 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
@@ -77,8 +59,8 @@ def test_facade_spm(t : T?) {
         var raw <- load_tokenizer_gguf(path)
         let text = "Once upon a time"
         let ok = (v.kind == TokKind.spm &&
-            same(encode(v, text, true, false), encode(raw, text, true, false)) &&
-            same(encode(v, text, false, false), encode(raw, text, false, false)))
+            ids_equal(encode(v, text, true, false), encode(raw, text, true, false)) &&
+            ids_equal(encode(v, text, false, false), encode(raw, text, false, false)))
         t |> success(ok, "spm dispatch + encode parity (with/without BOS)")
         delete raw
         delete v
@@ -105,8 +87,8 @@ def test_facade_bpe(t : T?) {
         want |> push_from(bpe_encode(raw, text))
         let ids <- encode(v, text, false, false)
         let ok = (v.kind == TokKind.bpe &&
-            same(encode(v, text, false, false), bpe_encode(raw, text)) &&
-            same(encode(v, text, true, false), want) &&
+            ids_equal(encode(v, text, false, false), bpe_encode(raw, text)) &&
+            ids_equal(encode(v, text, true, false), want) &&
             decode(v, ids) == text)   // byte-level BPE round-trips ASCII exactly
         t |> success(ok, "bpe dispatch + encode/decode parity")
         delete raw
@@ -128,7 +110,7 @@ def test_facade_model(t : T?) {
         let via_tok <- encode(m.tok, text, true, false)
         let last = via_model[length(via_model) - 1]
         let ok = (m.tok.kind == TokKind.bpe &&
-            same(via_model, via_tok) &&
+            ids_equal(via_model, via_tok) &&
             piece(m, last) == piece(m.tok, last))
         t |> success(ok, "model.tok populated + encode/piece delegate")
         delete m

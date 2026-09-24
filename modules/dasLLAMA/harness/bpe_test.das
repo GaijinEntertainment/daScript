@@ -12,33 +12,12 @@ require dasllama/dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
+require ../tests/_model_tier.das   // ids_equal
+require ../tests/_tokenizer_corpus.das   // parse_out_ids, drop_trailing_empty
 
 // Default fixture; override with a CLI path arg to test another BPE vocab (e.g. ggml-vocab-qwen2.gguf).
 let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/ggml-vocab-llama-bpe.gguf"
 let SEP = "\n__ggml_vocab_test__\n"
-
-// Parse one .out line (" 1142 220 19 ...") into token ids; tolerant of the leading space.
-def parse_out_ids(line : string) : array<int64> {
-    return <- [for (tok in split(line, " ")); to_int64(tok, false); where !empty(tok)]
-}
-
-// Drop a single trailing empty element (both fixture files end with a trailing
-// delimiter / newline, producing one artifact piece after split).
-def drop_trailing_empty(var xs : array<string>) {
-    if (!empty(xs) && empty(xs[length(xs) - 1])) {
-        xs |> erase(length(xs) - 1)
-    }
-}
-
-def ids_equal(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (av, bv in a, b) {
-        return false if (av != bv)
-    }
-    return true
-}
 
 // Independent cross-check: ids captured from `llama-tokenize` (BOS stripped, since
 // bpe_encode is BOS-free) on sentences NOT in the fixture corpus.

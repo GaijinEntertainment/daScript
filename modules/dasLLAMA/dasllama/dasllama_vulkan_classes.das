@@ -5033,7 +5033,7 @@ def iq3xxs_grid_word(i : int) : uint {}
 
 // ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit
 // index, so the byte is idx | (parity << 7) - five ALU ops, nothing staged.
-def private ksign7(v : uint) : uint {
+def ksign7(v : uint) : uint {
     var t = v ^ (v >> 4u)
     t = t ^ (t >> 2u)
     t = t ^ (t >> 1u)

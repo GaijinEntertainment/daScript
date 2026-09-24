@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier   // llama2c_dir
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
@@ -233,10 +234,6 @@ def test_kv_paged_store_roundtrip(t : T?) {
 
 // ===== paged == flat bit-exactness on a real model (env-gated, JIT-only) =====
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 def private mk_prompt(n : int64) : array<int64> {

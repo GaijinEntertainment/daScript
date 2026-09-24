@@ -11,7 +11,6 @@ require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 - batch_step_census
 require dasllama/dasllama_bench   // nolint:STYLE030,LINT019 - bench_tg_batched_rep, inside the das_metal halves
 require dasllama/dasllama_scheduler   // nolint:STYLE030,LINT019 - the scheduler the joint cell drives, inside the das_metal halves
 require _scheduler_rig   // nolint:STYLE030,LINT019 - toks_of, inside the das_metal halves
-require _ids   // nolint:STYLE030,LINT019 - same_ids, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_stats - the batched driver's own count
 require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - the pre-encode lever and its taken count, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_shutdown before the leak gate, inside the das_metal halves
@@ -269,7 +268,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 for (pi in range64(3l)) {
                     var got <- toks_of(events, 10l + pi)
                     log_gen_texts(tr, "joint stream {pi} (solo, joint)", refs[pi], got)
-                    t |> success(same_ids(got, refs[pi]), "joint stream {pi} tokens == its solo stream")
+                    t |> success(ids_equal(got, refs[pi]), "joint stream {pi} tokens == its solo stream")
                     delete got
                 }
                 t |> success(sch.mtp_drafted > 0l, "the joint ticks drafted ({sch.mtp_drafted} drafts)")
@@ -339,7 +338,7 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
                 for (pi in range64(3l)) {
                     var got <- toks_of(events, 10l + pi)
                     log_gen_texts(tr, "staggered stream {pi} (solo, joint)", refs[pi], got)
-                    t |> success(same_ids(got, refs[pi]), "staggered stream {pi} tokens == its solo stream")
+                    t |> success(ids_equal(got, refs[pi]), "staggered stream {pi} tokens == its solo stream")
                     delete got
                 }
                 delete sch
@@ -441,7 +440,7 @@ def test_metal_batched_row_pre_encode(t : T?) {
                         for (pi in range64(4l)) {
                             var got <- toks_of(events, pi + 1l)
                             log_gen_texts(tr, "stream {pi} (encoded at call, pre-encoded)", refs[pi], got)
-                            t |> success(same_ids(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
+                            t |> success(ids_equal(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
                             delete got
                         }
                     }

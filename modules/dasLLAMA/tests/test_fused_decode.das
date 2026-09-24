@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
+require _model_tier   // llama2c_dir
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -18,16 +19,7 @@ require dasllama/dasllama_env
 // the fused size gate, so both sides run with target_chunk_work forced to 1 (identical
 // dispatch decisions per-op path included).
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
-// override the machine-local model root with DASLLAMA_MODELS_DIR (same rail as test_parity)
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 let N_STEPS = 24
 let FUSED_CTX = 64l   //! the GGUF sessions' context: N_STEPS positions and room; a CPU f32 K/V at a file's whole context runs to tens of GB (77 on the 262144-position Qwen3-4B)
 

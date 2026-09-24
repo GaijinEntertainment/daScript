@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier   // llama2c_dir
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
@@ -13,7 +14,6 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require strings   // the stamp cell strips a parameter's own const from a typename
-require dasllama/dasllama_env
 
 // KV-cache codec layout invariants — synthetic Configs only (no model files, never skips):
 // the per-session row-byte prefixes built by make_run_state must mirror layout_offsets' shared-
@@ -611,10 +611,6 @@ def test_kv_codec_f16(t : T?) {
     }
 }
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 
@@ -780,10 +776,6 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
 // q8_0 model tests run a GGUF carrier (stories15M's head_size 48 is rejected by the create-time
 // 32-block check — by design); SmolLM2-135M is the small head_size-64 carrier, same rail as
 // test_fused_decode. Override the model root with DASLLAMA_MODELS_DIR.
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 let GGUF_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private gguf_missing(t : T?) : bool {
