@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include <future>
+#include <atomic>
 #include <cstdlib>
 
 #include "../../../src/builtin/module_builtin_rtti.h"
@@ -167,12 +168,14 @@ public:
     WebSocketClient_Adapter ( char * pClass, const StructInfo * info, Context * ctx )
         : HvWebSocketClient_Adapter(info), classPtr(pClass), context(ctx) {
         onopen = [=]() {
+            connected.store(true);
             lock_guard<mutex> guard(lock);
             que.emplace_back([=](){
                 onOpen();
             });
         };
         onclose = [=]() {
+            connected.store(false);
             lock_guard<mutex> guard(lock);
             que.emplace_back([=](){
                 onClose();
@@ -223,6 +226,9 @@ protected:
     Context *   context;
     mutex       lock;
     vector<function<void()>>    que;
+    atomic<bool>    connected{false};
+public:
+    bool isConnected() { return connected.load(); }
 };
 
 Handle<hv::WebSocketClient> makeWebSocketClient ( const void * pClass, const StructInfo * info, Context * context ) {
@@ -254,7 +260,11 @@ int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t l
 int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return -1;
-    return p->close();
+    const auto & loop = p->loop();
+    if ( !loop || !loop->isRunning() ) return p->close();
+    auto client = p.get();
+    loop->runInLoop([client](){ client->close(); });
+    return 0;
 }
 
 void das_hv_set_log_file ( const char * path ) {
@@ -264,7 +274,7 @@ void das_hv_set_log_file ( const char * path ) {
 bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return false;
-    return p->isConnected();
+    return ((WebSocketClient_Adapter *) p.get())->isConnected();
 }
 
 void das_wsc_tick ( Handle<hv::WebSocketClient> h ) {
@@ -522,10 +532,15 @@ public:
         lock_guard<mutex> guard(writer_lock);
         active_writers.erase(w);
     }
+    bool is_writer_open ( hv::HttpResponseWriter * w ) {
+        lock_guard<mutex> guard(writer_lock);
+        auto it = active_writers.find(w);
+        return it != active_writers.end() && it->second.second->load();
+    }
     HttpResponseWriterPtr find_writer ( hv::HttpResponseWriter * w ) {
         lock_guard<mutex> guard(writer_lock);
         auto it = active_writers.find(w);
-        return it != active_writers.end() ? it->second : HttpResponseWriterPtr();
+        return it != active_writers.end() ? it->second.first : HttpResponseWriterPtr();
     }
     // Streaming route: an async (writer) handler. libhv hands us a live HttpResponseWriter and keeps
     // the connection open until we End() it. The das handler runs on the tick thread (its context +
@@ -535,9 +550,16 @@ public:
     void STREAM ( const char * relative_path, Lambda lmb, Context * context, LineInfoArg * at ) {
         lock_guard<mutex> guard(lock);
         router.Any(relative_path, [this,context,at,lmb](const HttpRequestPtr & req, const HttpResponseWriterPtr & writer) {
+            auto open = make_shared<atomic<bool>>(true);
+            auto mark_close = [writer,open](){
+                if ( !writer->isOpened() ) open->store(false);
+                else writer->onclose = [open](){ open->store(false); };
+            };
+            if ( auto wloop = this->loop(0) ) wloop->runInLoop(mark_close);
+            else mark_close();
             {
                 lock_guard<mutex> wguard(writer_lock);
-                active_writers[writer.get()] = writer;
+                active_writers[writer.get()] = make_pair(writer, open);
             }
             {
                 lock_guard<mutex> qguard(lock);
@@ -556,7 +578,7 @@ protected:
     mutex       lock;
     vector<function<void()>>    que;
     mutex       writer_lock;
-    map<hv::HttpResponseWriter*, HttpResponseWriterPtr>  active_writers;
+    map<hv::HttpResponseWriter*, pair<HttpResponseWriterPtr, shared_ptr<atomic<bool>>>>  active_writers;
     mutex       channel_lock;
     map<hv::WebSocketChannel*, Handle<hv::WebSocketChannel>>  channel_handles;
 };
@@ -861,15 +883,10 @@ void das_writer_release ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter 
     if ( auto adapter = lookup_server(h) ) adapter->release_writer(w);
 }
 
-// True while the writer's connection is still open (isOpened: io alive + not disconnected). The
-// async write ops never report a dead peer, so a server polls this to evict abandoned streams.
-// False for null / unknown / already-released writers.
 bool das_writer_is_connected ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w ) {
     auto adapter = lookup_server(h);
     if ( !adapter || !w ) return false;
-    auto sp = adapter->find_writer(w);
-    if ( !sp ) return false;
-    return sp->isOpened();
+    return adapter->is_writer_open(w);
 }
 
 void das_wss_set_document_root ( Handle<hv::WebSocketServer> h, const char * dir ) {
