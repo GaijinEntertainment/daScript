@@ -143,6 +143,14 @@ get_property(_das_modules GLOBAL PROPERTY DAS_SHARED_MODULE_TARGETS)
 if(_das_modules)
     add_dependencies(das_build_products ${_das_modules})
 endif()
+# the hosts and probe libraries tests load by name: tests/dasbind's [extern] bindings dlopen
+# dasbind_probe, and a sweep that only compiles the corpus (the sanitizer backend job) still
+# has to resolve them
+foreach(_host daslang-live watchdog dasbind_probe)
+    if(TARGET ${_host})
+        add_dependencies(das_build_products ${_host})
+    endif()
+endforeach()
 foreach(_lane ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY}
               test-small test-big check_bundle_smoke
               run_tests_interpreter run_tests_interpreter_isolated
