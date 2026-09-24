@@ -143,19 +143,6 @@ def private skip_back_ident(src : Source; from : int) : int {
 }
 
 
-def private skip_back_blank(src : Source; from : int) : int {
-    var i = from
-    peek_data(src.text) $(bytes) {
-        while (i > 0) {
-            let c = int(bytes[i - 1])
-            if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break
-            i--
-        }
-    }
-    return i
-}
-
-
 def public rule_block_braces(src : Source; lex : Lexical; blk : ExprBlock?; var set : EditSet) {
     //! Wraps an indent-delimited block in braces.
     //!

@@ -10,6 +10,7 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the kq mul_mm trio (Apple
 require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + Metal-4 tensor forms)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
+require ?das_metal _metal4_probe
 require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require dasllama/dasllama_gemm_schema     // kq_qsb — the ONE per-format quant-plane stride source
 require math
@@ -173,26 +174,6 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     delete want
     delete env
     delete wrow
-}
-
-// The tensor arms' skip gate: a CAPABILITY probe, not the artifact under test (an artifact
-// gate skips forever green when its producer regresses). Probed once, OR of two independent
-// tensor sources — a single regressed source still reds its own arm while the other proves
-// the toolchain; only both regressing together would misread as no-support.
-var private g_m4_probed = false
-var private g_m4_ok = false
-
-def private metal4_tensor_available(dev) : bool {
-    if (!g_m4_probed) {
-        g_m4_probed = true
-        var err : string
-        var p1 = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
-        var p2 = pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err)
-        g_m4_ok = p1 != null || p2 != null
-        metal_release(p1)
-        metal_release(p2)
-    }
-    return g_m4_ok
 }
 
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings; the

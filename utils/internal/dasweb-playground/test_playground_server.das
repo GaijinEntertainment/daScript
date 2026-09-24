@@ -3,6 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost public
 require playground_server
+require _playground_test_common
 require daslib/jobque_boost
 require daslib/json_boost
 require daslib/fio
@@ -56,18 +57,6 @@ def private default_policy : StorePolicy {
 
 def private tiny_policy : StorePolicy {
     return StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
-}
-
-def private posted_hash(base_url : string; source : string) : string {
-    var hash = ""
-    POST("{base_url}/api/samples", source) $(resp) {
-        if (resp != null && resp.status_code == http_status.OK) {
-            var jerr = ""
-            var doc = read_json(string(resp.body), jerr)
-            hash = doc?["hash"] ?? ""
-        }
-    }
-    return hash
 }
 
 [test]

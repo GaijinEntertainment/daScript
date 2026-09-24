@@ -147,6 +147,36 @@ class ArrayAdapter : SourceAdapter {
     }
 }
 
+[macro_function]
+def private wrap_two_source_invoke(shape; var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
+    let srcAName = shape.srcAName
+    let srcBName = shape.srcBName
+    let srcAType = shape.srcAType
+    let srcBType = shape.srcBType
+    let srcAExpr = shape.srcAExpr
+    let srcBExpr = shape.srcBExpr
+    var emission : Expression?
+    if (retType != null) {
+        emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) : $t(retType) {
+            $b(stmts)
+        }, $e(srcAExpr), $e(srcBExpr)))
+    } else {
+        emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
+            $b(stmts)
+        }, $e(srcAExpr), $e(srcBExpr)))
+    }
+    emission.force_at(at)
+    emission.force_generated(true)
+    let blk = (emission as ExprInvoke).arguments[0] as ExprMakeBlock
+    (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
+    (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
+    if (wrapIter) {
+        emission = qmacro($e(emission).to_sequence_move())
+        emission.force_generated(true)
+    }
+    return emission
+}
+
 class ZipAdapter : SourceAdapter {
     shape : ZipShape
     def override name_prefix() : string {
@@ -193,32 +223,7 @@ class ZipAdapter : SourceAdapter {
         }
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        let srcAName = shape.srcAName
-        let srcBName = shape.srcBName
-        let srcAType = shape.srcAType
-        let srcBType = shape.srcBType
-        let srcAExpr = shape.srcAExpr
-        let srcBExpr = shape.srcBExpr
-        var emission : Expression?
-        if (retType != null) {
-            emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) : $t(retType) {
-                $b(stmts)
-            }, $e(srcAExpr), $e(srcBExpr)))
-        } else {
-            emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
-                $b(stmts)
-            }, $e(srcAExpr), $e(srcBExpr)))
-        }
-        emission.force_at(at)
-        emission.force_generated(true)
-        let blk = (emission as ExprInvoke).arguments[0] as ExprMakeBlock
-        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
-        (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
-        if (wrapIter) {
-            emission = qmacro($e(emission).to_sequence_move())
-            emission.force_generated(true)
-        }
-        return emission
+        return wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
     }
 }
 
@@ -260,32 +265,7 @@ class ArrayJoinAdapter : SourceAdapter {
         }
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        let srcAName = shape.srcAName
-        let srcBName = shape.srcBName
-        let srcAType = shape.srcAType
-        let srcBType = shape.srcBType
-        let srcAExpr = shape.srcAExpr
-        let srcBExpr = shape.srcBExpr
-        var emission : Expression?
-        if (retType != null) {
-            emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) : $t(retType) {
-                $b(stmts)
-            }, $e(srcAExpr), $e(srcBExpr)))
-        } else {
-            emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
-                $b(stmts)
-            }, $e(srcAExpr), $e(srcBExpr)))
-        }
-        emission.force_at(at)
-        emission.force_generated(true)
-        let blk = (emission as ExprInvoke).arguments[0] as ExprMakeBlock
-        (blk._block as ExprBlock).arguments[0].flags.can_shadow = true
-        (blk._block as ExprBlock).arguments[1].flags.can_shadow = true
-        if (wrapIter) {
-            emission = qmacro($e(emission).to_sequence_move())
-            emission.force_generated(true)
-        }
-        return emission
+        return wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
     }
 }
 

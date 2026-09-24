@@ -13,6 +13,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kerne
 require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only the tag-less mismatch compares stay local
+require ?das_metal _metal4_probe
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require math
 
@@ -3159,24 +3160,6 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
 // The gathered q51 mul_mm: ne experts with padded-CSR row runs (gather = 0 bucket-rows mode);
 // exact-arithmetic planes (the A tile's f16(d*q + m) values are dyadic <= 63.25 — f16-exact),
 // int x rows — every simdgroup accumulate is exact, so the whole padded y compares BIT-exact.
-// Metal-4 tensor toolchain probe (the gemm file's twin, file-private there): one crowned
-// twin PSO compiling proves the toolchain, so a later twin compile failure is a RED
-var private g_m4_probed = false
-var private g_m4_ok = false
-
-def private metal4_tensor_available(dev) : bool {
-    if (!g_m4_probed) {
-        g_m4_probed = true
-        var err : string
-        var p1 = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
-        var p2 = pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err)
-        g_m4_ok = p1 != null || p2 != null
-        metal_release(p1)
-        metal_release(p2)
-    }
-    return g_m4_ok
-}
-
 //! device-free: the dev-W knee arithmetic (the pick the board's deep-dense cells ride).
 //! Expectations hold at the DEVW_SMALL_PANEL default (32 MiB) - no sidecar loads here
 [test, unused_argument(t)]   // off-Apple the body feints without touching t

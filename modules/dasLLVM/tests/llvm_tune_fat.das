@@ -5,6 +5,7 @@ require daslib/module_path
 require daslib/strings_boost
 require daslib/fio
 require strings
+require _spawn_common
 require llvm/daslib/llvm_tune
 require llvm/daslib/llvm_cpu_class
 
@@ -21,21 +22,6 @@ def private tune_env_prefix(mode, baseline, pin : string) : string {
     return (get_platform_name() == "windows" ?
         "set DAS_TUNE_MODE={mode}&& set DAS_JIT_BASELINE={baseline}&& set DAS_TUNE_FAT_CLASS={pin}&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_LOG_LEVEL=info&& " :
         "DAS_TUNE_MODE={mode} DAS_JIT_BASELINE={baseline} DAS_TUNE_FAT_CLASS={pin} DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_LOG_LEVEL=info ")
-}
-
-def private spawn_child(cmd : string; var lines : array<string>) : int {
-    let rc = unsafe(popen_timeout("{cmd} 2>&1", 300.0) $(f) {
-        if (f == null) {
-            return
-        }
-        while (!feof(f)) {
-            let ln = strip(fgets(f))
-            if (!empty(ln)) {
-                lines |> push("{ln}")
-            }
-        }
-    })
-    return rc
 }
 
 def private has(lines : array<string>; needle : string) : bool {

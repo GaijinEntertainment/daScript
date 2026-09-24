@@ -3,7 +3,7 @@ options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
 
-require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_load
@@ -13,6 +13,7 @@ require ?das_metal dasllama/dasllama_metal_prefill
 require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime — the standing pre-measure stack
 require daslib/jobque_boost
 require daslib/fio
+require ?das_metal _prefill_probe_fixture
 
 // ATTRIBUTION SWEEP - its arms attribute the Metal prefill wall across kernel FAMILIES (gemm,
 // attn, ew, dense activation converts, weight staging), never selecting between implementations.
@@ -20,27 +21,6 @@ require daslib/fio
 // at npos=512, best-of-3, base re-measured before every family (drift-guarded). Adds the new
 // act_cvt arm (dense activation converts) beside devw_cvt (weight staging). Direction-grade;
 // output is GARBAGE while a family is skipped.
-
-def measure_one(tr : Model; npos : int64; reps : int) : double {
-    var best = 1.0e30lf
-    for (_r in range(reps)) {
-        var s <- make_run_state(tr.config)
-        var toks : array<int64>
-        toks |> reserve(npos)
-        for (i in range64(npos)) {
-            toks |> push(100l + i % 5000l)
-        }
-        let t0 = ref_time_ticks()
-        eval_(tr, s, toks)
-        let ms = double(get_time_usec(t0)) / 1000.0lf
-        if (ms < best) {
-            best = ms
-        }
-        delete toks
-        delete s
-    }
-    return best
-}
 
 [export, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def main {

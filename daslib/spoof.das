@@ -151,20 +151,24 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
     return (result = string(result), ok = true)
 }
 
+def private accept_until_double_percent(var expr : ExprReader?; ch : int) : bool {
+    if (ch != '\r') {
+        append(expr.sequence, ch)
+    }
+    if (ends_with(expr.sequence, "%%")) {
+        let len = length(expr.sequence)
+        resize(expr.sequence, len - 2)
+        return false
+    } else {
+        return true
+    }
+}
+
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro {
     //! Reader macro that parses spoof template definitions.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        if (ch != '\r') {
-            append(expr.sequence, ch)
-        }
-        if (ends_with(expr.sequence, "%%")) {
-            let len = length(expr.sequence)
-            resize(expr.sequence, len - 2)
-            return false
-        } else {
-            return true
-        }
+        return accept_until_double_percent(expr, ch)
     }
 
     def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr {
@@ -234,16 +238,7 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
 class SpoofInstanceReader : AstReaderMacro {
     //! Reader macro that instantiates a spoof template.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        if (ch != '\r') {
-            append(expr.sequence, ch)
-        }
-        if (ends_with(expr.sequence, "%%")) {
-            let len = length(expr.sequence)
-            resize(expr.sequence, len - 2)
-            return false
-        } else {
-            return true
-        }
+        return accept_until_double_percent(expr, ch)
     }
 
     def override suffix(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; info : LineInfo; var outLine : int&; var outFile : FileInfo?&) : string {

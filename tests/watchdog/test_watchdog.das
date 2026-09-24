@@ -29,6 +29,13 @@ def guard(seconds : float) : float {
     return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 }
 
+//! the deadline on a supervision whose child runs in script mode (`daslang -jit`): every launch
+//! JITs the fixture's whole require closure into a fresh cwd with no cache, about ten seconds on a
+//! Release host and near sixty on the leak-tracking RelWithDebInfo one, and the cells wait for two
+def script_mode_guard() : float {
+    return guard(180.0)
+}
+
 def make_temp(t : T?; prefix : string) : string {
     let tmp = create_temp_directory_result(prefix)
     if (!(tmp is value)) {
@@ -981,7 +988,7 @@ def test_supervise_tune_bootstrap(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, guard(60.0)), 0)
+        t |> equal(run_bounded(t, sup, script_mode_guard()), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_bootstrap_complete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0)
@@ -1009,7 +1016,7 @@ def test_supervise_tune_abort_backs_off(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, guard(60.0)), 0)
+        t |> equal(run_bounded(t, sup, script_mode_guard()), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_incomplete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "tune_bootstrap_complete"), 0, "no marker, no bootstrap")
