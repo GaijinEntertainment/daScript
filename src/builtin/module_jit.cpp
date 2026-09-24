@@ -724,10 +724,6 @@ namespace das {
                 SideEffects::none, "das_get_context_shared_size");
             addExternInline<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
                 SideEffects::none, "das_get_jit_str_cat");
-            addExternInline<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
-                SideEffects::none, "das_get_jit_prologue");
-            addExternInline<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
-                SideEffects::none, "das_get_jit_epilogue");
             addExternInline<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
                 SideEffects::none, "das_get_jit_make_block");
             addExternInline<DAS_BIND_FUN(das_get_jit_try_recover)>(*this, lib, "get_jit_try_recover",

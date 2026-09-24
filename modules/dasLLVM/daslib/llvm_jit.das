@@ -951,8 +951,7 @@ class public LlvmJitVisitor : AstVisitor {
                 get_context_param(),
                 get_line_info_ptr(funAt)    // at — used for stack-overflow throw
             )
-            var typ = g_fn_types[FN_JIT_PROLOGUE]
-            LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
+            build_jit_runtime_call(g_builder, JitRuntime.jit_prologue, params)
         }
         // allocate arguments (promoted to local variables). hasMakeBlock forces always-promote so
         // block-captured argument variables are addressable; could be narrowed to captured-only.
@@ -1010,8 +1009,7 @@ class public LlvmJitVisitor : AstVisitor {
                 prologue,
                 get_context_param()
             )
-            var typ = g_fn_types[FN_JIT_EPILOGUE]
-            LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_EPILOGUE), params, "")
+            build_jit_runtime_call(g_builder, JitRuntime.jit_epilogue, params)
         }
     }
 

@@ -41,8 +41,6 @@ namespace das {
     void * das_get_jit_string_table_at_after_packed_miss ();
     void * das_get_jit_str_cat ();
     void * das_get_jit_ast_typedecl ();
-    void * das_get_jit_prologue ();
-    void * das_get_jit_epilogue ();
     void * das_get_jit_make_block ();
     void * das_get_jit_try_recover ();
     void * das_get_jit_ad_by_sid ();

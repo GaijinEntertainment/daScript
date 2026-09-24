@@ -34,14 +34,22 @@ def arg(i : int) : Ir => ir(LLVMGetParam(g_ir.fn, uint(i)))
 def text(s : string) : Ir => ir(build_string_constant(s))
 def operator +(a, b : Ir) : Ir => ir(LLVMBuildAdd(g_ir.b, a.v, b.v, ""))
 def operator -(a, b : Ir) : Ir => ir(LLVMBuildSub(g_ir.b, a.v, b.v, ""))
+def operator -(a : Ir) : Ir => ir(LLVMBuildNeg(g_ir.b, a.v, ""))
 def operator &(a, b : Ir) : Ir => ir(LLVMBuildAnd(g_ir.b, a.v, b.v, ""))
 def operator ==(a, b : Ir) : Ir => ir(LLVMBuildICmp(g_ir.b, LLVMIntPredicate.LLVMIntEQ, a.v, b.v, ""))
 def operator !=(a, b : Ir) : Ir => ir(LLVMBuildICmp(g_ir.b, LLVMIntPredicate.LLVMIntNE, a.v, b.v, ""))
+def below(a, b : Ir) : Ir => ir(LLVMBuildICmp(g_ir.b, LLVMIntPredicate.LLVMIntULT, a.v, b.v, ""))
+def zext64(a : Ir) : Ir => ir(LLVMBuildZExt(g_ir.b, a.v, g_prim_t.t_int64, ""))
 def is_null(p : Ir) : Ir => ir(LLVMBuildIsNull(g_ir.b, p.v, ""))
 def select(c, a, b : Ir) : Ir => ir(LLVMBuildSelect(g_ir.b, c.v, a.v, b.v, ""))
+def offset(p : Ir; var bytes : Ir) : Ir => ir(LLVMBuildGEP2(g_ir.b, g_prim_t.t_int8, p.v, bytes.v, "", false))
+def offset(p : Ir; bytes : uint) : Ir => offset(p, ir(bytes))
+//! the pointer-sized slot `i` slots away from `p`, stepped by the target's pointer size
+def ptr_slot(p : Ir; i : int) : Ir => ir(LLVMBuildGEP2(g_ir.b, g_prim_t.LLVMVoidPtrType(), p.v, LLVMConstInt(g_prim_t.t_int32, uint64(int64(i)), 1), "", false))
 def field(p : Ir; st : LLVMOpaqueType?; index : int) : Ir => ir(LLVMBuildStructGEP2(g_ir.b, st, p.v, uint(index), ""))
 def load(p : Ir; t : LLVMOpaqueType?) : Ir => ir(LLVMBuildLoad2(g_ir.b, t, p.v, ""))
 def load32(p : Ir) : Ir => load(p, g_prim_t.t_int32)
+def load_ptr(p : Ir) : Ir => load(p, g_prim_t.LLVMVoidPtrType())
 def ir_builder : LLVMBuilderRef => g_ir.b
 
 def ret(v : Ir) {

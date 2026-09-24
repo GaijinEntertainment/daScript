@@ -695,31 +695,6 @@ extern "C" {
         }
     }
 
-    struct JitStackState {
-        char * EP;
-        char * SP;
-    };
-
-    DAS_API void jit_prologue ( const char *funcName, void * funcLineInfo,
-            int32_t stackSize, JitStackState * stackState,
-            Context * context, LineInfoArg * at ) {
-        if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
-            context->throw_error_at(at, "stack overflow");
-        }
-#if DAS_ENABLE_STACK_WALK
-        Prologue * pp = (Prologue *)context->stack.sp();
-        pp->info = nullptr;
-        pp->fileName = funcName;
-        pp->functionLine = (LineInfo *) funcLineInfo;
-        pp->stackSize = stackSize;
-        pp->is_jit = true;
-#endif
-    }
-
-    DAS_API void jit_epilogue ( JitStackState * stackState, Context * context ) {
-        context->stack.pop(stackState->EP, stackState->SP);
-    }
-
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4611)  // setjmp + C++ object destruction
@@ -889,8 +864,6 @@ extern "C" {
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
     void *das_get_jit_free_persistent() { return (void *)&jit_free_persistent; }
     void *das_get_jit_array_resize() { return (void *)&builtin_array_resize; }
-    void *das_get_jit_prologue() { return (void *)&jit_prologue; }
-    void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
     void *das_get_jit_make_block() { return (void *)&jit_make_block; }
     void *das_get_jit_try_recover() { return (void *)&jit_try_recover; }
     void *das_get_jit_ad_by_sid() { return (void *)&jit_ad_by_sid; }

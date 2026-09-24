@@ -62,8 +62,6 @@ let public FN_JIT_FREE_HEAP         = "jit_free_heap"
 let public FN_JIT_FREE_PERSISTENT   = "jit_free_persistent"
 let public FN_JIT_ARRAY_RESIZE      = "jit_array_resize"
 let public FN_JIT_STR_CAT           = "jit_str_cat"
-let public FN_JIT_PROLOGUE          = "jit_prologue"
-let public FN_JIT_EPILOGUE          = "jit_epilogue"
 let public FN_JIT_MAKE_BLOCK        = "jit_make_block"
 let public FN_JIT_TRY_RECOVER       = "jit_try_recover"
 let public FN_JIT_AD_BY_SID         = "jit_ad_by_sid"
@@ -842,11 +840,6 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
         get_jit_array_resize(), fixed_array(nounwind, willreturn), (nocapture, [0]))
     jit_add_extern(FN_JIT_STR_CAT, jit_fn_type($(sA, sB, ctx, at : void?) : void? {}),
         get_jit_str_cat(), fixed_array(nounwind, willreturn), (nocapture, [0, 1, 2]))
-    jit_add_extern(FN_JIT_PROLOGUE,
-        jit_fn_type($(funcName, funcLineInfo : void?; stackSize : int; stackState, ctx, at : void?) : void {}),
-        get_jit_prologue(), fixed_array(nounwind, willreturn), (nocapture, [3, 4, 5]))
-    jit_add_extern(FN_JIT_EPILOGUE, jit_fn_type($(stackState, ctx : void?) : void {}),
-        get_jit_epilogue(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
     jit_add_extern(FN_JIT_MAKE_BLOCK,
         jit_fn_type($(blk : void?; argStackTop : int; ad : int64; bodyNode, jitImpl, funcInfo, at, ctx : void?) : void {}),
         get_jit_make_block(), fixed_array(nounwind, willreturn), (nocapture, [0, 3, 4, 5, 6]))

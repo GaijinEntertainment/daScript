@@ -23,6 +23,8 @@ enum public JitRuntime {
     jit_array_unlock
     jit_table_lock
     jit_table_unlock
+    jit_prologue
+    jit_epilogue
 }
 
 //! calls runtime helper `fn`, defining its body into g_mod on the module's first call
@@ -40,7 +42,9 @@ def private define_jit_runtime_helper(fn : JitRuntime) : LLVMOpaqueValue? {
     if (fn == JitRuntime.jit_array_lock) return define_lock(name, "array")
     if (fn == JitRuntime.jit_table_lock) return define_lock(name, "table")
     if (fn == JitRuntime.jit_array_unlock) return define_unlock(name, "array")
-    return define_unlock(name, "table")
+    if (fn == JitRuntime.jit_table_unlock) return define_unlock(name, "table")
+    if (fn == JitRuntime.jit_prologue) return define_prologue(name)
+    return define_epilogue(name)
 }
 
 //! strcmp where a null string reads as ""
@@ -82,5 +86,35 @@ def private define_unlock(name, what : string) : LLVMOpaqueValue? {
         let left = lock - ir(1u)
         store(header(JIT_ARRAY.LOCK), left)
         store(header(JIT_ARRAY.MAGIC), select(left == ir(0u), ir(0u), ir(ARRAY_MAGIC)))
+    }
+}
+
+//! StackAllocator::push (heap.h) into the caller's stack state, then the Prologue a stack walk reads (simulate.h);
+//! StackAllocator's stack and stackTop are the pointers beside its evalTop
+def private define_prologue(name : string) : LLVMOpaqueValue? {
+    return ir_function(name, jit_fn_type($(funcName, funcLineInfo : void?; stackSize : int; stackState, ctx, at : void?) : void {}), 4, 5) {
+        let evalTopP = offset(arg(4), CONTEXT_OFFSET_OF_EVAL_TOP)
+        let stackTopP = ptr_slot(evalTopP, 1)
+        let top = load_ptr(stackTopP)
+        let newTop = offset(top, -zext64(arg(2)))
+        throw_if(below(newTop, load_ptr(ptr_slot(evalTopP, -1))), text("stack overflow"))
+        store(field(arg(3), g_t_stack_state, 0), load_ptr(evalTopP))
+        store(field(arg(3), g_t_stack_state, 1), top)
+        store(stackTopP, newTop)
+        store(evalTopP, newTop)
+        let pt = jit_struct_type(type<tuple<info : void?; fileName : void?; functionLine : void?; stackSize : int; flags : int>>)
+        let is_jit = ir(1u)
+        for (i, v in range(5), fixed_array(ir(LLVMConstNull(g_prim_t.LLVMVoidPtrType())), arg(0), arg(1), arg(2), is_jit)) {
+            store(field(newTop, pt, i), v)
+        }
+    }
+}
+
+//! StackAllocator::pop back to the state jit_prologue saved
+def private define_epilogue(name : string) : LLVMOpaqueValue? {
+    return ir_function(name, jit_fn_type($(stackState, ctx : void?) : void {}), 1, -1) {
+        let evalTopP = offset(arg(1), CONTEXT_OFFSET_OF_EVAL_TOP)
+        store(evalTopP, load_ptr(field(arg(0), g_t_stack_state, 0)))
+        store(ptr_slot(evalTopP, 1), load_ptr(field(arg(0), g_t_stack_state, 1)))
     }
 }
