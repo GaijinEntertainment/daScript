@@ -666,7 +666,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
 
 let private PAT_HEADS = 16   //! the SigLIP head count: sixteen 72-wide heads through the padded 128 route
 
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
 def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded route end to end: the fixture, the command buffer, the oracle and its controls
     t0 |> run("the padded attention route (pad, the h128 bidirectional tile, unpad) == attention_bidir at 72-wide heads") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -753,26 +753,22 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
 
 let private WIN_HS = 80   //! the window ViT's head width, padded to 128 on the tile
 let private WIN_HEADS = 4
-let private WIN_ROWS = 982   //! sixteen windows: fifteen full 64-row slots and a ragged 22-row one
+let private WIN_ROWS = 982   //! sixteen windows: fifteen of 64 rows and a ragged 22-row one
 
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
 def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route end to end plus the two seams: the fixture, the command buffer, the oracles and their controls
-    t0 |> run("the window-attention classes (slotted pads, the block-diagonal tile, the rms seam, the gated hidden) == the CPU tower helpers") <| @(t : T?) {
+    t0 |> run("the window-attention classes (the f32 per-window attention, the rms seam, the gated hidden) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let khr = !cm2_fa_on()
-            let fa_ok = khr ? ensure_fa_khr_h128_win_cls() : ensure_fa_cm2_h128_win_cls()
-            if (!fa_ok || !ensure_tower_hpad_slot_cls() || !ensure_tower_hpad16_slot_cls() || !ensure_tower_hunpad_slot_cls()
-                    || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
+            if (!ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
                 t |> skip("the window route's classes declined on this device")
                 return
             }
             let rows = WIN_ROWS
             let dc = WIN_HEADS * WIN_HS
-            let dp = WIN_HEADS * LN_HSP
             let scale = 1.0 / sqrt(float(WIN_HS))
             let nslot = (rows + 63) / 64
             var win_lo : array<int64>
@@ -780,41 +776,21 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             for (s in range(nslot + 1)) {
                 win_lo |> push(min(int64(s) * 64l, int64(rows)))
             }
-            let srows = nslot * 64
-            var rmap : array<int>
-            var wcnt : array<uint>
-            rmap |> resize(srows)
-            wcnt |> resize(nslot)
-            for (s in range(nslot)) {
-                let lo = int(win_lo[s])
-                let cnt = int(win_lo[s + 1]) - lo
-                wcnt[s] = uint(cnt)
-                for (i in range(64)) {
-                    rmap[s * 64 + i] = i < cnt ? lo + i : -1
-                }
+            var wlo : array<uint>
+            wlo |> resize(nslot + 1)
+            for (s in range(nslot + 1)) {
+                wlo[s] = uint(win_lo[s])
             }
             var q <- row_fill(rows * dc, 29, 11, 0.02, 0.9)
             var k <- row_fill(rows * dc, 17, 3, 0.03, 1.4)
             var v <- row_fill(rows * dc, 53, 7, 0.04, 1.7)
-            for (i in range(rows * dc)) {
-                k[i] = f16r(k[i])
-                v[i] = f16r(v[i])
-            }
             let bc = int64(rows * dc) * 4l
-            let bp = int64(srows * dp) * 4l
-            let bph = int64(srows * dp) * 2l
-            let brm = int64(srows) * 4l
-            let bwc = int64(nslot) * 4l
+            let bwl = int64(nslot + 1) * 4l
             let qd = make_device_buf(bc)
             let kd = make_device_buf(bc)
             let vd = make_device_buf(bc)
-            let qpd = make_device_buf(bp)
-            let kpd = make_device_buf(bph)
-            let vpd = make_device_buf(bph)
-            let attpd = make_device_buf(bp)
             let attd = make_device_buf(bc)
-            let rmd = make_device_buf(brm)
-            let wcd = make_device_buf(bwc)
+            let wld = make_device_buf(bwl)
             // the two seams' fixture: d-wide rows, a bias and rms weight rows at wn
             let d = ROWS_D
             let nrows = ROWS_N
@@ -837,42 +813,22 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
                 upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
                 upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
-                upload_region_at(rmd, 0l, addr<uint8 const?>(rmap[0]), brm)
-                upload_region_at(wcd, 0l, addr<uint8 const?>(wcnt[0]), bwc)
+                upload_region_at(wld, 0l, addr<uint8 const?>(wlo[0]), bwl)
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
                 upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
                 upload_region_at(ud, 0l, addr<uint8 const?>(u[0]), bx)
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
             }
-            var s_pq = set_tower_hpad_slot_cls(fixed_array(qd, qpd, rmd), fixed_array(bc, bp, brm), fixed_array(1u, 2u, 0u))
-            var s_pk = set_tower_hpad16_slot_cls(fixed_array(kd, kpd, rmd), fixed_array(bc, bph, brm), fixed_array(4u, 8u, 0u))
-            var s_pv = set_tower_hpad16_slot_cls(fixed_array(vd, vpd, rmd), fixed_array(bc, bph, brm), fixed_array(16u, 32u, 0u))
-            var s_fa : VkDescriptorSet
-            if (khr) {
-                s_fa = set_fa_khr_h128_win_cls(fixed_array(qpd, kpd, vpd, attpd, wcd), fixed_array(bp, bph, bph, bp, bwc), fixed_array(2u, 8u, 32u, 64u, 0u))
-            } else {
-                s_fa = set_fa_cm2_h128_win_cls(fixed_array(qpd, kpd, vpd, attpd, wcd), fixed_array(bp, bph, bph, bp, bwc), fixed_array(2u, 8u, 32u, 64u, 0u))
-            }
-            var s_un = set_tower_hunpad_slot_cls(fixed_array(attpd, attd, rmd), fixed_array(bp, bc, brm), fixed_array(64u, 128u, 0u))
+            var s_win = set_tower_win_attn_cls(fixed_array(qd, kd, vd, attd, wld), fixed_array(bc, bc, bc, bc, bwl), fixed_array(1u, 4u, 16u, 128u, 0u))
             var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(256u, 512u, 1024u, 0u))
             var s_glu = set_tower_glu_act_cls(fixed_array(gd, ud, wd), fixed_array(bx, bx, bw), fixed_array(2048u, 4096u, 0u))
-            var pa_rs = TowerRestrideArgs(rows = uint(srows), nheads = uint(WIN_HEADS), hs = uint(WIN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
-            var pa_fa = FaArgs(rows = uint(srows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
+            var pa_win = TowerWinArgs(d = uint(dc), nheads = uint(WIN_HEADS), hs = uint(WIN_HS), scale = scale)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u)
             var pa_glu = TowerGluArgs(d = uint(d), nelem = uint(nd), bgoff = uint(2 * d), buoff = uint(3 * d))
-            let wg_rs = int64((srows * dp + 255) / 256)
             let wg4 = int64((nd / 4 + 255) / 256)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tower_hpad_slot_cls(raw, h, s_pq, pa_rs, wg_rs)
-                enc_tower_hpad16_slot_cls(raw, h, s_pk, pa_rs, wg_rs)
-                enc_tower_hpad16_slot_cls(raw, h, s_pv, pa_rs, wg_rs)
-                if (khr) {
-                    enc_fa_khr_h128_win_cls(raw, h, s_fa, pa_fa, fa_wgs(true, WIN_HEADS, srows))
-                } else {
-                    enc_fa_cm2_h128_win_cls(raw, h, s_fa, pa_fa, fa_wgs(false, WIN_HEADS, srows))
-                }
-                enc_tower_hunpad_slot_cls(raw, h, s_un, pa_rs, wg_rs)
+                enc_tower_win_attn_cls(raw, h, s_win, pa_win, int64(nslot * WIN_HEADS))
                 enc_tower_glu_act_cls(raw, h, s_glu, pa_glu, wg4)
                 enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
                 vhz_dep(raw, h, 128u | 256u | 1024u | 2048u, 0u, true)
@@ -905,9 +861,9 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
             }
             let bad = mismatch_approx(att_dev, att_ref)
-            t |> success(bad == 0, "the window route matches attention_bidir_windows over {nslot} windows, one ragged ({bad} of {rows * dc} off)")
-            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "the window route: the bar reds a poisoned element")
-            //! the leak control: the same rows attended in full differ on the first row, so the slots' walls are the stamps' doing
+            t |> success(bad == 0, "tower_win_attn matches attention_bidir_windows over {nslot} windows, one ragged ({bad} of {rows * dc} off)")
+            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "tower_win_attn: the bar reds a poisoned element")
+            //! the leak control: the same rows attended in full differ on the first row, so the windows' walls are the class's doing
             var full_ref : array<float>
             full_ref |> resize(rows * dc)
             with_job_que() {
@@ -916,9 +872,9 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             }
             var moved = 0.0
             for (i in range(dc)) {
-                moved = max(moved, abs(full_ref[i] - att_ref[i]))
+                moved = max(moved, abs(full_ref[i] - att_dev[i]))
             }
-            t |> success(moved > 0.01, "the window route control: full attention over the same rows lands elsewhere (maxdiff {moved})")
+            t |> success(moved > 0.01, "tower_win_attn control: full attention over the same rows lands elsewhere (maxdiff {moved})")
             var x_ref := x
             var yb := y
             add_bias_rows(yb, wn, 0l, int64(d), int64(nrows))
@@ -943,7 +899,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let bad_glu = mismatch_approx(g_dev, g_ref)
             t |> success(bad_glu == 0, "tower_glu_act: silu(g + bg) . (u + bu) matches the CPU form ({bad_glu} of {nd} off)")
             t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_glu_act: the bar reds a poisoned element")
-            for (b in fixed_array(qd, kd, vd, qpd, kpd, vpd, attpd, attd, rmd, wcd, xd, yd, xbd, gd, ud, wd)) {
+            for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, gd, ud, wd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)

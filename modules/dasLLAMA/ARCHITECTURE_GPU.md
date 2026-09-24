@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's. This docume
 section 1.5: the GPU backend role table with its closed asymmetry lists.
 `ARCHITECTURE_GPU_RACE_SHAPES.md` beside it carries section 2.2b - the tensor-GEMM and
 fused-attention shapes that measured out. The Metal tower's attention routes and its encode
-chains are `ARCHITECTURE_GPU_TOWER.md` sections 2.2w-2.2x.
+chains are `ARCHITECTURE_GPU_TOWER.md` sections 2.2w-2.2x, the Vulkan tower's 2.2aq-2.2ar.
 
 ### 1.5 GPU backends {#gpu-backends}
 
@@ -295,6 +295,6 @@ The Vulkan resident driver's sections live in its companions, each head saying w
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 
 Section 2.2b, the tensor-GEMM and fused-attention shapes that measured out, is
-`ARCHITECTURE_GPU_RACE_SHAPES.md`; sections 2.2w-2.2x, the tower attention routes and the tower
-driver's encode chains, are `ARCHITECTURE_GPU_TOWER.md`; sections 2.2y-2.2z, the Metal quant plane
+`ARCHITECTURE_GPU_RACE_SHAPES.md`; sections 2.2w-2.2x and 2.2aq-2.2ar, the tower attention routes
+and the tower drivers' encode chains, are `ARCHITECTURE_GPU_TOWER.md`; sections 2.2y-2.2z, the Metal quant plane
 reads, are `ARCHITECTURE_GPU_QUANT_PLANES.md`.

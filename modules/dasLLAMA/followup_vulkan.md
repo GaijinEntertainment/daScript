@@ -1725,6 +1725,25 @@ module) is independent and can land any time - it is pure structure.
     added: the `[grid_words]` and `kq_tile_stamp` macro diagnostics (no failing fixture), and the
     two decode call sites that now clamp past +-65504 through `cvt_f32_to_f16` where the old cast
     gave +-inf (no plane carries such a value).
+94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER.md`
+    2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
+    x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
+    late blocks' outlier channels is the f16 feed into the f16 GEMM class and the full layers' f16
+    K/V shadows on the padded route. If a caption ever needs the deep bar tightened, the levers
+    are f32 K/V shadows on the full layers (four of 32) and an f32-x GEMM form for the late blocks'
+    feed; the instrument is `test_qwen25v_vulkan_twin`'s whole-tower legs with the bar at what the
+    lever reads.
+95. **The Vulkan tower's speed levers.** Every dispatch is the CPU loop's twin one for one -
+    correctness first. The levers: the cm2 f16 feed (`TowerClampCvt` into the f16 GEMM class) in
+    place of the Q8_0 requant and the q8 batch tile where the device has cm2; fusing the per-row
+    dispatches that sit between two GEMMs (a bias, an activation, a restride) into the GEMM's
+    epilogue or the next class; the head restrides folded into the flash tile's load on the padded
+    route; K and V staged in workgroup memory on the f32 window route (it reads them off the
+    compact rows today). The instrument is `lcpp_bench --image` on the E2B / gemma-3-4b /
+    Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows. The q8 tower images carry f32 scales
+    the upload converts to f16 on the gather (the resident MoE driver's precedent); baking f16
+    scales (`qscales16`) into the tower images would drop the conversion and switch the CPU q8
+    lane to its s16 kernels - a ruling.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s

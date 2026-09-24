@@ -309,10 +309,9 @@ helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox
 bar; the biased-block classes (the layernorm, the bias with its tanh GELU, the seam with its next
 layernorm, the head restrides to the tile's 128 and the rope on a fused row's k slot) the same way;
 the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
-heads) against `attention_bidir`; and the window classes - the slotted restrides, the block-diagonal
-tile over sixteen 64-row window slots (one ragged) against `attention_bidir_windows` with full
-attention over the same rows as the leak control, the rms seam and the gated hidden against their
-CPU forms. The attention and GEMM classes the towers ride are the kernel file's.
+heads) against `attention_bidir`; and the window classes - the f32 per-window attention over the
+compact rows on sixteen windows (one ragged) against `attention_bidir_windows` with full attention
+over the same rows as the leak control, the rms seam and the gated hidden against their CPU forms. The attention and GEMM classes the towers ride are the kernel file's.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit
@@ -1048,8 +1047,10 @@ quad content, GPU vs the CPU chain at 0.1 abs, the chaos-free window discriminat
 (the kernel's own block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly
 without the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`gpu_towers`). On a
 Vulkan build `test_qwen25v_vulkan_twin` holds the Vulkan block loop over the baked halfword twin
-(this family has no q8 lane, so the exact CPU chain is the reference) to the f16 route's 8e-2*rms
-bar on the single-window, four-window and ragged-edge fixtures with the engage counters and the
+(this family has no q8 lane, so the exact CPU chain is the reference) to 1e-2*rms on one-, two- and
+eight-block truncated towers and to 0.15*rms on the whole tower (the f16 GEMM feed's re-roll at
+depth, the Metal rung's order; the window layers attend in f32 so their noise does not compound)
+on the single-window, four-window and ragged-edge fixtures with the engage counters and the
 knob-off decline, then the shallow routing cells on the driver - the one-block pure-window and
 all-full towers on quad content against the CPU chain at 0.1 abs; quad content stays off the deep
 numeric set as on the Metal rung. Skips without the mmproj or a device.

@@ -466,7 +466,7 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; twx : Q
 // mergers reading the stashed residuals, so the wide rows' slices are the instrument for the taps.
 // One-, two- and six-block truncated towers first (the six-block one reaches the first tap), then
 // the whole tower; then the exact-lane tower, which the driver must decline (quant_mode).
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_qwen3v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact-lane decline") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

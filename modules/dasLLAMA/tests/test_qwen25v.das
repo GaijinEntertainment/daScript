@@ -106,12 +106,11 @@ def test_qwen25v_tier1(t : T?) {
 
 let private TWIN_ABS_VK = 2e-4
 //! the Vulkan twin's bars, the device chain vs the exact CPU chain (no q8 lane in this family): to eight blocks the route
-//! holds 1e-2 x rms on both arms (measured 1.4e-3..5.7e-3); past block 12 the f16 feed and the f16 K/V shadows on the
-//! late blocks' outlier channels re-roll the whole output - measured 0.13..0.37 x rms on the KHR arm and 0.16..0.79 on the
-//! cm2 arm at 32 blocks, non-monotonic in depth - so the deep bar is the not-garbage floor and the numbers are logged;
-//! the product gate is the caption (test_vision_chat's Omni pair), the lever is followup_vulkan's row
+//! holds 1e-2 x rms on both arms (measured 1.0e-3..4.5e-3); the whole tower holds the Metal rung's order - the f16 GEMM
+//! feed and the full layers' f16 K/V shadows re-roll the late blocks' outlier channels (measured 0.02..0.09 x rms at 32
+//! blocks; with the window layers on f16 K/V shadows it read 0.16..1.53, which is why the window route reads f32)
 let private TWIN_REL_VK_SHALLOW = 1e-2
-let private TWIN_REL_VK_DEEP = 1.0
+let private TWIN_REL_VK_DEEP = 0.15
 
 def private encode_maxdiff(a, b : array<float>) : float {
     var m = 0.0
@@ -235,7 +234,7 @@ def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
 // The Vulkan twin: the device block loop against the exact CPU chain (this family has no q8 lane) on
 // the shaped fixtures - the single window, four full windows, the ragged edges - and the shallow
 // routing cells; quad content stays off the deep numeric set as it does on the Metal rung.
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_qwen25v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the exact CPU chain, and the window routing") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

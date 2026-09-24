@@ -306,7 +306,7 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; twx :
 // The Vulkan twin: the device block loop against the CPU q8 chain on the fixed canvas - the instrument
 // that needs no oracle dump. One- and two-block truncated towers first, then the whole tower; then
 // the exact-lane tower, which the driver must decline (quant_mode) and leave to the CPU chain.
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_gemma3v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

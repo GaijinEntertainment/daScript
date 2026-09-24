@@ -758,10 +758,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // flash tile's width; their coverage is test_vkt_tower_ln_rows
     "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
-    // the window-attention ViT's classes (qwen25v): the block-diagonal flash stamps over 64-row window slots, the slotted
-    // restrides, the gated FFN's hidden and the rms seam; their coverage is test_vkt_tower_win_rows
-    "fa_cm2_h128_win_cls_spv", "fa_khr_h128_win_cls_spv", "tower_hpad_slot_cls_spv", "tower_hpad16_slot_cls_spv",
-    "tower_hunpad_slot_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
+    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows, the gated FFN's
+    // hidden and the rms seam; their coverage is test_vkt_tower_win_rows
+    "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

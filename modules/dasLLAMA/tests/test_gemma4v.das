@@ -476,7 +476,7 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; twx :
 // instrument that needs no oracle dump. Three grids: the smallest, a square product size, the
 // transposed one; then the exact-lane tower, which the driver must decline (quant_mode) and
 // leave to the CPU chain.
-[test]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_gemma4v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
