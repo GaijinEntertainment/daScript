@@ -1801,12 +1801,23 @@ def private arena_drop_shells {
     g_gpu.arenas |> clear()
 }
 
+var private g_vk_drop_hooks : array<function<() : void>>
+
+//! A driver whose device objects the model drop sweeps (every buffer and descriptor set is model-owned) registers a hook
+//! that forgets its handles; the sweep runs it before the objects die, and the driver rebuilds on its next use.
+def register_vk_drop_hook(fn : function<() : void>) {
+    g_vk_drop_hooks |> push(fn)
+}
+
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
 def vk_drop_model_state {
     if (g_gpu == null) {
         return
+    }
+    for (fn in g_vk_drop_hooks) {
+        invoke(fn)
     }
     if (g_gpu.dry) {
         // dry bake owns no device objects — reset the accounting shells only

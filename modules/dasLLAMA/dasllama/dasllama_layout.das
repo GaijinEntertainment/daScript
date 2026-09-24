@@ -604,19 +604,28 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
     assert(rows * n <= 2147483647l, "GPU MoE stack exceeds the int32 gather-buffer rail")
     wq |> grow_resize(rows * n)
     ws |> grow_resize(rows * nb * Q8_SPB)
+    unsafe {
+        if (t.wscale_f16) {
+            q8_gather_rows(addr<int8 const?>(t.qblob[woff]), addr<uint16 const?>(t.qscales16[woff / Q8_BLOCK_ELEMS]), null,
+                n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+        } else {
+            q8_gather_rows(addr<int8 const?>(t.qblob[woff]), null, addr<float const?>(t.qscales[woff / Q8_BLOCK_ELEMS]),
+                n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+        }
+    }
+}
+
+//! The gather's core over raw planes: `rows` x `n` prepared Q8 rows at `wp` (grp<mr> interleaved per `slice_rows`, or plain
+//! row-major at mr 1) with their scales (f16 halfwords at `s16p`, else f32 at `s32p`) into row-major int8 quants at
+//! `wq[dst_q..]` and f16 halfword scales at halfword `dst_s` of `ws` - the tower drivers gather region by region through it
+def q8_gather_rows(wp : int8 const?; s16p : uint16 const?; s32p : float const?; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
+                   var wq : array<uint8>; var ws : array<uint8>; dst_q : int64 = 0l; dst_s : int64 = 0l) {
+    let nb = n / Q8_BLOCK_ELEMS
     assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
-        let wp = addr<int8 const?>(t.qblob[woff])
-        var s16p : uint16 const? = null
-        var s32p : float const? = null
-        if (t.wscale_f16) {
-            s16p = addr<uint16 const?>(t.qscales16[woff / Q8_BLOCK_ELEMS])
-        } else {
-            s32p = addr<float const?>(t.qscales[woff / Q8_BLOCK_ELEMS])
-        }
-        var wqp = addr(wq[0])
-        var wsp = addr<uint16?>(ws[0])
+        var wqp = addr(wq[dst_q])
+        var wsp = addr<uint16?>(ws[dst_s * Q8_SPB])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
         maybe_parallel_for(0, nslices, njobs) $(sb, se) {
             unsafe {

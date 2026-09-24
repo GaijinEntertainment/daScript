@@ -283,7 +283,9 @@ def private g4v_put_clamp(var blob : array<float>; off : int64; c : Clamp) {
     blob[off + 4l] = c.active ? 1.0 : 0.0
 }
 
-def private g4v_clamp_at(t : Gemma4vTower; off : int64) : Clamp {
+//! The clamp record at `off` in ``blob`` (a ``Gemma4vBlockOffs.clamp`` entry or ``proj_clamp``) - the CPU loop and the
+//! GPU drivers read the bounds through this.
+def gemma4v_clamp_at(t : Gemma4vTower; off : int64) : Clamp {
     var c = Clamp()
     c.imin = t.blob[off]
     c.imax = t.blob[off + 1l]
@@ -637,9 +639,9 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     rms_rows(s.xb, s.x, t.blob, o.ln1, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_Q], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q]), t.q8)
-    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_K], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K]), t.q8)
-    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_V], s.xb, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_V]), t.q8)
+    g4v_gemm_clamped(s.qq, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_Q], s.xb, d, d, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_Q]), t.q8)
+    g4v_gemm_clamped(s.kk, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_K], s.xb, d, d, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_K]), t.q8)
+    g4v_gemm_clamped(s.vv, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_V], s.xb, d, d, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_V]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.qq, s.qq, t.blob, o.q_norm, hd, npos * t.n_head, t.eps)
@@ -652,7 +654,7 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0)   // kq_scale = 1: the ViT attends unscaled
     asr_prof_add("g4v.attn_core", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_O], s.xb2, d, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_O]), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_O], s.xb2, d, d, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_O]), t.q8)
     asr_prof_add("g4v.attn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.xb, s.xb, t.blob, o.attn_post, d, npos, t.eps)
@@ -661,14 +663,14 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     rms_rows(s.xb, s.x, t.blob, o.ln2, d, npos, t.eps)
     asr_prof_add("g4v.norm", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_GATE], s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_GATE]), t.q8)
-    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_UP], s.xb, d, ff, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_UP]), t.q8)
+    g4v_gemm_clamped(s.hg, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_GATE], s.xb, d, ff, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_GATE]), t.q8)
+    g4v_gemm_clamped(s.hu, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_UP], s.xb, d, ff, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_UP]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
     geglu_quick_lut_rows(s.hg, s.hg, s.hu, ff, npos)
     asr_prof_add("g4v.geglu", tp)
     tp = ref_time_ticks()
-    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_DOWN], s.hg, ff, d, npos, g4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN]), t.q8)
+    g4v_gemm_clamped(s.xb, t, s, t.blk_bf16, o.w[GEMMA4V_GEMM_DOWN], s.hg, ff, d, npos, gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN]), t.q8)
     asr_prof_add("g4v.ffn_mm", tp)
     tp = ref_time_ticks()
     rms_rows(s.xb, s.xb, t.blob, o.ffn_post, d, npos, t.eps)
@@ -736,7 +738,7 @@ def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : in
     }
     rms_rows_weightless(s.pooled, d, nout, t.eps)
     ensure_length(out, nout * t.proj_dim)
-    g4v_gemm_clamped(out, t, s, t.proj_bf16, t.proj_w, s.pooled, d, t.proj_dim, nout, g4v_clamp_at(t, t.proj_clamp))
+    g4v_gemm_clamped(out, t, s, t.proj_bf16, t.proj_w, s.pooled, d, t.proj_dim, nout, gemma4v_clamp_at(t, t.proj_clamp))
     return nout
 }
 

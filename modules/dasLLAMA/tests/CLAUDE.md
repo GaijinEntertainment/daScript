@@ -955,7 +955,16 @@ eight E2B fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e
 measured maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through
 the staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung
 - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
-with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps. Every
+CPU-lane claim pins BOTH GPU tower knobs off (`gpu_towers`). On a Vulkan build two more cells:
+`test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image on
+the q8 lane's bar with the engage counters per fixture, and `test_gemma4v_vulkan_twin` needs no
+dump - one canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and
+two-block truncated towers and the whole tower, the counters proving which served, the device's
+distance from the exact chain held within 1.5x the CPU q8 chain's own (the gate's reading: the
+device chain is the same or better), the residual rows logged per 64-row tile, a poisoned element
+per bar, then the exact-lane tower's `quant_mode` decline; the E4B cell's q8 leg re-runs its dump
+through the driver. Both skip without a Vulkan device.
 `test_gemma3v.das` - stocked suite; the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896^2 (learned position table), so

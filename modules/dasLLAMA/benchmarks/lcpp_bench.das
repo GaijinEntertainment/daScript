@@ -558,7 +558,8 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                 // form; --image-think prices that model's template-default turn instead)
                 print("lcpp_bench --image: the timed reply is EMPTY - no cell minted (try --image-think for a model whose suppress form derails it)\n")
             } else {
-                var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
+                //! the stamp follows the LLM rows': the Vulkan tier serves the tower where it is installed, the CPU chain otherwise
+                var run = BenchRun(engine = "das", backend = gpu ? "metal" : (moe_gpu_tier_installed() ? "vulkan" : "cpu"), flavor = flavor_stamp(accel ? "accel" : "tuned"),
                 exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
