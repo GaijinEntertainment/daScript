@@ -6,24 +6,20 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`.
 **Routed from `REVIEW.md` (beside this file): a diff that checklist routes here applies this
 list together with `REVIEW.md`'s.**
 
-A pinned test cell is one whose expected value must be kept in step with something maintained
-outside the cell - a document, a checked-in table, a committed artifact's form, a roster, a knob
-list - wherever the value is written; a value the cell's own claim defines is not pinned.
-
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
 axis gained or lost - updates that cell's entry in the pinned set in the same change.** An axis
 is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's order;
 a new input row on an axis the cell already asserts is not an axis gained.
 
-**A diff that removes one of a pinned test cell's asserts, loosens one of its bounds, or drops
-an input or a run that reaches it is a defect - a pinned cell's coverage never shrinks; a diff
-that changes what a pinned predicate answers on an input the cell keeps is not one of these.**
-A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
-that is not a shrink.
+**A diff that removes one of a pinned test cell's asserts, loosens one of its bounds, or drops an
+input, or every run that reaches it (the per-PR `stocked` run is one), is a defect; a diff that
+changes what a pinned predicate answers on an input the cell keeps is not one of these.**
 
-**A diff that adds a pinned test cell adds it to the pinned set in the same change** - as a
-named cell; or, when every cell of its file pins, as that file's entry naming what it pins, or,
-when the file already has an entry, by adding each axis the new cell asserts to that entry's
+**A diff that adds a cell whose expected value must be kept in step with something maintained
+outside the cell - a document, a checked-in table, a committed artifact's form, a roster, a knob
+list; not a value the cell's own claim defines - adds it to the pinned set in the same change** -
+as a named cell; or, when every cell of its file pins, as that file's entry naming what it pins,
+or, when the file already has an entry, by adding each axis the new cell asserts to that entry's
 parenthetical where it is missing.
 
 **The pinned set - a cell listed here, or every cell of a listed file, is a pinned test cell,

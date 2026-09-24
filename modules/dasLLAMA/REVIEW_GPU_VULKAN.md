@@ -11,10 +11,11 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - adds every piece of state the family keeps per model to
-`vk_drop_model_state`'s sweep, in the same change.** A `make_device_buf` result and any field of
-`RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch and a
-profiler accumulator are not; pipelines are device-lifetime state that survives the drop and
-rebuilds lazily.
+`vk_drop_model_state`'s sweep, or to a listener registered through `register_vk_drop_hook`
+(`dasllama/dasllama_vulkan_common.das`), in the same change.** A `make_device_buf` result and any
+field of `RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch
+and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop
+and rebuilds lazily.
 
 **A diff that adds a host-side ensure/set/enc pick ladder for a new family of class stamps -
 the stamps of one `[vk_dispatch]` class template, picked by a shape argument - to
@@ -27,7 +28,8 @@ binds it.** The bind site cannot shrink a buffer that was sized wrong.
 
 **Never cache a descriptor set or a host address - a pointer into CPU memory - across
 dispatches in state that `vk_drop_model_state` does not clear** - hold it in
-`dasllama/dasllama_vulkan_common.das` module state that `vk_drop_model_state` clears.
+`dasllama/dasllama_vulkan_common.das` module state that `vk_drop_model_state` clears, or in a
+driver's own state that a listener registered through `register_vk_drop_hook` clears.
 
 **Never take a quant byte out of an `unpack8` select in a cm2 decode body - the `decode` method
 of a format's `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das` - or its four-wide twin
@@ -55,9 +57,11 @@ routed off and why.** A silent decline is a fallback a user finds only by profil
 `continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
 that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
-**A chain in `dasllama/dasllama_vulkan_tower.das` checks `gpu_want_arms_tier()` before it calls
-`vk_moe_init()`, and declines `device` when the want is off.** `vk_moe_init` reads no knob, so a
-chain that skips the check serves on a box whose `DASLLAMA_GPU` says no.
+**A function under `dasllama/` outside the tier's arm probe `vulkan_moe_gpu_arm` that calls
+`vk_moe_init()` tests `gpu_want_arms_tier()` first, and when the want is off declines without
+calling it; a serving hook that keeps a decline counter counts that decline under its no-device
+reason.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
+`DASLLAMA_GPU` says no.
 
 **A diff that changes what a device limit decides for the tier - which path serves, how much
 it arms, whether it declines - adds that limit to `vk_ext_roster`
@@ -173,10 +177,10 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
 **Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
 pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
-the workgroup through a `@workgroup` staging array (`wg_rms_inv` of `RmsWgBase`,
-`dasllama/dasllama_vulkan_classes.das`, takes it as the `slot` argument, 0 or 1); a slot is the run
-of partials one reduce writes into that array. A reduce carries one barrier, so a thread still
-summing the first reduce's partials would read the second's writes out of the same slot.
+the workgroup through a `@workgroup` staging array - every `RmsWgBase` reduce that takes a `slot`
+argument, 0 or 1 (`dasllama/dasllama_vulkan_classes.das`); a slot is the run of partials one
+reduce writes into that array. A reduce carries one barrier, so a thread still summing the first
+reduce's partials would read the second's writes out of the same slot.
 
 **A builder in `dasllama/dasllama_vulkan_decode.das` that asks `set_<family>` for a class ensures
 `ensure_<family>` on every path that reaches it.** A set asked of a class whose pipeline is not
@@ -229,10 +233,10 @@ form that leaves its list installed sends every later one-row profile to another
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**A kernel body in `dasllama/dasllama_vulkan_classes.das` that divides or takes a modulo by a
-divisor that is not a literal or a template constant - a push-constant field, bare or computed
-from - clamps it to at least one (`max(1u, ...)`) before it divides, unless an enclosing `if` the
-zero case cannot enter guards the division; a `?:` select on the field is not a guard.** Some
+**An integer division or modulo in a kernel body in `dasllama/dasllama_vulkan_classes.das` whose
+divisor is not a literal or a template constant - a push-constant field, bare or computed from -
+clamps the divisor to at least one (`max(1u, ...)`) before it divides, unless an enclosing `if`
+the zero case cannot enter guards the division; a `?:` select on the field is not a guard.** Some
 drivers evaluate both arms of a select, and an integer division by zero is undefined in SPIR-V,
 so the selected arm can carry the undefined result.
 

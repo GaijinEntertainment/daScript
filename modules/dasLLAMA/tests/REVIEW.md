@@ -10,8 +10,10 @@ asserts belong to every cell that calls it.
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**
 
-**A diff that adds a pinned test cell, or touches one, applies `REVIEW_PINNED_GATES.md` (beside
-this file) together with this list** - that checklist defines the kind.
+**A diff that touches a cell in the pinned set, or adds a cell whose expected value must be kept
+in step with something maintained outside the cell (a document, a checked-in table, a committed
+artifact's form, a roster, a knob list), applies `REVIEW_PINNED_GATES.md` (beside this file)
+together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -72,8 +74,8 @@ whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
-header of every test file that runs the cell, wherever the cell is defined.** The header names
-every fact the cells that file runs skip on.
+header - the file's top comment block - of every test file that runs the cell, wherever the cell
+is defined, so that the header names every fact the cells that file runs skip on.**
 
 **A diff that adds, moves, or removes a test file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -110,15 +112,16 @@ through `model_available` (`_model_tier.das`), one call per file; a test that ca
 and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is set.** Every
 other stocked fixture gates on its own presence.
 
-**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
-never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
-or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
+**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
+cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
+never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
+calls no loader that bakes a `.dlim` (`load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
 `load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; the exact name
-`load_model_`, the plain GGUF load, bakes nothing, and a media carrier loads in memory from the
-family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty image
-path.** A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
-`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is the case that bites: a disk bake
+`load_model_`, the plain GGUF load, bakes nothing); such a test loads a media carrier in memory
+from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty
+image path.** A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
+`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is where the rule matters: a disk bake
 under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
 direct-image load in another suite panics on the wrong identity.
 
@@ -190,14 +193,13 @@ other driver setter it touched back where it found it; the unset call is the fam
 measures is `CLAUDE.md`'s "Metal fixtures".
 
 **A cell claiming a family serving lane pins it through the family's own lane knobs -
-`set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` /
-`set_asr_tower_fp32` - or through a loader parameter that takes the lane; a cell claiming the
-UNPINNED default lane never compares against a hardcoded lane - it compares against the same
-predicates the family's own `*_serves_q8` accessor reads for its unpinned default,
-`float_batch_override_active()` and the family's would-the-GPU-serve call.** A runtime decline
-standing in for a pin measures whichever lane the box's policy picked, and the default lane
-differs per box, so the assert is on the lane the policy selects, not on one predicate's own
-value.
+`set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` -
+or through a loader parameter that takes the lane.** A runtime decline standing in for a pin
+measures whichever lane the box's policy picked.
+
+**A cell asserting the unpinned default lane compares against the predicates the family's
+`*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
+hardcoded lane.** The default lane differs per box.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.
