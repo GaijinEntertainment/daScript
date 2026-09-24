@@ -216,6 +216,31 @@ def arms_binary_kinds(t : T?; fx : Fixture) {
     }
 }
 
+//! the compile targets keep their manifests apart too: a `--jit-target` naming another platform
+//! writes its own file beside the native one, and each replays its own - a sweep whose parallel
+//! tests mix native and wasm runs never sees a `compile target` recompile
+def arms_targets(t : T?; fx : Fixture) {
+    let targetCmd = "{fx.cmd} -- --jit-target wasm32-unknown-emscripten"
+    let targetManifest = path_join(fx.modDir, target_manifest_file_name("emscripten"))
+    t |> run("a wasm target's first start writes its own manifest and leaves the native one alone") @(t : T?) {
+        let before = fread(fx.manifest)
+        var out : string
+        t |> success(run_child_reported(t, "target cold", targetCmd, out, "PROBE 42"), "the require resolves through the target's compiled descriptor")
+        t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the target found no manifest of its own:\n{out}")
+        t |> success(stat(targetManifest).is_valid, "the target's manifest sits beside the descriptor under its own name")
+        t |> success(find(fread(targetManifest), "\ntarget\temscripten\n") >= 0, "the target's manifest names its platform")
+        t |> equal(before, fread(fx.manifest), "the native manifest is untouched")
+    }
+    t |> run("the native run and the target run each replay their own manifest after the other ran") @(t : T?) {
+        var out : string
+        t |> success(run_child_reported(t, "native warm", fx.cmd, out, "PROBE 42"), "the native run resolves through its rows")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out), "the native run replays, no compile-target recompile:\n{out}")
+        var again : string
+        t |> success(run_child_reported(t, "target warm", targetCmd, again, "PROBE 42"), "the target run resolves through its rows")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the target run replays its own:\n{again}")
+    }
+}
+
 def arms_rejections(t : T?; fx : Fixture) {
     let cmd = fx.cmd
     let manifest = fx.manifest
@@ -278,15 +303,18 @@ def arms_rejections(t : T?; fx : Fixture) {
         t |> success(run_child_reported(t, "dep edited warm", cmd, again, "PROBE 42"), "the rewritten manifest resolves the require")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
-    t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
+    t |> run("a cross-compile target is part of the key: a native manifest under the target's name is not replayed") @(t : T?) {
         //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -
-        //! an argv input, so a native manifest must not serve a --jit-target run, nor the other way round
+        //! an argv input, so the file name keeps the targets apart and the key line still refuses a
+        //! manifest written for another target, however it got there
+        let targetManifest = path_join(fx.modDir, target_manifest_file_name("emscripten"))
+        fwrite(targetManifest, fread(manifest))
         var out : string
         t |> success(run_child_reported(t, "target", "{cmd} -- --jit-target=wasm32-unknown-emscripten", out, "PROBE 42"), "the require resolves under the target")
-        t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(out), "the target keys the manifest apart:\n{out}")
+        t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(out), "the native rows under the target's name are refused:\n{out}")
         var back : string
         t |> success(run_child_reported(t, "native again", cmd, back, "PROBE 42"), "the native run resolves the require")
-        t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(back), "the native run keys apart from the target's manifest:\n{back}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(back), "the native manifest was never touched:\n{back}")
     }
 }
 
@@ -341,6 +369,7 @@ def test_descriptor_manifest(t : T?) {
     let fx = make_fixture(tmp)
     arms_record_and_replay(t, fx)
     arms_binary_kinds(t, fx)
+    arms_targets(t, fx)
     arms_rejections(t, fx)
     arms_opt_out_and_write_failures(t, fx)
     var err : string

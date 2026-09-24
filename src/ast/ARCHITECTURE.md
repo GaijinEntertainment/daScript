@@ -100,19 +100,18 @@ the descriptor's bytes and on four process-wide inputs a descriptor can read - i
 (`project_path`), the das root (`get_das_root()`), the binary kind (`das_is_dll_build()`) and the
 cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descriptor consults to
 register its module for the web target only) - so the file sits next to the descriptor, and a
-read-only tree simply compiles on every start. The binary kind also picks the file's name: a
-dynamic-module build writes `.das_module.manifest`, a static build (`daslang_static`, its
-modules linked in) `.das_module.static.manifest`, so the two kinds sharing one tree - a CI lane
-running both suites at once, a box with both binaries - never rewrite each other's rows, and each
-replays its own from its second start on. Its key
+read-only tree simply compiles on every start. The binary kind and the compile target pick the
+file's name - `.das_module.manifest`, `.das_module.static.manifest` for `daslang_static`, the
+platform name before `.manifest` for a `--jit-target` run (`.das_module.emscripten.manifest`) -
+so the kinds and targets sharing one tree (both suites at once, a sweep mixing native and wasm
+runs) never rewrite each other's rows, and each replays its own from its second start on. Its key
 is the descriptor's size and content hash (`hash_block64`, no stat) plus those four inputs, one
 line each (`root`, `dll`, `dasroot`, `target`), plus one `dep` line per file the descriptor's
 compile read - every module in its program with a file name, the daslib ones included - carrying
 that file's size and hash as the scan's `FileAccess` serves it (hashed once per file per
 access, whatever the descriptor count); a mismatch on any of them recompiles that descriptor
-and rewrites its manifest, so a native run and a `--jit-target` run of one tree alternate
-rewrites rather than serve each other's rows, and a descriptor whose rows come from a module it
-requires recompiles when that module changes. The file is line-oriented, tab-separated, with a
+and rewrites its manifest, so a descriptor whose rows come from a module it requires recompiles
+when that module changes. The file is line-oriented, tab-separated, with a
 format version (`MANIFEST_HEADER`) on its first line and an `end` line carrying the row count
 (`dep` lines are key, not rows); a missing `end`, a count mismatch, an unknown row kind, a wrong
 field count or a `dm` row whose `on_error` is not one of `RegisterOnError`'s three values is
