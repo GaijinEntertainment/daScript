@@ -26,17 +26,19 @@ const fmtSec = (s) => (s >= 3600 ? (s / 3600).toFixed(1) + " h" : s >= 60 ? Math
 const shortSha = (sha) => (sha || "").slice(0, 8);
 const dateOf = (iso) => (iso || "").slice(0, 10);
 const commitUrl = (sha) => (state.data.repo_url && sha ? state.data.repo_url.replace(/\/$/, "") + "/commit/" + sha : null);
-const recordUrl = (run) => "runs/" + encodeURIComponent(run.id) + ".json";
+// data.json, status.json and runs/ sit beside this script, wherever the page embedding it lives
+const BASE = new URL(".", document.currentScript.src).href;
+const recordUrl = (run) => BASE + "runs/" + encodeURIComponent(run.id) + ".json";
 const anchorId = (id) => "b-" + id.replace(/[^A-Za-z0-9_-]/g, "_");
 
 async function load() {
     const [dataRes, statusRes] = await Promise.allSettled([
-        fetch("data.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("data.json " + r.status)))),
-        fetch("status.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+        fetch(BASE + "data.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("data.json " + r.status)))),
+        fetch(BASE + "status.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ]);
     state.status = statusRes.status === "fulfilled" ? statusRes.value : null;
     if (dataRes.status === "fulfilled") state.data = dataRes.value;
-    else $("main").replaceChildren(el("p", "notice notice--error", "No data.json yet: the stand has not published a report (" + dataRes.reason.message + ")."));
+    else $("#stand").replaceChildren(el("p", "notice notice--error", "No data.json yet: the stand has not published a report (" + dataRes.reason.message + ")."));
     renderStatus();
     if (state.data) renderAll();
 }
@@ -381,5 +383,55 @@ function renderAll() {
     renderRuns();
 }
 
+// The viewer's markup is its own: a host page provides #status (the latest night's pill) and an
+// empty #stand, and everything the script queries by id or data attribute is built here.
+function mountSkeleton() {
+    const root = $("#stand");
+    const filters = el("section", "filters");
+    filters.setAttribute("aria-label", "filters");
+    const range = el("div", "filters__group");
+    range.setAttribute("role", "group"); range.setAttribute("aria-label", "range");
+    for (const [n, label, on] of [[30, "30 runs", false], [90, "90 runs", true], [0, "all", false]]) {
+        const b = el("button", "chip" + (on ? " is-on" : ""), label);
+        b.dataset.range = String(n);
+        range.append(b);
+    }
+    const lanes = el("div", "filters__group");
+    lanes.setAttribute("role", "group"); lanes.setAttribute("aria-label", "lanes");
+    for (const lane of LANES) {
+        const lb = el("label", "lane lane--" + lane);
+        const cb = el("input");
+        cb.type = "checkbox"; cb.dataset.lane = lane; cb.checked = true;
+        lb.append(cb, " " + lane);
+        lanes.append(lb);
+    }
+    const group = el("label", "select", "group ");
+    const sel = el("select");
+    sel.id = "group";
+    group.append(sel);
+    filters.append(range, lanes, group);
+    const night = el("section", "night");
+    night.id = "night"; night.setAttribute("aria-label", "latest night");
+    const series = el("section", "section");
+    const sh = el("h2", null, "Benchmarks ");
+    sh.append(el("span", "muted"));
+    sh.lastChild.id = "series-count";
+    const seriesBox = el("div");
+    seriesBox.id = "series";
+    series.append(sh, seriesBox);
+    const runs = el("section", "section");
+    const wrap = el("div", "table-wrap");
+    const table = el("table", "runs");
+    table.id = "runs";
+    wrap.append(table);
+    runs.append(el("h2", null, "Run history"), wrap);
+    const generated = el("p", "muted");
+    generated.id = "generated";
+    const tooltip = el("div", "tooltip");
+    tooltip.id = "tooltip"; tooltip.setAttribute("role", "tooltip"); tooltip.hidden = true;
+    root.replaceChildren(filters, night, series, runs, generated, tooltip);
+}
+
+mountSkeleton();
 wireFilters();
 load();

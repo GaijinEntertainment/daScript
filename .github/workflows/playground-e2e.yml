@@ -49,6 +49,7 @@ jobs:
           cp site/downloads.html _site/ || true
           cp site/performance.html _site/   # performance-page.spec.js drives it against the committed records
           cp site/examples.html _site/      # examples-phone.spec.js opens the phone player on it
+          cp site/nightly.html _site/       # nightly-page.spec.js routes /bench/ to the checked-in viewer
           cp -r site/files _site/files
 
           # Playground: vendor web/examples/ui IDE (no WASM artifacts)

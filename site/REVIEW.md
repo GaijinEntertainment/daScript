@@ -10,9 +10,13 @@ into that editor - and not the generated Sphinx output under `doc/` (this folder
 `.rst` sources answer to `doc/REVIEW.md` (repo root).
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
-illustration - show only a command the run actually executed, with every home directory
-spelled `~`.** A rendered `cmd` identifies the RUN, not the row: where one run produced several
-rendered rows (an ASR run's per-clip rows), each row's receipt is the run's command.
+illustration - show only a command the run actually executed.** A rendered `cmd` identifies the
+RUN, not the row: where one run produced several rendered rows (an ASR run's per-clip rows), each
+row's receipt is the run's command.
+
+**A diff to a page or its script never renders a person's login home directory - `/home/<user>`,
+`/Users/<user>`, `C:\Users\<user>` - from a record; it renders the record's `~` form as
+written.** A service account's directory is not a login home and needs no redaction.
 
 **A `cmd` field in `files/dasllama/bench_records.json` holds only the argvs the run executed -
 `modules/dasLLAMA/performance/gen_bench_records.das`'s, or the released bench exe's it spawns,
@@ -32,8 +36,9 @@ out, instead of `~`, in any `.json` under `files/dasllama/` - is a defect.**
 **Weakening `REVIEW.das`'s bench-cell parity check - the gate that compares every
 family-and-lane cell of `files/performance_bench.json` and `files/performance_engines.json`
 with the `benchmarks/sql/results.md` and `examples/benchmarks/sql/results.md` (repo root)
-tables - is a defect.** `_update_results.das --site-json` beside each table writes the record
-from the sweep that regenerates it, so the pair moves together.
+tables - is a defect.** The `--site-json` run of the updater beside each table
+(`benchmarks/sql/_update_results.das`, repo root, and its twin under `examples/benchmarks/sql/`)
+writes the record from the sweep that regenerates it, so the pair moves together.
 
 **A benchmark number hand-carried into a page that renders dasProfile numbers is a defect -
 render every such number only from the vendored dasProfile records, the
@@ -41,11 +46,11 @@ render every such number only from the vendored dasProfile records, the
 fetches from borisbat/dasProfile at deploy time.**
 
 **A claim on a page about how a measured number was captured - its statistic, its sample
-count, its spread, which clock timed each engine - that the checked-in record the page renders
-does not itself carry is a defect - render the claim from the record, state only what
-`doc/reference/dasllama_methodology.html` carries (its source is
-`doc/source/reference/dasllama_methodology.rst`, repo root) and link that page, or drop the
-claim.**
+count, its spread, which clock timed each engine - that the record the page renders (checked in,
+or served beside the page) does not itself carry is a defect - render the claim from the record,
+state only what the architecture document of the folder that writes the record carries and link
+that document - its deployed page where one exists (`doc/reference/dasllama_methodology.html` for
+the dasLLAMA records), its GitHub blob URL otherwise - or drop the claim.**
 
 **A second record file for data a dasProfile record already holds is a defect - read the
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the

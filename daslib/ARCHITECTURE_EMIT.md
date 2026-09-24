@@ -169,10 +169,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   struct, enum and handled type; a program that reaches no C++ module beyond the builtin one
   links exactly that set. A nano program reaches none by contract (every builtin module is
   absent there), so its output stays registry-free.
-  Once it reaches one, the default C++ modules the compiler loaded and every linked C++
-  module's `module_for_each_dependency` closure join the set, because module constructors
-  `Module::require` those by name (dasHV takes `rtti_core` this way). The pruned modules
-  (`compile time only, not linked`) get no `aotRequire` include and no registration.
+  Once it reaches one, every linked C++ module's `module_for_each_dependency` closure joins
+  the set, because module constructors `Module::require` those by name (dasHV takes
+  `rtti_core` this way). A default C++ module the program never reaches stays out, however
+  the compiler loaded it: a macro module's `daslib/ast` brings `rtti_core` and `ast_core`
+  into the compiler, and a context that registered them ran two constructors and carried
+  their code for nothing. The pruned modules (`compile time only, not linked`) get no
+  `aotRequire` include and no registration.
   `standaloneModuleRegistration` orders the C++ subset and ranks it: `DEFAULT_MODULE_ORDER`
   first (the pair it mirrors is recorded in sec. 5), then the rest dependencies-first, ranked
   by dependency depth. Each generated TU emits its list as a `StandaloneModule` table added to

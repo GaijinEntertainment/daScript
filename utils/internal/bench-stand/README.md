@@ -12,7 +12,10 @@ failed and what moved. Review rules: `REVIEW.md`.
   `compare`) answer ad-hoc questions about the same numbers. Every statistic it computes lives in
   `benchctl/benchstat.das`, which depends on no storage.
 - `site/` - the viewer: `index.html`, `app.js`, `style.css`. Static, no build step, no
-  dependencies; reads `data.json` beside it.
+  dependencies; `app.js` reads `data.json`, `status.json` and `runs/` beside itself and builds
+  the viewer's markup into a host page's `#stand`. The same two files back daslang.io's
+  `site/nightly.html` (repo root), whose stylesheet tokens they adopt through `var(--token,
+  fallback)`. The folder's `REVIEW.md` is not copied to the box.
 - `stand.cmake` - one pass over the current tree, run by the `run_bench_stand` target (section 3); `caddy.snippet` is the public route.
 
 ## 2. Data model
