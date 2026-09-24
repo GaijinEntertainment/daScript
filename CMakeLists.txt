@@ -335,7 +335,7 @@ MACRO(DAS_LLVM_AOT_LIB input_files genList mainTarget)
         if(_batch_n EQUAL 32 OR _llvm_aot_idx EQUAL _llvm_aot_total)
             ADD_CUSTOM_COMMAND(
                 OUTPUT  ${_batch_objs}
-                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das ${_das_llvm_aot_codegen} ${DAS_AOT_DASLIB_DEPENDS}
+                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das ${_das_llvm_aot_codegen} ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS}
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                 COMMENT "LLVM-AOT compiling ${_batch_n} files"
                 COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}

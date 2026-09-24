@@ -690,7 +690,11 @@ if(NOT ${DAS_LLVM_DISABLED})
 
     add_custom_target(test_llvm_aot_corpus)
     SET(LLVM_AOT_GENERATED_OBJ)
+    # compiling the corpus runs the tests' macros: tests/dasbind's [extern] bindings dlopen the
+    # probe library, the same dependency the C++ AOT row above declares
+    set(DAS_AOT_EXTRA_DEPENDS ${DAS_AOT_DASBIND_DEPENDS})
     DAS_LLVM_AOT_LIB("${LLVM_AOT_OBJECT_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
+    set(DAS_AOT_EXTRA_DEPENDS "")
 
     # Same main.cpp as daslang / test_aot; the .o are pre-built external inputs (EXTERNAL_OBJECT),
     # so the C++ toolchain links them without recompiling.
