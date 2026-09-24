@@ -9,8 +9,10 @@
 **A module file orders its top level types, then `private` helpers, then its public functions, so
 the tail of the file is the module's whole API.**
 
-**Never add a run-record field without saying in `README.md` what reads it - the viewer, or a
-person opening the record.** A field nobody named is one nobody notices going wrong.
+**Never add a run-record field - a field of `RunRecord` or `FileResult` in `bench_history.das`,
+what `run` writes per night - without saying in `README.md`'s "Run records" section what reads
+it - the viewer, or a person opening the record.** A field nobody named is one nobody notices
+going wrong.
 
 **A diff that changes a run-record field keeps the new reader parsing a record written by the old
 code, a missing field keeping its declared default.** Records already on the box are never

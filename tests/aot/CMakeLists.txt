@@ -594,6 +594,63 @@ target_include_directories(test_aot_subset PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot_subset PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot_subset)
 
+### AOT bench host — the nightly benchmark stand's aot lane
+# Every benchmark under benchmarks/ (its `_*` helper modules as libs) over the full daslib closure
+# and the module daslibs the benchmarks require. benchmarks/compile/ stays out: it times a child
+# daslang, and the host it runs in changes nothing about the child. EXCLUDE_FROM_ALL: the stand
+# builds it (`run_bench_stand`); no CI lane does.
+FILE(GLOB_RECURSE AOT_BENCH_ALL RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "benchmarks/*.das")
+# _update_results.das is the results.md sweep tool, a script beside the sql benchmarks, not a module
+list(FILTER AOT_BENCH_ALL EXCLUDE REGEX "benchmarks/compile/|/tests/|/_update_results\\.das$")
+IF(DAS_SQLITE_DISABLED)
+    list(FILTER AOT_BENCH_ALL EXCLUDE REGEX "benchmarks/sql/")
+ENDIF()
+IF(DAS_AUDIO_DISABLED)
+    list(FILTER AOT_BENCH_ALL EXCLUDE REGEX "benchmarks/audio/")
+ENDIF()
+IF(DAS_TERMINAL_DISABLED)
+    list(FILTER AOT_BENCH_ALL EXCLUDE REGEX "benchmarks/terminal/")
+ENDIF()
+IF(DAS_PUGIXML_DISABLED)
+    list(FILTER AOT_BENCH_ALL EXCLUDE REGEX "benchmarks/micro/json_source_shapes\\.das$")
+ENDIF()
+SET(AOT_BENCH_FILES ${AOT_BENCH_ALL})
+list(FILTER AOT_BENCH_FILES EXCLUDE REGEX "/_")
+SET(AOT_BENCH_MODULE_FILES ${AOT_BENCH_ALL})
+list(FILTER AOT_BENCH_MODULE_FILES INCLUDE REGEX "/_")
+IF(NOT DAS_TERMINAL_DISABLED)
+    list(APPEND AOT_BENCH_MODULE_FILES modules/dasTerminal/daslib/terminal.das)
+ENDIF()
+add_custom_target(test_aot_bench_modules)
+set(BENCH_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_BENCH_MODULE_FILES}" BENCH_MODULES_AOT_GENERATED_SRC test_aot_bench_modules daslang)
+add_custom_target(test_aot_bench_files)
+set(BENCH_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_BENCH_FILES}" BENCH_AOT_GENERATED_SRC test_aot_bench_files daslang)
+SET(TEST_AOT_BENCH_MODULE_SRC ${DASLIB_MODULES_AOT_GENERATED_SRC})
+SET(TEST_AOT_BENCH_MODULE_TARGETS test_aot_daslib_modules)
+FOREACH(_m dassqlite pugixml strudel)
+    string(TOUPPER ${_m} _u)
+    IF(TARGET test_aot_${_m}_modules)
+        list(APPEND TEST_AOT_BENCH_MODULE_SRC ${${_u}_MODULES_AOT_GENERATED_SRC})
+        list(APPEND TEST_AOT_BENCH_MODULE_TARGETS test_aot_${_m}_modules)
+    ENDIF()
+ENDFOREACH()
+add_executable(test_aot_bench EXCLUDE_FROM_ALL ${DAS_DASCRIPT_MAIN_SRC}
+    ${TESTING_AOT_GENERATED_SRC}
+    ${TEST_AOT_BENCH_MODULE_SRC}
+    ${BENCH_MODULES_AOT_GENERATED_SRC}
+    ${BENCH_AOT_GENERATED_SRC}
+)
+TARGET_LINK_LIBRARIES(test_aot_bench libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(test_aot_bench libDaScriptAot
+    test_aot_testing ${TEST_AOT_BENCH_MODULE_TARGETS}
+    test_aot_bench_modules test_aot_bench_files
+)
+target_include_directories(test_aot_bench PRIVATE ${TEST_AOT_INCLUDE_DIRS})
+target_compile_definitions(test_aot_bench PRIVATE ${TEST_AOT_COMPILE_DEFS})
+SETUP_CPP11(test_aot_bench)
+
 ### LLVM-AOT variant of test_aot (LLVM-only). Each .das is compiled by the LLVM backend into a
 ### self-registering native .o (das_aot_register load ctor) linked directly into the binary;
 ### -use-aot binds each function as a SimNode_Jit via linkCppAot. Opt-in, not in ALL / not in CI.

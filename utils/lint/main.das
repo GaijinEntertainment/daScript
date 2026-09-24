@@ -141,9 +141,10 @@ def is_skip_dir(name : string) : bool {
 }
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
-// carry .das and .md the tree never wrote
+// carry .das and .md the tree never wrote. Neither is another repository's checkout inside this
+// one (the EASTL local-verify clones): its comments cite documents of its own.
 def is_build_tree(path : string) : bool {
-    return stat("{path}/CMakeCache.txt").is_valid
+    return stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
 }
 
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {

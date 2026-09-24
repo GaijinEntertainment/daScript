@@ -57,7 +57,7 @@ struct DastestReport {
 
 let TAIL_LINES = 40
 
-let AOT_HOST = "test_aot_subset"
+let AOT_HOST = "test_aot_bench"
 let JIT_HOST = "test_llvm_aot"
 
 struct private OutputScan {

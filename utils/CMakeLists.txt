@@ -169,7 +169,7 @@ if(NOT DAS_SQLITE_DISABLED)
     # the jit lane runs `daslang -jit`; a linked test_llvm_aot host is picked up when a box built
     # one, but the night never builds it - its LLVM-AOT corpus batches same-named modules
     set(_bench_stand_deps daslang)
-    foreach(_t test_aot_subset dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
+    foreach(_t test_aot_bench dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
             dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
         if(TARGET ${_t})
             list(APPEND _bench_stand_deps ${_t})

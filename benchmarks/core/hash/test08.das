@@ -8,7 +8,7 @@ options persistent_heap
 
 require dastest/testing_boost
 
-require _common
+require _hash_common
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 

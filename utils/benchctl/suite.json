@@ -27,24 +27,8 @@
             "core/gc/escape_free.das": "force_escape_free frees a non-escaping allocation at scope exit as a heap chunk under jit, and the child dies on 'not a chunk pointer'"
         },
         "aot": {
-            "audio/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "compile/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "decs/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "fusion/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "micro/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "sort/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "sql/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "terminal/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/array/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/array_literal/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/bool_array/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/builtin_ops/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/gc/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/hash/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/jobque/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/math/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/small_table/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot",
-            "core/table/**": "not compiled into test_aot_subset - tests/aot/CMakeLists.txt registers only benchmarks/core/jit_aot"
+            "compile/**": "times a child daslang -compile-only; the lane the parent runs in changes nothing about the child, and the interp lane already carries the group",
+            "core/gc/test01.das": "heap_collect cannot attribute the locals of a frame entered through a compiled frame - the AOT'd dastest runner calls run_impl - so the gc benchmarks measure nothing under aot"
         }
     }
 }

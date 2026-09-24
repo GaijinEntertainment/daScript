@@ -462,3 +462,67 @@ def test_all_and_main_walker_wiring(t : T?) {
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
+
+// The repo-root gate: shared module names over git's tracked list. The fixture is its own
+// repository, so tracked / untracked is decided the way the real tree decides it.
+def make_root_gate_fixture(t : T?; tree, root : string) {
+    write_at(t, root, "REVIEW_COMMON.md", "contract\n")
+    write_at(t, root, "CMakeLists.txt", "project(fixture)\n")
+    write_at(t, root, "a/solo.das", "options gen2\nmodule solo shared public\n")
+    write_at(t, root, "a/plain.das", "options gen2\nmodule dup public\n")
+    write_at(t, root, "b/plain2.das", "options gen2\nmodule dup public\n")
+    write_at(t, root, "b/bare.das", "options gen2\nmodule x\n")
+    write_at(t, root, "b/nomod.das", "options gen2\n[export]\ndef main \{\n\}\n")
+    // the tolerated pair, at the paths the gate's rows name
+    write_at(t, root, "tests/module_tests/_modules/conflict/pkgA/foo.das", "options gen2\nmodule foo shared public\n")
+    write_at(t, root, "tests/module_tests/_modules/conflict/pkgB/foo.das", "options gen2\nmodule foo shared public\n")
+    var err : string
+    t |> success(copy_file(path_join(tree, "REVIEW.das"), path_join(root, "REVIEW.das"), true, err), "copied the real gate")
+    t |> equal(0, run_in(root, ["git", "init", "-q"]).rc, "fixture is a repository")
+    t |> equal(0, run_in(root, ["git", "add", "-A"]).rc, "fixture files are tracked")
+}
+
+[test]
+def test_root_gate_fixtures(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_root")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_root_gate_fixture(t, tree, fixture)
+    let gate = path_join(fixture, "REVIEW.das")
+
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "one shared name per file, a non-shared twin, a bare module, a module-less file and the tolerated pair are green: {green.out}")
+    t |> success(find(green.out, "REVIEW.das repo root: OK") >= 0, "green verdict printed")
+
+    // an untracked second declaration is not the tree's yet
+    write_at(t, fixture, "c/y.das", "options gen2\nmodule solo shared public\n")
+    let untracked = spawn_at(fixture, [gate])
+    t |> equal(0, untracked.rc, "an untracked file is outside the check: {untracked.out}")
+
+    // tracked, it is a finding on both files, each naming the other
+    t |> equal(0, run_in(fixture, ["git", "add", "c/y.das"]).rc, "planted file tracked")
+    let red = spawn_at(fixture, [gate])
+    t |> equal(1, red.rc, "a tracked second declaration is red")
+    t |> success(find(red.out, "c/y.das:2: shared module `solo` is also declared by a/solo.das:2") >= 0, "the plant names the original: {red.out}")
+    t |> success(find(red.out, "a/solo.das:2: shared module `solo` is also declared by c/y.das:2") >= 0, "the original names the plant: {red.out}")
+
+    // a third declaration of a tolerated name is not covered by the pair's rows
+    t |> equal(0, run_in(fixture, ["git", "rm", "-q", "--cached", "c/y.das"]).rc, "plant untracked again")
+    write_at(t, fixture, "c/foo.das", "options gen2\nmodule foo shared public\n")
+    t |> equal(0, run_in(fixture, ["git", "add", "c/foo.das"]).rc, "third foo tracked")
+    let third = spawn_at(fixture, [gate])
+    t |> equal(1, third.rc, "a third declaration of a tolerated name is red")
+    t |> success(find(third.out, "c/foo.das:2: shared module `foo`") >= 0, "the third foo is named: {third.out}")
+
+    // outside the repo root the gate refuses rather than scanning nothing
+    let elsewhere = spawn_at(path_join(fixture, "a"), [gate])
+    t |> equal(2, elsewhere.rc, "run from a subfolder is a usage error: {elsewhere.out}")
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
