@@ -104,9 +104,7 @@ jobs:
         arch: x64
 
     # Restore-only: the PR matrix job above is the single seeder for this key.
-    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
     - name: "Restore vcpkg + openssl"
-      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: vcpkg
@@ -124,15 +122,17 @@ jobs:
     - uses: mozilla-actions/sccache-action@v0.0.10
 
     - name: "Configure sccache"
-      run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+      # 6000M: a windows /Z7 object set is ~5x a clang one; unbounded, the slot grows to sccache's 10G
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
 
-    # NOT persisted across runs, deliberately. This slot held 564MB of the repo's
-    # 10GB cache quota, and this job is nightly-only — nothing waits on it. That
-    # quota is contended: a Windows object cache is ~4.4GB (920 TUs x ~4.8MB,
-    # /Z7 embeds debug info in every .obj), and the PR-facing slots kept evicting
-    # each other, which is what left every PR building cold. Paying ~15 min once a
-    # night here is the cheapest quota we can free. Re-add a restore/save pair on
-    # key sccache-windows-64-RelWithDebInfo-none if the repo cache limit is raised.
+    # Its own slot, same shape as the matrix cells: this job is the only writer of the key.
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-RelWithDebInfo-none
 
     - name: "Build: Daslang RelWithDebInfo"
       run: |
@@ -158,6 +158,21 @@ jobs:
     # hand.
     - name: "Test"
       run: cmake --build ./build --config RelWithDebInfo --target run_build_sanitizers --parallel
+
+    # The lane target is what compiles (Build only configures), so the slot is saved after it,
+    # on a red sweep too: the objects a failed run compiled are as good as any.
+    - name: "Refresh sccache slot"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-windows-64-RelWithDebInfo-none
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-RelWithDebInfo-none
 
   ###########################################################
 
@@ -205,9 +220,7 @@ jobs:
         arch: x64
 
     # Restore-only: the PR matrix job above is the single seeder for this key.
-    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
     - name: "Restore vcpkg + openssl"
-      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: vcpkg
@@ -225,10 +238,17 @@ jobs:
     - uses: mozilla-actions/sccache-action@v0.0.10
 
     - name: "Configure sccache"
-      run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+      # 6000M: a windows /Z7 object set is ~5x a clang one; unbounded, the slot grows to sccache's 10G
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
 
-    # NOT persisted across runs — same quota reasoning as the RelWithDebInfo
-    # nightly above. This slot held another 758MB for a job nobody waits on.
+    # Its own slot (the matrix's windows Release cell builds LLVM-free, so its objects differ).
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-llvm
 
     - name: "Build: Daslang Release with LLVM"
       run: |
@@ -245,6 +265,19 @@ jobs:
       run: |
         cmake --build ./build --config Release --target run_build --parallel \
           || cmake --build ./build --config Release --target run_build_isolated --parallel
+
+    - name: "Refresh sccache slot"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-windows-64-Release-llvm
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-llvm
 
   ###########################################################
 
@@ -274,6 +307,9 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         shell: msys2 {0}
@@ -304,10 +340,8 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: CLANG64
-        # cache:false — this job is nightly/dispatch-only and nightlies consume
-        # no cache; the msys2 pkg snapshot alone was ~1.65GiB of quota.
         update: false
-        cache: false
+        cache: true
         install: >-
           mingw-w64-clang-x86_64-toolchain
           mingw-w64-clang-x86_64-cmake
@@ -331,8 +365,12 @@ jobs:
       run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
-    # No slot restore/save: this job is nightly/dispatch-only and nightlies
-    # consume no cache. sccache stays as a per-run local-disk launcher only.
+        echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-mingw
     - name: "Build: Daslang (clang-mingw64)"
       run: |
         set -eux
@@ -351,6 +389,20 @@ jobs:
       run: |
         cmake --build ./build-mingw --config Release --target run_build_mingw --parallel \
           || cmake --build ./build-mingw --config Release --target run_build_mingw_isolated --parallel
+
+    - name: "Refresh sccache slot"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-windows-64-Release-mingw
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-mingw
 
     # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
     # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
@@ -386,6 +438,9 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -425,12 +480,8 @@ jobs:
     # dasHV builds OpenSSL from source here (the path the scrub fix targets), and
     # nmake is serial — ~7 min. Cache the install so only the first run (or a dasHV
     # CMakeLists change) pays it; on a hit find_package(OpenSSL) finds it and the
-    # from-source ExternalProject is skipped. (On Ninja CMAKE_<LANG>_COMPILER_LAUNCHER
-    # now works, so sccache could be added here later; OpenSSL from-source is unchanged.)
-    # Skipped on the cron: nightlies consume no cache, so the scheduled run
-    # builds OpenSSL from source (~8 min, budgeted). Dispatch still caches.
+    # from-source ExternalProject is skipped.
     - name: "Cache OpenSSL (clang-cl from-source build)"
-      if: github.event_name != 'schedule'
       uses: actions/cache@v4
       with:
         path: |
@@ -439,12 +490,26 @@ jobs:
           build-clangcl/openssl/bin
         key: openssl-clangcl-${{ runner.os }}-${{ hashFiles('modules/dasHV/CMakeLists.txt') }}
 
+    # The launcher goes on the main configure only (not the env), like the MSVC matrix cell:
+    # the OpenSSL sub-build keeps plain cl and must not inherit it.
+    - uses: mozilla-actions/sccache-action@v0.0.10
+    - name: "Configure sccache"
+      run: |
+        echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
+    - name: "Restore sccache objects"
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-clangcl
+
     - name: "Build: Daslang (Ninja + clang-cl)"
       shell: pwsh
       # Ninja + clang-cl (from vcvars PATH). No VS-generator, so no VS-major pinning
       # to the runner image and no MSBuild CustomBuild sweep wrapper (see job header).
       run: |
-        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Test"
@@ -452,6 +517,19 @@ jobs:
       run: |
         cmake --build ./build-clangcl --config Release --target run_build_clangcl --parallel
         if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Refresh sccache slot"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-windows-64-Release-clangcl
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-windows-64-Release-clangcl
 
   nightly_issue:
     needs:

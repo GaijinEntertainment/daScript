@@ -106,6 +106,7 @@ jobs:
         echo "SCCACHE_CACHE_SIZE=2000M" >> $GITHUB_ENV
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+    # PRs restore read-only; the cron saves (the seeder), a master push saves too.
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4
       with:

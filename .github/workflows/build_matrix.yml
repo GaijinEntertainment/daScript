@@ -29,7 +29,7 @@ jobs:
 
   build:
     needs: matrix
-    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }})"
+    name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }}${{ matrix.phase != 'all' && format(', {0}', matrix.phase) || '' }})"
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -87,10 +87,8 @@ jobs:
     # every Windows job still missed and rebuilt openssl from source, 8.5 min a run.
     # This job is the SEEDER for both arch keys; every other Windows job in the repo
     # is restore-only, so there is exactly one writer per key and no save race.
-    # Not on the cron: nightlies consume no cache (they are not a show-stopper),
-    # so the scheduled run builds openssl from source and then re-seeds below.
     - name: "Restore vcpkg + openssl"
-      if: runner.os == 'Windows' && github.event_name != 'schedule'
+      if: runner.os == 'Windows'
       uses: actions/cache/restore@v4
       with:
         # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Build
@@ -186,15 +184,15 @@ jobs:
           echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         fi
     # Stable per-config key, one fixed slot. On master, delete + re-save the
-    # same key after Build so the slot is overwritten with fresh objects (GHA
-    # caches are immutable — plain save under an existing key is a no-op, so we
-    # delete first). PRs read-only. Bounded footprint: N configs × one tarball,
-    # no run_id pileup. The cron does NOT restore — nightlies consume no cache
-    # and build cold by policy — but its save still lands a complete fresh
-    # object set, and that save is the seeder every PR lane warms from (master
-    # PUSH runs are usually pre_job-skipped as same-content duplicates).
+    # same key once the lane has compiled, so the slot is overwritten with fresh
+    # objects (GHA caches are immutable — plain save under an existing key is a
+    # no-op, so we delete first). PRs read-only. Bounded footprint: N configs ×
+    # one tarball, no run_id pileup. Every run restores, the cron included: the
+    # nightly cells are the slow ones, and the cron's save is the seeder every PR
+    # lane warms from (master PUSH runs are usually pre_job-skipped as
+    # same-content duplicates). A sanitizer cell's three phase jobs share one
+    # slot; only the tests phase writes it, so there is one writer per key.
     - name: "Restore sccache objects"
-      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -215,28 +213,13 @@ jobs:
           -DDAS_FAST_MATH=${{ matrix.fast_math }} \
           ${{ matrix.cmake_extra }}
 
-    # A nightly-only cell saves no slot: nothing restores it (the cron does not
-    # restore, and no PR lane runs the cell), so the tarball would only hold quota.
-    - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
-      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
-    - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'
-      uses: actions/cache/save@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
-
     # NOTE: the "Prewarm JIT cache" step (jit_cache_all_tests, ~17 min on the
     # win64 lane) is GONE: the JIT sweep now runs isolated-PARALLEL and mints
     # the dll cache itself — cold-cache parallel measured faster than the old
     # warm sequential sweep, so a separate prewarm only duplicated the
     # frontend-compile of every test. The target still exists for local use.
     - name: "Test"
-      if: inputs.lane == 'build' || matrix.nightly_only == 'ON'
+      if: (inputs.lane == 'build' || matrix.nightly_only == 'ON') && (matrix.phase == 'all' || matrix.phase == 'tests')
       run: |
         lane=${{ matrix.sanitizers == 'none' && 'run_build' || 'run_build_sanitizers' }}
         cmake --build ./build --config ${{ matrix.cmake_preset }} --target $lane --parallel \
@@ -255,3 +238,28 @@ jobs:
       # local-only.
       if: matrix.cmake_preset == 'Release' && matrix.sanitizers == 'none' && inputs.lane == 'build_nightly'
       run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build_nightly --parallel
+
+    # A sanitizer cell takes the nightly steps one job at a time (ci/ci_matrix.py, the phase):
+    # in one job the sweeps ran 2.5 to 4 hours back to back and the tsan backend sweep never fit
+    # its cap.
+    - name: "Slow Release Tests"
+      if: inputs.lane == 'build_nightly' && matrix.phase == 'slow'
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_slow --parallel
+    - name: "Nightly Backend Sweeps"
+      if: inputs.lane == 'build_nightly' && matrix.phase == 'backend'
+      run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_backend_sweeps --parallel
+
+    # The lane targets above are what compiles (Build only configures), so the slot is saved
+    # here, and on a red sweep too: the objects a failed run compiled are as good as any.
+    - name: "Refresh sccache slot"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
+    - name: "Save sccache objects"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}

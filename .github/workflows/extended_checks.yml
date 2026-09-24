@@ -10,7 +10,7 @@ on:
   # of the PR that just merged (4 of 15 recent merges actually ran), so seeding was
   # left to chance. A cron run is on master, has no concurrent twin, and lands the
   # slot every night. It also hosts the checks too slow to sit on every PR,
-  # and the whole windows lane (nightly-only, uncached — see the matrix).
+  # and the whole windows lane (nightly-only — see the matrix).
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
@@ -148,10 +148,8 @@ jobs:
     # to refs/pull/N/merge — invisible to every sibling PR. That is what actually
     # happened: 6 cache entries for 2 keys, all PR-scoped, ~836MB of quota, and
     # every Windows job still missing and rebuilding openssl (8.5 min a run).
-    # Not on the cron: nightlies consume no cache, so the scheduled windows lane
-    # builds openssl from source (~8 min, budgeted). Dispatch still restores.
     - name: "Restore vcpkg + openssl"
-      if: runner.os == 'Windows' && github.event_name != 'schedule'
+      if: runner.os == 'Windows'
       uses: actions/cache/restore@v4
       with:
         # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl.
@@ -173,34 +171,33 @@ jobs:
     # matrix config — mirrors build.yml. The GHA backend writes one cache item
     # per TU (quota fragmentation, frequent concurrent-write failures); local
     # disk keeps all objects in $SCCACHE_DIR persisted as a single tarball.
-    # Linux + darwin only: the windows lane is nightly-only and nightlies run
-    # UNCACHED by policy (they are not a show-stopper; a windows /Z7 object
-    # slot alone would be ~5-6GB of quota serving one un-waited-on run a day).
     - uses: mozilla-actions/sccache-action@v0.0.10
-      if: matrix.target != 'windows'
-    - if: matrix.target != 'windows'
-      run: |
+    - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
-        # The launcher exported via env also wraps the GLFW/libhv
-        # ExternalProject sub-builds — harmless on gcc/clang.
         # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
         # slot grows until it evicts other caches in the repository. A Release
         # build of daslang + daslang_static + the sequence smoke's module targets
-        # is ~800MB of objects; 1500M holds all of it, so the nightly save lands
-        # a complete set and a PR lane's build is a cache read.
-        echo "SCCACHE_CACHE_SIZE=1500M" >> $GITHUB_ENV
+        # is ~800MB of objects; 1500M holds all of it. A windows /Z7 object is
+        # ~5x the size (debug info embedded in every .obj), hence its own bound.
+        if [ '${{ matrix.target }}' = windows ]; then
+          echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
+        else
+          echo "SCCACHE_CACHE_SIZE=1500M" >> $GITHUB_ENV
+        fi
+    # Non-windows: the launcher exported via env also wraps the GLFW/libhv ExternalProject
+    # sub-builds — harmless on gcc/clang. Windows passes it on the main configure only
+    # (Build step), so the sub-builds keep plain cl.
+    - if: matrix.target != 'windows'
+      run: |
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
-    # clobbers build.yml's slots. PRs restore read-only; save only on master
-    # (delete first — GHA caches are immutable, so a plain save under an existing
-    # key is a no-op). The nightly cron is what makes the save reliable (the
-    # master PUSH run is usually skipped as a concurrent duplicate), and it does
-    # NOT restore — nightlies consume no cache; a cold build still saves a
-    # complete fresh object set for the PR lanes to warm from.
+    # clobbers build.yml's slots. Every run restores; save only on master (delete
+    # first — GHA caches are immutable, so a plain save under an existing key is
+    # a no-op). The nightly cron is what makes the save reliable (the master PUSH
+    # run is usually skipped as a concurrent duplicate).
     - name: "Restore sccache objects"
-      if: matrix.target != 'windows' && github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -217,8 +214,8 @@ jobs:
             # vcpkg so dasHV skips its perl+nmake source build.
             echo "BIN=./bin" >> $GITHUB_ENV
             export PATH="/c/Strawberry/perl/bin:$PATH"
-            # No sccache launcher: this lane is nightly-only and runs uncached.
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
+              -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
             ;;
           linux)
@@ -249,13 +246,13 @@ jobs:
         cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
 
     - name: "Refresh sccache slot"
-      if: matrix.target != 'windows' && matrix.role != 'modules' && github.ref == 'refs/heads/master'
+      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: matrix.target != 'windows' && matrix.role != 'modules' && github.ref == 'refs/heads/master'
+      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
