@@ -74,10 +74,9 @@ jobs:
           jq
 
     # sccache with local-disk backend, RESTORE-ONLY from extended_checks'
-    # master-seeded slot — this workflow never saves, so it cannot clobber
-    # the per-PR cache slots. The restore is skipped on the cron (nightlies
-    # consume no cache and build cold by policy); a manual dispatch — the
-    # on-demand ABI sweep someone is waiting on — still restores warm.
+    # master-seeded slot, by prefix — this workflow never saves, so it cannot
+    # clobber the per-PR cache slots. The cron and a manual dispatch both
+    # restore warm.
     - uses: mozilla-actions/sccache-action@v0.0.10
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
@@ -85,11 +84,11 @@ jobs:
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     - name: "Restore sccache objects (read-only)"
-      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-extended-linux-64
+        key: sccache-extended-linux-64@${{ github.run_id }}
+        restore-keys: sccache-extended-linux-64@
 
     - name: "Build: Daslang (Release)"
       # mirrors extended_checks' linux build (clang + Ninja + release

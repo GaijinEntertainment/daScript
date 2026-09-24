@@ -204,7 +204,8 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
+        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
+        restore-keys: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
 
     - name: "Build: Daslang (Release)"
       run: |
@@ -248,19 +249,26 @@ jobs:
         esac
         cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
 
-    - name: "Refresh sccache slot"
-      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
-      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
       if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
+        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
 
+    - name: "Prune older sccache slots"
+      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
+      run: |
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
     - name: "Install python packages"
       run: |
         set -eux
