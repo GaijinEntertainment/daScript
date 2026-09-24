@@ -3829,7 +3829,8 @@ def test_served_tree_paths(t : T?) {
         t |> equal(resolve_path("tests/x.das"), path_join(served, "tests/x.das"))
         t |> equal(resolve_path(""), served)
         t |> equal(resolve_path("."), served)
-        t |> equal(resolve_path("/abs/x.das"), "/abs/x.das")
+        let abs = path_join(to_generic_path(get_das_root()), "abs/x.das")   //! a rooted path on every platform (a bare `/abs` is drive-relative on Windows and resolves to `D:/abs`)
+        t |> equal(resolve_path(abs), abs)
     }
     t |> run("a served tree with no project marker keeps the daslang C++ index roots") @(t : T?) {
         var inscope dirs <- cpp_default_search_dirs()
