@@ -2704,3 +2704,41 @@ state.
   asked of 12422 MB usable, the weights alone 12899 MB with other processes holding 1835 MB - and the
   per-op rails read 8.5 / 3.4 against the reference's 2.5 / 2.0, both paging. The IQ4_XS file on 16 GB
   is `followup_vulkan.md` item 81's streamed-weights arm, not a kernel.
+
+### From the Vulkan vision tower arc (2026-09-24)
+
+The instrument: the pod (RTX PRO 4500 Blackwell, driver 580.173, an AMD EPYC 7443 container at 48
+threads under the 62 GB cgroup cap), `daslang -jit benchmarks/lcpp_bench.das -- -m <decoder> --image
+<coco 640x480> --image-mmproj <mmproj> --for-debug-purposes -r 3 -t 16` under `DASLLAMA_IMAGE=0
+DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, the untuned tier; the `vk` arm `DASLLAMA_GPU=1`
+(the tower chain on the Vulkan tower driver, the bench's engage line reading encodes +3 of 3), the
+`cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every encode, the CPU tower chain -
+the q8 lane where the family has one, the exact f32 lane on qwen25v - and the decoder on the CPU
+too, so only the encode column is a tower-vs-tower reading) [direction-grade - two processes]. The
+encode is one image's tower time in ms, the mean of the three timed reps.
+
+- **The four families, the driver against the CPU chain, encode ms:** gemma-4-E2B (gemma4v q8, 130
+  soft tokens) **35.2** against 706; gemma-3-4b (gemma3v q8, 256 tokens, the fixed 896 canvas -
+  4096 patch rows through 27 blocks) **165** against 14345; Qwen3-VL-4B (qwen3v q8 with the three
+  deepstack taps, 300 tokens) **262** against 1561; Qwen2.5-Omni-3B (qwen25v over the halfword twin,
+  391 tokens, the f32 per-window route) **179** against 7305 (162 on the slotted f16 route the arc
+  replaced: the window layers read K and V off the compact rows, `followup_vulkan.md` row 95's
+  staging lever). The captions name the two cats and the remotes on both arms of every pair. Before
+  the resident driver's span pass hydrated the mirror's head rows down, the E2B turn on the Vulkan
+  decoder read "a cat lying down on a pink surface" here and "Please provide the image" in
+  `test_vision_chat_e2b` (the CPU computed the media rows against a head of zeros, and the decode
+  fell to the CPU at tg 24.7): with the pass hydrated the same row reads tg 188.4 against the CPU
+  arm's 24.5, the decode serving on the device.
+- **The pp / tg columns are the decoder's**, not the tower's: on the `cpu` arm the decoder runs on the
+  CPU too (Qwen3-VL tg 14.0 against 56.0 on the Vulkan resident driver, Omni 18.8 against 102.7,
+  E2B 24.5 against 188.4).
+- **The device chain's distance from the exact CPU chain, the twin cells at the tip, x token rms
+  (the CPU q8 chain's own distance beside where the family has one):** gemma4v E2B 16 blocks
+  0.082 / 0.160 / 0.63 / 0.26 against 0.064 / 0.193 / 0.46 / 0.25 (cb96, cb336, green 672x336,
+  cb768x384; the 1- and 2-block towers within 0.015 on both); gemma3v 27 blocks 3.26 against 2.68 (the fixed canvas; the 1- and 2-block towers 0.12
+  against 0.12 / 0.13); qwen3v 4B 24 blocks 0.42 / 0.62 / 0.61 against 0.36 / 0.58 / 0.44 (cb96,
+  cb448, cb640x320); qwen25v 32 blocks 0.015 / 0.076 / 0.092 against the exact chain (cb112, cb448,
+  cb616x336; no q8 lane), the 5060 Ti's KHR arm 0.020 / 0.034 / 0.020. The slotted f16 window
+  route read 0.16 to 0.79 on the 5060 Ti's cm2 arm and 1.53 on the pod's at 32 blocks - the
+  coopmat tile's f16 staging compounds over the 28 window layers, which is why the window layers
+  attend in f32 on the compact rows (`ARCHITECTURE_GPU_TOWER.md` 2.2aq).

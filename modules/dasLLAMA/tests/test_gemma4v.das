@@ -13,11 +13,11 @@ require math
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
-require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan block loop over the q8 image; the CPU gates pin its knob off too
-require ?vulkan dasllama/dasllama_vulkan_common   // vk_moe_init - whether the tier has a device
+require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_common
 
 //! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def private gpu_towers(on : bool) {
+def private set_every_gpu_tower(on : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(on)
     }
@@ -71,7 +71,7 @@ def test_gemma4v_tier1(t : T?) {
         set_gemma4v_q8(false)   // the CPU gate owns the exact-plane lane; the q8 serving lane is the next test
         var tw <- load_gemma4v_tower(mm)
         reset_gemma4v_q8()
-        gpu_towers(false)   // this gate owns the CPU chain; the GPU rungs are their own tests below
+        set_every_gpu_tower(false)
         var st = Gemma4vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.patch), 16, "patch")
@@ -120,7 +120,7 @@ def test_gemma4v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas that is not a multiple of the pooled patch panics at the span check")
-        gpu_towers(true)
+        set_every_gpu_tower(true)
         delete st
         delete tw
     }
@@ -207,7 +207,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         tt |> equal(armed, int(stg.t.n_layer * GEMMA4V_GEMMS), "every block GEMM carries an active clamp on E2B")
         var tw = Gemma4vTower()
         mint_gemma4v_tower(stg, tw)
-        gpu_towers(false)   // the knockout reads the CPU chain
+        set_every_gpu_tower(false)
         var st = Gemma4vState()
         let planes <- make_planes("cb", 336, 336)
         var out : array<float>
@@ -246,7 +246,7 @@ def test_gemma4v_clamps_bind(t : T?) {
             maxdiffq = max(maxdiffq, abs(outq[p * int(twq.proj_dim)] - o.v0[p]))
         }
         tt |> success(twq.q8 && maxdiffq > KNOCKOUT_FLOOR, "q8 lane: disarmed clamps miss the oracle by {maxdiffq}")
-        gpu_towers(true)
+        set_every_gpu_tower(true)
         delete stq
         delete twq
     }
@@ -262,7 +262,7 @@ def test_gemma4v_std_guard(t : T?) {
         if (!model_available(tt, mm)) {
             return
         }
-        gpu_towers(false)   // the CPU chain carries the standardize step (the drivers serve blocks only)
+        set_every_gpu_tower(false)
         set_gemma4v_q8(false)
         let planes <- make_planes("cb", 96, 96)
         var plain : array<float>
@@ -312,7 +312,7 @@ def test_gemma4v_std_guard(t : T?) {
         }
         tt |> success(neutral_diff == 0.0, "bias 0 / scale 1 leaves the encode bit-identical (diff {neutral_diff})")
         tt |> success(biased_diff > 1e-2, "bias 0.25 / scale -1 moves the tokens (diff {biased_diff})")
-        gpu_towers(true)
+        set_every_gpu_tower(true)
     }
 }
 
@@ -333,7 +333,7 @@ def test_gemma4v_tier1_q8(t : T?) {
         var inscope via_carrier_exact <- load_vision_embedder(mm)
         tt |> equal(vision_exec_fmt(via_carrier_exact), "f32", "the carrier stamps the exact lane")
         reset_gemma4v_q8()
-        gpu_towers(false)   // a CPU-lane claim pins the covering knobs, never relies on the runtime decline
+        set_every_gpu_tower(false)
         var st = Gemma4vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> success(length(tw.qblob) == tw.n_layer * tw.layer_w_stride, "qblob holds exactly the block GEMM set")
@@ -341,15 +341,13 @@ def test_gemma4v_tier1_q8(t : T?) {
         tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "green", 336, 336, "e2b.encode.green336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log", TIER1_REL_Q8)
-        gpu_towers(true)
+        set_every_gpu_tower(true)
         delete st
         delete tw
     }
 }
 
-// The Vulkan tier-1 rung: the same dumps through the Vulkan tower's block loop over the q8 image
-// (the serving lane on a Vulkan box), on the q8 lane's bar - the device runs the q8 chain's own
-// arithmetic with f16 weight scales and its own summation order.
+//! the q8 lane's bar: the device runs the q8 chain's arithmetic with f16 weight scales and its own summation order
 [test]
 def test_gemma4v_tier1_vulkan(t : T?) {
     t |> run("tier-1 Vulkan attempt vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
@@ -363,7 +361,7 @@ def test_gemma4v_tier1_vulkan(t : T?) {
                 return
             }
             tt |> success(gemma4v_serves_q8(), "the Vulkan tower serves the q8 image, so the default lane stays q8")
-            gpu_towers(true)
+            set_every_gpu_tower(true)
             var tw <- load_gemma4v_tower(mm)
             var st = Gemma4vState()
             tt |> success(tw.q8, "q8 lane (the lane the driver serves)")
@@ -387,9 +385,8 @@ def test_gemma4v_tier1_vulkan(t : T?) {
     }
 }
 
-let private TWIN_SLACK_VK = 1.5   // the Vulkan twin's bar: the device chain sits no farther from the exact chain than 1.5x the CPU q8 chain's own distance - the same activation quants, f16 weight scales, the tiles' summation order, the closed-form GEGLU against the f16 LUT
+let private TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GEGLU against the f16 LUT
 
-//! the max |a - b| over two encodes
 def private encode_maxdiff(a, b : array<float>) : float {
     var m = 0.0
     for (x, y in a, b) {
@@ -398,10 +395,7 @@ def private encode_maxdiff(a, b : array<float>) : float {
     return m
 }
 
-//! one canvas three ways - the exact CPU chain, the CPU q8 chain and the Vulkan block loop over the q8 image: the counters
-//! prove which served, the device chain's distance from the exact chain holds to the q8 chain's own within the slack, a
-//! poisoned element as the control that the bar reds
-def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; twx : Gemma4vTower; var stx : Gemma4vState; kind : string; w, h : int) {
+def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_exact : Gemma4vTower; var st_exact : Gemma4vState; kind : string; w, h : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
         var cpu : array<float>
@@ -412,7 +406,7 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; twx :
         set_vulkan_tower(false)
         with_job_que() {
             setup_dasllama_jobque_()
-            gemma4v_encode(twx, stx, planes, int64(w), int64(h), exact)
+            gemma4v_encode(tw_exact, st_exact, planes, int64(w), int64(h), exact)
         }
         let d0 = vulkan_tower_stats()
         with_job_que() {
@@ -430,7 +424,6 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; twx :
         if (d2.encodes == d1.encodes) {
             to_log(LOG_INFO, "gemma4v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
-        // the residual rows by 64-row tile: where the two chains part
         let npos = int64(w / 16) * int64(h / 16)
         let dd = tw.n_embd
         var worst_row = -1l
@@ -472,10 +465,6 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; twx :
     }
 }
 
-// The Vulkan twin: the device block loop against the CPU q8 chain on synthetic canvases - the
-// instrument that needs no oracle dump. Three grids: the smallest, a square product size, the
-// transposed one; then the exact-lane tower, which the driver must decline (quant_mode) and
-// leave to the CPU chain.
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_gemma4v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
@@ -489,10 +478,10 @@ def test_gemma4v_vulkan_twin(t : T?) {
                 return
             }
             set_gemma4v_q8(false)
-            var twx <- load_gemma4v_tower(mm)   //! the exact chain: the reference both q8 chains are measured against
-            var stx = Gemma4vState()
-            tt |> success(!twx.q8, "exact-plane lane loaded")
-            // the shallow twins first: one- and two-block towers, so a drift names its block before the deep chain compounds it
+            var tw_exact <- load_gemma4v_tower(mm)   //! the exact chain: the reference both q8 chains are measured against
+            var st_exact = Gemma4vState()
+            tt |> success(!tw_exact.q8, "exact-plane lane loaded")
+            //! the one- and two-block towers first: a drift names its block before the deep chain compounds it
             for (nl in [1l, 2l]) {
                 var inscope stgx <- stage_gemma4v_tower(mm)
                 stgx.t.n_layer = nl
@@ -519,13 +508,12 @@ def test_gemma4v_vulkan_twin(t : T?) {
             reset_gemma4v_q8()
             var st = Gemma4vState()
             tt |> success(tw.q8, "q8 lane loaded")
-            twin_encode(tt, tw, st, twx, stx, "cb", 96, 96)
-            twin_encode(tt, tw, st, twx, stx, "cb", 336, 336)
-            twin_encode(tt, tw, st, twx, stx, "green", 672, 336)
-            twin_encode(tt, tw, st, twx, stx, "cb", 768, 384)   //! 1152 rows, a 128-multiple: the aligned tile variant's canvas
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 336, 336)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "green", 672, 336)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384)   //! 1152 rows, a 128-multiple: the aligned tile variant's canvas
             delete st
             delete tw
-            // the exact-lane tower: its planes are not the q8 image, the driver declines and the CPU chain serves
             let planes <- make_planes("cb", 96, 96)
             var outx : array<float>
             set_vulkan_tower(true)
@@ -533,14 +521,14 @@ def test_gemma4v_vulkan_twin(t : T?) {
             let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
             with_job_que() {
                 setup_dasllama_jobque_()
-                gemma4v_encode(twx, stx, planes, 96l, 96l, outx)
+                gemma4v_encode(tw_exact, st_exact, planes, 96l, 96l, outx)
             }
             let x1 = vulkan_tower_stats()
             tt |> equal(x1.encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
             tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 1l, "the exact-lane tower recorded the quant_mode decline")
-            tt |> success(length(outx) == 4 * int(twx.proj_dim), "the CPU chain served the exact-lane encode")
-            delete stx
-            delete twx
+            tt |> success(length(outx) == 4 * int(tw_exact.proj_dim), "the CPU chain served the exact-lane encode")
+            delete st_exact
+            delete tw_exact
             vulkan_tower_shutdown()
         } else {
             feint("dasVulkan is not built on this platform - the twin needs it\n")
@@ -561,7 +549,7 @@ def test_gemma4v_tier1_e4b(t : T?) {
         set_gemma4v_q8(false)
         var tw <- load_gemma4v_tower(mm)
         reset_gemma4v_q8()
-        gpu_towers(false)   // the CPU gate first; the GPU rung re-arms below
+        set_every_gpu_tower(false)
         var st = Gemma4vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.proj_dim), 2560, "soft-token width - the one dimension E4B changes")
@@ -585,13 +573,13 @@ def test_gemma4v_tier1_e4b(t : T?) {
         delete st
         delete tw
         set_gemma4v_q8(true)   // the serving lane on its own bar
-        gpu_towers(false)   // a CPU-lane claim pins the covering knobs, never relies on the runtime decline
+        set_every_gpu_tower(false)
         var twq <- load_gemma4v_tower(mm)
         reset_gemma4v_q8()
         var stq = Gemma4vState()
         tt |> success(twq.q8, "q8 lane loaded")
         tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
-        static_if (typeinfo builtin_module_exists(vulkan)) {   //! the Vulkan rung on the E4B tower: the same geometry, the wider projection stays CPU
+        static_if (typeinfo builtin_module_exists(vulkan)) {
             if (vk_moe_init()) {
                 set_vulkan_tower(true)
                 let v0 = vulkan_tower_stats()
@@ -602,7 +590,7 @@ def test_gemma4v_tier1_e4b(t : T?) {
                 }
             }
         }
-        gpu_towers(true)
+        set_every_gpu_tower(true)
         delete stq
         delete twq
     }

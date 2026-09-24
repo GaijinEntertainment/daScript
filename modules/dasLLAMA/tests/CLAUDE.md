@@ -961,7 +961,7 @@ measured maxdiff logged per fixture; plus the clamp knockout (every block clamp 
 the staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung
 - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
 with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps. Every
-CPU-lane claim pins BOTH GPU tower knobs off (`gpu_towers`). On a Vulkan build two more cells:
+CPU-lane claim pins BOTH GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build two more cells:
 `test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image on
 the q8 lane's bar with the engage counters per fixture, and `test_gemma4v_vulkan_twin` needs no
 dump - one canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and
@@ -984,7 +984,7 @@ the knob ARMED must never dispatch and must record the `quant_mode` decline - it
 would read as f32 garbage), and a third crowned encode on the twin-W route
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
-the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`gpu_towers`); on a
+the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`); on a
 Vulkan build the q8 cell re-runs its two dumps through the Vulkan block loop with the engage
 counters, and `test_gemma3v_vulkan_twin` is the dump-free instrument - the fixed canvas three
 ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block truncated
@@ -1019,7 +1019,7 @@ the same GPU bars, engage proven by the metal_tower_f16_encodes delta, plus the 
 leg whose counter must not move, and the Omni-30B bf16 half - the same crowned route on the
 bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves the twin
 bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell. The CPU-lane
-claims pin both GPU tower knobs off (`gpu_towers`). On a Vulkan build `test_qwen3v_vulkan_twin`
+claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build `test_qwen3v_vulkan_twin`
 (Qwen3-VL 4B, the deepstack carrier) is the dump-free instrument: the exact CPU chain, the CPU
 q8 chain and the Vulkan block loop over the q8 image (the tap mergers run on the CPU off the
 residuals the driver stashes after the tap blocks, so the wide rows' slices read the device's
@@ -1045,7 +1045,7 @@ with engage proven per fixture by the encodes/blocks counters, a twin-route coun
 planes, and the SHALLOW routing cells - 1-layer truncated towers (pure-window and all-full) on
 quad content, GPU vs the CPU chain at 0.1 abs, the chaos-free window discrimination for the DRIVER
 (the kernel's own block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly
-without the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`gpu_towers`). On a
+without the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a
 Vulkan build `test_qwen25v_vulkan_twin` holds the Vulkan block loop over the baked halfword twin
 (this family has no q8 lane, so the exact CPU chain is the reference) to 1e-2*rms on one-, two- and
 eight-block truncated towers and to 0.15*rms on the whole tower (the f16 GEMM feed's re-roll at

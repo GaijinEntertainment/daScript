@@ -663,7 +663,7 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
         tp = ref_time_ticks()
         q25v_stem_finish(t, s, npos)
         asr_prof_add("q25v.stem", tp)
-        if (!(g_q25v_gpu_blocks_set && invoke(g_q25v_gpu_blocks, t, s, npos))) {   //! the blocks-only seat over the stemmed rows, else the CPU loop
+        if (!(g_q25v_gpu_blocks_set && invoke(g_q25v_gpu_blocks, t, s, npos))) {
             for (l in range64(t.n_layer)) {
                 q25v_block(t, s, l, npos)
             }

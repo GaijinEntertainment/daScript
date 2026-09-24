@@ -55,6 +55,10 @@ routed off and why.** A silent decline is a fallback a user finds only by profil
 `continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
 that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
+**A chain in `dasllama/dasllama_vulkan_tower.das` checks `gpu_want_arms_tier()` before it calls
+`vk_moe_init()`, and declines `device` when the want is off.** `vk_moe_init` reads no knob, so a
+chain that skips the check serves on a box whose `DASLLAMA_GPU` says no.
+
 **A diff that changes what a device limit decides for the tier - which path serves, how much
 it arms, whether it declines - adds that limit to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without

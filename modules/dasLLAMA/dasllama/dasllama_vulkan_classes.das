@@ -91,10 +91,22 @@ class RmsWgBase {
 
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
     def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float {
-        return 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)   // the CPU rmsnorm's own form
+        let ss = subgroupAdd(ss0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[slot * 64u + gl_SubgroupID] = ss
+        }
+        barrier()
+        var tot = 0.0
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            tot += part[slot * 64u + sgi]
+            sgi++
+        }
+        return 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
     }
 
-    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it)
+    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it); its text is `wg_rms_inv`'s
+    //! reduce, kept apart because the fold moves every decode stamp on this base by 108 bytes
     def wg_sum(v0 : float; slot : uint) : float {
         let ss = subgroupAdd(v0)
         if (gl_SubgroupInvocationID == 0u) {
@@ -8860,14 +8872,12 @@ class QkRms : RmsWgBase {
     }
 }
 
-// ===== the vision tower classes: the Vulkan tower driver's own dispatches over compact f32 rows =====
-
 struct TowerRowArgs {
-    d : uint        // the row width
-    rows : uint     // rows in the dispatch (one workgroup each)
-    woff : uint     // the norm weight row's base in wn
+    d : uint
+    rows : uint     //! rows in the dispatch (one workgroup each)
+    woff : uint     //! the norm weight row's base in wn
     eps : float
-    ln_on : uint    // TowerPostAdd: the next pre-norm's weight row at `lnoff` norms the updated row into xb
+    ln_on : uint
     lnoff : uint
 }
 
@@ -8901,7 +8911,7 @@ class TowerRms : RmsWgBase {
 }
 
 struct TowerClampArgs {
-    nelem : uint    // a 4-multiple (every tower width is a 64-multiple)
+    nelem : uint    //! a 4-multiple (every tower width is a 64-multiple)
     lo : float
     hi : float
 }
@@ -8970,10 +8980,10 @@ class template TowerClampRqT : RqT {
 class TowerClampRq : TowerClampRqT {}
 
 struct TowerRopeArgs {
-    d : uint        // the row width (heads x hs)
+    d : uint
     nheads : uint
     hs : uint
-    pairs : uint    // rotated pairs per axis = hs / 4: one packed table row is [cx | sx | cy | sy], `pairs` each
+    pairs : uint    //! rotated pairs per axis = hs / 4: one packed table row is [cx | sx | cy | sy], `pairs` each
     rows : uint
 }
 
@@ -9017,9 +9027,9 @@ class TowerRope2d {
 //! xb[r] = rmsnorm(x[r]) . wln (the next branch's pre-norm, `lnoff`) - the CPU loop's post-norm, add and pre-norm in one workgroup a row
 [vk_dispatch(name = "tower_post_add_cls", grid = "wgs", params = "wgs : int64")]
 class TowerPostAdd : RmsWgBase {
-    @ssbo @binding = 0 x : array<float>    // the residual stream, updated in place
-    @ssbo @binding = 1 y : array<float>    // the branch's rows
-    @ssbo @binding = 2 xb : array<float>   // the next pre-norm's rows (written under ln_on)
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 xb : array<float>
     @ssbo @binding = 3 @role = "weight" wn : array<float>
     @push_constant pa : TowerRowArgs
 
@@ -9055,12 +9065,12 @@ class TowerPostAdd : RmsWgBase {
 }
 
 struct TowerGegluArgs {
-    nelem : uint    // a 4-multiple
-    glo : float     // the gate GEMM's output bounds
+    nelem : uint    //! a 4-multiple
+    glo : float     //! the gate GEMM's output bounds
     ghi : float
-    ulo : float     // the up GEMM's
+    ulo : float     //! the up GEMM's
     uhi : float
-    dlo : float     // the down GEMM's input bounds
+    dlo : float     //! the down GEMM's input bounds
     dhi : float
 }
 
@@ -9092,12 +9102,12 @@ class TowerGeglu {
 }
 
 struct TowerLnArgs {
-    d : uint        // the row width
+    d : uint
     rows : uint
-    woff : uint     // the norm weight row's base in wn, its bias row at boff
+    woff : uint     //! the norm weight row's base in wn, its bias row at boff
     boff : uint
     eps : float
-    ln_on : uint    // TowerPostAddLn: the next pre-norm at lnoff / lnboff norms the updated row into xb
+    ln_on : uint
     lnoff : uint
     lnboff : uint
 }
@@ -9144,9 +9154,9 @@ class TowerLn : RmsWgBase {
 [ |> template_struct_instance]
 class template TowerPostAddLnT : RmsWgBase {
     @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v), not the layernorm
-    @ssbo @binding = 0 x : array<float>    // the residual stream, updated in place
-    @ssbo @binding = 1 y : array<float>    // the branch's rows
-    @ssbo @binding = 2 xb : array<float>   // the next pre-norm's rows (written under ln_on)
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 xb : array<float>
     @ssbo @binding = 3 @role = "weight" wn : array<float>
     @push_constant pa : TowerLnArgs
 
@@ -9203,10 +9213,10 @@ class TowerPostAddRms : TowerPostAddLnT {
 }
 
 struct TowerBiasArgs {
-    d : uint        // the row width (a 4-multiple)
-    nelem : uint    // rows x d
-    boff : uint     // the bias row's base in wn
-    act : uint      // 0 = the bias alone, 1 = the tanh GELU after it
+    d : uint        //! the row width, a 4-multiple
+    nelem : uint
+    boff : uint     //! the bias row's base in wn
+    gelu_on : uint  //! 0 = the bias alone, 1 = the tanh GELU after it
 }
 
 //! a GEMM output's bias row added in place, and under `act` the tanh GELU the SigLIP FFN takes - the CPU `gelu_tanh_lut`'s
@@ -9231,7 +9241,7 @@ class TowerBiasAct {
 
     def biased(e : uint) : float {
         let v = x[e] + wn[pa.boff + e % pa.d]
-        return pa.act != 0u ? gelu_tanh(v) : v
+        return pa.gelu_on != 0u ? gelu_tanh(v) : v
     }
 
     [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cls_spv")]
@@ -9249,9 +9259,9 @@ class TowerBiasAct {
 struct TowerRestrideArgs {
     rows : uint
     nheads : uint
-    hs : uint       // the compact head width
-    hsp : uint      // the padded head width (the flash tile's)
-    sstride : uint  // the compact rows' stride and the column their heads start at (a fused [q | k | v] row: 3d and 0 / d / 2d)
+    hs : uint
+    hsp : uint
+    sstride : uint  //! the compact rows' stride and the column their heads start at (a fused [q | k | v] row: 3d and 0 / d / 2d)
     soff : uint
 }
 
@@ -9309,9 +9319,9 @@ class TowerHeadUnpad : TowerRestrideT {
 }
 
 struct TowerGluArgs {
-    d : uint        // the row width (a 4-multiple)
-    nelem : uint    // rows x d
-    bgoff : uint    // the gate and up bias rows' bases in wn
+    d : uint        //! the row width, a 4-multiple
+    nelem : uint
+    bgoff : uint    //! the gate and up bias rows' bases in wn
     buoff : uint
 }
 
@@ -9343,25 +9353,22 @@ class TowerGluAct {
 }
 
 struct TowerRopeTabArgs {
-    sstride : uint  // the rows' stride and the column the heads start at (a fused [q | k | v] row)
+    sstride : uint  //! the rows' stride and the column the heads start at (a fused [q | k | v] row)
     soff : uint
     nheads : uint
     hs : uint
-    half : uint     // the rotary half = hs / 2: pairs (j, j + half), one table row of `half` cos and `half` sin a token
+    half : uint     //! the rotary half = hs / 2: pairs (j, j + half), one table row of `half` cos and `half` sin a token
     rows : uint
 }
 
 struct TowerWinArgs {
-    d : uint        // the compact row stride
+    d : uint
     nheads : uint
     hs : uint
     scale : float
 }
 
-//! per-window attention in f32 over the compact rows, one workgroup a (window, head): a window's rows attend each other
-//! and nothing else, q, k and v read straight off the compact rows - the coopmat tile's f16 staging noise compounds over
-//! a tower's window layers, so this route reads f32 as the Metal driver's per-window route does; 256 threads = 64 query
-//! rows x 4 lanes, the lanes over the keys for the scores and over the head's dims for the output
+//! 256 threads = 64 query rows x 4 lanes: the lanes split the keys for the scores and the head's dims for the output
 [vk_dispatch(name = "tower_win_attn_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
 class TowerWinAttn {
     @ssbo @binding = 0 q : array<float>

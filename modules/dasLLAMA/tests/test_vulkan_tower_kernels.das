@@ -6,21 +6,21 @@ module test_vulkan_tower_kernels
 
 require dastest/testing_boost public
 require math
-require daslib/f16_cvt   // f32_to_f16 / f16_to_f32: the oracle reads the K/V rows as the f16 shadows the tile reads
-require dasllama/dasllama_plane   // PlaneF: the CPU rms helper's weight plane
-require dasllama/dasllama_tower   // the CPU tower helpers the row classes mirror: rms_rows, clamp_rows, rope_neox_2d_rows, add_inplace_rows
-require dasllama/dasllama_common   // requant_rows_q8_sized: the Q8_0 feed's oracle
-require ?vulkan vulkan   // VkCommandBuffer: the one-shot bracket's block argument
+require daslib/f16_cvt
+require dasllama/dasllama_plane
+require dasllama/dasllama_tower
+require dasllama/dasllama_common
+require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
-require ?vulkan _vkd_oracles   // attn_row_oracle over every key: the bidirectional oracle
+require ?vulkan _vkd_oracles
 require ?vulkan _compares
-require dasllama/dasllama_math   // setup_dasllama_jobque_ - the CPU attention oracle runs on the que
+require dasllama/dasllama_math
 require daslib/jobque_boost
 
 //! The vision towers' Vulkan kernel classes against their CPU oracles (a Vulkan device, else the
-//! cells skip): the bidirectional flash tiles, and - as the tower arc lands them - the tower-only
-//! classes (rope2d, layernorm rows, clamp rows, the gated activations, the window attention).
+//! cells skip): the bidirectional flash tiles, the tower row classes, the biased-block classes,
+//! the padded attention route and the window classes.
 
 let private TOWER_NHEADS = 4
 let private TOWER_ROWS = 77       //! one whole 64-row tile and a 13-row partial: the tail mask past kvlen runs on the last K step of both arms
@@ -30,7 +30,6 @@ let private TOWER_SCALE = 0.125
 
 def private f16r(v : float) : float => f16_to_f32(f32_to_f16(v))
 
-//! the four stamps' ensure / set / enc by arm, so the cell reads one shape
 def private fa_bidir_ensure(khr : bool; hs : int) : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (khr) {
@@ -56,7 +55,6 @@ def private fa_bidir_enc(khr : bool; hs : int; raw; var h; var s; var pc; wgs : 
     }
 }
 
-//! the causal twin at the same head width, the control that the mask switch is the stamps' only difference
 def private fa_causal_enc(khr : bool; hs : int; raw; var h; var s; var pc; wgs : int64) {
     if (khr) {
         if (hs == 64) {
@@ -82,15 +80,18 @@ def private fa_causal_ensure(khr : bool; hs : int) : bool {
     }
 }
 
-//! the workgroups a flash dispatch takes: one per (head, query tile) - 64-row tiles on the cm2 arm, 16-row on KHR
 def private fa_wgs(khr : bool; nheads, rows : int) : int64 => int64(nheads) * int64((rows + (khr ? 15 : 63)) / (khr ? 16 : 64))
 
-//! one arm of the bidirectional cell: the tile over compact f32 q rows and f16 K/V shadows, against the two-pass
-//! CPU oracle attending every key (the K/V rows rounded through f16 as the shadows are), the causal twin as the
-//! control that the switch moves the output, the sentinel slack rows as the control that the tail mask holds
 def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 — one arm: the fixture, both stamps, the oracle and its controls
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "{khr ? "fa_khr" : "fa_cm2"} h{hs} bidir"
+        let B_Q = 1u
+        let B_K = 2u
+        let B_Y = 4u
+        let B_V = 8u
+        let B_KH = 16u
+        let B_VH = 32u
+        let B_YC = 64u
         let nheads = TOWER_NHEADS
         let rows = TOWER_ROWS
         let qd = nheads * hs
@@ -130,10 +131,10 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
             upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
             upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
         }
-        var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-        var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-        var sfa = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd), fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(1u, 16u, 32u, 4u))
-        var sfc = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, ycd), fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(1u, 16u, 32u, 64u))
+        var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(B_K, B_KH))
+        var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(B_V, B_VH))
+        var sfa = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd), fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(B_Q, B_KH, B_VH, B_Y))
+        var sfc = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, ycd), fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(B_Q, B_KH, B_VH, B_YC))
         var pcv = ActArgs(nelem = uint(kpad * qd), nblk = 0u)
         var pcf = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(qd), kvd = uint(qd), kv_mul = 1u, kvbase = 0u,
             scale = TOWER_SCALE, window = 0u, sinkoff = 0u)
@@ -143,7 +144,7 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
             enc_f16cvt_cls(raw, h, scv, pcv, cvtwgs)
             fa_bidir_enc(khr, hs, raw, h, sfa, pcf, fa_wgs(khr, nheads, rows))
             fa_causal_enc(khr, hs, raw, h, sfc, pcf, fa_wgs(khr, nheads, rows))
-            vhz_dep(raw, h, 4u | 64u, 0u, true)
+            vhz_dep(raw, h, B_Y | B_YC, 0u, true)
             cmd_copy_range(raw, yd, 0l, host.buf, 0l, q_bytes)
             cmd_copy_range(raw, ycd, 0l, host.buf, q_bytes, q_bytes)
         }
@@ -243,8 +244,7 @@ def private row_fill(n : int; mul, add : int; scale, off : float) : array<float>
     return <- a
 }
 
-//! the Q8_0 requant compare: block scales within the kernel cells' bar, bytes within one step (the device's rounding of a
-//! half-step value against the CPU's)
+//! scales on the kernel cells' bar, quant bytes within one step: the device rounds a half-step value apart from the CPU
 def private q8_rows_off(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : array<float>) : int {
     var bad = 0
     for (a, b in sd, sr) {
@@ -260,7 +260,6 @@ def private q8_rows_off(qd : array<int8>; sd : array<float>; qr : array<int8>; s
     return bad
 }
 
-//! gelu_quick(x) = x . sigmoid(1.702 x) - the CPU LUT's closed form
 def private gelu_quick_ref(x : float) : float => x * (1.0 / (1.0 + exp(-1.702 * x)))
 
 [test]
@@ -272,6 +271,16 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 t |> skip("no Vulkan device")
                 return
             }
+            let B_X = 1u
+            let B_Y = 2u
+            let B_XB = 4u
+            let B_XB2 = 8u
+            let B_Q = 16u
+            let B_G = 32u
+            let B_U = 64u
+            let B_XH = 128u
+            let B_XQ = 256u
+            let B_XS = 512u
             let d = ROWS_D
             let rows = ROWS_N
             let ff = ROWS_FF
@@ -320,14 +329,13 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
                 upload_region_at(td, 0l, addr<uint8 const?>(tabs[0]), btabs)
             }
-            //! the hazard bits: x 1, y 2, xb 4, xb2 8, q 16, g 32, u 64, the feeds 128 / 256 / 512, the tables and weights unbit
-            var s_rms = set_tower_rms_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(1u, 4u, 0u))
-            var s_clamp = set_tower_clamp_cls(fixed_array(yd), fixed_array(bx), fixed_array(2u))
-            var s_cvt = set_tower_clamp_cvt_cls(fixed_array(xd, xhd), fixed_array(bx, bh), fixed_array(1u, 128u))
-            var s_rq = set_tower_clamp_rq_cls(fixed_array(xd, xqd, xsd), fixed_array(bx, bq, bs), fixed_array(1u, 256u, 512u))
-            var s_rope = set_tower_rope2d_cls(fixed_array(qd, td), fixed_array(bx, btabs), fixed_array(16u, 0u))
-            var s_post = set_tower_post_add_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(1u, 2u, 8u, 0u))
-            var s_geglu = set_tower_geglu_cls(fixed_array(gd, ud), fixed_array(bff, bff), fixed_array(32u, 64u))
+            var s_rms = set_tower_rms_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
+            var s_clamp = set_tower_clamp_cls(fixed_array(yd), fixed_array(bx), fixed_array(B_Y))
+            var s_cvt = set_tower_clamp_cvt_cls(fixed_array(xd, xhd), fixed_array(bx, bh), fixed_array(B_X, B_XH))
+            var s_rq = set_tower_clamp_rq_cls(fixed_array(xd, xqd, xsd), fixed_array(bx, bq, bs), fixed_array(B_X, B_XQ, B_XS))
+            var s_rope = set_tower_rope2d_cls(fixed_array(qd, td), fixed_array(bx, btabs), fixed_array(B_Q, 0u))
+            var s_post = set_tower_post_add_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
+            var s_geglu = set_tower_geglu_cls(fixed_array(gd, ud), fixed_array(bff, bff), fixed_array(B_G, B_U))
             var pa_rms = TowerRowArgs(d = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
             var pa_post = TowerRowArgs(d = uint(d), rows = uint(rows), woff = uint(d), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u)
             var pa_clamp = TowerClampArgs(nelem = uint(nd), lo = lo, hi = hi)
@@ -344,7 +352,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 enc_tower_geglu_cls(raw, h, s_geglu, pa_geglu, int64((nff / 4 + 255) / 256))
                 enc_tower_clamp_cls(raw, h, s_clamp, pa_clamp, wg4)
                 enc_tower_post_add_cls(raw, h, s_post, pa_post, int64(rows))   //! last: it rewrites x, which the rms and the feeds read whole
-                vhz_dep(raw, h, 1u | 2u | 4u | 8u | 16u | 32u | 128u | 256u | 512u, 0u, true)
+                vhz_dep(raw, h, B_X | B_Y | B_XB | B_XB2 | B_Q | B_G | B_XH | B_XQ | B_XS, 0u, true)
                 cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
                 cmd_copy_range(raw, yd, 0l, host.buf, bx, bx)
                 cmd_copy_range(raw, xd, 0l, host.buf, 2l * bx, bx)
@@ -384,13 +392,12 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var q_dev : array<float>
             q_dev |> resize(nd)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                vhz_dep(raw, h, 16u, 0u, true)
+                vhz_dep(raw, h, B_Q, 0u, true)
                 cmd_copy_range(raw, qd, 0l, host.buf, 0l, bx)
             }
             unsafe {
                 memcpy(addr<void?>(q_dev[0]), host.mapped, bx)
             }
-            // the oracles, the CPU tower helpers over the same rows
             let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(2 * d))
             var xb_ref : array<float>
             xb_ref |> resize(nd)
@@ -484,25 +491,35 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 t |> skip("no Vulkan device")
                 return
             }
+            let B_X = 1u
+            let B_XB = 2u
+            let B_G = 4u
+            let B_Y = 8u
+            let B_XB2 = 16u
+            let B_Q = 32u
+            let B_QP = 64u
+            let B_QPH = 128u
+            let B_QC = 256u
+            let B_QKV = 512u
             let d = ROWS_D
             let rows = ROWS_N
             let nd = rows * d
-            let dc = ROWS_HEADS * LN_HS    //! the compact attention width
-            let dp = ROWS_HEADS * LN_HSP   //! the padded one
+            let d_compact = ROWS_HEADS * LN_HS
+            let d_padded = ROWS_HEADS * LN_HSP
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
             var y <- row_fill(nd, 17, 3, 0.04, 1.9)
             var g <- row_fill(nd, 13, 5, 0.3, 14.0)   //! wide enough to reach both tails of the GELU (past +-10)
-            var q <- row_fill(rows * dc, 29, 11, 0.06, 2.8)
-            var qkv <- row_fill(rows * 3 * dc, 37, 5, 0.05, 2.2)   //! a fused [q | k | v] row: the rope runs on its k slot in place
+            var q <- row_fill(rows * d_compact, 29, 11, 0.06, 2.8)
+            var qkv <- row_fill(rows * 3 * d_compact, 37, 5, 0.05, 2.2)   //! a fused [q | k | v] row: the rope runs on its k slot in place
             let half = LN_HS / 2
             var cos_t <- row_fill(rows * half, 31, 2, 0.02, 0.97)
             var sin_t <- row_fill(rows * half, 19, 4, 0.03, 0.55)
             var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   //! rows: ln w at 0, ln b at d, the bias at 2d, the next ln w at 3d (its bias reads the first ln's)
             let bx = int64(nd) * 4l
             let bw = int64(4 * d) * 4l
-            let bq = int64(rows * dc) * 4l
-            let bp = int64(rows * dp) * 4l
-            let bph = int64(rows * dp) * 2l
+            let bq = int64(rows * d_compact) * 4l
+            let bp = int64(rows * d_padded) * 4l
+            let bph = int64(rows * d_padded) * 2l
             let xd = make_device_buf(bx)
             let xbd = make_device_buf(bx)
             let yd = make_device_buf(bx)
@@ -530,20 +547,20 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 upload_region_at(cosd, 0l, addr<uint8 const?>(cos_t[0]), btab)
                 upload_region_at(sind, 0l, addr<uint8 const?>(sin_t[0]), btab)
             }
-            var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(512u, 0u, 0u))
-            var pa_rope = TowerRopeTabArgs(sstride = uint(3 * dc), soff = uint(dc), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), half = uint(half), rows = uint(rows))
-            var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(1u, 2u, 0u))
-            var s_bias = set_tower_bias_act_cls(fixed_array(gd, wd), fixed_array(bx, bw), fixed_array(4u, 0u))
-            var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(1u, 8u, 16u, 0u))
-            var s_pad = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bq, bp), fixed_array(32u, 64u))
-            var s_pad16 = set_tower_hpad16_cls(fixed_array(qd, qphd), fixed_array(bq, bph), fixed_array(32u, 128u))
-            var s_unpad = set_tower_hunpad_cls(fixed_array(qpd, qcd), fixed_array(bp, bq), fixed_array(64u, 256u))
+            var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(B_QKV, 0u, 0u))
+            var pa_rope = TowerRopeTabArgs(sstride = uint(3 * d_compact), soff = uint(d_compact), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), half = uint(half), rows = uint(rows))
+            var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
+            var s_bias = set_tower_bias_act_cls(fixed_array(gd, wd), fixed_array(bx, bw), fixed_array(B_G, 0u))
+            var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
+            var s_pad = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bq, bp), fixed_array(B_Q, B_QP))
+            var s_pad16 = set_tower_hpad16_cls(fixed_array(qd, qphd), fixed_array(bq, bph), fixed_array(B_Q, B_QPH))
+            var s_unpad = set_tower_hunpad_cls(fixed_array(qpd, qcd), fixed_array(bp, bq), fixed_array(B_QP, B_QC))
             var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
-            var pa_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = 1u)
+            var pa_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), gelu_on = 1u)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d))
-            var pa_rs = TowerRestrideArgs(rows = uint(rows), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
+            var pa_rs = TowerRestrideArgs(rows = uint(rows), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(d_compact), soff = 0u)
             let wg4 = int64((nd / 4 + 255) / 256)
-            let wg_rs = int64((rows * dp + 255) / 256)
+            let wg_rs = int64((rows * d_padded + 255) / 256)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
                 enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4)
@@ -552,7 +569,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 enc_tower_hunpad_cls(raw, h, s_unpad, pa_rs, wg_rs)
                 enc_tower_rope_tab_cls(raw, h, s_rope, pa_rope, int64((rows * ROWS_HEADS * half + 255) / 256))
                 enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))   //! last: it rewrites x, which the layernorm reads whole
-                vhz_dep(raw, h, 1u | 2u | 4u | 16u | 64u | 128u | 256u | 512u, 0u, true)
+                vhz_dep(raw, h, B_X | B_XB | B_G | B_XB2 | B_QP | B_QPH | B_QC | B_QKV, 0u, true)
                 cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
                 cmd_copy_range(raw, gd, 0l, host.buf, bx, bx)
                 cmd_copy_range(raw, xd, 0l, host.buf, 2l * bx, bx)
@@ -563,7 +580,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 cmd_copy_range(raw, qkvd, 0l, host.buf, 4l * bx + bp + bph + bq, bqkv)
             }
             var qkv_dev : array<float>
-            qkv_dev |> resize(rows * 3 * dc)
+            qkv_dev |> resize(rows * 3 * d_compact)
             var xb_dev : array<float>
             var g_dev : array<float>
             var x_dev : array<float>
@@ -575,9 +592,9 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             g_dev |> resize(nd)
             x_dev |> resize(nd)
             xb2_dev |> resize(nd)
-            qp_dev |> resize(rows * dp)
-            qph_dev |> resize(rows * dp)
-            qc_dev |> resize(rows * dc)
+            qp_dev |> resize(rows * d_padded)
+            qph_dev |> resize(rows * d_padded)
+            qc_dev |> resize(rows * d_compact)
             unsafe {
                 let hp = intptr(host.mapped)
                 memcpy(addr<void?>(xb_dev[0]), host.mapped, bx)
@@ -589,7 +606,6 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 memcpy(addr<void?>(qc_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph)), bq)
                 memcpy(addr<void?>(qkv_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph + bq)), bqkv)
             }
-            // the oracles
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
@@ -634,24 +650,23 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             t |> success(bad_pad16 == 0, "tower_hpad16: the f16 panel is that panel rounded to f16, bit for bit ({bad_pad16} off)")
             let bad_unpad = mismatch_exact_count(qc_dev, q)
             t |> success(bad_unpad == 0, "tower_hunpad: the compact rows come back off the padded panel exactly ({bad_unpad} off)")
-            // the rope on the fused row's k slot: the CPU form over the slot's rows gathered compact, the q and v slots untouched
             var k_ref : array<float>
             var k_dev : array<float>
-            k_ref |> resize(rows * dc)
-            k_dev |> resize(rows * dc)
+            k_ref |> resize(rows * d_compact)
+            k_dev |> resize(rows * d_compact)
             var bad_slots = 0
             for (r in range(rows)) {
-                for (i in range(dc)) {
-                    k_ref[r * dc + i] = qkv[r * 3 * dc + dc + i]
-                    k_dev[r * dc + i] = qkv_dev[r * 3 * dc + dc + i]
-                    if (qkv_dev[r * 3 * dc + i] != qkv[r * 3 * dc + i] || qkv_dev[r * 3 * dc + 2 * dc + i] != qkv[r * 3 * dc + 2 * dc + i]) {
+                for (i in range(d_compact)) {
+                    k_ref[r * d_compact + i] = qkv[r * 3 * d_compact + d_compact + i]
+                    k_dev[r * d_compact + i] = qkv_dev[r * 3 * d_compact + d_compact + i]
+                    if (qkv_dev[r * 3 * d_compact + i] != qkv[r * 3 * d_compact + i] || qkv_dev[r * 3 * d_compact + 2 * d_compact + i] != qkv[r * 3 * d_compact + 2 * d_compact + i]) {
                         bad_slots++
                     }
                 }
             }
             rope_neox_tab_rows(k_ref, int64(rows), int64(ROWS_HEADS), int64(LN_HS), cos_t, sin_t)
             let bad_rope = mismatch_approx(k_dev, k_ref)
-            t |> success(bad_rope == 0, "tower_rope_tab: the k slot of the fused rows matches rope_neox_tab_rows ({bad_rope} of {rows * dc} off)")
+            t |> success(bad_rope == 0, "tower_rope_tab: the k slot of the fused rows matches rope_neox_tab_rows ({bad_rope} of {rows * d_compact} off)")
             t |> success(bad_slots == 0, "tower_rope_tab: the q and v slots stay untouched ({bad_slots} moved)")
             t |> success(!approx(k_dev[0], k_ref[0] + 0.5), "tower_rope_tab: the bar reds a poisoned element")
             for (b in fixed_array(xd, xbd, yd, gd, xb2d, wd, qd, qpd, qphd, qcd, qkvd, cosd, sind)) {
@@ -680,6 +695,14 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                 t |> skip("the padded route's classes declined on this device")
                 return
             }
+            let B_Q = 1u
+            let B_QP = 2u
+            let B_K = 4u
+            let B_KP = 8u
+            let B_V = 16u
+            let B_VP = 32u
+            let B_ATTP = 64u
+            let B_ATT = 128u
             let rows = TOWER_ROWS
             let dc = PAT_HEADS * LN_HS
             let dp = PAT_HEADS * LN_HSP
@@ -708,11 +731,11 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                 upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
                 upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
             }
-            var s_pq = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bc, bp), fixed_array(1u, 2u))
-            var s_pk = set_tower_hpad16_cls(fixed_array(kd, kpd), fixed_array(bc, bph), fixed_array(4u, 8u))
-            var s_pv = set_tower_hpad16_cls(fixed_array(vd, vpd), fixed_array(bc, bph), fixed_array(16u, 32u))
-            var s_fa = fa_stamp_set(khr, fixed_array(qpd, kpd, vpd, attpd), fixed_array(bp, bph, bph, bp), fixed_array(2u, 8u, 32u, 64u))
-            var s_un = set_tower_hunpad_cls(fixed_array(attpd, attd), fixed_array(bp, bc), fixed_array(64u, 128u))
+            var s_pq = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bc, bp), fixed_array(B_Q, B_QP))
+            var s_pk = set_tower_hpad16_cls(fixed_array(kd, kpd), fixed_array(bc, bph), fixed_array(B_K, B_KP))
+            var s_pv = set_tower_hpad16_cls(fixed_array(vd, vpd), fixed_array(bc, bph), fixed_array(B_V, B_VP))
+            var s_fa = fa_stamp_set(khr, fixed_array(qpd, kpd, vpd, attpd), fixed_array(bp, bph, bph, bp), fixed_array(B_QP, B_KP, B_VP, B_ATTP))
+            var s_un = set_tower_hunpad_cls(fixed_array(attpd, attd), fixed_array(bp, bc), fixed_array(B_ATTP, B_ATT))
             var pa_rs = TowerRestrideArgs(rows = uint(rows), nheads = uint(PAT_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
             var pa_fa = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
             let wg_rs = int64((rows * dp + 255) / 256)
@@ -722,7 +745,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                 enc_tower_hpad16_cls(raw, h, s_pv, pa_rs, wg_rs)
                 fa_bidir_enc(khr, LN_HSP, raw, h, s_fa, pa_fa, fa_wgs(khr, PAT_HEADS, rows))
                 enc_tower_hunpad_cls(raw, h, s_un, pa_rs, wg_rs)
-                vhz_dep(raw, h, 128u, 0u, true)
+                vhz_dep(raw, h, B_ATT, 0u, true)
                 cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
             }
             var att_dev : array<float>
@@ -751,7 +774,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
     }
 }
 
-let private WIN_HS = 80   //! the window ViT's head width, padded to 128 on the tile
+let private WIN_HS = 80
 let private WIN_HEADS = 4
 let private WIN_ROWS = 982   //! sixteen windows: fifteen of 64 rows and a ragged 22-row one
 
@@ -767,6 +790,15 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 t |> skip("the window route's classes declined on this device")
                 return
             }
+            let B_Q = 1u
+            let B_K = 4u
+            let B_V = 16u
+            let B_ATT = 128u
+            let B_X = 256u
+            let B_Y = 512u
+            let B_XB = 1024u
+            let B_G = 2048u
+            let B_U = 4096u
             let rows = WIN_ROWS
             let dc = WIN_HEADS * WIN_HS
             let scale = 1.0 / sqrt(float(WIN_HS))
@@ -791,7 +823,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let vd = make_device_buf(bc)
             let attd = make_device_buf(bc)
             let wld = make_device_buf(bwl)
-            // the two seams' fixture: d-wide rows, a bias and rms weight rows at wn
             let d = ROWS_D
             let nrows = ROWS_N
             let nd = nrows * d
@@ -820,9 +851,9 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 upload_region_at(ud, 0l, addr<uint8 const?>(u[0]), bx)
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
             }
-            var s_win = set_tower_win_attn_cls(fixed_array(qd, kd, vd, attd, wld), fixed_array(bc, bc, bc, bc, bwl), fixed_array(1u, 4u, 16u, 128u, 0u))
-            var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(256u, 512u, 1024u, 0u))
-            var s_glu = set_tower_glu_act_cls(fixed_array(gd, ud, wd), fixed_array(bx, bx, bw), fixed_array(2048u, 4096u, 0u))
+            var s_win = set_tower_win_attn_cls(fixed_array(qd, kd, vd, attd, wld), fixed_array(bc, bc, bc, bc, bwl), fixed_array(B_Q, B_K, B_V, B_ATT, 0u))
+            var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB, 0u))
+            var s_glu = set_tower_glu_act_cls(fixed_array(gd, ud, wd), fixed_array(bx, bx, bw), fixed_array(B_G, B_U, 0u))
             var pa_win = TowerWinArgs(d = uint(dc), nheads = uint(WIN_HEADS), hs = uint(WIN_HS), scale = scale)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u)
             var pa_glu = TowerGluArgs(d = uint(d), nelem = uint(nd), bgoff = uint(2 * d), buoff = uint(3 * d))
@@ -831,7 +862,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 enc_tower_win_attn_cls(raw, h, s_win, pa_win, int64(nslot * WIN_HEADS))
                 enc_tower_glu_act_cls(raw, h, s_glu, pa_glu, wg4)
                 enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
-                vhz_dep(raw, h, 128u | 256u | 1024u | 2048u, 0u, true)
+                vhz_dep(raw, h, B_ATT | B_X | B_XB | B_G, 0u, true)
                 cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
                 cmd_copy_range(raw, xd, 0l, host.buf, bc, bx)
                 cmd_copy_range(raw, xbd, 0l, host.buf, bc + bx, bx)
@@ -909,7 +940,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
     }
 }
 
-//! exact element-for-element mismatch count (the clamp writes the same floats the CPU does)
 def private mismatch_exact_count(got, want : array<float>) : int {
     var bad = 0
     for (a, b in got, want) {

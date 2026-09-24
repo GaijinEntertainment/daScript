@@ -114,7 +114,7 @@ struct Qwen3vState {
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
     @exact_size ds_stash : array<float>  // GPU arm: each tap merger's proj output [n_ds × nout × proj]
-    @exact_size ds_xtaps : array<float>  // the q8 GPU arm: the residual after each tap block [n_ds × npos × d], the CPU tap mergers read it
+    @exact_size ds_xtaps : array<float>  //! the q8 GPU arm: the residual after each tap block [n_ds × npos × d], the CPU tap mergers read it
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -889,8 +889,7 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
     return nout
 }
 
-// the q8-lane GPU seat over a stemmed s.x: the blocks on the driver, then the tap mergers on the CPU off the stashed
-// residuals; false = no seat or a decline, the CPU loop serves
+[arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def private q3v_blocks_q8_gpu(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : bool {
     if (!t.q8 || !g_q3v_gpu_q8_set) {
         return false
@@ -904,7 +903,7 @@ def private q3v_blocks_q8_gpu(t : Qwen3vTower; var s : Qwen3vState; npos : int64
     }
     for (k in range64(nds)) {
         let tl = k == 0l ? t.ds_l0 : (k == 1l ? t.ds_l1 : t.ds_l2)
-        if (tl < 0l || tl >= t.n_layer) {   //! a tap past the served blocks never ran on the CPU loop either (a truncated tower)
+        if (tl < 0l || tl >= t.n_layer) {
             continue
         }
         unsafe {

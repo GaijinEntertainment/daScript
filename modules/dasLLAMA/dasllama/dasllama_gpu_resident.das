@@ -1758,8 +1758,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     }
     if (!rdec_owns(s, r) || pos > g_rdec_regions[r].cnt) {
         if (rdec_owns(s, r)) {
-            rdec_pass_once(RdecPass.gap, pos, g_rdec_regions[r].cnt)   // our own region short of pos: nothing on the host past cnt either
-            return false
+            return rdec_pass_hydrated(t, s, RdecPass.gap, pos, g_rdec_regions[r].cnt)   //! our own region short of pos: the CPU-served rows past cnt sit on the host, the region's own come down first
         }
         if (s.rdec_gen != 0l && !s.rdec_host_current) {
             panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
@@ -1871,8 +1870,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         return false
     }
     if (s.attn_uniform_end != 0l) {
-        rdec_pass_once(RdecPass.span, 0l, 0l)
-        return false
+        return rdec_pass_hydrated(t, s, RdecPass.span, 0l, 0l)   //! the CPU computes the media rows against the head the mirror holds, so the head comes down first
     }
     let c = t.config
     if (start_pos != 0l && c.recr_mask != 0ul) {

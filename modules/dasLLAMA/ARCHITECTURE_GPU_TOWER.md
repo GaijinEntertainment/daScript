@@ -98,8 +98,11 @@ chain on the same canvas, the device's distance from the exact chain held within
 chain's own. The x64 q8 plane is the active backend's grp interleave, which the tiles do not
 read, so the upload gathers each block's GEMM rows row-major through `q8_gather_rows` with f16
 scales - the resident MoE driver's precedent - once per tower into device memory, beside the
-per-block norm rows with a ones row appended (the weightless per-head norms read it). The
-residency key folds the plane's address, size, sampled words and the served block count: an
+per-block norm rows with a ones row appended (the weightless per-head norms read it). qwen25v's
+upload copies the twin's block GEMM region verbatim - IEEE halves, the GEMM offsets rebased to
+the region's start - beside the block rows; the family has no scale plane. The residency key -
+over the q8 plane, or over qwen25v's halfword twin - folds the plane's address, size, sampled
+words and the served block count: an
 address is not an identity, a truncated tower minted from the same bytes lands at the freed
 address, and a resident sized for fewer blocks read past its rows under a deeper chain. The
 model drop's sweep tells the driver to forget its handles through `register_vk_drop_hook`
@@ -107,10 +110,10 @@ model drop's sweep tells the driver to forget its handles through `register_vk_d
 per-encode scratch is sized to the canvas and grown when a taller one arrives; every batch
 schedule of an encode sits in one meta buffer sized by the encode (a record and a map a
 dispatch), so nothing the command reads moves under it; the batch tile's variant is picked per
-output width, since d and ff can pick different tiles.
+output width - d, ff and qwen3v's fused 3d can each pick a different tile.
 
 The declines: `quant_mode` on an exact-lane tower (or the bf16 twin), `shape` off the tile's head
-sizes or past the schedule cap, `knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want
-(`DASLLAMA_GPU`, read before any device init) or a class declines, `unserved` while a chain is
-unfilled. Engage is `vulkan_tower_stats` and `vulkan_tower_declines` deltas, and the bench's image
-cell prints them around its timed turn.
+sizes or past the row cap, `knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want
+(`DASLLAMA_GPU`, read before any device init) or a class declines. Engage is
+`vulkan_tower_stats` and `vulkan_tower_declines` deltas, and the bench's image cell prints them
+around its timed turn.

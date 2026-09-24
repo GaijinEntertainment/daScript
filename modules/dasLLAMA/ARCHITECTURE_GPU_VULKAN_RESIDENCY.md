@@ -63,7 +63,11 @@ took is served from the host or not at all: where its rows never came down, its 
 decode panics rather than read another session's history. A batched step over a
 per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
 row gathered on device where the driver holds the projection, else that row of the pre-step
-`eval_batch` already ran.
+`eval_batch` already ran. A host-cached session's call that passes to the CPU rails brings the
+region's device-only rows down first (`rdec_pass_hydrated`) - the gap, cap and continuation
+passes and the image turn's non-causal span alike, since the CPU computes the media rows against
+the head the mirror holds and a decode past the region's rows reads them beside the CPU-served
+ones.
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
 with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and

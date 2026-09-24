@@ -558,7 +558,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                 vt0 = (encodes = s0.encodes, declines = s0.declines)
             }
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps, think)
-            static_if (typeinfo builtin_module_exists(vulkan)) {   //! the served shape: the tower's engage witness beside the row
+            static_if (typeinfo builtin_module_exists(vulkan)) {
                 let s1 = vulkan_tower_stats()
                 print("lcpp_bench --image: vulkan tower encodes +{s1.encodes - vt0.encodes} of {reps}, declines +{s1.declines - vt0.declines} {vulkan_tower_declines()}\n")
             }

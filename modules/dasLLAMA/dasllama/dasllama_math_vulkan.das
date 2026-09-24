@@ -11,7 +11,7 @@ require dasllama/dasllama_vulkan_classes public   // the facade: consumers reach
 require dasllama/dasllama_vulkan_common public
 require dasllama/dasllama_vulkan_decode public
 require dasllama/dasllama_vulkan_prefill public
-require dasllama/dasllama_vulkan_tower public   // [init]-only from here: the vision tower hooks (the Metal driver's twin on a build without das_metal)
+require dasllama/dasllama_vulkan_tower public   //! [init]-only from here: the vision tower hooks (the Metal driver's twin on a build without das_metal)
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math

@@ -187,9 +187,6 @@ def private register_gemma3v_image_tags {
     register_image_family_tag(GEMMA3V_TAG_Q8)
 }
 
-// the GPU blocks hook (registered by a tower driver at [init]; requires-back): on an exact-lane tower it runs the stem's
-// GEMM off s.x0 and every block into s.x (Metal); on a q8 tower it takes s.x after the CPU stem and runs the blocks
-// (Vulkan); false = declined, the CPU loop is the fallback. `serves` = would the driver serve (the lane policy asks)
 typedef Gemma3vGpuBlocksFn = function<(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool>
 typedef Gemma3vGpuServesFn = function<() : bool>
 var private g_g3v_gpu : Gemma3vGpuBlocksFn
@@ -710,7 +707,7 @@ def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; var
 //! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into `out` =
 //! [nout × proj_dim] soft tokens. The canvas is FIXED at image_px² (the learned position table
 //! covers exactly that grid); returns nout = (image_px / patch / merge)².
-[hot_path]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64;
                    var out : array<float>) : int64 {
     if (w != t.image_px || h != t.image_px) {
@@ -720,8 +717,6 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
     let npos = g3v_stem_cols(t, s, planes, w, h)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
-    //! the exact-lane driver (Metal) runs the stem's GEMM on its own cb off s.x0; a q8 tower's driver (Vulkan) serves the
-    //! blocks alone, so its stem lands in s.x on the CPU first
     var stem_done = false
     if (t.q8) {
         g3v_stem_finish(t, s, npos)

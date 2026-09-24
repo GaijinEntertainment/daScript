@@ -11,14 +11,14 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the twin-W leg re-arms crowned PSOs
-require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan block loop over the halfword twin; the CPU gates pin its knob off too
-require ?vulkan dasllama/dasllama_vulkan_common   // vk_moe_init - whether the tier has a device
+require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_common
 require dasllama/dasllama_common   // set_metal_tensor_crowns - the twin-W leg's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require math   // nolint:STYLE030,LINT019 — used only inside the GPU static_if arms; the no-GPU lane sees it unused
 
 //! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def private gpu_towers(on : bool) {
+def private set_every_gpu_tower(on : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(on)
     }
@@ -69,7 +69,7 @@ def test_qwen25v_tier1(t : T?) {
             return
         }
         var tw <- load_qwen25v_tower(mm)
-        gpu_towers(false)   // this gate owns the CPU chain - the dumps are CPU-minted
+        set_every_gpu_tower(false)
         var st = Qwen25vState()
         tt |> equal(int(tw.patch), 14, "patch")
         tt |> equal(int(tw.merge), 2, "spatial merge")
@@ -98,17 +98,13 @@ def test_qwen25v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 28 px merged-patch grid panics by name")
-        gpu_towers(true)
+        set_every_gpu_tower(true)
         delete st
         delete tw
     }
 }
 
 let private TWIN_ABS_VK = 2e-4
-//! the Vulkan twin's bars, the device chain vs the exact CPU chain (no q8 lane in this family): to eight blocks the route
-//! holds 1e-2 x rms on both arms (measured 1.0e-3..4.5e-3); the whole tower holds the Metal rung's order - the f16 GEMM
-//! feed and the full layers' f16 K/V shadows re-roll the late blocks' outlier channels (measured 0.02..0.09 x rms at 32
-//! blocks; with the window layers on f16 K/V shadows it read 0.16..1.53, which is why the window route reads f32)
 let private TWIN_REL_VK_SHALLOW = 1e-2
 let private TWIN_REL_VK_DEEP = 0.15
 
@@ -120,8 +116,6 @@ def private encode_maxdiff(a, b : array<float>) : float {
     return m
 }
 
-//! one canvas through the exact CPU chain and the Vulkan block loop over the halfword twin: the counters prove which served,
-//! the rows hold to the f16 route's bar, a poisoned element the control that the bar reds
 def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
@@ -159,7 +153,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         let dev_ex = encode_maxdiff(gpu, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
         let bar = TWIN_ABS_VK + rel * rms
-        // the error's shape: NaNs the maxdiff cannot see, the worst token, the tokens past the bar
+        //! the error's shape: NaNs the maxdiff cannot see, the worst token, the tokens past the bar
         var nans = 0
         var worst_tok = -1
         var worst = 0.0
@@ -188,9 +182,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
     }
 }
 
-//! the routing discrimination on the driver: a one-block tower on quad content, pure-window (wa 99) and all-full (wa 1), each
-//! against the CPU chain at 0.1 abs - the bar the Metal precedent holds (one layer's GPU noise measures ~2.6e-2 abs peak,
-//! a mixed-quadrant routing defect >= 1.0)
+//! the bar is shallow_routing_cell's 0.1 abs and its derivation, held on the driver
 def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var inscope st <- stage_qwen25v_tower(mm)
@@ -231,9 +223,6 @@ def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
     }
 }
 
-// The Vulkan twin: the device block loop against the exact CPU chain (this family has no q8 lane) on
-// the shaped fixtures - the single window, four full windows, the ragged edges - and the shallow
-// routing cells; quad content stays off the deep numeric set as it does on the Metal rung.
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def test_qwen25v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the exact CPU chain, and the window routing") @(tt : T?) {
