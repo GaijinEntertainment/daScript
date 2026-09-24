@@ -443,14 +443,16 @@ public:
             // worker_threads defaults to 1, so this is the loop the connection
             // lives on — the send must run here, not on the tick thread.
             auto connLoop = this->loop();
+            auto resp = make_shared<HttpResponse>(*ctx->response);
             lock_guard<mutex> guard(lock);
-            que.emplace_back([context,at,lmb,ctx,connLoop](){
+            que.emplace_back([context,at,lmb,ctx,connLoop,resp](){
                 int st = das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(
-                    context, at, lmb, ctx->request.get(), ctx->response.get());
-                ctx->response->status_code = (http_status) st;
+                    context, at, lmb, ctx->request.get(), resp.get());
+                resp->status_code = (http_status) st;
                 if ( connLoop ) {
-                    connLoop->runInLoop([ctx](){ ctx->send(); });
+                    connLoop->runInLoop([ctx,resp](){ *ctx->response = *resp; ctx->send(); });
                 } else {
+                    *ctx->response = *resp;
                     ctx->send();
                 }
             });
