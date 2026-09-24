@@ -1088,6 +1088,20 @@ def test_goto_definition_declarations(t : T?) {
         t |> equal(source_line(fixture_path("_fixture_refs.das"), 68), "    for (i in range(2)) \{", "the subtools' line reader is 1-based")
         t |> equal(source_line(fixture_path("_fixture_refs.das"), 100000), "", "past the end of the file the line is empty")
     }
+    t |> run("a CRLF file's lines come back without the carriage return") <| @(t : T?) {
+        var terr : string
+        let dir = create_temp_directory("mcp_source_line_crlf", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let file = path_join(dir, "crlf.das")
+        fwrite(file, "let a = 1\r\nlet b = 2\r\nlet c = 3\r\n")
+        t |> equal(source_line(file, 2), "let b = 2", "the line, not the line plus \\r")
+        t |> equal(length(source_line(file, 3)), length("let c = 3"), "the last line too")
+        t |> equal(source_line(file, 5), "", "past the end of the file the line is empty")
+        rmdir_rec(dir)
+    }
 }
 
 [test]
