@@ -858,7 +858,8 @@ def private vt_gemm_groups(d, rows : int64) : int64 {
 }
 
 //! the device and the arm the chains share: the tier armed, the flash arm picked, its KHR tile where the arm reads it
-def private vt_arm_ok(khr : bool) : bool => gpu_want_arms_tier() && vk_moe_init() && (!khr || khr_kq_tile_on())
+//! the tier's want (DASLLAMA_GPU) before the device init: nothing reads `g_gpu` ahead of this answer
+def private vt_arm_ok : bool => gpu_want_arms_tier() && vk_moe_init()
 
 [cold_path]
 def private vt_upload_g3v(var r : VtResident; key : uint64; t : Gemma3vTower) : bool {
@@ -897,8 +898,11 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
     if (hs > 128l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
+    if (!vt_arm_ok()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
     let khr = !cm2_fa_on()
-    if (!vt_arm_ok(khr)) {
+    if (khr && !khr_kq_tile_on()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
@@ -1064,8 +1068,11 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     if (hs > 128l || hs % 2l != 0l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
+    if (!vt_arm_ok()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
     let khr = !cm2_fa_on()
-    if (!vt_arm_ok(khr)) {
+    if (khr && !khr_kq_tile_on()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
@@ -1237,9 +1244,12 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             || (has_win && (wmax > 64l || hs != VT_WIN_HS))) {
         return vt_decline(r, VulkanTowerDecline.shape)  //! the chain's sets are built at the 128 head alone (the family's 80-wide heads)
     }
+    if (!vt_arm_ok()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
     let khr = !cm2_fa_on()
     let gemm_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-    if (!vt_arm_ok(khr || gemm_khr)) {
+    if ((khr || gemm_khr) && !khr_kq_tile_on()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let w_off = t.layer_w
@@ -1403,8 +1413,11 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     if (hs != 64l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
+    if (!vt_arm_ok()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
     let khr = !cm2_fa_on()
-    if (!vt_arm_ok(khr)) {
+    if (khr && !khr_kq_tile_on()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
