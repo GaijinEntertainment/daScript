@@ -462,7 +462,8 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
 
 // Best-of-`reps` for one image turn.
 struct private ImageTurn {
-    enc_ms : double = 1.0e30lf   // the embedder alone
+    enc_ms : double = 1.0e30lf   // the embedder alone, the best rep
+    enc_reps : array<double>     // every rep's encode ms, the spread beside the best
     pp_tok_s : double            // the spliced prefill: head tokens + soft-token rows + tail tokens, all positions
     tg_tok_s : double            // the decode
     n_rows : int64
@@ -472,12 +473,15 @@ struct private ImageTurn {
 def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : VisionImage;
                                prompt : string; reps : int; think : bool) : ImageTurn {
     var r = ImageTurn()
+    r.enc_reps |> reserve(reps)
     var st = VisionState()
     var rows : array<float>
     for (_rep in range(reps)) {
         let t_enc = ref_time_ticks()
         r.n_rows = encode_image_(emb, st, img, "bench", rows)
-        r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
+        let rep_ms = double(get_time_usec(t_enc)) / 1000.0lf
+        r.enc_reps |> push(rep_ms)
+        r.enc_ms = min(r.enc_ms, rep_ms)
         var chat <- create_chat_(m, "", int64(image_turn_steps()))
         set_thinking_(chat, think)   // default off: the timed shape is the answer, not a scratchpad
         // the SHIPPED walk end to end: the rows seam takes the pre-encoded (possibly
@@ -583,7 +587,12 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             run.tests |> insert("img:enc", BenchTest(ms = turn.enc_ms))
             run.tests |> insert("img:pp", BenchTest(tok_s = turn.pp_tok_s))
             run.tests |> insert("img:tg", BenchTest(tok_s = turn.tg_tok_s, text = turn.text))
-            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
+            let enc_reps = build_string() $(var wr) {
+                for (e in turn.enc_reps) {
+                    write(wr, " {e}")
+                }
+            }
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms (best of {reps}:{enc_reps}) | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
             print("  text: {turn.text}\n")
             var cell = BenchModel(gguf = base_name(model), arch = vision_family(emb),
                                   size_bytes = int64(stat(model).size))

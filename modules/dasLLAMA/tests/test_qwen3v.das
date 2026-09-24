@@ -542,7 +542,7 @@ def test_qwen3v_vulkan_twin(t : T?) {
                 }
                 let x1 = vulkan_tower_stats()
                 tt |> equal(x1.encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
-                tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "the exact-lane tower never reached the q8 seat (its hook is the Metal driver's)")
+                tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 1l, "the exact-lane tower reached the blocks seat and the driver declined quant_mode")
                 tt |> success(long_length(outx) == 9l * qwen3v_row_width(tw_exact), "the CPU chain served the exact-lane encode")
                 delete st_exact
                 delete tw_exact
