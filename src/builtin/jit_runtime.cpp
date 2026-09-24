@@ -408,11 +408,6 @@ extern "C" {
             vi->name = "";
             finfo->fields[arg] = vi;
         }
-
-        void initFunctionAddr ( uint64_t index, void * globPtr ) {
-            DAS_ASSERT(index < (uint64_t) totalFunctions);
-            *((SimFunction **) globPtr) = &functions[index];
-        }
     };
 
     // Note: this function called in runtime, before main.
@@ -463,10 +458,6 @@ extern "C" {
 
     DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {
         ctx->jitInitScript = fn;
-    }
-
-    DAS_API void jit_init_function_addr ( Context * ctx, uint64_t index, void * globPtr ) {
-        static_cast<JitContext *>(ctx)->initFunctionAddr(index, globPtr);
     }
 
     // A missing MODULE and a missing FUNCTION die on the same lookup — distinguish them,
@@ -535,10 +526,6 @@ extern "C" {
             DAS_FATAL_ERROR("Failed to find annotation %s in module %s.\n", annName, moduleName);
         }
         return result;
-    }
-
-    DAS_API void jit_trap() {
-        DAS_FATAL_ERROR("FATAL: Unresolved dynamic function call in compiled code. This indicates a missing JIT symbol. Disable `strict` mode or remove this call.\n");
     }
 
     DAS_API void jit_set_command_line_arguments( int argc, char * argv[] ) {
@@ -687,28 +674,8 @@ extern "C" {
         das_aligned_free16(bytes);
     }
 
-    DAS_API void jit_array_lock ( const Array & arr, Context * context, LineInfoArg * at ) {
-        builtin_array_lock_mutable(arr, context, at);
-    }
-
-    DAS_API void jit_array_unlock ( const Array & arr, Context * context, LineInfoArg * at ) {
-        builtin_array_unlock_mutable(arr, context, at);
-    }
-
-    DAS_API void jit_table_lock ( Table & tab, Context * context, LineInfoArg * at ) {
-        builtin_table_lock(tab, context, at);
-    }
-
-    DAS_API void jit_table_unlock ( Table & tab, Context * context, LineInfoArg * at ) {
-        builtin_table_unlock(tab, context, at);
-    }
-
     DAS_API void jit_array_resize ( Array & arr, int newSize, int stride, Context * context, LineInfoArg * at ) {
         builtin_array_resize(arr, newSize, stride, context, at);
-    }
-
-    DAS_API int32_t jit_str_cmp ( char * a, char * b ) {
-        return strcmp(a ? a : "",b ? b : "");
     }
 
     DAS_API char * jit_str_cat ( const char * sA, const char * sB, Context * context, LineInfoArg * at ) {
@@ -921,13 +888,7 @@ extern "C" {
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
     void *das_get_jit_free_persistent() { return (void *)&jit_free_persistent; }
-    void *das_get_jit_array_lock() { return (void *)&builtin_array_lock; }
-    void *das_get_jit_array_unlock() { return (void *)&builtin_array_unlock; }
-    void *das_get_jit_table_lock() { return (void *)&builtin_table_lock; }
-    void *das_get_jit_table_unlock() { return (void *)&builtin_table_unlock; }
     void *das_get_jit_array_resize() { return (void *)&builtin_array_resize; }
-
-    void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
     void *das_get_jit_prologue() { return (void *)&jit_prologue; }
     void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
     void *das_get_jit_make_block() { return (void *)&jit_make_block; }
@@ -1322,11 +1283,6 @@ DAS_API void jit_destroy_standalone_ctx ( das::Context * ctx ) {
     delete ctx;
 }
 
-DAS_API void jit_initialize_modules () {
-    // No need to initialize modules. JIT will generate required calls.
-    das::daScriptEnvironment::ensure();
-}
-
 DAS_API void jit_initialize_modules_done ( int32_t guard ) {
     if ( guard==2 ) {
         das::string notInitialized;
@@ -1354,10 +1310,6 @@ DAS_API void jit_shutdown () {
 DAS_API void jit_lib_shutdown ( int32_t guard ) {
     if ( guard!=1 ) return;
     das::Module::ShutdownStandalone();
-}
-
-DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
-    return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
 }
 
 DAS_API void jit_set_exe_file_for_test_( const char * (*fn)() ) {
@@ -1416,12 +1368,6 @@ DAS_API void jit_finalize_dynamic_modules () {
 DAS_API void jit_lib_finalize_dynamic_modules () {
     das::retry_pending_dynamic_modules();
     das::report_pending_dynamic_modules();
-}
-
-// ABI shim: -exe binaries emitted before the resolving form link this runtime dynamically
-// and still import the 3-argument name.
-DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
-    das::register_native_path(mod_name, src_path, dst_path, nullptr, nullptr);
 }
 
 // Emitted by inject_main (llvm_exe.das) for every native path the program compiled

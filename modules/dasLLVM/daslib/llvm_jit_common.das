@@ -60,12 +60,7 @@ let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
 let public FN_JIT_FREE_PERSISTENT   = "jit_free_persistent"
-let public FN_JIT_ARRAY_LOCK        = "jit_array_lock"
-let public FN_JIT_ARRAY_UNLOCK      = "jit_array_unlock"
-let public FN_JIT_TABLE_LOCK        = "jit_table_lock"
-let public FN_JIT_TABLE_UNLOCK      = "jit_table_unlock"
 let public FN_JIT_ARRAY_RESIZE      = "jit_array_resize"
-let public FN_JIT_STR_CMP           = "jit_str_cmp"
 let public FN_JIT_STR_CAT           = "jit_str_cat"
 let public FN_JIT_PROLOGUE          = "jit_prologue"
 let public FN_JIT_EPILOGUE          = "jit_epilogue"
@@ -843,19 +838,8 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
         get_jit_free_heap(), fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw), (nocapture, [0, 2]))
     jit_add_extern(FN_JIT_FREE_PERSISTENT, jit_fn_type($(bytes, ctx : void?) : void {}),
         get_jit_free_persistent(), fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw), (nocapture, [0, 1]))
-    jit_add_extern(FN_JIT_ARRAY_LOCK, jit_fn_type($(arr, ctx, at : void?) : void {}),
-        get_jit_array_lock(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
-    jit_add_extern(FN_JIT_ARRAY_UNLOCK, jit_fn_type($(arr, ctx, at : void?) : void {}),
-        get_jit_array_unlock(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
     jit_add_extern(FN_JIT_ARRAY_RESIZE, jit_fn_type($(arr : void?; newSize, stride : int; ctx, at : void?) : void {}),
         get_jit_array_resize(), fixed_array(nounwind, willreturn), (nocapture, [0]))
-    jit_add_extern(FN_JIT_TABLE_LOCK, jit_fn_type($(tab, ctx, at : void?) : void {}),
-        get_jit_table_lock(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
-    jit_add_extern(FN_JIT_TABLE_UNLOCK, jit_fn_type($(tab, ctx, at : void?) : void {}),
-        get_jit_table_unlock(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
-
-    jit_add_extern(FN_JIT_STR_CMP, jit_fn_type($(sA, sB : void?) : int {}),
-        get_jit_str_cmp(), fixed_array(nounwind, willreturn), (nocapture, [0, 1]))
     jit_add_extern(FN_JIT_STR_CAT, jit_fn_type($(sA, sB, ctx, at : void?) : void? {}),
         get_jit_str_cat(), fixed_array(nounwind, willreturn), (nocapture, [0, 1, 2]))
     jit_add_extern(FN_JIT_PROLOGUE,

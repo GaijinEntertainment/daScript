@@ -33,17 +33,12 @@ namespace das {
     void * das_get_jit_alloc_persistent ();
     void * das_get_jit_free_heap ();
     void * das_get_jit_free_persistent ();
-    void * das_get_jit_array_lock ();
-    void * das_get_jit_array_unlock ();
-    void * das_get_jit_table_lock ();
-    void * das_get_jit_table_unlock ();
     void * das_get_jit_array_resize ();
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_string_table_at_with_hash ();
     void * das_get_jit_string_table_at_after_packed_miss ();
-    void * das_get_jit_str_cmp ();
     void * das_get_jit_str_cat ();
     void * das_get_jit_ast_typedecl ();
     void * das_get_jit_prologue ();

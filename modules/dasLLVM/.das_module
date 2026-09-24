@@ -7,7 +7,7 @@ def initialize(project_path : string) {
     let daslib_paths = [
         "llvm_boost", "llvm_debug", "llvm_jit", "llvm_targets",
         "llvm_dsl",
-        "llvm_jit_intrin", "llvm_jit_common", "llvm_jit_lower", "llvm_dll_utils",
+        "llvm_jit_intrin", "llvm_jit_common", "ir_dsl", "llvm_jit_runtime", "llvm_jit_lower", "llvm_dll_utils",
         "llvm_jit_di",
         "llvm_exe", "jit_standalone", "llvm_macro", "llvm_jit_cli", "llvm_jit_run", "llvm_aot",
         "llvm_jit_plan",      // the emitter-free half of the driver: plan, DLL key, probe, install
