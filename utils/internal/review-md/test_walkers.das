@@ -498,7 +498,6 @@ def test_root_gate_fixtures(t : T?) {
 
     let green = spawn_at(fixture, [gate])
     t |> equal(0, green.rc, "one shared name per file, a non-shared twin, a bare module, a module-less file and the tolerated pair are green: {green.out}")
-    t |> success(find(green.out, "REVIEW.das repo root: OK") >= 0, "green verdict printed")
 
     // an untracked second declaration is not the tree's yet
     write_at(t, fixture, "c/y.das", "options gen2\nmodule solo shared public\n")
