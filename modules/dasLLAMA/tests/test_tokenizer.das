@@ -4,9 +4,9 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tokenizer
 require daslib/fio
-require strings
 require daslib/strings_boost
-require dasllama/dasllama_env
+require _model_tier
+require _tokenizer_corpus
 
 // Tokenizer regression gates against the upstream test-tokenizer-0 corpora (the .inp/.out files
 // shipped next to each ggml-vocab-*.gguf), through the production facade (load_tokenizer_auto ->
@@ -14,32 +14,6 @@ require dasllama/dasllama_env
 // SPM-style BPE (gemma-4), and SentencePiece (phi-3, llama-spm). The vocab fixtures are
 // machine-local (gitignored model dir), so each case skips cleanly when absent - the file rides
 // the runner's model-free suite and reports SKIPPED where the vocab fixtures are not stocked.
-
-// override the machine-local fixture root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
-
-def private parse_out_ids(line : string) : array<int64> {
-    return <- [for (tok in split(line, " ")); to_int64(tok, false); where !empty(tok)]
-}
-
-def private drop_trailing_empty(var xs : array<string>) {
-    if (!empty(xs) && empty(xs[length(xs) - 1])) {
-        xs |> erase(length(xs) - 1)
-    }
-}
-
-def private ids_equal(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (av, bv in a, b) {
-        return false if (av != bv)
-    }
-    return true
-}
 
 // Run the .inp/.out corpus for one vocab: every input must encode to the reference ids, and
 // decode(encode(x)) must round-trip losslessly. The first divergence of each kind is carried in

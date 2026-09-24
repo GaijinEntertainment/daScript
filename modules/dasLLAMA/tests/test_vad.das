@@ -6,11 +6,9 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_vad
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_gguf   // rd_u32 / rd_u16 for the WAV reader
 require daslib/jobque_boost
-require daslib/fio
 require math
-require dasllama/dasllama_env
+require _model_tier
 
 // Silero-VAD tests. The forward gate is self-contained (the ~1.2 MB weights are checked in at
 // modules/dasLLAMA/models/silero_vad.bin) and drives a deterministic integer-LCG signal — the
@@ -20,11 +18,6 @@ require dasllama/dasllama_env
 
 def private vad_bin_path() : string {
     return "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
-}
-
-def private samples_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 
 // deterministic integer LCG (Numerical Recipes), fp32-mapped to [-0.15, 0.15) — identical to
@@ -37,37 +30,6 @@ def private lcg_signal(n : int) : array<float> {
         state = state * 1664525u + 1013904223u
         out[i] = (float(state >> 16u) / 32768.0 - 1.0) * 0.15
     }
-    return <- out
-}
-
-def private read_wav_pcm16_mono(path : string) : array<float> {
-    var out : array<float>
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return <- out
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let n = long_length(bytes)
-        var o = 12l
-        while (o + 8l <= n) {
-            let id = rd_u32(bytes, o)
-            let sz = int64(rd_u32(bytes, o + 4l))
-            if (id == 0x61746164u) {   // "data"
-                let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(cnt)
-                for (i in range64(cnt)) {
-                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
-                    if (v >= 32768) {
-                        v -= 65536
-                    }
-                    out[i] = float(v) / 32768.0
-                }
-                break
-            }
-            o += 8l + sz + (sz & 1l)
-        }
-    }
-    fclose(f)
     return <- out
 }
 
@@ -93,7 +55,7 @@ def test_vad_forward_lcg(t : T?) {
 [test]
 def test_vad_segments_jfk(t : T?) {
     t |> run("find_speech_timestamps matches silero get_speech_timestamps on jfk.wav") @(t : T?) {
-        let wav = "{samples_dir()}/jfk.wav"
+        let wav = "{models_dir()}/jfk.wav"
         let samples <- read_wav_pcm16_mono(wav)
         if (empty(samples)) {
             t |> skip("jfk.wav not present in DASLLAMA_MODELS_DIR")

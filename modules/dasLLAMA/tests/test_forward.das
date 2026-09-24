@@ -5,36 +5,20 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
+require _model_tier
 require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
-require dasllama/dasllama_env
 
 // End-to-end oracle: needs llama2.c's stories15M.bin + tokenizer.bin (gitignored, 60MB).
 // Skips cleanly when absent (e.g. in CI), so it's a real regression locally and a no-op elsewhere.
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 // llama2.c greedy (-t 0.0): empty-prompt IDs, and encode("Once upon a time", bos).
 let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
 let PROMPT_ORACLE <- [1l, 9038l, 2501l, 263l, 931l]
-
-def same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (va, vb in a, b) {
-        if (va != vb) {
-            return false
-        }
-    }
-    return true
-}
 
 [test]
 def test_forward_end_to_end(t : T?) {
@@ -52,7 +36,7 @@ def test_forward_end_to_end(t : T?) {
         var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         // BPE encoder vs llama2.c tokenization
         let pt <- encode(tk, "Once upon a time", true, false)
-        t |> success(same(pt, PROMPT_ORACLE), "encode prompt tokens")
+        t |> success(ids_equal(pt, PROMPT_ORACLE), "encode prompt tokens")
         // full forward + greedy decode, token-for-token (threads the classifier)
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
@@ -61,7 +45,7 @@ def test_forward_end_to_end(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "empty-prompt greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "empty-prompt greedy token-for-token")
             delete s
         }
         delete tk
@@ -93,7 +77,7 @@ def test_forward_q8(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
             delete s
         }
         delete tk
@@ -126,7 +110,7 @@ def test_forward_q8_pooled(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
             delete s
         }
         delete tk
@@ -159,7 +143,7 @@ def test_forward_q4(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
+            t |> success(ids_equal(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
             delete s
         }
         delete tk

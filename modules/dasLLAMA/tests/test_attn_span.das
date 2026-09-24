@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -15,7 +16,6 @@ require daslib/fio
 require math
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + set_prefill_attn_mode
 require dasllama/dasllama_load   // quantize_weights_q4: the q4_0 requant leg
-require dasllama/dasllama_env
 
 // The non-causal image span (eval_embd_/forward_prefill_embd non_causal=true): every query of
 // the span attends [the sliding-window floor, span_end) — the non-causal decode semantics gemma
@@ -23,10 +23,6 @@ require dasllama/dasllama_env
 // attention position 0's residual cannot depend on later rows; under the span it must.
 // Needs llama2.c's stories15M.bin (test_flash's fixture); skips cleanly when absent.
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 let NPOS = 48l

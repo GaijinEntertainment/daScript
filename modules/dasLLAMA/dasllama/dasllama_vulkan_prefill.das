@@ -66,458 +66,6 @@ def private pf_qkv_feed_fused(l : int64) : bool => !g_rd.layers[l].recurrent && 
 
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_ensure(fmt : int) : bool {
-    if (fmt == int(KqFmt.q8)) return ensure_q8_batch_khr_cls()
-    if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_khr_cls()
-    if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_khr_cls()
-    if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_khr_cls()
-    if (fmt == int(KqFmt.q40)) return ensure_kq_batch_q40_khr_cls()
-    if (fmt == int(KqFmt.iq4xs)) return ensure_kq_batch_iq4xs_khr_cls()
-    if (fmt == int(KqFmt.k3)) return ensure_kq_batch_k3_khr_cls()
-    if (fmt == int(KqFmt.iq3s)) return ensure_kq_batch_iq3s_khr_cls()
-    if (fmt == int(KqFmt.iq3xxs)) return ensure_kq_batch_iq3xxs_khr_cls()
-    if (fmt == int(KqFmt.iq4nl)) return ensure_kq_batch_iq4nl_khr_cls()
-    if (fmt == int(KqFmt.k2)) return ensure_kq_batch_k2_khr_cls()
-    if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_khr_cls()
-    if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_khr_cls()
-    if (fmt == int(KqFmt.q51)) return ensure_q51_batch_khr_cls()
-    if (fmt == int(KqFmt.mx4)) return ensure_mx4_batch_khr_cls()
-    verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR ensure fell through for a format the f16 feed admits")
-    return ensure_kq_batch_iq2xxs_khr_cls()
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    if (fmt == int(KqFmt.q8)) return set_q8_batch_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.q40)) return set_kq_batch_q40_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq4xs)) return set_kq_batch_iq4xs_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k3)) return set_kq_batch_k3_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq3s)) return set_kq_batch_iq3s_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq3xxs)) return set_kq_batch_iq3xxs_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq4nl)) return set_kq_batch_iq4nl_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k2)) return set_kq_batch_k2_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.q51)) return set_q51_batch_khr_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.mx4)) return set_mx4_batch_khr_cls(bufs, sizes, gbits)
-    verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR set fell through for a format the f16 feed admits")
-    return set_kq_batch_iq2xxs_khr_cls(bufs, sizes, gbits)
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    if (fmt == int(KqFmt.q8)) {
-        enc_q8_batch_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k4)) {
-        enc_kq_batch_k4_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k5)) {
-        enc_kq_batch_k5_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k6)) {
-        enc_kq_batch_k6_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q40)) {
-        enc_kq_batch_q40_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        enc_kq_batch_iq4xs_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k3)) {
-        enc_kq_batch_k3_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq3s)) {
-        enc_kq_batch_iq3s_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        enc_kq_batch_iq3xxs_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        enc_kq_batch_iq4nl_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k2)) {
-        enc_kq_batch_k2_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq2s)) {
-        enc_kq_batch_iq2s_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        enc_kq_batch_iq2xs_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q51)) {
-        enc_q51_batch_khr_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.mx4)) {
-        enc_mx4_batch_khr_cls(raw, h, s, pc, groups)
-    } else {
-        verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR enc fell through for a format the f16 feed admits")
-        enc_kq_batch_iq2xxs_khr_cls(raw, h, s, pc, groups)
-    }
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_ensure(fmt : int) : bool {
-    if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_cm2e_cls()
-    if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_cm2e_cls()
-    if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_cm2e_cls()
-    if (fmt == int(KqFmt.q40)) return ensure_kq_batch_q40_cm2e_cls()
-    if (fmt == int(KqFmt.iq4xs)) return ensure_kq_batch_iq4xs_cm2e_cls()
-    if (fmt == int(KqFmt.k3)) return ensure_kq_batch_k3_cm2e_cls()
-    if (fmt == int(KqFmt.iq3s)) return ensure_kq_batch_iq3s_cm2e_cls()
-    if (fmt == int(KqFmt.iq3xxs)) return ensure_kq_batch_iq3xxs_cm2e_cls()
-    if (fmt == int(KqFmt.iq4nl)) return ensure_kq_batch_iq4nl_cm2e_cls()
-    if (fmt == int(KqFmt.k2)) return ensure_kq_batch_k2_cm2e_cls()
-    if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_cm2e_cls()
-    if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_cm2e_cls()
-    if (fmt == int(KqFmt.iq2xxs)) return ensure_kq_batch_iq2xxs_cm2e_cls()
-    if (fmt == int(KqFmt.q51)) return ensure_q51_batch_cm2e_cls()
-    if (fmt == int(KqFmt.mx4)) return ensure_mx4_batch_cm2e_cls()
-    verify(fmt == int(KqFmt.q8), "vk prefill: the e-column ensure fell through for a kq format - a format the feed admits must own a tile arm")
-    return ensure_q8_batch_cm2e_cls()
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.q40)) return set_kq_batch_q40_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq4xs)) return set_kq_batch_iq4xs_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k3)) return set_kq_batch_k3_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq3s)) return set_kq_batch_iq3s_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq3xxs)) return set_kq_batch_iq3xxs_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq4nl)) return set_kq_batch_iq4nl_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.k2)) return set_kq_batch_k2_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.iq2xxs)) return set_kq_batch_iq2xxs_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.q51)) return set_q51_batch_cm2e_cls(bufs, sizes, gbits)
-    if (fmt == int(KqFmt.mx4)) return set_mx4_batch_cm2e_cls(bufs, sizes, gbits)
-    verify(fmt == int(KqFmt.q8), "vk prefill: the e-column set fell through for a kq format - a format the feed admits must own a tile arm")
-    return set_q8_batch_cm2e_cls(bufs, sizes, gbits)
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    if (fmt == int(KqFmt.k4)) {
-        enc_kq_batch_k4_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k5)) {
-        enc_kq_batch_k5_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k6)) {
-        enc_kq_batch_k6_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q40)) {
-        enc_kq_batch_q40_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        enc_kq_batch_iq4xs_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k3)) {
-        enc_kq_batch_k3_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq3s)) {
-        enc_kq_batch_iq3s_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        enc_kq_batch_iq3xxs_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        enc_kq_batch_iq4nl_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k2)) {
-        enc_kq_batch_k2_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq2s)) {
-        enc_kq_batch_iq2s_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        enc_kq_batch_iq2xs_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        enc_kq_batch_iq2xxs_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q51)) {
-        enc_q51_batch_cm2e_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.mx4)) {
-        enc_mx4_batch_cm2e_cls(raw, h, s, pc, groups)
-    } else {
-        verify(fmt == int(KqFmt.q8), "vk prefill: the e-column enc fell through for a kq format - a format the feed admits must own a tile arm")
-        enc_q8_batch_cm2e_cls(raw, h, s, pc, groups)
-    }
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_ensure(fmt : int; tc : int64) : bool {
-    verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {   //! the KHR arm is one 128 x 128 tile for every column, the expert schedule's s and m pieces included
-        return khr_cls_ensure(fmt)
-    }
-    if (tc == CM2_TC_E) {
-        return cm2e_cls_ensure(fmt)
-    }
-    if (fmt == int(KqFmt.q51)) {   //! the q51 rail is the expert schedule's: its s and e stamps; a dense q51 plane is declined at the plan
-        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        return ensure_q51_batch_cm2s_cls()
-    }
-    if (fmt == int(KqFmt.mx4)) {   //! the mx4 rail is the expert schedule's too: the loader tags only routed expert stacks mx4
-        verify(tc == 32l, "vk prefill: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        return ensure_mx4_batch_cm2s_cls()
-    }
-    if (fmt == int(KqFmt.k4)) {
-        return tc == 256l ? ensure_kq_batch_k4_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k4_cm2m_cls() : ensure_kq_batch_k4_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.k5)) {
-        return tc == 256l ? ensure_kq_batch_k5_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k5_cm2m_cls() : ensure_kq_batch_k5_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.k6)) {
-        return tc == 256l ? ensure_kq_batch_k6_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k6_cm2m_cls() : ensure_kq_batch_k6_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.q40)) {
-        return tc == 256l ? ensure_kq_batch_q40_cm2l_cls() : (tc == 128l ? ensure_kq_batch_q40_cm2m_cls() : ensure_kq_batch_q40_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq4xs)) {
-        return tc == 256l ? ensure_kq_batch_iq4xs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq4xs_cm2m_cls() : ensure_kq_batch_iq4xs_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.k3)) {
-        return tc == 256l ? ensure_kq_batch_k3_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k3_cm2m_cls() : ensure_kq_batch_k3_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq3s)) {
-        return tc == 256l ? ensure_kq_batch_iq3s_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq3s_cm2m_cls() : ensure_kq_batch_iq3s_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq3xxs)) {
-        return tc == 256l ? ensure_kq_batch_iq3xxs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq3xxs_cm2m_cls() : ensure_kq_batch_iq3xxs_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq4nl)) {
-        return tc == 256l ? ensure_kq_batch_iq4nl_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq4nl_cm2m_cls() : ensure_kq_batch_iq4nl_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.k2)) {
-        return tc == 256l ? ensure_kq_batch_k2_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k2_cm2m_cls() : ensure_kq_batch_k2_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq2s)) {
-        return tc == 256l ? ensure_kq_batch_iq2s_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2s_cm2m_cls() : ensure_kq_batch_iq2s_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq2xs)) {
-        return tc == 256l ? ensure_kq_batch_iq2xs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xs_cm2m_cls() : ensure_kq_batch_iq2xs_cm2s_cls())
-    }
-    if (fmt == int(KqFmt.iq2xxs)) {
-        return tc == 256l ? ensure_kq_batch_iq2xxs_cm2l_cls() : (tc == 128l ? ensure_kq_batch_iq2xxs_cm2m_cls() : ensure_kq_batch_iq2xxs_cm2s_cls())
-    }
-    verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 ensure fell through for a kq format - a format the feed admits must own a tile arm")
-    return tc == 256l ? ensure_q8_batch_cm2l_cls() : (tc == 128l ? ensure_q8_batch_cm2m_cls() : ensure_q8_batch_cm2s_cls())
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        return khr_cls_set(fmt, bufs, sizes, gbits)
-    }
-    if (tc == CM2_TC_E) {
-        return cm2e_cls_set(fmt, bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.q51)) {
-        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        return set_q51_batch_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.mx4)) {
-        verify(tc == 32l, "vk prefill: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        return set_mx4_batch_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.k4)) {
-        if (tc == 256l) {
-            return set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k4_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.k5)) {
-        if (tc == 256l) {
-            return set_kq_batch_k5_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_k5_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k5_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.k6)) {
-        if (tc == 256l) {
-            return set_kq_batch_k6_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_k6_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k6_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.q40)) {
-        if (tc == 256l) {
-            return set_kq_batch_q40_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_q40_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_q40_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq4xs)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq4xs_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq4xs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq4xs_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.k3)) {
-        if (tc == 256l) {
-            return set_kq_batch_k3_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_k3_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k3_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq3s)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq3s_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq3s_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq3s_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq3xxs)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq3xxs_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq3xxs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq3xxs_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq4nl)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq4nl_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq4nl_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq4nl_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.k2)) {
-        if (tc == 256l) {
-            return set_kq_batch_k2_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_k2_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_k2_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq2s)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq2s_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq2s_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2s_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq2xs)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq2xs_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq2xs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xs_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq2xxs)) {
-        if (tc == 256l) {
-            return set_kq_batch_iq2xxs_cm2l_cls(bufs, sizes, gbits)
-        }
-        return tc == 128l ? set_kq_batch_iq2xxs_cm2m_cls(bufs, sizes, gbits) : set_kq_batch_iq2xxs_cm2s_cls(bufs, sizes, gbits)
-    }
-    verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 set fell through for a kq format - a format the feed admits must own a tile arm")
-    if (tc == 256l) {
-        return set_q8_batch_cm2l_cls(bufs, sizes, gbits)
-    }
-    return tc == 128l ? set_q8_batch_cm2m_cls(bufs, sizes, gbits) : set_q8_batch_cm2s_cls(bufs, sizes, gbits)
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        khr_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (tc == CM2_TC_E) {
-        cm2e_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q51)) {
-        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.mx4)) {
-        verify(tc == 32l, "vk prefill: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        enc_mx4_batch_cm2s_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.k4)) {
-        if (tc == 256l) {
-            enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_k4_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_k4_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.k5)) {
-        if (tc == 256l) {
-            enc_kq_batch_k5_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_k5_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_k5_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.k6)) {
-        if (tc == 256l) {
-            enc_kq_batch_k6_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_k6_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_k6_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.q40)) {
-        if (tc == 256l) {
-            enc_kq_batch_q40_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_q40_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_q40_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq4xs_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq4xs_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq4xs_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.k3)) {
-        if (tc == 256l) {
-            enc_kq_batch_k3_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_k3_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_k3_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq3s)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq3s_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq3s_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq3s_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq3xxs_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq3xxs_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq3xxs_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq4nl_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq4nl_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq4nl_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.k2)) {
-        if (tc == 256l) {
-            enc_kq_batch_k2_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_k2_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_k2_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq2s)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq2s_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq2s_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq2s_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq2xs_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq2xs_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq2xs_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        if (tc == 256l) {
-            enc_kq_batch_iq2xxs_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            enc_kq_batch_iq2xxs_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            enc_kq_batch_iq2xxs_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } elif (tc == 256l) {
-        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
-        enc_q8_batch_cm2l_cls(raw, h, s, pc, groups)
-    } elif (tc == 128l) {
-        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
-        enc_q8_batch_cm2m_cls(raw, h, s, pc, groups)
-    } else {
-        verify(fmt == int(KqFmt.q8), "vk prefill: the cm2 enc fell through for a kq format - a format the feed admits must own a tile arm")
-        enc_q8_batch_cm2s_cls(raw, h, s, pc, groups)
-    }
-}
-
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
     if (!g_env_vulkan.vk_kv_merge || g_rd.layers[l].fq != int(KqFmt.q8)
@@ -712,12 +260,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         var pcc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
-    if (xq8k) {
-        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
-    } elif (!x6 || !g_rd.dn_ba_f32) {
-        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+    if (xq8k || !x6 || !g_rd.dn_ba_f32) {
+        rq_enc(raw, h, g_rd.pf_sets[b + 0], xq8k, 0l, wlen * dim)
     }
     pfq_ts(raw)
     let xqb = x6 ? g_rd.pf_xf : g_rd.pf_xq
@@ -741,9 +285,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         }
         pfq_ts(raw)
     } else {
-        if (xq8k) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
-            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-            enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pcq, (wlen * dim / 4l + 255l) / 256l)
+        if (xq8k) {   //! the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
+            rq_enc(raw, h, g_rd.pf_sets[b + 0], false, 0l, wlen * dim)
         }
         let pb = arena_planes(int(KqFmt.q8), L.bbeta)
         pf_gemm_enc(raw, h, b + 3, int(KqFmt.q8), pb.wq, pb.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
@@ -785,12 +328,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     if (o6) {
         var pco = ActArgs(nelem = uint(wlen * di), nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
-    } elif (kq_sb(L.fout)) {
-        var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 256l))
-        enc_cls_q8k_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 8l + 255l) / 256l)
     } else {
-        var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 32l))
-        enc_cls_dn_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 4l + 255l) / 256l)
+        rq_enc(raw, h, g_rd.pf_dnrq_set, kq_sb(L.fout), DN_O_OFF, wlen * di)
     }
     pfq_ts(raw)
     let pout = arena_planes(L.fout, L.bout)
@@ -987,9 +526,9 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
         map_off = uint(PF_MOE_MAP_OFF), map_off_mgu = map_m_gu, map_off_mdn = map_m_dn,
         bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn), bound_mgu = uint(bounds.mgu), bound_mdn = uint(bounds.mdn),
-        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
-        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
-        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)))
+        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / kq_unit(L.fe1)),
+        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / kq_unit(L.fe3)),
+        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)))
     enc_moe_sched_cls(raw, h, L.pf_sched_set, pcs, 1l)
     pfq_ts(raw)
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
@@ -1034,8 +573,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
         var pcc = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 16], pcc, (wlen * dim / 4l + 255l) / 256l)
     } else {
-        var pcx = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 16], pcx, (wlen * dim / 4l + 255l) / 256l)
+        rq_enc(raw, h, g_rd.pf_sets[b + 16], false, 0l, wlen * dim)
     }
     pfq_ts(raw)
     pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, x6 ? g_rd.pf_xf : g_rd.pf_xq, x6 ? g_rd.dummy : g_rd.pf_xs, g_rd.pf_gate,
@@ -1068,13 +606,7 @@ def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt 
     }
     if (next_fused) {   //! the Q8 feed's requant, the next layer's own quant_xb set
         let nb = int((l + 1l) * PF_ROLES)
-        if (kq_sb(g_rd.layers[l + 1l].fq)) {
-            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-            enc_cls_q8k_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 8l + 255l) / 256l)
-        } else {
-            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-            enc_cls_dn_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 4l + 255l) / 256l)
-        }
+        rq_enc(raw, h, g_rd.pf_sets[nb], kq_sb(g_rd.layers[l + 1l].fq), 0l, wlen * dim)
     }
 }
 
@@ -1705,12 +1237,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     if (fq6) {
                         var pc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
-                    } elif (fqk) {
-                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
                     } else {
-                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                        rq_enc(raw, h, g_rd.pf_sets[b + 0], fqk, 0l, wlen * dim)
                     }
                 }
                 pfq_ts(raw)
@@ -1811,12 +1339,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         var pc6 = ActArgs(nelem = uint(wlen * qd), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
                     }
-                } elif (fok) {
-                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 8l + 255l) / 256l)
                 } else {
-                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                    rq_enc(raw, h, g_rd.pf_sets[b + 6], fok, 0l, wlen * qd)
                 }
                 pfq_ts(raw)
                 let po = arena_planes(g_rd.layers[l].fo, g_rd.layers[l].bo)
@@ -1846,12 +1370,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     if (feed_read && gu6) {
                         var pc9 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
-                    } elif (feed_read && guk) {
-                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
                     } elif (feed_read) {
-                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                        rq_enc(raw, h, g_rd.pf_sets[b + 9], guk, 0l, wlen * dim)
                     }
                 }
                 pfq_ts(raw)
@@ -1873,12 +1393,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     if (dn6) {
                         var pc12 = ActArgs(nelem = uint(ffn_rows * hid), act = act, nblk = uint(ffn_rows * hid / 32l), elem0 = uint(ffn_row0 * hid))
                         enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (ffn_rows * hid / 4l + 255l) / 256l)
-                    } elif (dnk) {
-                        var pc12 = ActArgs(nelem = uint(wlen * hid), act = act, nblk = uint(wlen * hid / 256l))
-                        enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
                     } else {
-                        var pc12 = ActArgs(nelem = uint(wlen * hid), act = act, nblk = uint(wlen * hid / 32l))
-                        enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                        var pc12 = ActArgs(nelem = uint(wlen * hid), act = act)
+                        actrq_enc(raw, h, g_rd.pf_sets[b + 12], dnk, pc12, wlen * hid)
                     }
                     pfq_ts(raw)
                     let p2 = arena_planes(g_rd.layers[l].f2, g_rd.layers[l].b2)
@@ -1918,13 +1435,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
             }
             if (last) {
-                if (kq_sb(g_rd.cls_fmt_marker)) {
-                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 8l + 255l) / 256l)
-                } else {
-                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
-                }
+                rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), (wlen - 1l) * dim, dim)
                 pfq_ts(raw)
                 var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
                 gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
@@ -2161,7 +1672,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     verify(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f2)
-    let xunit = fmt_unit(f1)
+    let xunit = kq_unit(f1)
     let dkq = !kq_block32(f2)
     var gate_set = af_role_set(g_gpu.af_gate_sets, f1, blk1, g_gpu.af_meta_g.buf,
         g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev, XQ_BYTES, XS_BYTES, 0u, VHG_Y1)
@@ -2176,28 +1687,18 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         fill_gemv_regions(g_gpu.af_meta_d, blk2)
         memcpy(g_gpu.af_xq.mapped, addr<void?>(xq[0]), n)
         memcpy(g_gpu.af_xs.mapped, addr<void?>(xs[0]), (n / xunit) * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
-        gemv_enc(f1, raw, h, gate_set, pcg, nfe)
-        gemv_enc(f3, raw, h, up_set, pcg, nfe)
-        // the requant form follows the DOWN plane — its GEMV consumes hq/hs
-        var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(nfe / (dkq ? 256l : 32l)))
-        let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
-            enc_q8k_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
-        } else {
-            enc_q8_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
+            gemv_enc(f1, raw, h, gate_set, pcg, nfe)
+            gemv_enc(f3, raw, h, up_set, pcg, nfe)
+            // the requant form follows the DOWN plane - its GEMV consumes hq/hs
+            var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
+            actrq_enc(raw, h, g_gpu.af_actrq_set, dkq, pca, nfe)
+            var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
+            gemv_enc(f2, raw, h, down_set, pcd, n)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         }
-        var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
-        gemv_enc(f2, raw, h, down_set, pcd, n)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
         memcpy(addr<void?>(y[0]), g_gpu.af_yo_host.mapped, n * 4l)
     }
 }
@@ -2246,17 +1747,12 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         let groups = fill_arena_batch_sched(a.batch_meta, d, blk, npos, fmt)
         upload_region_at(g_gpu.batch_xq_dev, 0l, addr<uint8 const?>(xq[0]), npos * n)
         upload_region_at(g_gpu.batch_xs_dev, 0l, addr<uint8 const?>(xs[0]), npos * (n / 32l) * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[skey], pc, int64(groups))
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+            q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[skey], pc, int64(groups))
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
+        }
         memcpy(addr<void?>(y[0]), g_gpu.batch_y1.mapped, npos * d * 4l)
     }
 }
@@ -2269,7 +1765,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = fmt_unit(fmt)   // q8 takes 32-block Q8_0 activations
+    let unit = kq_unit(fmt)
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
@@ -2281,17 +1777,12 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         mp[1] = 0u          // activation block base
         memcpy(a.xq.mapped, reinterpret<void?>(xqp), n)   // one int8 quant per weight
         memcpy(a.xs.mapped, reinterpret<void?>(xsp), nb * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-        gemv_enc(fmt, raw, h, s_cls, pc, d)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+            gemv_enc(fmt, raw, h, s_cls, pc, d)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
+        }
         memcpy(reinterpret<void?>(yp), a.y.mapped, d * 4l)
     }
 }
@@ -2394,7 +1885,7 @@ def private cmd_copy_batch_acts(raw : VkCommandBuffer; xq_bytes, xs_bytes : int6
 [unused_argument(n), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, d : int64; r0, r1 : int64; cm2 : bool = false) : uint {
     let fmt = g_gpu.stacks[si].fmt
-    let unit = fmt_unit(fmt)
+    let unit = kq_unit(fmt)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.stacks[si].batch_meta.mapped)
         var nrc = 0l
@@ -2517,7 +2008,7 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
 // recording cost is noise. comb_npos > 0: down rows stay device-side, accumulating into comb_y_dev;
 // only the last chunk appends the k-fold-smaller combined DMA. Hidden planes never leave the device.
 def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, gout_bytes : int64;
-                                 axq_bytes, axs_bytes, mid_nblk : int64; is_gelu : bool;
+                                 axq_bytes, axs_bytes : int64; is_gelu : bool;
                                  comb_npos : uint = 0u; comb_first : bool = false; comb_last : bool = false;
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l;
                                  comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l) {
@@ -2542,14 +2033,8 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     stack_batch_enc(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc(raw, h, s3, nwg_gu, n, nfe)
     // the mid-step form follows the DOWN stack — its GEMM is the consumer of the hidden plane
-    var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(mid_nblk))
-    let dkq = g_gpu.stacks[s2].fmt != 0
-    let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-    if (dkq) {
-        enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-    } else {
-        enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-    }
+    var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
+    actrq_enc(raw, h, g_gpu.batch_actrq_set, kq_sb(g_gpu.stacks[s2].fmt), pca, rows * nfe)
     stack_batch_enc(raw, h, s2, nwg_dn, nfe, n)
     if (comb_npos > 0u) {
         var pcc = CombineArgs(n = uint(comb_n), k = uint(comb_k), r0 = uint(comb_r0), r1 = uint(comb_r1))
@@ -2578,8 +2063,8 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let kq_in = !kq_block32(f1)
     verify(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
-    let xunit_in = fmt_unit(f1)
-    let xunit_mid = fmt_unit(f2)
+    let xunit_in = kq_unit(f1)
+    let xunit_mid = kq_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
     ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
@@ -2612,8 +2097,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
         let ts1 = ref_time_ticks()
         upload_batch_acts(xqp, xsp, r0, rows, n, xunit_in)
         let ts2 = ref_time_ticks()
-        record_ffn_batch_cmd(s1, s3, s2, nwg1, nwg2, rows, n, nfe, rows * n * 4l, rows * n, rows * (n / xunit_in) * 4l,
-            rows * nfe / xunit_mid, is_gelu,
+        record_ffn_batch_cmd(s1, s3, s2, nwg1, nwg2, rows, n, nfe, rows * n * 4l, rows * n, rows * (n / xunit_in) * 4l, is_gelu,
             [comb_npos = comb ? uint(npos) : 0u, comb_first = r0 == 0l, comb_last = r1 == nrows,
              comb_wi_bytes = nrows * 4l, comb_y_bytes = npos * n * 4l,
              comb_n = comb ? n : 0l, comb_k = comb_k, comb_r0 = r0, comb_r1 = r1])
@@ -2659,7 +2143,7 @@ def private record_dense_cmd(si : int; nwg : uint; n, d, y_bytes : int64; axq_by
 //! the FFN arm; activations arrive pre-quantized in the plane's own form.
 def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d, nrows : int64; fmt : int) {
     let si = find_stack(woff, fmt, "dense batch")
-    let xunit = fmt_unit(fmt)
+    let xunit = kq_unit(fmt)
     ensure_batch_state()
     ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
     var chunk = min(BATCH_XQ_BYTES / n, BATCH_XS_BYTES / ((n / xunit) * 4l))
@@ -2774,8 +2258,7 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         cmd_copy_whole(raw, g_gpu.dn_state_dev, g_gpu.dn_state_host.buf, nvh * ds * ds * 4l)
     }
     pfq_ts(raw)   // q6: tail copies
-    var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(rows * di / 32l))
-    enc_cls_dn_rq(raw, h, g_gpu.dn_rq_set, pcr, (rows * di / 4l + 255l) / 256l)
+    rq_enc(raw, h, g_gpu.dn_rq_set, false, DN_O_OFF, rows * di)
     pfq_ts(raw)   // q7: o requant
     stack_batch_enc(raw, h, s_o, nwg_out, di, dim)
     pfq_ts(raw)   // q8: out GEMM
@@ -2949,7 +2432,7 @@ def private ensure_at_fa_state(hs : int64) {
 // o requant, wo tile, y DMA
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
-                          rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
+                          rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul : int64;
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa, hasb : bool;
                           eps, scale : float; woq : int64) {
     let raw = g_gpu.batch_cmd
@@ -3019,13 +2502,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         enc_at_attn_cls(raw, h, g_gpu.at_attn_set, pca, n_heads * ((rows + 7l) / 8l))
     }
     pfq_ts(raw)
-    var pcr = RqArgs(inbase = 0u, nblk = uint(o_nblk))
-    let rqwgs = (rows * qd / (o_kq ? 8l : 4l) + 255l) / 256l
-    if (o_kq) {
-        enc_cls_q8k_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
-    } else {
-        enc_cls_dn_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
-    }
+    rq_enc(raw, h, g_gpu.at_rq_set, o_kq, 0l, rows * qd)
     pfq_ts(raw)
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     pfq_ts(raw)
@@ -3139,7 +2616,6 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         let ts1 = ref_time_ticks()
         record_at_cmd(s_q, s_k, s_v, s_o, nwg_q, nwg_k, nwg_v, nwg_o,
             rows, r0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul,
-            rows * qd / (fo != 0 ? 256l : 32l),
             rows * dim, rows * (dim / xunit) * 4l, (AT_SM_COS + 2l * rows * half) * 4l,
             fo != 0, gated, qknorm, fa, hasb, eps, scale, woq)
         submit_wait(g_gpu.batch_cmd)

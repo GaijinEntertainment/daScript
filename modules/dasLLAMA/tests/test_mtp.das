@@ -38,18 +38,6 @@ let MTP_WANT <- [2943l, 11l, 4097l, 11l, 4590l, 11l, 7840l, 11l, 7810l, 11l, 112
                  42744l, 11l, 28279l, 11l, 58614l, 11l, 60163l, 11l, 35442l, 11l, 56091l, 11l, 78592l,
                  11l, 59942l, 11l, 90600l, 11l, 16570l, 13l, 198l, 2427l, 494l, 799l, 310l, 16570l]
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 // Pin the bit-exact kernel modes around `body` and restore the previous modes — classic prefill
 // attention (not flash), scalar libm activations (not exp4), per-token recurrent deltanet prefill
 // (not chunked). Token-exact gates must not ride near-tie kernel variance; see parity_gen_ok.
@@ -102,7 +90,7 @@ def private specoff_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
         let ids <- generate(tr, s, prompt, length(prompt) + length(want))
         let echo = length(prompt) - 1
         let got <- [for (i in range(length(want))); ids[echo + i]; where echo + i < length(ids)]
-        ok = same(got, want)
+        ok = ids_equal(got, want)
         delete s
     }
     return ok
@@ -153,7 +141,7 @@ def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int
     var nd = 0l
     var na = 0l
     let spec_ids <- gen_spec(tr, prompt, total, nd, na)
-    t |> success(same(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
+    t |> success(ids_equal(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
     t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts)")
 }
 
@@ -243,7 +231,7 @@ def test_mtp_reject_rollback(t : T?) {
         with_pinned_kernels() {
             var want : array<int64>
             let got <- reject_rollback_ids(tr, 6l, want)
-            t |> success(same(got, want), "post-rollback decode token-for-token vs plain")
+            t |> success(ids_equal(got, want), "post-rollback decode token-for-token vs plain")
         }
         delete tr
     }
@@ -322,7 +310,7 @@ def test_mtp_invariance_glm(t : T?) {
             var na = 0l
             let ref_ids <- gen_plain(tr, code, total)
             let spec_ids <- gen_spec(tr, code, total, nd, na)
-            t |> success(same(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
+            t |> success(ids_equal(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
             t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
             // the reject branch on demand: every third draft rejected, the stream still plain decode's
             set_mtp_force_reject_every(3l)
@@ -330,7 +318,7 @@ def test_mtp_invariance_glm(t : T?) {
             var na_forced = 0l
             let forced_ids <- gen_spec(tr, code, total, nd_forced, na_forced)
             set_mtp_force_reject_every(0l)
-            t |> success(same(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
+            t |> success(ids_equal(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
             t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
                          "code-glm forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
         }

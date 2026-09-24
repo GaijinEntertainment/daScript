@@ -16,6 +16,7 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_span_reset: the span rec
 require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
+require _compares
 
 //! The per-op tier's decode attention block and the decode FFN tail against a CPU reference:
 //! two attention quads (layers A and B), one expert stack pair, two positions, in both acts
@@ -140,10 +141,10 @@ def private attn_ref(q : array<float>; kmir, vmir : array<float>; cnt : int64; v
 }
 
 def private check_row(t : T?; tag : string; gpu, refv : array<float>) {
-    let mr = max_abs(refv)
+    let mr = logits_maxabs(refv)
     let rel_bar = REL_BAR * mr
     let bad = count_bad(gpu, refv, ABS_BAR, rel_bar)
-    let md = max_diff(gpu, refv)
+    let md = logits_maxdiff(gpu, refv)
     to_log(LOG_INFO, "{tag}: {bad} of {length(refv)} off the reference (maxdiff {md}, maxref {mr}, rel bar {rel_bar})\n")
     t |> success(mr > 0.0, "{tag}: the reference is non-trivial")
     t |> success(bad == 0, "{tag}: matches the CPU reference ({bad} of {length(refv)} off, maxdiff {md} vs abs {ABS_BAR} / rel {rel_bar})")
@@ -402,8 +403,8 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     check_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
     if (pos == 0l) {
         var poison := xb2   // the bar's control: one element pushed past both bars must red
-        poison[0] += 1.0 + 2.0 * max_abs(xb2b_ref)
-        t |> success(count_bad(poison, xb2b_ref, ABS_BAR, REL_BAR * max_abs(xb2b_ref)) == 1, "{tag}: the bars catch a poisoned element")
+        poison[0] += 1.0 + 2.0 * logits_maxabs(xb2b_ref)
+        t |> success(count_bad(poison, xb2b_ref, ABS_BAR, REL_BAR * logits_maxabs(xb2b_ref)) == 1, "{tag}: the bars catch a poisoned element")
     }
 }
 
@@ -843,15 +844,15 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
                 check_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", x, x_ref)
                 if (pos == 0l) {
                     var poison := x
-                    poison[0] += 1.0 + 2.0 * max_abs(x_ref)
-                    t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * max_abs(x_ref)) == 1, "span shexp ({tag}): the bars catch a poisoned element")
+                    poison[0] += 1.0 + 2.0 * logits_maxabs(x_ref)
+                    t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * logits_maxabs(x_ref)) == 1, "span shexp ({tag}): the bars catch a poisoned element")
                     var x_no : array<float>
                     fill_row(x_no, N, 0.5)
                     var ka : array<float>
                     var kb : array<float>
                     span_layer_ref(qa, f, router, 0l, x_no, 0l, cossin, ka)
                     span_layer_ref(qb, f, router, 1l, x_no, 0l, cossin, kb)
-                    t |> success(count_bad(x, x_no, ABS_BAR, REL_BAR * max_abs(x_no)) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")
+                    t |> success(count_bad(x, x_no, ABS_BAR, REL_BAR * logits_maxabs(x_no)) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")
                 }
             }
         }

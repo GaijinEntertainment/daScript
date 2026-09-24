@@ -52,7 +52,7 @@ def private qwen2_forced_feed(t : T?; n : int64) {
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
         delete fed
         delete prompt
         delete toks

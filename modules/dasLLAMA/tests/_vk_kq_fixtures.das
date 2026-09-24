@@ -174,18 +174,11 @@ def count_bad(gpu, refv : array<float>; abs_bar, rel_bar : float) : int {
     return bad
 }
 
-def max_abs(v : array<float>) : float {
-    var m = 0.0
-    for (x in v) {
-        m = max(m, abs(x))
-    }
-    return m
+//! one hashed word of synthetic quant bytes for index i - the kernel suite's and the probes' plane filler
+def hash_word(i : uint) : uint {
+    var h = i * 2654435761u
+    h ^= h >> 16u
+    h *= 2246822519u
+    return h ^ (h >> 13u)
 }
 
-def max_diff(a, b : array<float>) : float {
-    var m = 0.0
-    for (av, bv in a, b) {
-        m = max(m, abs(av - bv))
-    }
-    return m
-}

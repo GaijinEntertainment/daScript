@@ -13,8 +13,12 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   tables the grid and codebook formats key off - each as a builder function (`iq3s_grid()`,
   `iq4nl_lut()`) for kernels that may run on a team lane, plus a global twin for tests,
   oracles and the emitter's constant bake, the `KqTag_<fmt>` tag family (one empty struct per
-  member, the LAST parameter of every per-format overload family) and the `kq_fmt_stamp` call
-  macro that binds a member's tag per arm. It requires nothing else in
+  member, the LAST parameter of every per-format overload family), the `kq_fmt_stamp` call
+  macro that binds a member's tag per arm, the `kq_tile_stamp` call macro that stamps a kernel
+  home's per-member pick ladders over the enum (with `kq_tile_stem`, the per-32 formats' stamp
+  spelling), the `[grid_words]` annotation that bakes a codebook table into a kernel home's word
+  accessor, and the `KQ_CM2E_ALIASES_M` roster of the formats whose expert column the m stamp
+  serves - the format-keyed facts every kernel home reads. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space - the enum; integer ids
   exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
   `fmt != q8` test does not imply the lattice, so branch on the predicate.

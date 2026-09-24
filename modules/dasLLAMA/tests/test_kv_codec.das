@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
@@ -13,7 +14,6 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require strings   // the stamp cell strips a parameter's own const from a typename
-require dasllama/dasllama_env
 
 // KV-cache codec layout invariants — synthetic Configs only (no model files, never skips):
 // the per-session row-byte prefixes built by make_run_state must mirror layout_offsets' shared-
@@ -611,10 +611,6 @@ def test_kv_codec_f16(t : T?) {
     }
 }
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 
@@ -780,10 +776,6 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
 // q8_0 model tests run a GGUF carrier (stories15M's head_size 48 is rejected by the create-time
 // 32-block check — by design); SmolLM2-135M is the small head_size-64 carrier, same rail as
 // test_fused_decode. Override the model root with DASLLAMA_MODELS_DIR.
-def private models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 let GGUF_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private gguf_missing(t : T?) : bool {
@@ -816,14 +808,6 @@ def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>
     delete s
 }
 
-def private worst_diff(a : array<float>; b : array<float>) : float {
-    var w = 0.0
-    for (va, vb in a, b) {
-        w = max(w, abs(va - vb))
-    }
-    return w
-}
-
 [test]
 def test_kv_q8_decode(t : T?) {
     t |> run("q8_0 KV: teacher-forced logits track f16, fused==std bit-exact under q8 (needs SmolLM2-135M)") @(t : T?) {
@@ -852,9 +836,9 @@ def test_kv_q8_decode(t : T?) {
             // trajectories are NOT compared — on a 135M model a near-tie argmax flips under f16
             // noise too, and one flip compounds the whole stream). Measured here: q8-vs-f32 noise
             // is the same order as f16-vs-f32 (~0.4-1.8 worst per step).
-            let w8 = worst_diff(lg16, lg8)
+            let w8 = logits_maxdiff(lg16, lg8)
             t |> success(w8 < 4.0, "q8/q8-vs-f16 teacher-forced logits within the structural bound (worst |diff| = {w8})")
-            let w8m = worst_diff(lg16, lg8m)
+            let w8m = logits_maxdiff(lg16, lg8m)
             t |> success(w8m < 4.0, "q8-K/f16-V-vs-f16 within the structural bound (worst |diff| = {w8m})")
             // fused vs std, BOTH under q8: identical kernels + identical query quants -> bit-exact
             var lg_bad = 0

@@ -40,6 +40,11 @@ touches the filesystem; a diff that adds one is a defect, and weakening `test_ru
 no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run` by
 bare same-dir name, so anything that fires on require fires inside every one of those test processes.
 
+**A diff that gives `_model_tier.das`, or a `tests/` fixture it requires, an `[init]` that
+declares the CPU-prefill intent (`allow_cpu_prefill`) is a defect - the intent is declared in
+the `[init]` of the test file that needs it.** `test_cpu_prefill_tripwire.das` requires
+`_model_tier` and asserts that the guard trips while the intent is undeclared.
+
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
 thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
 `ChatTemplate.think_default` is `true` unless a family clears it, so an un-opted-out turn 1
@@ -157,7 +162,7 @@ defect.** A stocked artifact is anything the test reads out of `models_dir()` th
 build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps.
 Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `model_specs.das` in `../performance/`; for an oracle dump, the mint script stocked
+script beside `../performance/model_specs.das`; for an oracle dump, the mint script stocked
 beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header -

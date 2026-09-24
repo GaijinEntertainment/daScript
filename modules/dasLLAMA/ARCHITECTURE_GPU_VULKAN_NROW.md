@@ -149,12 +149,17 @@ logits are garbage under any bit.
 The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
 row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue
 (`Q8GemvAr.epilogue`, the one-row command's post-attention and post-FFN sites), and the
-regions cells hold the two commands bit for bit. The forms share their reduce, their four-column
-round and their requant word for word, and a driver still decides per kernel whether a multiply
+regions cells hold the two commands bit for bit. The forms are ONE text - `ResidualT.accum_row`
+and `ResidualT.quant32`, the template shell both classes stamp, its reads and writes behind
+accessor overrides (the row kernel's stash slab against the GEMV's re-read of its row) - so the
+reduce, the four-column round and the requant cannot drift apart; a driver still decides per kernel whether a multiply
 feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
 ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
 apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
 spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
-contraction to choose; the plain column carries no multiply before its add.
+contraction to choose; the plain column carries no multiply before its add. The row kernel walks
+its row four columns a round - `accum_row` issues a round's four loads before its adds,
+`ArBase.store_out` its four loads before its stores - because a one-workgroup row kernel's time
+is its load rounds.
 `test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
 fed the GEMV's own y row.

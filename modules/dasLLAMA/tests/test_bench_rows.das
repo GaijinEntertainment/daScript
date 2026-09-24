@@ -7,17 +7,13 @@ require dasllama/dasllama_common
 require dasllama/dasllama_load
 require dasllama/dasllama_bench
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_env
 require daslib/jobque_boost
 require daslib/fio
+require _model_tier   // llama2c_dir
 
 // The bench rows' contracts on a real model (stories15M, the llama2.c checkpoint): what the
 // released exe and the server's /bench run per row, held on the smallest model that runs them.
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 // a pp row on a session sized to `seq_len`: under the prompt it must refuse before it writes,

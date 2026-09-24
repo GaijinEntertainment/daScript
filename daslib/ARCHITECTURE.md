@@ -183,8 +183,8 @@ Six companions carry a concern each.
   `st.fields` on the instance already lists what the parser materialized from the whole parent
   chain, so the reifier binds constants, gates and calls from the instance alone and never walks
   an ancestor's field list for them. Only methods need the per-level walk, nearest ancestor
-  first, where the first name seen wins; a field the surviving concrete parent declares keeps
-  its parent-typed `cast<auto>` finalizer init, which binds the instance's finalizer to the parent's slot type.
+  first, where the first name seen wins; a slot the surviving concrete parent declares keeps the
+  parser's `cast<auto>` init (the parent's slot type binds it), and a slot only the cut chain declared - an override at any template level, the finalizer - drops it, as infer does on a parentless class.
 
 ## 26. constant_expression
 

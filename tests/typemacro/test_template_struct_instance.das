@@ -393,6 +393,42 @@ class ChainLeafOwn : ChainMid {
     }
 }
 
+//! chain fixture under a concrete base: a template level overrides a non-abstract template method, ChainRoot stays the parent
+class ChainRoot {
+    hits : int = 0
+
+    def bump : void {
+        hits++
+    }
+}
+
+[ |> template_struct_instance]
+class template RootedBase : ChainRoot {
+    @template_constant SCALE : int = 1
+
+    def accum(x : int) : int {
+        return x * 2
+    }
+    def run(x : int) : int {
+        return accum(x) * SCALE + hits
+    }
+}
+
+[ |> template_struct_instance]
+class template RootedMid : RootedBase {
+    def override accum(x : int) : int {
+        return x * 3
+    }
+}
+
+class RootedLeaf : RootedMid {
+    override SCALE = 10
+}
+
+class RootedLeafBase : RootedBase {
+    override SCALE = 10
+}
+
 [test]
 def test_tsi_template_chain(t : T?) {
     t |> run("a template chain reifies whole: constants, typedefs and overrides at every level") @(t : T?) {
@@ -401,6 +437,15 @@ def test_tsi_template_chain(t : T?) {
             t |> equal(c->run(5), (5 + 2 + 10) * 3 + 7)
             var inscope o <- new ChainLeafOwn(mid_v = 4)
             t |> equal(o->run(9), (9 - 4) * 2 + 7)
+        }
+    }
+    t |> run("a template-level override of a template method reifies under a concrete parent") @(t : T?) {
+        unsafe {
+            var inscope m <- new RootedLeaf()
+            m->bump()
+            t |> equal(m->run(5), 5 * 3 * 10 + 1)
+            var inscope b <- new RootedLeafBase()
+            t |> equal(b->run(5), 5 * 2 * 10)
         }
     }
 }

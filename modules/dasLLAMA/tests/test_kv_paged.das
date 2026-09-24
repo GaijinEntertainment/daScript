@@ -5,10 +5,10 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_env
 
 // Paged KV pool (E2) — pool accounting, block-table run math, and the paged/flat storage seam on
 // synthetic Configs (no model files, never skips); then paged == flat BIT-EXACTNESS on stories15M
@@ -233,10 +233,6 @@ def test_kv_paged_store_roundtrip(t : T?) {
 
 // ===== paged == flat bit-exactness on a real model (env-gated, JIT-only) =====
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 def private mk_prompt(n : int64) : array<int64> {
@@ -358,9 +354,7 @@ def test_kv_paged_q8(t : T?) {
             return
         }
         // q8_0 needs a head_size-64 carrier (stories15M's 48 is rejected by the 32-block check)
-        let env = g_env_harness.models_dir
-        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
             return

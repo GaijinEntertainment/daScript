@@ -11,6 +11,7 @@ module _vk_probe_fixture shared public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
+require ../tests/_vk_kq_fixtures.das public
 
 //! arms the device timestamp rail on the command `raw` is recording: the probe's stamps land from query 0
 def pfq_arm(raw : VkCommandBuffer) {
@@ -32,15 +33,6 @@ def pfq_avg_us(var raw : VkCommandBuffer; submits, stamps : int) : double {
         }
     }
     return us / double(submits * stamps)
-}
-
-//! one hashed word of synthetic quant bytes for index i
-def hash_word(i : uint) : uint {
-    var x = i * 2654435761u
-    x ^= x >> 16u
-    x *= 2246822519u
-    x ^= x >> 13u
-    return x
 }
 
 //! two packed f16 scales per word, small positive values (the kernel-suite fixture shape)

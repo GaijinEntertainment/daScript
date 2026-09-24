@@ -714,13 +714,6 @@ def test_metal_kernel_coverage(tst : T?) {
 // The Vulkan census's DECLARED blind spots, by census name (`<vk_dispatch name>_spv`): kernel
 // classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does.
 let private VK_CENSUS_NEVER_DISPATCHED <- [
-    // the expert schedule's e stamps of the formats no stocked MoE carrier holds a routed expert
-    // plane in: the zoo's resident MoE carriers put q8 and k4 planes (the Qwen1.5-MoE files), the
-    // 30B Q4_K_M's k4 and k6 planes (under DASLLAMA_PARITY_FULL=1) and the UD-IQ2_XXS 30B's
-    // iq2xxs / iq2xs / iq2s / iq3xxs / iq3s / iq4xs mix on the schedule. Their coverage is the e arm
-    // of each format's cell in test_vulkan_kernels.das
-    "kq_batch_k5_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
-    "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv",
     // the q51 expert rail (the 32-block down planes of the 26B-A4B's Q4_K_M: a carrier above the zoo's tier) -
     // its s and e stamps and its decode GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
     "q51_batch_cm2s_cls_spv", "q51_batch_cm2e_cls_spv", "q51_gemv_cls_spv",

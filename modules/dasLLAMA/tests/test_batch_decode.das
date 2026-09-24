@@ -13,7 +13,6 @@ require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_env
 require _model_tier   // model_available: the stocked-carrier gate (shards, the large tier)
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
@@ -24,10 +23,6 @@ require _model_tier   // model_available: the stocked-carrier gate (shards, the 
 // (a tokenizer for the scheduler's streams) and the JIT; it skips without either. The deltanet
 // hybrid cells need Qwen3.5-0.8B-Q8_0.gguf under models_dir() and the JIT, and the MoE hybrid's
 // cell Qwen3.6-35B-A3B-UD-Q4_K_M.gguf under the large tier; they skip without either.
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 // ragged prompts (raw stories15M token ids, BOS-first — no tokenizer.bin dependency)
@@ -380,9 +375,7 @@ def test_batch_decode_q8_kv(t : T?) {
         }
         // stories15M's head_size 48 is rejected by the q8_0 32-block check (by design) — this arm
         // runs the SmolLM2 GGUF carrier instead, same rail as test_fused_decode
-        let env = g_env_harness.models_dir
-        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
             return
@@ -410,9 +403,7 @@ def test_batch_decode_tq4_kv(t : T?) {
         // stories15M's head_size 48 fails the tq4 pow2 check (by design) — SmolLM2 (head 64) carrier,
         // same rail as test_batch_decode_q8_kv. Parity, not quality: both paths rotate + quantize
         // through the same kernels, so batch == sequential holds at fp32 tolerance
-        let env = g_env_harness.models_dir
-        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
             return
@@ -507,11 +498,10 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
             return
         }
         // the scheduler's streams need a vocabulary (the stop-token walk), which the llama2.c checkpoint lacks
-        let env = g_env_harness.models_dir
-        let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-        let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!model_available(t, path)) return
         var tr <- load_model_(path, QuantMode.q8)   //! the engine load: the scheduler's streams detokenize through the model's own tokenizer
+        moe_gpu_drop_model()   // the claim is the CPU batched stack's refusal: an armed whole-model driver would home the streams and refuse by its own region count instead
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         let prev_rope = get_rope_table_mode()

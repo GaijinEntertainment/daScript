@@ -95,18 +95,6 @@ def private greedy_top_at(lg : array<float>; base, vocab : int64) : int64 {
     return best
 }
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 [unused_argument(t, tr, kdt, tag, exp_pf, exp_dec, exp_bat)]   // off-Apple the gated body is empty
 def private matrix_cell(t : T?; tr : Model; kdt : KVDtype; tag : string;
                         exp_pf, exp_dec, exp_bat : string) {
@@ -481,7 +469,7 @@ def test_metal_support_matrix(t : T?) {
                     select_decode_override("")
                     select_prefill_override("")
                 }
-                t |> success(same(cpu_ids, gpu_ids),
+                t |> success(ids_equal(cpu_ids, gpu_ids),
                     "K-quant continuation with metal overrides ON matches the CPU truth (guard verified)")
                 delete cpu_ids
                 delete gpu_ids
@@ -701,7 +689,7 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
                 select_prefill_override("")
             }
             log_gen_texts(tr, tag, cpu_ids, gpu_ids)
-            t |> success(same(cpu_ids, gpu_ids),
+            t |> success(ids_equal(cpu_ids, gpu_ids),
                 "{tag}: metal-overrides generate matches the CPU truth token-for-token")
             delete cpu_ids
             delete gpu_ids
@@ -830,7 +818,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                 select_prefill_override("")
             }
             log_gen_texts(tr, "{tag} kv={kdt}", cpu_ids, gpu_ids)
-            t |> success(same(cpu_ids, gpu_ids),
+            t |> success(ids_equal(cpu_ids, gpu_ids),
                 "{tag} kv={kdt}: metal-overrides generate matches the CPU truth token-for-token")
             delete cpu_ids
             delete gpu_ids
@@ -911,7 +899,7 @@ def private tensor_twin_row(t : T?; path, tag : string; optional : bool = false)
         // without this the cell passes vacuously the day crowning stops taking effect
         t |> success(twins > 0, "{tag}: a crowned tmm2d twin actually served ({twins} of them)")
         log_gen_texts(tr, tag, cpu_ids, gpu_ids)
-        t |> success(same(cpu_ids, gpu_ids),
+        t |> success(ids_equal(cpu_ids, gpu_ids),
             "{tag}: crowned tmm2d generate matches the CPU truth token-for-token")
         delete cpu_ids
         delete gpu_ids
@@ -1051,7 +1039,7 @@ def private qwen2moe_row(t : T?; path : string) {
             select_prefill_override("")
         }
         log_gen_texts(tr, "qwen2moe", cpu_ids, gpu_ids)
-        t |> success(same(cpu_ids, gpu_ids),
+        t |> success(ids_equal(cpu_ids, gpu_ids),
             "qwen2moe: metal-overrides generate matches the CPU truth token-for-token")
         delete cpu_ids
         delete gpu_ids
@@ -1222,7 +1210,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
         if (tokexact) {
-            t |> success(same(cpu_ids, gpu_ids),
+            t |> success(ids_equal(cpu_ids, gpu_ids),
                 "{tag}: metal-overrides generate matches the CPU truth token-for-token")
         } else {
             // the 2B near-ties on the counting continuation (the CPU truth itself leaves the
@@ -1451,7 +1439,7 @@ def private gemma2_window_row(t : T?; path : string) {
         t |> success(served_de > 0l && served_pf > 0l,
             "gemma2-2b/window: both GPU paths engaged (decode {served_de}, prefill {served_pf})")
         log_gen_texts(tr, "gemma2-2b/window", cpu_ids, gpu_ids)
-        t |> success(same(cpu_ids, gpu_ids),
+        t |> success(ids_equal(cpu_ids, gpu_ids),
             "gemma2-2b/window: window-crossing generate matches the CPU truth token-for-token")
         delete cpu_ids
         delete gpu_ids
@@ -1624,10 +1612,10 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         log_gen_texts(tr, "gemma4-12b/q8", cpu_ids, gpu_ids)
         log_pair_texts(tr, "gemma4-12b/q8 B=2", cpu_b2, gpu_b2)
         to_log(LOG_INFO, "gemma4-12b/q8 B=4 eyeball: CPU forced-final picks '{eyeball_text(tr, b4c)}' vs GPU '{eyeball_text(tr, b4g)}' (maxd {d4})\n")
-        t |> success(same(cpu_ids, gpu_ids),
+        t |> success(ids_equal(cpu_ids, gpu_ids),
             "gemma4-12b/q8: metal-decode generate matches the CPU truth token-for-token")
         t |> success(served_bat > 0l, "gemma4-12b/q8: the hetero q8 batch ENGAGED ({served_bat} served)")
-        t |> success(same(cpu_b2, gpu_b2),
+        t |> success(ids_equal(cpu_b2, gpu_b2),
             "gemma4-12b/q8: B=2 batched decode (MvB2) matches the CPU truth token-for-token")
         t |> success(d4 < 8.0,
             "gemma4-12b/q8: B=4 forced-feed batched logits (MvB4) within 8 of CPU (measured {d4})")
@@ -1757,11 +1745,11 @@ def private gemma4_hetero_row(t : T?; path : string) {
         t |> success(served_free > 0l, "gemma4-12b/k4: the forced-feed freeform decode ENGAGED ({served_free} served)")
         t |> success(served_pf > 0l, "gemma4-12b/k4: the hetero prefill ENGAGED ({served_pf} served)")
         log_gen_texts(tr, "gemma4-12b/k4 both-paths", cpu_cnt_ids, both_ids)
-        t |> success(same(cpu_cnt_ids, both_ids),
+        t |> success(ids_equal(cpu_cnt_ids, both_ids),
             "gemma4-12b/k4: metal prefill+decode generate matches the CPU truth token-for-token")
         t |> success(served_bat > 0l, "gemma4-12b/k4: the hetero batch ENGAGED ({served_bat} served)")
         log_pair_texts(tr, "gemma4-12b/k4 B=2", cpu_bat, gpu_bat)
-        t |> success(same(cpu_bat, gpu_bat),
+        t |> success(ids_equal(cpu_bat, gpu_bat),
             "gemma4-12b/k4: B=2 batched decode matches the CPU truth token-for-token")
         cont_logits_cell(t, tr, trg, "gemma4-12b/k4", 8.0)
         delete cpu_ids

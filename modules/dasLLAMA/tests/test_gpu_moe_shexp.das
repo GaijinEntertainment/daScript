@@ -87,7 +87,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
         set_moe_gpu_shexp_route(true)   //! the tier as found
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
         t |> equal(span_tokens(), span0 + FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
-        feed_steps_within(t, "", n, dev, cpu, toks, SHEXP_LOGIT_BAR_REL, "the device shared expert", "the CPU form")
+        feed_steps_within(t, tr, "", n, dev, cpu, toks, SHEXP_LOGIT_BAR_REL, "the device shared expert", "the CPU form")
         delete dev
         delete cpu
         delete prompt
