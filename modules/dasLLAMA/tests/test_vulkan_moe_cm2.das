@@ -10,7 +10,7 @@ require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; t
 require daslib/f16_cvt
 require math
 require ?vulkan _vk_kq_fixtures
-require _compares
+require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
 

@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require math
 require strings   // starts_with: the roster cell finds an entry by its name's head
 require dasllama/dasllama_math
-require _compares
+require ?vulkan _compares   // logits_maxdiff / logits_maxabs: read inside the vulkan arms only, so a lane without dasVulkan sees no use
 require _vk_kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
