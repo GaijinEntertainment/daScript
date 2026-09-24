@@ -1740,10 +1740,16 @@ module) is independent and can land any time - it is pure structure.
     epilogue or the next class; the head restrides folded into the flash tile's load on the padded
     route; K and V staged in workgroup memory on the f32 window route (it reads them off the
     compact rows today). The instrument is `lcpp_bench --image` on the E2B / gemma-3-4b /
-    Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows. The q8 tower images carry f32 scales
-    the upload converts to f16 on the gather (the resident MoE driver's precedent); baking f16
-    scales (`qscales16`) into the tower images would drop the conversion and switch the CPU q8
-    lane to its s16 kernels - a ruling.
+    Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
+98. **The tower planes baked in the tile's layout (decided: every conversion at `.dlim` bake time, no
+    duplicated plane).** The Vulkan flavor of a tower image carries the CPU layout today - the grp
+    interleave with f32 scales - and the driver gathers each block's rows row-major with f16
+    scales on upload (`q8_gather_rows`, the resident MoE driver's precedent). The Vulkan flavor
+    bakes the row-major Q8_0 words and the f16 scales the tiles read instead, so the upload is a
+    copy; the flavor is that box's alone (a `.dlim` is per box identity), and on that box the
+    tower chain's fallback - a decline - reads the baked layout through the row-major q8 kernels
+    with the s16 scale twins, the same rows the driver reads. The evidence is the twin cells on
+    the baked flavor and the E2B image row's first rep (the upload's share of it).
 96. **The batch rails mark a session host-current after reading back its one row.** The N-row
     token command and the row-at-a-time step (`dasllama_gpu_resident.das`, the two
     `s.rdec_host_current = !s.device_kv` landings after `g_rdec_regions[r].cnt = pos + 1l`) read
