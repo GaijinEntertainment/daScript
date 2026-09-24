@@ -1758,8 +1758,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     }
     if (!rdec_owns(s, r) || pos > g_rdec_regions[r].cnt) {
         if (rdec_owns(s, r)) {
-            rdec_pass_once(RdecPass.gap, pos, g_rdec_regions[r].cnt)   // our own region short of pos: nothing on the host past cnt either
-            return false
+            return rdec_pass_hydrated(t, s, RdecPass.gap, pos, g_rdec_regions[r].cnt)
         }
         if (s.rdec_gen != 0l && !s.rdec_host_current) {
             panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration - engine bug (the steal path must hydrate first)")
@@ -1823,6 +1822,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
 }
 
 //! Always false, the override's answer: the CPU rails take the call, so the session's device-only rows come down first.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b : int64) : bool {
     if (rdec_has_device_only_rows(s)) {
         rdec_hydrate_host(t, s)
@@ -1859,8 +1859,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         return false
     }
     if (!g_resident_prefill_allowed && !s.device_kv) {
-        rdec_pass_once(RdecPass.pinned_off, 0l, 0l)
-        return false
+        return rdec_pass_hydrated(t, s, RdecPass.pinned_off, 0l, 0l)
     }
     if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
         rdec_pass_once(RdecPass.codec, int64(int(s.kv_dtype_k)), int64(int(s.kv_dtype_v)))
@@ -1871,8 +1870,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         return false
     }
     if (s.attn_uniform_end != 0l) {
-        rdec_pass_once(RdecPass.span, 0l, 0l)
-        return false
+        return rdec_pass_hydrated(t, s, RdecPass.span, 0l, 0l)
     }
     let c = t.config
     if (start_pos != 0l && c.recr_mask != 0ul) {

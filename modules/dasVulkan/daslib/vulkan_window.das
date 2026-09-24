@@ -210,7 +210,7 @@ def public create_frame_sync(device : Device) : FrameSync {
 // ===== draw =====
 
 //! set a full-extent viewport + scissor on a pipeline built with dynamic viewport state
-def private set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
+def public set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
     var vp = Viewport(width = float(width), height = float(height), maxDepth = 1.0f)
     var vps : array<Viewport>
     vps |> push(vp)

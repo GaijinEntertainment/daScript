@@ -104,6 +104,23 @@ class RmsWgBase {
         }
         return 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
     }
+
+    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it); its text is `wg_rms_inv`'s
+    //! reduce, kept apart because the fold moves every decode stamp on this base by 108 bytes
+    def wg_sum(v0 : float; slot : uint) : float {
+        let ss = subgroupAdd(v0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[slot * 64u + gl_SubgroupID] = ss
+        }
+        barrier()
+        var tot = 0.0
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            tot += part[slot * 64u + sgi]
+            sgi++
+        }
+        return tot
+    }
 }
 
 //! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md sec.2.2ap): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
@@ -3256,6 +3273,10 @@ def facm2_pick(r, c : uint; v, o : float) : float => max(v + FA_MAX_BIAS, o)
 [spirv_per_element]
 def facm2_mask(r, c : uint; v : float; qbase, kbase, win : uint) : float => (kbase + c > qbase + r || (win != 0u && kbase + c + win <= qbase + r)) ? -1.7e38 : v
 
+//! the bidirectional stamps' only mask: the key columns past kvlen
+[spirv_per_element, unused_argument(r)]
+def facm2_tail(r, c : uint; v : float; kbase, kvlen : uint) : float => kbase + c >= kvlen ? -1.7e38 : v
+
 [spirv_per_element, unused_argument(r, c)]
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 
@@ -3299,6 +3320,7 @@ class template FaT {
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
     @template_constant SINK : bool = false       //! the sink stamps (gpt-oss): the online softmax seeds its max with the head's sink logit and its sum with one - the phantom key with no value row
     @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
+    @template_constant CAUSAL : bool = true      //! the bidirectional stamps (the vision towers' encoder attention) clear it: every query row attends every key row, and the mask keeps only the tail past kvlen
     @workgroup @template_gate = KHR fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup @template_gate = KHR fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup @template_gate = KHR fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
@@ -3352,7 +3374,7 @@ class template FaT {
                 o[z] = 0.0
             }
             let qbase = pa.w0 + q0
-            let kend = pa.w0 + min(q0 + 16u, pa.rows)
+            let kend = CAUSAL ? pa.w0 + min(q0 + 16u, pa.rows) : kvlen
             var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u
             barrier()
             while [dont_unroll] (j < kend) {
@@ -3377,9 +3399,15 @@ class template FaT {
                     let idx = srow * 64u + key_col0 + uint(c)
                     let gk = j + key_col0 + uint(c)
                     let v = CAP ? softcap_exp(fs[idx], pa.cap) : fs[idx]
-                    let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
-                    fs[idx] = sv
-                    mloc = max(mloc, sv)
+                    static_if (CAUSAL) {
+                        let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
+                        fs[idx] = sv
+                        mloc = max(mloc, sv)
+                    } else {
+                        let sv = gk >= kvlen ? -3.0e38 : v
+                        fs[idx] = sv
+                        mloc = max(mloc, sv)
+                    }
                 }
                 mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
                 mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
@@ -3476,7 +3504,7 @@ class template FaT {
             }
             var o : OF
             let qbase = pa.w0 + q0
-            let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+            let kmax = CAUSAL ? pa.w0 + min(q0 + 64u, pa.rows) : kvlen   // causal bound (exclusive) of the tile's last row; every key row on the bidirectional stamps
             // a sliding layer's first step: the step below the tile's first query's window start
             var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u
             while [dont_unroll] (j < kmax) {
@@ -3487,8 +3515,14 @@ class template FaT {
                 static_if (CAP) {
                     coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
                 }
-                if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
-                    coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
+                static_if (CAUSAL) {
+                    if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
+                        coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
+                    }
+                } else {
+                    if (j + BC > kvlen) {   //! the padded tensor load reads the tail past kvlen as zero rows: a zero score, not a masked one
+                        coopmatPerElement(s, s, @@facm2_tail, j, kvlen)
+                    }
                 }
                 var rmax : SACC
                 coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
@@ -3567,6 +3601,13 @@ class FaCm2H64F16 : FaH64T {
     override OUT16 = true
 }
 
+//! the bidirectional twin (the vision towers' encoder attention: gemma4v at its native head width)
+[vk_dispatch(name = "fa_cm2_h64_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64Bidir : FaH64T {
+    typedef OT = float
+    override CAUSAL = false
+}
+
 [vk_dispatch(name = "fa_cm2_h64_sink_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H64Sink : FaH64T {
     typedef OT = float
@@ -3606,6 +3647,13 @@ class FaCm2H128 : FaH128T {
 class FaCm2H128F16 : FaH128T {
     typedef OT = float16
     override OUT16 = true
+}
+
+//! the bidirectional twin: the padded route of the 72- and 80-wide tower heads (gemma3v, qwen3v, qwen25v), zero pads exact
+[vk_dispatch(name = "fa_cm2_h128_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128Bidir : FaH128T {
+    typedef OT = float
+    override CAUSAL = false
 }
 
 // hs=256 (the deltanet hybrids' attention heads) at Bc=32; the gated leaves ride the [q | gate] panel
@@ -3693,6 +3741,13 @@ class FaKhrH64 : FaH64T {
     typedef OT = float
 }
 
+[vk_dispatch(name = "fa_khr_h64_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64Bidir : FaH64T {
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+}
+
 [vk_dispatch(name = "fa_khr_h64_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH64F16 : FaH64T {
     override KHR = true
@@ -3718,6 +3773,13 @@ class FaKhrH64SinkF16 : FaH64T {
 [vk_dispatch(name = "fa_khr_h128_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH128 : FaH128T {
     override KHR = true
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h128_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128Bidir : FaH128T {
+    override KHR = true
+    override CAUSAL = false
     typedef OT = float
 }
 
@@ -3776,7 +3838,13 @@ def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
 }
 
 //! the refusals are `panic`s, not `verify`s: a `verify` prints a stack walk before it throws, and the refusal cell probes them under `recover`
-def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
+def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) {
+    if (bidir && (gated || cap || sink || f16)) {
+        panic("vk flash: the bidirectional stamps take no gate, cap, sink or f16 output")
+    }
+    if (bidir && hs != 64l && hs != 128l) {
+        panic("vk flash: the bidirectional stamps serve head sizes 64 and 128 alone")
+    }
     if (khr && gated) {
         panic("vk flash: the KHR flash tile has no gated stamp")
     }
@@ -3797,8 +3865,13 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
 def private fa_sink_ensure(khr, f16 : bool) : bool
     => khr ? (f16 ? ensure_fa_khr_h64_sink_f16_cls() : ensure_fa_khr_h64_sink_cls()) : (f16 ? ensure_fa_cm2_h64_sink_f16_cls() : ensure_fa_cm2_h64_sink_cls())
 
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink)
+//! `bidir` picks the vision towers' bidirectional twins (h64 and h128, f32 output, no gate, cap or sink)
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    if (bidir) {
+        if (hs == 64l) return khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
+        return khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+    }
     if (sink) return fa_sink_ensure(khr, f16)
     if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
     if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
@@ -3826,9 +3899,19 @@ def private fa_sink_enc(khr, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; v
     }
 }
 
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink)
-    if (sink) {
+def private fa_bidir_enc(khr : bool; hs : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {
+    if (khr) {
+        if (hs == 64l) { enc_fa_khr_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_bidir_cls(raw, h, s, pc, wgs) }
+    } else {
+        if (hs == 64l) { enc_fa_cm2_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_bidir_cls(raw, h, s, pc, wgs) }
+    }
+}
+
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    if (bidir) {
+        fa_bidir_enc(khr, hs, raw, h, s, pc, wgs)
+    } elif (sink) {
         fa_sink_enc(khr, f16, raw, h, s, pc, wgs)
     } elif (hs == 64l) {
         if (khr) {
@@ -8806,6 +8889,620 @@ class QkRms : RmsWgBase {
             if (two) {
                 krows[vb + t1] = v1 * inv
             }
+        }
+    }
+}
+
+struct TowerRowArgs {
+    d : uint
+    rows : uint     //! rows in the dispatch (one workgroup each)
+    woff : uint     //! the norm weight row's base in wn
+    eps : float
+    ln_on : uint
+    lnoff : uint
+}
+
+//! rms rows against a weight row: out[r] = rmsnorm(x[r]) . w in the CPU `rmsnorm`'s (x . inv) . w order - one workgroup
+//! a row; a per-head norm is this with `d` = the head width and `rows` = tokens x heads (a weightless one reads a ones row)
+[vk_dispatch(name = "tower_rms_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRms : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 outx : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerRowArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rms_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let v = x[base + i]
+            ss += v * v
+            i += 256u
+        }
+        let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
+        i = tid
+        while (i < pa.d) {
+            outx[base + i] = (x[base + i] * inv) * wn[pa.woff + i]
+            i += 256u
+        }
+    }
+}
+
+struct TowerClampArgs {
+    nelem : uint    //! a 4-multiple (every tower width is a 64-multiple)
+    lo : float
+    hi : float
+}
+
+//! rows clamped in place to [lo, hi] - a gemma4v ClippableLinear's output bounds
+[vk_dispatch(name = "tower_clamp_cls", grid = "wgs", params = "wgs : int64")]
+class TowerClamp {
+    @ssbo @binding = 0 x : array<float>
+    @push_constant pa : TowerClampArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            x[e] = clamp(x[e], pa.lo, pa.hi)
+            x[e + 1u] = clamp(x[e + 1u], pa.lo, pa.hi)
+            x[e + 2u] = clamp(x[e + 2u], pa.lo, pa.hi)
+            x[e + 3u] = clamp(x[e + 3u], pa.lo, pa.hi)
+        }
+    }
+}
+
+//! the f16 feed of a clamped GEMM input: outh = f16(clamp(src, lo, hi)) - the input bounds applied on the way into the
+//! tile, so the normed rows stay whole for the next GEMM's own bounds
+[vk_dispatch(name = "tower_clamp_cvt_cls", grid = "wgs", params = "wgs : int64")]
+class TowerClampCvt {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outh : array<float16>
+    @push_constant pa : TowerClampArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cvt_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            outh[e] = float16(clamp(src[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 1u] = float16(clamp(src[e + 1u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 2u] = float16(clamp(src[e + 2u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e + 3u] = float16(clamp(src[e + 3u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+        }
+    }
+}
+
+struct TowerClampRqArgs {
+    inbase : uint
+    nblk : uint
+    lo : float
+    hi : float
+}
+
+//! the Q8_0 feed of a clamped GEMM input: the requant over the clamped elements (the mm and KHR modes' tile feed)
+[ |> template_struct_instance]
+class template TowerClampRqT : RqT {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<int8>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : TowerClampRqArgs
+
+    def override load4(eb : uint) : float4 {
+        let e = pa.inbase + eb
+        return float4(clamp(src[e], pa.lo, pa.hi), clamp(src[e + 1u], pa.lo, pa.hi), clamp(src[e + 2u], pa.lo, pa.hi), clamp(src[e + 3u], pa.lo, pa.hi))
+    }
+    def override load1(e : uint) : float => clamp(src[pa.inbase + e], pa.lo, pa.hi)
+}
+
+[vk_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClampRq : TowerClampRqT {}
+
+struct TowerRopeArgs {
+    nheads : uint
+    hs : uint       //! the head width: the compact row is nheads x hs wide, the rotated pairs per axis hs / 4
+    rows : uint
+}
+
+//! the 2D neox rope over q or k rows in place, the CPU `rope_neox_2d_rows`'s form: per head the x axis rotates the
+//! pairs (j, j + pairs) of its first half against the row's x table, the y axis the same pairs of its second half
+//! against the y table (one packed table row is [cx | sx | cy | sy], `pairs` each) - one thread per (row, head, pair), both axes
+[vk_dispatch(name = "tower_rope2d_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRope2d {
+    @ssbo @binding = 0 v : array<float>
+    @ssbo @binding = 1 tabs : array<float>
+    @push_constant pa : TowerRopeArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rope2d_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let pairs = pa.hs / 4u
+        let d = pa.nheads * pa.hs
+        let per_row = pa.nheads * pairs
+        if (gid < pa.rows * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let base = row * d + (hp / pairs) * pa.hs
+            let j = hp % pairs
+            let tb = row * 4u * pairs
+            let x0 = v[base + j]
+            let x1 = v[base + j + pairs]
+            let cx = tabs[tb + j]
+            let sx = tabs[tb + pairs + j]
+            v[base + j] = x0 * cx - x1 * sx
+            v[base + j + pairs] = x0 * sx + x1 * cx
+            let yb = base + pa.hs / 2u
+            let y0 = v[yb + j]
+            let y1 = v[yb + j + pairs]
+            let cy = tabs[tb + 2u * pairs + j]
+            let sy = tabs[tb + 3u * pairs + j]
+            v[yb + j] = y0 * cy - y1 * sy
+            v[yb + j + pairs] = y0 * sy + y1 * cy
+        }
+    }
+}
+
+//! the residual seam of a tower block: x[r] += rmsnorm(y[r]) . wpost (the branch's post-norm, `woff`), then under `ln_on`
+//! xb[r] = rmsnorm(x[r]) . wln (the next branch's pre-norm, `lnoff`) - the CPU loop's post-norm, add and pre-norm in one workgroup a row
+[vk_dispatch(name = "tower_post_add_cls", grid = "wgs", params = "wgs : int64")]
+class TowerPostAdd : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 xb : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @push_constant pa : TowerRowArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_post_add_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let v = y[base + i]
+            ss += v * v
+            i += 256u
+        }
+        let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
+        var ss2 = 0.0
+        i = tid
+        while (i < pa.d) {
+            let xv = x[base + i] + (y[base + i] * inv) * wn[pa.woff + i]
+            x[base + i] = xv
+            ss2 += xv * xv
+            i += 256u
+        }
+        if (pa.ln_on != 0u) {
+            let inv2 = wg_rms_inv(ss2, pa.d, pa.eps, 1u)
+            i = tid
+            while (i < pa.d) {
+                xb[base + i] = (x[base + i] * inv2) * wn[pa.lnoff + i]
+                i += 256u
+            }
+        }
+    }
+}
+
+struct TowerGegluArgs {
+    nelem : uint    //! a 4-multiple
+    glo : float     //! the gate GEMM's output bounds
+    ghi : float
+    ulo : float     //! the up GEMM's
+    uhi : float
+    dlo : float     //! the down GEMM's input bounds
+    dhi : float
+}
+
+//! GEGLU-quick with the gemma4v bounds: g = clamp(gelu_quick(clamp(g)) * clamp(u)) in place over the gate rows -
+//! gelu_quick(x) = x . sigmoid(1.702 x), the CPU LUT's closed form (the LUT rounds through f16, so approx bars)
+[vk_dispatch(name = "tower_geglu_cls", grid = "wgs", params = "wgs : int64")]
+class TowerGeglu {
+    @ssbo @binding = 0 g : array<float>
+    @ssbo @binding = 1 u : array<float>
+    @push_constant pa : TowerGegluArgs
+
+    def geglu(gv0, uv0 : float) : float {
+        let gv = clamp(gv0, pa.glo, pa.ghi)
+        let uv = clamp(uv0, pa.ulo, pa.uhi)
+        let a = gv * (1.0 / (1.0 + exp(-1.702 * gv)))
+        return clamp(a * uv, pa.dlo, pa.dhi)
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_geglu_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            g[e] = geglu(g[e], u[e])
+            g[e + 1u] = geglu(g[e + 1u], u[e + 1u])
+            g[e + 2u] = geglu(g[e + 2u], u[e + 2u])
+            g[e + 3u] = geglu(g[e + 3u], u[e + 3u])
+        }
+    }
+}
+
+struct TowerLnArgs {
+    d : uint
+    rows : uint
+    woff : uint     //! the norm weight row's base in wn, its bias row at boff
+    boff : uint
+    eps : float
+    ln_on : uint
+    lnoff : uint
+    lnboff : uint
+}
+
+//! layernorm rows against a weight and a bias row: out[r] = (x[r] - mean) . inv . w + b, the CPU `layernorm`'s form with
+//! its mean and variance as workgroup sums - one workgroup a row
+[vk_dispatch(name = "tower_ln_cls", grid = "wgs", params = "wgs : int64")]
+class TowerLn : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 outx : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_ln_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            s1 += x[base + i]
+            i += 256u
+        }
+        let s1w = wg_sum(s1, 0u)
+        let mean = s1w / float(pa.d)
+        var s2 = 0.0
+        i = tid
+        while (i < pa.d) {
+            let dv = x[base + i] - mean
+            s2 += dv * dv
+            i += 256u
+        }
+        let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+        i = tid
+        while (i < pa.d) {
+            outx[base + i] = (x[base + i] - mean) * inv * wn[pa.woff + i] + wn[pa.boff + i]
+            i += 256u
+        }
+    }
+}
+
+//! the residual seam of a biased block: x[r] += y[r] + b (the branch's output bias at `boff`), then under `ln_on`
+//! xb[r] = layernorm(x[r]) . wln + bln (the next branch's pre-norm at `lnoff` / `lnboff`; the RMS stamp: rms(x[r]) . wln)
+//! - one workgroup a row
+[ |> template_struct_instance]
+class template TowerPostAddLnT : RmsWgBase {
+    @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v), not the layernorm
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 xb : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let xv = x[base + i] + (y[base + i] + wn[pa.boff + i])
+            x[base + i] = xv
+            static_if (RMS) {
+                s1 += xv * xv
+            } else {
+                s1 += xv
+            }
+            i += 256u
+        }
+        if (pa.ln_on != 0u) {
+            static_if (RMS) {
+                let inv = wg_rms_inv(s1, pa.d, pa.eps, 0u)
+                i = tid
+                while (i < pa.d) {
+                    xb[base + i] = (x[base + i] * inv) * wn[pa.lnoff + i]
+                    i += 256u
+                }
+            } else {
+                let s1w = wg_sum(s1, 0u)
+                let mean = s1w / float(pa.d)
+                var s2 = 0.0
+                i = tid
+                while (i < pa.d) {
+                    let dv = x[base + i] - mean
+                    s2 += dv * dv
+                    i += 256u
+                }
+                let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+                i = tid
+                while (i < pa.d) {
+                    xb[base + i] = (x[base + i] - mean) * inv * wn[pa.lnoff + i] + wn[pa.lnboff + i]
+                    i += 256u
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddLn : TowerPostAddLnT {}
+
+[vk_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddRms : TowerPostAddLnT {
+    override RMS = true
+}
+
+struct TowerBiasArgs {
+    d : uint        //! the row width, a 4-multiple
+    nelem : uint
+    boff : uint     //! the bias row's base in wn
+    gelu_on : uint
+}
+
+//! a GEMM output's bias row added in place, and under `gelu_on` the tanh GELU the SigLIP FFN takes - the CPU `gelu_tanh_lut`'s
+//! form with its f16 rounding of the input and the output (the LUT is the f16-domain twin of this)
+[vk_dispatch(name = "tower_bias_act_cls", grid = "wgs", params = "wgs : int64")]
+class TowerBiasAct {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @push_constant pa : TowerBiasArgs
+
+    def gelu_tanh(v : float) : float {
+        if (v <= -10.0) {
+            return 0.0
+        }
+        if (v >= 10.0) {
+            return v
+        }
+        let xr = float(float16(v))
+        let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
+        return float(float16(g))
+    }
+
+    def biased(e : uint) : float {
+        let v = x[e] + wn[pa.boff + e % max(1u, pa.d)]
+        if (pa.gelu_on == 0u) {
+            return v
+        }
+        let g = gelu_tanh(v)
+        return g
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            x[e] = biased(e)
+            x[e + 1u] = biased(e + 1u)
+            x[e + 2u] = biased(e + 2u)
+            x[e + 3u] = biased(e + 3u)
+        }
+    }
+}
+
+struct TowerRestrideArgs {
+    rows : uint
+    rows_pad : uint //! the padded panel's row cap (the flash tile's 64-row alignment): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
+    nheads : uint
+    hs : uint
+    hsp : uint
+    sstride : uint  //! the compact rows' stride and the column their heads start at (a fused [q | k | v] row: 3d and 0 / d / 2d)
+    soff : uint
+}
+
+//! the head restride between the compact rows [rows x heads x hs] (at `sstride` / `soff`) and the flash tile's padded panel
+//! [rows_pad x heads x hsp]: PAD writes the padded panel with zero pads and zero rows past `rows` (f16 under OUT16 - the K/V
+//! shadows, clamped to the half range - else f32, the q panel), the other way reads the compact row back off the padded f32
+//! output - one thread an element of the padded space
+[ |> template_struct_instance]
+class template TowerRestrideT {
+    @template_constant PAD : bool = true
+    @template_constant OUT16 : bool = false
+    @template_constant OUT32 : bool = true   //! the f32 destination's gate: the f16 stamp clears it as it sets OUT16
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 @template_gate = OUT32 dst : array<float>
+    @ssbo @binding = 2 @template_gate = OUT16 dsth : array<float16>
+    @push_constant pa : TowerRestrideArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let per_row = pa.nheads * pa.hsp
+        let rows_out = PAD ? pa.rows_pad : pa.rows
+        if (gid < rows_out * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let head = hp / pa.hsp
+            let lane = hp % pa.hsp
+            let ci = row * pa.sstride + pa.soff + head * pa.hs + lane
+            static_if (PAD) {
+                let v = lane < pa.hs && row < pa.rows ? src[ci] : 0.0
+                static_if (OUT16) {
+                    dsth[gid] = float16(clamp(v, -65504.0, 65504.0))
+                } else {
+                    dst[gid] = v
+                }
+            } else {
+                if (lane < pa.hs) {
+                    dst[ci] = src[gid]
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "tower_hpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
+class TowerHeadPad : TowerRestrideT {}
+
+[vk_dispatch(name = "tower_hpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadPad16 : TowerRestrideT {
+    override OUT16 = true
+    override OUT32 = false
+}
+
+[vk_dispatch(name = "tower_hunpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadUnpad : TowerRestrideT {
+    override PAD = false
+}
+
+struct TowerGluArgs {
+    d : uint        //! the row width, a 4-multiple
+    nelem : uint
+    bgoff : uint    //! the gate and up bias rows' bases in wn
+    buoff : uint
+}
+
+//! the gated FFN's hidden in place: g = silu(g + bg) . (u + bu) - the two bias rows, the SiLU and the product of the CPU
+//! loop in one pass over the rows
+[vk_dispatch(name = "tower_glu_act_cls", grid = "wgs", params = "wgs : int64")]
+class TowerGluAct {
+    @ssbo @binding = 0 g : array<float>
+    @ssbo @binding = 1 u : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerGluArgs
+
+    def glu(e : uint) : float {
+        let c = e % max(1u, pa.d)
+        let gv = g[e] + wn[pa.bgoff + c]
+        let uv = u[e] + wn[pa.buoff + c]
+        return act_mul_sel(gv, uv, ACT_SILU)
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_glu_act_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            g[e] = glu(e)
+            g[e + 1u] = glu(e + 1u)
+            g[e + 2u] = glu(e + 2u)
+            g[e + 3u] = glu(e + 3u)
+        }
+    }
+}
+
+struct TowerRopeTabArgs {
+    sstride : uint  //! the rows' stride and the column the heads start at (a fused [q | k | v] row)
+    soff : uint
+    nheads : uint
+    hs : uint       //! the head width: the rotary half is hs / 2 - pairs (j, j + half), one table row of `half` cos and `half` sin a token
+    rows : uint
+}
+
+struct TowerWinArgs {
+    nheads : uint
+    scale : float
+}
+
+//! 256 threads = 64 query rows x 4 lanes: the lanes split the keys for the scores and the head's dims for the output; the
+//! head width is the stamp's HS and the compact row nheads x HS wide
+[ |> template_struct_instance]
+class template TowerWinAttnT {
+    @template_constant HS : uint = 80u   //! the head width served (the qwen25v family's 80)
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 k : array<float>
+    @ssbo @binding = 2 v : array<float>
+    @ssbo @binding = 3 att : array<float>
+    @ssbo @binding = 4 wlo : array<uint>   //! window w's rows: wlo[w] .. wlo[w + 1] (64 at most)
+    @workgroup sc : float[4096]   //! the 64 x 64 score block, then the exponentials
+    @push_constant pa : TowerWinArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let wid = gl_WorkGroupID.x
+        let nheads = max(1u, pa.nheads)
+        let d = nheads * HS
+        let w = wid / nheads
+        let hh = wid - w * nheads
+        let lo = wlo[w]
+        let cnt = wlo[w + 1u] - lo
+        let tid = gl_LocalInvocationID.x
+        let r = tid >> 2u
+        let lane = tid & 3u
+        let live = r < cnt
+        let qb = (lo + r) * d + hh * HS
+        if (live) {
+            var j = lane
+            while (j < cnt) {
+                let kb = (lo + j) * d + hh * HS
+                var s = 0.0
+                var i = 0u
+                while (i < HS) {
+                    s += q[qb + i] * k[kb + i]
+                    i++
+                }
+                sc[r * 64u + j] = s * pa.scale
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var m = -3.4028235e38
+            var j = 0u
+            while (j < cnt) {
+                m = max(m, sc[r * 64u + j])
+                j++
+            }
+            j = lane
+            while (j < cnt) {
+                sc[r * 64u + j] = exp(sc[r * 64u + j] - m)
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var l = 0.0
+            var j = 0u
+            while (j < cnt) {
+                l += sc[r * 64u + j]
+                j++
+            }
+            let inv = 1.0 / l
+            var dd = lane
+            while (dd < HS) {
+                var acc = 0.0
+                j = 0u
+                while (j < cnt) {
+                    acc += sc[r * 64u + j] * v[(lo + j) * d + hh * HS + dd]
+                    j++
+                }
+                att[qb + dd] = acc * inv
+                dd += 4u
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
+class TowerWinAttn : TowerWinAttnT {}
+
+//! the full-head NEOX rope over q or k rows in place, the CPU `rope_neox_tab_rows`'s form: one table pair a row shared by
+//! every head (the vision mrope tables), the pairs (j, j + half) rotated - one thread per (row, head, pair)
+[vk_dispatch(name = "tower_rope_tab_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRopeTab {
+    @ssbo @binding = 0 v : array<float>
+    @ssbo @binding = 1 cos_t : array<float>
+    @ssbo @binding = 2 sin_t : array<float>
+    @push_constant pa : TowerRopeTabArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rope_tab_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let half = pa.hs / 2u
+        let per_row = pa.nheads * half
+        if (gid < pa.rows * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let j = hp % half
+            let base = row * pa.sstride + pa.soff + (hp / half) * pa.hs
+            let x0 = v[base + j]
+            let x1 = v[base + j + half]
+            let c = cos_t[row * half + j]
+            let s = sin_t[row * half + j]
+            v[base + j] = x0 * c - x1 * s
+            v[base + j + half] = x0 * s + x1 * c
         }
     }
 }

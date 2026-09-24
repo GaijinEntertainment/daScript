@@ -149,6 +149,13 @@ The MCP tools `export_corpus` / `detect_duplicates` wrap the same two steps.
 
 ## Where this runs in the daslang repo (repo-only)
 
+- Before opening every big PR, run `cmake --build build --config Release --target
+  check_duplicates`: detect-dupe over `daslib`, `utils`, `src` and `modules` (every `tutorials/`
+  and `examples/` folder left out), reporting each exact cluster of 64 tokens or more; it never
+  fails the build, and no CI lane or other target runs it. Check the clusters your branch
+  touches. A cluster can be a false positive: "exact" means identical after identifiers, types
+  and literals are renamed, so copies that differ on a constant or bind different globals still
+  match - read each pair before folding.
 - The per-PR audit is the `dupe-auditor` agent (`.claude/agents/dupe-auditor.md`): one
   instance over the whole diff, launched in `skills/internal/make_pr.md` step 0a beside the
   `tdd-auditor`, and in the surfacing phase of `skills/internal/review_round.md`. Its DUPLICATE

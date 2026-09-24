@@ -72,10 +72,17 @@ A float operand keeps the op off its native fast path.
 
 **A global-rooted-array read - a module global, a `@workgroup` array or a `self.<member>`
 resource read in a kernel body or in a `def` it calls - that a diff adds, makes reach an index it
-did not reach before, makes happen where a condition used to keep it out, or makes happen in a
-compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it did not appear in
-before (a removed `static_if` or `@template_gate`, or a widened constant the gate switches on),
-is in range on every dispatch it happens on: its index sits inside the region that dispatch's
-own bound defines, or inside slack - an allocation past that region's end that the kernel's
-module-root `ARCHITECTURE*.md` names.** A condition keeps a read out when it is a guard on the
-read, a clamp landing inside the region, or a guard on the store of a block the read loads whole.
+did not reach before, or makes happen where a condition used to keep it out, is in range on every
+dispatch it happens on: its index sits inside the region that dispatch's own bound defines, or
+inside slack - an allocation past that region's end that the kernel's module-root
+`ARCHITECTURE*.md` names.** A run-time condition keeps a read out when it is a guard on the read,
+a clamp landing inside the region, or a guard on the store of a block the read loads whole.
+
+**A global-rooted-array read - a module global, a `@workgroup` array or a `self.<member>` resource
+read in a kernel body or in a `def` it calls - that a diff makes happen in a compiled
+`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it did not appear in before -
+through a removed `static_if` or `@template_gate`, or a widened constant the gate switches on - is
+in range on every dispatch of that variant: inside the region the dispatch's own bound defines, or
+inside slack - an allocation past that region's end that the kernel's module-root
+`ARCHITECTURE*.md` names.** The gate that keeps the read out of the variant is its only range
+check there.

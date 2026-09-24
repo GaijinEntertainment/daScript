@@ -165,6 +165,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tower_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
@@ -279,7 +280,7 @@ def area_tests(area : string) : array<string> {
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
-                    "test_vision_embedder.das" ]
+                    "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
         return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
@@ -331,7 +332,7 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision",
+    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision", "dasllama_vulkan_tower" => "vision",
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_parakeet" => "audio",
@@ -385,7 +386,7 @@ def areas_for_path(path : string) : array<string> {
         if (name |> starts_with("_")) {
             if (name |> starts_with("_tts_")) {
                 return <- ["tts"]
-            } elif (name == "_vision_oracle.das") {
+            } elif (name == "_vision_oracle.das" || name == "_tower_twin.das") {
                 return <- ["vision"]
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
                 return <- ["llm"]

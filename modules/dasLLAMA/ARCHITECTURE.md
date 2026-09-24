@@ -49,8 +49,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   and the per-format slots the interleave identity prints.
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that
   measured out, the retained reference arms beside them, and the sanctioned float-A stamps.
-- `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the tower attention routes, and the tower driver's
-  encode chains.
+- `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the Metal tower attention routes, and the Metal
+  tower driver's encode chains; sec.2.2aq-2.2ar: the Vulkan tower's row classes and attention
+  routes, and the Vulkan tower driver's encode chains.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - sec.2.2y-2.2z, 2.2an: the Metal kq split scale plane, the
   iquant GEMV grid read with its f4-slab twin, and the Metal GEMV site abstraction.
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill
@@ -70,7 +71,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   tiles the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
   ladder, the class-pipeline build seat, the MoE expert chain on those tiles, the KHR arm's
   hand-staged kq tile - and the decode GEMV family's lane split by row length.
-- `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o, 2.2an: what a model has to fit on the card
+- `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o, 2.2an, 2.2as: what a model has to fit on the card
   before the driver runs - the residency plan, and the GPU-slot marks swap that lets one slot
   serve many models.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - sec.2.2ao-2.2ap: the N-row token command a batched step's

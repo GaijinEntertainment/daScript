@@ -90,7 +90,7 @@ def document_module_vulkan_window() {
         group_by_regex("Surfaces",   mod, %regex~^(create_surface|queue_family_supports_present)$%%),
         group_by_regex("Swapchain",  mod, %regex~^(create_swapchain|recreate_swapchain|build_swapchain_framebuffers)$%%),
         group_by_regex("Frame sync", mod, %regex~^create_frame_sync$%%),
-        group_by_regex("Frame loop", mod, %regex~^(draw_frame|present_frame)$%%),
+        group_by_regex("Frame loop", mod, %regex~^(draw_frame|present_frame|set_dynamic_viewport)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))
     )
     document("Window — surface, swapchain, frame sync, and the present loop", mod, "vulkan_window.rst", groups)

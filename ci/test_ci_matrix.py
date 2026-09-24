@@ -162,6 +162,19 @@ class WorkflowShapes(unittest.TestCase):
             for block in saves:
                 self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
 
+    def test_every_workflow_restores_sccache_by_prefix(self):
+        # a consumer in another workflow that restores a slot by its exact old name would go cold
+        # the moment the writer moved to run keys
+        for name in sorted(os.listdir(WORKFLOWS)):
+            if not name.endswith(".yml"):
+                continue
+            text = self.read(name)
+            for block in re.findall(r"uses: actions/cache/restore@v4\n((?:      .*\n)+)", text):
+                if "key: sccache-" not in block:
+                    continue
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+                self.assertRegex(block, r"restore-keys: sccache-[^\n]+@\n", name)
+
     def test_master_push_builds_are_not_cancelled_by_the_next_merge(self):
         text = self.read("build.yml")
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", text)

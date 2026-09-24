@@ -15,7 +15,8 @@ dispatch-less base class whose methods the emitter splices flat into each derivi
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
-twin ignores that field.**
+twin ignores that field; a field a `@template_gate` omits on one twin is a shared field still,
+and keeps the number the other twin binds it at.**
 
 **A kernel class whose body differs from a sibling's only on such an axis is a defect: twins
 stamp one `class template`, derive from one base shell, or - where the axis is a run-time count -
@@ -23,11 +24,10 @@ share one class whose body reads the count from its kargs.** Body divergence is 
 `@template_constant`, by an overridden method spliced flat at emission, or by a run-time value
 the builder passes.
 
-**Two kernel bodies that compile to separate shader modules and that a test cell
-(`tests/test_vulkan_kernels.das`) or a regions file (`tests/test_gpu_resident_regions_*.das`)
-holds bit for bit against each other spell every multiply that feeds an add as `mad` in both, on
-the path the compare covers - except a product both bodies add from one shared method text, whose
-CPU oracle replays that text.** A driver decides per shader module whether to contract a
+**Two kernel bodies that compile to separate shader modules and that any cell under
+`modules/dasLLAMA/tests/` holds bit for bit against each other spell as `mad` in both, on the path
+the compare covers, every multiply that feeds an add and that is not one product both bodies take
+from one shared method text.** A driver decides per shader module whether to contract a
 multiply-add into one fma, so two bodies spelled alike round a ulp apart on a driver that
 contracts one and not the other; `mad` is the fused instruction by definition and leaves the
 driver nothing to choose. The shared text is one source in both modules, and a `mad` there would
@@ -53,15 +53,17 @@ the test cell that pins it.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer to a
-binding whose fields its compiled body, inherited code included, never reads is a defect: gate
-the field with `@template_gate` where a template constant decides it, and where the family
-shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered
-kernel-binding asymmetries.** A binding counts as read when the compiled body reads any field
-declared on it - fields in the stamp or in the shell may share a binding, `@role = "alias"` marks
-such a view - including a field read only under a run-time flag.
+binding whose fields its compiled body, inherited code included, never reads or writes is a
+defect: gate the field with `@template_gate` where a template constant decides it, and where the
+family shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md` sec.1.5's
+ledgered kernel-binding asymmetries.** A binding counts as used when the compiled body reads or
+writes any field declared on it - fields in the stamp or in the shell may share a binding,
+`@role = "alias"` marks such a view - including a field touched only under a run-time flag.
 
-**A forked kernel class carries a `//!` line above its `[metal_dispatch]` / `[vk_dispatch]`
-declaration naming the body difference that keeps it out of its former siblings' template.**
+**A diff that moves a kernel class out of the class template its siblings stamp, or off the base
+shell they derive from, gives the class a `//!` line above its `[metal_dispatch]` /
+`[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
+shell.**
 
 **A `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes after arming - a binding
 filled before the first encode and never written again - carries `@role = "weight"` on a field at
@@ -128,6 +130,6 @@ builder instead.** Binding it separately adds a second place to get it wrong.
 operand or a subscript, but not as the whole right-hand side of a `let` or an assignment -
 returns its value in one statement after compile-time folding: an arrow form (`=>`), or a
 `static_if` whose every arm is one `return`; a method that needs more than one statement hands
-its value back through a `var T&` parameter instead.** The emitter splices such a nested call as
-one expression, so a body that folds to more than one statement reaches the kernel as a
-statement and its value never arrives.
+its value back through a `var T&` parameter instead.** A kernel class compiles on both emitters
+and as its own CPU oracle, and only a one-statement body means the same thing on all three when
+spliced into a larger expression.

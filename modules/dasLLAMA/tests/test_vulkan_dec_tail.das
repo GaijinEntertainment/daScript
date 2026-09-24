@@ -39,10 +39,6 @@ let private STRIDE = 1_000_000l  // plane offsets, far apart
 let private ABS_BAR = 2.0e-3     // the reference mirrors every device rounding: rows agree to ~1e-4 of their max
 let private REL_BAR = 1.0e-3
 
-def private f16r(v : float) : float => f16_to_f32(f32_to_f16(v))
-
-def private silu(v : float) : float => v / (1.0 + exp(-v))
-
 def private fill_row(var x : array<float>; n : int64; phase : float) {
     x |> resize(n)
     for (i in range64(n)) {

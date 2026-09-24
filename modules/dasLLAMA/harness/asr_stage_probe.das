@@ -8,7 +8,7 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_math
 require dasllama/dasllama_common   // forward_profile_reset/report — the decoder-engine buckets
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec_step — the all-Metal probe arm
-require audio
+require _audio_probe_fixture
 require math   // the parakeet mel worker resolves log at the instantiation site
 require daslib/clargs
 require daslib/jobque_boost
@@ -64,32 +64,6 @@ struct ProbeArgs {
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
     help : bool
-}
-
-def load_audio_16k_mono(path : string) : array<float> {
-    var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))
-    if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
-        panic("cannot open audio file '{path}'")
-    }
-    var out : array<float>
-    let chunk = 65536
-    var buf : array<float>
-    buf |> resize(chunk)
-    while (true) {
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(buf[0])), uint64(chunk)))
-        break if (got <= 0)
-        out |> reserve(length(out) + got)
-        for (i in range(got)) {
-            out |> push(buf[i])
-        }
-        break if (got < chunk)
-    }
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
-    return <- out
 }
 
 def run_once(m : AsrModel; samples : array<float>; lang : string) {

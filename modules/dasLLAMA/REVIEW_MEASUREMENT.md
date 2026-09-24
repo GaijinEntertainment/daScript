@@ -36,15 +36,17 @@ or serves, other than that run's own flags named above.
 
 A board cell is a run `performance/gen_bench_records.das` spawns, or a manual
 `benchmarks/lcpp_bench.das` cell its `PROFILE.md` section documents, whose reading lands as a row
-of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it never writes the
-store. A reading an instrument under `harness/` produces is not a board cell, whether or not it
-writes a record. The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`
-rather than as the released exe. A `-jit` reading is a wall or rate, or a ratio of two, that an
-instrument - the `-jit` script included - printed while running under `-jit`. A rig leg is a child cell
-`performance/gen_bench_records.das` spawns whose record row has `engine` `das`; it is named by
-that row's `(backend, flavor)` pair, whatever the row's `workload` (text rows carry none; others
-are `image-chat`, `asr`, `audio-chat`). A vehicle model is a real model file
-a harness run drives; a harness is the `harness/` script that drove a run, where one did.
+of `performance/records/<box>.json`; a manual cell is minted by running that documented command
+by hand and writing its reading as a row of `performance/records/<box>.json`; an `--oracle`
+re-measure is not a board cell - it never writes the store. A reading an instrument under
+`harness/` produces is not a board cell, whether or not it writes a record. The `-jit` script is
+`benchmarks/lcpp_bench.das` run as a script under `-jit` rather than as the released exe. A `-jit`
+reading is a wall or rate, or a ratio of two, that an instrument - the `-jit` script included -
+printed while running under `-jit`. A rig leg is a child cell `performance/gen_bench_records.das`
+spawns whose record row has `engine` `das`; it is named by that row's `(backend, flavor)` pair,
+whatever the row's `workload` (text rows carry none; others are `image-chat`, `asr`,
+`audio-chat`). A vehicle model is a real model file a harness run drives; a harness is the
+`harness/` script that drove a run, where one did.
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
@@ -96,14 +98,15 @@ including the path a run with no flags and no environment overrides takes.
 change, an artifact that shows the route ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
-ledger), with the flags that run took.** A box cannot mint the row when no rig leg drives the
-leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
-official` does not carry the model.
+ledger), with the flags that run took.** A box cannot mint a spawned cell when no rig leg drives
+the leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
+official` does not carry the model; it can mint a manual cell whenever it can run the documented
+command.
 
-**A diff that changes what a fat exe runs at startup or while serving copies into the PR body
-the `sanity:` lines and the `tune gate:` line of an `lcpp_bench` run of the fat exe the diff
-builds, or says that run printed none.** A fat exe is what `daspkg release --fat <class>` builds
-(`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
+**A diff that changes code a fat exe reaches from its `main` before or during its first served
+request copies into the PR body the `sanity:` lines and the `tune gate:` line of an `lcpp_bench`
+run of the fat exe the diff builds, or says that run printed none.** A fat exe is what `daspkg
+release --fat <class>` builds (`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,

@@ -9,8 +9,8 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — the codec under probe
 require dasllama/dasllama_tokenizer
-require daslib/f16_cvt
 require dasllama/dasllama_env
+require _tq4_probe_fixture
 
 // Is one channel order enough, or is it MoE-shaped? Run SmolLM2 over 5 text domains, learn a
 // pair-granular hot/quiet partition per (layer, head, side) two ways — GLOBAL (pooled, normalized
@@ -36,19 +36,6 @@ def domain_text(d : int) : string {
         return "Der alte Uhrmacher oeffnete seine Werkstatt jeden Morgen um Punkt sieben Uhr, noch bevor die Strassenbahnen durch die enge Gasse fuhren. Auf seinem Tisch lagen winzige Zahnraeder, Federn und Schrauben in flachen Holzschachteln, jede mit einem handgeschriebenen Etikett versehen. Die Kunden brachten ihm Taschenuhren ihrer Grossvaeter, zerbrochene Wanduhren aus Kriegszeiten und manchmal auch moderne Armbanduhren, die kein anderer mehr reparieren wollte. Er arbeitete langsam und gruendlich, mit einer Lupe im Auge und unendlicher Geduld in den Haenden. Am Abend, wenn das Licht schraeg durch die staubigen Fenster fiel, zog er nacheinander alle Uhren auf und lauschte dem vielstimmigen Ticken, das die kleine Werkstatt wie ein Herzschlag erfuellte."
     }
     return "2026-07-12T08:14:03.221Z INFO  worker-3 request accepted id=7f3a92 route=/api/v2/ingest bytes=48211 2026-07-12T08:14:03.409Z DEBUG worker-3 cache miss key=usr:8812:profile ttl=300 2026-07-12T08:14:03.501Z INFO  worker-1 request accepted id=7f3a93 route=/api/v2/query bytes=1022 2026-07-12T08:14:03.688Z WARN  worker-2 slow query ms=1204 table=events shard=11 2026-07-12T08:14:04.012Z INFO  worker-3 response sent id=7f3a92 status=201 ms=791 2026-07-12T08:14:04.100Z ERROR worker-4 upstream timeout host=10.0.3.17 port=9200 retry=1 2026-07-12T08:14:04.315Z INFO  worker-1 response sent id=7f3a93 status=200 ms=814 2026-07-12T08:14:04.606Z DEBUG worker-2 gc pause ms=12 heap=412MB 2026-07-12T08:14:05.001Z INFO  worker-4 upstream recovered host=10.0.3.17 attempts=2"
-}
-
-// probe-local 8-bit symmetric amax block quant (f16-rounded scale), mixed-arm hot block
-def quant_int8_block(var v : array<float>; i0, n : int64) {
-    var amax = 0.0
-    for (j in range64(i0, i0 + n)) {
-        amax = max(amax, abs(v[j]))
-    }
-    let d = f16_to_f32(f32_to_f16(amax / 127.0))
-    let id = d != 0.0 ? 1.0 / d : 0.0
-    for (j in range64(i0, i0 + n)) {
-        v[j] = float(clamp(int(floor(v[j] * id + 0.5)), -127, 127)) * d
-    }
 }
 
 // mixed 8/4 rel-MSE of one (layer, head, side, session) row set under a given channel order

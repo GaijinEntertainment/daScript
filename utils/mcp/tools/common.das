@@ -396,10 +396,10 @@ def get_daslang_exe() : string {
 
 var private SOURCE_LINES : table<string; array<string>>
 
-//! the source line (1-based) of a file, "" past its end; a file is read once per process
+//! the source line (1-based) of a file, "" past its end, without its line ending on a CRLF checkout; a file is read once per process
 def public source_line(file : string; line : int) : string {
     if (!key_exists(SOURCE_LINES, file)) {
-        SOURCE_LINES[file] <- split(fread(file), "\n")
+        SOURCE_LINES[file] <- [for (l in split(fread(file), "\n")); rtrim(l, "\r")]
     }
     var text = ""
     let lines & = unsafe(SOURCE_LINES[file])

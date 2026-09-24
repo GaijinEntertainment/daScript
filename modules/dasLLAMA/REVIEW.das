@@ -148,7 +148,8 @@ var private AUDIO_SEAM_EXEMPT <- {
 }
 
 var private VISION_SEAM_EXEMPT <- {
-    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das"
+    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"
 }
 
 def private carried_families(carrier, kind_enum : string) : array<string> {
@@ -202,6 +203,9 @@ def private collect_das_files(folder : string; var out : array<string>; prune_pr
 }
 
 def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; route_hint : string) {
+    var licensed <- [for (k in keys(exempt)); k]
+    licensed |> sort()
+    let licensed_text = join(licensed, ", ")
     for (fam in carried_families(carrier, kind_enum)) {
         let fam_path = "modules/dasLLAMA/dasllama/{fam}.das"
         if (!fexist(fam_path)) {
@@ -220,7 +224,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
             let text = strip_line_comments(fread(p))
             for (n in names) {
                 if (contains_word(text, n)) {
-                    gate_finding(p, "names {n}, which the {fam} family owns - the carrier is the one seam type; route through it ({route_hint})")
+                    gate_finding(p, "names {n}, which the {fam} family owns - outside the family's own file a family type is named only in the carrier, in the licensed namers ARCHITECTURE_MEDIA.md's carrier charter ledgers ({licensed_text}) and under tests/; route through the carrier ({route_hint})")
                 }
             }
         }
@@ -234,7 +238,7 @@ var private GPU_ROLES_METAL <- {
 }
 
 var private GPU_ROLES_VULKAN <- {
-    "classes", "common", "decode", "prefill", "seams", "dispatch"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false

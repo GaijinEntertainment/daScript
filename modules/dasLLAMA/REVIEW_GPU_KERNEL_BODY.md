@@ -12,29 +12,24 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
 
-**Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
-whether the call carries a uniform attention span - however that parameter is derived; window
-readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
-`decode_decline` instead.**
+**In a kernel's main loop, a branch whose answer is the same for every thread of the dispatch, and
+whose deciding value the host fixes before it records the dispatch, is a defect. This covers a
+bounds guard, a tail guard, a nested loop's own bound, and a push-constant count tested inside an
+`[unroll]` loop whose live iterations run different bodies. Stamp the deciding value - a
+`@template_constant`, or a module constant the class reads where no template instantiates it;
+never a push constant, uniform or kargs field; for a guard outside an `[unroll]` loop, you may
+instead clamp the index so the guarded work runs on a live value and its result is never
+stored.** Inside an `[unroll]` loop a clamp folds every dead iteration against a live one and
+costs what the branch saves, while a count whose every live iteration runs the same body costs
+nothing - the GPU compiler hoists it.
 
-**A per-iteration branch in a kernel's main loop whose answer is the same for every thread of
-the dispatch, and whose deciding value the host fixes before it records the dispatch, is a
-defect - a bounds guard, a tail guard, and a nested loop's own bound all count. Stamp it; for a
-guard, clamping the index so the guarded work runs on a live value and its result is never
-stored also conforms.** Stamped means the deciding value is a `@template_constant`, or - for a
-class no template instantiates - a module constant the class reads. A branch on a push-constant
-count inside an `[unroll]` loop whose every live iteration runs the same body is not this defect:
-the driver reads it once per dispatch, and the clamp form folds every dead iteration against a live
-one, so it costs what the branch saves (the N-column GEMV shell's column guard).
+**A chunk-stepping `[metal_dispatch]` kernel (its main loop steps fixed-size chunks with no
+partial-last-chunk check) declares each alignment it assumes on a value the builder receives - a
+`params=` name or a kargs field - as one `<lhs> % N` item in `requires =`, comma-separated.** The
+generated builder then trips on the first misaligned dispatch instead of reading the next row.
 
-**A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
-a time and never checks for a partial last chunk - declares each alignment it assumes on a value
-the builder receives - a `params=` name or a kargs field - as one
-`<lhs> % N` item in `requires =`, comma-separated.** The generated builder then trips on the
-first misaligned dispatch instead of reading the next row.
-
-**A driver that keeps misaligned shapes off a chunk-stepping kernel - its main loop steps
-fixed-size chunks with no partial-last-chunk check - gates each dispatch site of that kernel on
+**A driver that keeps misaligned shapes off a chunk-stepping kernel (its main loop steps
+fixed-size chunks with no partial-last-chunk check) gates each dispatch site of that kernel on
 that site's own K, the extent that site's loop steps along, never on one gate covering every
 site.**
 
@@ -68,7 +63,7 @@ repeats on every thread of every row's threadgroup, and it grows with the bucket
 **Never test the validity of a row in the bucket-ordered buffer - where each expert owns one
 run of rows - against the pad sentinel `0xFFFFFFFF`; compare the row's per-row bucket entry,
 the one the bucket-building kernel writes, with the live entry count (positions x experts per
-token, `npos * nk`) instead.** Rows past the last expert's stamped tail hold stale pool
+token, `npos * nk`) instead.** Rows past the last expert's written tail hold stale pool
 bytes, not the sentinel, and an equality test sends their token index out of bounds.
 
 **Never put an op every lane of the group must reach together - a `barrier()`, a simdgroup matrix
@@ -79,14 +74,15 @@ bound it with such a value, or hoist the op out.** A lane that exits early, or r
 different number of times, leaves the group unable to complete it.
 
 **An encoder that picks a kernel form whose loop carries no bounds or tail guard, or a stamped
-constant bound in place of one - stamped without one, or generated from a template instance
-that has none - shows that every address the form touches stays inside its buffers'
-allocations.** A `requires =` contract on the class
-is that showing for the dimension it names; an unchecked claim that an extent divides evenly is
-not. A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
+constant - a `@template_constant`, or a module constant the class reads where no template
+instantiates it; never a push constant, uniform or kargs field - bound in place of one, written
+without one or generated from a template instance that has none, shows that every address the
+form touches stays inside its buffers' allocations.** A `requires =` contract on the class is
+that showing for the dimension it names; an unchecked claim that an extent divides evenly is not.
+A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
 corrupts real rows.
 
-**Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
-operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
-pool bytes, so a pad row used as B multiplies stale values (NaN included) into every real row
-of the tile.
+**Never let a pad row reach a `matmul2d` or a staged cooperative tile as an operand; stage it as
+zero, or bound the walk at the live row count. A pad row is a row past a buffer's live count that
+the dispatch producing the buffer did not write.** A pad row holds recycled pool bytes, so one
+used as an operand multiplies stale values (NaN included) into every real row of the tile.

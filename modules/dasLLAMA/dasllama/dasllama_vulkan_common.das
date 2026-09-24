@@ -1176,14 +1176,14 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve, and a MoE stays per op in mm mode"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, and the vision tower driver's KHR route (its bidirectional flash tiles and the qwen25v f16 GEMM off cm2); without it the sdot4 tiles and the chunked attention serve, a MoE stays per op in mm mode, and the tower driver declines `device` off cm2"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
             knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
-            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode; without them the KHR flash tile serves at subgroup 32, and the h128 twin and the chunked attention tiles where it declines"),
+            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode, and the vision tower driver's cm2 route (its bidirectional flash tiles); without them the KHR flash tile serves at subgroup 32, the h128 twin and the chunked attention tiles where it declines, and the tower driver takes its KHR route"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
             knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
@@ -1207,7 +1207,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
-            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves"),
+            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; the vision tower driver binds a tower's gathered weights and its largest scratch buffer as one range each, and declines `shape` past it"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -1801,12 +1801,54 @@ def private arena_drop_shells {
     g_gpu.arenas |> clear()
 }
 
+var private g_vk_drop_hooks : array<function<() : void>>
+
+//! The Vulkan drivers' decline counter: `counts` by reason name (the gates read deltas on them), `total` over every reason,
+//! and the log said once per (who, reason) in the words the caller passes - `who` names the driver and its model family.
+struct VkDeclineCounter {
+    counts : table<string; int64>
+    total : int64
+    said : table<string>
+}
+
+//! Count `reason` for `who`, say it once in `words` (the reason name when empty); answers false so a decline site returns it.
+[cold_path]
+def note(var c : VkDeclineCounter; who, reason : string; words : string = "") : bool {
+    c.counts[reason] = (c.counts?[reason] ?? 0l) + 1l
+    c.total++
+    let key = "{who}/{reason}"
+    if (!key_exists(c.said, key)) {
+        c.said |> insert(key)
+        to_log(LOG_INFO, "dasLLAMA vulkan: {who} declined - {empty(words) ? reason : words}\n")
+    }
+    return false
+}
+
+//! Forget what was said for `who`: the next decline of each reason logs again (a driver calls it as a new model arrives).
+[cold_path]
+def unsay(var c : VkDeclineCounter; who : string) {
+    let prefix = "{who}/"
+    var gone <- [for (k in keys(c.said)); k; where starts_with(k, prefix)]
+    for (k in gone) {
+        c.said |> erase(k)
+    }
+}
+
+//! A driver whose device objects the model drop sweeps (every buffer and descriptor set is model-owned) registers a hook
+//! that forgets its handles; the sweep runs it before the objects die, and the driver rebuilds on its next use.
+def register_vk_drop_hook(fn : function<() : void>) {
+    g_vk_drop_hooks |> push(fn)
+}
+
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
 def vk_drop_model_state {
     if (g_gpu == null) {
         return
+    }
+    for (fn in g_vk_drop_hooks) {
+        invoke(fn)
     }
     if (g_gpu.dry) {
         // dry bake owns no device objects — reset the accounting shells only

@@ -175,9 +175,13 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-windows-64-RelWithDebInfo-none@
       run: |
-        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
-          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
-          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
   ###########################################################
 
   build_windows_release_llvm_nightly:
@@ -284,9 +288,13 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-windows-64-Release-llvm@
       run: |
-        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
-          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
-          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
 
   ###########################################################
 
@@ -414,9 +422,13 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-windows-64-Release-mingw@
       run: |
-        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
-          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
-          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
     # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
     # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
     # `fatal error: 'float.h' file not found`; needs explicit -resource-dir /
@@ -545,9 +557,13 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-windows-64-Release-clangcl@
       run: |
-        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
-          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
-          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
 
   nightly_issue:
     needs:

@@ -12,13 +12,14 @@ its format parameter - into a `KqFmt` or any per-format number resolves it throu
 `kq_fmt_of_id(id, what)`, the `bool` overload whose false branch panics, or a per-format accessor
 that takes the id (`kq_qsb` / `kq_ssb`) - never with a mapping of its own.**
 
-**Outside `dasllama/dasllama_kqformat.das` (the `kq_desc` row and the named stride and
-stream-tag constants it reads), the `ggml_type_bytes` block table (`dasllama/dasllama_gguf.das`),
-and the pins of `tests/test_kqformat.das`, a per-format number - any number that differs between
-`KqFmt` members - under `modules/dasLLAMA/` is read through an accessor of the `kq_desc` row
-(`dasllama/dasllama_kqformat.das`), through `kq_qsb` / `kq_ssb` on a format id
-(`dasllama/dasllama_gemm_schema.das`), or through `kq_disk_bytes` (`dasllama/dasllama_gguf.das`) -
-never written as a literal.** A hand-copied count drifts from the row it restates.
+**A number that differs between `KqFmt` members, written as a literal anywhere under
+`modules/dasLLAMA/` outside `dasllama/dasllama_kqformat.das` (the `kq_desc` rows and the named
+stride and stream-tag constants they read), the `ggml_type_bytes` table
+(`dasllama/dasllama_gguf.das`), `Q8_BLOCK_ELEMS` / `Q8_QPB` / `Q8_SPB`
+(`dasllama/dasllama_gemm_schema.das`) and the pins of `tests/test_kqformat.das`, is a defect: read
+it through a `kq_desc` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on
+a format id, or through a named constant one of those files declares.** A hand-copied count drifts
+from the row it restates.
 
 **A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
 `ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in

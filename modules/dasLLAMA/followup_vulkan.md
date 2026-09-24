@@ -1725,6 +1725,82 @@ module) is independent and can land any time - it is pure structure.
     added: the `[grid_words]` and `kq_tile_stamp` macro diagnostics (no failing fixture), and the
     two decode call sites that now clamp past +-65504 through `cvt_f32_to_f16` where the old cast
     gave +-inf (no plane carries such a value).
+94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER.md`
+    2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
+    x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
+    late blocks' outlier channels is the f16 feed into the f16 GEMM class and the full layers' f16
+    K/V shadows on the padded route. If a caption ever needs the deep bar tightened, the levers
+    are f32 K/V shadows on the full layers (four of 32) and an f32-x GEMM form for the late blocks'
+    feed; the instrument is `test_qwen25v_vulkan_twin`'s whole-tower legs with the bar at what the
+    lever reads.
+95. **The Vulkan tower's speed levers.** Every dispatch is the CPU loop's twin one for one -
+    correctness first. The levers: the cm2 f16 feed (`TowerClampCvt` into the f16 GEMM class) in
+    place of the Q8_0 requant and the q8 batch tile where the device has cm2; fusing the per-row
+    dispatches that sit between two GEMMs (a bias, an activation, a restride) into the GEMM's
+    epilogue or the next class; the head restrides folded into the flash tile's load on the padded
+    route; K and V staged in workgroup memory on the f32 window route (it reads them off the
+    compact rows today). The instrument is `lcpp_bench --image` on the E2B / gemma-3-4b /
+    Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
+98. **The tower planes baked in the tile's layout (decided: every conversion at `.dlim` bake time, no
+    duplicated plane).** The Vulkan flavor of a tower image carries the CPU layout today - the grp
+    interleave with f32 scales - and the driver gathers each block's rows row-major with f16
+    scales on upload (`q8_gather_rows`, the resident MoE driver's precedent). The Vulkan flavor
+    bakes the row-major Q8_0 words and the f16 scales the tiles read instead, so the upload is a
+    copy; the flavor is that box's alone (a `.dlim` is per box identity), and on that box the
+    tower chain's fallback - a decline - reads the baked layout through the row-major q8 kernels
+    with the s16 scale twins, the same rows the driver reads. The evidence is the twin cells on
+    the baked flavor and the E2B image row's first rep (the upload's share of it).
+96. **The batch rails mark a session host-current after reading back its one row.** The N-row
+    token command and the row-at-a-time step (`dasllama_gpu_resident.das`, the two
+    `s.rdec_host_current = !s.device_kv` landings after `g_rdec_regions[r].cnt = pos + 1l`) read
+    back only the row at `pos` and then mark the session's host cache current. A one-row decode
+    marks the session NOT current (the mirror advanced past the last hydration), so a stream that
+    decoded one row at a time and then joins a batched step comes out marked current while the
+    rows between its last hydration and `pos` are still device-only; a later pass to the CPU
+    rails (`rdec_pass_hydrated` is a no-op on a current session) would then compute over a host
+    cache with those rows missing. The sequence: a one-row step (or a device prefill) on a
+    host-cached session, no hydration, then that session inside a batched step, then a pass to
+    the CPU rails. Not reproduced; `tests/_resident_regions.das`'s batched cells hydrate nothing
+    between steps, and no cell passes a batched stream to the CPU afterwards. The fix reads the
+    landing's flag from the session's state before the step (`rdec_has_device_only_rows`) rather
+    than setting it true unconditionally, with a cell that runs the sequence.
+97. **The vision tower arc's templatable sets - the post-arc dedup pass.** The per-PR audits
+    fold DUPLICATEs only; these are the sibling sets the arc left for the folds pass, each with
+    the fold. The tower classes that rebuild an LLM class (`dasllama_vulkan_classes.das`):
+    `TowerPostAdd` and `TowerPostAddLnT<RMS>` are `ClsArAddRms` with `pre_on` / `abias_on` set
+    (and gain its `mad` spelling), `TowerRms` its `add_on = 0` form, `TowerGluAct` plus the
+    `F16Cvt` pass after it is `ActF16B` at a zero row map (one pass per block fewer - a row 95
+    lever too); `TowerLn` / `TowerPostAddLnT`'s layer-norm arm against a layer-norm constant on
+    `ResidualT`, `TowerClamp` / `TowerClampCvt` against `F16Cvt` on an `OUT16` gate
+    (`TowerClampCvt` has no engine caller), `TowerClampRqT` against `RqPlainT` with the bounds in
+    the requant args - each fold moves a chain's dispatch onto an existing stamp, so its evidence
+    is the family twin cells on the pod. The driver's residency pairs
+    (`dasllama_vulkan_tower.das`): `vt_key` / `vt_key_f16` over a region list, `vt_upload` /
+    `vt_upload_f16`, `vt_scratch` / `vt_scratch_f16` (`vt_scratch_max_bytes` already takes the
+    flag) - one builder over a buffer-size table; the four `vt_sets_*` builders on a `vt_sizes`
+    struct plus per-route set helpers; the three `vt_build_sets_*` and the three blocks of
+    `vt_batch_sets` - one table keyed by width class and variant; the three `vt_upload_*` region
+    walks, the schedule-map loops and the `meta_bytes` sums - one region list per family every
+    walker reads; `vt_sched_map` / `vt_gemm_groups` against the prefill's
+    `fill_arena_batch_sched` - one record writer in `dasllama_vulkan_common.das`. The g3v / q3v
+    block tails (25 lines differing in offset field names), the gemma4v clamp-in / GEMM /
+    clamp-out site written four times (Metal's `g4a_mm_site` is the shape), the state resets
+    `vt_release_scratch` / `vt_forget_one` share. `VkDeclineCounter` against Metal's
+    `DeclineCounter` (and the say-once tables in `dasllama_gpu_tier.das` /
+    `dasllama_gpu_resident.das`) - one backend-neutral counter; the engage-counter bump written
+    four times here and eight in the Metal driver - a `TowerEngage` in `dasllama_tower.das`.
+    `wg_sum` against `wg_rms_inv` (the fold moves eighteen decode stamps by 108 bytes - a fold
+    takes the stamp source-diff evidence and a decode row). The three hand-rolled listener
+    registries (`register_vk_drop_hook`, `register_weights_epoch_listener`,
+    `register_reload_prep`) against daslib's `delegate` module. The tests: `fa_bidir_arm` against
+    `fa_tile_run` (a `bidir` field on its arm tuple, the causal twin under it), the readback
+    offsets typed twice per cell in `test_vulkan_tower_kernels.das` (`vkd_run_copy` moved to
+    `_vkd_oracles.das` with a `host_floats` reader), the post-add seam trio, `q8_rows_off`
+    against `mismatch_qbytes` in `_compares`, the Vulkan dump rungs and `shallow_routing_cell_vk`
+    against their Metal twins (the stats accessor as the axis), the `poison_device_leg` pair,
+    the older zero-block loops in `test_qwen3v.das` / `test_qwen25v.das` onto
+    `truncate_and_poison`, the five `x * sigmoid(1.702 x)` spellings, and `approx` in
+    `test_metal_decode_kernels.das` against `_compares`.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s

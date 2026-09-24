@@ -204,6 +204,20 @@ def public skip_blank(src : Source; from, to : int) : int {
 }
 
 
+def public skip_back_blank(src : Source; from : int) : int {
+    //! Start of the whitespace run that ends at `from`.
+    var i = from
+    peek_data(src.text) $(bytes) {
+        while (i > 0) {
+            let c = int(bytes[i - 1])
+            if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break
+            i--
+        }
+    }
+    return i
+}
+
+
 def public end_of_type_token(src : Source; from, limit : int) : int {
     //! End of the type spelling that starts at `from`.
     //!

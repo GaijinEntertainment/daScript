@@ -155,21 +155,6 @@ def private readback_swapchain_image(image_index : int) : array<uint8> {
 // Frame (drop-in for vulkan_window's draw_frame, with integrated capture)
 // ============================================================================
 
-def private set_live_viewport(cmd : CommandBuffer; width, height : int) {
-    var vp = Viewport(width = float(width), height = float(height), maxDepth = 1.0f)
-    var vps : array<Viewport>
-    vps |> push(vp)
-    cmd_set_viewport(cmd, 0u, vps)
-    delete vps
-    var sci : Rect2D
-    sci.extent.width = uint(width)
-    sci.extent.height = uint(height)
-    var scis : array<Rect2D>
-    scis |> push(sci)
-    cmd_set_scissor(cmd, 0u, scis)
-    delete scis
-}
-
 def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;
                               dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
     //! acquire -> record (render pass + `blk`) -> submit -> present on the `vk_live_set_target` target;
@@ -202,7 +187,7 @@ def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear 
     record_render_pass(cmd, render_pass, sc.framebuffers[int(image_index)],
             full_area(sc.width, sc.height), clear) {
         if (dynamic_viewport) {
-            set_live_viewport(cmd, sc.width, sc.height)
+            set_dynamic_viewport(cmd, sc.width, sc.height)
         }
         invoke(blk, cmd)
     }

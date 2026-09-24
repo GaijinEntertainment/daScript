@@ -515,6 +515,26 @@ def private q25v_grid_tables(t : Qwen25vTower; var s : Qwen25vState; pw, ph : in
     s.grid_h = ph
 }
 
+//! Block `l` attends over the whole canvas (every `n_wa_pattern`-th block, or every block with no pattern); the others attend per window.
+def qwen25v_layer_full(t : Qwen25vTower; l : int64) : bool => t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+
+//! The widest window's row count over the sorted windows (`win_lo`): the GPU drivers' per-window tile bound.
+def qwen25v_window_widest(s : Qwen25vState) : int64 {
+    let nwin = long_length(s.win_lo) - 1l
+    var wmax = 0l
+    for (i in range64(nwin)) {
+        wmax = max(wmax, s.win_lo[i + 1l] - s.win_lo[i])
+    }
+    return wmax
+}
+
+//! The window table the GPU drivers upload: `win_lo` as `nwin + 1` words at `wp`.
+def qwen25v_window_table(s : Qwen25vState; var wp : uint?) {
+    for (i in range64(long_length(s.win_lo))) {
+        unsafe(wp[i]) = uint(s.win_lo[i])
+    }
+}
+
 // one RMS-normed block over the window-sorted residual stream s.x (npos rows); non-full
 // layers attend per contiguous window range, full layers ((l+1) % n_wa_pattern == 0) in full
 def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) {
@@ -538,7 +558,7 @@ def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) 
     rope_neox_tab_rows(s.kk, npos, t.n_head, hd, s.cos_t, s.sin_t)
     asr_prof_add("q25v.qkv_rope", tp)
     tp = ref_time_ticks()
-    let full = t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+    let full = qwen25v_layer_full(t, l)
     if (full) {
         attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0 / sqrt(float(hd)))
     } else {
@@ -627,6 +647,16 @@ def register_qwen25v_gpu(fn : Qwen25vGpuBlocksFn) {
     g_q25v_gpu_set = true
 }
 
+var private g_q25v_gpu_blocks : Qwen25vGpuBlocksFn
+var private g_q25v_gpu_blocks_set = false
+
+//! The blocks-only seat (the Vulkan tower over the baked halfword twin): the fn takes the window-sorted s.x after the CPU
+//! stem, runs every block, leaves the result in s.x; false = decline, the CPU loop serves; the merger tail stays on the CPU.
+def register_qwen25v_gpu_blocks(fn : Qwen25vGpuBlocksFn) {
+    g_q25v_gpu_blocks = fn
+    g_q25v_gpu_blocks_set = true
+}
+
 //! Encode a letterboxed, normalized canvas (``vision_normalize3`` planes, w×h) into ``out`` =
 //! [nout × proj_dim] soft tokens; returns nout = (w/28)×(h/28). Oracle fixtures skip the normalize.
 [hot_path]
@@ -653,8 +683,10 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
         tp = ref_time_ticks()
         q25v_stem_finish(t, s, npos)
         asr_prof_add("q25v.stem", tp)
-        for (l in range64(t.n_layer)) {
-            q25v_block(t, s, l, npos)
+        if (!(g_q25v_gpu_blocks_set && invoke(g_q25v_gpu_blocks, t, s, npos))) {
+            for (l in range64(t.n_layer)) {
+                q25v_block(t, s, l, npos)
+            }
         }
         tp = ref_time_ticks()
         q25v_tail(t, s, npos)
