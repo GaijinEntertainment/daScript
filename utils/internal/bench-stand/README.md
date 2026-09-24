@@ -16,7 +16,7 @@ failed and what moved. Review rules: `REVIEW.md`.
   the viewer's markup into a host page's `#stand`. The same two files back daslang.io's
   `site/nightly.html` (repo root), whose stylesheet tokens they adopt through `var(--token,
   fallback)`. The folder's `REVIEW.md` is not copied to the box.
-- `stand.cmake` - one pass over the current tree, run by the `run_bench_stand` target (section 3); `caddy.snippet` is the public route.
+- `stand.cmake` - one pass over the current tree, run by the `run_bench_stand` target (section 5); `caddy.snippet` is the public route.
 
 ## 2. Data model
 
@@ -56,26 +56,26 @@ not run the suite (the driver's way to record a failed build) and exits 1.
 
 ## 3. The box
 
-`dasweb-1` (the daslang.io origin) pulls master and builds `run_bench_stand` from the `bench` user's
-cron under `/srv/bench-stand`: `src/` (the clone), `runs/`, `site/` (what Caddy serves at `/bench/`).
-The target builds Release (RelWithDebInfo arms the C++ allocation tracker, whose exit-time report
-costs the run time) with the module set the benchmarks require, then runs `stand.cmake`: `run`, then
-`report`. A night whose build fails records nothing; the cron log has it. There is no CI runner and
-no ssh path into the box: the repository is public.
+`zen4` runs the night; `dasweb-1` (the daslang.io origin) only serves it. On zen4, cron runs
+`~/bench-stand/nightly.sh` at 03:00 box time over `~/bench-stand/{src,runs,site,logs}`: the script
+resets `src` to `origin/master`, builds `daslang`, the module libraries the benchmarks require
+(SQLITE, PUGIXML, Audio, Minfft, Terminal, UnitTest, LLVM) and `test_aot_bench` (Release:
+RelWithDebInfo arms the C++ allocation tracker, whose exit-time report costs the run time), writes
+`meta.json`, then runs `benchctl run` - or `run --failed` after a red build, so the night is recorded
+either way - then `report`, copies the viewer files from this folder's `site/`, writes `status.json`,
+and publishes. Its arguments go to `benchctl run`. Logs: `~/bench-stand/logs/<date>.log` and
+`build-<run_id>.log`. The script is box-local, not in the tree; `run_bench_stand` (section 5) is the
+same night as one cmake target for a box that builds in-tree.
 
-One-time setup, as root:
+Publishing is two `rsync`s over ssh to `boris@dasweb-1`, `runs/` first and then `site/` with its
+`site/runs -> ../runs` symlink (excluding the symlink 404s every record link), with the deploy key
+`~/.ssh/bench_stand_deploy`, which dasweb-1's `authorized_keys` restricts to
+`rrsync /srv/bench-stand`. dasweb-1 holds `/srv/bench-stand/{site,runs}` and serves them through
+`caddy.snippet`, pasted into the `daslang.io` block of its Caddyfile. dasweb-1 builds nothing and has
+no CI runner; the repository is public.
 
-```sh
-useradd -r -m -d /srv/bench-stand -s /bin/bash bench
-# llvm-22-dev is required: the night builds with -DDAS_LLVM_DISABLED=OFF, and without it
-# there is no jit lane. apt.llvm.org carries it for noble, as in extended_checks.
-apt-get install -y git cmake ninja-build g++ ccache llvm-22-dev
-su - bench -c 'git clone https://github.com/GaijinEntertainment/daScript src && cmake -S src -B src/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_SQLITE_DISABLED=OFF -DDAS_PUGIXML_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON -DBENCH_STAND_OUT=/srv/bench-stand'
-su - bench -c 'cmake --build /srv/bench-stand/src/build --target run_bench_stand'   # first pass by hand
-echo '0 5 * * * bench git -C /srv/bench-stand/src pull -q && cmake --build /srv/bench-stand/src/build --target run_bench_stand >> /srv/bench-stand/cron.log 2>&1' > /etc/cron.d/bench-stand
-```
-
-then paste `caddy.snippet` into the `daslang.io` block of the Caddyfile and `systemctl reload caddy`.
+zen4 needs `llvm-22-dev` (apt.llvm.org carries it for bookworm; without it there is no jit lane),
+`cmake`, `ninja-build`, `clang` and the module libraries' dev packages.
 
 `BENCH_STAND_ARGS` goes to `benchctl run` - `-DBENCH_STAND_ARGS="--filter core/math/ --repeat 1"` is
 a slice of a night. `BENCH_STAND_OUT` is where `runs/` and `site/` go (default `build/bench-stand`).
