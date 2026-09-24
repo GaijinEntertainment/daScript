@@ -1,7 +1,7 @@
 options gen2
 options persistent_heap
 
-require _common public
+require _sort_common public
 
 // Baseline: plain ``sort(arr, cmp)`` over int / user-struct arrays. Boris
 // flagged that sort itself had no dedicated benchmark; this fills the gap and

@@ -4,8 +4,8 @@
 `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`. A diff touching `promoteInitToAssign`
 (`ast_infer_type_function.cpp`) or `isPromotedInitCall` (`ast_generate.cpp`) applies
 `daslib/REVIEW.md` (repo root) too -
-the `builtin.das` helpers they name are the other side of a recorded pair
-(`daslib/ARCHITECTURE_SYNTAX.md`).
+the `daslib/builtin.das` (repo root) helpers they name are the other side of a recorded pair
+(`daslib/ARCHITECTURE_SYNTAX.md`, repo root).
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping its scan of the prints in
   `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md` sec.1) or of the module-cache

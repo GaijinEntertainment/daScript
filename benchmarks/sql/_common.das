@@ -1,6 +1,8 @@
 options gen2
 options persistent_heap
 
+module _common public
+
 require daslib/sql public
 require daslib/linq_boost public
 require sqlite/sqlite_boost public

@@ -1,7 +1,7 @@
 options gen2
 options persistent_heap
 
-require _common public
+require _sort_common public
 require daslib/sort_boost
 
 // Heap-op overhead micro-benchmark. Two scenarios:

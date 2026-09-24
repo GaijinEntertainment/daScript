@@ -1,6 +1,6 @@
 options gen2
 
-module _common shared public
+module _sort_common shared public
 
 require dastest/testing_boost public
 

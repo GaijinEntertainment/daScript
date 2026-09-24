@@ -12,7 +12,7 @@ options persistent_heap
 
 require dastest/testing_boost
 
-require _common
+require _hash_common
 
 let SSIZE = TOTAL_RANDOM_NUMBERS
 

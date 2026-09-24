@@ -20,7 +20,7 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 | File | Description |
 |---|---|
-| `_common.das` | Shared helper module - random number generation, shuffling, intersection helpers (not a benchmark) |
+| `_hash_common.das` | Shared helper module - random number generation, shuffling, intersection helpers (not a benchmark); a `shared` module's name is unique tree-wide, so no two helpers are both `_common` |
 | `_slot_map.das` | SlotMap template macro module - wraps hash maps as ID-based slot allocators (not a benchmark) |
 | `test02.das` | Sequential insert + read of 600K elements across builtin table, cuckoo, and flat hash maps |
 | `test03.das` | Insert 1M unique random numbers, clear, re-insert - builtin table, cuckoo, and flat hash maps |
