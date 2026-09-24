@@ -25,6 +25,11 @@ def twin_manifest_file_name() : string {
     return das_is_dll_build() ? ".das_module.static.manifest" : ".das_module.manifest"
 }
 
+//! the manifest a `--jit-target` run of this kind writes: the target's platform name sits before `.manifest`
+def target_manifest_file_name(target : string) : string {
+    return das_is_dll_build() ? ".das_module.{target}.manifest" : ".das_module.static.{target}.manifest"
+}
+
 //! the other binary kind's daslang beside this one - `daslang_static` beside `daslang` and back; "" when absent
 def twin_exe() : string {
     let exe = das_exe()

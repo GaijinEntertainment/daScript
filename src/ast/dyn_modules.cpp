@@ -89,10 +89,16 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
     return Result::OK;
 }
 
-// src/ast/ARCHITECTURE.md#module-scan-manifest - one file per binary kind, so a dynamic-module
-// build and a static one sharing a tree never rewrite each other's rows
-static constexpr const char *MANIFEST_SUFFIX = ".das_module.manifest";
-static constexpr const char *MANIFEST_SUFFIX_STATIC = ".das_module.static.manifest";
+// src/ast/ARCHITECTURE.md#module-scan-manifest - one file per binary kind and per compile target,
+// so a dynamic-module build and a static one, a native run and a --jit-target one, sharing a
+// tree never rewrite each other's rows
+static string manifest_file_name() {
+    string name = ".das_module";
+    if ( !das_is_dll_build() ) name += ".static";
+    const string target = das_get_cross_platform_name();
+    if ( !target.empty() ) name += "." + target;
+    return name + ".manifest";
+}
 static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t4";
 
 static bool g_ignore_manifests = false;
@@ -409,7 +415,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     uint32_t len = 0;
     fi->getSourceAndLength(src, len);
     const uint64_t stamp = src ? hash_block64((const uint8_t *) src, len) : 0;
-    const string manifest = path + "/" + (das_is_dll_build() ? MANIFEST_SUFFIX : MANIFEST_SUFFIX_STATIC);
+    const string manifest = path + "/" + manifest_file_name();
     const ManifestKey key = manifest_key(path);
     auto time0 = ref_time_ticks();
 #if DAS_NO_FILEIO
