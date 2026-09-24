@@ -213,9 +213,9 @@ def private register_gemma4v_image_tags {
     register_image_family_tag(GEMMA4V_TAG_Q8)
 }
 
-// the GPU blocks hook (registered by dasllama_metal_tower at [init]; requires-back). It takes
-// s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false =
-// declined, the CPU loop is the fallback. `serves` = would the driver serve (the lane policy asks)
+// the GPU blocks hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back). It takes
+// s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false = declined, the CPU loop is
+// the fallback. `serves` = would the driver serve (the lane policy asks)
 typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>
 typedef Gemma4vGpuServesFn = function<() : bool>
 var private g_g4v_gpu : Gemma4vGpuBlocksFn
@@ -593,6 +593,22 @@ def private g4v_rope_tables(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_ro
     build_rope_tabs_rows(s.cos_y, s.sin_y, GEMMA4V_ROPE_THETA, 1.0, 1.0, no_ff, false, s.pos_y, npos, hd / 2l)
     s.grid_w = n_cols
     s.grid_h = n_rows
+}
+
+//! The rope tables packed a row at a time as [cx | sx | cy | sy] (`pairs` each, `pairs` = head width / 4) into `tp`
+//! (`npos` x 4 x `pairs` floats) - the row the GPU drivers' 2D rope reads.
+def gemma4v_pack_rope_tabs(s : Gemma4vState; npos, pairs : int64; var tp : float?) {
+    unsafe {
+        for (r in range64(npos)) {
+            let rb = r * 4l * pairs
+            for (j in range64(pairs)) {
+                tp[rb + j] = s.cos_x[r * pairs + j]
+                tp[rb + pairs + j] = s.sin_x[r * pairs + j]
+                tp[rb + 2l * pairs + j] = s.cos_y[r * pairs + j]
+                tp[rb + 3l * pairs + j] = s.sin_y[r * pairs + j]
+            }
+        }
+    }
 }
 
 //! One block's offsets (elements): the f32 rows in ``blob``, the seven GEMM regions in the block

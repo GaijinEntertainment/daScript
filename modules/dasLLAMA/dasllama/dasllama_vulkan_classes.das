@@ -3838,7 +3838,13 @@ def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
 }
 
 //! the refusals are `panic`s, not `verify`s: a `verify` prints a stack walk before it throws, and the refusal cell probes them under `recover`
-def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
+def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) {
+    if (bidir && (gated || cap || sink || f16)) {
+        panic("vk flash: the bidirectional stamps take no gate, cap, sink or f16 output")
+    }
+    if (bidir && hs != 64l && hs != 128l) {
+        panic("vk flash: the bidirectional stamps serve head sizes 64 and 128 alone")
+    }
     if (khr && gated) {
         panic("vk flash: the KHR flash tile has no gated stamp")
     }
@@ -3859,8 +3865,13 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
 def private fa_sink_ensure(khr, f16 : bool) : bool
     => khr ? (f16 ? ensure_fa_khr_h64_sink_f16_cls() : ensure_fa_khr_h64_sink_cls()) : (f16 ? ensure_fa_cm2_h64_sink_f16_cls() : ensure_fa_cm2_h64_sink_cls())
 
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink)
+//! `bidir` picks the vision towers' bidirectional twins (h64 and h128, f32 output, no gate, cap or sink)
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    if (bidir) {
+        if (hs == 64l) return khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
+        return khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+    }
     if (sink) return fa_sink_ensure(khr, f16)
     if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
     if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
@@ -3888,9 +3899,19 @@ def private fa_sink_enc(khr, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; v
     }
 }
 
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink)
-    if (sink) {
+def private fa_bidir_enc(khr : bool; hs : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {
+    if (khr) {
+        if (hs == 64l) { enc_fa_khr_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_bidir_cls(raw, h, s, pc, wgs) }
+    } else {
+        if (hs == 64l) { enc_fa_cm2_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_bidir_cls(raw, h, s, pc, wgs) }
+    }
+}
+
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    if (bidir) {
+        fa_bidir_enc(khr, hs, raw, h, s, pc, wgs)
+    } elif (sink) {
         fa_sink_enc(khr, f16, raw, h, s, pc, wgs)
     } elif (hs == 64l) {
         if (khr) {
@@ -8980,16 +9001,14 @@ class template TowerClampRqT : RqT {
 class TowerClampRq : TowerClampRqT {}
 
 struct TowerRopeArgs {
-    d : uint
     nheads : uint
-    hs : uint
-    pairs : uint    //! rotated pairs per axis = hs / 4: one packed table row is [cx | sx | cy | sy], `pairs` each
+    hs : uint       //! the head width: the compact row is nheads x hs wide, the rotated pairs per axis hs / 4
     rows : uint
 }
 
 //! the 2D neox rope over q or k rows in place, the CPU `rope_neox_2d_rows`'s form: per head the x axis rotates the
 //! pairs (j, j + pairs) of its first half against the row's x table, the y axis the same pairs of its second half
-//! against the y table - one thread per (row, head, pair), both axes
+//! against the y table (one packed table row is [cx | sx | cy | sy], `pairs` each) - one thread per (row, head, pair), both axes
 [vk_dispatch(name = "tower_rope2d_cls", grid = "wgs", params = "wgs : int64")]
 class TowerRope2d {
     @ssbo @binding = 0 v : array<float>
@@ -8999,26 +9018,28 @@ class TowerRope2d {
     [spirv_kernel(local_size_x = 256, name = "tower_rope2d_cls_spv")]
     def run {
         let gid = gl_GlobalInvocationID.x
-        let per_row = pa.nheads * pa.pairs
+        let pairs = pa.hs / 4u
+        let d = pa.nheads * pa.hs
+        let per_row = pa.nheads * pairs
         if (gid < pa.rows * per_row) {
             let row = gid / per_row
             let hp = gid % per_row
-            let base = row * pa.d + (hp / pa.pairs) * pa.hs
-            let j = hp % pa.pairs
-            let tb = row * 4u * pa.pairs
+            let base = row * d + (hp / pairs) * pa.hs
+            let j = hp % pairs
+            let tb = row * 4u * pairs
             let x0 = v[base + j]
-            let x1 = v[base + j + pa.pairs]
+            let x1 = v[base + j + pairs]
             let cx = tabs[tb + j]
-            let sx = tabs[tb + pa.pairs + j]
+            let sx = tabs[tb + pairs + j]
             v[base + j] = x0 * cx - x1 * sx
-            v[base + j + pa.pairs] = x0 * sx + x1 * cx
+            v[base + j + pairs] = x0 * sx + x1 * cx
             let yb = base + pa.hs / 2u
             let y0 = v[yb + j]
-            let y1 = v[yb + j + pa.pairs]
-            let cy = tabs[tb + 2u * pa.pairs + j]
-            let sy = tabs[tb + 3u * pa.pairs + j]
+            let y1 = v[yb + j + pairs]
+            let cy = tabs[tb + 2u * pairs + j]
+            let sy = tabs[tb + 3u * pairs + j]
             v[yb + j] = y0 * cy - y1 * sy
-            v[yb + j + pa.pairs] = y0 * sy + y1 * cy
+            v[yb + j + pairs] = y0 * sy + y1 * cy
         }
     }
 }
@@ -9131,7 +9152,8 @@ class TowerLn : RmsWgBase {
             s1 += x[base + i]
             i += 256u
         }
-        let mean = wg_sum(s1, 0u) / float(pa.d)
+        let s1w = wg_sum(s1, 0u)
+        let mean = s1w / float(pa.d)
         var s2 = 0.0
         i = tid
         while (i < pa.d) {
@@ -9185,7 +9207,8 @@ class template TowerPostAddLnT : RmsWgBase {
                     i += 256u
                 }
             } else {
-                let mean = wg_sum(s1, 0u) / float(pa.d)
+                let s1w = wg_sum(s1, 0u)
+                let mean = s1w / float(pa.d)
                 var s2 = 0.0
                 i = tid
                 while (i < pa.d) {
@@ -9216,10 +9239,10 @@ struct TowerBiasArgs {
     d : uint        //! the row width, a 4-multiple
     nelem : uint
     boff : uint     //! the bias row's base in wn
-    gelu_on : uint  //! 0 = the bias alone, 1 = the tanh GELU after it
+    gelu_on : uint
 }
 
-//! a GEMM output's bias row added in place, and under `act` the tanh GELU the SigLIP FFN takes - the CPU `gelu_tanh_lut`'s
+//! a GEMM output's bias row added in place, and under `gelu_on` the tanh GELU the SigLIP FFN takes - the CPU `gelu_tanh_lut`'s
 //! form with its f16 rounding of the input and the output (the LUT is the f16-domain twin of this)
 [vk_dispatch(name = "tower_bias_act_cls", grid = "wgs", params = "wgs : int64")]
 class TowerBiasAct {
@@ -9240,8 +9263,12 @@ class TowerBiasAct {
     }
 
     def biased(e : uint) : float {
-        let v = x[e] + wn[pa.boff + e % pa.d]
-        return pa.gelu_on != 0u ? gelu_tanh(v) : v
+        let v = x[e] + wn[pa.boff + e % max(1u, pa.d)]
+        if (pa.gelu_on == 0u) {
+            return v
+        }
+        let g = gelu_tanh(v)
+        return g
     }
 
     [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cls_spv")]
@@ -9258,6 +9285,7 @@ class TowerBiasAct {
 
 struct TowerRestrideArgs {
     rows : uint
+    rows_pad : uint //! the padded panel's row cap (the flash tile's 64-row alignment): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
     nheads : uint
     hs : uint
     hsp : uint
@@ -9266,8 +9294,9 @@ struct TowerRestrideArgs {
 }
 
 //! the head restride between the compact rows [rows x heads x hs] (at `sstride` / `soff`) and the flash tile's padded panel
-//! [rows x heads x hsp]: PAD writes the padded panel with zero pads (f16 under OUT16 - the K/V shadows - else f32, the q
-//! panel), the other way reads the compact row back off the padded f32 output - one thread an element of the padded space
+//! [rows_pad x heads x hsp]: PAD writes the padded panel with zero pads and zero rows past `rows` (f16 under OUT16 - the K/V
+//! shadows, clamped to the half range - else f32, the q panel), the other way reads the compact row back off the padded f32
+//! output - one thread an element of the padded space
 [ |> template_struct_instance]
 class template TowerRestrideT {
     @template_constant PAD : bool = true
@@ -9282,16 +9311,17 @@ class template TowerRestrideT {
     def run {
         let gid = gl_GlobalInvocationID.x
         let per_row = pa.nheads * pa.hsp
-        if (gid < pa.rows * per_row) {
+        let rows_out = PAD ? pa.rows_pad : pa.rows
+        if (gid < rows_out * per_row) {
             let row = gid / per_row
             let hp = gid % per_row
             let head = hp / pa.hsp
             let lane = hp % pa.hsp
             let ci = row * pa.sstride + pa.soff + head * pa.hs + lane
             static_if (PAD) {
-                let v = lane < pa.hs ? src[ci] : 0.0
+                let v = lane < pa.hs && row < pa.rows ? src[ci] : 0.0
                 static_if (OUT16) {
-                    dsth[gid] = float16(v)
+                    dsth[gid] = float16(clamp(v, -65504.0, 65504.0))
                 } else {
                     dst[gid] = v
                 }
@@ -9335,9 +9365,10 @@ class TowerGluAct {
     @push_constant pa : TowerGluArgs
 
     def glu(e : uint) : float {
-        let gv = g[e] + wn[pa.bgoff + e % pa.d]
-        let uv = u[e] + wn[pa.buoff + e % pa.d]
-        return (gv / (1.0 + exp(-gv))) * uv
+        let c = e % max(1u, pa.d)
+        let gv = g[e] + wn[pa.bgoff + c]
+        let uv = u[e] + wn[pa.buoff + c]
+        return act_mul_sel(gv, uv, ACT_SILU)
     }
 
     [spirv_kernel(local_size_x = 256, name = "tower_glu_act_cls_spv")]
@@ -9356,21 +9387,20 @@ struct TowerRopeTabArgs {
     sstride : uint  //! the rows' stride and the column the heads start at (a fused [q | k | v] row)
     soff : uint
     nheads : uint
-    hs : uint
-    half : uint     //! the rotary half = hs / 2: pairs (j, j + half), one table row of `half` cos and `half` sin a token
+    hs : uint       //! the head width: the rotary half is hs / 2 - pairs (j, j + half), one table row of `half` cos and `half` sin a token
     rows : uint
 }
 
 struct TowerWinArgs {
-    d : uint
     nheads : uint
-    hs : uint
     scale : float
 }
 
-//! 256 threads = 64 query rows x 4 lanes: the lanes split the keys for the scores and the head's dims for the output
-[vk_dispatch(name = "tower_win_attn_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
-class TowerWinAttn {
+//! 256 threads = 64 query rows x 4 lanes: the lanes split the keys for the scores and the head's dims for the output; the
+//! head width is the stamp's HS and the compact row nheads x HS wide
+[ |> template_struct_instance]
+class template TowerWinAttnT {
+    @template_constant HS : uint = 80u   //! the head width served (the qwen25v family's 80)
     @ssbo @binding = 0 q : array<float>
     @ssbo @binding = 1 k : array<float>
     @ssbo @binding = 2 v : array<float>
@@ -9379,25 +9409,27 @@ class TowerWinAttn {
     @workgroup sc : float[4096]   //! the 64 x 64 score block, then the exponentials
     @push_constant pa : TowerWinArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_win_attn_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let wid = gl_WorkGroupID.x
-        let w = wid / pa.nheads
-        let hh = wid - w * pa.nheads
+        let nheads = max(1u, pa.nheads)
+        let d = nheads * HS
+        let w = wid / nheads
+        let hh = wid - w * nheads
         let lo = wlo[w]
         let cnt = wlo[w + 1u] - lo
         let tid = gl_LocalInvocationID.x
         let r = tid >> 2u
         let lane = tid & 3u
         let live = r < cnt
-        let qb = (lo + r) * pa.d + hh * pa.hs
+        let qb = (lo + r) * d + hh * HS
         if (live) {
             var j = lane
             while (j < cnt) {
-                let kb = (lo + j) * pa.d + hh * pa.hs
+                let kb = (lo + j) * d + hh * HS
                 var s = 0.0
                 var i = 0u
-                while (i < pa.hs) {
+                while (i < HS) {
                     s += q[qb + i] * k[kb + i]
                     i++
                 }
@@ -9429,11 +9461,11 @@ class TowerWinAttn {
             }
             let inv = 1.0 / l
             var dd = lane
-            while (dd < pa.hs) {
+            while (dd < HS) {
                 var acc = 0.0
                 j = 0u
                 while (j < cnt) {
-                    acc += sc[r * 64u + j] * v[(lo + j) * pa.d + hh * pa.hs + dd]
+                    acc += sc[r * 64u + j] * v[(lo + j) * d + hh * HS + dd]
                     j++
                 }
                 att[qb + dd] = acc * inv
@@ -9442,6 +9474,9 @@ class TowerWinAttn {
         }
     }
 }
+
+[vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-routes")]
+class TowerWinAttn : TowerWinAttnT {}
 
 //! the full-head NEOX rope over q or k rows in place, the CPU `rope_neox_tab_rows`'s form: one table pair a row shared by
 //! every head (the vision mrope tables), the pairs (j, j + half) rotated - one thread per (row, head, pair)
@@ -9455,18 +9490,19 @@ class TowerRopeTab {
     [spirv_kernel(local_size_x = 256, name = "tower_rope_tab_cls_spv")]
     def run {
         let gid = gl_GlobalInvocationID.x
-        let per_row = pa.nheads * pa.half
+        let half = pa.hs / 2u
+        let per_row = pa.nheads * half
         if (gid < pa.rows * per_row) {
             let row = gid / per_row
             let hp = gid % per_row
-            let j = hp % pa.half
-            let base = row * pa.sstride + pa.soff + (hp / pa.half) * pa.hs
+            let j = hp % half
+            let base = row * pa.sstride + pa.soff + (hp / half) * pa.hs
             let x0 = v[base + j]
-            let x1 = v[base + j + pa.half]
-            let c = cos_t[row * pa.half + j]
-            let s = sin_t[row * pa.half + j]
+            let x1 = v[base + j + half]
+            let c = cos_t[row * half + j]
+            let s = sin_t[row * half + j]
             v[base + j] = x0 * c - x1 * s
-            v[base + j + pa.half] = x0 * s + x1 * c
+            v[base + j + half] = x0 * s + x1 * c
         }
     }
 }

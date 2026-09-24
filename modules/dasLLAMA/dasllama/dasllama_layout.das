@@ -621,7 +621,9 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
 def q8_gather_rows(wp : int8 const?; s16p : uint16 const?; s32p : float const?; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
                    var wq : array<uint8>; var ws : array<uint8>; dst_q : int64 = 0l; dst_s : int64 = 0l) {
     let nb = n / Q8_BLOCK_ELEMS
-    assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
+    if (wbias != 0l && wbias != 128l) {
+        panic("q8_gather_rows: unknown q8 plane bias {wbias}")
+    }
     let nslices = int(rows / slice_rows)
     unsafe {
         var wqp = addr(wq[dst_q])

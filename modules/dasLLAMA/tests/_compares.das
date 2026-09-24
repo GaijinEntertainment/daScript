@@ -56,3 +56,18 @@ def mismatch_rel(got, want : array<float>; bar : float) : int {
 
 //! `mismatch_rel` at the kernel cells' bar.
 def mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, 2e-3)
+
+//! The elements of `got` not bit-equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad).
+def mismatch_exact(got, want : array<float>) : int {
+    var bad = 0
+    for (g, w in got, want) {
+        if (g != w) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! The word a kernel cell fills an output with before its dispatch: a NaN, so a stale or unwritten element cannot sit
+//! inside any bar.
+let NAN_SENTINEL_BITS = 0x7fc00000u

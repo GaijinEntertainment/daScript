@@ -515,6 +515,23 @@ def private q25v_grid_tables(t : Qwen25vTower; var s : Qwen25vState; pw, ph : in
     s.grid_h = ph
 }
 
+//! The widest window's row count over the sorted windows (`win_lo`): the GPU drivers' per-window tile bound.
+def qwen25v_window_widest(s : Qwen25vState) : int64 {
+    let nwin = long_length(s.win_lo) - 1l
+    var wmax = 0l
+    for (i in range64(nwin)) {
+        wmax = max(wmax, s.win_lo[i + 1l] - s.win_lo[i])
+    }
+    return wmax
+}
+
+//! The window table the GPU drivers upload: `win_lo` as `nwin + 1` words at `wp`.
+def qwen25v_window_table(s : Qwen25vState; var wp : uint?) {
+    for (i in range64(long_length(s.win_lo))) {
+        unsafe(wp[i]) = uint(s.win_lo[i])
+    }
+}
+
 // one RMS-normed block over the window-sorted residual stream s.x (npos rows); non-full
 // layers attend per contiguous window range, full layers ((l+1) % n_wa_pattern == 0) in full
 def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) {

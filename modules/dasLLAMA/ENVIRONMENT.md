@@ -33,7 +33,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
 | `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 | `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
-| `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
+| `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the vision tower driver reads before any device init: the vision towers' block loops serve on the device only while it is on, and decline `device` otherwise. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
 | `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks; a pinned cap takes no headroom and reads no OS room. |
@@ -137,7 +137,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | off | Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths. |
-| `DASLLAMA_VK_TOWER` | flag | on | Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) on the Vulkan tower driver; 0 pins the CPU tower chain. |
+| `DASLLAMA_VK_TOWER` | flag | on | Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline. |
 | `DASLLAMA_VK_KV_MERGE` | flag | on | Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B. |
 | `DASLLAMA_VK_FFN_SLICE` | flag | on | The last layer's FFN runs on the window's last 32 rows only (the classifier reads one); 0 runs it over the whole window for a same-build A/B. |
 | `DASLLAMA_VK_OVERLAP` | flag | on | Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role). |

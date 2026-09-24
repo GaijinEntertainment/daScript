@@ -66,8 +66,8 @@ the towers take three routes:
   Metal per-window route does (2.2w): one workgroup a (window, head), the window's rows (64 at
   most, `wlo` the row starts) attend each other and nothing else, the scores in workgroup memory.
   No restride and no f16 shadow: the coopmat tile's f16 staging noise compounds over the 28
-  window layers of a 32-block tower (0.16 to 1.5 x rms against the exact chain on the slotted
-  f16 tile it replaced; 0.02 to 0.09 in f32, the Metal rung's order).
+  window layers of a 32-block tower - a slotted f16 tile reads 0.16 to 1.5 x rms against the
+  exact chain at 32 blocks, the f32 window route 0.02 to 0.09, the Metal rung's order.
 
 The Metal driver keeps the compact 72-wide heads on its own flash kernel (2.2w); the Vulkan
 driver pays the restride instead, because the flash template's coopmat typedefs size on the head
@@ -85,7 +85,7 @@ back into the family's state. Where a chain and its family part on the seat:
   stem (the Metal driver runs the stem itself), so `gemma3v_encode` finishes the stem on the CPU
   first when the tower is q8 and the driver serves the blocks alone. **qwen3v**'s hook is
   exact-lane and whole-chain (Metal's), so the driver takes the blocks-only q8 seat
-  (`register_qwen3v_gpu_q8`): after each deepstack tap block the residual is copied on the device
+  (`register_qwen3v_gpu_blocks`): after each deepstack tap block the residual is copied on the device
   into a stash read back beside x, and the tap mergers run on the CPU off those rows, a tap past
   a truncated tower's blocks skipped as the CPU loop skips it. **qwen25v** has no q8 lane, so its
   blocks-only seat (`register_qwen25v_gpu_blocks`) runs after the CPU stem and before the CPU
@@ -104,7 +104,7 @@ the region's start - beside the block rows; the family has no scale plane. The r
 over the q8 plane, or over qwen25v's halfword twin - folds the plane's address, size, sampled
 words and the served block count: an
 address is not an identity, a truncated tower minted from the same bytes lands at the freed
-address, and a resident sized for fewer blocks read past its rows under a deeper chain. The
+address, and a resident sized for fewer blocks reads past its rows under a deeper chain. The
 model drop's sweep tells the driver to forget its handles through `register_vk_drop_hook`
 (every buffer and set is model-owned); `vulkan_tower_shutdown` is the tests' release. The
 per-encode scratch is sized to the canvas and grown when a taller one arrives; every batch

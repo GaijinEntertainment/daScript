@@ -717,10 +717,9 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
     let npos = g3v_stem_cols(t, s, planes, w, h)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
-    var stem_done = false
     if (t.q8) {
+        tp = ref_time_ticks()
         g3v_stem_finish(t, s, npos)
-        stem_done = true
         asr_prof_add("g3v.stem", tp)
     }
     var gpu_served = false
@@ -730,11 +729,11 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         asr_prof_add("g3v.gpu", tp)
     }
     if (!gpu_served) {
-        tp = ref_time_ticks()
-        if (!stem_done) {
+        if (!t.q8) {
+            tp = ref_time_ticks()
             g3v_stem_finish(t, s, npos)
+            asr_prof_add("g3v.stem", tp)
         }
-        asr_prof_add("g3v.stem", tp)
         for (l in range64(t.n_layer)) {
             g3v_block(t, s, l, npos)
         }

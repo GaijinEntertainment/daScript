@@ -558,8 +558,10 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                 vt0 = (encodes = s0.encodes, declines = s0.declines)
             }
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps, think)
+            var vk_served = false   // the engage witness: every timed rep's encode ran on the tower driver
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let s1 = vulkan_tower_stats()
+                vk_served = s1.encodes - vt0.encodes >= int64(reps)
                 print("lcpp_bench --image: vulkan tower encodes +{s1.encodes - vt0.encodes} of {reps}, declines +{s1.declines - vt0.declines} {vulkan_tower_declines()}\n")
             }
             if (empty(turn.text)) {
@@ -568,8 +570,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                 // form; --image-think prices that model's template-default turn instead)
                 print("lcpp_bench --image: the timed reply is EMPTY - no cell minted (try --image-think for a model whose suppress form derails it)\n")
             } else {
-                //! the stamp follows the LLM rows': the Vulkan tier serves the tower where it is installed, the CPU chain otherwise
-                var run = BenchRun(engine = "das", backend = gpu ? "metal" : (moe_gpu_tier_installed() ? "vulkan" : "cpu"), flavor = flavor_stamp(accel ? "accel" : "tuned"),
+                var run = BenchRun(engine = "das", backend = gpu ? "metal" : (vk_served ? "vulkan" : "cpu"), flavor = flavor_stamp(accel ? "accel" : "tuned"),
                 exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),

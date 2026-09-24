@@ -2710,12 +2710,16 @@ state.
 The instrument: the pod (RTX PRO 4500 Blackwell, driver 580.173, an AMD EPYC 7443 container at 48
 threads under the 62 GB cgroup cap), `daslang -jit benchmarks/lcpp_bench.das -- -m <decoder> --image
 <coco 640x480> --image-mmproj <mmproj> --for-debug-purposes -r 3 -t 16` under `DASLLAMA_IMAGE=0
-DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, the untuned tier; the `vk` arm `DASLLAMA_GPU=1`
-(the tower chain on the Vulkan tower driver, the bench's engage line reading encodes +3 of 3), the
-`cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every encode, the CPU tower chain -
-the q8 lane where the family has one, the exact f32 lane on qwen25v - and the decoder on the CPU
-too, so only the encode column is a tower-vs-tower reading) [direction-grade - two processes]. The
-encode is one image's tower time in ms, the mean of the three timed reps.
+DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, `DASLLAMA_COOPMAT` unset (cm2, the pod's default
+mode) and `DAS_TUNE_POLICY` unset (the box default; the untuned tier is what
+`DASLLAMA_ALLOW_UNTUNED=1` arms, so the kernels are the fallback bodies); the `vk` arm
+`DASLLAMA_GPU=1` (the tower chain on the Vulkan tower driver, the bench's engage line reading
+encodes +3 of 3), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every encode,
+the CPU tower chain - the q8 lane where the family has one, the exact f32 lane on qwen25v - and the
+decoder on the CPU too, so only the encode column is a tower-vs-tower reading) [direction-grade -
+two processes]. The encode is one image's tower time in ms and a tg figure is the decoder's tok/s,
+each the mean of the three timed reps: the bench's image cell logs that mean alone, so no spread
+(deviation, min or max) is recorded for the rows below.
 
 - **The four families, the driver against the CPU chain, encode ms:** gemma-4-E2B (gemma4v q8, 130
   soft tokens) **35.2** against 706; gemma-3-4b (gemma3v q8, 256 tokens, the fixed 896 canvas -
@@ -2723,15 +2727,35 @@ encode is one image's tower time in ms, the mean of the three timed reps.
   deepstack taps, 300 tokens) **262** against 1561; Qwen2.5-Omni-3B (qwen25v over the halfword twin,
   391 tokens, the f32 per-window route) **179** against 7305 (162 on the slotted f16 route the arc
   replaced: the window layers read K and V off the compact rows, `followup_vulkan.md` row 95's
-  staging lever). The captions name the two cats and the remotes on both arms of every pair. Before
-  the resident driver's span pass hydrated the mirror's head rows down, the E2B turn on the Vulkan
-  decoder read "a cat lying down on a pink surface" here and "Please provide the image" in
-  `test_vision_chat_e2b` (the CPU computed the media rows against a head of zeros, and the decode
-  fell to the CPU at tg 24.7): with the pass hydrated the same row reads tg 188.4 against the CPU
-  arm's 24.5, the decode serving on the device.
+  staging lever). The captions read on both arms of every pair name the two cats and the remotes -
+  an observation of the served output, not a parity claim; the parity instruments are the twin
+  cells below and the chat pairs of `tests/test_vision_chat.das`.
+- **The E2B image row's decode with the resident driver's span pass hydrating the mirror's rows
+  before the CPU takes the image eval:** tg **188.4** on the `vk` arm, against 24.7 at the previous
+  tip on the same arm (the decode falling to the CPU after the span eval) and the `cpu` arm's 24.5
+  [direction-grade - two commits]. The caption the chat cell `test_vision_chat_e2b` reads under
+  `DASLLAMA_GPU=1` is that cell's own assert.
 - **The pp / tg columns are the decoder's**, not the tower's: on the `cpu` arm the decoder runs on the
   CPU too (Qwen3-VL tg 14.0 against 56.0 on the Vulkan resident driver, Omni 18.8 against 102.7,
   E2B 24.5 against 188.4).
+- **The driver's allocations at the largest shape the path serves - the 4096-row encode cap
+  (`VT_MAX_ENCODE_ROWS`, the `shape` decline past it), which is gemma3v's fixed canvas exactly:**
+  the qwen25v halfword twin uploaded whole, 32 layers x (4 x 1280^2 + 3 x 1280 x 3456) weights x 2
+  bytes = 1,268,776,960 bytes, about 1.27 GB (`q25v_gemm_sizes`: the four d x d GEMMs, the gate and
+  up at d x ff_pad, the down at ff_pad x d); the gemma3v Q8_0 plane uploaded whole, 27 layers x (4 x
+  1152^2 + 2 x 1152 x 4352) = 414 M weights, about 414 MB of quants plus 26 MB of f16 scales (2 bytes
+  a 32-weight block); the per-encode device scratch at 4096 rows, from `vt_scratch` /
+  `vt_scratch_f16`'s buffer list - eleven f32 row buffers at rows x d x 4 (eight on qwen25v), two
+  f32 hidden buffers at rows x ff x 4, the two f16 K/V shadows at rows x d x 2, the Q8_0 feed at
+  rows x max(d, ff) x 33/32 (the f16 feed at rows x max(d, ff) x 2 on qwen25v), the padded panels at
+  rows x n_head x 128 x 12 where the head is not 64 wide, the rope tables at rows x hd x 4 - reads
+  about 491 MB for gemma3v (d 1152, ff 4352, 16 padded heads), about 432 MB for qwen25v (d 1280, ff
+  3456, 16 padded heads) and about 507 MB for the Qwen3-VL-4B qwen3v tower (d 1024, ff 4096, the
+  fused [q | k | v] rows at 3 x rows x d x 4 and the three tap stashes at 3 x rows x d x 4 beside the
+  padded panels); and the qwen3v host-side tap stash `ds_xtaps` at n_ds x rows x d x 4 bytes, 3 x
+  4096 x 1024 x 4 = 50,331,648 bytes, about 50 MB on the 4B. The gemma4v scratch follows the same
+  list at its d and ff with no padded panels (its head is 64 wide). One resident a family, released
+  by the model drop's sweep.
 - **The device chain's distance from the exact CPU chain, the twin cells at the tip, x token rms
   (the CPU q8 chain's own distance beside where the family has one):** gemma4v E2B 16 blocks
   0.082 / 0.160 / 0.63 / 0.26 against 0.064 / 0.193 / 0.46 / 0.25 (cb96, cb336, green 672x336,
@@ -2742,3 +2766,12 @@ encode is one image's tower time in ms, the mean of the three timed reps.
   route read 0.16 to 0.79 on the 5060 Ti's cm2 arm and 1.53 on the pod's at 32 blocks - the
   coopmat tile's f16 staging compounds over the 28 window layers, which is why the window layers
   attend in f32 on the compact rows (`ARCHITECTURE_GPU_TOWER.md` 2.2aq).
+
+  Provenance of the twin-cell figures: `test_gemma4v_vulkan_twin`, `test_gemma3v_vulkan_twin`,
+  `test_qwen3v_vulkan_twin` and `test_qwen25v_vulkan_twin` (`tests/test_<family>.das`), each run
+  through dastest under `-jit` with `--test-names` naming the cell, `DASLLAMA_GPU=1`,
+  `DASLLAMA_IMAGE=0`, `DAS_TUNE_POLICY` unset; the box is the pod (RTX PRO 4500 Blackwell, driver
+  580.173) on its cm2 arm (`DASLLAMA_COOPMAT` unset) unless the sentence names the 5060 Ti (Boris's
+  box, RTX 5060 Ti 16 GB, driver 616.56), whose cm2 arm is likewise the default and whose KHR arm
+  is `DASLLAMA_COOPMAT=mm`. A distance is the cell's own logged x-rms reading over one run of the
+  cell; the cells log the reading on green and assert the bar.

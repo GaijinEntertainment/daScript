@@ -31,6 +31,8 @@ def private set_every_gpu_tower(on : bool) {
 // Reference arm: the f32-widened mmproj, CPU, -fa off (qwen3vl-vision-oracle/mint_25o.sh).
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower
 // math; cb448 = four full windows, cb112 = the single-window arm, cb616x336 = ragged windows.
+// The Vulkan twin skips on a build with das_metal - the Metal driver owns the tower hooks there - and
+// without a Vulkan device under DASLLAMA_GPU=1.
 
 let private TIER1_ABS = 2e-4
 // x token rms; one GELU-LUT chain (the merger) rides the qwen3v Omni floor
@@ -108,15 +110,35 @@ let private TWIN_ABS_VK = 2e-4
 let private TWIN_REL_VK_SHALLOW = 1e-2
 let private TWIN_REL_VK_DEEP = 0.15
 
-def private encode_maxdiff(a, b : array<float>) : float {
-    var m = 0.0
-    for (x, y in a, b) {
-        m = max(m, abs(x - y))
+//! a tower minted in memory from the staged planes: `nl` blocks (0 = the file's count), `wa` the full-attention period when
+//! >= 0 (the shallow routing cells), `zero_block` >= 0 zeroes that block's GEMM region through BOTH staging planes (the baked
+//! halfword twin serves the driver, so a blob-only zero is laundered) - the input poison of the device-side bars. Never
+//! `load_qwen25v_tower`, which bakes a `.dlim`.
+def private mint_tower(mm : string; nl : int64 = 0l; wa : int64 = -1l; zero_block : int64 = -1l) : Qwen25vTower {
+    var inscope stg <- stage_qwen25v_tower(mm)
+    if (nl > 0l) {
+        stg.t.n_layer = nl
     }
-    return m
+    if (wa >= 0l) {
+        stg.t.n_wa_pattern = wa
+    }
+    if (zero_block >= 0l) {
+        let base = stg.t.layer_w + zero_block * stg.t.layer_w_stride
+        for (i in range64(stg.t.layer_w_stride)) {
+            stg.blob[base + i] = 0.0
+        }
+        for (i in range64(long_length(stg.wblob) > 0l ? stg.t.layer_w_stride : 0l)) {
+            stg.wblob[base + i] = uint16(0)
+        }
+    }
+    var tw = Qwen25vTower()
+    mint_qwen25v_tower(stg, tw)
+    return <- tw
 }
 
-def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int) {
+//! one canvas two ways - the exact CPU chain and the device chain - with the counters and the bar; `zero_block` >= 0 adds the
+//! input poison: the device chain over a fresh tower with that block zeroed must EXCEED the bar the clean chains set
+def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
         var cpu : array<float>
@@ -150,10 +172,10 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
             ss += a * a
         }
         let rms = sqrt(ss / float(max(length(cpu), 1)))
-        let dev_ex = encode_maxdiff(gpu, cpu)
+        let dev_ex = logits_maxdiff(gpu, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
         let bar = TWIN_ABS_VK + rel * rms
-        //! the error's shape: NaNs the maxdiff cannot see, the worst token, the tokens past the bar
+        // the error's shape: NaNs the maxdiff cannot see, the worst token, the tokens past the bar
         var nans = 0
         var worst_tok = -1
         var worst = 0.0
@@ -178,18 +200,32 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         }
         to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks, full every {tw.n_wa_pattern}): rms {rms}; device vs exact {dev_ex} ({dev_ex / rms} x rms); NaNs {nans}, worst token {worst_tok} of {length(cpu) / pd}, {over} tokens past the bar\n")
         tt |> success(dev_ex <= bar, "{kind} {w}x{h}: the device chain holds to the exact chain within {rel} x rms ({dev_ex / rms} x rms)")
-        tt |> success(abs((gpu[0] + 2.0 * bar) - cpu[0]) > bar, "{kind} {w}x{h}: a poisoned element reds the bar")
+        if (zero_block >= 0l) {
+            var twp <- mint_tower(mm, tw.n_layer, -1l, zero_block)
+            var stp = Qwen25vState()
+            var poisoned : array<float>
+            let p0 = vulkan_tower_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                qwen25v_encode(twp, stp, planes, int64(w), int64(h), poisoned)
+            }
+            tt |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{kind} {w}x{h} poison: device-served (encodes delta)")
+            let poison_ex = logits_maxdiff(poisoned, cpu)
+            to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / rms} x rms), bar {bar}\n")
+            tt |> success(poison_ex > bar, "{kind} {w}x{h}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {bar})")
+            delete stp
+            delete twp
+        }
     }
 }
 
-//! the bar is shallow_routing_cell's 0.1 abs and its derivation, held on the driver
-def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
+let private SHALLOW_ABS_BAR = 0.1   //! shallow_routing_cell's 0.1 abs and its derivation, held on the driver
+
+//! the one-block routing cell on the driver: the device chain against the CPU chain on quad content, then the input poison -
+//! the device over a tower whose one block is zeroed, against the same clean CPU chain, must EXCEED the bar
+def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {   // nolint:LINT012,LINT019 — the whole body is the vulkan static_if arm; the no-vulkan lane sees every argument unused
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var inscope st <- stage_qwen25v_tower(mm)
-        st.t.n_layer = 1l
-        st.t.n_wa_pattern = wa
-        var tw = Qwen25vTower()
-        mint_qwen25v_tower(st, tw)
+        var tw <- mint_tower(mm, 1l, wa)
         let planes <- make_planes("quad", 448, 448)
         var sg = Qwen25vState()
         var og : array<float>
@@ -211,15 +247,31 @@ def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
         }
         set_vulkan_tower(true)
         t |> equal(int(ng), int(nc), "shallow {name}: token counts agree")
-        let md = encode_maxdiff(og, oc)
-        t |> success(md < 0.1, "shallow {name}: device == CPU on quad within 0.1 abs (measured {md})")
+        let md = logits_maxdiff(og, oc)
+        to_log(LOG_INFO, "qwen25v shallow {name} on the driver: device vs CPU on quad maxdiff {md} (bar {SHALLOW_ABS_BAR} abs)\n")
+        t |> success(md < SHALLOW_ABS_BAR, "shallow {name}: device == CPU on quad within {SHALLOW_ABS_BAR} abs (measured {md})")
+        var twp <- mint_tower(mm, 1l, wa, 0l)
+        var sp = Qwen25vState()
+        var op : array<float>
+        let p0 = vulkan_tower_stats().encodes
+        with_job_que() {
+            setup_dasllama_jobque_()
+            qwen25v_encode(twp, sp, planes, 448l, 448l, op)
+        }
+        t |> equal(vulkan_tower_stats().encodes - p0, 1l, "shallow {name} poison: device-served")
+        let mdp = logits_maxdiff(op, oc)
+        to_log(LOG_INFO, "qwen25v shallow {name} poison: the zeroed block on the device vs the clean CPU chain maxdiff {mdp}\n")
+        t |> success(mdp >= SHALLOW_ABS_BAR, "shallow {name}: a zeroed block through the device chain EXCEEDS the {SHALLOW_ABS_BAR} abs bar (measured {mdp})")
         delete og
         delete oc
+        delete op
         delete sg
         delete sc
+        delete sp
         delete tw
+        delete twp
     } else {
-        t |> skip("no dasVulkan on this build: {mm} {name} {wa} unread")
+        t |> skip("no dasVulkan on this build")
     }
 }
 
@@ -227,38 +279,39 @@ def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {
 def test_qwen25v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the exact CPU chain, and the window routing") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let mm = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
-            if (!model_available(tt, mm)) {
-                return
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                tt |> skip("das_metal on this build owns the tower hooks - the Vulkan twin has no seat")
+            } else {
+                let mm = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
+                if (!model_available(tt, mm)) {
+                    return
+                }
+                if (!vk_moe_init()) {
+                    tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
+                    return
+                }
+                for (nl in [1l, 2l, 8l]) {   // the shallow twins first, on the tight bar: a drift names its depth before the deep mix re-rolls it
+                    var tws <- mint_tower(mm, nl)
+                    var sts = Qwen25vState()
+                    twin_encode(tt, tws, sts, "cb", 448, 448, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
+                    twin_encode(tt, tws, sts, "cb", 616, 336, mm)
+                    delete sts
+                    delete tws
+                }
+                var tw <- mint_tower(mm)
+                var st = Qwen25vState()
+                tt |> success(tw.wblob.n > 0l && !tw.blk_bf16, "the halfword twin is baked from an f16 file: the driver's lane")
+                twin_encode(tt, tw, st, "cb", 112, 112, mm)
+                twin_encode(tt, tw, st, "cb", 448, 448, mm)
+                twin_encode(tt, tw, st, "cb", 616, 336, mm)
+                delete st
+                delete tw
+                shallow_routing_cell_vk(tt, mm, "window", 99l)
+                shallow_routing_cell_vk(tt, mm, "full", 1l)
+                vulkan_tower_shutdown()
             }
-            if (!vk_moe_init()) {
-                tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
-                return
-            }
-            for (nl in [1l, 2l, 8l]) {   //! the shallow twins first, on the tight bar: a drift names its depth before the deep mix re-rolls it
-                var inscope stg <- stage_qwen25v_tower(mm)
-                stg.t.n_layer = nl
-                var tws = Qwen25vTower()
-                mint_qwen25v_tower(stg, tws)
-                var sts = Qwen25vState()
-                twin_encode(tt, tws, sts, "cb", 448, 448)
-                twin_encode(tt, tws, sts, "cb", 616, 336)
-                delete sts
-                delete tws
-            }
-            var tw <- load_qwen25v_tower(mm)
-            var st = Qwen25vState()
-            tt |> success(tw.wblob.n > 0l && !tw.blk_bf16, "the halfword twin is baked from an f16 file: the driver's lane")
-            twin_encode(tt, tw, st, "cb", 112, 112)
-            twin_encode(tt, tw, st, "cb", 448, 448)
-            twin_encode(tt, tw, st, "cb", 616, 336)
-            delete st
-            delete tw
-            shallow_routing_cell_vk(tt, mm, "window", 99l)
-            shallow_routing_cell_vk(tt, mm, "full", 1l)
-            vulkan_tower_shutdown()
         } else {
-            feint("dasVulkan is not built on this platform - the twin needs it\n")
+            tt |> skip("dasVulkan not present")
         }
     }
 }
@@ -330,8 +383,8 @@ def test_qwen25v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twp
-            shallow_routing_cell(tt, mm, "window", 99l)   //! (0+1) % 99 != 0 -> the window arm
-            shallow_routing_cell(tt, mm, "full", 1l)      //! (0+1) % 1 == 0 -> the slab arm
+            shallow_routing_cell(tt, mm, "window", 99l)   // (0+1) % 99 != 0 -> the window arm
+            shallow_routing_cell(tt, mm, "full", 1l)      // (0+1) % 1 == 0 -> the slab arm
         } else {
             tt |> skip("no das_metal on this build - the GPU rung has no device to serve")
         }

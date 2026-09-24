@@ -746,20 +746,25 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
     "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
     "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
-    // the bidirectional flash tiles (the vision towers' encoder attention, on both arms at the 64 head and the padded
-    // 128): their carriers are the vision mmprojs, no zoo row; their coverage is test_vkt_fa_bidir in
-    // test_vulkan_tower_kernels.das
+    // the bidirectional flash tiles (the vision towers' encoder attention): the 64 head is the gemma4v tower's (the stocked
+    // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das), the padded 128 the
+    // gemma3v / qwen3v towers' (mmproj-gemma-3-4b-it-F16.gguf via test_gemma3v_vulkan_twin, mmproj-Qwen3VL-4B-Instruct-F16.gguf
+    // via test_qwen3v_vulkan_twin) - no zoo row; their kernel coverage is test_vkt_fa_bidir in test_vulkan_tower_kernels.das
     "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
-    // the vision towers' row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the same
-    // carriers, no zoo row; their coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
+    // the gemma4v tower's row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the stocked
+    // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
+    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
     "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the biased-block (SigLIP) row classes: the layernorm, the bias with its GELU, the seam, the head restrides to the
-    // flash tile's width; their coverage is test_vkt_tower_ln_rows
+    // flash tile's width (the stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_vulkan_twin in test_gemma3v.das;
+    // the rope on a fused row's slot is the qwen3v tower's - mmproj-Qwen3VL-4B-Instruct-F16.gguf via test_qwen3v_vulkan_twin
+    // in test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows
     "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
     // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows, the gated FFN's
-    // hidden and the rms seam; their coverage is test_vkt_tower_win_rows
+    // hidden and the rms seam (the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf, dispatched by test_qwen25v_vulkan_twin in
+    // test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
     "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr

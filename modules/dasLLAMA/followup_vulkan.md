@@ -1744,6 +1744,40 @@ module) is independent and can land any time - it is pure structure.
     the upload converts to f16 on the gather (the resident MoE driver's precedent); baking f16
     scales (`qscales16`) into the tower images would drop the conversion and switch the CPU q8
     lane to its s16 kernels - a ruling.
+96. **The batch rails mark a session host-current after reading back its one row.** The N-row
+    token command and the row-at-a-time step (`dasllama_gpu_resident.das`, the two
+    `s.rdec_host_current = !s.device_kv` landings after `g_rdec_regions[r].cnt = pos + 1l`) read
+    back only the row at `pos` and then mark the session's host cache current. A one-row decode
+    marks the session NOT current (the mirror advanced past the last hydration), so a stream that
+    decoded one row at a time and then joins a batched step comes out marked current while the
+    rows between its last hydration and `pos` are still device-only; a later pass to the CPU
+    rails (`rdec_pass_hydrated` is a no-op on a current session) would then compute over a host
+    cache with those rows missing. The sequence: a one-row step (or a device prefill) on a
+    host-cached session, no hydration, then that session inside a batched step, then a pass to
+    the CPU rails. Not reproduced; `tests/_resident_regions.das`'s batched cells hydrate nothing
+    between steps, and no cell passes a batched stream to the CPU afterwards. The fix reads the
+    landing's flag from the session's state before the step (`rdec_has_device_only_rows`) rather
+    than setting it true unconditionally, with a cell that runs the sequence.
+97. **The vision tower arc's templatable sets - the post-arc dedup pass.** The per-PR audits
+    fold DUPLICATEs only; these are the sibling sets the arc left for the folds pass, each with
+    the fold. Kernel twins in `dasllama_vulkan_classes.das`: `TowerRms` / `TowerLn`,
+    `TowerPostAdd` / `TowerPostAddLnT<RMS>`, `F16Cvt` / `TowerClampCvt` - one template per pair
+    on one kargs struct. The family twin cells across the four `tests/test_<family>.das` files:
+    `twin_encode`, `set_every_gpu_tower`, `TWIN_SLACK_VK`, the exact-lane decline tail and the
+    rms loop - one generic `vk_twin_encode` in a shared test module plus a `logits_rms` in
+    `_compares`. The driver's residency pairs (`dasllama_vulkan_tower.das`): `vt_key` /
+    `vt_key_f16`, `vt_upload` / `vt_upload_f16`, `vt_scratch` / `vt_scratch_f16` - one generic over
+    the plane type, or over the flags the release keys on. The four `vt_sets_*` builders -
+    per-concern builders composed per family. The chains' shared prologue, epilogue and
+    schedule-map loops - `vt_gate`, `vt_sched_maps(r, regions, npos)`, `vt_finish` - and the three
+    `*_regions` walkers - one walker over a per-family GEMM table. `vt_sched_map` /
+    `vt_gemm_groups` against the prefill's `fill_arena_batch_sched` - one record writer. The
+    g3v / q3v block tails (about 24 lines differing in offset field names). `vt_decline` against
+    Metal's `DeclineCounter` / `note_decline` - a backend-neutral home. `wg_sum` against
+    `wg_rms_inv` (the fold moves eighteen decode stamps by 108 bytes - a fold takes the stamp
+    source-diff evidence and a decode row). The three hand-rolled listener registries
+    (`register_vk_drop_hook`, `register_weights_epoch_listener`, `register_reload_prep`) against
+    daslib's `delegate` module.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s

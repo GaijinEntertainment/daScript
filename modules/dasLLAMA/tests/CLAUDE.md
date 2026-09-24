@@ -305,9 +305,13 @@ the tail-mask control, and the poisoned-element control on the bar; and the towe
 weighted rms, the in-place clamp, the clamp-and-f16 and clamp-and-Q8_0 feeds, the two-axis neox
 rope, the post-add with its next pre-norm, and the clamped GEGLU-quick - each against the CPU tower
 helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
-`add_inplace_rows`) or its closed form, over one command buffer, with a poisoned-element control per
-bar; the biased-block classes (the layernorm, the bias with its tanh GELU, the seam with its next
-layernorm, the head restrides to the tile's 128 and the rope on a fused row's k slot) the same way;
+`add_inplace_rows`) or its closed form, over one command buffer, every written-only output under a
+sentinel fill before its dispatch (NaN words; a NaN in both halves for the f16 panels, -128 bytes
+for the Q8_0 quants), with a poisoned-element control per bar, and the flag arms - the post-add
+classes at `ln_on = 0` (the seam alone, the pre-norm output proven untouched by its sentinel) and
+the bias class at `gelu_on = 0`; the biased-block classes (the layernorm, the bias with its tanh
+GELU, the seam with its next layernorm, the head restrides to the tile's 128 and the rope on a
+fused row's k slot) the same way;
 the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
 heads) against `attention_bidir`; and the window classes - the f32 per-window attention over the
 compact rows on sixteen windows (one ragged) against `attention_bidir_windows` with full attention
@@ -962,14 +966,21 @@ the staging planes must miss the oracle - the sidecar scalars are load-bearing);
 - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
 with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps. Every
 CPU-lane claim pins BOTH GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build two more cells:
-`test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image on
-the q8 lane's bar with the engage counters per fixture, and `test_gemma4v_vulkan_twin` needs no
-dump - one canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and
-two-block truncated towers and the whole tower, the counters proving which served, the device's
-distance from the exact chain held within 1.5x the CPU q8 chain's own (the gate's reading: the
-device chain is the same or better), the residual rows logged per 64-row tile, a poisoned element
-per bar, then the exact-lane tower's `quant_mode` decline; the E4B cell's q8 leg re-runs its dump
-through the driver. Both skip without a Vulkan device.
+`test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image (minted
+in memory under the lane pin, the pin restored) on the q8 lane's bar with the engage counters per
+fixture, then the input poison - a q8 tower with block 8's planes zeroed, served by the driver, must
+EXCEED the bar on cb336; and `test_gemma4v_vulkan_twin` needs no dump - cb96 and cb336 three ways
+(the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block truncated towers,
+then cb96, cb336, green 672x336 and cb768x384 (1152 rows, the aligned tile variant's canvas) on the
+whole tower, every tower staged and minted in memory (never `load_gemma4v_tower`, which bakes a
+`.dlim` under the pin), the counters proving which served, the device's distance from the exact
+chain held within 1.5x the CPU q8 chain's own (the gate's reading: the device chain is the same or
+better), the residual rows logged per 64-row tile, the input poison on the one-block cb96 leg (a
+fresh q8 tower with its block zeroed through the device chain must EXCEED the bar the clean chains
+set), then the exact-lane tower's `quant_mode` decline; the E4B cell's q8 leg re-runs its dump
+through the driver and runs the same zeroed-block poison against it. All three skip without a
+Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where the Metal driver owns
+the tower hooks.
 `test_gemma3v.das` - stocked suite; the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896^2 (learned position table), so
@@ -986,11 +997,16 @@ would read as f32 garbage), and a third crowned encode on the twin-W route
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
 the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`); on a
 Vulkan build the q8 cell re-runs its two dumps through the Vulkan block loop with the engage
-counters, and `test_gemma3v_vulkan_twin` is the dump-free instrument - the fixed canvas three
-ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block truncated
-towers and the whole tower, the device's distance from the exact chain held within 1.5x the
-CPU q8 chain's own, a poisoned element per bar, then the exact-lane tower's `quant_mode`
-decline; one deep canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's cost.
+counters and the input poison (a q8 tower with block 13's planes zeroed, served by the driver, must
+EXCEED the q8 bar on cb896), and `test_gemma3v_vulkan_twin` is the dump-free instrument - the fixed
+canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block
+truncated towers and the whole tower, every tower staged and minted in memory (never
+`load_gemma3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
+chain's own, the input poison on the one-block leg (a fresh q8 tower with its block zeroed through
+the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline; one deep
+canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's cost. The Vulkan rung and
+the twin skip without a Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where
+the Metal driver owns the tower hooks.
 `test_qwen3v.das` - stocked suite; the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
@@ -1024,9 +1040,13 @@ claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build `
 q8 chain and the Vulkan block loop over the q8 image (the tap mergers run on the CPU off the
 residuals the driver stashes after the tap blocks, so the wide rows' slices read the device's
 rows) on one-, two- and six-block truncated towers (the six-block one reaches the first tap) and
-the whole tower, three canvases, the device's distance from the exact chain held within 1.5x the
-CPU q8 chain's own, a poisoned element per bar, then the exact-lane tower left to the CPU chain
-(its hook is the Metal driver's, so no decline is counted). Skips without the mmproj or a device.
+the whole tower, three canvases, every tower staged and minted in memory (never
+`load_qwen3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
+chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with its block zeroed
+through the device chain must EXCEED the bar), then the exact-lane tower left to the CPU chain (its
+hook is the Metal driver's, so no decline is counted). Skips without the mmproj, without a Vulkan
+device under `DASLLAMA_GPU=1`, and on a build with das_metal, where the Metal driver owns the
+tower hooks.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,
@@ -1051,9 +1071,14 @@ Vulkan build `test_qwen25v_vulkan_twin` holds the Vulkan block loop over the bak
 eight-block truncated towers and to 0.15*rms on the whole tower (the f16 GEMM feed's re-roll at
 depth, the Metal rung's order; the window layers attend in f32 so their noise does not compound)
 on the single-window, four-window and ragged-edge fixtures with the engage counters and the
-knob-off decline, then the shallow routing cells on the driver - the one-block pure-window and
-all-full towers on quad content against the CPU chain at 0.1 abs; quad content stays off the deep
-numeric set as on the Metal rung. Skips without the mmproj or a device.
+knob-off decline, every tower staged and minted in memory (never `load_qwen25v_tower`), the input
+poison on the one-block cb448 leg (a fresh tower with its block zeroed through BOTH staging planes,
+served by the driver, must EXCEED the bar), then the shallow routing cells on the driver - the
+one-block pure-window and all-full towers on quad content against the CPU chain at 0.1 abs, the
+measured maxdiff logged, each with its own poison (the device over the zeroed one-block tower
+against the clean CPU chain must EXCEED the bar); quad content stays off the deep numeric set as on
+the Metal rung. Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on a
+build with das_metal, where the Metal driver owns the tower hooks.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
 over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
 `quad` generator and the q1/q2/q3 quarter-offset probe fields live here).

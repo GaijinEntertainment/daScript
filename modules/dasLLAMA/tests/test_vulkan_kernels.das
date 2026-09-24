@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require math
 require strings   // starts_with: the roster cell finds an entry by its name's head
 require dasllama/dasllama_math
-require ?vulkan _compares   // logits_maxdiff / logits_maxabs: read inside the vulkan arms only, so a lane without dasVulkan sees no use
+require _compares
 require _vk_kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
@@ -274,7 +274,6 @@ def test_vkd_class_dispatch(t0 : T?) {
 }
 
 //! SPIR-V's OpDecorate is opcode 71, three words (target, decoration) or four with the decoration's literal; Binding is 33, NonWritable 24
-let private NAN_SENTINEL_BITS = 0x7fc00000u   //! the output fill before a dispatch: a NaN, so a stale or unwritten element cannot sit inside any bar
 let private SPV_HEADER_WORDS = 5   //! the module header the instruction walk skips
 let private SPV_OP_DECORATE = 71u
 let private SPV_DECOR_NONWRITABLE = 24u
@@ -1418,20 +1417,6 @@ def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
     return bad
 }
 
-//! `bytes` of `word` into the device buffer `dev` at `off`; the three take `dev` untyped so a build without the vulkan module never infers them
-def private fill_upload(dev; off, bytes : int64; word : uint) {
-    var s : array<uint>
-    s |> resize(bytes / 4l)
-    for (v in s) {
-        v = word
-    }
-    upload_region_at(dev, off, unsafe(addr<uint8 const?>(s[0])), bytes)
-    delete s
-}
-
-//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
-def private nan_sentinel_upload(dev; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
-
 // the dot-product cells' bar - 1e-3 of the larger of 1 and the reference - over n outputs from base
 def private rel_mismatches(got, want : array<float>; base, n : int) : int {
     var bad = 0
@@ -1457,15 +1442,6 @@ def private ba_plane_mismatches(got, want : array<float>; npos, ne, nvh, ob_b, o
     return bad
 }
 
-def private mismatch_exact(got, want : array<float>) : int {
-    var bad = 0
-    for (g, w in got, want) {
-        if (g != w) {
-            bad++
-        }
-    }
-    return bad
-}
 
 // packed quant words as signed bytes within +-tol (act chains carry transcendental ulp noise)
 def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
