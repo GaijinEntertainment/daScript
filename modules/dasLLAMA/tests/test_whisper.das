@@ -28,15 +28,6 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown â
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
 // Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng).
-def private whisper_models_dir() : string {
-    let env = g_env_test.whisper_dir
-    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
-}
-
-def private samples_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 
 // the ASR corpus (jfk + LibriSpeech clips) lives under the repo's benchmarks/asr, gitignored
 def private corpus_dir() : string {
@@ -211,7 +202,7 @@ def test_dec_layer_layout(t : T?) {
 [test]
 def test_whisper_loader(t : T?) {
     t |> run("tiny bin: hparams, special ids, vocab (needs ggml-tiny.bin)") @(t : T?) {
-        let path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        let path = path_join(whisper_dir(), "ggml-tiny.bin")
         if (!model_available(t, path)) return
         let w <- load_whisper_model(path)
         t |> equal(w.n_vocab, 51865l)
@@ -237,7 +228,7 @@ def test_whisper_loader(t : T?) {
 [test]
 def test_asr_surface(t : T?) {
     t |> run("load_asr_model sniffs the bin + caps report whisper honestly") @(t : T?) {
-        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
         var inscope m <- load_asr_model(model_path)   // the sniff route: ggml magic + big vocab -> whisper
         t |> equal(m.whisper.n_vocab, 51865l, "loaded through the sniff")
@@ -265,9 +256,9 @@ def test_qwen3a_tower(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = path_join(samples_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -315,9 +306,9 @@ def test_parakeet_oracle(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = path_join(whisper_models_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
+        let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
         if (!model_available(t, path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -377,9 +368,9 @@ def test_parakeet_v3_oracle(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let path = path_join(whisper_models_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         if (!model_available(t, path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -420,9 +411,9 @@ def test_whisper_transcribe_oracle(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -497,9 +488,9 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -558,9 +549,9 @@ def test_whisper_tower_fp32_knob(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -661,9 +652,9 @@ def test_whisper_crowned_word_level(t : T?) {
                 t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
                 return
             }
-            let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             if (!model_available(t, model_path)) return
-            let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -768,8 +759,8 @@ def test_canary_qwen_oracle(t : T?) {
             t |> skip("canary-qwen is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
         }
-        let dec = path_join(samples_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
-        let enc = path_join(samples_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        let dec = path_join(models_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
+        let enc = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         if (!model_available(t, dec) || !model_available(t, enc)) {
             return
         }
@@ -810,8 +801,8 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        let dec = path_join(samples_dir(), "gemma-4-E2B-it-Q8_0.gguf")
-        let mmproj = path_join(samples_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        let dec = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+        let mmproj = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
@@ -896,8 +887,8 @@ def test_qwen3omni_audio_oracle(t : T?) {
             t |> skip("Qwen3-Omni-30B is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
         }
-        let dec = path_join(samples_dir(), "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf")
-        let mmproj = path_join(samples_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+        let dec = path_join(models_dir(), "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf")
+        let mmproj = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
@@ -940,7 +931,7 @@ def test_mel_state_reuse_deterministic(t : T?) {
             t |> skip("jfk.wav not present in the asr corpus")
             return
         }
-        let g4a_path = path_join(samples_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        let g4a_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (model_available(t, g4a_path)) {
             var inscope enc <- load_gemma4a_encoder(g4a_path)
             var st = Gemma4aState()
@@ -955,7 +946,7 @@ def test_mel_state_reuse_deterministic(t : T?) {
             delete mel1
             delete st
         }
-        let cn_path = path_join(samples_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        let cn_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         if (model_available(t, cn_path)) {
             var inscope cenc <- load_canary_encoder(cn_path)
             var cst = CanaryState()

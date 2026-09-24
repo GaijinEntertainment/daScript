@@ -4,7 +4,6 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _ids   // same_ids
 require dasllama/dasllama_spm
 require dasllama/dasllama_gguf
 require dasllama/dasllama_pocket
@@ -119,7 +118,7 @@ def test_pocket_tokenizer(t : T?) {
     var bad = 0
     for (r in fx.rows) {
         var inscope ours <- unigram_encode(tk, r.prepared, unk_id, byte_fallback, reserved)
-        if (!same_ids(ours, r.ids)) {
+        if (!ids_equal(ours, r.ids)) {
             bad++
             if (bad <= 3) {
                 to_log(LOG_ERROR, "pocket tokens {r.id}: ours [{ids_text(ours)}] reference [{ids_text(r.ids)}]\n")
@@ -130,7 +129,7 @@ def test_pocket_tokenizer(t : T?) {
     // the probes: byte fallback on an emoji and a Cyrillic capital, whitespace runs, tabs and newlines
     for (p in fx.probes) {
         var inscope ours <- unigram_encode(tk, p.text, unk_id, byte_fallback, reserved)
-        t |> success(same_ids(ours, p.ids), "'{p.text}': ours [{ids_text(ours)}] reference [{ids_text(p.ids)}]")
+        t |> success(ids_equal(ours, p.ids), "'{p.text}': ours [{ids_text(ours)}] reference [{ids_text(p.ids)}]")
     }
     // decode returns the text the ids came from
     var bad_decode = 0
@@ -884,14 +883,14 @@ def private language_cells(t : T?; L : PocketLang) {
     var bad = 0
     for (r in fx.rows) {
         var inscope ours <- pocket_text_ids(m, r.prepared)
-        if (!same_ids(ours, r.ids)) {
+        if (!ids_equal(ours, r.ids)) {
             bad++
             to_log(LOG_ERROR, "pocket {L.config} tokens {r.id} '{r.prepared}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(r.ids)}]\n")
         }
     }
     for (p in fx.probes) {
         var inscope ours <- pocket_text_ids(m, p.text)
-        if (!same_ids(ours, p.ids)) {
+        if (!ids_equal(ours, p.ids)) {
             bad++
             to_log(LOG_ERROR, "pocket {L.config} probe '{p.text}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(p.ids)}]\n")
         }

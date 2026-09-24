@@ -5,20 +5,16 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require _model_tier
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_env
 
 // The CPU-prefill tripwire — this file deliberately never calls allow_cpu_prefill()
 // (test_attn_span arms it in [init], which is why this cell cannot live there): on a
 // Metal-capable build a >32-row undeclared batched prefill panics, media span included —
 // the metal rail serves spans, so a CPU-served one is a silent fallback like any other.
 
-def private llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let NROWS = 40l
 

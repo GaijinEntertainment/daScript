@@ -4,6 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require math
+require _compares
 
 [test]
 def test_silu(t : T?) {
@@ -45,12 +46,6 @@ def private gate_inputs() : tuple<array<float>; array<float>> {
     return g => u
 }
 
-def private maxdiff(a, b : array<float>) : float {
-    var m = 0.0
-    for (av, bv in a, b) { m = max(m, abs(av - bv)) }
-    return m
-}
-
 [test]
 def test_gate(t : T?) {
     let n = 12l
@@ -62,7 +57,7 @@ def test_gate(t : T?) {
         for (i in range(int(n))) { ref[i] *= inp._1[i] }
         var got := inp._0
         swiglu(got, inp._1, n)
-        t |> success(maxdiff(ref, got) == 0.0, "swiglu bit-exact vs silu then *u")
+        t |> success(logits_maxdiff(ref, got) == 0.0, "swiglu bit-exact vs silu then *u")
     }
     t |> run("geglu scalar == gelu*u (bit-exact)") @(t : T?) {
         let inp <- gate_inputs()
@@ -71,7 +66,7 @@ def test_gate(t : T?) {
         for (i in range(int(n))) { ref[i] *= inp._1[i] }
         var got := inp._0
         geglu(got, inp._1, n)
-        t |> success(maxdiff(ref, got) == 0.0, "geglu bit-exact vs gelu then *u")
+        t |> success(logits_maxdiff(ref, got) == 0.0, "geglu bit-exact vs gelu then *u")
     }
     // The exp4 fused gate (production default) is ~2 ulp — within tolerance of the scalar reference.
     t |> run("swiglu4 ~= swiglu (exp4 tolerance)") @(t : T?) {
@@ -80,7 +75,7 @@ def test_gate(t : T?) {
         swiglu(ref, inp._1, n)
         var got := inp._0
         swiglu4(unsafe(addr(got[0])), unsafe(addr(inp._1[0])), n)
-        t |> success(maxdiff(ref, got) < 1e-3, "swiglu4 within tolerance of scalar swiglu")
+        t |> success(logits_maxdiff(ref, got) < 1e-3, "swiglu4 within tolerance of scalar swiglu")
     }
     t |> run("geglu4 ~= geglu (exp4 tolerance)") @(t : T?) {
         let inp <- gate_inputs()
@@ -88,6 +83,6 @@ def test_gate(t : T?) {
         geglu(ref, inp._1, n)
         var got := inp._0
         geglu4(unsafe(addr(got[0])), unsafe(addr(inp._1[0])), n)
-        t |> success(maxdiff(ref, got) < 1e-3, "geglu4 within tolerance of scalar geglu")
+        t |> success(logits_maxdiff(ref, got) < 1e-3, "geglu4 within tolerance of scalar geglu")
     }
 }

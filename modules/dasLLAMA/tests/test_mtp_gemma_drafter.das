@@ -256,14 +256,6 @@ def test_gemma_drafter_cpu_step(t : T?) {
     }
 }
 
-def private maxd_of(a, b : array<float>) : float {
-    var mx = 0.0
-    for (x, y in a, b) {
-        mx = max(mx, abs(x - y))
-    }
-    return mx
-}
-
 // the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried
 // hidden, same anchor, so the two must agree on the argmax and sit within GPU-vs-CPU f32 noise
 [test]
@@ -324,8 +316,8 @@ def test_gemma_drafter_gpu_step(t : T?) {   // nolint:STYLE038 - one fixture: lo
                 gemma_drafter_last_logits(lg)
                 var out : GemmaDraftOut
                 gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out)
-                let dl = maxd_of(lg, out.logits)
-                let dh = maxd_of(hg, out.h_next)
+                let dl = logits_maxdiff(lg, out.logits)
+                let dh = logits_maxdiff(hg, out.h_next)
                 t |> equal(out.token, dg, "GPU and CPU drafts agree on the token")
                 t |> success(dl <= 0.25, "draft logits within 0.25 of the oracle (maxd {dl})")
                 t |> success(dh <= 0.05, "h_next within 0.05 of the oracle (maxd {dh})")

@@ -46,25 +46,17 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         if (add) {
             upload_region_at(g_gpu.ar_a_dev, 0l, addr<uint8 const?>(a[0]), bytes)
         }
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = ArArgs(dim = uint(dim), add_on = add ? 1u : 0u, woff = 0u, eps = eps, ascale = ascale)
-        enc_cls_ar(raw, h, g_gpu.ar_set, pc, 1l)   // one workgroup owns the whole row (it reduces)
-        vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
-        cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = ArArgs(dim = uint(dim), add_on = add ? 1u : 0u, woff = 0u, eps = eps, ascale = ascale)
+            enc_cls_ar(raw, h, g_gpu.ar_set, pc, 1l)
+            vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
+            cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
+        }
         memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
         // x is the residual stream: read the updated row back too
-        var raw2 = alloc_transient_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        cmd_copy_whole(raw2, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw2), null)
-        submit_wait(raw2)
-        free_transient_cmd(raw2)
+        cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
+            cmd_copy_whole(raw, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
+        }
         memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
     }
 }
@@ -110,21 +102,16 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kv_dim), hs = uint(head_size),
-            half = uint(half), neox = neox ? 1u : 0u, kpair0 = uint(kpair0),
-            npairs = uint(npairs), layerbase = 0u)
-        enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
-        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
-        cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
-        cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
-        cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kv_dim), hs = uint(head_size),
+                half = uint(half), neox = neox ? 1u : 0u, kpair0 = uint(kpair0),
+                npairs = uint(npairs), layerbase = 0u)
+            enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
+            vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
+            cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
+            cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
+            cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
+        }
         memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
         memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
         memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
@@ -160,18 +147,13 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
         tm.cnt = uint(cnt)
         tm.mirbase = 0u   //! the seam's mirror starts at 0: the attention adds the row's base to its push
-        var raw = alloc_transient_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
-            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-        enc_da_attn_cls(raw, h, g_gpu.da_set, pc, da_attn_row_wgs(int64(n_heads), kv_mul, 1l))
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        free_transient_cmd(raw)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
+                kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
+            enc_da_attn_cls(raw, h, g_gpu.da_set, pc, da_attn_row_wgs(int64(n_heads), kv_mul, 1l))
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
+        }
         memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
     }
 }

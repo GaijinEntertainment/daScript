@@ -161,8 +161,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tower_asr_kernels.das",
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
                     "modules/dasLLAMA/tests/test_tune_interrupt.das",
+                    "modules/dasLLAMA/tests/test_vk_spv_diff.das",
                     "modules/dasLLAMA/tests/test_unicode.das",
-                    "modules/dasLLAMA/tests/test_vad.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
@@ -244,6 +244,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tts_kokoro.das",
                     "modules/dasLLAMA/tests/test_tts_pocket.das",
                     "modules/dasLLAMA/tests/test_tts_facade.das",
+                    "modules/dasLLAMA/tests/test_vad.das",
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
@@ -289,7 +290,7 @@ def area_tests(area : string) : array<string> {
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das", "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
                     "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das",
-                    "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das" ]
+                    "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
     } elif (area == "llm") {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
                     "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_facade.das",

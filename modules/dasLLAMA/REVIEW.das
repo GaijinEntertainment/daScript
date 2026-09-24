@@ -816,7 +816,7 @@ def private check_image_layout_stamp {
 // ===== the Vulkan checklist's mechanical checks (REVIEW_GPU_VULKAN.md) =====
 
 let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
-let private VK_PREFILL = "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das"
+let private KQ_FORMAT = "modules/dasLLAMA/dasllama/dasllama_kqformat.das"
 let private VK_COMMON = "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das"
 let private BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_blocks.das"
 
@@ -885,7 +885,7 @@ def private literal_after(lines : array<string>; marker : string) : int {
 def private check_ar_max_dim_triple {
     var inscope common_lines <- split(strip_line_comments(fread(VK_COMMON)), "\n")
     let constant = literal_after(common_lines, "let AR_MAX_DIM = ")
-    var inscope ar_lines <- class_lines(VK_CLASSES, "class ArBase")
+    var inscope ar_lines <- class_lines(VK_CLASSES, "class template ArBase")
     let slab = literal_after(ar_lines, "@workgroup row : float[")
     var gate = -1
     var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
@@ -899,7 +899,7 @@ def private check_ar_max_dim_triple {
         gate_finding(VK_COMMON, "no `let AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
     }
     if (slab < 0) {
-        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class ArBase` - the add+rms slab triple has no slab to compare")
+        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class template ArBase` - the add+rms slab triple has no slab to compare")
     }
     if (gate < 0) {
         gate_finding(BLOCKS_FILE, "no `c.dim > N` inside attn_dec_shape_ok - the add+rms slab triple has no servability cap to compare")
@@ -913,14 +913,40 @@ def private check_ar_max_dim_triple {
 var private CM2_KHR_EXEMPT : table<string>   //! every format on the cm2 template owns a KHR arm today; a per-32 format the feed never admits in mm mode would join here
 var private CM2_NO_EXEMPT : table<string>
 
+//! every `class template <Fmt>Cm2T` on the cm2 base - directly, or through another format's template (`Iq4nlCm2T : Q40Cm2T`)
 def private cm2_format_templates(exempt : table<string>) : array<string> {
     var out : array<string>
     for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
         continue if (!(line |> starts_with("class template ")))
         let name = ident_prefix(slice(line, length("class template ")))
-        if (name |> ends_with("Cm2T") && find(line, ": KqCm2BatchT") >= 0 && !key_exists(exempt, name)) {
+        let base = cm2_template_base(line)
+        if (name |> ends_with("Cm2T") && (base == "KqCm2BatchT" || base |> ends_with("Cm2T")) && !key_exists(exempt, name)) {
             out |> push(name)
         }
+    }
+    return <- out
+}
+
+//! the base a `class [template] X : Y {` line names, "" when the line names none
+def private cm2_template_base(line : string) : string {
+    let colon = find(line, " : ")
+    return colon < 0 ? "" : ident_prefix(slice(line, colon + 3))
+}
+
+//! a cm2 format template's class lines, then its bases' up to the cm2 base: an override inherited from a parent template counts
+def private cm2_template_chain_lines(name : string) : array<string> {
+    var out : array<string>
+    var cur = name
+    while (!empty(cur) && cur != "KqCm2BatchT") {
+        out |> push_from(class_lines(VK_CLASSES, "class template {cur}"))
+        var next = ""
+        for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+            if (line |> starts_with("class template {cur} ")) {
+                next = cm2_template_base(line)
+                break
+            }
+        }
+        cur = next
     }
     return <- out
 }
@@ -937,6 +963,31 @@ def private cm2_dispatch_name(fmt, tail : string) : string {
     return fmt == "q8" || fmt == "q51" || fmt == "mx4" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
+//! the words of `let KQ_CM2E_ALIASES_M = "..."` in the kqformat module: the formats whose e column the m stamp serves
+def private kqformat_cm2e_aliases : array<string> {
+    let marker = "let KQ_CM2E_ALIASES_M = \""
+    for (line in split(strip_line_comments(fread(KQ_FORMAT)), "\n")) {
+        continue if (!(line |> starts_with(marker)))
+        let from = length(marker)
+        return <- split(slice(line, from, find(line, "\"", from)), " ")
+    }
+    gate_finding(KQ_FORMAT, "no `{marker}...\"` line - the e-column alias rule has no roster to read; keep the spelling or move this check with it")
+    var none : array<string>
+    return <- none
+}
+
+//! a stamp's k step off its class lines: the cm2 template's BK unless the stamp overrides it
+def private stamp_bk(lines : array<string>; template_bk : int) : int {
+    let over = literal_after(lines, "override BK = ")
+    return over < 0 ? template_bk : over
+}
+
+//! the cm2 template's own BK (`@template_constant BK : uint = N`), -1 when the line is not there
+def private cm2_template_bk : int {
+    var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
+    return literal_after(base_lines, "@template_constant BK : uint = ")
+}
+
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
     var inscope templates <- cm2_format_templates(exempt)
     if (empty(templates)) {
@@ -944,27 +995,67 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
         return
     }
     let classes = strip_line_comments(fread(VK_CLASSES))
-    var inscope ladders <- function_bodies(VK_PREFILL) $(header) {
+    var inscope ladders <- function_bodies(VK_CLASSES) $(header) {
         return header |> starts_with("def {trio.ladder}ensure") || header |> starts_with("def {trio.ladder}set") || header |> starts_with("def {trio.ladder}enc")
     }
     if (length(ladders) != 3) {
-        gate_finding(VK_PREFILL, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
+        gate_finding(VK_CLASSES, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
     }
+    for (f in ladders) {
+        let ladder = ident_prefix(slice(f.body, length("def ")))
+        let placeholder = "tile_{slice(ladder, length(trio.ladder))}_{trio.tail}("
+        let stamp_at = find(f.body, "kq_tile_stamp(")
+        if (stamp_at < 0 || find(f.body, placeholder) < 0) {
+            gate_finding(VK_CLASSES, f.line, "{ladder} is not stamped by `kq_tile_stamp` over `{placeholder}` - the stamp walks every KqFmt member, so a format without the class fails the compile instead of {trio.why}")
+            continue
+        }
+        //! a skip list takes a member off the ladder, and the innermost verify then panics at the format's first dispatch - the gate reads it so a cm2 template never hides behind one
+        let call = slice(f.body, stamp_at, find(f.body, ")", stamp_at))
+        let q0 = find(call, "\"")
+        continue if (q0 < 0)
+        for (word in split(slice(call, q0 + 1, find(call, "\"", q0 + 1)), " ")) {
+            continue if (empty(word))
+            for (tpl in templates) {
+                if (to_lower(slice(tpl, 0, length(tpl) - length("Cm2T"))) == word) {
+                    gate_finding(VK_CLASSES, f.line, "{ladder} skips {word} in its `kq_tile_stamp` list while `class template {tpl}` sits on the cm2 base - a skipped format panics at its first dispatch, so {trio.why}")
+                }
+            }
+        }
+    }
+    let e_trio = trio.suffix == "Cm2EBatch"
+    var inscope aliases <- kqformat_cm2e_aliases()
+    let base_bk = cm2_template_bk()
     for (tpl in templates) {
         let pfx = slice(tpl, 0, length(tpl) - length("Cm2T"))
-        let dispatch = cm2_dispatch_name(to_lower(pfx), trio.tail)
+        let fmt = to_lower(pfx)
+        let dispatch = cm2_dispatch_name(fmt, trio.tail)
+        if (e_trio) {
+            //! the e column steps k as the s column does (32 on the grid-codebook formats), so the s stamp's BK against the m stamp's says whether an e stamp would differ from the m stamp
+            var inscope slines <- class_lines(VK_CLASSES, "class {pfx}Cm2SBatch")
+            var inscope mlines <- class_lines(VK_CLASSES, "class {pfx}Cm2MBatch")
+            let has_m = !empty(mlines)
+            let m_bk = stamp_bk(mlines, base_bk)
+            let e_is_m = has_m && !empty(slines) && stamp_bk(slines, base_bk) == m_bk
+            let aliased = find_index(aliases, fmt) >= 0
+            if (aliased && !has_m) {
+                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but the file has no `class {pfx}Cm2MBatch` for its e column to alias")
+            } elif (aliased && !e_is_m) {
+                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but its expert column steps k by {stamp_bk(slines, base_bk)} (its s stamp's BK), not the m stamp's {m_bk} - the format leaves the roster and keeps its own e stamp")
+            } elif (!aliased && e_is_m) {
+                gate_finding(VK_CLASSES, "{tpl}: its expert column steps k by {m_bk} (its s stamp's BK), so its e stamp is the m stamp byte for byte - {fmt} joins KQ_CM2E_ALIASES_M in dasllama_kqformat.das and ships no e stamp")
+            }
+            if (aliased) {
+                if (find(classes, "class {pfx}{trio.suffix} : {tpl}") >= 0) {
+                    gate_finding(VK_CLASSES, "{tpl} keeps a `class {pfx}{trio.suffix}` its ladder never picks - {fmt} aliases the m stamp (KQ_CM2E_ALIASES_M); delete the stamp or take the format off the roster")
+                }
+                continue
+            }
+        }
         if (find(classes, "class {pfx}{trio.suffix} : {tpl}") < 0) {
             gate_finding(VK_CLASSES, "{tpl} has no `class {pfx}{trio.suffix} : {tpl}` - a format on the cm2 template ships its {trio.suffix} stamp in the same change, or {trio.why}")
         }
         if (find(classes, "name = \"{dispatch}\"") < 0) {
             gate_finding(VK_CLASSES, "{tpl} has no `[vk_dispatch(name = \"{dispatch}\"` stamp - its {trio.suffix} class has no dispatch")
-        }
-        for (f in ladders) {
-            let ladder = ident_prefix(slice(f.body, length("def ")))
-            let arm = "{slice(ladder, length(trio.ladder))}_{dispatch}("
-            if (find(f.body, arm) < 0) {
-                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - {trio.why}")
-            }
         }
     }
 }
@@ -1004,10 +1095,9 @@ def private vk_stamps(path : string) : array<VkStamp> {
             let from = length("[vk_dispatch(name = \"")
             pending = slice(line, from, find(line, "\"", from))
         } elif (!empty(pending) && line |> starts_with("class ")) {
-            let colon = find(line, " : ")
             out |> push(VkStamp(dispatch_name = pending, line = line_no,
                 cls = ident_prefix(slice(line, length("class "))),
-                base = colon < 0 ? "" : ident_prefix(slice(line, colon + 3))))
+                base = cm2_template_base(line)))
             cur = length(out) - 1
             pending = ""
         } elif (!(line |> starts_with("["))) {
@@ -1045,7 +1135,7 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
     if (bk * unr != d.bk * d.unr) {
         gate_finding(path, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({d.bk * d.unr} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {d.bk * d.unr / 32}u` and a 64-deep one none")
     }
-    var inscope tlines <- class_lines(VK_CLASSES, "class template {st.base}")
+    var inscope tlines <- cm2_template_chain_lines(st.base)
     if (ident_after(tlines, "override SCACHE = ") == "true") {
         let blkw_over = literal_after(tlines, "override BLKW = ")
         let blkw = blkw_over < 0 ? d.blkw : blkw_over
@@ -1071,6 +1161,58 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
     }
     if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != d.s_rows) {
         gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({d.s_rows}) rows wide, the column the stamp serves")
+    }
+    if (st.dispatch_name |> ends_with("_cm2m_cls") && bn != d.m_rows) {
+        let head = slice(st.dispatch_name, 0, length(st.dispatch_name) - length("_cm2m_cls"))
+        let fmt = head |> starts_with("kq_batch_") ? slice(head, length("kq_batch_")) : slice(head, 0, find(head, "_batch"))
+        if (find_index(kqformat_cm2e_aliases(), fmt) >= 0) {
+            gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on the m stamp of {fmt}, whose expert column IS this stamp (KQ_CM2E_ALIASES_M) - the expert schedule's m pieces are SCHED_M_ROWS ({d.m_rows}) rows wide; keep BN or take the format off the roster and give it an e stamp")
+        }
+    }
+}
+
+//! a grid format's GEMV leaf template carries its codebook's words and first word as literal template constants
+//! (`override GRID_WORDS` / `override GRID_OFF`): each held to the `let KQ_GRID_<FMT>_WORDS` line and the
+//! `let KQ_GRID_<FMT> = KQ_GRID_<PREV> + KQ_GRID_<PREV>_WORDS` chain the host fill (`kq_grid_dev`) reads
+def private check_kq_gemv_grid_literals {
+    var inscope lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
+    var words : table<string; int>
+    var offs : table<string; int>
+    var templates : array<string>
+    for (line in lines) {
+        if (line |> starts_with("let KQ_GRID_")) {
+            let name = ident_prefix(slice(line, length("let ")))
+            continue if (name == "KQ_GRID_WORDS" || name == "KQ_GRID_BYTES")
+            let rhs = strip(slice(line, find(line, "=") + 1))
+            if (name |> ends_with("_WORDS")) {
+                words[slice(name, length("KQ_GRID_"), length(name) - length("_WORDS"))] = literal_after([line], "= ")
+            } elif (is_number(first_character(rhs))) {
+                offs[slice(name, length("KQ_GRID_"))] = literal_after([line], "= ")
+            } else {
+                let prev = slice(ident_prefix(rhs), length("KQ_GRID_"))
+                offs[slice(name, length("KQ_GRID_"))] = (offs?[prev] ?? -1) + (words?[prev] ?? -1)
+            }
+        } elif (line |> starts_with("class template ") && find(line, "GemvT : KqGemvLeafT") >= 0) {
+            templates |> push(ident_prefix(slice(line, length("class template "))))
+        }
+    }
+    if (empty(templates)) {
+        gate_finding(VK_CLASSES, "no `class template <Fmt>GemvT : KqGemvLeafT` found - the grid literal rule has no templates to walk; keep the spelling or move this check with it")
+        return
+    }
+    for (tpl in templates) {
+        var inscope body <- class_lines(VK_CLASSES, "class template {tpl}")
+        continue if (ident_after(body, "override GRID = ") != "true")
+        let fmt = to_upper(slice(tpl, 0, length(tpl) - length("GemvT")))
+        let want_words = words?[fmt] ?? -1
+        let want_off = offs?[fmt] ?? -1
+        let got_words = literal_after(body, "override GRID_WORDS = ")
+        let got_off = literal_after(body, "override GRID_OFF = ")
+        if (want_words < 0 || want_off < 0) {
+            gate_finding(VK_CLASSES, "{tpl}: no `let KQ_GRID_{fmt}_WORDS` / `let KQ_GRID_{fmt}` for its grid - the host fill and the stamp read the codebook from different rosters")
+        } elif (got_words != want_words || got_off != want_off) {
+            gate_finding(VK_CLASSES, "{tpl}: `override GRID_WORDS = {got_words}u` / `override GRID_OFF = {got_off}u` against KQ_GRID_{fmt}_WORDS = {want_words} at word {want_off} - a template constant is a literal, so the stamp's copy moves with the `let` chain in the same change")
+        }
     }
 }
 
@@ -1375,6 +1517,7 @@ def main() : int {
     check_ar_max_dim_triple()
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
+    check_kq_gemv_grid_literals()
     check_vk_extension_roster()
     check_no_hand_pipelines()
     check_test_file_placement()

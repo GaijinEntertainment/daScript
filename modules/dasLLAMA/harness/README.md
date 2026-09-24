@@ -16,6 +16,7 @@ instruments - each carries its purpose in its header comment.
 | `batch_decline_census.das` | The batched-step decline census: one host-cached N-stream row per GGUF through the Metal batch driver (`--npl`, `--ctx`, `--kv f16|f32|q8_0|tq4`), then the step census (device / cpu_stack / per_row) and both drivers' declines-by-reason tables - names which serving shapes still step a row at a time, and reads a dying per-row fallback as text. |
 | `forced_feed_probe.das` | The forced-feed probe: a CPU prefill on a CPU session and on the GPU-decode blob twin, then N steps fed the CPU chain's greedy tokens on both (`--kv`, `--steps`), printing each step's logits maxd and both argmaxes - separates a decode step's numerics from the drift a diverging chain hides. |
 | `mem.das` | Resident memory footprint of a loaded model, by region. |
+| `vk_spv_diff.das` | The SPIR-V identity gate for a kernel fold: two `DASLLAMA_VK_SPV_DUMP` directories in, the stamps whose emitted words moved, appeared or vanished out; exit 0 only when every stamp is byte-identical on both sides. |
 
 ## Token-for-token parity (the correctness detector)
 

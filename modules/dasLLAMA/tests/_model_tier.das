@@ -21,6 +21,7 @@ require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 require dasllama/dasllama_env
+require _compares public
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
@@ -29,24 +30,6 @@ let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 //! The KV codec a session takes to be served by the armed mirror: f16, or f32 where DASLLAMA_VK_KV32
 //! arms f32 mirrors - a session on the other codec rides the CPU rails.
 def mirror_kv_dtype() : KVDtype => g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
-
-//! Max |a[i] - b[i]| over two same-length float arrays - the compare behind a logits bar.
-def logits_maxdiff(a, b : array<float>) : float {
-    var m = 0.0
-    for (x, y in a, b) {
-        m = max(m, abs(x - y))
-    }
-    return m
-}
-
-//! Max |a[i]| - the scale a relative logits bar multiplies.
-def logits_maxabs(a : array<float>) : float {
-    var m = 0.0
-    for (x in a) {
-        m = max(m, abs(x))
-    }
-    return m
-}
 
 let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 
@@ -62,23 +45,16 @@ def live_maxabs(v : array<float>) : float {
     return m
 }
 
-//! Element-for-element equality of two id lists.
-def ids_equal(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
 def models_dir() : string {
     let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
+}
+
+//! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
+def llama2c_dir() : string {
+    let env = g_env_test.llama2c_dir
+    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 
 // True when the large tier is enabled for this run (the pre-PR full sweep).

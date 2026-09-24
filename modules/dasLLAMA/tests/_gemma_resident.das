@@ -123,7 +123,7 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
         delete ids
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
         delete fed
         delete prompt
         delete toks

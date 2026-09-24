@@ -41,18 +41,6 @@ def private with_parity_backend(t : T?; blk : block<() : void>) {
     invoke(blk)
 }
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 // The pinned-kernel generate-and-compare core: greedily continue `prompt` on a loaded model and
 // return whether the continuation matches `want` token-for-token. Kept free of T? so the [test]'s
 // run()-lambda captures no array by move.
@@ -81,7 +69,7 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : 
         // index length(prompt)-1 (the same slice harness/parity.das compares)
         let echo = length(prompt) - 1
         let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
-        ok = same(got, want)
+        ok = ids_equal(got, want)
         if (eyeball) {   // opt-in: needs a tokenizer-bearing load (load_model_, not load_gguf)
             to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
             to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
@@ -167,9 +155,7 @@ def test_parity_untied_emb_q8_rows(t : T?) {
         // the row reader the forward pass uses agrees with the raw plane arithmetic
         var inscope row : array<float>
         row |> resize(dim)
-        unsafe {
-            embed_row(t8, 1000l, addr(row[0]))
-        }
+        embed_row(t8, 1000l, unsafe(addr(row[0])))
         var bad_row = 0l
         for (i in range64(dim)) {
             if (row[i] != t32.fblob[t32.tok_emb_off + 1000l * dim + i]) {

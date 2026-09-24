@@ -20,6 +20,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard 
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
+require dasllama/dasllama_kqformat
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 
@@ -94,17 +95,19 @@ def private unsplit_want(nprompt : int64) : int64 {
 }
 
 //! the census over every format's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr` (every
-//! piece in mm mode) - the expert planes carrying whichever format the file holds: the kq formats, q8, the per-32 q51 and mx4 rails
+//! piece in mm mode) - the expert planes carrying whichever format the file holds: the kq formats, q8, the per-32 q51 and mx4 rails;
+//! a 64-step format's e column is its m stamp (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
 def private column_census(col : string) : int64 {
-    var n = census("q8_batch_{col}_cls_spv") + census("q51_batch_{col}_cls_spv") + census("mx4_batch_{col}_cls_spv")
+    var n = census("q8_batch_{col == "cm2e" && kq_cm2e_aliases_m("q8") ? "cm2m" : col}_cls_spv") + census("q51_batch_{col}_cls_spv") + census("mx4_batch_{col}_cls_spv")
     for (f in ["k4", "k5", "k6", "q40", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs"]) {
-        n += census("kq_batch_{f}_{col}_cls_spv")
+        n += census("kq_batch_{f}_{col == "cm2e" && kq_cm2e_aliases_m(f) ? "cm2m" : col}_cls_spv")
     }
     return n
 }
 
 //! the expert pieces' tile column on this device, and the dispatches it takes per MoE layer per window: the e column's one m dispatch a
-//! plane in cm2 mode; in mm mode the KHR tile takes both the s and the m dispatch of every plane
+//! plane in cm2 mode; in mm mode the KHR tile takes both the s and the m dispatch of every plane. Either way the count is a floor: the
+//! KHR tile and the 64-step formats' m stamp both serve the window's dense GEMMs too
 def private expert_column() : tuple<col : string; per_plane : int64> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return g_gpu.coopmat_mode == COOPMAT_MM ? (col = "khr", per_plane = 2l) : (col = "cm2e", per_plane = 1l)
@@ -179,14 +182,10 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
             let edelta = column_census(ecol.col) - e0
             let ewant = 3l * ecol.per_plane * layers * windows
-            if (ecol.per_plane == 1l) {
-                t |> equal(edelta, ewant, "the expert schedule's m pieces dispatched the e column on the three expert planes, once per MoE layer per window")
-            } else {   //! the KHR tile also serves the window's dense GEMMs, so its count is a floor: the expert pieces' dispatches at least
-                t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the KHR tile at least twice a plane per MoE layer per window ({edelta} over a floor of {ewant})")
-            }
+            t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per MoE layer per window ({edelta} over a floor of {ewant})")
         }
         }
-        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
         delete fed
         delete prompt
         delete toks

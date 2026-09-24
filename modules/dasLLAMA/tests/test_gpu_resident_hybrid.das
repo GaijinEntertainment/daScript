@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the who
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
+require _resident_feed
 
 // The whole-model resident driver on a deltanet hybrid under DASLLAMA_GPU=1: the resident window
 // chain prefills the prompt (the recurrent layers through the conv + chunked scan over their device
@@ -49,30 +50,10 @@ enum HybridPlanes {
     kq_q8out
 }
 
-//! the served tile arm, so a red names which prefill tile it came from
-def private tile_arm_tag() : string {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return "coopmat mode {g_gpu.coopmat_mode}"
-    } else {
-        return "no vulkan module"
-    }
-}
-
 def private window_pin(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
     }
-}
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
 }
 
 //! the coverage census's count of Q8_K requant dispatches so far; RQ_NO_CENSUS with no vulkan module
@@ -91,27 +72,6 @@ def private f16_feed_admits_kq() : bool {
     } else {
         return false
     }
-}
-
-struct FedLogits {
-    rows : array<array<float>>   //! after the prefill, then after each fed step
-    prefill_q8k_rq : int64       //! Q8_K requants the prefill alone dispatched (RQ_NO_CENSUS with no vulkan module)
-}
-
-// prefill `prompt`, then feed `toks` one per step; the logits after the prefill and after each step
-def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : FedLogits {
-    let n = long_length(prompt)
-    var out : FedLogits
-    out.rows |> reserve(long_length(toks) + 1l)
-    let rq0 = q8k_requants()
-    forward_prefill(tr, s, prompt, n, 0l)
-    out.prefill_q8k_rq = rq0 == RQ_NO_CENSUS ? RQ_NO_CENSUS : q8k_requants() - rq0
-    out.rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out.rows |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
-    }
-    return <- out
 }
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
@@ -153,41 +113,23 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
-        var gpu <- feed_logits(tr, sg, prompt, toks)
-        t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
-        if (kq && gpu.prefill_q8k_rq != RQ_NO_CENSUS) {
+        let rq0 = q8k_requants()
+        var prefill_q8k_rq = RQ_NO_CENSUS
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
+            prefill_q8k_rq = rq0 == RQ_NO_CENSUS ? RQ_NO_CENSUS : q8k_requants() - rq0
+        }) $ {}
+        if (kq && prefill_q8k_rq != RQ_NO_CENSUS) {
             //! off the f16 feed the x route requants once per recurrent layer per window - the threshold both arms read
-            to_log(LOG_INFO, "prefill ({n} tokens) [{tile_arm_tag()}]: {gpu.prefill_q8k_rq} Q8_K requants over {nrec} recurrent layers, f16 feed admits kq {f16_feed_admits_kq()}\n")
+            to_log(LOG_INFO, "prefill ({n} tokens) [{tile_arm_tag()}]: {prefill_q8k_rq} Q8_K requants over {nrec} recurrent layers, f16 feed admits kq {f16_feed_admits_kq()}\n")
             if (f16_feed_admits_kq()) {
-                t |> success(gpu.prefill_q8k_rq < nrec, "on the f16 feed the prefill never requantized the block input to Q8_K for the qkv/z pair ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
+                t |> success(prefill_q8k_rq < nrec, "on the f16 feed the prefill never requantized the block input to Q8_K for the qkv/z pair ({prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
             } else {
-                t |> success(gpu.prefill_q8k_rq >= nrec, "off the f16 feed the K-quant qkv/z pair reads the Q8_K form ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
+                t |> success(prefill_q8k_rq >= nrec, "off the f16 feed the K-quant qkv/z pair reads the Q8_K form ({prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
             }
         }
-        delete sg
-        moe_gpu_drop_model()   // every later step is the CPU chain
-        var sc <- create_session(tr, mirror_kv_dtype())
-        var cpu <- feed_logits(tr, sc, prompt, toks)
-        delete sc
         let rel = kq ? (f16_feed_admits_kq() ? DN_LOGIT_BAR_REL_KQ_F16_FEED : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
-        for (st in range64(long_length(cpu.rows))) {
-            let diff = logits_maxdiff(gpu.rows[st], cpu.rows[st])
-            let bar = rel * logits_maxabs(cpu.rows[st])
-            let ag = argmax_of(gpu.rows[st])
-            let ac = argmax_of(cpu.rows[st])
-            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-            to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu.rows[st][ac]}), resident {ag} ({gpu.rows[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
-            t |> success(diff <= bar, "{what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
-            if (st > 0l) {   // the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
-                let off = logits_maxdiff(gpu.rows[st], cpu.rows[st - 1l])
-                t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
-            }
-        }
-        delete gpu
-        delete cpu
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, rel)
+        delete fed
         delete prompt
         delete toks
     }

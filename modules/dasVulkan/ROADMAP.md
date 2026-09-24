@@ -135,6 +135,44 @@ a device-local (staged, NOT mappable) one -- `deferred_tut.das`'s
 `write_scene_ubo_manual` is the sanctioned pattern, not a workaround.
 Per-binding multi-UBO auto-bind stays unimplemented.
 
+## Vulkan 1.4 arc - the boost layer and tutorials move off deprecated shapes
+
+User feedback: `vulkan_boost` reads as pre-1.3 Vulkan. The [Vulkan guide's
+deprecation page](https://docs.vulkan.org/guide/latest/deprecated.html) names
+three of its shapes - `VkRenderPass` / `VkFramebuffer` (replaced by dynamic
+rendering), `VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT` and the other legacy stage /
+access bits (replaced by `VK_KHR_synchronization2`), and `VkPipeline` (shader
+objects, `VK_EXT_shader_object`).
+
+Where the layers stand: the generated binding carries every replacement -
+`cmd_pipeline_barrier2` / `queue_submit2` with the 64-bit `VkPipelineStageFlags2`
+/ `VkAccessFlags2` bitfields (`tBitfield64`), the dynamic-rendering structs and
+commands, `vkCmdBindShadersEXT`. `create_device` already enables
+`dynamicRendering` + `synchronization2` and gates at API 1.3, where both are
+core. The boost layer is what teaches the old shape: three render-pass creators
+and two `vkCmdBeginRenderPass` wrappers, `transition_image*` typed on the legacy
+`VkPipelineStageFlags` / `VkAccessFlags` (and `top_of_pipe` set inside the
+library), `vkQueueSubmit` in `vulkan_boost`, `vulkan_window` and `vulkan_live`,
+framebuffers in the window swapchain path. Tutorials 01-08 and 10-14 sit on
+render passes; only 09 uses dynamic rendering; no tutorial or example uses sync2.
+
+Order, one arc, after 0.6.4 and the queued Vulkan coverage work:
+
+1. **sync2 first** - `transition_image*` and the submit helpers move to the `_2`
+   structs; `top_of_pipe` leaves the library. No floor bump: 1.3 is already the
+   boost's floor.
+2. **Dynamic rendering as the boost default** - the window swapchain path drops
+   framebuffers, tutorials 01-08 and 11-14 migrate. Tutorial 10 (deferred:
+   subpasses + input attachments) is the honest exception - its replacement is
+   `VK_KHR_dynamic_rendering_local_read`, core in 1.4, so it either keeps its
+   render pass on purpose or becomes the 1.4 showcase.
+3. **Shader objects stay opt-in** - an extension, not 1.4 core, absent on
+   Android, partial on MoltenVK, and dasllama's compute path is `VkPipeline`.
+   One example showing the workflow; never a boost default.
+
+The render-pass helpers stay beside the new ones: deprecated is not removed. Once
+the sync2 twins exist, a `vulkan_lint` rule nudges `top_of_pipe` toward them.
+
 ## p-prefix strip on boost field names
 
 The boost view structs keep Vulkan's C field names verbatim - `pAttachments`,

@@ -3,6 +3,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_convert
 require math
 
 //! The [tuned] elementwise kernels - dot, dot_bf16, axpy, add_inplace, add_scale_inplace,
@@ -391,5 +392,61 @@ def test_zero_length(t : T?) {
     t |> run("a zero count is a no-op on every elementwise kernel") @(t : T?) {
         t |> equal(zero_length_moves(), 0, "a zero count must leave the destination untouched")
         t |> equal(zero_length_dots(), 0.0, "a zero count must answer an empty sum")
+    }
+}
+
+def private f16_cast_bits(v : float) : uint16 => unsafe(reinterpret<uint16>(float16(v)))
+
+def private f16_form_mismatches(vals : array<float>) : int {
+    var out : array<uint16>
+    out |> resize(length(vals))
+    cvt_f32_to_f16(unsafe(addr(out[0])), unsafe(addr(vals[0])), long_length(vals))
+    var bad = 0
+    for (w, v in out, vals) {
+        if (w != f16_cast_bits(v)) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the values a rounding difference shows on: the halfway ties, the subnormal band, the largest half, both zeros, a value under the smallest subnormal
+def private f16_edge_values : array<float> {
+    var edge : array<float>
+    edge |> reserve(64 * 4 + 5)
+    for (k in range(64)) {
+        let tie = 1.0 + float(k) / 2048.0 + 1.0 / 4096.0
+        edge |> push(tie)
+        edge |> push(-tie)
+        edge |> push(float(k) * 5.9604645e-8)
+        edge |> push(float(k + 1) * 0.5e-5)
+    }
+    edge |> push(65504.0)
+    edge |> push(-65504.0)
+    edge |> push(-0.0)
+    edge |> push(0.0)
+    edge |> push(1.0e-9)
+    return <- edge
+}
+
+[test]
+def test_f32_to_f16_forms(t : T?) {
+    t |> run("cvt_f32_to_f16 bit-matches the float16 cast over the tail sweep and the rounding edges") @(t : T?) {
+        var total = 0
+        for (n in SWEEP) {
+            total += f16_form_mismatches(lcg_unit(n, 77u))
+        }
+        total += f16_form_mismatches(f16_edge_values())
+        t |> equal(total, 0, "the row convert and the cast must round alike inside the half range")
+    }
+    t |> run("cvt_f32_to_f16 clamps past the half range where the cast overflows - the control") @(t : T?) {
+        var big <- [70000.0, -70000.0, 1.0e9, -1.0e9]
+        var out : array<uint16>
+        out |> resize(length(big))
+        cvt_f32_to_f16(unsafe(addr(out[0])), unsafe(addr(big[0])), long_length(big))
+        for (w, v in out, big) {
+            t |> equal(w, f16_cast_bits(v > 0.0 ? 65504.0 : -65504.0), "a value past the half range must land on the largest half")
+        }
+        t |> equal(f16_form_mismatches(big), 4, "the cast overflows where the convert clamps")
     }
 }

@@ -804,19 +804,17 @@ def dev_raw : VkDevice {
 // ~100x SLOWER CPU reads) and host-cached. Buffers the CPU reads back (the y planes) MUST be
 // cached — a 33MB memcpy out of a WC mapping measured ~400ms/layer at pp512
 def find_host_mem(type_bits : uint; cached : bool) : uint {
-    if (cached) {
-        var mp : VkPhysicalDeviceMemoryProperties
-        vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, mp)
-        for (i in range(int(mp.memoryTypeCount))) {
-            let fl = mp.memoryTypes[i].propertyFlags
-            if ((type_bits & (1u << uint(i))) != 0u && fl.host_visible && fl.host_coherent && fl.host_cached) {
-                return uint(i)
-            }
-        }
-    }
     var want : VkMemoryPropertyFlags
     want.host_visible = true
     want.host_coherent = true
+    if (cached) {
+        var want_cached = want
+        want_cached.host_cached = true
+        let i = try_find_memory_type(g_gpu.phys, type_bits, want_cached)
+        if (i >= 0) {
+            return uint(i)
+        }
+    }
     return find_memory_type(g_gpu.phys, type_bits, want)
 }
 
@@ -969,11 +967,8 @@ def destroy_host_buf(hb : HostBuf) {   // vkFreeMemory implicitly unmaps
     g_gpu.host_bytes -= hb.bytes
 }
 
-def nonowning_buf(h : uint64) : Buffer {
-    var b : Buffer
-    b._vk = h
-    return b
-}
+//! a raw buffer handle as a boost `Buffer` the finalizer leaves alone (the handle stays the tier's)
+def nonowning_buf(h : uint64) : Buffer => vk_value_to_boost(unsafe(reinterpret<VkBuffer>(h)))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
@@ -1508,7 +1503,7 @@ def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSe
 
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
 def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64> {
-    let nb = arena_blocks_for(n, rows, fmt)   // strides live in arena_block_bytes — one source
+    let nb = kq_blocks_for(n, rows, fmt)
     let bb = arena_block_bytes(fmt)
     return (wq = nb * bb.wq, ws = nb * bb.ws)
 }
@@ -1710,7 +1705,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
 // probe — a divergent copy would desync the baked plan at the refusal boundary.
 // 0 = accept, 1 = VRAM budget, 2 = descriptor capacity, 3 = unplaceable row length.
 def vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
-    if (!arena_rows_ok(n, fmt)) {   // must precede stack_plane_bytes — its block math asserts
+    if (!kq_rows_ok(n, fmt)) {   // must precede stack_plane_bytes - its block math asserts
         return 3
     }
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -1736,8 +1731,8 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
     if (!vk_moe_init()) {
         return false
     }
-    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this stack stays on the CPU
-        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined - row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+    if (!kq_rows_ok(n, fmt)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined - row length {n} is not a {kq_unit(fmt)}-block multiple (fmt {fmt})\n")
         return false
     }
     if (stream) {
@@ -2023,10 +2018,6 @@ def vk_kq_schema_id(fmt : int) : int {
 }
 
 
-// meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq
-// lattice counts 256-weight superblocks
-def fmt_unit(fmt : int) : int64 => kq_block32(fmt) ? 32l : 256l
-
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == int(KqFmt.q8)) {
@@ -2039,16 +2030,6 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
         return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
-}
-
-//! Row-length servability: the arena strides whole blocks, so a row that is not a block
-//! multiple cannot be placed — callers DECLINE such stacks to the CPU (never assert).
-def arena_rows_ok(n : int64; fmt : int) : bool => n % fmt_unit(fmt) == 0l
-
-def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
-    verify(kq_block32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
-    verify(!kq_block32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
-    return rows * (n / (kq_block32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
 var private g_arena_slab_override = 0l
@@ -2131,7 +2112,7 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
     if (!key_exists(g_gpu.arenas, fmt)) {
         return -1l
     }
-    let need = arena_blocks_for(n, rows, fmt)
+    let need = kq_blocks_for(n, rows, fmt)
     unsafe {
         var a & = g_gpu.arenas[fmt]
         if (a.blocks + need > a.cap_blocks) {
@@ -2179,8 +2160,8 @@ def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64
     if (!vk_moe_init() || empty(wq) || empty(ws)) {
         return -1l
     }
-    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined - row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+    if (!kq_rows_ok(n, fmt)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined - row length {n} is not a {kq_unit(fmt)}-block multiple (fmt {fmt})\n")
         return -1l
     }
     return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)
@@ -3383,6 +3364,31 @@ def free_transient_cmd(var raw : VkCommandBuffer) {
     vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
 }
 
+//! one command `rec` records on a transient buffer with a fresh hazard rail, submitted on the compute queue and waited (the seams, the
+//! cold KV readbacks); `run_cmd_sync` cannot serve these - it never waits the pending transfer copy `submit_core` attaches
+def cmd_one_shot(rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var raw = alloc_transient_cmd()
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    invoke(rec, raw, h)
+    vk_check(vkEndCommandBuffer(raw), null)
+    submit_wait(raw)
+    free_transient_cmd(raw)
+}
+
+//! the same on the shared batch command buffer, reset first: the decode's cold state uploads and readbacks
+def batch_cmd_one_shot(rec : block<(raw : VkCommandBuffer) : void>) {
+    var raw = g_gpu.batch_cmd
+    let rf : VkCommandBufferResetFlags
+    vk_check(vkResetCommandBuffer(raw, rf), null)
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    invoke(rec, raw)
+    vk_check(vkEndCommandBuffer(raw), null)
+    submit_wait(raw)
+}
+
 //! a persistent command on the compute pool, model-owned: freed by the model drop
 def alloc_cmd : VkCommandBuffer {
     var raw = alloc_cmd_in(g_gpu.pool)
@@ -3397,10 +3403,11 @@ def alloc_xfer_cmd : VkCommandBuffer {
     return raw
 }
 
+//! `bytes` of a device buffer from `off` zeroed by a fill command, no host array
 def upload_zeros(dev : uint64; off, bytes : int64) {
-    var zeros : array<uint8>
-    zeros |> resize(bytes)
-    upload_region_at(dev, off, unsafe(addr<uint8 const?>(zeros[0])), bytes)
+    cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
+        cmd_fill_zero(raw, dev, off, bytes)
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -3529,7 +3536,7 @@ def submit_wait(var raw : VkCommandBuffer) {
 // regions expand so output lands row-major); n/d/nreg/ybase ride the GemvArgs push instead
 def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows, xnb : int64) {
     assert(nrows * 2l * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN regions exceed capacity")
-    let unit = fmt_unit(g_gpu.stacks[si].fmt)
+    let unit = kq_unit(g_gpu.stacks[si].fmt)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.stacks[si].meta.mapped)
         for (r in range64(nregions)) {
@@ -3548,7 +3555,7 @@ def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows
 def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : int64) {
     assert(xq_bytes <= XQ_BYTES, "dasLLAMA vulkan tier: dispatch exceeds scratch capacity")
     assert(g_gpu.stacks[si].gemv_made, "dasLLAMA vulkan tier: a stack fill before its GEMV scratch was made")
-    let unit = fmt_unit(g_gpu.stacks[si].fmt)
+    let unit = kq_unit(g_gpu.stacks[si].fmt)
     unsafe {
         memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
         memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void?>(xsp), (xq_bytes / unit) * 4l)

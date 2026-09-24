@@ -236,14 +236,16 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
    (`6 -> 44`). This is the third id space at its Vulkan seam; without the arm the arena plan
    panics on the first iq4xs stack.
-2. `KqGemvIq4xs : KqGemvBase` - `def override blk_decode`: the block decoded once into its lo
+2. `class template Iq4xsGemvT : KqGemvLeafT` - `def override blk_decode`: the block decoded once into its lo
    and hi packed quads (the q40 nibble tiling, `wq4[wsb * 8 + blk]`, each nibble word decoded
    through `iq4_word` into SIGNED lanes for `sdot4` - OpSDot, signed x signed, so the block-sum
    trick of q40/k4 does not apply: `fold_reads_bsum` stays false) and the fold's terms `(d * sc, 0, d *
    sc, 0)` with `sc` decoded by `iq4xs_sc` off the two-word device row (`scales_h` above d in
    word 0, the `scales_l` nibbles in word 1); the family's `blk_fold` dots the decoded block
-   against each column, and a `KqGemvIq4xsN` stamp whose `run` calls `gemv_shell_n` is the
-   N-column leaf. `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
+   against each column. The two stamps are `KqGemvIq4xs : Iq4xsGemvT {}` and `KqGemvIq4xsN` with
+   `override NCOL = true` - the template's `run` picks the shell; a grid format's template adds
+   `override GRID = true` with its literal `GRID_WORDS` / `GRID_OFF` (REVIEW.das holds them to the
+   `KQ_GRID_<FMT>` chain). `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
    `gemv_cls_ensure_n` / `gemv_cls_enc_n` take one arm each, or the first batched step on a model
    carrying the format panics; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
    which the ncol cell holds against the family's roster `kq_gemv_fmts`, and its N stamp joins the
@@ -257,7 +259,11 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
    `xscl * ws * idot` (q40's without the `- 8 * bsum`). A class child is declared after its
    parent in the file - the class rail resolves parents in declaration order and reports
-   "parent structure not found" otherwise.
+   "parent structure not found" otherwise. The word compose the GEMV leaf's `blk_decode` and the
+   tile's `stage_w` both need is ONE free function beside `k5_dep` - a k-lattice format's
+   `<fmt>_quad` over a `uint4` of packed words, a grid format's `<fmt>_idx4` / `<fmt>_sgn4` pick
+   (the four grid words and their sign nibbles; the class gathers them through its own grid slab,
+   the leaf through `grid4`) - never a second spelling in the tile.
 4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
    `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
 5. The decode GEMV's lanes per row (`dasllama/dasllama_vulkan_classes.das`): join
@@ -272,7 +278,9 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    filled there or the device compares against zeros), the family cells in
    `tests/test_vulkan_kernels.das`, and - because the codebook pack is new bit-math that a
    class-vs-device compare cannot see (both sides run the same `iq4_word`) - a float dequant
-   straight off the plane bytes (`iq4xs_gemv_float_oracle`) that the class oracle must match.
+   straight off the plane bytes (`iq4xs_gemv_float_oracle`) that the class oracle must match,
+   registered in `kq_has_float_oracle` AND `kq_gemv_float_oracle` (`tests/_vkd_oracles.das`) - the
+   family cell compares only the formats the first names, so a witness left off it never runs.
    The cells fill planes with pseudo-random words, so a scale or strip byte takes values real
    quantized data never produces: the class, the cm2 decode, the float oracle and the f16 oracle
    read every field with the same signedness (the grid formats read strips unsigned on both
@@ -292,16 +300,21 @@ schedule takes; `cm2_cls_ensure` refuses it a dense column, the plan declines a 
 and a decode GEMV in `Q8Gemv`'s shape (`Q51Gemv`, `Mx4Gemv`: one lane a block, `gemv_lanes_per_row`
 0; a format whose gate and up stacks share a slab may add the fused gate+up+act+requant twin in
 `KqGemvK4Gu`'s shape, `Mx4GemvGu`). Its census rows land in `VK_CENSUS_NEVER_DISPATCHED` while no
-stocked small carrier holds such a plane. The module gate (`REVIEW.das`) reads it twice: the
+stocked small carrier holds such a plane. Its stamps spell `<fmt>_batch_<tail>` the way q8's do, so
+the format joins `kq_tile_stem`'s per-32 list (`dasllama_kqformat.das`) and, since its dense column
+is refused, the `"q51 mx4"` skip lists of the `cm2_cls_*` ladders with an explicit branch of its own
+beside them (`dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice: the
 template ships the KHR trio like every format on the cm2 template (`CM2_KHR_EXEMPT` is empty), and
 `cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls` the way q8
 does.
 
 A grid format adds one more: its table joins the family's grid buffer (`kq_grid_dev` - a
 `KQ_GRID_<FMT>` word offset, `KQ_GRID_WORDS` / `KQ_GRID_BYTES` grown, the accessor called
-once per word into the host image) and the GEMV's `stage_grid`, which both `run` forms call first, stages `gridb[KQ_GRID_<FMT> + idx]`
-into its `@workgroup` table - never the `*_grid_word` accessor, which the batch and cm2 tiles
-keep (`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+once per word into the host image) and its GEMV template sets `override GRID = true` with the
+literal `GRID_WORDS` / `GRID_OFF` twins of that chain (`check_kq_gemv_grid_literals` holds them), so
+`KqGemvLeafT`'s `stage_grid` stages `gridb[GRID_OFF + idx]` into its `@workgroup` table ahead of
+either shell - never the `*_grid_word` accessor, which the batch and cm2 tiles keep
+(`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
 ### 6b. The cm2 prefill tile - a decode method on the template
 
@@ -310,17 +323,20 @@ On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile te
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
 verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in
 PAIR form - every shared read derived from `e & ~1u`, both elements computed, the element selected
-last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus four width
-stamps (the l, m and s columns and the expert schedule's e column - the m column at the format's k
-step; each names its `BN`, `STILE`, the k step `BK` where it is not the template's 64 with the
-unroll `UNR` that keeps the unrolled block at one superblock (`override UNR = 8u` beside
-`override BK = 32u`), and the `AT`/`BT`/`ACC`/`ACCW` tile types of that depth - copy k4's for a
-K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-codebook decode, and settle the k
-step on a whole-model MoE row, not the uniform probe alone), and arms in the `cm2_cls_ensure/set/enc`
-and `cm2e_cls_*` ladders. `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the
-enum member exists, so the ladder arms are due in the same change: `cm2_cls_ensure` ends in a verify
-that names a kq format falling through, because without it the prefill served the q8 tiles over
-the new planes - garbage text at full speed. A codebook format raises the `IQLUT` axis - a gated
+last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus its width
+stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column - the m
+column at the format's k step; each names its `BN`, `STILE`, the k step `BK` where it is not the
+template's 64 with the unroll `UNR` that keeps the unrolled block at one superblock (`override UNR
+= 8u` beside `override BK = 32u`), and the `AT`/`BT`/`ACC`/`ACCW` tile types of that depth - copy
+k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-codebook decode, and
+settle the k step on a whole-model MoE row, not the uniform probe alone). A 64-step format's e
+column is its m stamp byte for byte, so it ships no e stamp and joins `KQ_CM2E_ALIASES_M` in
+`dasllama_kqformat.das` instead; the gate holds that roster to every s stamp's k step. The class
+ladders (`cm2_cls_*`, `cm2e_cls_*`, `khr_cls_*`) take no arm: `kq_tile_stamp` walks every `KqFmt`
+member, so the tree fails to compile until every stamp the new member names exists - and it must,
+since `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the enum member exists,
+and a ladder that fell through served the q8 tiles over the new planes - garbage text at full
+speed. A codebook format raises the `IQLUT` axis - a gated
 `@workgroup` f16 table staged ahead of the tile loop (the reference build's `init_iq_shmem` form);
 never select codes out of a register vector per element inside a decode callback. A format whose
 sub-block scale takes an unpack per element raises the `SCACHE` axis and reads its sub-block's
@@ -350,8 +366,8 @@ it `abstract`, so a stamp without one fails to compile. The k4 override is the p
 decode methods' index math is the same, only read sixteen at a time. Then `<Fmt>KhrBatch :
 <Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the four cm2 typedefs the uncalled
 tensor body still names (`AT`, `BT`, `ACC`, `ACCW` - copy k4's), a
-`[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
-(`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its KHR arm (`ARM_KHR`, tile
+`[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]` (the `khr_cls_ensure/set/enc` ladders in
+`dasllama_vulkan_classes.das` pick it up by name - `kq_tile_stamp` walks the enum), and the format's kernel cell runs its KHR arm (`ARM_KHR`, tile
 128) wherever the device has KHR coopmat at subgroup 32 - on the 5060 Ti the same run covers the
 cm2 l/m/s/e tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
 arm, whose f16 accumulation sits inside the cell's 2e-2 relative bar.

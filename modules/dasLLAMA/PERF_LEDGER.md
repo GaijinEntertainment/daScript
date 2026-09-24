@@ -11,6 +11,12 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **The resident plan and upload read one plane list (`resident_planes`,
+  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The list is built twice per load - once
+  for the plan's byte sum, once for the upload's reserve - and holds one 24-byte record per
+  device plane: about 25 KB on a 94-layer model, a few microseconds each, against a load that
+  moves gigabytes. Cost today: nothing measurable; the fix, if the list ever grows per-token
+  readers, is to build it once at load and keep it on the resident state.
 - **LANDED (2026-09-18) - a K/V mirror region per stream trades context for concurrency, not
   for throughput (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The resident driver's
   mirror is one allocation a side; `set_gpu_resident_regions` splits it, and the residency plan

@@ -68,7 +68,7 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
             delete passes
         }
         t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
-        feed_steps_within(t, "{file} ", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
+        feed_steps_within(t, tr, "{file} ", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
         delete fed
         delete prompt
         delete toks

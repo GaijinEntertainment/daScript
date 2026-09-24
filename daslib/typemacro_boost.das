@@ -727,17 +727,16 @@ def private tsi_stamp_methods(var st : StructurePtr; temMethods : array<Function
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE.md#typemacro-boost")]
 def private tsi_normalize_fields(var st : StructurePtr; var rules : Template; above : StructurePtr) {
     for (f in st.fields) {
         f._type = apply_template(rules, f.at, clone_type(f._type))
         if (f.init != null) {
             f.init = apply_template(rules, f.at, clone_expression(f.init))
         }
-        // a field the surviving concrete parent declares stays a parent field: its cast<auto> finalizer init is what binds the instance's finalizer to the parent's slot type
         if (above != null && find_structure_field(above, string(f.name)) != null) continue
         f.flags.parentType = false
-        if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {
+        if (f.init != null && f.init is ExprCast) {
             let c = f.init as ExprCast
             if (c.castType != null && c.castType.baseType == Type.autoinfer) {
                 f.init = clone_expression(c.subexpr)

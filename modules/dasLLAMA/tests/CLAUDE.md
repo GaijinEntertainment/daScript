@@ -323,13 +323,16 @@ expert schedule's e column (the format's own 128-row e stamp, whose k step is th
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
 32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; every
-arm runs through the prefill's tile ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
+arm runs through the classes file's tile ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
 `khr_cls_*`) in one shared loop (`tile_cell_arms` over a `tile_fixture` - the format's packed planes
 handed in, the activation plane and the device buffers built once - with the arms asked for and the
 format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map
 words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
 match; the q8 fmt-0 cells (`q8_planes` for their planes) and the q51 cell run the same loop over
 their own arm lists;
+`test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
+sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
+grid, with the gate's move and a poisoned element as its controls;
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot
@@ -741,9 +744,10 @@ under either of two summation orders, the one-step-off controls 0.42 and above; 
 carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
 per MoE layer per window, the expert schedule's m pieces dispatched the format's e column on the
-three expert planes once per MoE layer per window in cm2 mode (in mm mode the KHR tile also serves
-the window's dense GEMMs, so its count is a floor of two dispatches a plane per MoE layer per
-window), the token command's top-k count a whole multiple of the MoE layer count (the command
+three expert planes once per MoE layer per window in cm2 mode - exact where the format keeps its
+own e stamp, a floor where its e column is its m stamp (`KQ_CM2E_ALIASES_M`), since that stamp also
+serves the window's dense GEMMs (in mm mode the KHR tile serves them too, so its count is a floor of
+two dispatches a plane per MoE layer per window), the token command's top-k count a whole multiple of the MoE layer count (the command
 records once and resubmits), and on a device whose SM count splits the attention keys the
 unsplit twin served every step of the one-window cell and none of the two-window one; the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
@@ -853,6 +857,11 @@ exists, every image-suite arm is reachable from an area or listed as unclaimed),
 planners behind an area run, the argument contracts, the change-to-area map behind `--changed`,
 the `--exclude` filter's semantics, and a dry run of the runner with a no-op child binary.
 Requires `run` by bare same-dir name.
+`test_vk_spv_diff.das` - model-free: the SPIR-V dump differ (`harness/vk_spv_diff.das`, the
+identity gate a kernel fold's "byte-identical" claim rests on) - its four bins over two in-memory
+dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal
+of a dump with no stamp in it, and the directory read by stem. Requires the harness by relative
+path.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` and its first-paint projection
@@ -1203,7 +1212,11 @@ the fp64 reference land on a representable float and differ from the input at ev
 construction (`copy_floats` writes over a 1e9 sentinel, `add_scale_inplace` uses positive
 operands with a negative scale so the result cannot be the input, `mul_inplace`'s multiplier is
 a multiple of 0.375 so it can never be one), and every cell asserts that count. A closing cell
-pins a zero count as a no-op on all eight.
+pins a zero count as a no-op on all eight. `test_f32_to_f16_forms` holds the row convert
+`cvt_f32_to_f16` (the resident decode's three host f16 copies) to the language's `float16()`
+cast bit for bit over the tail sweep, the halfway ties, the subnormal band, the largest half,
+both zeros and a value under the smallest subnormal, and holds its clamp past the half range
+where the cast overflows, with the un-clamped cast as the control.
 `test_math_activations.das` - model-free: the activation, norm and fp32 GEMM kernels against
 closed forms and in-test fp64 references over the same tail sweep. `softmax_sink` is gated per
 element plus the closed form its name carries - the row's sum plus the sink mass is one - at a

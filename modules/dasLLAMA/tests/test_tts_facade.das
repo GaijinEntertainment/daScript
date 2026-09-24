@@ -27,14 +27,6 @@ def private cpt_count(s : string) : int {
     return length(c)
 }
 
-def private peak_abs(a : array<float>) : float {
-    var peak = 0.0
-    for (x in a) {
-        peak = max(peak, abs(x))
-    }
-    return peak
-}
-
 def private panic_text_of(blk : block<() : void>) : string {
     var why = ""
     try {
@@ -575,11 +567,11 @@ def test_release_and_cap_on_a_model(t : T?) {
                 capped |> push_from(chunk.pcm)
             }
             t |> success(chunks > 3, "{chunks} chunks at a 24-codepoint cap, more than the three sentences")
-            let peak = peak_abs(capped)
+            let peak = logits_maxabs(capped)
             t |> success(peak > 0.05 && peak <= 1.0, "the capped synthesis is audible speech (peak {peak})")
             var inscope silent : array<float>
             silent |> resize(length(capped))
-            t |> success(!(peak_abs(silent) > 0.05), "the peak floor's control: a silent buffer of the same length lands under it")
+            t |> success(!(logits_maxabs(silent) > 0.05), "the peak floor's control: a silent buffer of the same length lands under it")
             let ratio = float(length(capped)) / float(length(first.pcm))
             t |> success(ratio > 0.7 && ratio < 1.5, "and about as long as the uncapped one ({ratio})")
             let half = ratio * 0.5

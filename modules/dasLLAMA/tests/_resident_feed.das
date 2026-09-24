@@ -36,12 +36,13 @@ def argmax_of(v : array<float>) : int64 {
     return bi
 }
 
-//! the prefill's logits, then each fed step's, through `s`
-def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
+//! the prefill's logits, then each fed step's, through `s`; `after_prefill` runs between the prefill and the first step
+def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>; after_prefill : block<void>) : array<array<float>> {
     let n = long_length(prompt)
     var out : array<array<float>>
     out |> reserve(long_length(toks) + 1l)
     forward_prefill(tr, s, prompt, n, 0l)
+    invoke(after_prefill)
     out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
     for (st in range64(long_length(toks))) {
         forward(tr, s, toks[st], n + st)
@@ -50,20 +51,25 @@ def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array
     return <- out
 }
 
+//! the prefill's logits, then each fed step's, through `s`
+def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
+    return <- feed_logits(tr, s, prompt, toks) $ {}
+}
+
 //! the two arms' logits rows: the resident driver's, then the CPU chain's
 struct FeedPair {
     gpu : array<array<float>>
     cpu : array<array<float>>
 }
 
-//! `prompt` then `toks` through the resident driver armed on `tr` (the stayed-armed and served-prefill witnesses under `t`,
-//! then `after_gpu`, the caller's own witnesses while the driver still holds the model), then the model dropped off the
-//! device and the same tokens through the CPU chain
-def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair {
+//! `prompt` then `toks` through the resident driver armed on `tr` (`after_prefill` between the resident prefill and its
+//! first step, then the stayed-armed and served-prefill witnesses under `t`, then `after_gpu`, the caller's own witnesses
+//! while the driver still holds the model), then the model dropped off the device and the same tokens through the CPU chain
+def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_prefill : block<void>; after_gpu : block<void>) : FeedPair {
     var pair : FeedPair
     var sg <- create_session(tr, mirror_kv_dtype())
     let served0 = moe_gpu_resident_prefills()
-    pair.gpu <- feed_logits(tr, sg, prompt, toks)
+    pair.gpu <- feed_logits(tr, sg, prompt, toks, after_prefill)
     t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
     t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {long_length(prompt)}-token prompt")
     invoke(after_gpu)
@@ -75,17 +81,22 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
     return <- pair
 }
 
+//! the same with no seat between the resident prefill and its first step
+def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair {
+    return <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
+}
+
 //! every row of `gpu` (the prefill's, then each fed step's) within `bar_rel` of the CPU chain's max live |logit| of the
 //! same row, and each step's one-step-off compare (the previous step's CPU row, a disconnected mechanism) past the bar;
-//! both argmaxes logged under `tag`, the two arms named `gpu_name` and `cpu_name` in every message
-def feed_steps_within(t : T?; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
+//! both argmaxes logged under `tag` with the piece `tr` decodes them to, the two arms named `gpu_name` and `cpu_name` in every message
+def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
     for (st in range64(long_length(cpu))) {
         let diff = logits_maxdiff(gpu[st], cpu[st])
         let bar = bar_rel * live_maxabs(cpu[st])
         let ag = argmax_of(gpu[st])
         let ac = argmax_of(cpu[st])
         let what = tag + (st == 0l ? "prefill ({nprompt} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
-        to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), {gpu_name} {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
+        to_log(LOG_INFO, "{what}: argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu[st][ac]}), {gpu_name} {ag} '{decode_(tr, [ag])}' ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
         t |> success(diff <= bar, "{what} logits: {gpu_name} within {bar} of {cpu_name} (maxdiff {diff})")
         if (st > 0l) {
             let off = logits_maxdiff(gpu[st], cpu[st - 1l])
