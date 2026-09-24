@@ -1822,7 +1822,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
 }
 
 //! Always false, the override's answer: the CPU rails take the call, so the session's device-only rows come down first.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b : int64) : bool {
     if (rdec_has_device_only_rows(s)) {
         rdec_hydrate_host(t, s)

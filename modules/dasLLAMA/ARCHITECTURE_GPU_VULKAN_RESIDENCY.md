@@ -63,11 +63,7 @@ took is served from the host or not at all: where its rows never came down, its 
 decode panics rather than read another session's history. A batched step over a
 per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
 row gathered on device where the driver holds the projection, else that row of the pre-step
-`eval_batch` already ran. A host-cached session's call that passes to the CPU rails brings the
-region's device-only rows down first (`rdec_pass_hydrated`) - the gap, cap and continuation
-passes and the image turn's non-causal span alike, since the CPU computes the media rows against
-the head the mirror holds and a decode past the region's rows reads them beside the CPU-served
-ones.
+`eval_batch` already ran.
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
 with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and
@@ -257,3 +253,12 @@ leaves a 16-byte landing, and its planes take 4 x (2 x 64 + 1) bytes a row of th
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
+
+### 2.2as A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
+
+Every pass of a host-cached session's call to the CPU rails - whatever the reason - brings the
+region's device-only rows down to the host cache first (`rdec_pass_hydrated`), so the CPU
+computes over the rows the mirror holds: an image turn's media rows attend the head the device
+prefilled, and a decode past the region's rows reads them beside the CPU-served ones. A
+device-home session has no host cache to fill, so its pass panics with the reason. The pass
+still answers false, and the CPU rails serve the call.

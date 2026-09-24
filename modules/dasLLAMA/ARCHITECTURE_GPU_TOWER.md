@@ -71,7 +71,15 @@ the towers take three routes:
 
 The Metal driver keeps the compact 72-wide heads on its own flash kernel (2.2w); the Vulkan
 driver pays the restride instead, because the flash template's coopmat typedefs size on the head
-and 72 is off every fragment lattice.
+and 72 is off every fragment lattice. Per family, both drivers:
+
+| family | head | Metal attention (2.2w) | Vulkan attention | Vulkan weights |
+|---|---|---|---|---|
+| gemma4v | 64 | the slab trio | the compact route, h64 tile | the q8 image, gathered on upload |
+| gemma3v | 72 | the flash route (rows a multiple of 64), else the slab trio | the padded route, h128 tile | the q8 image, gathered on upload |
+| qwen3v | 72 | the flash route (rows a multiple of 64), else the slab trio | the padded route off the fused row | the q8 image, gathered on upload |
+| qwen25v full layers | 80 | the slab trio | the padded route, h128 tile | the baked halfword twin |
+| qwen25v window layers | 80 | the per-window route | the window route, f32 | the baked halfword twin |
 
 ### 2.2ar The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
 
@@ -101,10 +109,11 @@ scales - the resident MoE driver's precedent - once per tower into device memory
 per-block norm rows with a ones row appended (the weightless per-head norms read it). qwen25v's
 upload copies the twin's block GEMM region verbatim - IEEE halves, the GEMM offsets rebased to
 the region's start - beside the block rows; the family has no scale plane. The residency key -
-over the q8 plane, or over qwen25v's halfword twin - folds the plane's address, size, sampled
-words and the served block count: an
-address is not an identity, a truncated tower minted from the same bytes lands at the freed
-address, and a resident sized for fewer blocks reads past its rows under a deeper chain. The
+over the q8 plane, or over qwen25v's halfword twin - folds every plane the upload reads: the
+weight plane's address, size and sampled words, the scale plane's, the norm rows' region, the
+served block count and offsets, and the active repack layout. An address is not an identity: a
+truncated tower minted from the same bytes lands at the freed address, and a resident sized for
+fewer blocks reads past its rows under a deeper chain. The
 model drop's sweep tells the driver to forget its handles through `register_vk_drop_hook`
 (every buffer and set is model-owned); `vulkan_tower_shutdown` is the tests' release. The
 per-encode scratch is sized to the canvas and grown when a taller one arrives; every batch
@@ -113,7 +122,10 @@ dispatch), so nothing the command reads moves under it; the batch tile's variant
 output width - d, ff and qwen3v's fused 3d can each pick a different tile.
 
 The declines: `quant_mode` on an exact-lane tower (or the bf16 twin), `shape` off the tile's head
-sizes or past the row cap, `knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want
-(`DASLLAMA_GPU`, read before any device init) or a class declines. Engage is
+sizes, past the row cap, or with a weight plane or scratch buffer over `vk_max_storage_range()`,
+`knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want (`DASLLAMA_GPU`, read before any
+device init) or a class declines, `memory` where an allocation fails (the partial upload or
+scratch is released, the CPU chain serves). Each decline is logged once per reason per model.
+Engage is
 `vulkan_tower_stats` and `vulkan_tower_declines` deltas, and the bench's image cell prints them
 around its timed turn.
