@@ -145,6 +145,15 @@ struct private VtResident {
     sin_dev : uint64
     taps : int64          //! deepstack tap stashes: the residual after each tap block, read back with x
     xtap_dev : uint64
+    f16w : bool           //! the halfword-twin family (qwen25v): the f16 feed rows, the window tables, the slotted panels
+    xh_dev : uint64       //! the f16 feed, [cap x max(d, ff)]
+    rmap_dev : uint64     //! the window slot rows' compact rows and the slots' live counts
+    wcnt_dev : uint64
+    slot_cap : int64      //! the slotted panels' row capacity (windows x 64)
+    sqp_dev : uint64
+    skp16_dev : uint64
+    svp16_dev : uint64
+    sattp_dev : uint64
     host : HostBuf        //! the x readback staging (the tap stashes behind it)
     bvar : int            //! the q8 batch class variant the d-wide sets were built for (-1 = none)
     bvar_ff : int         //! ... and the ff-wide ones (gate, up): the tile pick reads the output width
@@ -153,6 +162,15 @@ struct private VtResident {
     s_bias_qkv : VkDescriptorSet
     s_rope_tq : VkDescriptorSet
     s_rope_tk : VkDescriptorSet
+    s_cvt_xb : VkDescriptorSet    //! the halfword-twin family's f16 feeds, the slotted restrides, the window tile, the gated hidden
+    s_cvt_att : VkDescriptorSet
+    s_cvt_hg : VkDescriptorSet
+    s_spad_q : VkDescriptorSet
+    s_spad_k : VkDescriptorSet
+    s_spad_v : VkDescriptorSet
+    s_sfa : VkDescriptorSet
+    s_sunpad : VkDescriptorSet
+    s_glu : VkDescriptorSet
     s_q : VkDescriptorSet
     s_k : VkDescriptorSet
     s_v : VkDescriptorSet
@@ -197,12 +215,160 @@ struct private VtResident {
 var private g_vt_g4v : VtResident   //! the gemma4v family's resident tower (one a family: a second mmproj replaces it)
 var private g_vt_g3v : VtResident   //! the gemma3v family's
 var private g_vt_q3v : VtResident   //! the qwen3v family's
+var private g_vt_q25v : VtResident  //! the qwen25v family's (the halfword twin, no q8 lane)
 var private g_vt_tabs : array<float>   //! the packed rope tables staging, [row][cx | sx | cy | sy]
 
-//! the residency key: the quant plane's address and size folded with sampled words, so a tower freed and another mapped
-//! at the same address with the same geometry reads as a new tower
-def private vt_key(qblob : PlaneI8; qscales_n : int64) : uint64 {
-    var k = intptr(unsafe(reinterpret<void?>(qblob.p))) * 0x9E3779B97F4A7C15ul + uint64(qblob.n) + uint64(qscales_n) * 0x100000001B3ul
+//! the halfword twin's residency key, the same fold over its plane and the served block count
+def private vt_key_u16(wblob : PlaneU16; n_layer : int64) : uint64 {
+    var k = intptr(unsafe(reinterpret<void?>(wblob.p))) * 0x9E3779B97F4A7C15ul + uint64(wblob.n) + uint64(n_layer) * 0x100000001B3ul
+    let step = max(wblob.n / VT_FP_SAMPLES, 1l)
+    var i = 0l
+    while (i < wblob.n) {
+        unsafe {
+            k = (k ^ uint64(wblob.p[i])) * 0x100000001B3ul
+        }
+        i += step
+    }
+    return k
+}
+
+//! the halfword twin's block GEMM region uploaded verbatim (IEEE halves at the plane's own offsets, rebased to the region)
+//! beside the block rows
+[cold_path]
+def private vt_upload_f16(var r : VtResident; key : uint64; wblob : PlaneU16; w_off, w_n : int64; blob : PlaneF; rows_off, rows_n : int64) {
+    vt_release(r)
+    r.key = key
+    r.wq_bytes = w_n * 2l
+    r.ws_bytes = 0l
+    r.wq_dev = make_device_buf(r.wq_bytes)
+    r.ws_dev = make_device_buf(64l)   //! no scale plane on this family: a stub the release frees like the others
+    unsafe {
+        upload_region_at(r.wq_dev, 0l, reinterpret<uint8 const?>(plane_at(wblob, w_off)), r.wq_bytes)
+    }
+    r.ones_off = 0l
+    r.norms_bytes = rows_n * 4l
+    r.norms_dev = make_device_buf(r.norms_bytes)
+    unsafe {
+        upload_region_at(r.norms_dev, 0l, reinterpret<uint8 const?>(plane_at(blob, rows_off)), r.norms_bytes)
+    }
+    r.cap_rows = 0l
+    r.bvar = -1
+    r.bvar_ff = -1
+    r.bvar_qkv = -1
+}
+
+//! the halfword-twin family's scratch: the padded panels at the compact rows and the slotted ones at the window slots, the
+//! f16 feed, the window tables; true when (re)built
+[cold_path]
+def private vt_scratch_f16(var r : VtResident; rows, srows, d, ff, hd, dp : int64; khr : bool) : bool {
+    let cap = (rows + 63l) / 64l * 64l
+    if (r.cap_rows >= cap && r.slot_cap >= srows && r.d == d && r.ff == ff && r.pad_dp == dp && r.f16w) {
+        return false
+    }
+    vt_release_scratch(r)
+    r.cap_rows = cap
+    r.slot_cap = srows
+    r.d = d
+    r.ff = ff
+    r.hd = hd
+    r.fa_khr = khr
+    r.pad_dp = dp
+    r.f16w = true
+    r.fused = true   //! the rope tables ride the fused-row seats
+    let bx = cap * d * 4l
+    let bff = cap * ff * 4l
+    let bh = cap * d * 2l
+    r.qp_dev = make_device_buf(cap * dp * 4l)
+    r.kp16_dev = make_device_buf(cap * dp * 2l)
+    r.vp16_dev = make_device_buf(cap * dp * 2l)
+    r.attp_dev = make_device_buf(cap * dp * 4l)
+    r.sqp_dev = make_device_buf(srows * dp * 4l)
+    r.skp16_dev = make_device_buf(srows * dp * 2l)
+    r.svp16_dev = make_device_buf(srows * dp * 2l)
+    r.sattp_dev = make_device_buf(srows * dp * 4l)
+    r.rmap_dev = make_device_buf(srows * 4l)
+    r.wcnt_dev = make_device_buf((srows / 64l) * 4l)
+    r.xh_dev = make_device_buf(cap * max(d, ff) * 2l)
+    r.qkv_dev = make_device_buf(64l)   //! unused seats of the fused set, stubs the release frees alike
+    r.cos_dev = make_device_buf(cap * (hd / 2l) * 4l)
+    r.sin_dev = make_device_buf(cap * (hd / 2l) * 4l)
+    r.x_dev = make_device_buf(bx)
+    r.xb_dev = make_device_buf(bx)
+    r.xq_dev = make_device_buf(64l)
+    r.xs_dev = make_device_buf(64l)
+    r.q_dev = make_device_buf(bx)
+    r.k_dev = make_device_buf(bx)
+    r.v_dev = make_device_buf(bx)
+    r.q2_dev = make_device_buf(64l)
+    r.k2_dev = make_device_buf(64l)
+    r.v2_dev = make_device_buf(64l)
+    r.k16_dev = make_device_buf(bh)
+    r.v16_dev = make_device_buf(bh)
+    r.att_dev = make_device_buf(bx)
+    r.yo_dev = make_device_buf(bx)
+    r.hg_dev = make_device_buf(bff)
+    r.hu_dev = make_device_buf(bff)
+    r.yd_dev = make_device_buf(bx)
+    r.tabs_dev = make_device_buf(64l)
+    r.host = make_host_buf(bx, true, [cached = true])
+    r.meta_bytes = 0l
+    return true
+}
+
+//! the qwen25v family's sets over that scratch
+[cold_path]
+def private vt_sets_q25v(var r : VtResident; gemm_khr : bool) {
+    let cap = r.cap_rows
+    let srows = r.slot_cap
+    let bx = cap * r.d * 4l
+    let bff = cap * r.ff * 4l
+    let bxh = cap * max(r.d, r.ff) * 2l
+    let bp = cap * r.pad_dp * 4l
+    let bph = cap * r.pad_dp * 2l
+    let sbp = srows * r.pad_dp * 4l
+    let sbph = srows * r.pad_dp * 2l
+    let btab = cap * (r.hd / 2l) * 4l
+    let brm = srows * 4l
+    let bwc = (srows / 64l) * 4l
+    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_cvt_xb = set_f16cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
+    r.s_cvt_att = set_f16cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
+    r.s_cvt_hg = set_f16cvt_cls(fixed_array(r.hg_dev, r.xh_dev), fixed_array(bff, bxh), fixed_array(VT_HG, VT_XQ))
+    r.s_q = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.q_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_Q))
+    r.s_k = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.k_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_K))
+    r.s_v = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.v_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_V))
+    r.s_o = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.yo_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_YO))
+    r.s_gate = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.hg_dev), fixed_array(r.wq_bytes, bxh, bff), fixed_array(0u, VT_XQ, VT_HG))
+    r.s_up = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.hu_dev), fixed_array(r.wq_bytes, bxh, bff), fixed_array(0u, VT_XQ, VT_HU))
+    r.s_down = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.yd_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_YD))
+    r.s_bias_q = set_tower_bias_act_cls(fixed_array(r.q_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_Q, 0u))
+    r.s_bias_k = set_tower_bias_act_cls(fixed_array(r.k_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_K, 0u))
+    r.s_bias_v = set_tower_bias_act_cls(fixed_array(r.v_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_V, 0u))
+    r.s_rope_tq = set_tower_rope_tab_cls(fixed_array(r.q_dev, r.cos_dev, r.sin_dev), fixed_array(bx, btab, btab), fixed_array(VT_Q, 0u, 0u))
+    r.s_rope_tk = set_tower_rope_tab_cls(fixed_array(r.k_dev, r.cos_dev, r.sin_dev), fixed_array(bx, btab, btab), fixed_array(VT_K, 0u, 0u))
+    r.s_pad_q = set_tower_hpad_cls(fixed_array(r.q_dev, r.qp_dev), fixed_array(bx, bp), fixed_array(VT_Q, VT_Q2))
+    r.s_pad_k = set_tower_hpad16_cls(fixed_array(r.k_dev, r.kp16_dev), fixed_array(bx, bph), fixed_array(VT_K, VT_K16))
+    r.s_pad_v = set_tower_hpad16_cls(fixed_array(r.v_dev, r.vp16_dev), fixed_array(bx, bph), fixed_array(VT_V, VT_V16))
+    r.s_fa = fa_stamp_set(r.fa_khr, fixed_array(r.qp_dev, r.kp16_dev, r.vp16_dev, r.attp_dev), fixed_array(bp, bph, bph, bp), fixed_array(VT_Q2, VT_K16, VT_V16, VT_K2))
+    r.s_unpad = set_tower_hunpad_cls(fixed_array(r.attp_dev, r.att_dev), fixed_array(bp, bx), fixed_array(VT_K2, VT_ATT))
+    r.s_spad_q = set_tower_hpad_slot_cls(fixed_array(r.q_dev, r.sqp_dev, r.rmap_dev), fixed_array(bx, sbp, brm), fixed_array(VT_Q, VT_Q2, 0u))
+    r.s_spad_k = set_tower_hpad16_slot_cls(fixed_array(r.k_dev, r.skp16_dev, r.rmap_dev), fixed_array(bx, sbph, brm), fixed_array(VT_K, VT_K16, 0u))
+    r.s_spad_v = set_tower_hpad16_slot_cls(fixed_array(r.v_dev, r.svp16_dev, r.rmap_dev), fixed_array(bx, sbph, brm), fixed_array(VT_V, VT_V16, 0u))
+    if (r.fa_khr) {
+        r.s_sfa = set_fa_khr_h128_win_cls(fixed_array(r.sqp_dev, r.skp16_dev, r.svp16_dev, r.sattp_dev, r.wcnt_dev), fixed_array(sbp, sbph, sbph, sbp, bwc), fixed_array(VT_Q2, VT_K16, VT_V16, VT_K2, 0u))
+    } else {
+        r.s_sfa = set_fa_cm2_h128_win_cls(fixed_array(r.sqp_dev, r.skp16_dev, r.svp16_dev, r.sattp_dev, r.wcnt_dev), fixed_array(sbp, sbph, sbph, sbp, bwc), fixed_array(VT_Q2, VT_K16, VT_V16, VT_K2, 0u))
+    }
+    r.s_sunpad = set_tower_hunpad_slot_cls(fixed_array(r.sattp_dev, r.att_dev, r.rmap_dev), fixed_array(sbp, bx, brm), fixed_array(VT_K2, VT_ATT, 0u))
+    r.s_post_o_ln = set_tower_post_add_rms_cls(fixed_array(r.x_dev, r.yo_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YO, VT_XB, 0u))
+    r.s_post_d_ln = set_tower_post_add_rms_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
+    r.s_glu = set_tower_glu_act_cls(fixed_array(r.hg_dev, r.hu_dev, r.norms_dev), fixed_array(bff, bff, r.norms_bytes), fixed_array(VT_HG, VT_HU, 0u))
+}
+
+//! the residency key: the quant plane's address, size and served block count folded with sampled words, so a tower freed
+//! and another mapped at the same address with the same bytes but another depth (a truncated twin) reads as a new tower
+def private vt_key(qblob : PlaneI8; qscales_n, n_layer : int64) : uint64 {
+    var k = intptr(unsafe(reinterpret<void?>(qblob.p))) * 0x9E3779B97F4A7C15ul + uint64(qblob.n) + uint64(qscales_n) * 0x100000001B3ul + uint64(n_layer) * 0x9E3779B1ul
     let step = max(qblob.n / VT_FP_SAMPLES, 1l)
     var i = 0l
     while (i < qblob.n) {
@@ -242,9 +408,18 @@ def private vt_release_scratch(var r : VtResident) {
         destroy_device_buf(r.xtap_dev)
         r.taps = 0l
     }
+    if (r.f16w) {
+        for (b in fixed_array(r.xh_dev, r.rmap_dev, r.wcnt_dev, r.sqp_dev, r.skp16_dev, r.svp16_dev, r.sattp_dev)) {
+            destroy_device_buf(b)
+        }
+        r.f16w = false
+        r.slot_cap = 0l
+    }
     destroy_host_buf(r.host)
-    destroy_host_buf(r.meta)
-    r.meta_bytes = 0l
+    if (r.meta_bytes > 0l) {
+        destroy_host_buf(r.meta)
+        r.meta_bytes = 0l
+    }
     r.cap_rows = 0l
     r.bvar = -1
     r.bvar_ff = -1
@@ -267,6 +442,7 @@ def vulkan_tower_shutdown {
     vt_release(g_vt_g4v)
     vt_release(g_vt_g3v)
     vt_release(g_vt_q3v)
+    vt_release(g_vt_q25v)
 }
 
 def private vt_blank : VtResident => VtResident(bvar = -1, bvar_ff = -1, bvar_qkv = -1)
@@ -276,6 +452,7 @@ def private vt_forget {
     g_vt_g4v = vt_blank()
     g_vt_g3v = vt_blank()
     g_vt_q3v = vt_blank()
+    g_vt_q25v = vt_blank()
 }
 
 //! one block GEMM's region in the tower's q8 plane: its element offset, its input width and its rows - the repack unit
@@ -492,6 +669,7 @@ def private vt_batch_sets(var r : VtResident; v, vff : int; vqkv : int = -1) {
         r.s_qkv = vt_batch_set(r, vqkv, r.qkv_dev, 3l * bx, VT_QKV)
         r.bvar_qkv = vqkv
     }
+    to_log(LOG_INFO, "dasLLAMA vulkan tower: batch sets at {r.cap_rows} rows - variants {v} (d {r.d}) / {vff} (ff {r.ff}) / {vqkv} (qkv), tiles {q8_batch_tile_for(r.d, r.cap_rows)} / {q8_batch_tile_for(r.ff, r.cap_rows)}\n")
 }
 
 //! the qwen3v family's sets: the layernorm, the plain feeds, the fused qkv rows with their bias and the per-token rope on
@@ -605,7 +783,7 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
         return vt_decline(VulkanTowerDecline.device)
     }
     var r & = g_vt_g3v
-    let key = vt_key(t.qblob, t.qscales.n)
+    let key = vt_key(t.qblob, t.qscales.n, t.n_layer)
     if (r.key != key) {
         var regions <- g3v_regions(t)
         vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
@@ -786,7 +964,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         return vt_decline(VulkanTowerDecline.device)
     }
     var r & = g_vt_q3v
-    let key = vt_key(t.qblob, t.qscales.n)
+    let key = vt_key(t.qblob, t.qscales.n, t.n_layer)
     if (r.key != key) {
         var regions <- q3v_regions(t)
         vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
@@ -926,12 +1104,188 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     return true
 }
 
-[unused_argument(t, s, npos)]
-def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {
+//! the qwen25v (window ViT) block loop as one command buffer over the baked halfword twin: the rms pre-norm, the f16 feed
+//! into the biased f16 GEMMs, the rope, the heads to the tile's 128 through the bidirectional tile on a full block or the
+//! slotted restrides and the block-diagonal tile on a window block, o and its rms seam, the gated hidden in one pass, down, the FFN seam
+def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {   // nolint:STYLE037,STYLE038 — the dispatch chain is the shape, its two attention arms the routing
     if (!g_vt_env_tower) {
         return vt_decline(VulkanTowerDecline.knob)
     }
-    return vt_decline(VulkanTowerDecline.unserved)
+    if (t.wblob.n <= 0l || t.blk_bf16) {   //! the f16 GEMMs read an IEEE halfword twin: none baked, or a bf16-sourced one, is not their lane
+        return vt_decline(VulkanTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let ff = t.ff_pad
+    let hs = d / t.n_head
+    let hsp = hs <= 64l ? 64l : 128l
+    let dp = t.n_head * hsp
+    let nwin = long_length(s.win_lo) - 1l
+    var wmax = 0l
+    for (i in range64(nwin)) {
+        wmax = max(wmax, s.win_lo[i + 1l] - s.win_lo[i])
+    }
+    let srows = nwin * 64l   //! every window in a 64-row slot
+    if (hs > 128l || hs % 2l != 0l || d % 64l != 0l || ff % 64l != 0l || npos > VT_META_CAP_ROWS || npos <= 0l || wmax > 64l || nwin <= 0l) {
+        return vt_decline(VulkanTowerDecline.shape)
+    }
+    if (!gpu_want_arms_tier() || !vk_moe_init()) {   //! the tier's want (DASLLAMA_GPU) gates the driver; the device init alone reads no knob
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    let khr = !cm2_fa_on()
+    let gemm_khr = g_gpu.coopmat_mode != COOPMAT_CM2
+    if ((khr || gemm_khr) && !khr_kq_tile_on()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var fa_ok = false
+    if (hsp == 64l) {
+        fa_ok = khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
+    } else {
+        fa_ok = khr ? (ensure_fa_khr_h128_bidir_cls() && ensure_fa_khr_h128_win_cls()) : (ensure_fa_cm2_h128_bidir_cls() && ensure_fa_cm2_h128_win_cls())
+    }
+    if (hsp == 64l) {
+        return vt_decline(VulkanTowerDecline.shape)   //! the window stamps exist at the 128 head alone (the family's 80-wide heads)
+    }
+    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_f16cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
+            || !ensure_tower_rope_tab_cls() || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()
+            || !ensure_tower_hpad_slot_cls() || !ensure_tower_hpad16_slot_cls() || !ensure_tower_hunpad_slot_cls()
+            || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var r & = g_vt_q25v
+    let key = vt_key_u16(t.wblob, t.n_layer)
+    let w_off = t.layer_w   //! the block GEMM region of the twin is what lives on the device; the GEMM offsets rebase to it
+    if (r.key != key) {
+        vt_upload_f16(r, key, t.wblob, w_off, t.n_layer * t.layer_w_stride, t.blob, t.layer_f, t.n_layer * t.layer_f_stride)
+    }
+    if (vt_scratch_f16(r, npos, srows, d, ff, hs, dp, khr)) {
+        vt_sets_q25v(r, gemm_khr)
+    }
+    // the window tables: each slot row's compact row (-1 a pad) and each slot's live count
+    var rmap : array<int>
+    var wcnt : array<uint>
+    rmap |> resize(srows)
+    wcnt |> resize(nwin)
+    for (w in range64(nwin)) {
+        let lo = s.win_lo[w]
+        let cnt = s.win_lo[w + 1l] - lo
+        wcnt[w] = uint(cnt)
+        for (i in range64(64l)) {
+            rmap[w * 64l + i] = i < cnt ? int(lo + i) : -1
+        }
+    }
+    let bx = npos * d * 4l
+    let half = hs / 2l
+    let btab = npos * half * 4l
+    unsafe {
+        upload_region_at(r.x_dev, 0l, addr<uint8 const?>(s.x[0]), bx)
+        upload_region_at(r.cos_dev, 0l, addr<uint8 const?>(s.cos_t[0]), btab)
+        upload_region_at(r.sin_dev, 0l, addr<uint8 const?>(s.sin_t[0]), btab)
+        upload_region_at(r.rmap_dev, 0l, addr<uint8 const?>(rmap[0]), srows * 4l)
+        upload_region_at(r.wcnt_dev, 0l, addr<uint8 const?>(wcnt[0]), nwin * 4l)
+    }
+    delete rmap
+    delete wcnt
+    let nd = npos * d
+    let nff = npos * ff
+    let wg_nd = (nd / 4l + 255l) / 256l
+    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_pad = (npos * dp + 255l) / 256l
+    let wg_spad = (srows * dp + 255l) / 256l
+    let wg_rope = (npos * t.n_head * half + 255l) / 256l
+    let wg_fa = t.n_head * ((npos + (khr ? 15l : 63l)) / (khr ? 16l : 64l))
+    let wg_sfa = t.n_head * (srows / (khr ? 16l : 64l))
+    let n_off = t.layer_f
+    let scale = 1.0 / sqrt(float(hs))
+    var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
+    var pc_sfa = FaArgs(rows = uint(srows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
+    var pc_rs = TowerRestrideArgs(rows = uint(npos), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
+    var pc_srs = TowerRestrideArgs(rows = uint(srows), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
+    var pc_rope = TowerRopeTabArgs(sstride = uint(d), soff = 0u, nheads = uint(t.n_head), hs = uint(hs), half = uint(half), rows = uint(npos))
+    var pc_cvt = ActArgs(nelem = uint(nd), nblk = 0u)
+    var pc_cvth = ActArgs(nelem = uint(nff), nblk = 0u)
+    var pc_gd = F16GemmArgs(n = uint(d), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
+    var pc_gff = F16GemmArgs(n = uint(d), d = uint(ff), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ff), ksplit = 0u)
+    var pc_dn = F16GemmArgs(n = uint(ff), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
+    var pc_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = 0u)
+    var pc_glu = TowerGluArgs(d = uint(ff), nelem = uint(nff), bgoff = 0u, buoff = 0u)
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        for (l in range64(t.n_layer)) {
+            let o = qwen25v_block_offs(t, l)
+            let full = t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+            if (l == 0l) {
+                var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - n_off), eps = t.eps)
+                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+            }
+            enc_f16cvt_cls(raw, h, r.s_cvt_xb, pc_cvt, wg_nd)
+            pc_gd.woff = uint(o.w[QWEN25V_GEMM_Q] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_q, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_Q] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_q, pc_bias, wg_nd)
+            pc_gd.woff = uint(o.w[QWEN25V_GEMM_K] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_k, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_K] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_k, pc_bias, wg_nd)
+            pc_gd.woff = uint(o.w[QWEN25V_GEMM_V] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_v, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_V] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_v, pc_bias, wg_nd)
+            enc_tower_rope_tab_cls(raw, h, r.s_rope_tq, pc_rope, wg_rope)
+            enc_tower_rope_tab_cls(raw, h, r.s_rope_tk, pc_rope, wg_rope)
+            if (full) {
+                enc_tower_hpad_cls(raw, h, r.s_pad_q, pc_rs, wg_pad)
+                enc_tower_hpad16_cls(raw, h, r.s_pad_k, pc_rs, wg_pad)
+                enc_tower_hpad16_cls(raw, h, r.s_pad_v, pc_rs, wg_pad)
+                if (khr) {
+                    enc_fa_khr_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                } else {
+                    enc_fa_cm2_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                }
+                enc_tower_hunpad_cls(raw, h, r.s_unpad, pc_rs, wg_pad)
+            } else {
+                enc_tower_hpad_slot_cls(raw, h, r.s_spad_q, pc_srs, wg_spad)
+                enc_tower_hpad16_slot_cls(raw, h, r.s_spad_k, pc_srs, wg_spad)
+                enc_tower_hpad16_slot_cls(raw, h, r.s_spad_v, pc_srs, wg_spad)
+                if (khr) {
+                    enc_fa_khr_h128_win_cls(raw, h, r.s_sfa, pc_sfa, wg_sfa)
+                } else {
+                    enc_fa_cm2_h128_win_cls(raw, h, r.s_sfa, pc_sfa, wg_sfa)
+                }
+                enc_tower_hunpad_slot_cls(raw, h, r.s_sunpad, pc_srs, wg_spad)
+            }
+            enc_f16cvt_cls(raw, h, r.s_cvt_att, pc_cvt, wg_nd)
+            pc_gd.woff = uint(o.w[QWEN25V_GEMM_O] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_o, pc_gd, npos, d)
+            var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.b[QWEN25V_GEMM_O] - n_off), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln2_w - n_off), lnboff = 0u)
+            enc_tower_post_add_rms_cls(raw, h, r.s_post_o_ln, pc_post, npos)
+            enc_f16cvt_cls(raw, h, r.s_cvt_xb, pc_cvt, wg_nd)
+            pc_gff.woff = uint(o.w[QWEN25V_GEMM_GATE] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_gate, pc_gff, npos, ff)
+            pc_gff.woff = uint(o.w[QWEN25V_GEMM_UP] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_up, pc_gff, npos, ff)
+            pc_glu.bgoff = uint(o.b[QWEN25V_GEMM_GATE] - n_off)
+            pc_glu.buoff = uint(o.b[QWEN25V_GEMM_UP] - n_off)
+            enc_tower_glu_act_cls(raw, h, r.s_glu, pc_glu, wg_nff)
+            enc_f16cvt_cls(raw, h, r.s_cvt_hg, pc_cvth, wg_nff)
+            pc_dn.woff = uint(o.w[QWEN25V_GEMM_DOWN] - w_off)
+            f16_gemm_enc(gemm_khr, raw, h, r.s_down, pc_dn, npos, d)
+            let last = l + 1l == t.n_layer
+            pc_post.boff = uint(o.b[QWEN25V_GEMM_DOWN] - n_off)
+            pc_post.ln_on = last ? 0u : 1u
+            if (!last) {
+                pc_post.lnoff = uint(qwen25v_block_offs(t, l + 1l).ln1_w - n_off)
+            }
+            enc_tower_post_add_rms_cls(raw, h, r.s_post_d_ln, pc_post, npos)
+        }
+        vhz_dep(raw, h, VT_X, 0u, true)
+        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+    }
+    unsafe {
+        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
+    }
+    g_vt_encodes++
+    g_vt_rows += npos
+    g_vt_blocks += t.n_layer
+    return true
 }
 
 //! the gemma4v block GEMM regions in GEMMA4V_GEMM_* order, each its own repack unit
@@ -985,7 +1339,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         return vt_decline(VulkanTowerDecline.device)
     }
     var r & = g_vt_g4v
-    let key = vt_key(t.qblob, t.qscales.n)
+    let key = vt_key(t.qblob, t.qscales.n, t.n_layer)
     if (r.key != key) {
         var regions <- g4v_regions(t)
         vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hd)
@@ -1155,6 +1509,6 @@ def dasllama_vulkan_tower_register {
         register_gemma4v_gpu(@@vulkan_gemma4v_blocks, @@vulkan_tower_serves_exact)
         register_gemma3v_gpu(@@vulkan_gemma3v_blocks, @@vulkan_tower_serves_exact)
         register_qwen3v_gpu_q8(@@vulkan_qwen3v_blocks)   //! the q8-lane seat: the exact-lane hook stays the Metal driver's
-        register_qwen25v_gpu(@@vulkan_qwen25v_blocks)
+        register_qwen25v_gpu_blocks(@@vulkan_qwen25v_blocks)   //! the blocks-only seat: the whole-chain hook stays the Metal driver's
     }
 }

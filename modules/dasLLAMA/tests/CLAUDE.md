@@ -306,7 +306,13 @@ weighted rms, the in-place clamp, the clamp-and-f16 and clamp-and-Q8_0 feeds, th
 rope, the post-add with its next pre-norm, and the clamped GEGLU-quick - each against the CPU tower
 helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
 `add_inplace_rows`) or its closed form, over one command buffer, with a poisoned-element control per
-bar; the attention and GEMM classes the towers ride are the kernel file's.
+bar; the biased-block classes (the layernorm, the bias with its tanh GELU, the seam with its next
+layernorm, the head restrides to the tile's 128 and the rope on a fused row's k slot) the same way;
+the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
+heads) against `attention_bidir`; and the window classes - the slotted restrides, the block-diagonal
+tile over sixteen 64-row window slots (one ragged) against `attention_bidir_windows` with full
+attention over the same rows as the leak control, the rms seam and the gated hidden against their
+CPU forms. The attention and GEMM classes the towers ride are the kernel file's.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit
@@ -1040,7 +1046,13 @@ with engage proven per fixture by the encodes/blocks counters, a twin-route coun
 planes, and the SHALLOW routing cells - 1-layer truncated towers (pure-window and all-full) on
 quad content, GPU vs the CPU chain at 0.1 abs, the chaos-free window discrimination for the DRIVER
 (the kernel's own block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly
-without the mmproj or dumps.
+without the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`gpu_towers`). On a
+Vulkan build `test_qwen25v_vulkan_twin` holds the Vulkan block loop over the baked halfword twin
+(this family has no q8 lane, so the exact CPU chain is the reference) to the f16 route's 8e-2*rms
+bar on the single-window, four-window and ragged-edge fixtures with the engage counters and the
+knob-off decline, then the shallow routing cells on the driver - the one-block pure-window and
+all-full towers on quad content against the CPU chain at 0.1 abs; quad content stays off the deep
+numeric set as on the Metal rung. Skips without the mmproj or a device.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
 over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
 `quad` generator and the q1/q2/q3 quarter-offset probe fields live here).

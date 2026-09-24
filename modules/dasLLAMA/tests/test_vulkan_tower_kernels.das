@@ -667,13 +667,17 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
 let private PAT_HEADS = 16   //! the SigLIP head count: sixteen 72-wide heads through the padded 128 route
 
 [test]
-def test_vkt_tower_padded_attn(t0 : T?) {
+def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded route end to end: the fixture, the command buffer, the oracle and its controls
     t0 |> run("the padded attention route (pad, the h128 bidirectional tile, unpad) == attention_bidir at 72-wide heads") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
             let khr = !cm2_fa_on()
             let fa_ok = khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
-            if (!vk_moe_init() || !fa_ok || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()) {
-                t |> skip("no Vulkan device")
+            if (!fa_ok || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()) {
+                t |> skip("the padded route's classes declined on this device")
                 return
             }
             let rows = TOWER_ROWS
@@ -738,6 +742,208 @@ def test_vkt_tower_padded_attn(t0 : T?) {
             t |> success(bad == 0, "the padded route matches attention_bidir over {PAT_HEADS} heads of {LN_HS} ({bad} of {rows * dc} off)")
             t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "the bar reds a poisoned element")
             for (b in fixed_array(qd, kd, vd, qpd, kpd, vpd, attpd, attd)) {
+                destroy_device_buf(b)
+            }
+            destroy_host_buf(host)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private WIN_HS = 80   //! the window ViT's head width, padded to 128 on the tile
+let private WIN_HEADS = 4
+let private WIN_ROWS = 982   //! sixteen windows: fifteen full 64-row slots and a ragged 22-row one
+
+[test]
+def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route end to end plus the two seams: the fixture, the command buffer, the oracles and their controls
+    t0 |> run("the window-attention classes (slotted pads, the block-diagonal tile, the rms seam, the gated hidden) == the CPU tower helpers") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let khr = !cm2_fa_on()
+            let fa_ok = khr ? ensure_fa_khr_h128_win_cls() : ensure_fa_cm2_h128_win_cls()
+            if (!fa_ok || !ensure_tower_hpad_slot_cls() || !ensure_tower_hpad16_slot_cls() || !ensure_tower_hunpad_slot_cls()
+                    || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
+                t |> skip("the window route's classes declined on this device")
+                return
+            }
+            let rows = WIN_ROWS
+            let dc = WIN_HEADS * WIN_HS
+            let dp = WIN_HEADS * LN_HSP
+            let scale = 1.0 / sqrt(float(WIN_HS))
+            let nslot = (rows + 63) / 64
+            var win_lo : array<int64>
+            win_lo |> reserve(nslot + 1)
+            for (s in range(nslot + 1)) {
+                win_lo |> push(min(int64(s) * 64l, int64(rows)))
+            }
+            let srows = nslot * 64
+            var rmap : array<int>
+            var wcnt : array<uint>
+            rmap |> resize(srows)
+            wcnt |> resize(nslot)
+            for (s in range(nslot)) {
+                let lo = int(win_lo[s])
+                let cnt = int(win_lo[s + 1]) - lo
+                wcnt[s] = uint(cnt)
+                for (i in range(64)) {
+                    rmap[s * 64 + i] = i < cnt ? lo + i : -1
+                }
+            }
+            var q <- row_fill(rows * dc, 29, 11, 0.02, 0.9)
+            var k <- row_fill(rows * dc, 17, 3, 0.03, 1.4)
+            var v <- row_fill(rows * dc, 53, 7, 0.04, 1.7)
+            for (i in range(rows * dc)) {
+                k[i] = f16r(k[i])
+                v[i] = f16r(v[i])
+            }
+            let bc = int64(rows * dc) * 4l
+            let bp = int64(srows * dp) * 4l
+            let bph = int64(srows * dp) * 2l
+            let brm = int64(srows) * 4l
+            let bwc = int64(nslot) * 4l
+            let qd = make_device_buf(bc)
+            let kd = make_device_buf(bc)
+            let vd = make_device_buf(bc)
+            let qpd = make_device_buf(bp)
+            let kpd = make_device_buf(bph)
+            let vpd = make_device_buf(bph)
+            let attpd = make_device_buf(bp)
+            let attd = make_device_buf(bc)
+            let rmd = make_device_buf(brm)
+            let wcd = make_device_buf(bwc)
+            // the two seams' fixture: d-wide rows, a bias and rms weight rows at wn
+            let d = ROWS_D
+            let nrows = ROWS_N
+            let nd = nrows * d
+            var x <- row_fill(nd, 41, 7, 0.05, 2.1)
+            var y <- row_fill(nd, 17, 3, 0.04, 1.9)
+            var g <- row_fill(nd, 13, 5, 0.09, 4.0)
+            var u <- row_fill(nd, 23, 9, 0.07, 3.3)
+            var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   //! rows: the o bias at 0, the rms weight at d, the gate bias at 2d, the up bias at 3d
+            let bx = int64(nd) * 4l
+            let bw = int64(4 * d) * 4l
+            let xd = make_device_buf(bx)
+            let yd = make_device_buf(bx)
+            let xbd = make_device_buf(bx)
+            let gd = make_device_buf(bx)
+            let ud = make_device_buf(bx)
+            let wd = make_device_buf(bw)
+            var host = make_host_buf(bc + 3l * bx, true, [cached = true])
+            unsafe {
+                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
+                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
+                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
+                upload_region_at(rmd, 0l, addr<uint8 const?>(rmap[0]), brm)
+                upload_region_at(wcd, 0l, addr<uint8 const?>(wcnt[0]), bwc)
+                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
+                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
+                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
+                upload_region_at(ud, 0l, addr<uint8 const?>(u[0]), bx)
+                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
+            }
+            var s_pq = set_tower_hpad_slot_cls(fixed_array(qd, qpd, rmd), fixed_array(bc, bp, brm), fixed_array(1u, 2u, 0u))
+            var s_pk = set_tower_hpad16_slot_cls(fixed_array(kd, kpd, rmd), fixed_array(bc, bph, brm), fixed_array(4u, 8u, 0u))
+            var s_pv = set_tower_hpad16_slot_cls(fixed_array(vd, vpd, rmd), fixed_array(bc, bph, brm), fixed_array(16u, 32u, 0u))
+            var s_fa : VkDescriptorSet
+            if (khr) {
+                s_fa = set_fa_khr_h128_win_cls(fixed_array(qpd, kpd, vpd, attpd, wcd), fixed_array(bp, bph, bph, bp, bwc), fixed_array(2u, 8u, 32u, 64u, 0u))
+            } else {
+                s_fa = set_fa_cm2_h128_win_cls(fixed_array(qpd, kpd, vpd, attpd, wcd), fixed_array(bp, bph, bph, bp, bwc), fixed_array(2u, 8u, 32u, 64u, 0u))
+            }
+            var s_un = set_tower_hunpad_slot_cls(fixed_array(attpd, attd, rmd), fixed_array(bp, bc, brm), fixed_array(64u, 128u, 0u))
+            var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(256u, 512u, 1024u, 0u))
+            var s_glu = set_tower_glu_act_cls(fixed_array(gd, ud, wd), fixed_array(bx, bx, bw), fixed_array(2048u, 4096u, 0u))
+            var pa_rs = TowerRestrideArgs(rows = uint(srows), nheads = uint(WIN_HEADS), hs = uint(WIN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
+            var pa_fa = FaArgs(rows = uint(srows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
+            var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u)
+            var pa_glu = TowerGluArgs(d = uint(d), nelem = uint(nd), bgoff = uint(2 * d), buoff = uint(3 * d))
+            let wg_rs = int64((srows * dp + 255) / 256)
+            let wg4 = int64((nd / 4 + 255) / 256)
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tower_hpad_slot_cls(raw, h, s_pq, pa_rs, wg_rs)
+                enc_tower_hpad16_slot_cls(raw, h, s_pk, pa_rs, wg_rs)
+                enc_tower_hpad16_slot_cls(raw, h, s_pv, pa_rs, wg_rs)
+                if (khr) {
+                    enc_fa_khr_h128_win_cls(raw, h, s_fa, pa_fa, fa_wgs(true, WIN_HEADS, srows))
+                } else {
+                    enc_fa_cm2_h128_win_cls(raw, h, s_fa, pa_fa, fa_wgs(false, WIN_HEADS, srows))
+                }
+                enc_tower_hunpad_slot_cls(raw, h, s_un, pa_rs, wg_rs)
+                enc_tower_glu_act_cls(raw, h, s_glu, pa_glu, wg4)
+                enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
+                vhz_dep(raw, h, 128u | 256u | 1024u | 2048u, 0u, true)
+                cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
+                cmd_copy_range(raw, xd, 0l, host.buf, bc, bx)
+                cmd_copy_range(raw, xbd, 0l, host.buf, bc + bx, bx)
+                cmd_copy_range(raw, gd, 0l, host.buf, bc + 2l * bx, bx)
+            }
+            var att_dev : array<float>
+            var x_dev : array<float>
+            var xb_dev : array<float>
+            var g_dev : array<float>
+            att_dev |> resize(rows * dc)
+            x_dev |> resize(nd)
+            xb_dev |> resize(nd)
+            g_dev |> resize(nd)
+            unsafe {
+                let hp = intptr(host.mapped)
+                memcpy(addr<void?>(att_dev[0]), host.mapped, bc)
+                memcpy(addr<void?>(x_dev[0]), reinterpret<void?>(hp + uint64(bc)), bx)
+                memcpy(addr<void?>(xb_dev[0]), reinterpret<void?>(hp + uint64(bc + bx)), bx)
+                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bc + 2l * bx)), bx)
+            }
+            var att_ref : array<float>
+            var hpp : array<float>
+            var attsc : array<float>
+            att_ref |> resize(rows * dc)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
+            }
+            let bad = mismatch_approx(att_dev, att_ref)
+            t |> success(bad == 0, "the window route matches attention_bidir_windows over {nslot} windows, one ragged ({bad} of {rows * dc} off)")
+            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "the window route: the bar reds a poisoned element")
+            //! the leak control: the same rows attended in full differ on the first row, so the slots' walls are the stamps' doing
+            var full_ref : array<float>
+            full_ref |> resize(rows * dc)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                attention_bidir(full_ref, q, k, v, hpp, attsc, int64(rows), int64(dc), int64(WIN_HEADS), scale)
+            }
+            var moved = 0.0
+            for (i in range(dc)) {
+                moved = max(moved, abs(full_ref[i] - att_ref[i]))
+            }
+            t |> success(moved > 0.01, "the window route control: full attention over the same rows lands elsewhere (maxdiff {moved})")
+            var x_ref := x
+            var yb := y
+            add_bias_rows(yb, wn, 0l, int64(d), int64(nrows))
+            add_inplace_rows(x_ref, yb, int64(nd))
+            let bad_add = mismatch_approx(x_dev, x_ref)
+            t |> success(bad_add == 0, "tower_post_add_rms: x += y + b ({bad_add} of {nd} off)")
+            var xb_ref : array<float>
+            xb_ref |> resize(nd)
+            let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(4 * d))
+            rms_rows(xb_ref, x_ref, wplane, int64(d), int64(d), int64(nrows), ROWS_EPS)
+            let bad_rms = mismatch_approx(xb_dev, xb_ref)
+            t |> success(bad_rms == 0, "tower_post_add_rms: the next weighted rms over the updated rows ({bad_rms} of {nd} off)")
+            t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_post_add_rms: the bar reds a poisoned element")
+            var g_ref := g
+            var u_ref := u
+            add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
+            add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
+            silu(g_ref, int64(nd))
+            for (i in range(nd)) {
+                g_ref[i] *= u_ref[i]
+            }
+            let bad_glu = mismatch_approx(g_dev, g_ref)
+            t |> success(bad_glu == 0, "tower_glu_act: silu(g + bg) . (u + bu) matches the CPU form ({bad_glu} of {nd} off)")
+            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_glu_act: the bar reds a poisoned element")
+            for (b in fixed_array(qd, kd, vd, qpd, kpd, vpd, attpd, attd, rmd, wcd, xd, yd, xbd, gd, ud, wd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)

@@ -3300,6 +3300,7 @@ class template FaT {
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
     @ssbo @binding = 4 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
+    @ssbo @binding = 5 @template_gate = DIAG wcnt : array<uint>   //! the DIAG stamps: the live row count of each 64-row window slot
     @push_constant pa : FaArgs
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the cm2 arm's K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
@@ -3309,6 +3310,7 @@ class template FaT {
     @template_constant SINK : bool = false       //! the sink stamps (gpt-oss): the online softmax seeds its max with the head's sink logit and its sum with one - the phantom key with no value row
     @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
     @template_constant CAUSAL : bool = true      //! the bidirectional stamps (the vision towers' encoder attention) clear it: every query row attends every key row, and the mask keeps only the tail past kvlen
+    @template_constant DIAG : bool = false       //! the block-diagonal window stamps (qwen25v): the rows sit in 64-row window slots, a query attends its own slot's live rows alone
     @workgroup @template_gate = KHR fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup @template_gate = KHR fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup @template_gate = KHR fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
@@ -3362,12 +3364,18 @@ class template FaT {
                 o[z] = 0.0
             }
             let qbase = pa.w0 + q0
-            let kend = CAUSAL ? pa.w0 + min(q0 + 16u, pa.rows) : kvlen
-            var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u
+            var slot0 = 0u        // nolint:LINT010,LINT019 — the DIAG stamps overwrite it below; the others read it
+            var kv_end = kvlen    // nolint:LINT010,LINT019 — the same
+            static_if (DIAG) {   //! the DIAG stamps: the slot's live rows are its whole key range
+                slot0 = (q0 / 64u) * 64u
+                kv_end = slot0 + wcnt[q0 / 64u]
+            }
+            let kend = CAUSAL ? pa.w0 + min(q0 + 16u, pa.rows) : kv_end
+            var j = DIAG ? slot0 : ((pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u)
             barrier()
             while [dont_unroll] (j < kend) {
                 let krow = j + sg * 16u
-                if (krow < kvlen) {
+                if (krow < kv_end) {
                     var s : coopmatAcc_f32_16x16
                     var d = 0u
                     while (d < HS) {
@@ -3392,7 +3400,7 @@ class template FaT {
                         fs[idx] = sv
                         mloc = max(mloc, sv)
                     } else {
-                        let sv = gk >= kvlen ? -3.0e38 : v
+                        let sv = gk >= kv_end ? -3.0e38 : v
                         fs[idx] = sv
                         mloc = max(mloc, sv)
                     }
@@ -3420,7 +3428,7 @@ class template FaT {
                 var acc : coopmatAcc_f16_16x16[8]
                 var kc = 0u
                 while (kc < 64u) {
-                    if (j + kc < kvlen) {
+                    if (j + kc < kv_end) {
                         var pf : coopmatA_f16_16x16
                         coopmatLoad(pf, fp, int(kc / 2u), 32, 0)
                         for [unroll_full] (f in range(int(HS / 64u))) {
@@ -3492,9 +3500,13 @@ class template FaT {
             }
             var o : OF
             let qbase = pa.w0 + q0
-            let kmax = CAUSAL ? pa.w0 + min(q0 + 64u, pa.rows) : kvlen   // causal bound (exclusive) of the tile's last row; every key row on the bidirectional stamps
+            var kv_end = kvlen    // nolint:LINT010,LINT019 — the DIAG stamps overwrite it below; the others read it
+            static_if (DIAG) {   //! the DIAG stamps: the q tile is one window slot, its live rows its whole key range
+                kv_end = q0 + wcnt[qt]
+            }
+            let kmax = CAUSAL ? pa.w0 + min(q0 + 64u, pa.rows) : kv_end   // causal bound (exclusive) of the tile's last row; every key row on the bidirectional stamps
             // a sliding layer's first step: the step below the tile's first query's window start
-            var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u
+            var j = DIAG ? q0 : ((pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u)
             while [dont_unroll] (j < kmax) {
                 var s : SACC
                 var kt : KB
@@ -3508,8 +3520,8 @@ class template FaT {
                         coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
                     }
                 } else {
-                    if (j + BC > kvlen) {   //! the padded tensor load reads the tail past kvlen as zero rows: a zero score, not a masked one
-                        coopmatPerElement(s, s, @@facm2_tail, j, kvlen)
+                    if (j + BC > kv_end) {   //! the padded tensor load reads the tail past kvlen as zero rows, a slot's pad rows are zero rows: a zero score, not a masked one
+                        coopmatPerElement(s, s, @@facm2_tail, j, kv_end)
                     }
                 }
                 var rmax : SACC
@@ -3644,6 +3656,14 @@ class FaCm2H128Bidir : FaH128T {
     override CAUSAL = false
 }
 
+//! the window-attention ViT's block-diagonal stamp (qwen25v, its 80-wide heads padded to 128): the rows in 64-row window slots
+[vk_dispatch(name = "fa_cm2_h128_win_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128Win : FaH128T {
+    typedef OT = float
+    override CAUSAL = false
+    override DIAG = true
+}
+
 // hs=256 (the deltanet hybrids' attention heads) at Bc=32; the gated leaves ride the [q | gate] panel
 [ |> template_struct_instance]
 class template FaH256T : FaT {
@@ -3768,6 +3788,14 @@ class FaKhrH128 : FaH128T {
 class FaKhrH128Bidir : FaH128T {
     override KHR = true
     override CAUSAL = false
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h128_win_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128Win : FaH128T {
+    override KHR = true
+    override CAUSAL = false
+    override DIAG = true
     typedef OT = float
 }
 
@@ -9139,16 +9167,18 @@ class TowerLn : RmsWgBase {
 }
 
 //! the residual seam of a biased block: x[r] += y[r] + b (the branch's output bias at `boff`), then under `ln_on`
-//! xb[r] = layernorm(x[r]) . wln + bln (the next branch's pre-norm at `lnoff` / `lnboff`) - one workgroup a row
-[vk_dispatch(name = "tower_post_add_ln_cls", grid = "wgs", params = "wgs : int64")]
-class TowerPostAddLn : RmsWgBase {
+//! xb[r] = layernorm(x[r]) . wln + bln (the next branch's pre-norm at `lnoff` / `lnboff`; the RMS stamp: rms(x[r]) . wln)
+//! - one workgroup a row
+[ |> template_struct_instance]
+class template TowerPostAddLnT : RmsWgBase {
+    @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v), not the layernorm
     @ssbo @binding = 0 x : array<float>    // the residual stream, updated in place
     @ssbo @binding = 1 y : array<float>    // the branch's rows
     @ssbo @binding = 2 xb : array<float>   // the next pre-norm's rows (written under ln_on)
     @ssbo @binding = 3 @role = "weight" wn : array<float>
     @push_constant pa : TowerLnArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_post_add_ln_cls_spv")]
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let base = gl_WorkGroupID.x * pa.d
         let tid = gl_LocalInvocationID.x
@@ -9157,26 +9187,47 @@ class TowerPostAddLn : RmsWgBase {
         while (i < pa.d) {
             let xv = x[base + i] + (y[base + i] + wn[pa.boff + i])
             x[base + i] = xv
-            s1 += xv
+            static_if (RMS) {
+                s1 += xv * xv
+            } else {
+                s1 += xv
+            }
             i += 256u
         }
         if (pa.ln_on != 0u) {
-            let mean = wg_sum(s1, 0u) / float(pa.d)
-            var s2 = 0.0
-            i = tid
-            while (i < pa.d) {
-                let dv = x[base + i] - mean
-                s2 += dv * dv
-                i += 256u
-            }
-            let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
-            i = tid
-            while (i < pa.d) {
-                xb[base + i] = (x[base + i] - mean) * inv * wn[pa.lnoff + i] + wn[pa.lnboff + i]
-                i += 256u
+            static_if (RMS) {
+                let inv = wg_rms_inv(s1, pa.d, pa.eps, 0u)
+                i = tid
+                while (i < pa.d) {
+                    xb[base + i] = (x[base + i] * inv) * wn[pa.lnoff + i]
+                    i += 256u
+                }
+            } else {
+                let mean = wg_sum(s1, 0u) / float(pa.d)
+                var s2 = 0.0
+                i = tid
+                while (i < pa.d) {
+                    let dv = x[base + i] - mean
+                    s2 += dv * dv
+                    i += 256u
+                }
+                let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+                i = tid
+                while (i < pa.d) {
+                    xb[base + i] = (x[base + i] - mean) * inv * wn[pa.lnoff + i] + wn[pa.lnboff + i]
+                    i += 256u
+                }
             }
         }
     }
+}
+
+[vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddLn : TowerPostAddLnT {}
+
+[vk_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddRms : TowerPostAddLnT {
+    override RMS = true
 }
 
 struct TowerBiasArgs {
@@ -9240,10 +9291,21 @@ class template TowerRestrideT {
     @template_constant PAD : bool = true
     @template_constant OUT16 : bool = false
     @template_constant OUT32 : bool = true   //! the f32 destination's gate: the f16 stamp clears it as it sets OUT16
+    @template_constant SLOT : bool = false   //! the padded rows are 64-row window slots: `rmap` names each slot row's compact row, -1 a pad row (zero)
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 @template_gate = OUT32 dst : array<float>
     @ssbo @binding = 2 @template_gate = OUT16 dsth : array<float16>
+    @ssbo @binding = 3 @template_gate = SLOT rmap : array<int>
     @push_constant pa : TowerRestrideArgs
+
+    //! the compact row a padded row reads or writes: itself, or its slot row's map entry (-1 = a pad row)
+    def crow(row : uint) : int {
+        static_if (SLOT) {
+            return rmap[row]
+        } else {
+            return int(row)
+        }
+    }
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -9254,16 +9316,17 @@ class template TowerRestrideT {
             let hp = gid % per_row
             let head = hp / pa.hsp
             let lane = hp % pa.hsp
-            let ci = row * pa.sstride + pa.soff + head * pa.hs + lane
+            let cr = crow(row)
+            let ci = uint(cr) * pa.sstride + pa.soff + head * pa.hs + lane
             static_if (PAD) {
-                let v = lane < pa.hs ? src[ci] : 0.0
+                let v = (lane < pa.hs && cr >= 0) ? src[ci] : 0.0
                 static_if (OUT16) {
                     dsth[gid] = float16(v)
                 } else {
                     dst[gid] = v
                 }
             } else {
-                if (lane < pa.hs) {
+                if (lane < pa.hs && cr >= 0) {
                     dst[ci] = src[gid]
                 }
             }
@@ -9283,6 +9346,58 @@ class TowerHeadPad16 : TowerRestrideT {
 [vk_dispatch(name = "tower_hunpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerHeadUnpad : TowerRestrideT {
     override PAD = false
+}
+
+[vk_dispatch(name = "tower_hpad_slot_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadPadSlot : TowerRestrideT {
+    override SLOT = true
+}
+
+[vk_dispatch(name = "tower_hpad16_slot_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadPad16Slot : TowerRestrideT {
+    override OUT16 = true
+    override OUT32 = false
+    override SLOT = true
+}
+
+[vk_dispatch(name = "tower_hunpad_slot_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadUnpadSlot : TowerRestrideT {
+    override PAD = false
+    override SLOT = true
+}
+
+struct TowerGluArgs {
+    d : uint        // the row width (a 4-multiple)
+    nelem : uint    // rows x d
+    bgoff : uint    // the gate and up bias rows' bases in wn
+    buoff : uint
+}
+
+//! the gated FFN's hidden in place: g = silu(g + bg) . (u + bu) - the two bias rows, the SiLU and the product of the CPU
+//! loop in one pass over the rows
+[vk_dispatch(name = "tower_glu_act_cls", grid = "wgs", params = "wgs : int64")]
+class TowerGluAct {
+    @ssbo @binding = 0 g : array<float>
+    @ssbo @binding = 1 u : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerGluArgs
+
+    def glu(e : uint) : float {
+        let gv = g[e] + wn[pa.bgoff + e % pa.d]
+        let uv = u[e] + wn[pa.buoff + e % pa.d]
+        return (gv / (1.0 + exp(-gv))) * uv
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_glu_act_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            g[e] = glu(e)
+            g[e + 1u] = glu(e + 1u)
+            g[e + 2u] = glu(e + 2u)
+            g[e + 3u] = glu(e + 3u)
+        }
+    }
 }
 
 struct TowerRopeTabArgs {
