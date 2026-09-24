@@ -147,5 +147,7 @@ its line here, with its tests, in the same change.**
 - `admin.das` - operator CLI (listing curation). Talks to the store the same way the server
   does; no second implementation of a store operation.
 - `test_*.das` - the dastest suites for the files above.
+- `_playground_test_common.das` - shared test fixtures, required by bare name from the HTTP
+  suites (the leading `_` keeps dastest's walker away).
 - `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` -
   packaging, deployment, and the public route boundary.

@@ -11,37 +11,11 @@ require dasllama/dasllama_asr
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_math
-require audio
+require _audio_probe_fixture
 require daslib/jobque_boost
 require strings
 require daslib/strings_boost
 require math
-
-def load_audio_16k_mono(path : string) : array<float> {
-    var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))
-    if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
-        panic("cannot open audio file '{path}'")
-    }
-    var out : array<float>
-    let chunk = 65536
-    var buf : array<float>
-    buf |> resize(chunk)
-    while (true) {
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(buf[0])), uint64(chunk)))
-        break if (got <= 0)
-        out |> reserve(length(out) + got)
-        for (i in range(got)) {
-            out |> push(buf[i])
-        }
-        break if (got < chunk)
-    }
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
-    return <- out
-}
 
 [export]
 def main() {

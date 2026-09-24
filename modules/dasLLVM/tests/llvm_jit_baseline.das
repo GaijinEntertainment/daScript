@@ -11,6 +11,7 @@ require dastest/testing_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
+require _spawn_common
 
 let HOST_CPU_LINE = "targeting the current box"
 let BASELINE_LINE = "DAS_JIT_BASELINE="
@@ -60,21 +61,6 @@ def private env_prefix(baseline : string) : string {
     return (get_platform_name() == "windows" ?
         "set DAS_TUNE_MODE=&& set DAS_JIT_BASELINE={baseline}&& " :
         "DAS_TUNE_MODE= DAS_JIT_BASELINE={baseline} ")
-}
-
-def private spawn_child(cmd : string; var lines : array<string>) : int {
-    let rc = unsafe(popen_timeout("{cmd} 2>&1", 300.0) $(f) {
-        if (f == null) {
-            return
-        }
-        while (!feof(f)) {
-            let ln = strip(fgets(f))
-            if (!empty(ln)) {
-                lines |> push("{ln}")
-            }
-        }
-    })
-    return rc
 }
 
 def private has(lines : array<string>; needle : string) : bool {

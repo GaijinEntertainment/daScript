@@ -69,6 +69,19 @@ add_das_target(check_lint_changed
     COMMENT "Linting the .das and .md files changed against origin/DAS_CI_BASE_REF"
 )
 
+set(_dupe_paths -p daslib -p utils -p src)
+file(GLOB _dupe_entries LIST_DIRECTORIES true RELATIVE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/modules/*/*)
+foreach(_e IN LISTS _dupe_entries)
+    if(_e MATCHES "\\.das$" OR (IS_DIRECTORY ${PROJECT_SOURCE_DIR}/${_e} AND NOT _e MATCHES "/(tutorials|examples)$"))
+        list(APPEND _dupe_paths -p ${_e})
+    endif()
+endforeach()
+add_custom_target(check_duplicates
+    COMMAND $<TARGET_FILE:daslang> utils/detect-dupe/main.das -- ${_dupe_paths} --no-fuzzy --min-tokens 64
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Reporting exact duplicate function bodies across daslib, utils, src and modules")
+
 # watchdog: the supervisor as a standalone context on the full runtime - libDaScript, dasHV,
 # dasStdDlg (the tray icon) and dasStbImage (the icon file's PNG decoder) as static archives, no
 # compiler, no shared module, no lock on the files it deploys (the shape of
