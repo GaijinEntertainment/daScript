@@ -128,10 +128,8 @@ jobs:
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
-    # wasm cross-compile. Skipped on a cache hit (the cached bin/ + shared modules
-    # are restored; das2rst below still runs against them).
-    - name: "Build: Daslang host (+ glfw/opengl shared modules)"
-      if: steps.wasm-cache.outputs.cache-hit != 'true'
+    # wasm cross-compile.
+    - name: "Configure the host"
       run: |
         set -eux
         mkdir -p build
@@ -162,7 +160,6 @@ jobs:
           -DDAS_LLVM_DISABLED=OFF \
           -DDAS_GLFW_DISABLED=OFF \
           -G Ninja
-        cmake --build ./build --target daslang dasModuleGlfw dasModuleOpenGL
 
     - name: "Run das2rst"
       # DAS_TRACE_MODULE_LOAD prints every shared-module dlopen attempt with
@@ -172,19 +169,14 @@ jobs:
       # the log names the .so and the missing symbol directly.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: cmake --build ./build --target check_docs_generated
+      run: cmake --build ./build --target check_docs_generated --parallel
 
-    # The three generator steps below call their tools DIRECTLY, as das2rst does, not through
-    # `cmake --build ./build --target ...`: on a cache hit the host build is skipped and there
-    # is no configured build/ at all (a site-only merge is exactly that run), and the cmake
-    # targets depend on the daslang target, so even a configured tree would rebuild it. Each
-    # command is the target's COMMAND from doc/CMakeLists.txt, run from the repo root.
     - name: "Run imgui2rst"
       # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
       # from its own generator; the host above builds with dasGlfw+dasImgui ON.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+      run: cmake --build ./build --target run_imgui2rst
 
     - name: "Run vulkan2rst"
       # dasVulkan's stdlib pages (doc/source/stdlib/generated/vulkan_*.rst) come
@@ -192,7 +184,7 @@ jobs:
       # and never creates a Vulkan instance, so this needs no GPU.
       env:
         DAS_TRACE_MODULE_LOAD: 1
-      run: ./bin/daslang modules/dasVulkan/utils/vulkan2rst.das
+      run: cmake --build ./build --target run_vulkan2rst
 
     - name: "Stage tutorial recordings (docs-assets release)"
       # The `.. video::` directive fails the -W sphinx build on any recording
@@ -213,154 +205,7 @@ jobs:
     # link (-sMEMORY64=2), so it runs on every engine, WebKit included.
     - name: "Build WASM (Emscripten): playground + wasm64 examples"
       if: steps.wasm-cache.outputs.cache-hit != 'true'
-      run: |
-        set -eux
-        REPO="$PWD"
-
-        # 0. The imgui-family dependents for the playground showcases (furier,
-        #    path_tracer_lab): dasImgui itself is IN-TREE now; clone only
-        #    dasImguiImplot + dasImguiNodeEditor into modules/ — the root modules
-        #    glob absorbs their both-worlds CMakeLists (the superbuild-emscripten
-        #    arm), so the playground build below compiles + statically links them
-        #    from source into the threaded daslang_static and embeds their .das
-        #    halves (web/CMakeLists EXISTS gates). No daspkg index or prebuilt
-        #    archives involved; the wasmboy CI lane gates this exact wiring on
-        #    every PR. The clones are REMOVED right after the playground build —
-        #    the wasm64 daspkg release flow (steps 2+) uses the externals'
-        #    STANDALONE emscripten branches and must not absorb the clones into
-        #    web/build64 (in-tree dasImgui stays put; its wasm64 archives build
-        #    on demand via its .das_package release_wasm_build).
-        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
-        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
-
-        # 1. wasm32 interpreter playground (daslang_static) + vendored UI + the example .das
-        #    sources staged into site/playground. THREADED build (-pthread + the imgui family),
-        #    so new_thread / JobQue map to Web Workers and every playground sample runs
-        #    cross-origin-isolated (coi-serviceworker).
-        #    stage_site_playground also generates the furier + path_tracer_lab samples from the
-        #    canonical examples/graphics sources. If the imgui-family build breaks (an external's
-        #    master regressed), degrade rather than blocking every deploy: drop the clones and
-        #    rebuild plain — only the imgui playground samples are unavailable that deploy (the
-        #    same non-fatal stance as the example cards).
-        build_playground() {
-            ( cd web && mkdir -p build && cd build \
-                && emcmake cmake -DCMAKE_BUILD_TYPE=Release -G Ninja -DDAS_WASM_PTHREADS=ON .. \
-                && ninja daslang_static stage_site_playground )
-        }
-        if ! build_playground; then
-            echo "WARNING: imgui-family playground build failed — rebuilding plain threaded daslang_static; the furier + path_tracer_lab playground samples will not run this deploy."
-            rm -rf modules/dasImguiImplot modules/dasImguiNodeEditor web/build
-            build_playground
-        fi
-        rm -rf modules/dasImguiImplot modules/dasImguiNodeEditor
-
-        # 2. wasm64 archives for the example games. Configure web/build64 with
-        #    the prebuilt host (so the game builds reuse it instead of
-        #    rebuilding daslang) + memory64; daspkg build --wasm then populates the
-        #    runtime/module archives into it.
-        #    This step exists only to serve the game builds below. When those move
-        #    onto the build queue, it leaves CI with them.
-        #    DAS_WASM_PTHREADS=ON: daspkg `release wasm` now ALWAYS links -pthread
-        #    (--shared-memory), so the module archives it links (dasGlfw/dasOpenGL/...)
-        #    MUST be compiled with +atomics,+bulk-memory or wasm-ld rejects the link
-        #    ("--shared-memory is disallowed by dasGLFW.cpp.o"). cmd_build_wasm only
-        #    self-configures threads when build64 has no cache yet, but we pre-create
-        #    the cache here (for the host override), so set the flag explicitly.
-        emcmake cmake -S web -B web/build64 -G Ninja \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DDAS_WEB_OUTPUT_DIR="$REPO/web/output64" \
-          -DDAS_WASM_MEMORY64=ON \
-          -DDAS_WASM_PTHREADS=ON \
-          -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 \
-          -DDAS_HOST_DASLANG_OVERRIDE="$REPO/bin/daslang"
-        ./bin/daslang utils/daspkg/main.das -- build --wasm
-
-        # 3. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/).
-        #    Non-fatal per game: a game's wasm build must never red the whole deploy
-        #    (which would take the playground + the other example cards down with it).
-        #    The staging step degrades a missing game wasm to its interpreted fallback.
-        for g in arcanoid pacman boulder-dash river_run; do
-            if ./bin/daslang utils/daspkg/main.das -- \
-                 release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"; then
-                echo "$g wasm build OK"
-            else
-                echo "WARNING: $g wasm build failed — its card falls back to interpreted this deploy."
-            fi
-        done
-
-        # 4. /examples furier — the ImGui-in-wasm showcase. dasImgui is in-tree;
-        #    `release wasm` discovers it from the compiled require chain and
-        #    drives its .das_package release_wasm_build to produce the 3 wasm64
-        #    archives on demand — no daspkg install step (the example declares
-        #    no deps). Non-fatal — a wasm-build hiccup must not red the whole
-        #    deploy; the furier card is skipped at stage time below (a placeholder
-        #    page stands in for the iframe).
-        if ./bin/daslang utils/daspkg/main.das -- \
-                release wasm --root examples/graphics/furier --out "$REPO/web/output64/examples"; then
-            echo "furier wasm build OK"
-        else
-            echo "WARNING: furier wasm build failed — its examples card will be skipped this deploy."
-        fi
-
-        # 5. /examples path_tracer_lab — the jobque + OpenGL showcase. Same in-tree
-        #    dasImgui require as furier; the threaded daspkg wasm pipeline (always
-        #    -pthread, see step 2) maps its new_thread / JobQue modes to real Web
-        #    Workers. Non-fatal for the same reason as furier; staged below only when
-        #    all three outputs are present. The page serves it cross-origin-isolated
-        #    via coi-serviceworker.js (required for the -pthread module to instantiate).
-        if ./bin/daslang utils/daspkg/main.das -- \
-                release wasm --root examples/graphics/path_tracer_lab --out "$REPO/web/output64/examples"; then
-            echo "path_tracer_lab wasm build OK"
-        else
-            echo "WARNING: path_tracer_lab wasm build failed — its examples card will be skipped this deploy."
-        fi
-
-        # 6. /examples physarum_lab — the threads + audio showcase. Same in-tree dasImgui require
-        #    as the path tracer; the threaded daspkg wasm
-        #    pipeline maps its worker threads to Web Workers, and the daspkg wasm link's AudioWorklet
-        #    flags carry the strudel soundtrack. Non-fatal; staged below only when all three outputs
-        #    are present. Served cross-origin-isolated (coi-serviceworker.js).
-        if ./bin/daslang utils/daspkg/main.das -- \
-                release wasm --root examples/graphics/physarum_lab --out "$REPO/web/output64/examples"; then
-            echo "physarum_lab wasm build OK"
-        else
-            echo "WARNING: physarum_lab wasm build failed — its examples card will be skipped this deploy."
-        fi
-
-        # 7. dasllama.io/examples — dasLLAMA itself compiled to wasm64, one app per example
-        #    (storyteller: stories15M writes, KittenTTS reads; storywish: you type the words,
-        #    tinystories-instruct-27M writes, Pocket TTS reads; parrot: you talk, Pocket TTS clones the
-        #    voice and reads the text you type in it). Each .das_package turns the GPU modules off, so the
-        #    host needs no Metal/Vulkan. Non-fatal like the games; the dasllama.io stage step
-        #    stages a card's page only when all three outputs exist. The models are prepared .dlim
-        #    images the stage step MINTS for this very build: examples/dasLLAMA/wasm/dlim_config is
-        #    the same wasm64 build's DlimConfiguration probe, run under node here so the stage step
-        #    bakes against the identity the browser build actually wants (a set minted for another
-        #    IMAGE_VERSION is declined by the program - the failure that put a black canvas on the
-        #    storyteller page for a day).
-        for ex in storyteller storywish parrot; do
-            if ./bin/daslang utils/daspkg/main.das -- \
-                    release wasm --root "examples/dasLLAMA/$ex" --out "$REPO/web/output64/examples"; then
-                echo "$ex wasm build OK"
-            else
-                echo "WARNING: $ex wasm build failed — the dasllama.io $ex page will be a placeholder this deploy."
-            fi
-        done
-        # the probe's stdout must BE the JSON: a stray runtime line ahead of it passes a
-        # substring grep and then fails every mint, which is two placeholder pages, not a red job
-        if ./bin/daslang utils/daspkg/main.das -- \
-                release wasm --root examples/dasLLAMA/wasm/dlim_config --out "$REPO/web/output64/examples" \
-           && ( cd web/output64/examples/dlim_config && node dlim_config.js > wasm64.json ) \
-           && python3 -c 'import json,sys; has_key = lambda o, k: isinstance(o, dict) and (k in o or any(has_key(v, k) for v in o.values())) or isinstance(o, list) and any(has_key(v, k) for v in o); sys.exit(0 if has_key(json.load(open(sys.argv[1])), "backend") else 1)' web/output64/examples/dlim_config/wasm64.json; then
-            echo "wasm64 DlimConfiguration probe OK: $(tr -d ' \n' < web/output64/examples/dlim_config/wasm64.json | cut -c1-120)..."
-        else
-            # fatal, unlike an example's own build: without the probe no set can be minted, so a
-            # deploy that went on would replace two working pages with placeholders; a red job
-            # leaves the previous deploy live
-            rm -f web/output64/examples/dlim_config/wasm64.json
-            echo "::error::the wasm64 DlimConfiguration probe failed - no model set can be minted for either dasllama.io example; the deploy stops here so the previous pages stay up"
-            exit 1
-        fi
+      run: cmake --build ./build --target build_site_wasm
 
     - name: "Compile-gate the curated playground samples"
       # The per-sample wasm64 builds used to live here and doubled as the proof
@@ -370,20 +215,7 @@ jobs:
       # simulates each sample and writes nothing. A sample broken by a compiler
       # or daslib change must red this deploy, not the production queue, where
       # the first person to click Run would find it.
-      run: |
-        set -eu
-        FAILED=""
-        for f in web/examples/ui/samples/examples/*.das web/examples/ui/samples/examples/*/main.das; do
-            ./bin/daslang -dry-run "$f" > /tmp/gate.log 2>&1 || {
-                FAILED="$FAILED ${f#web/examples/ui/samples/examples/}"
-                echo "--- $f ---"; tail -20 /tmp/gate.log
-            }
-        done
-        if [ -n "$FAILED" ]; then
-            echo "::error::curated playground sample(s) no longer compile:$FAILED"
-            exit 1
-        fi
-        echo "all curated samples compile"
+      run: cmake --build ./build --target check_playground_samples
 
     - name: "Verify wasm example artifacts (catch silent fallbacks)"
       # The example builds above are non-fatal (one run surfaces EVERY failure

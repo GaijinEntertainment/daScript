@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""The job matrices of build.yml and extended_checks.yml, one place, as JSON.
+"""The job matrices of build.yml, nightly.yml and extended_checks.yml, one place, as JSON.
 
-    ci_matrix.py build <event_name>       -> {"include": [cell, ...]}
-    ci_matrix.py extended <event_name>    -> {"include": [cell, ...]}
+    ci_matrix.py build|build_nightly|extended|extended_nightly    -> {"include": [cell, ...]}
 
 A per-PR job fits a 35-minute wall or its cells run on the nightly cron (and on a manual
 dispatch) instead. The workflow's pre_job step evaluates this script and the fan-out job reads
@@ -12,16 +11,10 @@ list the runner merges by its own rules. `ci/test_ci_matrix.py` pins both sets.
 import json
 import sys
 
-NIGHTLY_EVENTS = ("schedule", "workflow_dispatch")
-
 CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
 LINUX_ARM_EXTRA = CLANG + " -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
 WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
                  " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
-
-
-def is_nightly(event_name):
-    return event_name in NIGHTLY_EVENTS
 
 
 SANITIZERS = ("asan", "tsan", "ubsan")
@@ -37,7 +30,7 @@ def _cells(target, architecture, presets, **props):
             for preset in presets]
 
 
-def build_cells(event_name):
+def build_cells(nightly):
     """build.yml: Release + Debug on every platform per PR; the sanitizer cells and windows
     64 Debug are nightly-only. A sanitizer cell is three jobs, one per test step (`phase`);
     every other cell runs every step (`phase` all)."""
@@ -62,7 +55,7 @@ def build_cells(event_name):
     cells += _cells("windows", 64, ["Release"], release_target="windows", release_arch="x86_64",
                     runner="windows-latest", architecture_string="x64", archive_ext="zip",
                     llvm_disabled="ON", jit_disabled="ON", cmake_extra=WINDOWS_EXTRA, **cmake)
-    if is_nightly(event_name):
+    if nightly:
         cells += _cells("windows", 64, ["Debug"], release_target="windows", release_arch="x86_64",
                         runner="windows-latest", architecture_string="x64", archive_ext="zip",
                         jit_disabled="ON", nightly_only="ON", cmake_extra=WINDOWS_EXTRA, **cmake)
@@ -76,16 +69,17 @@ def build_cells(event_name):
                           fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",
                           nightly_only="ON", phase="all",
                           cmake_extra="-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++", **cmake))
+        cells = [c for c in cells if c["cmake_preset"] == "Release" or c.get("nightly_only")]
     return cells
 
 
-def extended_cells(event_name):
+def extended_cells(nightly):
     """extended_checks.yml: per PR two darwin15 jobs split by role (core: the tree's own gates and
     utils; modules: the module and service suites); the nightly runs every step on linux, darwin15
     and windows in one job each (role all)."""
     cmake = dict(build_system="cmake", cmake_generator="Ninja")
     darwin = dict(target="darwin15", architecture="arm64", runner="macos-15", architecture_string="arm64", **cmake)
-    if is_nightly(event_name):
+    if nightly:
         return [
             dict(target="linux", architecture=64, role="all", runner="ubuntu-latest", **cmake),
             dict(role="all", **darwin),
@@ -95,10 +89,11 @@ def extended_cells(event_name):
 
 
 def main(argv):
-    if len(argv) != 3 or argv[1] not in ("build", "extended"):
+    if len(argv) != 2 or argv[1] not in ("build", "build_nightly", "extended", "extended_nightly"):
         sys.stderr.write(__doc__)
         return 2
-    cells = build_cells(argv[2]) if argv[1] == "build" else extended_cells(argv[2])
+    nightly = argv[1].endswith("_nightly")
+    cells = build_cells(nightly) if argv[1].startswith("build") else extended_cells(nightly)
     print(json.dumps({"include": cells}, separators=(",", ":")))
     return 0
 

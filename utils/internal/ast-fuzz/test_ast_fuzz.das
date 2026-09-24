@@ -1,6 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
+require daslib/defer
 require daslib/fio
 require daslib/strings_boost
 
@@ -186,6 +187,10 @@ def test_every_visitor_deref_has_a_repair(t : T?) {
 
 [test]
 def test_generator_runs_and_classifies(t : T?) {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    defer() {
+        set_env_variable("DAS_LOG_LEVEL", "")
+    }
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/main.das", "--", "--bin", BIN,
         "--seeds", "3", "--synth-size", "4", "--synth-depth", "2", "--timeout", "30"], out, 300.0)

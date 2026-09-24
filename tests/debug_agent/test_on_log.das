@@ -6,6 +6,8 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require daslib/debugger
+require daslib/defer
+require daslib/fio
 
 var log_count : int = 0
 var last_log_level : int = -1
@@ -49,6 +51,10 @@ def reset_log_state() {
 
 [test]
 def test_to_log_triggers_on_log(t : T?) {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    defer() {
+        set_env_variable("DAS_LOG_LEVEL", "")
+    }
     t |> run("to_log routes through onLog") @(t : T?) {
         ensure_log_agent()
         unsafe(invoke_in_context(get_debug_agent_context("log_test"), "reset_log_state"))

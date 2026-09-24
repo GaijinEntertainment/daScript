@@ -629,7 +629,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                 exitCode = 1;
             } else if ( dryRun ) {
                 exitCode = 0;
-                tout << "dry run: " << fn << "\n";
+                auto li = LineInfoArg();
+                toLog(LogLevel::info, (string("dry run: ") + fn + "\n").c_str(), pctx.get(), &li);
             } else if ( program->thisModule->isModule ) {
                 tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else {

@@ -53,6 +53,7 @@ namespace das {
     const char * get_dasenv_team_prof ()               { return das_getenv("DAS_TEAM_PROF"); }
     const char * get_dasenv_trace_module_load ()       { return das_getenv("DAS_TRACE_MODULE_LOAD"); }
     const char * get_dasenv_module_cache_limit ()      { return das_getenv("DAS_MODULE_CACHE_LIMIT"); }
+    const char * get_dasenv_log_level ()               { return das_getenv("DAS_LOG_LEVEL"); }
     const char * get_dasenv_depfile ()                 { return das_getenv("DAS_DEPFILE"); }
     const char * get_dasenv_depfile_target ()          { return das_getenv("DAS_DEPFILE_TARGET"); }
     const char * get_dasenv_depfile_exclude ()         { return das_getenv("DAS_DEPFILE_EXCLUDE"); }

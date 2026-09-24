@@ -57,9 +57,12 @@ def test_wasm_idot_lowering(t : T?) {
     }
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
+    var terr : string
+    let dump = path_join(temp_directory(terr), "wasm_idot_{ref_time_ticks()}")
     t |> run("the wasm64 cross compile lowers idot4 to the exact pairwise int8 dot") @(t : T?) {
-        var ln : array<string>
-        spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-target=wasm64-unknown-emscripten --jit-compile-only --jit-dump", ln)
+        var out : array<string>
+        spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-target=wasm64-unknown-emscripten --jit-compile-only --jit-dump --jit-dump-to \"{dump}.wasm\"", out)
+        let ln <- split(fread("{dump}.wasm"), "\n")
         let pairs = count_with(ln, PAIRWISE_ADD)
         t |> success(pairs >= 3, "the declaration and the two half calls of {PAIRWISE_ADD} are in the dump ({pairs} lines, {length(ln)} lines total)")
         t |> success(count_with(ln, RELAXED_DOT) == 0, "the relaxed 7-bit dot is never emitted")
@@ -70,8 +73,9 @@ def test_wasm_idot_lowering(t : T?) {
         t |> success(zexts >= 2, "both halves of the unsigned operand widen with ZExt ({zexts} lines)")
     }
     t |> run("a host compile emits no wasm intrinsic") @(t : T?) {
-        var ln : array<string>
-        spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-compile-only --jit-dump", ln)
+        var out : array<string>
+        spawn_child("\"{bin}\" -jit \"{FIXTURE}\" -- --jit-compile-only --jit-dump --jit-dump-to \"{dump}.host\"", out)
+        let ln <- split(fread("{dump}.host"), "\n")
         t |> success(length(ln) > 20, "the host dump printed ({length(ln)} lines)")
         t |> success(count_with(ln, "llvm.wasm.") == 0, "no wasm intrinsic on the host")
     }
@@ -90,6 +94,8 @@ def test_wasm_idot_lowering(t : T?) {
         t |> success(find(features, "relaxed-simd") < 0, "no relaxed opcode can be in a module WebKit must run: {features}")
         rmdir_rec_result(dir)
     }
+    remove("{dump}.wasm", terr)
+    remove("{dump}.host", terr)
 }
 
 // the object's `target_features` custom section as one text line - each feature name is ASCII

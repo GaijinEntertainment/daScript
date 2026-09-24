@@ -23,7 +23,7 @@ struct Config {
     suite : string
     @clarg_doc = "run: daslang binary to measure with (default: bin/daslang under --root)"
     bin : string
-    @clarg_doc = "run: JSON with run_id, started, commit, machine, build - written by run_stand.sh"
+    @clarg_doc = "run: JSON with run_id, started, commit, machine, build - written by stand.cmake"
     meta : string
     @clarg_doc = "run: where to write the run record"
     out : string

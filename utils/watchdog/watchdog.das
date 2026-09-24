@@ -411,7 +411,7 @@ class public Emitter {
             }
         }
         if (tee) {
-            print("{line}\n")
+            print("{line}\n")   //! the mirror the operator asked for, not a record under the log floor
         }
     }
 }

@@ -29,7 +29,7 @@ jobs:
       - name: "Set up sccache"
         uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: "Build daslang + dasVulkan (in-tree)"
+      - name: "Configure"
         # dasModulePUGIXML feeds the generator (vk.xml); dasModuleVulkan at
         # --parallel 2 — the ~55 generated template-heavy TUs OOM a 7 GB runner
         # at full parallelism. No lavapipe here: nothing in this job renders.
@@ -42,26 +42,8 @@ jobs:
             -DDAS_GLFW_DISABLED=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DDAS_VULKAN_COMPILE_JOBS=2 \
             -G Ninja
-          cmake --build ./build --parallel --target daslang dasModulePUGIXML
-          cmake --build ./build --parallel 2 --target dasModuleVulkan
-          sccache --show-stats
 
-      - name: "Skip ratchet: the generator's skip tail must match the committed report"
-        run: |
-          set -eux
-          mkdir -p /tmp/vk_regen_src /tmp/vk_regen_daslib
-          ./bin/daslang modules/dasVulkan/generator/generate.das -- \
-            --out /tmp/vk_regen_src \
-            --boost-out /tmp/vk_regen_daslib \
-            --skip-report /tmp/vk_skip_report.txt
-          diff -u modules/dasVulkan/generator/skip_report.txt /tmp/vk_skip_report.txt
-          diff -u modules/dasVulkan/generator/copyability_report.txt /tmp/copyability_report.txt
-          # the committed binding matches the fresh run too: a fresh report beside a stale file is red
-          for f in /tmp/vk_regen_src/*; do diff -u "modules/dasVulkan/src/$(basename "$f")" "$f"; done
-          for f in /tmp/vk_regen_daslib/*; do diff -u "modules/dasVulkan/daslib/$(basename "$f")" "$f"; done
-
-      - name: "Lint: every dasVulkan .das must be clean"
-        run: |
-          set -eux
-          ./bin/daslang utils/lint/main.das -- modules/dasVulkan -q -j 0
+      - name: "Regenerate and lint dasVulkan"
+        run: cmake --build ./build --target check_vulkan

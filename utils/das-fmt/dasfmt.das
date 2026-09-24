@@ -368,26 +368,26 @@ def main() {
     run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures, stripped_count)
 
     if (stripped_count > 0) {
-        log::info("comments were deleted from {stripped_count} file(s) — before committing, run the harvester agent over their strip diff (the '(comments stripped)' files above)")
+        log::verdict("comments were deleted from {stripped_count} file(s) — before committing, run the harvester agent over their strip diff (the '(comments stripped)' files above)")
     }
 
     if (strip_failures > 0) {
-        log::info("Failed! {strip_failures} file(s) not stripped in {time_dt_hr(get_time_usec(startTime))}")
+        log::verdict("Failed! {strip_failures} file(s) not stripped in {time_dt_hr(get_time_usec(startTime))}")
         unsafe(fio::exit(1))
         return
     }
 
     if (verify) {
         if (verified) {
-            log::info("Verified! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
+            log::verdict("Verified! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
             return
         } else {
-            log::info("Verification failed! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
+            log::verdict("Verification failed! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
             unsafe(fio::exit(1))
         }
     }
 
-    log::info("Complete! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
+    log::verdict("Complete! {filesNum} files in {time_dt_hr(get_time_usec(startTime))}")
 }
 
 // options debugger

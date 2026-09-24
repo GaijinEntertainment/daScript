@@ -8273,5 +8273,6 @@ def init_llvm_jit_module_options() {
         this_module() |> add_module_option("jit_obj_cache", Type.tBool)
         this_module() |> add_module_option("jit_lib", Type.tBool)
         this_module() |> add_module_option("jit_lib_export_marked", Type.tBool)
+        this_module() |> add_module_option("jit_compile_only", Type.tBool)
     }
 }

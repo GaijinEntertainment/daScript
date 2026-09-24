@@ -304,7 +304,7 @@ jobs:
       - name: "Smoke-test installed bundle"
         if: matrix.cmake_preset == 'Release'
         shell: bash
-        run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target check_bundle_smoke
+        run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target check_bundle_smoke --parallel
       - name: "Build .deb"
         # the apt-installable form of the linux bundle (ci/packaging/README.md)
         if: matrix.cmake_preset == 'Release' && matrix.release_target == 'linux' && matrix.release_arch == 'x86_64'

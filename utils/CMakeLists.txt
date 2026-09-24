@@ -68,6 +68,13 @@ add_das_target(check_lint_changed
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Linting the .das and .md files changed against origin/DAS_CI_BASE_REF"
 )
+add_custom_target(check_lint_tree
+    COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- daslib utils modules tutorials examples tests src
+            -q --silent -j 1
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Linting the whole tree in one process"
+)
 
 set(_dupe_paths -p daslib -p utils -p src)
 file(GLOB _dupe_entries LIST_DIRECTORIES true RELATIVE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/modules/*/*)
@@ -155,13 +162,47 @@ endif()
 set(_lane_util_bin ${UTIL_BIN_DIR})
 
 
+das_lane_dastest_target(run_tests_daspkg COMMENT "Testing daspkg"
+    FILES utils/daspkg/test_daspkg.das ARGS --timeout 600)
+add_custom_target(run_daspkg_tests
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only
+            --test ${PROJECT_SOURCE_DIR}/utils/daspkg/test_daspkg_git.das --timeout 1200
+    COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR} -P ${PROJECT_SOURCE_DIR}/utils/daspkg/index_sweep.cmake
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Testing daspkg: the unit and fixture-repo suites, then every daspkg-index package at default-branch HEAD"
+    USES_TERMINAL
+)
+add_dependencies(run_daspkg_tests run_tests_daspkg)
+
+if(NOT DAS_SQLITE_DISABLED)
+    set(BENCH_STAND_OUT ${CMAKE_BINARY_DIR}/bench-stand CACHE PATH "Where run_bench_stand writes runs/ and site/")
+    set(BENCH_STAND_ARGS "" CACHE STRING "Extra benchctl run arguments, e.g. --filter core/math/ --repeat 1")
+    # the jit lane runs `daslang -jit`; a linked test_llvm_aot host is picked up when a box built
+    # one, but the night never builds it - its LLVM-AOT corpus batches same-named modules
+    set(_bench_stand_deps daslang)
+    foreach(_t test_aot_bench dasModuleSQLITE dasModulePUGIXML dasModuleAudio dasModuleMinfft
+            dasModuleTerminal dasModuleUnitTest dasModuleLLVM)
+        if(TARGET ${_t})
+            list(APPEND _bench_stand_deps ${_t})
+        endif()
+    endforeach()
+    add_custom_target(run_bench_stand
+        COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+                -DOUT=${BENCH_STAND_OUT} "-DARGS=${BENCH_STAND_ARGS}"
+                -P ${PROJECT_SOURCE_DIR}/utils/internal/bench-stand/stand.cmake
+        DEPENDS ${_bench_stand_deps}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Benchmarking the tree into ${BENCH_STAND_OUT}"
+        USES_TERMINAL
+    )
+endif()
+
 das_lane_dastest_target(run_tests_mcp_tools
     COMMENT "Testing the MCP tools"
     FILES utils/mcp/test_tools.das utils/mcp/test_crosstree_guard.das utils/mcp/test_setup.das
 )
-
-das_lane_dastest_target(run_tests_daspkg COMMENT "Testing daspkg"
-    FILES utils/daspkg/test_daspkg.das ARGS --timeout 900)
 
 das_lane_dastest_target(run_tests_dap_bridge COMMENT "Testing the DAP MCP bridge"
     FILES utils/dap/test_dap_bridge.das ARGS --timeout 900)
@@ -379,7 +420,7 @@ SET(DAS_UTILS_TO_TEST
 FOREACH(_das ${DAS_UTILS_TO_TEST})
     LIST(APPEND _run_utils_tests
         COMMAND ${CMAKE_COMMAND} -E echo "Running tests ${_das}"
-        COMMAND daslang ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --test ${PROJECT_SOURCE_DIR}/utils/${_das}
+        COMMAND daslang ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --test ${PROJECT_SOURCE_DIR}/utils/${_das}
         DEPENDS tree_sitter_daslang
     )
 ENDFOREACH()
@@ -406,7 +447,7 @@ add_dependencies(check_format_exe check_standalone_exes)
 
 if(TARGET dascov_exe)
     add_das_target(run_coverage
-        COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800
+        COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800
         COMMAND ${UTIL_BIN_DIR}/dascov.exe -- ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --exclude tests/language
         DEPENDS daslang dascov_exe
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

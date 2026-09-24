@@ -59,8 +59,8 @@ def private write_probe_script(script : string) : bool {
 // env prefix leads, so no sacrificial-quote wrap is needed (cmd.exe only strips a LEADING quote)
 def private env_prefix(baseline : string) : string {
     return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE=&& set DAS_JIT_BASELINE={baseline}&& " :
-        "DAS_TUNE_MODE= DAS_JIT_BASELINE={baseline} ")
+        "set DAS_TUNE_MODE=&& set DAS_JIT_BASELINE={baseline}&& set DAS_LOG_LEVEL=info&& " :
+        "DAS_TUNE_MODE= DAS_JIT_BASELINE={baseline} DAS_LOG_LEVEL=info ")
 }
 
 def private has(lines : array<string>; needle : string) : bool {

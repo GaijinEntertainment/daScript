@@ -78,7 +78,7 @@ jobs:
           cmake --build build --target cpp-mcp --parallel
 
       - name: Assemble and smoke-test bundle
-        run: cmake --build build --target check_cpp_mcp_bundle
+        run: cmake --build build --target check_cpp_mcp_bundle --parallel
 
       - name: Package (zip)
         if: runner.os == 'Windows'

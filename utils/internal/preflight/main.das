@@ -1727,6 +1727,10 @@ def report_gate(r : GateResult; verbose : bool) {
 
 [export]
 def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; the phases ARE the readability
+    //! the gate ledger is preflight's output, not a trace: the run reads at info unless the caller set a floor
+    if (empty(get_env_variable("DAS_LOG_LEVEL"))) {
+        set_env_variable("DAS_LOG_LEVEL", "info")
+    }
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")

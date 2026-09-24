@@ -43,7 +43,7 @@ def gate_verdict(name : string) : int {
         print("{f}\n")
     }
     if (empty(g_findings)) {
-        print("REVIEW.das {name}: OK\n")
+        to_log(LOG_INFO, "REVIEW.das {name}: OK\n")
         return 0
     }
     print("REVIEW.das {name}: {length(g_findings)} finding(s)\n")

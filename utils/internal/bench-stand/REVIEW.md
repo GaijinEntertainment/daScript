@@ -11,5 +11,5 @@ too** - the records are written and read there, and the viewer parses them.
 line here, with its tests, in the same change.**
 
 - `site/` - the viewer. Zero dependencies, zero build step.
-- `run_stand.sh` - one pass on a ref: checkout, build, run, report, publish. Cron calls it.
+- `stand.cmake` - one pass over the current tree: run, report, publish. The `run_bench_stand` target runs it.
 - `caddy.snippet` - the public route.

@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `../README.md`. A diff here answers to `site/REVIEW.md` (repo root) too.
 
-**A page, script, stylesheet or asset a diff adds to this folder is added to the copy line in
-`../run_stand.sh` in the same change** - a file missing from that line is never served at `/bench/`.
+**A page, script, stylesheet or asset a diff adds to this folder is added to the `file(COPY ...)`
+list in `../stand.cmake` in the same change** - a file missing from that list is never served at `/bench/`.
 
 **A series a diff adds or recolors takes its color from its lane - the execution tier the
 benchmark was measured in (`interp`, `jit`, `aot`) - never from its index in any list.**

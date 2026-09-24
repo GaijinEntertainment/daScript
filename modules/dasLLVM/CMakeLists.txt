@@ -178,4 +178,8 @@ if(NOT DAS_TOOLS_DISABLED)
     
     das_lane_dastest_target(run_tests_llvm_env_registry COMMENT "Testing the dasLLVM env-knob registry"
         FILES modules/dasLLVM/tests/llvm_env_registry.das)
+    das_lane_dastest_target(run_tests_llvm_jit_backend COMMENT "Testing the JIT backend"
+        JIT_FILES modules/dasLLVM/tests/llvm_compile_only.das modules/dasLLVM/tests/llvm_obj_cache.das
+                  modules/dasLLVM/tests/llvm_split_modules.das modules/dasLLVM/tests/llvm_ast_roundtrip.das
+                  modules/dasLLVM/tests/llvm_cache_selfheal.das modules/dasLLVM/tests/exe_host_cpu.das)
 endif()

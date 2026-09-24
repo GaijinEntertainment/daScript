@@ -98,7 +98,7 @@ def mark_failed_run(var rec : RunRecord&; finished, reason : string) {
     rec.finished = finished
     rec.files |> clear()
     if (rec.build.status == "ok") {
-        rec.files |> emplace(FileResult(path = "run_stand.sh", id = "bench-stand", group = "stand", lane = "driver",
+        rec.files |> emplace(FileResult(path = "stand.cmake", id = "bench-stand", group = "stand", lane = "driver",
             status = FileStatus.exit_nonzero, exit_code = 1, message = empty(reason) ? "the driver could not run the suite" : reason))
     }
     rec.status = derive_status(rec)

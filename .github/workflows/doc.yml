@@ -5,6 +5,7 @@ on:
   release:
     types: prereleased
   push:
+    branches: [master]
     paths:
       - 'doc/**'
       - 'daslib/**'
@@ -78,9 +79,8 @@ jobs:
           -DDAS_VULKAN_DISABLED=OFF \
           -DDAS_BUILD_DOCUMENTATION=ON \
           -G Ninja
-        cmake --build ./build --target daslang
 
     - name: "Doc lane"
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: cmake --build ./build --target run_doc
+      run: cmake --build ./build --target run_doc --parallel

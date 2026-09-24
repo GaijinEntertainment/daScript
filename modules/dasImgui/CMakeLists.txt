@@ -407,6 +407,17 @@ IF(COMMAND ADD_MODULE_CPP)
             ${DAS_IMGUI_DIR}/src)
         TARGET_LINK_LIBRARIES(imguiAppHeadless PRIVATE dasModuleImgui)
         SETUP_CPP11(imguiAppHeadless)
+        IF(NOT DAS_TOOLS_DISABLED)
+            IF(APPLE)
+                SET(_imgui_test_args --timeout 1800)
+            ELSE()
+                SET(_imgui_test_args --timeout 600 --isolated-mode --isolated-mode-threads 4)
+            ENDIF()
+            das_lane_dastest_target(run_tests_imgui_integration COMMENT "Testing dasImgui headless"
+                FILES modules/dasImgui/tests
+                ARGS ${_imgui_test_args} --exclude glfw_synth --exclude key_hud --exclude embedded_terminal --headless
+                DEPENDS daslang-live dasModuleImgui imguiAppHeadless)
+        ENDIF()
     ENDIF()
 
 ELSEIF(EMSCRIPTEN)

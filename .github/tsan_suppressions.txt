@@ -18,6 +18,9 @@ race:hio_is_opened
 # libhv mutex-guards the write queue but hio_write4 reads io state outside it (#3428).
 race:hio_write4
 
+# libhv's lazy default logger calls localtime while its date-header timer calls gmtime: one static buffer.
+race:logger_create
+
 # WebSocket client open/close callback bookkeeping inside hv::WebSocketClient (#3428).
 race:hv::WebSocketClient::close
 

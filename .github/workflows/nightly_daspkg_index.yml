@@ -101,18 +101,8 @@ jobs:
           -DCMAKE_BUILD_TYPE:STRING=Release \
           -DDAS_CLANG_BIND_DISABLED=ON \
           -G Ninja $ACTIVE_MODULES
-        cmake --build ./build --config Release --target daslang
 
-    - name: "daspkg suites: unit + git-integration"
-      # the binary is already built; unit is seconds and offline, the git
-      # suite exercises install/resolve against the borisbat/daspkg-test-*
-      # fixture repos (network, like the sweep below)
-      run: |
-        set -eux
-        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das --timeout 600
-        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das --timeout 1200
-
-    - name: "Sweep: install every index package at default-branch HEAD"
+    - name: "daspkg suites + sweep: install every index package at default-branch HEAD"
       # default-branch HEAD (not release-tag resolution): release tags lag
       # legitimately after an ABI sweep until externals re-release; branch
       # HEAD is the externals-merge-first invariant this nightly monitors.
@@ -121,37 +111,7 @@ jobs:
       # Resolution goes over the git protocol (ls-remote --symref), not the
       # GitHub API: anonymous, no rate limits on shared runner IPs, and the
       # same transport the install's clone uses anyway.
-      run: |
-        set -eux
-        curl -fsSL https://raw.githubusercontent.com/borisbat/daspkg-index/main/packages.json -o /tmp/packages.json
-        failed=()
-        summary=""
-        while IFS=$'\t' read -r name url; do
-          url="${url%$'\r'}"   # jq emits CRLF on some hosts
-          repo="${url#github.com/}"
-          def=$(git ls-remote --symref "https://$url" HEAD | awk '/^ref:/ {sub("refs/heads/","",$2); print $2}') || def=""
-          if [ -z "$def" ]; then
-            echo "::error::$name: cannot resolve default branch for $repo"
-            failed+=("$name")
-            summary+="| $name | :x: default-branch resolve failed |\n"
-            continue
-          fi
-          echo "::group::install $name ($repo @ $def)"
-          if ./bin/daslang utils/daspkg/main.das -- install "$name" --branch "$def"; then
-            summary+="| $name | :white_check_mark: $def |\n"
-          else
-            failed+=("$name")
-            summary+="| $name | :x: install failed ($def) |\n"
-          fi
-          echo "::endgroup::"
-        done < <(jq -r '.[] | [.name, .url] | @tsv' /tmp/packages.json)
-        printf '## daspkg-index sweep — %s @ %s\n\n| package | status |\n|---|---|\n' \
-          "$GITHUB_REF_NAME" "$(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
-        printf '%b' "$summary" >> "$GITHUB_STEP_SUMMARY"
-        if [ ${#failed[@]} -gt 0 ]; then
-          echo "FAILED: ${failed[*]}"
-          exit 1
-        fi
+      run: cmake --build ./build --config Release --target run_daspkg_tests
 
   daspkg_unit_macos:
     # the platform the unit suite exists to catch: the release layout forks
@@ -182,12 +142,9 @@ jobs:
       run: |
         set -eux
         cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=Release -DDAS_LLVM_DISABLED=OFF -G Ninja
-        cmake --build ./build --config Release --target daslang
 
     - name: "daspkg unit suite"
-      run: |
-        set -eux
-        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das --timeout 600
+      run: cmake --build ./build --config Release --target run_tests_daspkg
 
   nightly_issue:
     needs: [index_sweep, daspkg_unit_macos]

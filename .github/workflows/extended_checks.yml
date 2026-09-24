@@ -49,7 +49,9 @@ jobs:
         # two statements: a substitution inside echo would hide the script's exit code
         run: |
           set -eu
-          matrix=$(python3 ci/ci_matrix.py extended '${{ github.event_name }}')
+          lane=extended
+          if [ '${{ github.event_name }}' = 'schedule' ] || [ '${{ github.event_name }}' = 'workflow_dispatch' ]; then lane=extended_nightly; fi
+          matrix=$(python3 ci/ci_matrix.py "$lane")
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   ###########################################################
@@ -218,7 +220,6 @@ jobs:
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
               -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
             ;;
           linux)
             echo "BIN=./bin" >> $GITHUB_ENV
@@ -235,7 +236,6 @@ jobs:
               -DDAS_CLANG_BIND_DISABLED=ON \
               -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
-            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe
             ;;
           *)
             echo "BIN=./bin" >> $GITHUB_ENV
@@ -244,9 +244,9 @@ jobs:
               -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
               -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
-            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe
             ;;
         esac
+        cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
 
     - name: "Refresh sccache slot"
       if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
@@ -278,7 +278,7 @@ jobs:
       # gh release calls refuse to run in Actions without a token
       env:
         GH_TOKEN: ${{ github.token }}
-      run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }}
+      run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }} --parallel
 
   nightly_issue:
     needs: [pre_job, extended_checks]

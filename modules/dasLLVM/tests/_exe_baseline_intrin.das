@@ -16,11 +16,9 @@ def main {
     for (i in range(16)) {
         w[i] = int8(i + 1)
     }
-    unsafe {
-        let p = addr(w[0])
-        let sdot = lane_sum(aarch64_neon::sdot4(int4(0), p, p))
-        let mmla = lane_sum(aarch64_neon::smmla(int4(0), p, p))
-        let dot = lane_sum(x64_avx::dot4(int4(0), p, p))
-        print("INTRIN=[{sdot},{mmla},{dot}]\n")
-    }
+    let p = unsafe(addr(w[0]))
+    let sdot = lane_sum(aarch64_neon::sdot4(int4(0), p, p))
+    let mmla = lane_sum(aarch64_neon::smmla(int4(0), p, p))
+    let dot = lane_sum(x64_avx::dot4(int4(0), p, p))
+    print("INTRIN=[{sdot},{mmla},{dot}]\n")
 }

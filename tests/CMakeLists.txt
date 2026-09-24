@@ -24,15 +24,22 @@ if(NOT DAS_TOOLS_DISABLED)
     set(_DAS_TEST_DIR ${PROJECT_SOURCE_DIR}/tests)
     set(_DAS_TEST_COMMON --color --failures-only --test ${_DAS_TEST_DIR})
 
+    set(_DAS_TEST_HOSTS daslang)
+    foreach(_host daslang-live watchdog dasbind_probe)
+        if(TARGET ${_host})
+            list(APPEND _DAS_TEST_HOSTS ${_host})
+        endif()
+    endforeach()
+
     add_das_target(run_tests_interpreter
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
-        DEPENDS daslang
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
+        DEPENDS ${_DAS_TEST_HOSTS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
     )
     add_das_target(run_tests_interpreter_isolated
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
-        DEPENDS daslang
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
+        DEPENDS ${_DAS_TEST_HOSTS}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter, isolated retry)"
     )
@@ -85,13 +92,13 @@ if(NOT DAS_TOOLS_DISABLED)
         # test — max crash isolation, and a batch crash re-dispatches per-file).
         add_das_target(run_tests_jit
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --batch 4 --timeout ${DAS_TEST_JIT_TIMEOUT}
-            DEPENDS daslang
+            DEPENDS ${_DAS_TEST_HOSTS}
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated-parallel)"
         )
         add_das_target(run_tests_jit_isolated
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --timeout ${DAS_TEST_JIT_TIMEOUT_ISOLATED}
-            DEPENDS daslang
+            DEPENDS ${_DAS_TEST_HOSTS}
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated retry)"
         )

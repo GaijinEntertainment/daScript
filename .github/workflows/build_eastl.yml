@@ -36,4 +36,4 @@ jobs:
           DAGOR_ROOT: ${{ github.workspace }}/.dagor_headers
       - name: smoke run
         if: matrix.variant == 'pc'
-        run: cmake --build build_eastl_pc --target run_eastl_smoke
+        run: cmake --build build_eastl_pc --target run_eastl_smoke --parallel

@@ -84,13 +84,33 @@ add_das_target(run_standalone_sweep_aot
 
 ### JIT tier
 if(NOT DAS_LLVM_DISABLED)
-    add_das_target(standalone_sweep_jit
-        COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
-            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_lib -DFILES_LIST=${_sweep_files_list}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/sweep_jit.cmake
-        DEPENDS daslang
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Standalone sweep (JIT -lib): every file as a C-ABI library, loaded back"
-        VERBATIM
-    )
+    set(_jit_chunk_targets "")
+    set(_jit_chunk "")
+    set(_jit_i 0)
+    set(_jit_done 0)
+    foreach(_f IN LISTS _sweep_files)
+        list(APPEND _jit_chunk ${_f})
+        math(EXPR _jit_done "${_jit_done} + 1")
+        list(LENGTH _jit_chunk _jit_len)
+        if(_jit_len EQUAL 32 OR _jit_done EQUAL ${_sweep_count})
+            list(JOIN _jit_chunk "|" _jit_chunk_arg)
+            set(_jit_chunk_list "${CMAKE_CURRENT_BINARY_DIR}/sweep_jit_chunk_${_jit_i}.txt")
+            file(WRITE "${_jit_chunk_list}" "${_jit_chunk_arg}")
+            add_das_target(standalone_sweep_jit_${_jit_i}
+                COMMAND ${CMAKE_COMMAND} -DDASLANG=$<TARGET_FILE:daslang> -DROOT=${PROJECT_SOURCE_DIR}
+                    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_lib -DFILES_LIST=${_jit_chunk_list}
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/sweep_jit.cmake
+                DEPENDS daslang
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                COMMENT "Standalone sweep (JIT -lib): chunk ${_jit_i}"
+                VERBATIM
+            )
+            list(APPEND _jit_chunk_targets standalone_sweep_jit_${_jit_i})
+            set(_jit_chunk "")
+            math(EXPR _jit_i "${_jit_i} + 1")
+        endif()
+    endforeach()
+    add_custom_target(standalone_sweep_jit
+        COMMENT "Standalone sweep (JIT -lib): every file as a C-ABI library, loaded back")
+    add_dependencies(standalone_sweep_jit ${_jit_chunk_targets})
 endif()

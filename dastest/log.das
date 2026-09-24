@@ -6,7 +6,6 @@ module log shared
 require daslib/rtti
 require uriparser
 require strings
-require daslib/fio
 require daslib/ansi_colors public
 
 
@@ -28,13 +27,8 @@ def info(msg : string | #) {
     }
 }
 
-//! a timestamped progress line that must survive the process dying right after it: printed in
-//! every mode, --failures-only included, on stderr so a machine-read stdout (--bench-format
-//! json, the isolated result protocol) stays clean, and flushed at once - a hung sweep's log
-//! then ends with the program that hung and when it started, not with silence
 def started(msg : string | #) {
-    fwrite(fstderr(), "{iso8601_now()} {msg}\n")
-    fflush(fstderr())
+    to_log(LOG_INFO, "{iso8601_now()} {msg}\n")
 }
 
 

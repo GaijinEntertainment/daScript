@@ -710,6 +710,7 @@ struct public JitPlan {
     jit_all_functions : bool
     debug_info : bool
     dump_ir : bool
+    dump_ir_path : string
     gen_exe : bool
     gen_lib : bool
     lib_static : bool
@@ -781,14 +782,17 @@ def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; 
 
 //! the plan for `prog`; `announce` prints the one-time lines (the baseline class, the exe host
 //! CPU) - the first computation in a run passes true, a recomputation false
-def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) : JitPlan {   // nolint:STYLE038 - one flat resolution of every emission input; a split would hide which inputs key the cache
-    var plan : JitPlan
-    plan.aot_host = prog.policies.aot && prog.policies.jit_enabled
+def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) : JitPlan {
     let r <- parse_args(type<JitCliOptions>)
-    let cli_opts = r |> unwrap_or_default
-    plan.jit_all_functions = prog.policies.jit_jit_all_functions
-    plan.debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info)
-    plan.dump_ir = cli_opts.dump_ir |> unwrap_or(false)
+    return <- make_jit_plan(prog, ctx, announce, r |> unwrap_or_default)
+}
+
+def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; cli_opts : JitCliOptions) : JitPlan {   // nolint:STYLE038 - one flat resolution of every emission input; a split would hide which inputs key the cache
+    var plan = JitPlan(aot_host = prog.policies.aot && prog.policies.jit_enabled,
+        jit_all_functions = prog.policies.jit_jit_all_functions,
+        debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info),
+        dump_ir = cli_opts.dump_ir |> unwrap_or(false),
+        dump_ir_path = cli_opts.dump_ir_path |> unwrap_or(""))
     if (announce && prog.policies.jit_dll_mode && !das_is_dll_build()) {
         // a legitimate configuration (static daslang), but the cost is worth naming: no DLL
         // cache exists, so every -jit run pays full in-memory codegen
@@ -812,7 +816,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     // --jit-compile-only: build + verify + optimize (+dump), write/load/install nothing —
     // the program runs interpreted. Also bypasses the DLL cache probe, so the
     // generators always run (this is the cross-emission smoke rail).
-    plan.compile_only = cli_opts.compile_only |> unwrap_or(false)
+    plan.compile_only = cli_opts.compile_only |> unwrap_or((prog._options |> find_arg("jit_compile_only")) ?as tBool ?? false)
     // Offline AOT: emit the whole used function set to a .o for static linking, with a
     // load ctor registering them into the AOT library. Mutually exclusive with dll
     // mode (no in-memory engine work, no instrument).

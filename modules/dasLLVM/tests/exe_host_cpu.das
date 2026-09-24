@@ -13,15 +13,15 @@ require dastest/testing_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
+require _llvm_cache_common
 
 let OUTPUT_DIR = "{get_das_root()}/build/tests"
 let KERNEL_SCRIPT = "{OUTPUT_DIR}/exe_host_cpu_kernel.das"
 let KERNEL_EXE = "{OUTPUT_DIR}/exe_host_cpu_kernel"
 let PLAIN_SCRIPT = "{OUTPUT_DIR}/exe_host_cpu_plain.das"
 let PLAIN_EXE = "{OUTPUT_DIR}/exe_host_cpu_plain"
-let BASELINE_SCRIPT = "{get_das_root()}/tests/jit_tests/_exe_baseline_intrin.das"
+let BASELINE_SCRIPT = "{get_das_root()}/modules/dasLLVM/tests/_exe_baseline_intrin.das"
 let BASELINE_EXE = "{OUTPUT_DIR}/exe_baseline_intrin"
-let HOST_CPU_LINE = "targeting the current box"
 let BASELINE_ANSWER = "INTRIN=[1496,2480,1496]"   //! the fallback bodies over w = x = 1..16: sum of squares per lane group, the 2x2 block products, the same dot again
 
 def private write_probe_script(path : string; with_kernel : bool) : bool {
@@ -73,6 +73,20 @@ def private has(lines : array<string>; needle : string) : bool {
     return false
 }
 
+def private plan_targets_host(script : string) : bool {
+    var res = false
+    compile_for_jit(script, true) $(var program) {
+        simulate(program) $(sok, context, _serrors) {
+            if (sok) {
+                let cfg : JitCliOptions
+                let plan <- make_jit_plan(get_ptr(program), get_ptr(context), false, cfg)
+                res = plan.use_host_cpu
+            }
+        }
+    }
+    return res
+}
+
 [test]
 def test_exe_host_cpu(t : T?) {
     if (!jit_enabled()) {
@@ -84,20 +98,18 @@ def test_exe_host_cpu(t : T?) {
     let bin = args[0]
 
     t |> success(write_probe_script(KERNEL_SCRIPT, true), "failed to write kernel probe script")
+    t |> success(plan_targets_host(KERNEL_SCRIPT), "kernel-carrying exe build must target the host cpu")
     var lk : array<string>
     spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{KERNEL_EXE}\" \"{KERNEL_SCRIPT}\"", lk)
-    t |> success(lk |> has(HOST_CPU_LINE), "kernel-carrying exe build must target the host cpu")
 
     t |> success(write_probe_script(PLAIN_SCRIPT, false), "failed to write plain probe script")
-    var lp : array<string>
-    spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{PLAIN_EXE}\" \"{PLAIN_SCRIPT}\"", lp)
-    t |> success(!(lp |> has(HOST_CPU_LINE)), "kernel-free exe build must stay generic")
+    t |> success(!plan_targets_host(PLAIN_SCRIPT), "kernel-free exe build must stay generic")
 
     //! an intrinsic call alone must not promote the exe off the generic baseline - the gates decline to the fallback bodies, so the build emits nothing that machine cannot select
+    t |> success(!plan_targets_host(BASELINE_SCRIPT), "an intrinsic call alone never promotes the exe to the host cpu")
     var lb : array<string>
     let rcb = spawn_child("{neutral_env()}\"{bin}\" -exe -output \"{BASELINE_EXE}\" \"{BASELINE_SCRIPT}\"", lb)
     t |> equal(0, rcb, "the intrinsic-calling kernel-free exe must build on the generic baseline: {join(lb, "\n")}")
-    t |> success(!(lb |> has(HOST_CPU_LINE)), "an intrinsic call alone never promotes the exe to the host cpu")
 
     // run the built exes where the platform can load the shared lib (same gates as jit_exe.das:
     // Windows lacks RPATH; static builds ship no runtime lib for the exe to call into)

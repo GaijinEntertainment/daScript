@@ -214,6 +214,13 @@ def fwrite(path : string; text : string) : bool {
 }
 
 [generic]
+def fwrite_if_changed(path : string; text : string) : bool {
+    //! Writes `text` to `path` unless the file already holds it; returns whether it wrote.
+    if (fread(path) == text) return false
+    return fwrite(path, text)
+}
+
+[generic]
 def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void>) {
     var error : string
     builtin_dir_rec(path, blk, error)

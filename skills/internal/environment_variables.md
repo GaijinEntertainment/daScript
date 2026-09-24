@@ -49,6 +49,13 @@ user typed the flag at. It gates only what a human sees: progress *events* are f
 capturing parent regardless, so `silent` under a supervisor still yields a full event stream in
 the log.
 
+## Logging
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_LOG_LEVEL` | `trace` \| `debug` \| `info` \| `warning` \| `error` \| `critical`, or a number | Floor for `to_log`, read per call. Default `warning`. `print` is not filtered. |
+| `DAS_LOGGER_LEVEL` | same as `DAS_LOG_LEVEL` | Floor for `daslib/logger`, read once at init; falls back to `DAS_LOG_LEVEL`, then `warning`. |
+
 ## Lint
 
 | Variable | Type | Effect |

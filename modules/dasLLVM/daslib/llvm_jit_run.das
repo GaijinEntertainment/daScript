@@ -7,6 +7,7 @@ options no_global_variables = false
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_jit_plan public
+require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_exe
 require llvm/daslib/jit_standalone
 require daslib/c_api_header
@@ -37,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xd45c451a6d5efc90ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x977e21ccc369f3bdul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -207,7 +208,7 @@ def private verify_module_or_panic(funcs : array<FunctionPtr>) {
 }
 
 // the IR dump debug rail: globaldce (drop unused declarations) then print
-def private dump_module_ir(mod : LLVMOpaqueModule?) {
+def private dump_module_ir(dump_to : string; mod : LLVMOpaqueModule?) {
     var pmo = LLVMCreatePassBuilderOptions()
     let dce_err = LLVMRunPasses(mod, "globaldce", null, pmo)
     if (dce_err != null) {
@@ -219,16 +220,24 @@ def private dump_module_ir(mod : LLVMOpaqueModule?) {
     let module_str = LLVMPrintModuleToString(mod)
     let msg = clone_string(module_str)
     LLVMDisposeMessage(module_str)
-    to_log(LOG_INFO, "LLVM JIT: {msg}\n");
+    if (empty(dump_to)) {
+        to_log(LOG_INFO, "LLVM JIT: {msg}\n");
+        return
+    }
+    fopen(dump_to, "ab") $(f) {
+        if (f != null) {
+            f |> fwrite(msg)
+        }
+    }
 }
 
 // post-irgen tail: optimize, optional IR dump, whole-module verify
 [macro_function]
 def private optimize_and_verify_module(opt_level, size_level : int; use_host_cpu, dump_ir : bool;
-                                       funcs : array<FunctionPtr>) {
+                                       dump_to : string; funcs : array<FunctionPtr>) {
     optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu)
     if (dump_ir) {
-        dump_module_ir(g_mod)
+        dump_module_ir(dump_to, g_mod)
     }
     verify_module_or_panic(funcs)
 }
@@ -322,9 +331,11 @@ def private remove_split_link_files(objs : array<string>; output_path : string) 
 def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<FunctionPtr>;  // nolint:STYLE037,STYLE038 - the split orchestration is one linear pipeline (the cache probe adds its branches); the phases share the re-pointed g_* state
                               var uids : UidNodes?; jit_flags : LlvmJitFlags;
                               opt_level, size_level, split_threads : int; use_host_cpu : bool;
-                              debug_info, dump_ir, obj_cache : bool; target_triple : string;
+                              debug_info, dump_ir, obj_cache : bool; dump_to : string; target_triple : string;
                               output_path : string; log_jit_time : bool;
-                              target : SplitTarget) : tuple<objs : array<string>; t_irgen : int; t_optemit : int; link_whole_lib : bool; main_ok : bool> {
+                              target : SplitTarget) : tuple<objs : array<string>; t_irgen : int; t_optemit : int; link_whole_lib : bool; main_ok : bool; partitions : int; cached : int> {
+    var n_partitions = 0
+    var n_cached = 0
     var phase_tm = ref_time_ticks()   // t_irgen covers partitioning + per-partition declare/irgen/ctors
     let publish_token = "{ref_time_ticks()}"
     // partition by owning das-module, first-appearance (= program module) order - deterministic
@@ -459,6 +470,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         }
     }
     if (obj_cache) {
+        n_partitions = length(order)
+        n_cached = cached
         to_log(LOG_INFO, "LLVM JIT: obj cache - {cached}/{length(order)} partitions cached\n")
     } elif (!target.gen_exe) {   // an exe has no cache to be off
         // the off-state changes what the run compiles (every partition re-emits) - announce it
@@ -505,7 +518,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     // phase C - the opt-in IR dump only (workers verified each module post-optimize, pre-emit; cached partitions have no live IR)
     if (dump_ir) {
         for (p in g_split_parts) {
-            dump_module_ir(p.mod)
+            dump_module_ir(dump_to, p.mod)
         }
     }
     // --jit-lto (a split exe) and DAS_JIT_PROBE_LTO (the DLL dev probe; the env folds into the cache keys; ARCHITECTURE.md §3): bitcode partitions + an LTO link
@@ -545,20 +558,36 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     g_split_parts |> clear()
     // captured AFTER phase C: verifies, dump, and teardown land inside "optimize" - no untimed gap
     let tOptEmit = get_time_usec(phase_tm)
-    return <- (objs <- objs, t_irgen = tIr, t_optemit = tOptEmit, link_whole_lib = link_whole_lib, main_ok = main_ok)
+    return <- (objs <- objs, t_irgen = tIr, t_optemit = tOptEmit, link_whole_lib = link_whole_lib, main_ok = main_ok, partitions = n_partitions, cached = n_cached)
+}
+
+struct public JitRun {
+    ok : bool
+    partitions : int
+    cached : int
+    output_path : string
+    compile_only : bool
+    use_host_cpu : bool
 }
 
 //! Run the full JIT backend for an already-compiled & simulated program: take the plan, pass its
 //! candidates through the content gate, generate and optimize IR, and emit a .dll / .exe / .wasm
-//! per the program's jit policies. `llvm_jit_link` calls this on a DLL cache miss. Returns true.
+//! per the program's jit policies. `llvm_jit_link` calls this on a DLL cache miss.
 [macro_function]
-def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYLE037,STYLE038 - the JIT backend driver: one linear codegen pipeline over the plan; the phases share the module/target state and do not survive a split
+def public run_jit(prog : Program?; var ctx : Context?) : JitRun {
+    let r <- parse_args(type<JitCliOptions>)
+    return run_jit(prog, ctx, r |> unwrap_or_default)
+}
+
+[macro_function]
+def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions) : JitRun {  // nolint:STYLE037,STYLE038 - the JIT backend driver: one linear codegen pipeline over the plan; the phases share the module/target state and do not survive a split
+    var run = JitRun(ok = true)
     if (prog.policies.aot && !prog.policies.jit_emit_object && !prog.policies.jit_enabled) {
-        return true
+        return run
     }
     let totalTime = ref_time_ticks()
     var phase_tm = ref_time_ticks()
-    var plan <- make_jit_plan(prog, ctx, false)
+    var plan <- make_jit_plan(prog, ctx, false, cli_opts)
     assume aot_host = plan.aot_host
     assume jit_all_functions = plan.jit_all_functions
     assume debug_info = plan.debug_info
@@ -569,6 +598,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     assume lib_bindings = plan.lib_bindings
     assume exe_main = plan.exe_main
     assume compile_only = plan.compile_only
+    run.compile_only = compile_only
     assume emit_aot_object = plan.emit_aot_object
     assume use_dll = plan.use_dll
     assume split_modules = plan.split_modules
@@ -582,6 +612,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     assume exe_strict = plan.exe_strict
     assume config_out_path = plan.config_out_path
     assume output_path = plan.output_path
+    run.output_path = output_path
     assume path_to_shared_lib = plan.path_to_shared_lib
     assume path_to_linker = plan.path_to_linker
     assume target_triple = plan.target_triple
@@ -591,6 +622,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     assume linker_string = plan.linker_string
     assume exe_host_cpu = plan.exe_host_cpu
     assume use_host_cpu = plan.use_host_cpu
+    run.use_host_cpu = use_host_cpu
     assume log_jit_time = plan.log_jit_time
     assume dll_hash_basename = plan.dll_hash_basename
     assume disabled = plan.disabled
@@ -704,7 +736,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         var split_parts = 0
         if (recompile_prog && jit_split) {
             let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
-                split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, target_triple, output_path, log_jit_time,
+                split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, plan.dump_ir_path, target_triple, output_path, log_jit_time,
                 SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict, register_all_modules = register_all_modules, lto = jit_lto))
             let link_base = "{output_path}.{ref_time_ticks()}"
             t_irgen = sres.t_irgen
@@ -712,13 +744,15 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             // optimize + emit-obj + post-opt-verify + partition-teardown wall, and "emit+link"
             // below is the link+reopen tail only (ARCHITECTURE.md §1.1 split mapping)
             t_opt = sres.t_optemit
+            run.partitions = sres.partitions
+            run.cached = sres.cached
             split_parts = length(sres.objs)
             phase_tm = ref_time_ticks()
             if (gen_exe) {
                 if (!sres.main_ok) {
                     reset_codegen_accumulators()
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
-                    return true
+                    return run
                 }
                 LINK_WHOLE_LIB = sres.link_whole_lib
                 if (link_from_objects(sres.objs, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, jit_lto, 3u)) {   // under LTO the linker is the codegen, at the level every exe pins
@@ -756,7 +790,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 if (res.fn == null) {
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                     to_log(LOG_ERROR, "LLVM LIB: no library written for {output_path}\n")
-                    return false
+                    run.ok = false
+                    return run
                 }
             } elif (gen_exe) {
                 let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
@@ -769,7 +804,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                     // JIT failed. Couldn't create executable.
                     // Still return true, codegen ran correctly.
-                    return true
+                    return run
                 }
             }
             di_finalize()
@@ -799,7 +834,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             }
             t_irgen = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
-            optimize_and_verify_module(opt_level, size_level, use_host_cpu, dump_ir, funcs)
+            optimize_and_verify_module(opt_level, size_level, use_host_cpu, dump_ir, plan.dump_ir_path, funcs)
             // optimize covers the passes plus the opt-in IR dump and the post-opt verify
             t_opt = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
@@ -856,7 +891,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             }
             jit_log_report(funcs, true, opt_level, true, false, 0, debug_info, log_jit_time, totalTime,
                 t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, 0, 0)
-            return !emit_failed
+            run.ok = !emit_failed
+            return run
         }
         if (use_dll) {
             assert(g_dynamic_lib_handle.handle != null)
@@ -899,5 +935,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     } else {
         to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")
     }
-    return !emit_failed
+    run.ok = !emit_failed
+    return run
 }

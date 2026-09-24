@@ -1,0 +1,11 @@
+foreach(_var DASLANG ROOT)
+    if(NOT DEFINED ${_var})
+        message(FATAL_ERROR "smoke_check.cmake: -D${_var} is required")
+    endif()
+endforeach()
+execute_process(COMMAND "${DASLANG}" modules/dasVulkan/examples/smoke.das
+    WORKING_DIRECTORY "${ROOT}" OUTPUT_VARIABLE _out ERROR_VARIABLE _out RESULT_VARIABLE _rc)
+message("${_out}")
+if(NOT _rc EQUAL 0 OR NOT _out MATCHES "[Vv]ulkan instance version")
+    message(FATAL_ERROR "the loader-discovery smoke found no Vulkan instance (exit ${_rc})")
+endif()

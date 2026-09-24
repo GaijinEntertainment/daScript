@@ -60,12 +60,5 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DDAS_GLFW_DISABLED=OFF
 
-      - name: "Build the fat host (daslang_static — the flavor that links the static module halves; the DLL-flavor daslang gets externals via .shared_module at runtime instead)"
-        run: |
-          set -eux
-          cmake --build build --target daslang_static -j $(nproc)
-
       - name: "Run the fat man"
-        run: |
-          set -eux
-          ./bin/daslang_static examples/fatman/main.das
+        run: cmake --build build --target run_fatman

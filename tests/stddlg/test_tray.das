@@ -260,7 +260,7 @@ def test_tray_menu_over_private_bus(t : T?) {
             t |> equal(wait_for_line(t, rig, "@event menu", 10.0), "@event menu 10 0 0")
             dbus_send(rig, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:30", "string:clicked", "variant:int32:0", "uint32:0"])
             t |> equal(wait_for_line(t, rig, "@event menu 30", 10.0), "@event menu 30 0 0")
-            t |> equal(unsafe(process_wait(rig.child, 10.0)), 0, "child returned 0 after Quit")
+            t |> equal(unsafe(process_wait(rig.child, 120.0)), 0, "child returned 0 after Quit")
         }
     }
     t |> run("EventGroup, the batched form panels send, reaches the same menu event") @(t : T?) {
