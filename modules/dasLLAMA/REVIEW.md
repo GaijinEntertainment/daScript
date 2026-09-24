@@ -11,6 +11,9 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das`, or the special-token or template
 strings any of them look up - applies `REVIEW_TOKENIZER.md` (beside this file) too.**
 
+**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, or adds a
+file under `dasllama/` - the charter lines - applies `REVIEW_DOCS.md` (beside this file) too.**
+
 **Code that times a run itself and hands the wall or rate back as its result - a file that
 prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing
 two kernel variants - arms - against each other in one process), or a file
@@ -196,11 +199,6 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**A diff that adds a `followup_*.md` entry saying a function can be shortened or split - other
-than one asking twin bodies onto one template - drops that function's STYLE037/STYLE038
-suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) or lands the
-split in the same change; adding such a suppression to a function an entry names is a defect.**
-
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
 owns, or a consumer `ARCHITECTURE_ENGINE.md` sec.1.8 names as ruled** - a symbol the facade
@@ -249,25 +247,6 @@ adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
 the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it emits but the
 registry does not, `tests/test_env_registry.das` catches.
-
-**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter
-line does not cover, keeps the charters true in the same change - in an `ARCHITECTURE_*.md`
-companion, never `ARCHITECTURE.md`.** `ARCHITECTURE.md`'s sec.1 routing block names the
-companion holding each file's charter line.
-
-**A `followup_*.md` row whose work landed in this change is deleted and every checked-in
-citation of it repointed or dropped; no other row is renumbered (text cites rows by number),
-and a row listing several items keeps its number and strikes the one that landed.**
-
-**A row a diff adds to a `followup_*.md` takes a number higher than every number that file
-carries - a deleted row's number is never reused.**
-
-**A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
-or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
-companion's own opening (its range and the sections it names), and every repointed prose
-`sec.N` / file citation of the moved sections, in the same change; a new section takes a
-number no other section in this folder's `ARCHITECTURE*.md` set uses.** Prose citations are
-not LINT026-gated, so one naming a section that left its file sends the reader to nothing.
 
 **A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
 input into embeddings - onto a GPU hook leaves the CPU form in place and
