@@ -3,6 +3,7 @@
 #include "daScript/misc/fpe.h"
 
 #include <stdarg.h>
+#include <thread>
 
 #ifdef __EMSCRIPTEN__
 // write(2) + _Exit for the allocation-free out-of-memory report below.
@@ -377,6 +378,7 @@ namespace das
     }
 
     Context * Context::acquireForkContext ( uint32_t category_ ) {
+        forkContextsBorrowed.fetch_add(1, std::memory_order_relaxed);
         Context * fork = nullptr;
         {
             lock_guard<mutex> guard(forkContextPoolMutex);
@@ -411,6 +413,7 @@ namespace das
         } else {
             delete forkContext;
         }
+        forkContextsBorrowed.fetch_sub(1, std::memory_order_release);   // last touch of this: the owner may be waiting to die
     }
 
     void Context::addGcRoot ( void * ptr, TypeInfo * type ) {
@@ -422,6 +425,10 @@ namespace das
     }
 
     Context::~Context() {
+        // src/builtin/ARCHITECTURE.md#thread-leaves-count-last
+        while ( forkContextsBorrowed.load(std::memory_order_acquire) ) {
+            std::this_thread::yield();
+        }
         // free any pooled job-fork contexts (idle by now — with_job_que has joined). They were
         // cloned skip-init, so their own destructors skip the shutdown script.
         for ( auto * fork : forkContextPool ) {
