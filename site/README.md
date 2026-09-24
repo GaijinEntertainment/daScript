@@ -14,6 +14,9 @@ site/
 +-- dasllama.html           # dasLLAMA benchmarks - pair tables/bars from files/dasllama/bench_records.json
 +-- performance.html        # data-queries (linq) benchmarks - matrix from files/performance_bench.json
 +-- benchmarks.html         # cross-language benchmarks - both boards from files/profile_results_<platform>.json
++-- nightly.html            # the nightly benchmark stand - embeds /bench/app.js + /bench/style.css (utils/internal/bench-stand/site,
+                            # served by Caddy from the stand's output, not by pages.yml) over /bench/data.json; a local preview
+                            # symlinks site/bench to a stand output folder
 +-- files/
 |   +-- dasllama.js         # dasLLAMA page renderer (bars + tables + receipts, all derived from the records)
 |   +-- dasllama/
