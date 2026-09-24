@@ -1536,11 +1536,9 @@ def test_whisper_metal_cross_kv(tst : T?) {
     }
 }
 
-// Conformer families have NO seam - their hand-written encoders never reach encoder_blocks, so
-// the tower counters must not move AT ALL (engagement absence, not a decline).
 [test]
-def test_parakeet_tower_absence(tst : T?) {
-    tst |> run("parakeet: a Conformer transcribe never touches the tower rail") @(t : T?) {
+def test_parakeet_tower_metal(tst : T?) {
+    tst |> run("parakeet tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             if (!jit_enabled()) {
@@ -1556,16 +1554,146 @@ def test_parakeet_tower_absence(tst : T?) {
                 t |> skip("jfk.wav not present")
                 return
             }
-            set_metal_tower(true)
-            let s0 = metal_tower_stats()
-            let g = parakeet_transcribe_text(path, samples, cached = false)
-            let s1 = metal_tower_stats()
-            t |> success(!empty(g.text), "transcript non-empty")
-            t |> equal(s1.encodes, s0.encodes, "no tower encodes")
-            t |> equal(s1.declines, s0.declines, "no tower declines either - the seam is never reached")
+            var cpu_toks : array<int>
+            var gpu_toks : array<int>
+            var cpu_text = ""
+            var gpu_text = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            var off_encodes = 0l
+            var off_declines = 0l
+            var enc_rel_rms = 0.0
+            var poison_rel_rms = 0.0
+            var rows_gpu = 0l
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var inscope m = AsrModel(kind = AsrKind.parakeet)
+                var inscope stg <- stage_parakeet_model(path, false)
+                mint_parakeet_model(stg, m.pk, false)
+                t |> success(!m.pk.q8, "model is on the f32 rail")
+                nlayer = m.pk.n_layer
+                set_metal_tower(false)
+                let d0 = metal_tower_stats()
+                var inscope s <- create_session(m, "en")
+                transcribe(m, s, samples) $(seg) {
+                    cpu_toks |> push_from(seg.tokens)
+                    cpu_text += seg.text
+                }
+                let d1 = metal_tower_stats()
+                off_encodes = d1.encodes - d0.encodes
+                off_declines = d1.declines - d0.declines
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_session(m, "en")
+                transcribe(m, s2, samples) $(seg) {
+                    gpu_toks |> push_from(seg.tokens)
+                    gpu_text += seg.text
+                }
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                var inscope stc = ParakeetState()
+                var inscope stg2 = ParakeetState()
+                set_metal_tower(false)
+                parakeet_log_mel(samples, m.pk, stc)
+                let tt = parakeet_encode(m.pk, stc)
+                set_metal_tower(true)
+                parakeet_log_mel(samples, m.pk, stg2)
+                let e0 = metal_tower_stats().encodes
+                parakeet_encode(m.pk, stg2)
+                rows_gpu = metal_tower_stats().encodes - e0
+                enc_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+                // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
+                for (i in range(length(stg2.mel.data))) {
+                    stg2.mel.data[i] *= 3.0
+                }
+                parakeet_encode(m.pk, stg2)
+                poison_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+            }
+            t |> success(parakeet_gpu_serves(), "the driver reports serving with the tower on")
+            t |> success(!parakeet_serves_q8(), "the un-pinned lane is the f32 planes while the driver serves")
+            t |> equal(off_encodes, 0l, "the tower-off leg never dispatched")
+            t |> success(off_declines >= 1l, "the tower-off leg recorded the knob decline ({off_declines})")
+            t |> equal(rows_gpu, 1l, "the rows compare's GPU encode dispatched")
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            // the canary cell's bar (f32 GEMMs both sides; the device GEMM tiles re-order accumulation), logged either way
+            t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            t |> success(poison_rel_rms >= 5.0e-2, "a poisoned GPU element reds the bar (rel-rms {poison_rel_rms})")
+            to_log(LOG_INFO, "parakeet mtower encode rel-rms: {enc_rel_rms}\n")
+            to_log(LOG_INFO, "parakeet mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "parakeet mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
+            t |> equal(length(gpu_toks), length(cpu_toks), "token count CPU vs GPU")
+            for (a, b in cpu_toks, gpu_toks) {
+                t |> equal(a, b, "token CPU vs GPU")
+            }
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
             delete samples
+        } else {
+            t |> skip("no Metal build - the parakeet FastConformer driver has no device to serve")
         }
     }
+}
+
+// A q8 parakeet stays on the CPU chain: the driver declines it (quant_mode) and never dispatches.
+[test]
+def test_parakeet_tower_q8_decline(tst : T?) {
+    tst |> run("parakeet tower: the q8 lane records the quant_mode decline and never dispatches") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+            if (!model_available(t, path)) {
+                return
+            }
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            var text = ""
+            var enc_delta = 0l
+            var dec_delta = 0l
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var inscope m = AsrModel(kind = AsrKind.parakeet)
+                var inscope stg <- stage_parakeet_model(path, true)
+                mint_parakeet_model(stg, m.pk, true)
+                t |> success(m.pk.q8, "model is on the q8 lane")
+                set_metal_tower(true)
+                let s0 = metal_tower_stats()
+                var inscope s <- create_session(m, "en")
+                text = transcribe(m, s, samples)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                dec_delta = s1.declines - s0.declines
+            }
+            t |> success(!empty(text), "transcript non-empty")
+            t |> equal(enc_delta, 0l, "no tower encodes on the q8 lane")
+            t |> success(dec_delta >= 1l, "the quant_mode decline is counted ({dec_delta})")
+            delete samples
+        } else {
+            t |> skip("no Metal build - the parakeet FastConformer driver has no device to decline")
+        }
+    }
+}
+
+//! the encoder rows' distance as a fraction of their magnitude: sqrt(sum (a-b)^2 / sum a^2) over the first n
+def private rel_rms(a, b : array<float>; n : int64) : float {
+    var sd = 0.0lf
+    var sa = 0.0lf
+    for (i in range64(n)) {
+        let df = a[i] - b[i]
+        sd += double(df * df)
+        sa += double(a[i] * a[i])
+    }
+    return float(sqrt(sd / max(sa, 1.0e-18lf)))
 }
 
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
@@ -1576,8 +1704,9 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
         // the control: a staged read minted straight into memory, so it shares no bytes and no
         // file with the canonical image the other two arms load
         m.kind = AsrKind.parakeet
-        var inscope stg <- stage_parakeet_model(path, true)
-        mint_parakeet_model(stg, m.pk, true)
+        let cached_lane_q8 = parakeet_serves_q8()   // the lane the cached loads take on this box
+        var inscope stg <- stage_parakeet_model(path, cached_lane_q8)
+        mint_parakeet_model(stg, m.pk, cached_lane_q8)
     }
     var text = ""
     with_job_que() {
@@ -1607,7 +1736,7 @@ def test_parakeet_image_roundtrip(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        let img = image_path_for(path, "parakeet-q8")
+        let img = image_path_for(path, parakeet_serves_q8() ? "parakeet-q8" : "parakeet-f32")
         remove(img)
         // off-rail truth: both cached loads are image-backed, so they cannot check each other
         let g = parakeet_transcribe_text(path, samples, cached = false)
@@ -2165,14 +2294,7 @@ def test_gemma4a_tower_metal(t : T?) {
                 set_metal_tower(true)
                 gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
                 gemma4a_encode(enc, stg)
-                var sd = 0.0lf
-                var sa = 0.0lf
-                for (i in range64(long_length(stc.out))) {
-                    let df = stc.out[i] - stg.out[i]
-                    sd += double(df * df)
-                    sa += double(stc.out[i] * stc.out[i])
-                }
-                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
                 reset_gemma4a_q8()
                 delete dec
             }
@@ -2214,6 +2336,8 @@ def test_canary_tower_metal(t : T?) {
             var enc_delta = 0l
             var blk_delta = 0l
             var enc_rel_rms = 0.0
+            var poison_rel_rms = 0.0
+            var rows_gpu = 0l
             with_job_que() {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
@@ -2244,15 +2368,16 @@ def test_canary_tower_metal(t : T?) {
                 canary_encode(enc, stc)
                 set_metal_tower(true)
                 canary_log_mel(enc, samples, stg)
+                let e0 = metal_tower_stats().encodes
                 canary_encode(enc, stg)
-                var sd = 0.0lf
-                var sa = 0.0lf
-                for (i in range64(long_length(stc.out))) {
-                    let df = stc.out[i] - stg.out[i]
-                    sd += double(df * df)
-                    sa += double(stc.out[i] * stc.out[i])
+                rows_gpu = metal_tower_stats().encodes - e0
+                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
+                for (i in range(length(stg.mel))) {
+                    stg.mel[i] *= 3.0
                 }
-                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                canary_encode(enc, stg)
+                poison_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
                 reset_canary_enc_q8()
                 delete dec
             }
@@ -2260,7 +2385,9 @@ def test_canary_tower_metal(t : T?) {
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
             //! measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
             //! attention re-orders accumulation) - the bar leaves deep-GPU headroom
+            t |> equal(rows_gpu, 1l, "the rows compare's GPU encode dispatched")
             t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            t |> success(poison_rel_rms >= 5.0e-2, "a poisoned GPU element reds the bar (rel-rms {poison_rel_rms})")
             to_log(LOG_INFO, "canary mtower encode rel-rms: {enc_rel_rms}\n")
             to_log(LOG_INFO, "canary mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "canary mtower GPU eyeball: {gpu_text}\n")
@@ -2441,14 +2568,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 set_metal_tower(true)
                 var inscope w2 <- qwen3a_mel_window(mel, 0l)
                 qwen3a_encode(tw, egpu, c2, w2)
-                var sd = 0.0lf
-                var sa = 0.0lf
-                for (i in range64(long_length(ecpu.out))) {
-                    let df = ecpu.out[i] - egpu.out[i]
-                    sd += double(df * df)
-                    sa += double(ecpu.out[i] * ecpu.out[i])
-                }
-                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                enc_rel_rms = rel_rms(ecpu.out, egpu.out, long_length(ecpu.out))
                 set_metal_tower_f16(true)
                 let tw0 = metal_tower_f16_encodes()
                 var twin_text = ""

@@ -76,7 +76,7 @@ def test_gpu_pair_roster(t : T?) {
         t |> success(asr_gpu_pair_tool("mtmd"), "mtmd pairs (Metal build)")
         t |> success(asr_gpu_pair_tool("nemo"), "nemo pairs (torch-MPS)")
         t |> success(!asr_gpu_pair_tool("onnx"), "onnx is CPU-only")
-        t |> success(!asr_gpu_pair_tool("parakeet-cli"), "parakeet-cli is CPU-only")
+        t |> success(!asr_gpu_pair_tool("parakeet-cli"), "parakeet-cli runs -ng on the rig")
     }
 }
 

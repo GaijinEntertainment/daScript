@@ -144,7 +144,7 @@ def load_asr_model(path : string) : AsrModel {
     }
     if (vocab < 32768) {   // parakeet SPM vocabs: 1024 (v2, English) / 8192 (v3, 25-lang)
         var pm = AsrModel(kind = AsrKind.parakeet)
-        pm.pk <- load_parakeet_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32))
+        pm.pk <- load_parakeet_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && parakeet_serves_q8())
         return <- pm
     }
     // whisper vocabs: 51864 (.en) / 51865 (multilingual) / 51866 (large-v3 family); anything

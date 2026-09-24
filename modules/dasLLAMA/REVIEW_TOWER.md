@@ -20,7 +20,9 @@ names - says so in the PR body in place of the run.** The Metal gates are the fa
 `test_qwen3v_tier1_metal` and `test_qwen3v_tier1_metal_f16` in `tests/test_qwen3v.das`, and
 `test_qwen25v_tier1_gpu` in `tests/test_qwen25v.das`; `tests/test_whisper.das`,
 `tests/test_audio.das` and `tests/test_audio_embedder.das`; plus a `tests/test_model_image.das`
-run with the `mtower` arm, with `metal_tower_stats()`'s encode count rising across the run. The
+run with the `mtower` arm and no `--family` filter (`DASLLAMA_TEST_FAMILY` unset - the arm's cells
+span several families, and a filter skips the rest), with `metal_tower_stats()`'s encode count
+rising across the run. The
 Vulkan gates are `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin`
 in `tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
 `test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, and `tests/test_vulkan_tower_kernels.das`,
@@ -46,11 +48,11 @@ from the query-row pad alone** - the Metal QK grid reads `nk64` rows (the key co
 hides the overrun at some row sizes, so an undersized panel reads past its allocation only on
 specific canvas sizes.
 
-**A diff that changes a family's chain in a tower driver (`dasllama/dasllama_metal_tower.das`,
-`dasllama/dasllama_vulkan_tower.das`) also changes that family's CPU encoder block loop -
-`encoder_blocks` and `audio_encode_blocks` in
-`dasllama/dasllama_audio.das`, or a vision family's own block loop in
-`dasllama/dasllama_<family>.das` - in the same change, dispatch for dispatch.** The CPU loop is
+**A diff that changes a family's dispatch sequence in a tower driver
+(`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`) - the GPU dispatches
+that family's encode runs - leaves that sequence matching, step for step, the CPU block loop the
+family's registered hook replaces; a diff that changes what the sequence computes changes that CPU
+loop in the same diff.** The CPU loop is
 the chain's specification and the parity cells its instrument.
 
 **A driver route that dispatches a borrowed kernel set - the builders one driver borrows from

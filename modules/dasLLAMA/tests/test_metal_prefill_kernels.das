@@ -714,78 +714,85 @@ def private tower_win_gate(t : T?; dev, queue) {
     delete want
 }
 
-// ===== the canary FastConformer rel-pos attention (FULL bidirectional - every query attends
-// every key - with the Transformer-XL u/v bias pair over a 2·np−1 rel-pos table) =====
-def private cn_attn_gate(t : T?; dev, queue) {
-    let tag = "cn_attn"
+struct private FcFixture {
+    np : int = 24
+    heads : int = 2
+    hs : int = 128
+    d : int = 256
+    mp : int
+    nkp : int
+    ww : int
+    wwpad : int
+}
+
+//! the fixture's pads come from the driver's own derivation, so a lattice change moves both sides
+def private fc_fixture(dev; np : int = 24) : FcFixture {
+    var f = FcFixture(np = np)
+    let ka = fc_attn_args(int64(f.d), int64(f.hs), int64(f.np))
+    f.mp = int(ka.mp)
+    f.nkp = int(ka.nkp)
+    f.ww = int(ka.ww)
+    f.wwpad = int(ka.wwpad)
+    return f
+}
+
+def private fc_args(dev; f : FcFixture) => fc_attn_args(int64(f.d), int64(f.hs), int64(f.np))
+
+def private fc_pack_gate(t : T?; dev, queue) {
+    let tag = "fc_pack"
     var err : string
-    var pso = pipeline_from_source(dev, metal_cn_attn_msl, metal_cn_attn_msl_entry, metal_cn_attn_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_fc_pack_msl, metal_fc_pack_msl_entry, metal_fc_pack_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
-    let np = 24
-    let heads = 2
-    let hs = 128
-    let d = heads * hs
-    let ww = 2 * np - 1
-    let scale = 1.0 / sqrt(float(hs))
+    let f = fc_fixture(dev)
+    let h = 1
     var qv : array<float>
     var kv : array<float>
     var vv : array<float>
-    qv |> resize(np * d)
-    kv |> resize(np * d)
-    vv |> resize(np * d)
-    for (i in range(np * d)) {
+    qv |> resize(f.np * f.d)
+    kv |> resize(f.np * f.d)
+    vv |> resize(f.np * f.d)
+    for (i in range(f.np * f.d)) {
         qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
         kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
         vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
     }
     var pl : array<float>
-    pl |> resize(ww * d)
-    for (i in range(ww * d)) {
+    pl |> resize(f.ww * f.d)
+    for (i in range(f.ww * f.d)) {
         pl[i] = float(float16(0.03 * float((i * 11) % 29) - 0.4))
     }
     var bu : array<float>
     var bvv : array<float>
-    bu |> resize(d)
-    bvv |> resize(d)
-    for (i in range(d)) {
+    bu |> resize(f.d)
+    bvv |> resize(f.d)
+    for (i in range(f.d)) {
         bu[i] = float(float16(0.02 * float(i % 19) - 0.15))
         bvv[i] = float(float16(0.015 * float((i * 3) % 23) - 0.11))
     }
-    var want : array<float>
-    want |> resize(np * d)
-    for (h in range(heads)) {
-        for (qi in range(np)) {
-            let base = np - 1 - qi
-            var mx = -3.0e38
-            var sc : float[64]
-            for (j in range(np)) {
-                var cs = 0.0lf
-                var rs = 0.0lf
-                for (dd in range(hs)) {
-                    let qd0 = double(qv[qi * d + h * hs + dd])
-                    cs += (qd0 + double(bu[h * hs + dd])) * double(kv[j * d + h * hs + dd])
-                    rs += (qd0 + double(bvv[h * hs + dd])) * double(pl[(base + j) * d + h * hs + dd])
-                }
-                let s = float((cs + rs) * double(scale))
-                sc[j] = s
-                mx = max(mx, s)
-            }
-            var tot = 0.0lf
-            var oa : float[128]
-            for (dd in range(hs)) {
-                oa[dd] = 0.0
-            }
-            for (j in range(np)) {
-                let e = exp(sc[j] - mx)
-                tot += double(e)
-                for (dd in range(hs)) {
-                    oa[dd] += e * vv[j * d + h * hs + dd]
-                }
-            }
-            for (dd in range(hs)) {
-                want[qi * d + h * hs + dd] = oa[dd] / float(tot)
-            }
+    //! the oracle's five panels: the resize's zeros are the expected pad rows
+    var wqu : array<float>
+    var wqv : array<float>
+    var wkh : array<float>
+    var wvt : array<float>
+    var wph : array<float>
+    wqu |> resize(f.mp * f.hs)
+    wqv |> resize(f.mp * f.hs)
+    wkh |> resize(f.nkp * f.hs)
+    wvt |> resize(f.hs * f.nkp)
+    wph |> resize(f.wwpad * f.hs)
+    for (r in range(f.np)) {
+        for (j in range(f.hs)) {
+            let c = h * f.hs + j
+            wqu[r * f.hs + j] = qv[r * f.d + c] + bu[c]
+            wqv[r * f.hs + j] = qv[r * f.d + c] + bvv[c]
+            wkh[r * f.hs + j] = kv[r * f.d + c]
+            wvt[j * f.nkp + r] = vv[r * f.d + c]
+        }
+    }
+    for (r in range(f.ww)) {
+        for (j in range(f.hs)) {
+            wph[r * f.hs + j] = pl[r * f.d + h * f.hs + j]
         }
     }
     var bq = buf_upload(dev, qv)
@@ -794,59 +801,225 @@ def private cn_attn_gate(t : T?; dev, queue) {
     var bpl = buf_upload(dev, pl)
     var bbu = buf_upload(dev, bu)
     var bbv = buf_upload(dev, bvv)
-    var bo = buf_fill(dev, np * d, -1.0e30)
-    let ka = CnAttnArgs(d = uint(d), hs = uint(hs), npos = uint(np), scale = scale)
-    let np64 = (np + 63) / 64
-    let run_once <- @(bvx : MetalBuffer?; bbvx : MetalBuffer?) : bool {
+    var bqu = buf_fill(dev, f.mp * f.hs, -1.0e30)
+    var bqv = buf_fill(dev, f.mp * f.hs, -1.0e30)
+    var bkh = buf_fill(dev, f.nkp * f.hs, -1.0e30)
+    var bvt = buf_fill(dev, f.hs * f.nkp, -1.0e30)
+    var bph = buf_fill(dev, f.wwpad * f.hs, -1.0e30)
+    let ka = fc_args(dev, f)
+    let total = f.wwpad * f.hs
+    let run_once <- @(bqx, bkx, bvx, bplx, bbux, bbvx : MetalBuffer?) : bool {
         var err2 : string
         let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, pso)
-            metal_set_buffer(enc, bq, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
+            metal_set_buffer(enc, bqx, 0ul, 0)
+            metal_set_buffer(enc, bkx, 0ul, 1)
             metal_set_buffer(enc, bvx, 0ul, 2)
-            metal_set_buffer(enc, bo, 0ul, 3)
-            metal_set_buffer(enc, bpl, 0ul, 4)
-            metal_set_buffer(enc, bbu, 0ul, 5)
-            metal_set_buffer(enc, bbvx, 0ul, 6)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
-            metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+            metal_set_buffer(enc, bplx, 0ul, 3)
+            metal_set_buffer(enc, bbux, 0ul, 4)
+            metal_set_buffer(enc, bbvx, 0ul, 5)
+            metal_set_buffer(enc, bqu, 0ul, 6)
+            metal_set_buffer(enc, bqv, 0ul, 7)
+            metal_set_buffer(enc, bkh, 0ul, 8)
+            metal_set_buffer(enc, bvt, 0ul, 9)
+            metal_set_buffer(enc, bph, 0ul, 10)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 11)
+            var u_h = uint(h)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_h)), 4ul, 12)
+            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
         t |> success(ran, "{tag} dispatch: {err2}")
         return ran
     }
-    return if (!invoke(run_once, bv, bbv))
-    t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
-    vv[18 * d + hs / 2] += 3.0
-    var bv2 = buf_upload(dev, vv)
-    if (invoke(run_once, bv2, bbv)) {
-        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} V poison (MUST mismatch)") > 0,
-            "{tag}: a poisoned V element reds the bars")
+    return if (!invoke(run_once, bq, bk, bv, bpl, bbu, bbv))
+    t |> equal(buf_mismatch_bars(bqu, wqu, 0.0, 0.0, "{tag} Q+u"), 0)
+    t |> equal(buf_mismatch_bars(bqv, wqv, 0.0, 0.0, "{tag} Q+v"), 0)
+    t |> equal(buf_mismatch_bars(bkh, wkh, 0.0, 0.0, "{tag} K_h"), 0)
+    t |> equal(buf_mismatch_bars(bvt, wvt, 0.0, 0.0, "{tag} V_hT"), 0)
+    t |> equal(buf_mismatch_bars(bph, wph, 0.0, 0.0, "{tag} pos_h"), 0)
+    // one poisoned input per panel: each compare above has its own control
+    bu[h * f.hs + 5] += 2.0
+    var bbu2 = buf_upload(dev, bu)
+    if (invoke(run_once, bq, bk, bv, bpl, bbu2, bbv)) {
+        t |> success(buf_mismatch_bars(bqu, wqu, 0.0, 0.0, "{tag} bias_u poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned content bias reds the Q+u panel")
     }
-    vv[18 * d + hs / 2] -= 3.0
-    var bv3 = buf_upload(dev, vv)
-    bvv[hs / 3] += 2.0
+    bvv[h * f.hs + 9] += 2.0
     var bbv2 = buf_upload(dev, bvv)
-    if (invoke(run_once, bv3, bbv2)) {
-        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} bias_v poison (MUST mismatch)") > 0,
-            "{tag}: a poisoned rel bias reds the bars")
+    if (invoke(run_once, bq, bk, bv, bpl, bbu, bbv2)) {
+        t |> success(buf_mismatch_bars(bqv, wqv, 0.0, 0.0, "{tag} bias_v poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned rel bias reds the Q+v panel")
+    }
+    kv[3 * f.d + h * f.hs + 1] += 2.0
+    var bk2 = buf_upload(dev, kv)
+    if (invoke(run_once, bq, bk2, bv, bpl, bbu, bbv)) {
+        t |> success(buf_mismatch_bars(bkh, wkh, 0.0, 0.0, "{tag} K poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned K element reds the K_h panel")
+    }
+    vv[5 * f.d + h * f.hs + 2] += 2.0
+    var bv2 = buf_upload(dev, vv)
+    if (invoke(run_once, bq, bk, bv2, bpl, bbu, bbv)) {
+        t |> success(buf_mismatch_bars(bvt, wvt, 0.0, 0.0, "{tag} V poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned V element reds the V_hT panel")
+    }
+    pl[11 * f.d + h * f.hs + 3] += 2.0
+    var bpl2 = buf_upload(dev, pl)
+    if (invoke(run_once, bq, bk, bv, bpl2, bbu, bbv)) {
+        t |> success(buf_mismatch_bars(bph, wph, 0.0, 0.0, "{tag} pos poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned rel-table element reds the pos_h panel")
     }
     metal_release(bq)
     metal_release(bk)
     metal_release(bv)
-    metal_release(bv2)
-    metal_release(bv3)
     metal_release(bpl)
     metal_release(bbu)
+    metal_release(bbu2)
     metal_release(bbv)
     metal_release(bbv2)
-    metal_release(bo)
+    metal_release(bk2)
+    metal_release(bv2)
+    metal_release(bpl2)
+    metal_release(bqu)
+    metal_release(bqv)
+    metal_release(bkh)
+    metal_release(bvt)
+    metal_release(bph)
     metal_release(pso)
 }
 
-def private cn_dw_gate(t : T?; dev, queue) {
-    let tag = "cn_dw"
+//! np = 24 keeps every live key in simdgroup 0; np = 300 fills every simdgroup and strides each lane twice.
+//! Bar: the kernel sums f32 in a lane-then-simdgroup tree (error under 16 ulp of the sum) with the
+//! fast-math exp (2 ulp per term), the oracle sums in double - 1e-5 relative is ~10x that budget,
+//! 1e-6 absolute covers the probabilities under 0.1 where the relative bar tightens past it.
+def private fc_softmax_gate(t : T?; dev, queue; np : int) {
+    let tag = "fc_softmax np{np}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_cn_dw_msl, metal_cn_dw_msl_entry, metal_cn_dw_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_fc_softmax_msl, metal_fc_softmax_msl_entry, metal_fc_softmax_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let f = fc_fixture(dev, np)
+    var sc : array<float>
+    var sr : array<float>
+    sc |> resize(f.mp * f.nkp)
+    sr |> resize(f.mp * f.wwpad)
+    for (i in range(f.mp * f.nkp)) {
+        sc[i] = float(float16(0.9 * float((i * 7) % 31) - 12.0))
+    }
+    for (i in range(f.mp * f.wwpad)) {
+        sr[i] = float(float16(0.7 * float((i * 5) % 37) - 11.0))
+    }
+    let ka = fc_args(dev, f)
+    var want : array<float>
+    want |> resize(f.mp * f.nkp)   //! the resize's zeros are the expected pad rows and pad columns
+    for (r in range(f.np)) {
+        let base = f.np - 1 - r
+        var mx = -3.0e38
+        for (k in range(f.np)) {
+            mx = max(mx, (sc[r * f.nkp + k] + sr[r * f.wwpad + base + k]) * ka.scale)
+        }
+        var tot = 0.0lf
+        for (k in range(f.np)) {
+            let e = exp((sc[r * f.nkp + k] + sr[r * f.wwpad + base + k]) * ka.scale - mx)
+            want[r * f.nkp + k] = e
+            tot += double(e)
+        }
+        for (k in range(f.np)) {
+            want[r * f.nkp + k] = float(double(want[r * f.nkp + k]) / tot)
+        }
+    }
+    var bsc = buf_upload(dev, sc)
+    var bp = buf_fill(dev, f.mp * f.nkp, -1.0e30)
+    let run_once <- @(bsrx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bsc, 0ul, 0)
+            metal_set_buffer(enc, bsrx, 0ul, 1)
+            metal_set_buffer(enc, bp, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+            metal_set_threadgroup_memory_length(enc, metal_fc_softmax_msl_tgmem, 0)
+            metal_dispatch_threadgroups(enc, uint3(uint(f.mp), 1u, 1u), uint3(256u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bsr = buf_upload(dev, sr)
+    return if (!invoke(run_once, bsr))
+    t |> equal(buf_mismatch_bars(bp, want, 1e-5, 1e-6, tag), 0)
+    sr[3 * f.wwpad + (f.np - 1 - 3) + 7] += 6.0
+    var bsr2 = buf_upload(dev, sr)
+    if (invoke(run_once, bsr2)) {
+        t |> success(buf_mismatch_bars(bp, want, 1e-5, 1e-6, "{tag} rel-score poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned rel score reds the bars")
+    }
+    metal_release(bsc)
+    metal_release(bsr)
+    metal_release(bsr2)
+    metal_release(bp)
+    metal_release(pso)
+}
+
+def private fc_unpack_gate(t : T?; dev, queue) {
+    let tag = "fc_unpack"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_fc_unpack_msl, metal_fc_unpack_msl_entry, metal_fc_unpack_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let f = fc_fixture(dev)
+    var oh : array<float>
+    oh |> resize(f.heads * f.mp * f.hs)
+    for (i in range(f.heads * f.mp * f.hs)) {
+        oh[i] = float(float16(0.05 * float((i * 3) % 41) - 1.0))
+    }
+    var want : array<float>
+    want |> resize(f.mp * f.d)   //! the resize's zeros are the expected pad rows
+    for (r in range(f.np)) {
+        for (c in range(f.d)) {
+            want[r * f.d + c] = oh[((c / f.hs) * f.mp + r) * f.hs + c % f.hs]
+        }
+    }
+    let ka = fc_args(dev, f)
+    var bao = buf_fill(dev, f.mp * f.d, -1.0e30)
+    let total = f.mp * f.d
+    let run_once <- @(bohx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bohx, 0ul, 0)
+            metal_set_buffer(enc, bao, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
+            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var boh = buf_upload(dev, oh)
+    return if (!invoke(run_once, boh))
+    t |> equal(buf_mismatch_bars(bao, want, 0.0, 0.0, tag), 0)
+    oh[(1 * f.mp + 9) * f.hs + 17] += 2.0
+    var boh2 = buf_upload(dev, oh)
+    if (invoke(run_once, boh2)) {
+        t |> success(buf_mismatch_bars(bao, want, 0.0, 0.0, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned AV element reds the compare")
+    }
+    metal_release(boh)
+    metal_release(boh2)
+    metal_release(bao)
+    metal_release(pso)
+}
+
+//! Bar: nine f16-exact products summed in f32 (under 9 ulp), the folded BN affine and the
+//! fast-math exp of the SiLU (2 ulp) against the oracle's f32 chain in the same order - 1e-5
+//! relative is ~50x that budget, 1e-6 absolute covers the outputs near zero.
+def private fc_dw_gate(t : T?; dev, queue; tap_major : bool) {
+    let tag = tap_major ? "pk_dw" : "cn_dw"
+    var err : string
+    var pso : MetalComputePipeline?
+    if (tap_major) {
+        pso = pipeline_from_source(dev, metal_pk_dw_msl, metal_pk_dw_msl_entry, metal_pk_dw_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, metal_cn_dw_msl, metal_cn_dw_msl_entry, metal_cn_dw_msl_fastmath, err)
+    }
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let np = 13
@@ -879,7 +1052,7 @@ def private cn_dw_gate(t : T?; dev, queue) {
             for (kk in range(nk)) {
                 let src = tt + kk - kpad
                 if (src >= 0 && src < np) {
-                    acc += wv[c * nk + kk] * xv[src * d + c]
+                    acc += wv[tap_major ? kk * d + c : c * nk + kk] * xv[src * d + c]
                 }
             }
             let bvv2 = acc * bnw[c] + bnb[c]
@@ -1315,8 +1488,12 @@ def test_metal_prefill_kernels(t : T?) {
                 tower_flash_kvhc_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
                 g4a_attn_gate(t, dev, queue)
-                cn_attn_gate(t, dev, queue)
-                cn_dw_gate(t, dev, queue)
+                fc_pack_gate(t, dev, queue)
+                fc_softmax_gate(t, dev, queue, 24)
+                fc_softmax_gate(t, dev, queue, 300)
+                fc_unpack_gate(t, dev, queue)
+                fc_dw_gate(t, dev, queue, false)
+                fc_dw_gate(t, dev, queue, true)
                 tower_gather_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the

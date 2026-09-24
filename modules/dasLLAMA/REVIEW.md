@@ -31,9 +31,11 @@ and its cross target (a build for another platform) are part of it.
 **A diff that adds a kernel, loop or call path the runtime re-enters per token, per frame, per
 prefill quantum - one batch of prompt tokens the prefill path processes in a single pass - or per
 media encode (an image, a video frame, an audio chunk), adds, moves, renames or removes a
-`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or changes a
-measurement driver under `benchmarks/`, `harness/` or `performance/`, wherever the diff puts it,
-applies `REVIEW_HOT_PATH.md` (beside this file) together with this list.**
+`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, changes a
+measurement driver under `benchmarks/`, `harness/` or `performance/`, or adds or changes a
+function under `tests/`, `harness/`, `benchmarks/` or `performance/` that calls into a region
+entry, wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with
+this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -130,8 +132,10 @@ puts that race's rows, each naming its candidate, in the PR body or the change's
 `PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
 else that changed between the runs, so they cannot pick a candidate.
 
-**A diff that adds an allocation whose size grows with a scaling count states that size in bytes,
-at the largest shape the code path serves, in a `PERF_LEDGER.md` row.** A scaling count is a count
+**A diff that adds an allocation whose size grows with a scaling count states that size in bytes
+in a `PERF_LEDGER.md` row: at the largest shape the code path accepts, or, where the path accepts
+any value of the count, as a formula in the count with its value at two shapes that differ in
+it - a shape being one setting of the scaling counts.** A scaling count is a count
 the model file sets, how many tokens one step computes at once, how many rows one media encode
 feeds (an image's patches, a clip's frames), or how many regions one buffer is split into (the K/V
 cache's device copy, one region per request served at once; an MoE dispatch's expert regions).

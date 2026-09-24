@@ -5,6 +5,7 @@ require strings
 require dasllama/dasllama_whisper
 require dasllama/dasllama_parakeet
 require dasllama/dasllama_canary
+require daslib/defer
 require dasllama/dasllama_gemma4a
 require dasllama/dasllama_qwen3a
 require dasllama/dasllama_audio   // audio_tower_gpu_serves — the qwen3a lane policy's own predicate
@@ -89,6 +90,19 @@ def test_audio_lane_knobs(t : T?) {
         tt |> success(!canary_enc_serves_q8(), "pinned exact")
         reset_canary_enc_q8()
         tt |> equal(canary_enc_serves_q8(), !canary_gpu_serves(), "reset returns to the policy")
+    }
+    t |> run("parakeet: the q8 lane pin, and reset back to the policy") @(tt : T?) {
+        tt |> equal(parakeet_serves_q8(), !parakeet_gpu_serves(), "the default follows the Metal FastConformer driver")
+        {
+            defer() {
+                reset_parakeet_q8()
+            }
+            set_parakeet_q8(true)
+            tt |> success(parakeet_serves_q8(), "pinned q8")
+            set_parakeet_q8(false)
+            tt |> success(!parakeet_serves_q8(), "pinned exact")
+        }
+        tt |> equal(parakeet_serves_q8(), !parakeet_gpu_serves(), "the pin's scope ends on the policy")
     }
 }
 

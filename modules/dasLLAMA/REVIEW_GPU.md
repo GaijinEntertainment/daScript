@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_MTP_DECODE.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`.
-Planned work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
+for Vulkan.
 
 **A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
 `followup_metal.md` or `followup_vulkan.md`.
@@ -72,11 +72,11 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that divides one op's work across two or more dispatches - on a new path or on one that
-had a single dispatch - gates the path in the same change on the quantity the split divides (its
-K, key span or row count), or on the path's work size when it divides none of these. The gate's
-threshold, or the decision to ship no gate, comes from measurements at the smallest and the
-largest value the quantity takes on the path, both in the PR body; no gate ships only where the
+**A diff that divides one op's work across two or more dispatches - on a new path or on one that had
+a single dispatch - gates the path in the same change on the quantity the split divides (its K, key
+span or row count), or on the path's work size when it divides none of these. The gate's threshold,
+or the decision to ship no gate, comes from measurements at the smallest and the largest value the
+quantity takes on the workloads the path serves, both in the PR body; no gate ships only where the
 split wins at both ends.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at every
@@ -143,8 +143,10 @@ seat Metal fills, a function one backend exports with no counterpart under the o
 prefix - the same name after the prefix, the same role - called by code outside that backend's
 files, a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation the other lens lacks,
 or a decode or prefill behavior only one backend's drivers provide lands its own entry in
-`ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change, even when the list
-already carries one of the same class.** One backend serving the same path faster or slower is
+`ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change - a tower-driver hook,
+a `register_<family>_gpu` call the tower driver makes for one model family, lands in that
+section's role-table tower row instead - even when the list already carries one of the same
+class.** One backend serving the same path faster or slower is
 not such a change.
 
 **A change that can alter what a served GPU decode or prefill path computes or selects ships
@@ -164,9 +166,9 @@ together show the change cannot alter what the path computes or selects.
 **A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - applies
 `REVIEW_GPU_PARITY.md` (beside this file) for what counts as evidence, together with this list.**
 
-**A diff that adds a call site handing a whole served GPU decode or prefill call to the CPU
-path is a defect - it ships the device path in the same change.** A call that runs on the CPU
-gives the user who selected the GPU a fraction of its speed.
+**A diff that adds a call site handing a whole GPU decode or prefill call the device served before
+the diff to the CPU path is a defect - it ships the device path in the same change.** A call that
+runs on the CPU gives the user who selected the GPU a fraction of its speed.
 
 **A diff that lands a model family, a backend arm or a session shape whose batched decode step
 reads a weight plane once per row rather than once for all the step's rows, for any model it

@@ -39,6 +39,19 @@ best-effort: it answers false (or -1) on any shape, knob, quant-mode or device d
 CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
 `metal_tower_f16_encodes`), never from "the model ran".
 
+The FastConformer chain (canary and parakeet share it: one context, one block body over the
+canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
+depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM
+builder, because a per-row kernel walking every key is the encode's cost past a minute of audio:
+a pack writes the head's (Q+u), (Q+v), K_h, V_h^T and pos_h panels contiguous and zero-padded to
+the GEMM lattice (rows to 32, keys and rel positions to 64), two GEMMs give the content scores
+(Q+u)*K_h^T and the rel scores (Q+v)*pos_h^T, one row kernel adds the rel score at the CPU form's
+shift (npos - 1 - q + k), scales, and takes the softmax with zeros in every pad, a third GEMM
+gives P*V_h into the head's slot of the AV rows, and one unpack per layer writes the compact
+output. The score slabs are per-head scratch reused head after head - each head's writer is
+encoded after the previous head's reader. The head size is held to a multiple of 64 (the AV
+GEMM's column lattice) and the head count to the per-head uniform seats.
+
 ### 2.2aq The Vulkan tower's row classes and attention routes {#vk-tower-routes}
 
 Every vision block is a handful of row operations around two tiles the LLM rails already own -

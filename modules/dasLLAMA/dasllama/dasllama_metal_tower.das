@@ -20,6 +20,7 @@ require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-cla
 require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Conformer block loop
 require dasllama/dasllama_canary    // CanaryEncoder/CanaryState — the FastConformer block loop
+require dasllama/dasllama_parakeet  // ParakeetModel/ParakeetState — the same chain, parakeet's blob layout
 require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
@@ -575,16 +576,7 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         g4a_blocks_body(enc, t, c)
     }
-    var served = false
-    if (ran) {
-        unsafe {
-            memcpy(addr(s.x[0]), metal_buffer_contents(c.bx), uint64(npos * d * 4l))
-        }
-        g_tower_encodes++
-        g_tower_rows += npos
-        g_tower_blocks += t.n_layer
-        served = true
-    }
+    let served = tw_readback(c, ran, s.x, d, t.n_layer)
     g4a_ctx_release(c)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
@@ -592,98 +584,222 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     return true
 }
 
-//! The canary FastConformer driver's shared GPU context - g4a's shape with the rel table in place of the windowed RPE, and no clamp records.
-struct private CnGpuCtx : TwGpuCtx {
+let private FC_MAX_HEADS = 16   //!< the per-head uniform seats; the shape gate holds n_head to it
+
+//! The FastConformer driver's shared GPU context (canary and parakeet) - g4a's shape with the rel table in place of the windowed RPE, and no clamp records.
+struct private FcGpuCtx : TwGpuCtx {
     bposl : MetalBuffer?
     u_nk : MetalBuffer?
     u_np : MetalBuffer?
-    ka : CnAttnArgs
+    ka : FcAttnArgs
     wwp : int64
     ww : int64
+    n_head : int64
+    tap_major : bool      //!< which depthwise stamp serves: parakeet's tap-major taps or canary's channel-major
+    nkp : int64
+    wwpad : int64
+    bqu : MetalBuffer?
+    bqv : MetalBuffer?
+    bkh : MetalBuffer?
+    bvt : MetalBuffer?
+    bph : MetalBuffer?
+    bsc : MetalBuffer?
+    bsr : MetalBuffer?
+    bp : MetalBuffer?
+    boh : MetalBuffer?
+    u_heads : MetalBuffer? [FC_MAX_HEADS]
+    u_hs : MetalBuffer?
+    u_nkp : MetalBuffer?
+    u_wwpad : MetalBuffer?
+    bytes_head : uint64
+    bytes_kh : uint64
+    bytes_ph : uint64
+    bytes_sc : uint64
+    bytes_sr : uint64
+    bytes_oh : uint64
 }
 
-def private cn_ctx_make(t : CanaryEncoder; var st : CanaryState; npos, ww : int64) : CnGpuCtx {
-    let d = t.d_model
-    let dh = d / t.n_head
-    var c = CnGpuCtx(wwp = (ww + 31l) / 32l * 32l, ww = ww)
-    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), t.image_map != null,
-        npos, d, t.n_ff, t.eps, 0.5, uint64(c.wwp * d * 4l))
+def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int64; eps : float;
+                        pos_emb : array<float>; npos, ww : int64; tap_major : bool) : FcGpuCtx {
+    let dh = d / n_head
+    var c = FcGpuCtx(wwp = (ww + 31l) / 32l * 32l, ww = ww, n_head = n_head, tap_major = tap_major,
+        nkp = (npos + 63l) / 64l * 64l, wwpad = (ww + 63l) / 64l * 64l)
+    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
+        npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
     c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     unsafe {
         //! the sinusoidal rel table, zero-padded to the GEMM's row floor
         var pp = reinterpret<float?>(metal_buffer_contents(c.bpos))
-        memcpy(reinterpret<uint8?>(pp), addr(st.pos_emb[0]), ww * d * 4l)
+        memcpy(reinterpret<uint8?>(pp), addr(pos_emb[0]), ww * d * 4l)
         for (i in range64(ww * d, c.wwp * d)) {
             pp[i] = 0.0
         }
     }
-    c.u_nk = uniform_u32(uint(t.conv_kernel))
+    c.u_nk = uniform_u32(uint(nk))
     c.u_np = uniform_u32(uint(npos))
-    c.ka = CnAttnArgs(d = uint(d), hs = uint(dh), npos = uint(npos), scale = 1.0 / sqrt(float(dh)))
-    return c
+    c.ka = fc_attn_args(d, dh, npos)
+    c.bytes_head = uint64(c.mp * dh * 4l)
+    c.bytes_kh = uint64(c.nkp * dh * 4l)
+    c.bytes_ph = uint64(c.wwpad * dh * 4l)
+    c.bytes_sc = uint64(c.mp * c.nkp * 4l)
+    c.bytes_sr = uint64(c.mp * c.wwpad * 4l)
+    c.bytes_oh = uint64(n_head * c.mp * dh * 4l)
+    c.bqu = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_head)
+    c.bqv = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_head)
+    c.bkh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kh)
+    c.bvt = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kh)
+    c.bph = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ph)
+    c.bsc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sc)
+    c.bsr = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sr)
+    c.bp = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sc)
+    c.boh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_oh)
+    for (h in range64(n_head)) {
+        c.u_heads[h] = uniform_u32(uint(h))
+    }
+    c.u_hs = uniform_u32(uint(dh))
+    c.u_nkp = uniform_u32(uint(c.nkp))
+    c.u_wwpad = uniform_u32(uint(c.wwpad))
+    return <- c
 }
 
-def private cn_ctx_release(var c : CnGpuCtx) {
+def private fc_ctx_release(var c : FcGpuCtx) {
     pool_release(g_tw_pool, c.bposl, c.bytes_pos)
     pool_release(g_upool, c.u_nk, 4ul)
     pool_release(g_upool, c.u_np, 4ul)
+    pool_release(g_tw_pool, c.bqu, c.bytes_head)
+    pool_release(g_tw_pool, c.bqv, c.bytes_head)
+    pool_release(g_tw_pool, c.bkh, c.bytes_kh)
+    pool_release(g_tw_pool, c.bvt, c.bytes_kh)
+    pool_release(g_tw_pool, c.bph, c.bytes_ph)
+    pool_release(g_tw_pool, c.bsc, c.bytes_sc)
+    pool_release(g_tw_pool, c.bsr, c.bytes_sr)
+    pool_release(g_tw_pool, c.bp, c.bytes_sc)
+    pool_release(g_tw_pool, c.boh, c.bytes_oh)
+    for (h in range64(c.n_head)) {
+        pool_release(g_upool, c.u_heads[h], 4ul)
+    }
+    pool_release(g_upool, c.u_hs, 4ul)
+    pool_release(g_upool, c.u_nkp, 4ul)
+    pool_release(g_upool, c.u_wwpad, 4ul)
     tw_ctx_release(c)
 }
 
-[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private cn_blocks_body(enc : MetalComputeEncoder?; t : CanaryEncoder; c : CnGpuCtx) {
-    let d = t.d_model
-    let ff = t.n_ff
-    let npos = c.npos
-    let mp = c.mp
-    var ka = c.ka
-    for (l in range64(t.n_layer)) {
-        let lo = t.layers[l]
-        enc_ln(enc, c.bx, c.bblob, uint64(lo.nf1_w * 4l), c.bblob, uint64(lo.nf1_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
-        enc_f32_mm(enc, c.bblob, uint64(lo.ff1a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
-        enc_add_bias_rows(enc, c.bh, 0ul, c.bblob, uint64(lo.ff1a_b * 4l), c.u_ff, c.u_totff, npos * ff)
-        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
-        enc_f32_mm(enc, c.bblob, uint64(lo.ff1b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.ff1b_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
-        enc_ln(enc, c.bx, c.bblob, uint64(lo.nat_w * 4l), c.bblob, uint64(lo.nat_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
-        enc_f32_mm(enc, c.bblob, uint64(lo.q_w * 4l), c.bxb, c.bq, 0ul, c.u_d, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bq, 0ul, c.bblob, uint64(lo.q_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_f32_mm(enc, c.bblob, uint64(lo.k_w * 4l), c.bxb, c.bk, 0ul, c.u_d, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bk, 0ul, c.bblob, uint64(lo.k_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_f32_mm(enc, c.bblob, uint64(lo.v_w * 4l), c.bxb, c.bv, 0ul, c.u_d, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bv, 0ul, c.bblob, uint64(lo.v_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_f32_mm(enc, c.bblob, uint64(lo.pos_w * 4l), c.bpos, c.bposl, 0ul, c.u_d, c.u_d, c.wwp, d)
-        enc_cn_attn(enc, c.bq, c.bk, c.bv, c.bao, c.bposl, c.bblob, uint64(lo.bias_u * 4l),
-            c.bblob, uint64(lo.bias_v * 4l), ka, c.np64, t.n_head)
-        enc_f32_mm(enc, c.bblob, uint64(lo.o_w * 4l), c.bao, c.bxb, 0ul, c.u_d, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.o_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
-        enc_ln(enc, c.bx, c.bblob, uint64(lo.ncv_w * 4l), c.bblob, uint64(lo.ncv_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
-        enc_f32_mm(enc, c.bblob, uint64(lo.pw1_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_2d, mp, 2l * d)
-        enc_add_bias_rows(enc, c.bh, 0ul, c.bblob, uint64(lo.pw1_b * 4l), c.u_2d, c.u_tot2d, npos * 2l * d)
-        enc_g4a_glu(enc, c.bh, c.bglu, c.u_d, c.u_totd, npos * d)
-        enc_cn_dw(enc, c.bglu, c.bcvd, c.bblob, uint64(lo.dw_w * 4l), c.bblob, uint64(lo.bn_w * 4l),
-            c.bblob, uint64(lo.bn_b * 4l), c.u_d, c.u_nk, c.u_np, c.u_totd, npos * d)
-        enc_f32_mm(enc, c.bblob, uint64(lo.pw2_w * 4l), c.bcvd, c.bxb, 0ul, c.u_d, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.pw2_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
-        enc_ln(enc, c.bx, c.bblob, uint64(lo.nf2_w * 4l), c.bblob, uint64(lo.nf2_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
-        enc_f32_mm(enc, c.bblob, uint64(lo.ff2a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
-        enc_add_bias_rows(enc, c.bh, 0ul, c.bblob, uint64(lo.ff2a_b * 4l), c.u_ff, c.u_totff, npos * ff)
-        enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
-        enc_f32_mm(enc, c.bblob, uint64(lo.ff2b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
-        enc_add_bias_rows(enc, c.bxb, 0ul, c.bblob, uint64(lo.ff2b_b * 4l), c.u_d, c.u_totd, npos * d)
-        enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
-        enc_ln(enc, c.bx, c.bblob, uint64(lo.nout_w * 4l), c.bblob, uint64(lo.nout_b * 4l), c.bx, c.u_d, c.u_eps, npos)
+//! a GEMM's bias row-add, skipped where the family has none (a negative offset - parakeet's GEMMs carry no bias)
+def private fc_bias(enc : MetalComputeEncoder?; c : FcGpuCtx; buf : MetalBuffer?; boff : int64; u_w, u_tot : MetalBuffer?; n : int64) {
+    if (boff >= 0l) {
+        enc_add_bias_rows(enc, buf, 0ul, c.bblob, uint64(boff * 4l), u_w, u_tot, n)
     }
 }
 
-def private cn_shape_ok(t : CanaryEncoder) : bool {
-    let d = t.d_model
-    let dh = t.n_head > 0l ? d / t.n_head : 0l
-    return (!t.q8 && d % 64l == 0l && t.n_ff % 64l == 0l && t.n_head * dh == d
-        && dh >= 1l && dh <= 128l && t.conv_kernel % 2l == 1l)
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private fc_attention(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerOffs) {
+    var ka = c.ka
+    let dh = int64(ka.hs)
+    let mp = c.mp
+    for (h in range64(c.n_head)) {
+        enc_fc_pack(enc, c.bq, c.bk, c.bv, c.bposl, c.bblob, uint64(lo.bias_u * 4l), c.bblob, uint64(lo.bias_v * 4l),
+            c.bqu, c.bqv, c.bkh, c.bvt, c.bph, ka, c.u_heads[h], c.wwpad * dh)
+        enc_f32_mm(enc, c.bkh, 0ul, c.bqu, c.bsc, 0ul, c.u_hs, c.u_nkp, mp, c.nkp)
+        enc_f32_mm(enc, c.bph, 0ul, c.bqv, c.bsr, 0ul, c.u_hs, c.u_wwpad, mp, c.wwpad)
+        enc_fc_softmax(enc, c.bsc, c.bsr, c.bp, ka, mp)
+        enc_f32_mm(enc, c.bvt, 0ul, c.bp, c.boh, uint64(h) * c.bytes_head, c.u_nkp, c.u_hs, mp, dh)
+    }
+    enc_fc_unpack(enc, c.boh, c.bao, ka, mp * int64(ka.d))
+}
+
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private fc_block(enc : MetalComputeEncoder?; c : FcGpuCtx; lo : CanaryLayerOffs; d, ff : int64) {
+    let npos = c.npos
+    let mp = c.mp
+    enc_ln(enc, c.bx, c.bblob, uint64(lo.nf1_w * 4l), c.bblob, uint64(lo.nf1_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
+    enc_f32_mm(enc, c.bblob, uint64(lo.ff1a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
+    fc_bias(enc, c, c.bh, lo.ff1a_b, c.u_ff, c.u_totff, npos * ff)
+    enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
+    enc_f32_mm(enc, c.bblob, uint64(lo.ff1b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
+    fc_bias(enc, c, c.bxb, lo.ff1b_b, c.u_d, c.u_totd, npos * d)
+    enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
+    enc_ln(enc, c.bx, c.bblob, uint64(lo.nat_w * 4l), c.bblob, uint64(lo.nat_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
+    enc_f32_mm(enc, c.bblob, uint64(lo.q_w * 4l), c.bxb, c.bq, 0ul, c.u_d, c.u_d, mp, d)
+    fc_bias(enc, c, c.bq, lo.q_b, c.u_d, c.u_totd, npos * d)
+    enc_f32_mm(enc, c.bblob, uint64(lo.k_w * 4l), c.bxb, c.bk, 0ul, c.u_d, c.u_d, mp, d)
+    fc_bias(enc, c, c.bk, lo.k_b, c.u_d, c.u_totd, npos * d)
+    enc_f32_mm(enc, c.bblob, uint64(lo.v_w * 4l), c.bxb, c.bv, 0ul, c.u_d, c.u_d, mp, d)
+    fc_bias(enc, c, c.bv, lo.v_b, c.u_d, c.u_totd, npos * d)
+    enc_f32_mm(enc, c.bblob, uint64(lo.pos_w * 4l), c.bpos, c.bposl, 0ul, c.u_d, c.u_d, c.wwp, d)
+    fc_attention(enc, c, lo)
+    enc_f32_mm(enc, c.bblob, uint64(lo.o_w * 4l), c.bao, c.bxb, 0ul, c.u_d, c.u_d, mp, d)
+    fc_bias(enc, c, c.bxb, lo.o_b, c.u_d, c.u_totd, npos * d)
+    enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
+    enc_ln(enc, c.bx, c.bblob, uint64(lo.ncv_w * 4l), c.bblob, uint64(lo.ncv_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
+    enc_f32_mm(enc, c.bblob, uint64(lo.pw1_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_2d, mp, 2l * d)
+    fc_bias(enc, c, c.bh, lo.pw1_b, c.u_2d, c.u_tot2d, npos * 2l * d)
+    enc_g4a_glu(enc, c.bh, c.bglu, c.u_d, c.u_totd, npos * d)
+    if (c.tap_major) {
+        enc_pk_dw(enc, c.bglu, c.bcvd, c.bblob, uint64(lo.dw_w * 4l), c.bblob, uint64(lo.bn_w * 4l),
+            c.bblob, uint64(lo.bn_b * 4l), c.u_d, c.u_nk, c.u_np, c.u_totd, npos * d)
+    } else {
+        enc_cn_dw(enc, c.bglu, c.bcvd, c.bblob, uint64(lo.dw_w * 4l), c.bblob, uint64(lo.bn_w * 4l),
+            c.bblob, uint64(lo.bn_b * 4l), c.u_d, c.u_nk, c.u_np, c.u_totd, npos * d)
+    }
+    enc_f32_mm(enc, c.bblob, uint64(lo.pw2_w * 4l), c.bcvd, c.bxb, 0ul, c.u_d, c.u_d, mp, d)
+    fc_bias(enc, c, c.bxb, lo.pw2_b, c.u_d, c.u_totd, npos * d)
+    enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
+    enc_ln(enc, c.bx, c.bblob, uint64(lo.nf2_w * 4l), c.bblob, uint64(lo.nf2_b * 4l), c.bxb, c.u_d, c.u_eps, npos)
+    enc_f32_mm(enc, c.bblob, uint64(lo.ff2a_w * 4l), c.bxb, c.bh, 0ul, c.u_d, c.u_ff, mp, ff)
+    fc_bias(enc, c, c.bh, lo.ff2a_b, c.u_ff, c.u_totff, npos * ff)
+    enc_g4a_silu(enc, c.bh, 0ul, c.u_totff, npos * ff)
+    enc_f32_mm(enc, c.bblob, uint64(lo.ff2b_w * 4l), c.bh, c.bxb, 0ul, c.u_ff, c.u_d, mp, d)
+    fc_bias(enc, c, c.bxb, lo.ff2b_b, c.u_d, c.u_totd, npos * d)
+    enc_g4a_axpy(enc, c.bx, c.bxb, c.u_totd, c.u_half, npos * d)
+    enc_ln(enc, c.bx, c.bblob, uint64(lo.nout_w * 4l), c.bblob, uint64(lo.nout_b * 4l), c.bx, c.u_d, c.u_eps, npos)
+}
+
+def private fc_shape_ok(d, n_ff, n_head, nk, npos, ww : int64) : bool {
+    let dh = n_head > 0l ? d / n_head : 0l
+    return (d % 64l == 0l && n_ff % 64l == 0l && n_head * dh == d
+        && dh % 64l == 0l && n_head <= int64(FC_MAX_HEADS) && nk % 2l == 1l && npos >= 1l && ww == 2l * npos - 1l)
+}
+
+//! A served encode's tail: the residual rows back to the host and the engage counters; false when the command buffer failed.
+def private tw_readback(c : TwGpuCtx; ran : bool; var x : array<float>; d, n_layer : int64) : bool {
+    if (!ran) {
+        return false
+    }
+    unsafe {
+        memcpy(addr(x[0]), metal_buffer_contents(c.bx), uint64(c.npos * d * 4l))
+    }
+    g_tower_encodes++
+    g_tower_rows += c.npos
+    g_tower_blocks += n_layer
+    return true
+}
+
+//! The FastConformer chain from the shape gate on - context, upload, the block loop over the
+//! family's layer offsets, readback - as ONE command buffer on the f32 blob; the family hook
+//! keeps its knob and quant-mode declines and the front stays CPU.
+def private fc_run(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk, n_layer : int64; eps : float; pos_emb : array<float>;
+                   var x : array<float>; npos, ww : int64; tap_major : bool; layer : block<(l : int64) : CanaryLayerOffs>) : bool {
+    if (!fc_shape_ok(d, n_ff, n_head, nk, npos, ww)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !pf_fc_ready(tap_major)) {   //! per-encode: re-arms after any shutdown seat
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()   //! pin/commit before the first submission (the post-CPU-front slack)
+    var c <- fc_ctx_make(blob, mapped, d, n_ff, n_head, nk, eps, pos_emb, npos, ww, tap_major)
+    upload_rows_padded(c.bx, unsafe(addr(x[0])), npos, c.mp, d)
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        for (l in range64(n_layer)) {
+            fc_block(enc, c, invoke(layer, l), d, n_ff)
+        }
+    }
+    let served = tw_readback(c, ran, x, d, n_layer)
+    fc_ctx_release(c)
+    if (!served) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
 }
 
 //! The canary FastConformer block loop as ONE command buffer on the f32 blob; the subsample front, mel and final proj stay CPU.
@@ -695,35 +811,40 @@ def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, w
     if (t.q8) {
         return tw_decline(MetalTowerDecline.quant_mode)
     }
-    if (!cn_shape_ok(t) || npos < 1l || ww != 2l * npos - 1l) {
-        return tw_decline(MetalTowerDecline.shape)
+    return fc_run(t.blob, t.image_map != null, t.d_model, t.n_ff, t.n_head, t.conv_kernel, t.n_layer, t.eps, st.pos_emb,
+        st.x, npos, ww, false) $(l) {
+        return t.layers[l]
     }
-    if (!metal_tower_init() || !pf_cn_ready()) {   // per-encode: re-arms after any shutdown seat
-        return tw_decline(MetalTowerDecline.device)
+}
+
+//! Parakeet's block offsets in the shared chain's layout: the same regions, no GEMM biases (-1).
+def private pk_fc_layer(lo : PkLayerOffs) : CanaryLayerOffs {
+    return CanaryLayerOffs(nf1_w = lo.nf1_w, nf1_b = lo.nf1_b,
+        ff1a_w = lo.ff1a_w, ff1a_b = -1l, ff1b_w = lo.ff1b_w, ff1b_b = -1l,
+        nat_w = lo.nat_w, nat_b = lo.nat_b,
+        q_w = lo.q_w, q_b = -1l, k_w = lo.k_w, k_b = -1l, v_w = lo.v_w, v_b = -1l, o_w = lo.o_w, o_b = -1l,
+        pos_w = lo.pos_w, bias_u = lo.bias_u, bias_v = lo.bias_v,
+        ncv_w = lo.ncv_w, ncv_b = lo.ncv_b,
+        pw1_w = lo.pw1_w, pw1_b = -1l, dw_w = lo.dw_w, dw_b = -1l,
+        bn_w = lo.bn_w, bn_b = lo.bn_b, bn_mean = lo.bn_mean, bn_var = lo.bn_var,
+        pw2_w = lo.pw2_w, pw2_b = -1l,
+        nf2_w = lo.nf2_w, nf2_b = lo.nf2_b,
+        ff2a_w = lo.ff2a_w, ff2a_b = -1l, ff2b_w = lo.ff2b_w, ff2b_b = -1l,
+        nout_w = lo.nout_w, nout_b = lo.nout_b)
+}
+
+[hot_path]
+def private metal_parakeet_blocks(t : ParakeetModel; var st : ParakeetState; npos, ww : int64) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
     }
-    residency_flush()   // pin/commit before the first submission (the post-CPU-front slack)
-    let d = t.d_model
-    var c <- cn_ctx_make(t, st, npos, ww)
-    upload_rows_padded(c.bx, unsafe(addr(st.x[0])), npos, c.mp, d)
-    var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        cn_blocks_body(enc, t, c)
+    if (t.q8) {
+        return tw_decline(MetalTowerDecline.quant_mode)
     }
-    var served = false
-    if (ran) {
-        unsafe {
-            memcpy(addr(st.x[0]), metal_buffer_contents(c.bx), uint64(npos * d * 4l))
-        }
-        g_tower_encodes++
-        g_tower_rows += npos
-        g_tower_blocks += t.n_layer
-        served = true
+    return fc_run(t.blob, t.image_map != null, t.n_state, 4l * t.n_state, t.n_head, t.n_conv_kernel, t.n_layer, t.eps, st.pos_emb,
+        st.x, npos, ww, true) $(l) {
+        return pk_fc_layer(pk_layer_offsets(t, l))
     }
-    cn_ctx_release(c)
-    if (!served) {
-        return tw_decline(MetalTowerDecline.gpu_error)
-    }
-    return true
 }
 
 //! The whole-chunk gemma4a driver: from the CPU-windowed st.xw frames, ONE command buffer runs
@@ -2178,4 +2299,5 @@ def dasllama_metal_tower_register {
     register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
     register_canary_gpu(@@metal_canary_blocks, @@metal_tower_serves)
+    register_parakeet_gpu(@@metal_parakeet_blocks, @@metal_tower_serves)
 }

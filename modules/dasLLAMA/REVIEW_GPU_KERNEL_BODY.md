@@ -33,10 +33,16 @@ fixed-size chunks with no partial-last-chunk check) gates each dispatch site of 
 that site's own K, the extent that site's loop steps along, never on one gate covering every
 site.**
 
-**A dispatch site's alignment gate whose divisor is neither the chunk the kernel that site
-dispatches steps nor a multiple of that chunk the site forces by splitting its K extent across
-dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
-a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
+**A site's alignment gate on a value that site uses only as its K extent divides by the chunk its
+kernel steps, or by the multiple of that chunk the site's split of K across dispatches forces;
+any other divisor is a defect.** A gate that checks less than the kernel's chunk silently drops a
+tail; a gate that checks more than the site's own split forces never sees a shape the kernel could
+serve.
+
+**A value that dispatch sites read in more than one role - K at one, the output extent at another -
+is gated, at every one of those sites, on the least common multiple of the divisors each role
+requires; a gate on it at one role's divisor alone is a defect.** A gate at one role's divisor
+admits a shape that misaligns the other role's kernel, which then drops that site's tail.
 
 **Weakening this folder's `tests/test_metal_float_a_gate.das` - the gate that checks the MSL
 emitter refuses a float `matmul2d` A operand without the `[metal_kernel(float_a_ok=true)]`
@@ -82,7 +88,8 @@ that showing for the dimension it names; an unchecked claim that an extent divid
 A padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
 corrupts real rows.
 
-**Never let a pad row reach a `matmul2d` or a staged cooperative tile as an operand; stage it as
-zero, or bound the walk at the live row count. A pad row is a row past a buffer's live count that
-the dispatch producing the buffer did not write.** A pad row holds recycled pool bytes, so one
-used as an operand multiplies stale values (NaN included) into every real row of the tile.
+**Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
+axis - reach a `matmul2d` or a staged cooperative tile as an operand; stage it as zero, or bound
+the walk at the live row count. A pad row is a row past a buffer's live count that the dispatch
+producing the buffer did not write.** A pad along the reduction axis holds recycled pool bytes,
+so it multiplies stale values (NaN included) into every live output row.

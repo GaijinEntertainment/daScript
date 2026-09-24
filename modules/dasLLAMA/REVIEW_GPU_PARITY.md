@@ -16,10 +16,12 @@ control is the input one token off, or one output element overwritten with a wro
 --parity` (`performance/model_specs.das`'s fixed model list), or a cell run through
 `tests/run.das`.**
 
-**A `tests/run.das` parity cell compares in one of four forms: the logits within a tolerance; a
-counting prompt's tokens exactly; where the changed path produces a token id and no logits row,
-the served ids token for token against the host's `parallel_argmax` over the same logits; for a
-tower, the encoder's output rows against the CPU chain's rows over one fixed canvas or clip.**
+**A `tests/run.das` parity cell compares in one of these forms, and a cell comparing any other way
+is not parity evidence: the logits within a tolerance; a counting prompt's tokens exactly; where the
+changed path produces a token id and no logits row, the served ids token for token against the
+host's `parallel_argmax` over the same logits; for a tower, the encoder's output rows against the
+CPU chain's rows over one fixed canvas or clip, or its served transcript exactly equal to the CPU
+chain's over the same clip.**
 
 **A `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md` entry that settles a parity
 fix names the run its evidence came from, and that run is one this checklist admits as parity
@@ -29,10 +31,12 @@ evidence.**
 changed call: a log line naming the serving tier, or a cell assert that the serving driver's own
 counter rose across that call.**
 
-**A Metal run is armed by `--ngl` on the command line or by `select_decode_override("metal")` /
-`select_prefill_override("metal")` in process, and shows it by the driver's counters rising
+**Metal parity or driver-against-itself evidence counts only when the Metal driver's counters rose
 across the run - the step counters `metal_decode_stats`, `metal_batch_decode_stats` and
-`metal_prefill_stats`, or `metal_tower_stats`'s encodes for the tower driver.**
+`metal_prefill_stats`, or `metal_tower_stats`'s encodes for the tower driver.** Metal arms by
+`--ngl` on the command line, by `select_decode_override("metal")` /
+`select_prefill_override("metal")` in process, or - for the tower driver - unless
+`set_metal_tower(false)` / `DASLLAMA_METAL_TOWER=0` turns it off.
 
 **A Vulkan run is armed by `DASLLAMA_GPU=1` - never `--ngl` - and shows it by a log line naming
 the tier that serves the changed path: `resident driver armed` for the whole-model driver; for
@@ -52,5 +56,6 @@ Vulkan driver naming a call it handed back to the CPU path.
 **Driver-against-itself evidence - two GPU-served arms of one model compared against each other -
 is evidence for a `PERF_LEDGER.md` row, never parity evidence.**
 
-**A diff that widens a bar an instrument holds names, in the same change, the reading the new
-bar comes from and the box that read it.**
+**A diff that sets or widens a bar held by `harness/parity.das`, `benchmarks/lcpp_bench.das
+--parity` or a `tests/run.das` cell names, in a `PERF_LEDGER.md` row in the same change, the
+reading the bar comes from and the box that read it.**

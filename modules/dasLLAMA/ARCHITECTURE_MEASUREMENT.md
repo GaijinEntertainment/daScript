@@ -186,8 +186,9 @@ whose tower silently falls back fails instead of publishing a CPU wall under a G
 Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its
 own spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe takes
 `-ngl 99`, and the NeMo bench script takes `--device mps`. The remaining two reference legs
-have no pair - the parakeet exe measures slower on the GPU, and the ONNX export is CPU-only -
-so their das rows stand alone in the CPU category.
+have no pair - the rig runs the parakeet exe with `-ng`, though its Metal arm is the faster one
+(`PERF_LEDGER.md`), and the ONNX export is CPU-only - so their das rows stand alone in the CPU
+category.
 
 The media-chat reference exe is built as the bench exe's sibling in one reference worktree:
 `benchmarks/setup_lcpp_ref.das` builds both targets, because a bench-only build leaves the

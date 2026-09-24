@@ -186,11 +186,10 @@ file's `[init]`, and a claim that needs the lane unset establishes it with the f
 call - `reset_<family>_q8`, canary's `reset_canary_enc_q8`, whisper's `set_asr_fp32(false)` and
 `set_asr_tower_fp32(false)`.**
 
-**A cell returns with every family pin unset - whether or not this cell set one - and every
-other driver setter it touched back where it found it; the unset call is the family's own -
-`reset_<family>_q8`, canary's `reset_canary_enc_q8`, whisper's `set_asr_fp32(false)` and
-`set_asr_tower_fp32(false)` - returning the family to its policy default.** Why a hook left set changes what the next cell
-measures is `CLAUDE.md`'s "Metal fixtures".
+**A cell that sets a family pin or a driver setter - directly, through a helper it calls, or
+through a loader parameter that takes the lane - returns with that pin unset through the family's
+own unset call and that setter back where it found it.** A pin left set makes the next cell measure
+this cell's lane, not its own.
 
 **A cell claiming a family serving lane pins it through the family's own lane knobs -
 `set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` -
@@ -204,10 +203,12 @@ hardcoded lane.** The default lane differs per box.
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.
 
-**A CPU-vs-GPU arm on Metal - one comparing the two lanes' outputs, not one whose subject is
-the GPU lane's decline - runs its CPU stages on a PLANAR model (the non-blob form, the only
-one CPU inference reads) and the stages a decode override selects on that model's blob twin
-(`blob_twin(t, path, seq_cap)`, `_metal_blob_twin.das`), in one session.** The planar
+**A CPU-vs-GPU cell on Metal serving an LLM `Model` through a decode or prefill override - the
+Metal driver hook that runs the model's decode or prefill stages on the GPU - one comparing the
+two routes' outputs, not one whose subject is the GPU route's decline, runs its CPU stages on a
+PLANAR model (the non-blob form, the only one CPU inference reads) and the stages the override
+selects on that model's blob twin (`blob_twin(t, path, seq_cap)`, `_metal_blob_twin.das`), in one
+session.** The planar
 model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` -
@@ -251,7 +252,7 @@ maxdiff on green as well as red, is a defect.**
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
 tolerance, or past a floor or ceiling, ships in the same change a control that lands outside that
 bound in every cell that holds it; a control changes an input the computation reads (a zeroed
-weight region, a poisoned element, a mechanism unhooked) and re-runs the compare, so a value
+weight region, a poisoned input element, a mechanism disabled) and re-runs the compare, so a value
 added to the output after the fact is not one.** A bound nothing has exceeded where it is applied
 is not known to discriminate there.
 
@@ -266,12 +267,11 @@ the GEMM weights (`wblob`), so zeroing that buffer alone is a valid control ther
 that also reads the f32 plane (`fblob`) needs both zeroed. A poison the served route never
 reads passes on a broken kernel.
 
-**An ASR cell comparing transcripts across two serving lanes, other than a crowned lane
-against its tensor twin, asserts TOKEN equality.** A crowned lane is the kernel form the tuner
-measured fastest and armed as the serving one; its tensor twin is the same kernel written on
-Metal's tensor primitives.
-
-**An ASR cell comparing a crowned lane against its tensor twin asserts WORD equality** - the
+**An ASR cell comparing transcripts across two serving lanes - a lane is a weight format the
+family serves, one chain (CPU or device) over one format, or one kernel form of one format -
+asserts WORD equality when the pair is a crowned kernel form and its tensor twin, and TOKEN
+equality otherwise.** A crowned kernel form is the one the tuner measured fastest and armed as the
+serving one; its tensor twin is the same kernel written on Metal's tensor primitives, and the
 twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to

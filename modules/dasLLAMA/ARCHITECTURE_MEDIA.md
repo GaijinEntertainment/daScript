@@ -197,6 +197,11 @@ lane picks the image tag, so the two lanes are separate images that coexist.
 Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
 facade's fp32 rail.
 
+Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, the serving Metal
+driver, or the CPU default - because the lane changes what the load mints and serves. Where the
+caller hands the lane in (parakeet, canary), the line names the caller's pick beside the reason
+the policy gives, so a caller that overrides the policy shows as a pick its reason does not match.
+
 ### 2.16 An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
 
 The gemma4a, canary and qwen3a routes drive their decoders as ordinary `Model` sessions - embed
