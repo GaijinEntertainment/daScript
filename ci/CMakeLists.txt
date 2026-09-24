@@ -71,12 +71,13 @@ endfunction()
 
 set(DAS_EXTENDED_CORE
     check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_rpm_spec
-    check_example_games check_dasllama_site check_model_mint run_tests_bench_updater
+    check_example_games check_dasllama_site run_tests_bench_updater
     run_tests_pr_babysit check_dasgen run_tests_review_md run_tests_dastest
     check_lint_changed check_ast_verify_changed check_gated_das check_review_gates
     check_standalone_exes check_format check_format_exe run_utils_tests)
 if(NOT WIN32)
-    list(APPEND DAS_EXTENDED_CORE run_tests_dap_bridge)
+    # check_model_mint: its test stands in a shell script for daslang, which Windows cannot exec
+    list(APPEND DAS_EXTENDED_CORE run_tests_dap_bridge check_model_mint)
 endif()
 
 set(DAS_EXTENDED_MODULES

@@ -137,7 +137,10 @@ jobs:
               libxinerama-dev \
               libxi-dev \
               llvm-22-dev \
-              xvfb
+              xvfb \
+              gcc-arm-none-eabi \
+              libnewlib-arm-none-eabi \
+              libstdc++-arm-none-eabi-newlib
             ;;
         esac
 
