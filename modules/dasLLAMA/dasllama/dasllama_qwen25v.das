@@ -515,6 +515,9 @@ def private q25v_grid_tables(t : Qwen25vTower; var s : Qwen25vState; pw, ph : in
     s.grid_h = ph
 }
 
+//! Block `l` attends over the whole canvas (every `n_wa_pattern`-th block, or every block with no pattern); the others attend per window.
+def qwen25v_layer_full(t : Qwen25vTower; l : int64) : bool => t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+
 //! The widest window's row count over the sorted windows (`win_lo`): the GPU drivers' per-window tile bound.
 def qwen25v_window_widest(s : Qwen25vState) : int64 {
     let nwin = long_length(s.win_lo) - 1l
@@ -555,7 +558,7 @@ def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) 
     rope_neox_tab_rows(s.kk, npos, t.n_head, hd, s.cos_t, s.sin_t)
     asr_prof_add("q25v.qkv_rope", tp)
     tp = ref_time_ticks()
-    let full = t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+    let full = qwen25v_layer_full(t, l)
     if (full) {
         attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0 / sqrt(float(hd)))
     } else {

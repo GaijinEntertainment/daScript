@@ -256,15 +256,15 @@ def private vt_fold_words(k : uint64; p : uint8 const?; bytes : int64) : uint64 
     let wp = unsafe(reinterpret<uint const?>(p))
     var i = 0l
     while (i < n) {
-        h = (h ^ uint64(unsafe(wp[i]))) * 0x100000001B3ul
+        h = hash_combine64(h, uint64(unsafe(wp[i])))
         i += step
     }
     return h
 }
 
-def private vt_fold_addr(k : uint64; p : void?) : uint64 => (k ^ intptr(p)) * 0x100000001B3ul
+def private vt_fold_addr(k : uint64; p : void?) : uint64 => hash_combine64(k, intptr(p))
 
-def private vt_fold_int(k : uint64; v : int64) : uint64 => (k ^ uint64(v)) * 0x9E3779B97F4A7C15ul
+def private vt_fold_int(k : uint64; v : int64) : uint64 => hash_combine64(k, uint64(v))
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def private vt_key_f16(wblob : PlaneU16; w_off, w_n : int64; blob : PlaneF; rows_off, rows_n, n_layer : int64) : uint64 {
@@ -567,7 +567,7 @@ def private vt_gather_slice(rows, mr : int64) : int64
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
 def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>;
-                      blob : PlaneF; rows_off, rows_n, ones_n : int64) : bool {
+                      blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : VtRepackLayout) : bool {
     let q8e = kq_elems(KqFmt.q8)
     vt_upload_begin(r, key)
     r.wq_bytes = qblob.n
@@ -585,12 +585,8 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
     var ws : array<uint8>
     wq |> reserve_resize(r.wq_bytes)
     ws |> reserve_resize(r.ws_bytes)
-    let repacked = g_active_needs_repack
-    let mr = repacked ? active_q8_layout_mr() : 1l
-    let kgroup = repacked ? active_q8_kgroup() : 4l
-    let wbias = repacked ? active_q8_wbias() : 0l
     for (reg in regions) {
-        q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, vt_gather_slice(reg.rows, mr), mr, kgroup, wbias,
+        q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, vt_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
             wq, ws, reg.woff, reg.woff / q8e)
     }
     unsafe {
@@ -614,8 +610,11 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
     return true
 }
 
-//! the active backend's q8 repack layout, folded into the residency key: a backend switch re-gathers
-def private vt_repack_layout : tuple<mr : int64; kgroup : int64; wbias : int64> {
+typedef VtRepackLayout = tuple<mr : int64; kgroup : int64; wbias : int64>
+
+//! the active backend's q8 repack layout, folded into the residency key and handed to the gather: the key and the upload read
+//! one answer, and a backend switch re-gathers
+def private vt_repack_layout : VtRepackLayout {
     let repacked = g_active_needs_repack
     return (mr = repacked ? active_q8_layout_mr() : 1l, kgroup = repacked ? active_q8_kgroup() : 4l, wbias = repacked ? active_q8_wbias() : 0l)
 }
@@ -857,12 +856,42 @@ def private vt_gemm_groups(d, rows : int64) : int64 {
     return ((d + te.td - 1l) / te.td) * ((rows + te.tc - 1l) / te.tc)
 }
 
-//! the device and the arm the chains share: the tier armed, the flash arm picked, its KHR tile where the arm reads it
-//! the tier's want (DASLLAMA_GPU) before the device init: nothing reads `g_gpu` ahead of this answer
-def private vt_arm_ok : bool => gpu_want_arms_tier() && vk_moe_init()
+//! the tier's want (DASLLAMA_GPU) and then the device init - the gate every chain and every twin cell reads first: nothing
+//! reads `g_gpu` ahead of this answer
+def public vulkan_tower_arms : bool => gpu_want_arms_tier() && vk_moe_init()
+
+//! the arm every chain reads after its shape check: the want and the device first, then the flash arm and the KHR tile where
+//! the arm - or the GEMM feed off cm2, when the chain's GEMMs ride it (`gemm_off_cm2`) - reads it; `ok` false counted the decline
+def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : bool; khr : bool; gemm_khr : bool> {
+    if (!vulkan_tower_arms()) {
+        vt_decline(r, VulkanTowerDecline.device)
+        return (ok = false, khr = false, gemm_khr = false)
+    }
+    let khr = !cm2_fa_on()
+    let gemm_khr = gemm_off_cm2 && g_gpu.coopmat_mode != COOPMAT_CM2
+    if ((khr || gemm_khr) && !khr_kq_tile_on()) {
+        vt_decline(r, VulkanTowerDecline.device)
+        return (ok = false, khr = khr, gemm_khr = gemm_khr)
+    }
+    return (ok = true, khr = khr, gemm_khr = gemm_khr)
+}
+
+//! the encode's landing, one text for every chain: the residual rows back to the host, the counters, the announcement once
+def private vt_served(var r : VtResident; var x : array<float>; bx, npos, n_layer : int64) : bool {
+    unsafe {
+        memcpy(addr<void?>(x[0]), r.host.mapped, bx)
+    }
+    g_vt_encodes++
+    g_vt_rows += npos
+    g_vt_blocks += n_layer
+    if (!r.served_said) {
+        vt_announce(r)
+    }
+    return true
+}
 
 [cold_path]
-def private vt_upload_g3v(var r : VtResident; key : uint64; t : Gemma3vTower) : bool {
+def private vt_upload_g3v(var r : VtResident; key : uint64; t : Gemma3vTower; lay : VtRepackLayout) : bool {
     let d = t.n_embd
     let ff = t.ff_pad
     var regions : array<VtRegion>
@@ -875,7 +904,7 @@ def private vt_upload_g3v(var r : VtResident; key : uint64; t : Gemma3vTower) : 
             regions |> push(VtRegion(woff = o.w[g], n = n, rows = rows))
         }
     }
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
+    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l, lay)
     delete regions
     return ok
 }
@@ -898,13 +927,11 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
     if (hs > 128l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    if (!vt_arm_ok()) {
-        return vt_decline(r, VulkanTowerDecline.device)
+    let arm = vt_arm(r)
+    if (!arm.ok) {
+        return false
     }
-    let khr = !cm2_fa_on()
-    if (khr && !khr_kq_tile_on()) {
-        return vt_decline(r, VulkanTowerDecline.device)
-    }
+    let khr = arm.khr
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
@@ -920,7 +947,7 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
     }
     let lay = vt_repack_layout()
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
-    if (r.key != key && !vt_upload_g3v(r, key, t)) {
+    if (r.key != key && !vt_upload_g3v(r, key, t, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let g_d = vt_gemm_groups(d, npos)
@@ -951,8 +978,8 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
     let nd = npos * d
     let nff = npos * ff
     let npos_pad = vt_cap_rows(npos)
-    let wg_nd = (nd / 4l + 255l) / 256l
-    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_nd = rq_wgs(false, nd)
+    let wg_nff = rq_wgs(false, nff)
     let wg_pad = (npos_pad * dp + 255l) / 256l
     let wg_unpad = (npos * dp + 255l) / 256l
     let wg_fa = fa_stamp_wgs(khr, t.n_head, npos)
@@ -1019,20 +1046,11 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
         vhz_dep(raw, h, VT_X, 0u, true)
         cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-    }
-    g_vt_encodes++
-    g_vt_rows += npos
-    g_vt_blocks += t.n_layer
-    if (!r.served_said) {
-        vt_announce(r)
-    }
-    return true
+    return vt_served(r, s.x, bx, npos, t.n_layer)
 }
 
 [cold_path]
-def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower) : bool {
+def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay : VtRepackLayout) : bool {
     let d = t.n_embd
     let ff = t.ff_pad
     var regions : array<VtRegion>
@@ -1044,7 +1062,7 @@ def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower) : b
         regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_UP], n = d, rows = ff))
         regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_DOWN], n = ff, rows = d))
     }
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
+    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l, lay)
     delete regions
     return ok
 }
@@ -1068,13 +1086,11 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     if (hs > 128l || hs % 2l != 0l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    if (!vt_arm_ok()) {
-        return vt_decline(r, VulkanTowerDecline.device)
+    let arm = vt_arm(r)
+    if (!arm.ok) {
+        return false
     }
-    let khr = !cm2_fa_on()
-    if (khr && !khr_kq_tile_on()) {
-        return vt_decline(r, VulkanTowerDecline.device)
-    }
+    let khr = arm.khr
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
@@ -1091,7 +1107,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     }
     let lay = vt_repack_layout()
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
-    if (r.key != key && !vt_upload_q3v(r, key, t)) {
+    if (r.key != key && !vt_upload_q3v(r, key, t, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let g_d = vt_gemm_groups(d, npos)
@@ -1128,9 +1144,9 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     let nd = npos * d
     let nff = npos * ff
     let npos_pad = vt_cap_rows(npos)
-    let wg_nd = (nd / 4l + 255l) / 256l
-    let wg_n3d = (3l * nd / 4l + 255l) / 256l
-    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_nd = rq_wgs(false, nd)
+    let wg_n3d = rq_wgs(false, 3l * nd)
+    let wg_nff = rq_wgs(false, nff)
     let wg_pad = (npos_pad * dp + 255l) / 256l
     let wg_unpad = (npos * dp + 255l) / 256l
     let wg_rope = (npos * t.n_head * half + 255l) / 256l
@@ -1208,19 +1224,12 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
             cmd_copy_range(raw, r.xtap_dev, 0l, r.host.buf, bx, nds * bx)
         }
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-        if (nds > 0l) {
+    if (nds > 0l) {
+        unsafe {
             memcpy(addr<void?>(s.ds_xtaps[0]), reinterpret<void?>(intptr(r.host.mapped) + uint64(bx)), nds * bx)
         }
     }
-    g_vt_encodes++
-    g_vt_rows += npos
-    g_vt_blocks += t.n_layer
-    if (!r.served_said) {
-        vt_announce(r)
-    }
-    return true
+    return vt_served(r, s.x, bx, npos, t.n_layer)
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
@@ -1244,14 +1253,12 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             || (has_win && (wmax > 64l || hs != VT_WIN_HS))) {
         return vt_decline(r, VulkanTowerDecline.shape)  //! the chain's sets are built at the 128 head alone (the family's 80-wide heads)
     }
-    if (!vt_arm_ok()) {
-        return vt_decline(r, VulkanTowerDecline.device)
+    let arm = vt_arm(r, true)
+    if (!arm.ok) {
+        return false
     }
-    let khr = !cm2_fa_on()
-    let gemm_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-    if ((khr || gemm_khr) && !khr_kq_tile_on()) {
-        return vt_decline(r, VulkanTowerDecline.device)
-    }
+    let khr = arm.khr
+    let gemm_khr = arm.gemm_khr
     let w_off = t.layer_w
     let w_n = t.n_layer * t.layer_w_stride
     if (!vt_range_ok(w_n * 2l) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
@@ -1288,8 +1295,8 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let nd = npos * d
     let nff = npos * ff
     let npos_pad = vt_cap_rows(npos)
-    let wg_nd = (nd / 4l + 255l) / 256l
-    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_nd = rq_wgs(false, nd)
+    let wg_nff = rq_wgs(false, nff)
     let wg_pad = (npos_pad * dp + 255l) / 256l
     let wg_unpad = (npos * dp + 255l) / 256l
     let wg_rope = (npos * t.n_head * half + 255l) / 256l
@@ -1310,7 +1317,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
         for (l in range64(t.n_layer)) {
             let o = qwen25v_block_offs(t, l)
-            let full = t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+            let full = qwen25v_layer_full(t, l)
             if (l == 0l) {
                 var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), eps = t.eps)
                 enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
@@ -1366,20 +1373,11 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
         vhz_dep(raw, h, VT_X, 0u, true)
         cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-    }
-    g_vt_encodes++
-    g_vt_rows += npos
-    g_vt_blocks += t.n_layer
-    if (!r.served_said) {
-        vt_announce(r)
-    }
-    return true
+    return vt_served(r, s.x, bx, npos, t.n_layer)
 }
 
 [cold_path]
-def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64) : bool {
+def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64; lay : VtRepackLayout) : bool {
     let d = t.n_embd
     let ff = t.n_ff
     var regions : array<VtRegion>
@@ -1392,7 +1390,7 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs
             regions |> push(VtRegion(woff = o.w[g], n = n, rows = rows))
         }
     }
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hs)
+    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hs, lay)
     delete regions
     return ok
 }
@@ -1413,13 +1411,11 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     if (hs != 64l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    if (!vt_arm_ok()) {
-        return vt_decline(r, VulkanTowerDecline.device)
+    let arm = vt_arm(r)
+    if (!arm.ok) {
+        return false
     }
-    let khr = !cm2_fa_on()
-    if (khr && !khr_kq_tile_on()) {
-        return vt_decline(r, VulkanTowerDecline.device)
-    }
+    let khr = arm.khr
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
@@ -1435,7 +1431,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     }
     let lay = vt_repack_layout()
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
-    if (r.key != key && !vt_upload_g4v(r, key, t, hs)) {
+    if (r.key != key && !vt_upload_g4v(r, key, t, hs, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let g_d = vt_gemm_groups(d, npos)
@@ -1472,8 +1468,8 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     }
     let nd = npos * d
     let nff = npos * ff
-    let wg_nd = (nd / 4l + 255l) / 256l
-    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_nd = rq_wgs(false, nd)
+    let wg_nff = rq_wgs(false, nff)
     let wg_rope = (npos * t.n_head * pairs + 255l) / 256l
     let wg_fa = fa_stamp_wgs(khr, t.n_head, npos)
     let norms_base = t.layer_f
@@ -1570,16 +1566,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         vhz_dep(raw, h, VT_X, 0u, true)
         cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-    }
-    g_vt_encodes++
-    g_vt_rows += npos
-    g_vt_blocks += t.n_layer
-    if (!r.served_said) {
-        vt_announce(r)
-    }
-    return true
+    return vt_served(r, s.x, bx, npos, t.n_layer)
 }
 
 [init]

@@ -14,17 +14,7 @@ require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
 require ?vulkan dasllama/dasllama_vulkan_tower
-require ?vulkan dasllama/dasllama_vulkan_common
-
-//! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def private set_every_gpu_tower(on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(on)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(on)
-    }
-}
+require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrument
 
 // Tier-1 gemma4v tower parity vs llama-mtmd-debug -p encode.
 // Reference arm: the f32-widened mmproj, CPU, --no-mmproj-offload, -fa off (the only true-f32 arm).
@@ -358,15 +348,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
     set_gemma4v_q8(q8)
     var inscope stg <- stage_gemma4v_tower(mm)
     reset_gemma4v_q8()
-    if (nl > 0l) {
-        stg.t.n_layer = nl
-    }
-    if (zero_block >= 0l) {
-        let base = stg.t.layer_w + zero_block * stg.t.layer_w_stride
-        for (i in range64(stg.t.layer_w_stride)) {
-            stg.qblob[base + i] = int8(0)
-        }
-    }
+    truncate_and_poison(stg, nl, zero_block)
     var tw = Gemma4vTower()
     mint_gemma4v_tower(stg, tw)
     return <- tw
@@ -405,127 +387,44 @@ def private poison_device_leg(tt : T?; mm : string; kind : string; w, h : int; l
 def test_gemma4v_tier1_vulkan(t : T?) {
     t |> run("tier-1 Vulkan attempt vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                tt |> skip("das_metal on this build owns the tower hooks - the Vulkan rung has no seat")
-            } else {
-                let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-                if (!model_available(tt, mm)) {
-                    return
-                }
-                if (!vk_moe_init()) {
-                    tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
-                    return
-                }
-                set_every_gpu_tower(true)
-                var tw <- mint_tower(mm, true)
-                var st = Gemma4vState()
-                let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
-                                (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
-                                (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
-                                (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
-                for (fx in fixtures) {
-                    let s0 = vulkan_tower_stats()
-                    let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
-                    if (ran) {
-                        tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
-                        tt |> equal(vulkan_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
-                    }
-                }
-                delete st
-                delete tw
-                poison_device_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+                return
             }
+            set_every_gpu_tower(true)
+            var tw <- mint_tower(mm, true)
+            var st = Gemma4vState()
+            let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
+                            (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
+                            (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
+                            (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
+            for (fx in fixtures) {
+                let s0 = vulkan_tower_stats()
+                let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
+                if (ran) {
+                    tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
+                    tt |> equal(vulkan_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
+                }
+            }
+            delete st
+            delete tw
+            poison_device_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             tt |> skip("dasVulkan not present")
         }
     }
 }
 
-let private TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GEGLU against the f16 LUT
-
-//! one canvas three ways - the exact chain, the CPU q8 chain, the device chain - with the counters, the residual-row instrument
-//! and the bar; `zero_block` >= 0 adds the input poison: the device chain over a fresh q8 tower with that block zeroed must
-//! EXCEED the bar the clean chains set
-def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_exact : Gemma4vTower; var st_exact : Gemma4vState;   // nolint:STYLE038 — one instrument: the three chains, the counters, the row instrument, the bar and its poison
+//! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
+def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_exact : Gemma4vTower; var st_exact : Gemma4vState;
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
-        var cpu : array<float>
-        var gpu : array<float>
-        var exact : array<float>
-        var ncpu = 0l
-        var ngpu = 0l
-        set_vulkan_tower(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            gemma4v_encode(tw_exact, st_exact, planes, int64(w), int64(h), exact)
-        }
-        let d0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ncpu = gemma4v_encode(tw, st, planes, int64(w), int64(h), cpu)
-        }
-        var xcpu := st.x   // the residual stream the block loop left: the per-row instrument below reads it against the device's
-        let d1 = vulkan_tower_stats()
-        set_vulkan_tower(true)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ngpu = gemma4v_encode(tw, st, planes, int64(w), int64(h), gpu)
-        }
-        let d2 = vulkan_tower_stats()
-        if (d2.encodes == d1.encodes) {
-            to_log(LOG_INFO, "gemma4v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
-        }
-        let npos = int64(w / 16) * int64(h / 16)
-        let dd = tw.n_embd
-        var worst_row = -1l
-        var worst = 0.0
-        var tiles : array<float>
-        tiles |> resize((npos + 63l) / 64l)
-        for (r in range64(npos)) {
-            var m = 0.0
-            for (i in range64(dd)) {
-                m = max(m, abs(xcpu[r * dd + i] - st.x[r * dd + i]))
-            }
-            tiles[r / 64l] = max(tiles[r / 64l], m)
-            if (m > worst) {
-                worst = m
-                worst_row = r
-            }
-        }
-        to_log(LOG_INFO, "gemma4v vulkan twin {kind} {w}x{h}: residual rows worst {worst} at row {worst_row} of {npos}; per 64-row tile {tiles}\n")
-        delete xcpu
-        delete tiles
-        tt |> equal(ncpu, ngpu, "{kind} {w}x{h}: token count on both chains")
-        tt |> equal(d1.encodes - d0.encodes, 0l, "{kind} {w}x{h}: the knob-off leg never dispatched")
-        tt |> equal(d1.declines - d0.declines, 1l, "{kind} {w}x{h}: the knob-off leg recorded the knob decline")
-        tt |> equal(d2.encodes - d1.encodes, 1l, "{kind} {w}x{h}: device-served (encodes delta)")
-        tt |> equal(d2.blocks - d1.blocks, tw.n_layer, "{kind} {w}x{h}: every block ran on the driver (blocks delta)")
-        tt |> equal(d2.rows - d1.rows, int64(w / 16) * int64(h / 16), "{kind} {w}x{h}: the rows delta is the patch grid")
-        var ss = 0.0
-        for (a in exact) {
-            ss += a * a
-        }
-        let rms = sqrt(ss / float(max(length(exact), 1)))
-        let q8_ex = logits_maxdiff(cpu, exact)
-        let dev_ex = logits_maxdiff(gpu, exact)
-        let dev_q8 = logits_maxdiff(gpu, cpu)
-        let bar = TWIN_SLACK_VK * q8_ex + TIER1_ABS
-        to_log(LOG_INFO, "gemma4v vulkan twin {kind} {w}x{h}: rms {rms}; vs exact: cpu q8 {q8_ex} ({q8_ex / rms} x rms), device {dev_ex} ({dev_ex / rms} x rms); device vs cpu q8 {dev_q8} ({dev_q8 / rms} x rms)\n")
-        tt |> success(dev_ex <= bar, "{kind} {w}x{h}: the device chain sits within {TWIN_SLACK_VK}x the CPU q8 chain's distance from the exact chain ({dev_ex} vs {q8_ex})")
+        let r <- twin_three_way(tt, "gemma4v", kind, w, h, 16l, "", tw, st, tw_exact, st_exact) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
         if (zero_block >= 0l) {
             var twp <- mint_tower(mm, true, tw.n_layer, zero_block)
             var stp = Gemma4vState()
-            var poisoned : array<float>
-            let p0 = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                gemma4v_encode(twp, stp, planes, int64(w), int64(h), poisoned)
-            }
-            tt |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{kind} {w}x{h} poison: device-served (encodes delta)")
-            let poison_ex = logits_maxdiff(poisoned, exact)
-            to_log(LOG_INFO, "gemma4v vulkan twin {kind} {w}x{h} poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / rms} x rms), bar {bar}\n")
-            tt |> success(poison_ex > bar, "{kind} {w}x{h}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {bar})")
+            twin_poison(tt, "gemma4v", kind, w, h, zero_block, twp, stp, r) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
             delete stp
             delete twp
         }
@@ -536,60 +435,41 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_ex
 def test_gemma4v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                tt |> skip("das_metal on this build owns the tower hooks - the Vulkan twin has no seat")
-            } else {
-                let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-                if (!model_available(tt, mm)) {
-                    return
-                }
-                if (!vk_moe_init()) {
-                    tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
-                    return
-                }
-                var tw_exact <- mint_tower(mm, false)
-                var st_exact = Gemma4vState()
-                tt |> success(!tw_exact.q8, "exact-plane lane minted")
-                // the one- and two-block towers first: a drift names its block before the deep chain compounds it
-                for (nl in [1l, 2l]) {
-                    var twxs <- mint_tower(mm, false, nl)
-                    var twq <- mint_tower(mm, true, nl)
-                    var stq = Gemma4vState()
-                    var stxs = Gemma4vState()
-                    tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
-                    twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
-                    twin_encode(tt, twq, stq, twxs, stxs, "cb", 336, 336, mm)
-                    delete stq
-                    delete stxs
-                    delete twq
-                    delete twxs
-                }
-                var tw <- mint_tower(mm, true)
-                var st = Gemma4vState()
-                tt |> success(tw.q8, "q8 lane minted")
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 336, 336, mm)
-                twin_encode(tt, tw, st, tw_exact, st_exact, "green", 672, 336, mm)
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384, mm)   // 1152 rows, a 128-multiple: the aligned tile variant's canvas
-                delete st
-                delete tw
-                let planes <- make_planes("cb", 96, 96)
-                var outx : array<float>
-                set_vulkan_tower(true)
-                let x0 = vulkan_tower_stats()
-                let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
-                with_job_que() {
-                    setup_dasllama_jobque_()
-                    gemma4v_encode(tw_exact, st_exact, planes, 96l, 96l, outx)
-                }
-                let x1 = vulkan_tower_stats()
-                tt |> equal(x1.encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
-                tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 1l, "the exact-lane tower recorded the quant_mode decline")
-                tt |> success(length(outx) == 4 * int(tw_exact.proj_dim), "the CPU chain served the exact-lane encode")
-                delete st_exact
-                delete tw_exact
-                vulkan_tower_shutdown()
+            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+                return
             }
+            var tw_exact <- mint_tower(mm, false)
+            var st_exact = Gemma4vState()
+            tt |> success(!tw_exact.q8, "exact-plane lane minted")
+            // the one- and two-block towers first: a drift names its block before the deep chain compounds it
+            for (nl in [1l, 2l]) {
+                var twxs <- mint_tower(mm, false, nl)
+                var twq <- mint_tower(mm, true, nl)
+                var stq = Gemma4vState()
+                var stxs = Gemma4vState()
+                tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 336, 336, mm)
+                delete stq
+                delete stxs
+                delete twq
+                delete twxs
+            }
+            var tw <- mint_tower(mm, true)
+            var st = Gemma4vState()
+            tt |> success(tw.q8, "q8 lane minted")
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 336, 336, mm)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "green", 672, 336, mm)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384, mm)   // 1152 rows, a 128-multiple: the aligned tile variant's canvas
+            delete st
+            delete tw
+            let planes <- make_planes("cb", 96, 96)
+            exact_lane_declines(tt, tw_exact, st_exact, 4l * tw_exact.proj_dim) $(t; var s; var out) => gemma4v_encode(t, s, planes, 96l, 96l, out)
+            delete st_exact
+            delete tw_exact
+            vulkan_tower_shutdown()
         } else {
             tt |> skip("dasVulkan not present")
         }
@@ -643,7 +523,7 @@ def test_gemma4v_tier1_e4b(t : T?) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 to_log(LOG_INFO, "E4B q8: das_metal on this build owns the tower hooks - the Vulkan leg has no seat\n")
             } else {
-                if (vk_moe_init()) {
+                if (vulkan_tower_arms()) {
                     set_vulkan_tower(true)
                     let v0 = vulkan_tower_stats()
                     let ran = gate_encode(tt, twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)

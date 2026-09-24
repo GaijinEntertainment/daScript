@@ -6,9 +6,9 @@ module test_vulkan_tower_kernels
 
 require dastest/testing_boost public
 require math
-require daslib/f16_cvt
-require dasllama/dasllama_plane
-require dasllama/dasllama_tower
+require daslib/f16_cvt   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if arms; the no-vulkan lane sees it unused
+require dasllama/dasllama_plane   // nolint:STYLE030,LINT019 — the same
+require dasllama/dasllama_tower   // nolint:STYLE030,LINT019 — the same
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat   // kq_elems: the Q8_0 block width that sizes the requant feed's scale plane
 require ?vulkan vulkan
@@ -16,7 +16,7 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares
-require _vk_kq_fixtures   // f16r
+require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require daslib/jobque_boost
 
@@ -1011,10 +1011,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var u_ref := u
             add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
             add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
-            silu(g_ref, int64(nd))
-            for (i in range(nd)) {
-                g_ref[i] *= u_ref[i]
-            }
+            swiglu(g_ref, u_ref, int64(nd))
             let bad_glu = mismatch_approx(g_dev, g_ref)
             t |> success(bad_glu == 0, "tower_glu_act: silu(g + bg) . (u + bu) matches the CPU form ({bad_glu} of {nd} off)")
             t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_glu_act: the bar reds a poisoned element")

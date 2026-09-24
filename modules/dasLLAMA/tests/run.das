@@ -386,7 +386,7 @@ def areas_for_path(path : string) : array<string> {
         if (name |> starts_with("_")) {
             if (name |> starts_with("_tts_")) {
                 return <- ["tts"]
-            } elif (name == "_vision_oracle.das") {
+            } elif (name == "_vision_oracle.das" || name == "_tower_twin.das") {
                 return <- ["vision"]
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
                 return <- ["llm"]

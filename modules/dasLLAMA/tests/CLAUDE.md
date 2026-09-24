@@ -1043,10 +1043,13 @@ rows) on one-, two- and six-block truncated towers (the six-block one reaches th
 the whole tower, three canvases, every tower staged and minted in memory (never
 `load_qwen3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
 chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with its block zeroed
-through the device chain must EXCEED the bar), then the exact-lane tower left to the CPU chain (its
-hook is the Metal driver's, so no decline is counted). Skips without the mmproj, without a Vulkan
-device under `DASLLAMA_GPU=1`, and on a build with das_metal, where the Metal driver owns the
-tower hooks.
+through the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline
+(the blocks seat is the driver's, which declines the exact planes once and leaves the encode to
+the CPU chain). Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
+a build with das_metal, where the Metal driver owns the tower hooks. The four families' Vulkan
+twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
+`vulkan_tower_arms`), the three-way encode with its counters and bar, the input poison, the
+exact-lane decline and the staged tower's truncate-and-zero.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,

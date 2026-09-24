@@ -14,20 +14,10 @@ require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the f16-route cell re-arms crowned PSOs
 require ?vulkan dasllama/dasllama_vulkan_tower
-require ?vulkan dasllama/dasllama_vulkan_common
 require dasllama/dasllama_common   // set_metal_tensor_crowns - the f16-route cell's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
-require math
-
-//! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def private set_every_gpu_tower(on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(on)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(on)
-    }
-}
+require math   // nolint:STYLE030,LINT019 — used only inside the GPU static_if arms; the no-GPU lane sees it unused
+require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrument
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
 // Reference arm: the f32-widened mmprojs, CPU, -fa off (qwen3vl-vision-oracle/mint.sh mints the
@@ -402,8 +392,6 @@ def test_qwen3v_tier1_q8(t : T?) {
     }
 }
 
-let private TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
-
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
 //! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bar (q8 lane).
 //! Never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
@@ -411,81 +399,22 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
     set_qwen3v_q8(q8)
     var inscope stg <- stage_qwen3v_tower(mm)
     reset_qwen3v_q8()
-    if (nl > 0l) {
-        stg.t.n_layer = nl
-    }
-    if (zero_block >= 0l) {
-        let base = stg.t.layer_w + zero_block * stg.t.layer_w_stride
-        for (i in range64(stg.t.layer_w_stride)) {
-            stg.qblob[base + i] = int8(0)
-        }
-    }
+    truncate_and_poison(stg, nl, zero_block)
     var tw = Qwen3vTower()
     mint_qwen3v_tower(stg, tw)
     return <- tw
 }
 
-//! one canvas three ways - the exact chain, the CPU q8 chain, the device chain - with the counters and the bar; `zero_block` >= 0
-//! adds the input poison: the device chain over a fresh q8 tower with that block zeroed must EXCEED the bar the clean chains set
+//! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
 def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exact : Qwen3vTower; var st_exact : Qwen3vState;
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
-        var cpu : array<float>
-        var gpu : array<float>
-        var exact : array<float>
-        var ncpu = 0l
-        var ngpu = 0l
-        set_vulkan_tower(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            qwen3v_encode(tw_exact, st_exact, planes, int64(w), int64(h), exact)
-        }
-        let d0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ncpu = qwen3v_encode(tw, st, planes, int64(w), int64(h), cpu)
-        }
-        let d1 = vulkan_tower_stats()
-        set_vulkan_tower(true)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ngpu = qwen3v_encode(tw, st, planes, int64(w), int64(h), gpu)
-        }
-        let d2 = vulkan_tower_stats()
-        if (d2.encodes == d1.encodes) {
-            to_log(LOG_INFO, "qwen3v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
-        }
-        tt |> equal(ncpu, ngpu, "{kind} {w}x{h}: token count on both chains")
-        tt |> equal(d1.encodes - d0.encodes, 0l, "{kind} {w}x{h}: the knob-off leg never dispatched")
-        tt |> equal(d1.declines - d0.declines, 1l, "{kind} {w}x{h}: the knob-off leg recorded the knob decline")
-        tt |> equal(d2.encodes - d1.encodes, 1l, "{kind} {w}x{h}: device-served (encodes delta)")
-        tt |> equal(d2.blocks - d1.blocks, tw.n_layer, "{kind} {w}x{h}: every block ran on the driver (blocks delta)")
-        tt |> equal(d2.rows - d1.rows, int64(w / 16) * int64(h / 16), "{kind} {w}x{h}: the rows delta is the patch grid")
-        var ss = 0.0
-        for (a in exact) {
-            ss += a * a
-        }
-        let rms = sqrt(ss / float(max(length(exact), 1)))
-        let q8_ex = logits_maxdiff(cpu, exact)
-        let dev_ex = logits_maxdiff(gpu, exact)
-        let dev_q8 = logits_maxdiff(gpu, cpu)
-        let bar = TWIN_SLACK_VK * q8_ex + TIER1_ABS
-        to_log(LOG_INFO, "qwen3v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks, {tw.n_deepstack} taps): rms {rms}; vs exact: cpu q8 {q8_ex} ({q8_ex / rms} x rms), device {dev_ex} ({dev_ex / rms} x rms); device vs cpu q8 {dev_q8} ({dev_q8 / rms} x rms)\n")
-        tt |> success(dev_ex <= bar, "{kind} {w}x{h}: the device chain sits within {TWIN_SLACK_VK}x the CPU q8 chain's distance from the exact chain ({dev_ex} vs {q8_ex})")
+        let r <- twin_three_way(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
         if (zero_block >= 0l) {
             var twp <- mint_tower(mm, true, tw.n_layer, zero_block)
             var stp = Qwen3vState()
-            var poisoned : array<float>
-            let p0 = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                qwen3v_encode(twp, stp, planes, int64(w), int64(h), poisoned)
-            }
-            tt |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{kind} {w}x{h} poison: device-served (encodes delta)")
-            let poison_ex = logits_maxdiff(poisoned, exact)
-            to_log(LOG_INFO, "qwen3v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / rms} x rms), bar {bar}\n")
-            tt |> success(poison_ex > bar, "{kind} {w}x{h}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {bar})")
+            twin_poison(tt, "qwen3v", kind, w, h, zero_block, twp, stp, r) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
             delete stp
             delete twp
         }
@@ -496,58 +425,39 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exac
 def test_qwen3v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact-lane decline") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                tt |> skip("das_metal on this build owns the tower hooks - the Vulkan twin has no seat")
-            } else {
-                let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
-                if (!model_available(tt, mm)) {
-                    return
-                }
-                if (!vk_moe_init()) {
-                    tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
-                    return
-                }
-                var tw_exact <- mint_tower(mm, false)
-                var st_exact = Qwen3vState()
-                tt |> success(!tw_exact.q8 && tw_exact.n_deepstack == 3l, "exact-plane lane minted, three deepstack taps")
-                for (nl in [1l, 2l, 6l]) {
-                    var twxs <- mint_tower(mm, false, nl)
-                    var twq <- mint_tower(mm, true, nl)
-                    var stq = Qwen3vState()
-                    var stxs = Qwen3vState()
-                    tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
-                    twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
-                    twin_encode(tt, twq, stq, twxs, stxs, "cb", 448, 448, mm)
-                    delete stq
-                    delete stxs
-                    delete twq
-                    delete twxs
-                }
-                var tw <- mint_tower(mm, true)
-                var st = Qwen3vState()
-                tt |> success(tw.q8, "q8 lane minted")
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 448, 448, mm)
-                twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 640, 320, mm)   // non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
-                delete st
-                delete tw
-                let planes <- make_planes("cb", 96, 96)
-                var outx : array<float>
-                set_vulkan_tower(true)
-                let x0 = vulkan_tower_stats()
-                let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
-                with_job_que() {
-                    setup_dasllama_jobque_()
-                    qwen3v_encode(tw_exact, st_exact, planes, 96l, 96l, outx)
-                }
-                let x1 = vulkan_tower_stats()
-                tt |> equal(x1.encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
-                tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 1l, "the exact-lane tower reached the blocks seat and the driver declined quant_mode")
-                tt |> success(long_length(outx) == 9l * qwen3v_row_width(tw_exact), "the CPU chain served the exact-lane encode")
-                delete st_exact
-                delete tw_exact
-                vulkan_tower_shutdown()
+            let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+                return
             }
+            var tw_exact <- mint_tower(mm, false)
+            var st_exact = Qwen3vState()
+            tt |> success(!tw_exact.q8 && tw_exact.n_deepstack == 3l, "exact-plane lane minted, three deepstack taps")
+            for (nl in [1l, 2l, 6l]) {
+                var twxs <- mint_tower(mm, false, nl)
+                var twq <- mint_tower(mm, true, nl)
+                var stq = Qwen3vState()
+                var stxs = Qwen3vState()
+                tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96, mm, nl == 1l ? 0l : -1l)   // the poison on the one-block tower, where the bar is tightest
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 448, 448, mm)
+                delete stq
+                delete stxs
+                delete twq
+                delete twxs
+            }
+            var tw <- mint_tower(mm, true)
+            var st = Qwen3vState()
+            tt |> success(tw.q8, "q8 lane minted")
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 96, 96, mm)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 448, 448, mm)
+            twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 640, 320, mm)   // non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
+            delete st
+            delete tw
+            let planes <- make_planes("cb", 96, 96)
+            exact_lane_declines(tt, tw_exact, st_exact, 9l * qwen3v_row_width(tw_exact)) $(t; var s; var out) => qwen3v_encode(t, s, planes, 96l, 96l, out)
+            delete st_exact
+            delete tw_exact
+            vulkan_tower_shutdown()
         } else {
             tt |> skip("dasVulkan not present")
         }
