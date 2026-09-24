@@ -288,7 +288,7 @@ piece is its own synthesis, so a phrase cut in two is read as two phrases.
 .. code-block:: das
 
    tts_set_chunk_chars(m, 120)
-   let low <- synthesize(m, "A longer phrase, spoken in shorter pieces.", voice)
+   let low <- synthesize(m, "The same sentence, spoken in shorter pieces at a lower peak.", voice)
 
 Prepared voice prompts
 ======================
