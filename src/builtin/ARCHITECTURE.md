@@ -282,3 +282,11 @@ dastest process. The agent goes before the context because a context's destructo
 every debug agent, the thread-local one included, and an agent installed from that thread runs
 its callbacks in that very clone - a DAP debuggee whose agent outlived its context stopped
 running to its end after a disconnect.
+
+The same ordering holds one level down, between a context that pools its job forks and the
+workers that borrow them. A pooled job notifies its wait group from inside its lambda, so the
+dispatcher can pass its join, return from a `new_thread` lambda and release the owning clone while
+the worker is still handing the fork back - into a pool the destructor has already freed, through
+an owner that no longer exists. So the owner counts its borrowed forks (`forkContextsBorrowed`):
+`acquireForkContext` raises the count, `releaseForkContext` lowers it as its last touch of the
+owner, and `~Context` waits for zero before it frees the pool.

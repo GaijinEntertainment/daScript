@@ -933,6 +933,7 @@ namespace das
     protected:
         vector<Context *>               forkContextPool;
         mutex                           forkContextPoolMutex;
+        atomic<int32_t>                 forkContextsBorrowed{0};    // acquired and not yet released; the destructor waits for zero
     };
 
     struct DebugAgentInstance {
