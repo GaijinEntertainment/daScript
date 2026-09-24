@@ -11,7 +11,9 @@ defaults:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # a master push run is the sccache seeder; cancelled by the next merge it saves nothing, so
+  # master runs queue while PR runs still supersede each other
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
 
@@ -111,7 +113,8 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-bundle-linux-64-Release
+        key: sccache-bundle-linux-64-Release@${{ github.run_id }}
+        restore-keys: sccache-bundle-linux-64-Release@
 
     - name: "Build: Daslang with release modules"
       run: |
@@ -122,19 +125,22 @@ jobs:
           -G Ninja $ACTIVE_MODULES
         cmake --build ./build --config Release --parallel
 
-    - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-bundle-linux-64-Release
-      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
       if: github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-bundle-linux-64-Release
+        key: sccache-bundle-linux-64-Release@${{ github.run_id }}
 
+    - name: "Prune older sccache slots"
+      if: github.ref == 'refs/heads/master'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-bundle-linux-64-Release@
+      run: |
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
+          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
     - name: "Install and smoke-test the bundle"
       run: cmake --build ./build --config Release --target check_bundle_smoke --parallel
 

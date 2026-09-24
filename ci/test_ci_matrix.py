@@ -143,6 +143,29 @@ class WorkflowShapes(unittest.TestCase):
         self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'slow'", text)
         self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'backend'", text)
 
+    def test_slots_are_saved_under_a_run_key_and_restored_by_prefix(self):
+        # a delete-then-save refresh left the key empty for the length of a build, and a run
+        # cancelled between the two left it empty for good; a run-unique key with a prefix restore
+        # never has a gap, and the prune after the save keeps one entry per slot
+        for name in ("build.yml", "build_matrix.yml", "nightly.yml", "extended_checks.yml"):
+            text = self.read(name)
+            self.assertNotIn("Refresh sccache slot", text, name)
+            restores = re.findall(r"- name: \"Restore sccache objects\"\n((?:      .*\n)+)", text)
+            saves = re.findall(r"- name: \"Save sccache objects\"\n((?:      .*\n)+)", text)
+            prunes = text.count('- name: "Prune older sccache slots"')
+            self.assertTrue(restores, name)
+            self.assertEqual(len(saves), len(restores), name)
+            self.assertEqual(prunes, len(saves), name)
+            for block in restores:
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+                self.assertRegex(block, r"restore-keys: sccache-[^\n]+@\n", name)
+            for block in saves:
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+
+    def test_master_push_builds_are_not_cancelled_by_the_next_merge(self):
+        text = self.read("build.yml")
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", text)
+
     def test_the_slot_is_saved_after_the_lane_compiled(self):
         # Build only configures; the lane targets compile, so a save placed before them lands
         # an empty slot

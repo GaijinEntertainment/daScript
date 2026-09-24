@@ -196,7 +196,8 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
+        restore-keys: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@
 
     - name: "Override das_llvm_disabled for LLVM-free matrix cells"
       if: (matrix.target == 'windows' && matrix.architecture == 32) || matrix.llvm_disabled == 'ON'
@@ -251,15 +252,18 @@ jobs:
 
     # The lane targets above are what compiles (Build only configures), so the slot is saved
     # here, and on a red sweep too: the objects a failed run compiled are as good as any.
-    - name: "Refresh sccache slot"
-      if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
-      run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
-        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}
+        key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
+    - name: "Prune older sccache slots"
+      if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@
+      run: |
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,key \
+          --jq '.[] | select(.key != "'"$SCKEY"'${{ github.run_id }}") | .id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }} || true; done
