@@ -91,7 +91,12 @@ class RmsWgBase {
 
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
     def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float {
-        let ss = subgroupAdd(ss0)
+        return 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)   // the CPU rmsnorm's own form
+    }
+
+    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it)
+    def wg_sum(v0 : float; slot : uint) : float {
+        let ss = subgroupAdd(v0)
         if (gl_SubgroupInvocationID == 0u) {
             part[slot * 64u + gl_SubgroupID] = ss
         }
@@ -102,7 +107,7 @@ class RmsWgBase {
             tot += part[slot * 64u + sgi]
             sgi++
         }
-        return 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
+        return tot
     }
 }
 
@@ -9082,6 +9087,237 @@ class TowerGeglu {
             g[e + 1u] = geglu(g[e + 1u], u[e + 1u])
             g[e + 2u] = geglu(g[e + 2u], u[e + 2u])
             g[e + 3u] = geglu(g[e + 3u], u[e + 3u])
+        }
+    }
+}
+
+struct TowerLnArgs {
+    d : uint        // the row width
+    rows : uint
+    woff : uint     // the norm weight row's base in wn, its bias row at boff
+    boff : uint
+    eps : float
+    ln_on : uint    // TowerPostAddLn: the next pre-norm at lnoff / lnboff norms the updated row into xb
+    lnoff : uint
+    lnboff : uint
+}
+
+//! layernorm rows against a weight and a bias row: out[r] = (x[r] - mean) . inv . w + b, the CPU `layernorm`'s form with
+//! its mean and variance as workgroup sums - one workgroup a row
+[vk_dispatch(name = "tower_ln_cls", grid = "wgs", params = "wgs : int64")]
+class TowerLn : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 outx : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_ln_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            s1 += x[base + i]
+            i += 256u
+        }
+        let mean = wg_sum(s1, 0u) / float(pa.d)
+        var s2 = 0.0
+        i = tid
+        while (i < pa.d) {
+            let dv = x[base + i] - mean
+            s2 += dv * dv
+            i += 256u
+        }
+        let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+        i = tid
+        while (i < pa.d) {
+            outx[base + i] = (x[base + i] - mean) * inv * wn[pa.woff + i] + wn[pa.boff + i]
+            i += 256u
+        }
+    }
+}
+
+//! the residual seam of a biased block: x[r] += y[r] + b (the branch's output bias at `boff`), then under `ln_on`
+//! xb[r] = layernorm(x[r]) . wln + bln (the next branch's pre-norm at `lnoff` / `lnboff`) - one workgroup a row
+[vk_dispatch(name = "tower_post_add_ln_cls", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddLn : RmsWgBase {
+    @ssbo @binding = 0 x : array<float>    // the residual stream, updated in place
+    @ssbo @binding = 1 y : array<float>    // the branch's rows
+    @ssbo @binding = 2 xb : array<float>   // the next pre-norm's rows (written under ln_on)
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_post_add_ln_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let xv = x[base + i] + (y[base + i] + wn[pa.boff + i])
+            x[base + i] = xv
+            s1 += xv
+            i += 256u
+        }
+        if (pa.ln_on != 0u) {
+            let mean = wg_sum(s1, 0u) / float(pa.d)
+            var s2 = 0.0
+            i = tid
+            while (i < pa.d) {
+                let dv = x[base + i] - mean
+                s2 += dv * dv
+                i += 256u
+            }
+            let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+            i = tid
+            while (i < pa.d) {
+                xb[base + i] = (x[base + i] - mean) * inv * wn[pa.lnoff + i] + wn[pa.lnboff + i]
+                i += 256u
+            }
+        }
+    }
+}
+
+struct TowerBiasArgs {
+    d : uint        // the row width (a 4-multiple)
+    nelem : uint    // rows x d
+    boff : uint     // the bias row's base in wn
+    act : uint      // 0 = the bias alone, 1 = the tanh GELU after it
+}
+
+//! a GEMM output's bias row added in place, and under `act` the tanh GELU the SigLIP FFN takes - the CPU `gelu_tanh_lut`'s
+//! form with its f16 rounding of the input and the output (the LUT is the f16-domain twin of this)
+[vk_dispatch(name = "tower_bias_act_cls", grid = "wgs", params = "wgs : int64")]
+class TowerBiasAct {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @push_constant pa : TowerBiasArgs
+
+    def gelu_tanh(v : float) : float {
+        if (v <= -10.0) {
+            return 0.0
+        }
+        if (v >= 10.0) {
+            return v
+        }
+        let xr = float(float16(v))
+        let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
+        return float(float16(g))
+    }
+
+    def biased(e : uint) : float {
+        let v = x[e] + wn[pa.boff + e % pa.d]
+        return pa.act != 0u ? gelu_tanh(v) : v
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            x[e] = biased(e)
+            x[e + 1u] = biased(e + 1u)
+            x[e + 2u] = biased(e + 2u)
+            x[e + 3u] = biased(e + 3u)
+        }
+    }
+}
+
+struct TowerRestrideArgs {
+    rows : uint
+    nheads : uint
+    hs : uint       // the compact head width
+    hsp : uint      // the padded head width (the flash tile's)
+    sstride : uint  // the compact rows' stride and the column their heads start at (a fused [q | k | v] row: 3d and 0 / d / 2d)
+    soff : uint
+}
+
+//! the head restride between the compact rows [rows x heads x hs] (at `sstride` / `soff`) and the flash tile's padded panel
+//! [rows x heads x hsp]: PAD writes the padded panel with zero pads (f16 under OUT16 - the K/V shadows - else f32, the q
+//! panel), the other way reads the compact row back off the padded f32 output - one thread an element of the padded space
+[ |> template_struct_instance]
+class template TowerRestrideT {
+    @template_constant PAD : bool = true
+    @template_constant OUT16 : bool = false
+    @template_constant OUT32 : bool = true   //! the f32 destination's gate: the f16 stamp clears it as it sets OUT16
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 @template_gate = OUT32 dst : array<float>
+    @ssbo @binding = 2 @template_gate = OUT16 dsth : array<float16>
+    @push_constant pa : TowerRestrideArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let per_row = pa.nheads * pa.hsp
+        if (gid < pa.rows * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let head = hp / pa.hsp
+            let lane = hp % pa.hsp
+            let ci = row * pa.sstride + pa.soff + head * pa.hs + lane
+            static_if (PAD) {
+                let v = lane < pa.hs ? src[ci] : 0.0
+                static_if (OUT16) {
+                    dsth[gid] = float16(v)
+                } else {
+                    dst[gid] = v
+                }
+            } else {
+                if (lane < pa.hs) {
+                    dst[ci] = src[gid]
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "tower_hpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadPad : TowerRestrideT {}
+
+[vk_dispatch(name = "tower_hpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadPad16 : TowerRestrideT {
+    override OUT16 = true
+    override OUT32 = false
+}
+
+[vk_dispatch(name = "tower_hunpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerHeadUnpad : TowerRestrideT {
+    override PAD = false
+}
+
+struct TowerRopeTabArgs {
+    sstride : uint  // the rows' stride and the column the heads start at (a fused [q | k | v] row)
+    soff : uint
+    nheads : uint
+    hs : uint
+    half : uint     // the rotary half = hs / 2: pairs (j, j + half), one table row of `half` cos and `half` sin a token
+    rows : uint
+}
+
+//! the full-head NEOX rope over q or k rows in place, the CPU `rope_neox_tab_rows`'s form: one table pair a row shared by
+//! every head (the vision mrope tables), the pairs (j, j + half) rotated - one thread per (row, head, pair)
+[vk_dispatch(name = "tower_rope_tab_cls", grid = "wgs", params = "wgs : int64")]
+class TowerRopeTab {
+    @ssbo @binding = 0 v : array<float>
+    @ssbo @binding = 1 cos_t : array<float>
+    @ssbo @binding = 2 sin_t : array<float>
+    @push_constant pa : TowerRopeTabArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_rope_tab_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let per_row = pa.nheads * pa.half
+        if (gid < pa.rows * per_row) {
+            let row = gid / per_row
+            let hp = gid % per_row
+            let j = hp % pa.half
+            let base = row * pa.sstride + pa.soff + (hp / pa.half) * pa.hs
+            let x0 = v[base + j]
+            let x1 = v[base + j + pa.half]
+            let c = cos_t[row * pa.half + j]
+            let s = sin_t[row * pa.half + j]
+            v[base + j] = x0 * c - x1 * s
+            v[base + j + pa.half] = x0 * s + x1 * c
         }
     }
 }

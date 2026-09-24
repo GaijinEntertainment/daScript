@@ -979,7 +979,13 @@ the knob ARMED must never dispatch and must record the `quant_mode` decline - it
 would read as f32 garbage), and a third crowned encode on the twin-W route
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
-the mmproj or dumps.
+the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`gpu_towers`); on a
+Vulkan build the q8 cell re-runs its two dumps through the Vulkan block loop with the engage
+counters, and `test_gemma3v_vulkan_twin` is the dump-free instrument - the fixed canvas three
+ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block truncated
+towers and the whole tower, the device's distance from the exact chain held within 1.5x the
+CPU q8 chain's own, a poisoned element per bar, then the exact-lane tower's `quant_mode`
+decline; one deep canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's cost.
 `test_qwen3v.das` - stocked suite; the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
@@ -1007,7 +1013,15 @@ via set_metal_tensor_crowns + prefill re-init so the half twins compile, the 4B 
 the same GPU bars, engage proven by the metal_tower_f16_encodes delta, plus the knob-off
 leg whose counter must not move, and the Omni-30B bf16 half - the same crowned route on the
 bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves the twin
-bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell.
+bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell. The CPU-lane
+claims pin both GPU tower knobs off (`gpu_towers`). On a Vulkan build `test_qwen3v_vulkan_twin`
+(Qwen3-VL 4B, the deepstack carrier) is the dump-free instrument: the exact CPU chain, the CPU
+q8 chain and the Vulkan block loop over the q8 image (the tap mergers run on the CPU off the
+residuals the driver stashes after the tap blocks, so the wide rows' slices read the device's
+rows) on one-, two- and six-block truncated towers (the six-block one reaches the first tap) and
+the whole tower, three canvases, the device's distance from the exact chain held within 1.5x the
+CPU q8 chain's own, a poisoned element per bar, then the exact-lane tower left to the CPU chain
+(its hook is the Metal driver's, so no decline is counted). Skips without the mmproj or a device.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,

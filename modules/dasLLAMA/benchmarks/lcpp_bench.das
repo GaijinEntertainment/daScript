@@ -11,6 +11,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmup sanity check and the row statistic - shared with dasllama-server's in-process bench
 require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, a region a batched-row stream
 require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
+require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the image cell's engage witness, read in the vulkan half
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail the rows load on
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
@@ -551,7 +552,16 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1, think)   // warm: JIT + first touch
+            var vt0 = (encodes = 0l, declines = 0l)
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let s0 = vulkan_tower_stats()
+                vt0 = (encodes = s0.encodes, declines = s0.declines)
+            }
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps, think)
+            static_if (typeinfo builtin_module_exists(vulkan)) {   //! the served shape: the tower's engage witness beside the row
+                let s1 = vulkan_tower_stats()
+                print("lcpp_bench --image: vulkan tower encodes +{s1.encodes - vt0.encodes} of {reps}, declines +{s1.declines - vt0.declines} {vulkan_tower_declines()}\n")
+            }
             if (empty(turn.text)) {
                 // a duration over zero answer tokens prices nothing - refuse the cell by name
                 // (the Omni-30B greedy-flipped to an immediate stop under its own think-suppress

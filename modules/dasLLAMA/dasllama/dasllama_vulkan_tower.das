@@ -95,6 +95,8 @@ let private VT_YO = 0x1000u
 let private VT_HG = 0x2000u
 let private VT_HU = 0x4000u
 let private VT_YD = 0x8000u
+let private VT_QKV = 0x10000u   //! the fused [q | k | v] rows (qwen3v)
+let private VT_TAP = 0x20000u   //! the deepstack tap stash (the residual copied out after a tap block)
 
 //! one family's resident tower on the device: the whole block-GEMM plane as Q8_0 words, its scales as f16 halfwords (the
 //! image's own halfwords where it carries them, converted on the way up otherwise), the per-block f32 rows with a ones row
@@ -108,10 +110,12 @@ struct private VtResident {
     norms_dev : uint64
     norms_bytes : int64
     ones_off : int64      //! the ones row's element offset in norms_dev
-    meta : HostBuf        //! the batch schedules: one record and one map a GEMM dispatch
+    meta : HostBuf        //! the batch schedules: one record and one map a GEMM dispatch, sized by the encode (the scratch's)
+    meta_bytes : int64
     cap_rows : int64      //! the scratch's row capacity (0 = none yet)
     d : int64
     ff : int64
+    hd : int64            //! the head width the rope tables are sized for
     x_dev : uint64
     xb_dev : uint64
     xq_dev : uint64
@@ -130,9 +134,25 @@ struct private VtResident {
     hu_dev : uint64
     yd_dev : uint64
     tabs_dev : uint64
-    host : HostBuf        //! the x readback staging
+    pad_dp : int64        //! the padded attention width when the heads restride to the flash tile's width (0 = none)
+    qp_dev : uint64       //! the padded q panel (f32) and the padded K/V shadows (f16), the padded attention out
+    kp16_dev : uint64
+    vp16_dev : uint64
+    attp_dev : uint64
+    fused : bool          //! the fused [q | k | v] GEMM's rows and the per-token rope tables (qwen3v)
+    qkv_dev : uint64
+    cos_dev : uint64
+    sin_dev : uint64
+    taps : int64          //! deepstack tap stashes: the residual after each tap block, read back with x
+    xtap_dev : uint64
+    host : HostBuf        //! the x readback staging (the tap stashes behind it)
     bvar : int            //! the q8 batch class variant the d-wide sets were built for (-1 = none)
     bvar_ff : int         //! ... and the ff-wide ones (gate, up): the tile pick reads the output width
+    bvar_qkv : int        //! ... and the fused qkv one (3d wide)
+    s_qkv : VkDescriptorSet
+    s_bias_qkv : VkDescriptorSet
+    s_rope_tq : VkDescriptorSet
+    s_rope_tk : VkDescriptorSet
     s_q : VkDescriptorSet
     s_k : VkDescriptorSet
     s_v : VkDescriptorSet
@@ -160,10 +180,23 @@ struct private VtResident {
     s_post_o : VkDescriptorSet
     s_post_d : VkDescriptorSet
     s_geglu : VkDescriptorSet
+    s_ln : VkDescriptorSet        //! the biased-block family's sets (gemma3v): the layernorm, the biases, the restrides, the seams
+    s_bias_q : VkDescriptorSet
+    s_bias_k : VkDescriptorSet
+    s_bias_v : VkDescriptorSet
+    s_bias_hg : VkDescriptorSet
+    s_pad_q : VkDescriptorSet
+    s_pad_k : VkDescriptorSet
+    s_pad_v : VkDescriptorSet
+    s_unpad : VkDescriptorSet
+    s_post_o_ln : VkDescriptorSet
+    s_post_d_ln : VkDescriptorSet
     fa_khr : bool
 }
 
 var private g_vt_g4v : VtResident   //! the gemma4v family's resident tower (one a family: a second mmproj replaces it)
+var private g_vt_g3v : VtResident   //! the gemma3v family's
+var private g_vt_q3v : VtResident   //! the qwen3v family's
 var private g_vt_tabs : array<float>   //! the packed rope tables staging, [row][cx | sx | cy | sy]
 
 //! the residency key: the quant plane's address and size folded with sampled words, so a tower freed and another mapped
@@ -193,7 +226,25 @@ def private vt_release_scratch(var r : VtResident) {
             r.k16_dev, r.v16_dev, r.att_dev, r.yo_dev, r.hg_dev, r.hu_dev, r.yd_dev, r.tabs_dev)) {
         destroy_device_buf(b)
     }
+    if (r.pad_dp > 0l) {
+        for (b in fixed_array(r.qp_dev, r.kp16_dev, r.vp16_dev, r.attp_dev)) {
+            destroy_device_buf(b)
+        }
+        r.pad_dp = 0l
+    }
+    if (r.fused) {
+        for (b in fixed_array(r.qkv_dev, r.cos_dev, r.sin_dev)) {
+            destroy_device_buf(b)
+        }
+        r.fused = false
+    }
+    if (r.taps > 0l) {
+        destroy_device_buf(r.xtap_dev)
+        r.taps = 0l
+    }
     destroy_host_buf(r.host)
+    destroy_host_buf(r.meta)
+    r.meta_bytes = 0l
     r.cap_rows = 0l
     r.bvar = -1
     r.bvar_ff = -1
@@ -206,7 +257,6 @@ def private vt_release(var r : VtResident) {
         destroy_device_buf(r.wq_dev)
         destroy_device_buf(r.ws_dev)
         destroy_device_buf(r.norms_dev)
-        destroy_host_buf(r.meta)
         r.key = 0ul
     }
 }
@@ -215,13 +265,17 @@ def private vt_release(var r : VtResident) {
 //! uploads again.
 def vulkan_tower_shutdown {
     vt_release(g_vt_g4v)
+    vt_release(g_vt_g3v)
+    vt_release(g_vt_q3v)
 }
+
+def private vt_blank : VtResident => VtResident(bvar = -1, bvar_ff = -1, bvar_qkv = -1)
 
 //! the model drop's sweep takes every buffer and set the driver holds: forget the handles, the next encode rebuilds
 def private vt_forget {
-    g_vt_g4v = VtResident()
-    g_vt_g4v.bvar = -1
-    g_vt_g4v.bvar_ff = -1
+    g_vt_g4v = vt_blank()
+    g_vt_g3v = vt_blank()
+    g_vt_q3v = vt_blank()
 }
 
 //! one block GEMM's region in the tower's q8 plane: its element offset, its input width and its rows - the repack unit
@@ -275,30 +329,52 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
         upload_region_at(r.norms_dev, 0l, addr<uint8 const?>(norms[0]), r.norms_bytes)
     }
     delete norms
-    r.meta = make_host_buf(BATCH_META_BYTES, true)
     r.cap_rows = 0l
     r.bvar = -1
     r.bvar_ff = -1
+    r.bvar_qkv = -1
 }
 
-//! the per-encode scratch at a row capacity, and every descriptor set over it (the batch sets follow the variant, picked
-//! per encode from the row count - rebuilt when the pick moves)
+//! the per-encode scratch at a row capacity: `dp` > 0 adds the padded attention panels, `meta_bytes` sizes the schedule
+//! buffer, `fused` adds the [q | k | v] rows and the rope tables, `taps` the deepstack stashes; true when (re)built, so the
+//! family builds its sets over it (the batch sets follow the variant, picked per encode from the row count)
 [cold_path]
-def private vt_scratch(var r : VtResident; rows, d, ff, hd : int64; khr : bool) {
+def private vt_scratch(var r : VtResident; rows, d, ff, hd, dp, meta_bytes : int64; khr, fused : bool; taps : int64) : bool {
     let cap = (rows + 63l) / 64l * 64l
-    if (r.cap_rows >= cap && r.d == d && r.ff == ff) {
-        return
+    if (r.cap_rows >= cap && r.d == d && r.ff == ff && r.pad_dp == dp && r.meta_bytes >= meta_bytes && r.fused == fused && r.taps == taps) {
+        return false
     }
     vt_release_scratch(r)
+    r.meta_bytes = max(meta_bytes, BATCH_META_BYTES)
+    r.meta = make_host_buf(r.meta_bytes, true)
     r.cap_rows = cap
     r.d = d
     r.ff = ff
+    r.hd = hd
+    r.fa_khr = khr
     let bx = cap * d * 4l
     let bff = cap * ff * 4l
     let bq = cap * max(d, ff)
     let bs = bq / 32l * 4l
     let bh = cap * d * 2l
     let btabs = cap * hd * 4l   //! four tables of hd/4 pairs a row
+    r.pad_dp = dp
+    if (dp > 0l) {
+        r.qp_dev = make_device_buf(cap * dp * 4l)
+        r.kp16_dev = make_device_buf(cap * dp * 2l)
+        r.vp16_dev = make_device_buf(cap * dp * 2l)
+        r.attp_dev = make_device_buf(cap * dp * 4l)
+    }
+    r.fused = fused
+    if (fused) {
+        r.qkv_dev = make_device_buf(3l * bx)
+        r.cos_dev = make_device_buf(cap * (hd / 2l) * 4l)
+        r.sin_dev = make_device_buf(cap * (hd / 2l) * 4l)
+    }
+    r.taps = taps
+    if (taps > 0l) {
+        r.xtap_dev = make_device_buf(taps * bx)
+    }
     r.x_dev = make_device_buf(bx)
     r.xb_dev = make_device_buf(bx)
     r.xq_dev = make_device_buf(bq)
@@ -317,8 +393,25 @@ def private vt_scratch(var r : VtResident; rows, d, ff, hd : int64; khr : bool) 
     r.hu_dev = make_device_buf(bff)
     r.yd_dev = make_device_buf(bx)
     r.tabs_dev = make_device_buf(btabs)
-    r.host = make_host_buf(bx, true, [cached = true])
-    r.fa_khr = khr
+    r.host = make_host_buf((1l + taps) * bx, true, [cached = true])
+    r.bvar = -1
+    r.bvar_ff = -1
+    r.bvar_qkv = -1
+    return true
+}
+
+//! the gemma4v family's sets over the scratch: the norms, the clamped feeds, the bounds, the rope, the shadows, the flash
+//! tile at the head width, the seams, the GEGLU
+[cold_path]
+def private vt_sets_g4v(var r : VtResident) {
+    let cap = r.cap_rows
+    let bx = cap * r.d * 4l
+    let bff = cap * r.ff * 4l
+    let bq = cap * max(r.d, r.ff)
+    let bs = bq / 32l * 4l
+    let bh = cap * r.d * 2l
+    let btabs = cap * r.hd * 4l
+    let khr = r.fa_khr
     r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
     r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
     r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
@@ -339,21 +432,47 @@ def private vt_scratch(var r : VtResident; rows, d, ff, hd : int64; khr : bool) 
     r.s_post_o = set_tower_post_add_cls(fixed_array(r.x_dev, r.yo_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YO, VT_XB, 0u))
     r.s_post_d = set_tower_post_add_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
     r.s_geglu = set_tower_geglu_cls(fixed_array(r.hg_dev, r.hu_dev), fixed_array(bff, bff), fixed_array(VT_HG, VT_HU))
-    r.bvar = -1
-    r.bvar_ff = -1
+}
+
+//! the gemma3v family's sets: the layernorm, the plain feeds, the biases, the head restrides to the padded panels, the
+//! flash tile at the padded width, the seams with their next layernorm
+[cold_path]
+def private vt_sets_g3v(var r : VtResident) {
+    let cap = r.cap_rows
+    let bx = cap * r.d * 4l
+    let bff = cap * r.ff * 4l
+    let bq = cap * max(r.d, r.ff)
+    let bs = bq / 32l * 4l
+    let bp = cap * r.pad_dp * 4l
+    let bph = cap * r.pad_dp * 2l
+    r.s_ln = set_tower_ln_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
+    r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
+    r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
+    r.s_bias_q = set_tower_bias_act_cls(fixed_array(r.q_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_Q, 0u))
+    r.s_bias_k = set_tower_bias_act_cls(fixed_array(r.k_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_K, 0u))
+    r.s_bias_v = set_tower_bias_act_cls(fixed_array(r.v_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_V, 0u))
+    r.s_bias_hg = set_tower_bias_act_cls(fixed_array(r.hg_dev, r.norms_dev), fixed_array(bff, r.norms_bytes), fixed_array(VT_HG, 0u))
+    r.s_pad_q = set_tower_hpad_cls(fixed_array(r.q_dev, r.qp_dev), fixed_array(bx, bp), fixed_array(VT_Q, VT_Q2))
+    r.s_pad_k = set_tower_hpad16_cls(fixed_array(r.k_dev, r.kp16_dev), fixed_array(bx, bph), fixed_array(VT_K, VT_K16))
+    r.s_pad_v = set_tower_hpad16_cls(fixed_array(r.v_dev, r.vp16_dev), fixed_array(bx, bph), fixed_array(VT_V, VT_V16))
+    r.s_fa = fa_stamp_set(r.fa_khr, fixed_array(r.qp_dev, r.kp16_dev, r.vp16_dev, r.attp_dev), fixed_array(bp, bph, bph, bp), fixed_array(VT_Q2, VT_K16, VT_V16, VT_K2))
+    r.s_unpad = set_tower_hunpad_cls(fixed_array(r.attp_dev, r.att_dev), fixed_array(bp, bx), fixed_array(VT_K2, VT_ATT))
+    r.s_post_o_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yo_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YO, VT_XB, 0u))
+    r.s_post_d_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
 }
 
 //! one batch tile set over the resident weights, the shared feed and one output role, at a variant
 def private vt_batch_set(r : VtResident; v : int; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
     let bq = r.cap_rows * max(r.d, r.ff)
     return q8_batch_cls_set(v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xq_dev, r.xs_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, BATCH_META_BYTES, bq, bq / 32l * 4l, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, VT_XQ, y_bit))
+        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bq, bq / 32l * 4l, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, VT_XQ, y_bit))
 }
 
 //! the batch tile sets, one an output role: the d-wide roles at the variant the (d, rows) pick names, gate and up at the
-//! (ff, rows) one
+//! (ff, rows) one, the fused qkv at the (3d, rows) one where the scratch carries it
 [cold_path]
-def private vt_batch_sets(var r : VtResident; v, vff : int) {
+def private vt_batch_sets(var r : VtResident; v, vff : int; vqkv : int = -1) {
     let bx = r.cap_rows * r.d * 4l
     let bff = r.cap_rows * r.ff * 4l
     if (r.bvar != v) {
@@ -369,6 +488,39 @@ def private vt_batch_sets(var r : VtResident; v, vff : int) {
         r.s_up = vt_batch_set(r, vff, r.hu_dev, bff, VT_HU)
         r.bvar_ff = vff
     }
+    if (r.fused && r.bvar_qkv != vqkv) {
+        r.s_qkv = vt_batch_set(r, vqkv, r.qkv_dev, 3l * bx, VT_QKV)
+        r.bvar_qkv = vqkv
+    }
+}
+
+//! the qwen3v family's sets: the layernorm, the plain feeds, the fused qkv rows with their bias and the per-token rope on
+//! the q and k slots, the head restrides off those slots to the padded panels, the flash tile, the seams
+[cold_path]
+def private vt_sets_q3v(var r : VtResident) {
+    let cap = r.cap_rows
+    let bx = cap * r.d * 4l
+    let bff = cap * r.ff * 4l
+    let bq = cap * max(r.d, r.ff)
+    let bs = bq / 32l * 4l
+    let bp = cap * r.pad_dp * 4l
+    let bph = cap * r.pad_dp * 2l
+    let btab = cap * (r.hd / 2l) * 4l
+    r.s_ln = set_tower_ln_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
+    r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
+    r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
+    r.s_bias_qkv = set_tower_bias_act_cls(fixed_array(r.qkv_dev, r.norms_dev), fixed_array(3l * bx, r.norms_bytes), fixed_array(VT_QKV, 0u))
+    r.s_bias_hg = set_tower_bias_act_cls(fixed_array(r.hg_dev, r.norms_dev), fixed_array(bff, r.norms_bytes), fixed_array(VT_HG, 0u))
+    r.s_rope_tq = set_tower_rope_tab_cls(fixed_array(r.qkv_dev, r.cos_dev, r.sin_dev), fixed_array(3l * bx, btab, btab), fixed_array(VT_QKV, 0u, 0u))
+    r.s_rope_tk = r.s_rope_tq   //! the same set: the k slot is a column offset in the push constants
+    r.s_pad_q = set_tower_hpad_cls(fixed_array(r.qkv_dev, r.qp_dev), fixed_array(3l * bx, bp), fixed_array(VT_QKV, VT_Q2))
+    r.s_pad_k = set_tower_hpad16_cls(fixed_array(r.qkv_dev, r.kp16_dev), fixed_array(3l * bx, bph), fixed_array(VT_QKV, VT_K16))
+    r.s_pad_v = set_tower_hpad16_cls(fixed_array(r.qkv_dev, r.vp16_dev), fixed_array(3l * bx, bph), fixed_array(VT_QKV, VT_V16))
+    r.s_fa = fa_stamp_set(r.fa_khr, fixed_array(r.qp_dev, r.kp16_dev, r.vp16_dev, r.attp_dev), fixed_array(bp, bph, bph, bp), fixed_array(VT_Q2, VT_K16, VT_V16, VT_K2))
+    r.s_unpad = set_tower_hunpad_cls(fixed_array(r.attp_dev, r.att_dev), fixed_array(bp, bx), fixed_array(VT_K2, VT_ATT))
+    r.s_post_o_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yo_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YO, VT_XB, 0u))
+    r.s_post_d_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
 }
 
 //! the schedule writer: record `rid` = [wblk0, 0, rows, 0] at word 4 rid, its map of `groups` words all naming it at the
@@ -395,20 +547,383 @@ def private vt_gemm_groups(d, rows : int64) : int64 {
     return ((d + te.td - 1l) / te.td) * ((rows + te.tc - 1l) / te.tc)
 }
 
-[unused_argument(t, s, npos)]
-def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {
-    if (!g_vt_env_tower) {
-        return vt_decline(VulkanTowerDecline.knob)
+//! the gemma3v block GEMM regions in GEMMA3V_GEMM_* order (up at the padded ffn width, its rows; down over it)
+def private g3v_regions(t : Gemma3vTower) : array<VtRegion> {
+    let d = t.n_embd
+    let ff = t.ff_pad
+    var regions : array<VtRegion>
+    regions |> reserve(t.n_layer * GEMMA3V_GEMMS)
+    for (l in range64(t.n_layer)) {
+        let o = gemma3v_block_offs(t, l)
+        for (g in range64(GEMMA3V_GEMMS)) {
+            let n = g == GEMMA3V_GEMM_DOWN ? ff : d
+            let rows = g == GEMMA3V_GEMM_UP ? ff : d
+            regions |> push(VtRegion(woff = o.w[g], n = n, rows = rows))
+        }
     }
-    return vt_decline(VulkanTowerDecline.unserved)
+    return <- regions
 }
 
-[unused_argument(t, s, npos)]
-def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {
+//! the gemma3v (SigLIP) block loop as one command buffer over the q8 image, dispatch for dispatch the CPU loop's order: the
+//! biased q/k/v GEMMs, the heads restrided to the flash tile's 128 (zero pads keep the 72-wide dot exact at its own scale),
+//! the bidirectional tile, the o GEMM and its seam with the next layernorm, the up GEMM with the tanh GELU, down, the FFN seam
+def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_vt_env_tower) {
         return vt_decline(VulkanTowerDecline.knob)
     }
-    return vt_decline(VulkanTowerDecline.unserved)
+    if (!t.q8) {
+        return vt_decline(VulkanTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let ff = t.ff_pad
+    let hs = d / t.n_head
+    let hsp = hs <= 64l ? 64l : 128l
+    let dp = t.n_head * hsp
+    if (hs > 128l || d % 64l != 0l || ff % 64l != 0l || npos > VT_META_CAP_ROWS || npos <= 0l) {
+        return vt_decline(VulkanTowerDecline.shape)
+    }
+    if (!gpu_want_arms_tier() || !vk_moe_init()) {   //! the tier's want (DASLLAMA_GPU) gates the driver; the device init alone reads no knob
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    let khr = !cm2_fa_on()
+    if (khr && !khr_kq_tile_on()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var fa_ok = false
+    if (hsp == 64l) {
+        fa_ok = khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
+    } else {
+        fa_ok = khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+    }
+    if (!fa_ok || !ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_hpad_cls()
+            || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls() || !ensure_tower_post_add_ln_cls()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
+    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
+    if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff)) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var r & = g_vt_g3v
+    let key = vt_key(t.qblob, t.qscales.n)
+    if (r.key != key) {
+        var regions <- g3v_regions(t)
+        vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
+        delete regions
+    }
+    let g_d = vt_gemm_groups(d, npos)
+    let g_ff = vt_gemm_groups(ff, npos)
+    let nrec = t.n_layer * GEMMA3V_GEMMS
+    if (vt_scratch(r, npos, d, ff, hs, dp, (nrec * 4l + t.n_layer * (5l * g_d + g_ff)) * 4l, khr, false, 0l)) {
+        vt_sets_g3v(r)
+    }
+    vt_batch_sets(r, v, vff)
+    var maps : array<uint>
+    maps |> resize(nrec)
+    unsafe {
+        var mp = reinterpret<uint?>(r.meta.mapped)
+        var cur = nrec * 4l
+        for (l in range64(t.n_layer)) {
+            let o = gemma3v_block_offs(t, l)
+            for (g in range64(GEMMA3V_GEMMS)) {
+                let rid = l * GEMMA3V_GEMMS + g
+                maps[rid] = vt_sched_map(mp, cur, rid, o.w[g] / 32l, npos, g == GEMMA3V_GEMM_UP ? g_ff : g_d)
+            }
+        }
+    }
+    let bx = npos * d * 4l
+    unsafe {
+        upload_region_at(r.x_dev, 0l, addr<uint8 const?>(s.x[0]), bx)
+    }
+    let nd = npos * d
+    let nff = npos * ff
+    let wg_nd = (nd / 4l + 255l) / 256l
+    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_pad = (npos * dp + 255l) / 256l
+    let wg_fa = t.n_head * ((npos + (khr ? 15l : 63l)) / (khr ? 16l : 64l))
+    let n_off = t.layer_f
+    var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
+    var pc_rs = TowerRestrideArgs(rows = uint(npos), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
+    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / 32l), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / 32l), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
+    var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
+    var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u)
+    var pc_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = 0u)
+    var pc_gelu = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = 1u)
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        for (l in range64(t.n_layer)) {
+            let o = gemma3v_block_offs(t, l)
+            let rb = l * GEMMA3V_GEMMS
+            if (l == 0l) {
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - n_off), boff = uint(o.ln1_b - n_off), eps = t.eps)
+                enc_tower_ln_cls(raw, h, r.s_ln, pc, npos)
+            }
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
+            pc_gd.map_off = maps[rb + GEMMA3V_GEMM_Q]
+            q8_batch_cls_enc(v, raw, h, r.s_q, pc_gd, g_d)
+            pc_bias.boff = uint(o.b[GEMMA3V_GEMM_Q] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_q, pc_bias, wg_nd)
+            pc_gd.map_off = maps[rb + GEMMA3V_GEMM_K]
+            q8_batch_cls_enc(v, raw, h, r.s_k, pc_gd, g_d)
+            pc_bias.boff = uint(o.b[GEMMA3V_GEMM_K] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_k, pc_bias, wg_nd)
+            pc_gd.map_off = maps[rb + GEMMA3V_GEMM_V]
+            q8_batch_cls_enc(v, raw, h, r.s_v, pc_gd, g_d)
+            pc_bias.boff = uint(o.b[GEMMA3V_GEMM_V] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_v, pc_bias, wg_nd)
+            enc_tower_hpad_cls(raw, h, r.s_pad_q, pc_rs, wg_pad)
+            enc_tower_hpad16_cls(raw, h, r.s_pad_k, pc_rs, wg_pad)
+            enc_tower_hpad16_cls(raw, h, r.s_pad_v, pc_rs, wg_pad)
+            if (hsp == 64l) {
+                if (khr) {
+                    enc_fa_khr_h64_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                } else {
+                    enc_fa_cm2_h64_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                }
+            } elif (khr) {
+                enc_fa_khr_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+            } else {
+                enc_fa_cm2_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+            }
+            enc_tower_hunpad_cls(raw, h, r.s_unpad, pc_rs, wg_pad)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_att, pc_rq, wg_nd)
+            pc_gd.map_off = maps[rb + GEMMA3V_GEMM_O]
+            q8_batch_cls_enc(v, raw, h, r.s_o, pc_gd, g_d)
+            var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.b[GEMMA3V_GEMM_O] - n_off), eps = t.eps,
+                ln_on = 1u, lnoff = uint(o.ln2_w - n_off), lnboff = uint(o.ln2_b - n_off))
+            enc_tower_post_add_ln_cls(raw, h, r.s_post_o_ln, pc_post, npos)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
+            pc_gff.map_off = maps[rb + GEMMA3V_GEMM_UP]
+            q8_batch_cls_enc(vff, raw, h, r.s_gate, pc_gff, g_ff)   //! the up rows ride the gate slot's buffer (hg)
+            pc_gelu.boff = uint(o.b[GEMMA3V_GEMM_UP] - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_hg, pc_gelu, wg_nff)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_hg, pc_rqh, wg_nff)
+            pc_dn.map_off = maps[rb + GEMMA3V_GEMM_DOWN]
+            q8_batch_cls_enc(v, raw, h, r.s_down, pc_dn, g_d)
+            let last = l + 1l == t.n_layer
+            pc_post.boff = uint(o.b[GEMMA3V_GEMM_DOWN] - n_off)
+            pc_post.ln_on = last ? 0u : 1u
+            if (!last) {
+                let on = gemma3v_block_offs(t, l + 1l)
+                pc_post.lnoff = uint(on.ln1_w - n_off)
+                pc_post.lnboff = uint(on.ln1_b - n_off)
+            }
+            enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)
+        }
+        vhz_dep(raw, h, VT_X, 0u, true)
+        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+    }
+    unsafe {
+        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
+    }
+    delete maps
+    g_vt_encodes++
+    g_vt_rows += npos
+    g_vt_blocks += t.n_layer
+    return true
+}
+
+//! the qwen3v block GEMM regions in QWEN3V_GEMM_* order: the fused qkv at 3d rows, up at the padded ffn width, down over it
+def private q3v_regions(t : Qwen3vTower) : array<VtRegion> {
+    let d = t.n_embd
+    let ff = t.ff_pad
+    var regions : array<VtRegion>
+    regions |> reserve(t.n_layer * QWEN3V_GEMMS)
+    for (l in range64(t.n_layer)) {
+        let o = qwen3v_block_offs(t, l)
+        regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_QKV], n = d, rows = 3l * d))
+        regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_O], n = d, rows = d))
+        regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_UP], n = d, rows = ff))
+        regions |> push(VtRegion(woff = o.w[QWEN3V_GEMM_DOWN], n = ff, rows = d))
+    }
+    return <- regions
+}
+
+//! the tap index of block `l`, -1 off the taps
+def private q3v_tap_of(t : Qwen3vTower; l : int64) : int64 => l == t.ds_l0 ? 0l : (l == t.ds_l1 ? 1l : (l == t.ds_l2 ? 2l : -1l))
+
+//! the qwen3v block loop as one command buffer over the q8 image, dispatch for dispatch the CPU loop's order: the fused
+//! biased qkv GEMM, the rope on its q and k slots, the heads restrided off the slots to the tile's 128, the bidirectional
+//! tile, the o GEMM and its seam, up with the tanh GELU, down, the FFN seam; a tap block's residual is stashed for the CPU taps
+def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_vt_env_tower) {
+        return vt_decline(VulkanTowerDecline.knob)
+    }
+    if (!t.q8) {
+        return vt_decline(VulkanTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let ff = t.ff_pad
+    let hs = d / t.n_head
+    let hsp = hs <= 64l ? 64l : 128l
+    let dp = t.n_head * hsp
+    let nds = t.n_deepstack
+    if (hs > 128l || hs % 2l != 0l || d % 64l != 0l || ff % 64l != 0l || npos > VT_META_CAP_ROWS || npos <= 0l) {
+        return vt_decline(VulkanTowerDecline.shape)
+    }
+    if (!gpu_want_arms_tier() || !vk_moe_init()) {   //! the tier's want (DASLLAMA_GPU) gates the driver; the device init alone reads no knob
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    let khr = !cm2_fa_on()
+    if (khr && !khr_kq_tile_on()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var fa_ok = false
+    if (hsp == 64l) {
+        fa_ok = khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
+    } else {
+        fa_ok = khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+    }
+    if (!fa_ok || !ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_rope_tab_cls()
+            || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls() || !ensure_tower_post_add_ln_cls()) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
+    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
+    let vqkv = q8_batch_cls_variant(q8_batch_tile_for(3l * d, npos), q8_batch_aligned(3l * d, npos))
+    if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff) || !q8_batch_cls_ensure(vqkv)) {
+        return vt_decline(VulkanTowerDecline.device)
+    }
+    var r & = g_vt_q3v
+    let key = vt_key(t.qblob, t.qscales.n)
+    if (r.key != key) {
+        var regions <- q3v_regions(t)
+        vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l)
+        delete regions
+    }
+    let g_d = vt_gemm_groups(d, npos)
+    let g_ff = vt_gemm_groups(ff, npos)
+    let g_qkv = vt_gemm_groups(3l * d, npos)
+    let nrec = t.n_layer * QWEN3V_GEMMS
+    if (vt_scratch(r, npos, d, ff, hs, dp, (nrec * 4l + t.n_layer * (2l * g_d + g_ff + g_qkv)) * 4l, khr, true, nds)) {
+        vt_sets_q3v(r)
+    }
+    vt_batch_sets(r, v, vff, vqkv)
+    var maps : array<uint>
+    maps |> resize(nrec)
+    unsafe {
+        var mp = reinterpret<uint?>(r.meta.mapped)
+        var cur = nrec * 4l
+        for (l in range64(t.n_layer)) {
+            let o = qwen3v_block_offs(t, l)
+            let rb = l * QWEN3V_GEMMS
+            maps[rb + QWEN3V_GEMM_QKV] = vt_sched_map(mp, cur, rb + QWEN3V_GEMM_QKV, o.w[QWEN3V_GEMM_QKV] / 32l, npos, g_qkv)
+            maps[rb + QWEN3V_GEMM_O] = vt_sched_map(mp, cur, rb + QWEN3V_GEMM_O, o.w[QWEN3V_GEMM_O] / 32l, npos, g_d)
+            maps[rb + QWEN3V_GEMM_UP] = vt_sched_map(mp, cur, rb + QWEN3V_GEMM_UP, o.w[QWEN3V_GEMM_UP] / 32l, npos, g_ff)
+            maps[rb + QWEN3V_GEMM_DOWN] = vt_sched_map(mp, cur, rb + QWEN3V_GEMM_DOWN, o.w[QWEN3V_GEMM_DOWN] / 32l, npos, g_d)
+        }
+    }
+    let bx = npos * d * 4l
+    let half = hs / 2l
+    let btab = npos * half * 4l
+    unsafe {
+        upload_region_at(r.x_dev, 0l, addr<uint8 const?>(s.x[0]), bx)
+        upload_region_at(r.cos_dev, 0l, addr<uint8 const?>(s.cos_t[0]), btab)
+        upload_region_at(r.sin_dev, 0l, addr<uint8 const?>(s.sin_t[0]), btab)
+    }
+    let nd = npos * d
+    let nff = npos * ff
+    let wg_nd = (nd / 4l + 255l) / 256l
+    let wg_n3d = (3l * nd / 4l + 255l) / 256l
+    let wg_nff = (nff / 4l + 255l) / 256l
+    let wg_pad = (npos * dp + 255l) / 256l
+    let wg_rope = (npos * t.n_head * half + 255l) / 256l
+    let wg_fa = t.n_head * ((npos + (khr ? 15l : 63l)) / (khr ? 16l : 64l))
+    let n_off = t.layer_f
+    var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
+    var pc_rs = TowerRestrideArgs(rows = uint(npos), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
+    var pc_un = TowerRestrideArgs(rows = uint(npos), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
+    var pc_rope = TowerRopeTabArgs(sstride = uint(3l * d), soff = 0u, nheads = uint(t.n_head), hs = uint(hs), half = uint(half), rows = uint(npos))
+    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / 32l), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / 32l), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
+    var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
+    var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
+    var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u)
+    var pc_bqkv = TowerBiasArgs(d = uint(3l * d), nelem = uint(3l * nd), boff = 0u, act = 0u)
+    var pc_gelu = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = 1u)
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        for (l in range64(t.n_layer)) {
+            let o = qwen3v_block_offs(t, l)
+            let rb = l * QWEN3V_GEMMS
+            if (l == 0l) {
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - n_off), boff = uint(o.ln1_b - n_off), eps = t.eps)
+                enc_tower_ln_cls(raw, h, r.s_ln, pc, npos)
+            }
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
+            pc_gqkv.map_off = maps[rb + QWEN3V_GEMM_QKV]
+            q8_batch_cls_enc(vqkv, raw, h, r.s_qkv, pc_gqkv, g_qkv)
+            pc_bqkv.boff = uint(o.qkv_b - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_qkv, pc_bqkv, wg_n3d)
+            pc_rope.soff = 0u
+            enc_tower_rope_tab_cls(raw, h, r.s_rope_tq, pc_rope, wg_rope)
+            pc_rope.soff = uint(d)
+            enc_tower_rope_tab_cls(raw, h, r.s_rope_tk, pc_rope, wg_rope)
+            pc_rs.soff = 0u
+            enc_tower_hpad_cls(raw, h, r.s_pad_q, pc_rs, wg_pad)
+            pc_rs.soff = uint(d)
+            enc_tower_hpad16_cls(raw, h, r.s_pad_k, pc_rs, wg_pad)
+            pc_rs.soff = uint(2l * d)
+            enc_tower_hpad16_cls(raw, h, r.s_pad_v, pc_rs, wg_pad)
+            if (hsp == 64l) {
+                if (khr) {
+                    enc_fa_khr_h64_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                } else {
+                    enc_fa_cm2_h64_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+                }
+            } elif (khr) {
+                enc_fa_khr_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+            } else {
+                enc_fa_cm2_h128_bidir_cls(raw, h, r.s_fa, pc_fa, wg_fa)
+            }
+            enc_tower_hunpad_cls(raw, h, r.s_unpad, pc_un, wg_pad)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_att, pc_rq, wg_nd)
+            pc_gd.map_off = maps[rb + QWEN3V_GEMM_O]
+            q8_batch_cls_enc(v, raw, h, r.s_o, pc_gd, g_d)
+            var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.out_b - n_off), eps = t.eps,
+                ln_on = 1u, lnoff = uint(o.ln2_w - n_off), lnboff = uint(o.ln2_b - n_off))
+            enc_tower_post_add_ln_cls(raw, h, r.s_post_o_ln, pc_post, npos)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
+            pc_gff.map_off = maps[rb + QWEN3V_GEMM_UP]
+            q8_batch_cls_enc(vff, raw, h, r.s_gate, pc_gff, g_ff)   //! the up rows ride the gate slot's buffer (hg)
+            pc_gelu.boff = uint(o.up_b - n_off)
+            enc_tower_bias_act_cls(raw, h, r.s_bias_hg, pc_gelu, wg_nff)
+            enc_tower_clamp_rq_cls(raw, h, r.s_rq_hg, pc_rqh, wg_nff)
+            pc_dn.map_off = maps[rb + QWEN3V_GEMM_DOWN]
+            q8_batch_cls_enc(v, raw, h, r.s_down, pc_dn, g_d)
+            let last = l + 1l == t.n_layer
+            pc_post.boff = uint(o.down_b - n_off)
+            pc_post.ln_on = last ? 0u : 1u
+            if (!last) {
+                let on = qwen3v_block_offs(t, l + 1l)
+                pc_post.lnoff = uint(on.ln1_w - n_off)
+                pc_post.lnboff = uint(on.ln1_b - n_off)
+            }
+            enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)
+            let k = q3v_tap_of(t, l)
+            if (k >= 0l && k < nds) {
+                vhz_dep(raw, h, VT_X, VT_TAP, true)
+                cmd_copy_range(raw, r.x_dev, 0l, r.xtap_dev, k * bx, bx)
+            }
+        }
+        vhz_dep(raw, h, VT_X | VT_TAP, 0u, true)
+        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+        if (nds > 0l) {
+            cmd_copy_range(raw, r.xtap_dev, 0l, r.host.buf, bx, nds * bx)
+        }
+    }
+    unsafe {
+        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
+        if (nds > 0l) {
+            memcpy(addr<void?>(s.ds_xtaps[0]), reinterpret<void?>(intptr(r.host.mapped) + uint64(bx)), nds * bx)
+        }
+    }
+    delete maps
+    g_vt_encodes++
+    g_vt_rows += npos
+    g_vt_blocks += t.n_layer
+    return true
 }
 
 [unused_argument(t, s, npos)]
@@ -452,7 +967,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     if (hd != 64l || d % 64l != 0l || ff % 64l != 0l || npos > VT_META_CAP_ROWS || npos <= 0l) {
         return vt_decline(VulkanTowerDecline.shape)
     }
-    if (!vk_moe_init()) {
+    if (!gpu_want_arms_tier() || !vk_moe_init()) {   //! the tier's want (DASLLAMA_GPU) gates the driver; the device init alone reads no knob
         return vt_decline(VulkanTowerDecline.device)
     }
     let khr = !cm2_fa_on()
@@ -476,15 +991,14 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hd)
         delete regions
     }
-    vt_scratch(r, npos, d, ff, hd, khr)
-    vt_batch_sets(r, v, vff)
-    // the schedules: seven records and maps a block, all in one buffer
+    // the schedules: seven records and maps a block, all in one buffer sized for them
     let g_d = vt_gemm_groups(d, npos)
     let g_ff = vt_gemm_groups(ff, npos)
     let nrec = t.n_layer * GEMMA4V_GEMMS
-    if ((nrec * 4l + t.n_layer * (5l * g_d + 2l * g_ff)) * 4l > BATCH_META_BYTES) {
-        return vt_decline(VulkanTowerDecline.shape)
+    if (vt_scratch(r, npos, d, ff, hd, 0l, (nrec * 4l + t.n_layer * (5l * g_d + 2l * g_ff)) * 4l, khr, false, 0l)) {
+        vt_sets_g4v(r)
     }
+    vt_batch_sets(r, v, vff)
     var maps : array<uint>
     maps |> resize(nrec)
     unsafe {
@@ -640,7 +1154,7 @@ def dasllama_vulkan_tower_register {
     static_if (!typeinfo builtin_module_exists(das_metal)) {   //! the Metal driver owns the slots on an Apple build
         register_gemma4v_gpu(@@vulkan_gemma4v_blocks, @@vulkan_tower_serves_exact)
         register_gemma3v_gpu(@@vulkan_gemma3v_blocks, @@vulkan_tower_serves_exact)
-        register_qwen3v_gpu(@@vulkan_qwen3v_blocks, @@vulkan_tower_serves_exact)
+        register_qwen3v_gpu_q8(@@vulkan_qwen3v_blocks)   //! the q8-lane seat: the exact-lane hook stays the Metal driver's
         register_qwen25v_gpu(@@vulkan_qwen25v_blocks)
     }
 }

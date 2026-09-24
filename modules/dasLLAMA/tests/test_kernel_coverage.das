@@ -754,6 +754,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // carriers, no zoo row; their coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
     "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
+    // the biased-block (SigLIP) row classes: the layernorm, the bias with its GELU, the seam, the head restrides to the
+    // flash tile's width; their coverage is test_vkt_tower_ln_rows
+    "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
+    "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

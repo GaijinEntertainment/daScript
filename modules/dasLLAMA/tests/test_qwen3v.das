@@ -13,8 +13,21 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the f16-route cell re-arms crowned PSOs
+require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan block loop over the q8 image; the CPU gates pin its knob off too
+require ?vulkan dasllama/dasllama_vulkan_common   // vk_moe_init - whether the tier has a device
 require dasllama/dasllama_common   // set_metal_tensor_crowns - the f16-route cell's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
+require math
+
+//! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
+def private gpu_towers(on : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(on)
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        set_vulkan_tower(on)
+    }
+}
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
 // Reference arm: the f32-widened mmprojs, CPU, -fa off (qwen3vl-vision-oracle/mint.sh mints the
@@ -90,9 +103,7 @@ def test_qwen3v_tier1(t : T?) {
         set_qwen3v_q8(false)   // the exact-plane lane; the q8 serving lane is its own test
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
-        }
+        gpu_towers(false)   // this gate owns the CPU chain - the dumps are CPU-minted
         var st = Qwen3vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.patch), 16, "patch")
@@ -124,9 +135,7 @@ def test_qwen3v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 32 px merged-patch grid panics by name")
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(true)   // restore the module default the pin above flipped
-        }
+        gpu_towers(true)   // restore the module default the pin above flipped
         // negative control for the exact bar: layer 13's f32 layer_w region zeroed through the
         // staging planes must red the same fixture on the same bar (the loosened-bar rule)
         var o = OracleEncode()
@@ -313,9 +322,7 @@ def test_qwen3v_tier1_deepstack(t : T?) {
         set_qwen3v_q8(false)   // the exact-plane lane; the q8 serving lane is its own test
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
-        }
+        gpu_towers(false)   // this gate owns the CPU chain - the dumps are CPU-minted
         var st = Qwen3vState()
         tt |> success(!tw.q8, "exact-plane lane")
         tt |> equal(int(tw.n_embd), 1024, "tower width")
@@ -331,9 +338,7 @@ def test_qwen3v_tier1_deepstack(t : T?) {
         tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_DS)
         tt |> gate_encode(tw, st, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_DS)   // non-square: merge-reorder + transposed-grid
         tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_DS)   // 9 tokens: the pos-table DOWNSCALE arm
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(true)   // restore the module default the pin above flipped
-        }
+        gpu_towers(true)   // restore the module default the pin above flipped
         delete st
         delete tw
     }
@@ -350,9 +355,7 @@ def test_qwen3v_tier1_q8(t : T?) {
         set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
-        }
+        gpu_towers(false)   // this gate owns the CPU chain - the dumps are CPU-minted
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> equal(int(tw.ff_pad), 4352, "ffn served at the layout's padded width")
@@ -391,11 +394,145 @@ def test_qwen3v_tier1_q8(t : T?) {
             tt |> equal(vision_family(e), "qwen3v", "the baked q8 tag sniffs to the qwen3v arm")
             tt |> equal(vision_exec_fmt(e), "q8", "the carrier stamps the q8 lane")
         }
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(true)
-        }
+        gpu_towers(true)
         delete st
         delete tw
+    }
+}
+
+let private TWIN_SLACK_VK = 1.5   // the Vulkan twin's bar: the device chain sits no farther from the exact chain than 1.5x the CPU q8 chain's own distance - the same activation quants, f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
+
+def private encode_maxdiff(a, b : array<float>) : float {
+    var m = 0.0
+    for (x, y in a, b) {
+        m = max(m, abs(x - y))
+    }
+    return m
+}
+
+//! one canvas three ways - the exact CPU chain, the CPU q8 chain and the Vulkan block loop over the q8 image (the tap mergers
+//! on the CPU off the stashed residuals, so a deepstack slice reads the device's rows too): the counters prove which served,
+//! the device chain's distance from the exact chain holds to the q8 chain's own within the slack, a poisoned element the control
+def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; twx : Qwen3vTower; var stx : Qwen3vState; kind : string; w, h : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let planes <- make_planes(kind, w, h)
+        var cpu : array<float>
+        var gpu : array<float>
+        var exact : array<float>
+        var ncpu = 0l
+        var ngpu = 0l
+        set_vulkan_tower(false)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            qwen3v_encode(twx, stx, planes, int64(w), int64(h), exact)
+        }
+        let d0 = vulkan_tower_stats()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            ncpu = qwen3v_encode(tw, st, planes, int64(w), int64(h), cpu)
+        }
+        let d1 = vulkan_tower_stats()
+        set_vulkan_tower(true)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            ngpu = qwen3v_encode(tw, st, planes, int64(w), int64(h), gpu)
+        }
+        let d2 = vulkan_tower_stats()
+        if (d2.encodes == d1.encodes) {
+            to_log(LOG_INFO, "qwen3v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
+        }
+        tt |> equal(ncpu, ngpu, "{kind} {w}x{h}: token count on both chains")
+        tt |> equal(d1.encodes - d0.encodes, 0l, "{kind} {w}x{h}: the knob-off leg never dispatched")
+        tt |> equal(d1.declines - d0.declines, 1l, "{kind} {w}x{h}: the knob-off leg recorded the knob decline")
+        tt |> equal(d2.encodes - d1.encodes, 1l, "{kind} {w}x{h}: device-served (encodes delta)")
+        tt |> equal(d2.blocks - d1.blocks, tw.n_layer, "{kind} {w}x{h}: every block ran on the driver (blocks delta)")
+        tt |> equal(d2.rows - d1.rows, int64(w / 16) * int64(h / 16), "{kind} {w}x{h}: the rows delta is the patch grid")
+        var ss = 0.0
+        for (a in exact) {
+            ss += a * a
+        }
+        let rms = sqrt(ss / float(max(length(exact), 1)))
+        let q8_ex = encode_maxdiff(cpu, exact)
+        let dev_ex = encode_maxdiff(gpu, exact)
+        let dev_q8 = encode_maxdiff(gpu, cpu)
+        let bar = TWIN_SLACK_VK * q8_ex + TIER1_ABS
+        to_log(LOG_INFO, "qwen3v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks, {tw.n_deepstack} taps): rms {rms}; vs exact: cpu q8 {q8_ex} ({q8_ex / rms} x rms), device {dev_ex} ({dev_ex / rms} x rms); device vs cpu q8 {dev_q8} ({dev_q8 / rms} x rms)\n")
+        tt |> success(dev_ex <= bar, "{kind} {w}x{h}: the device chain sits within {TWIN_SLACK_VK}x the CPU q8 chain's distance from the exact chain ({dev_ex} vs {q8_ex})")
+        tt |> success(abs((gpu[0] + 2.0 * bar) - exact[0]) > bar, "{kind} {w}x{h}: a poisoned element reds the bar")
+    }
+}
+
+// The Vulkan twin on the deepstack carrier: the device block loop against the CPU q8 chain, the tap
+// mergers reading the stashed residuals, so the wide rows' slices are the instrument for the taps.
+// One-, two- and six-block truncated towers first (the six-block one reaches the first tap), then
+// the whole tower; then the exact-lane tower, which the driver must decline (quant_mode).
+[test]
+def test_qwen3v_vulkan_twin(t : T?) {
+    t |> run("the Vulkan block loop vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact-lane decline") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+            if (!model_available(tt, mm)) {
+                return
+            }
+            if (!vk_moe_init()) {
+                tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
+                return
+            }
+            set_qwen3v_q8(false)
+            var twx <- load_qwen3v_tower(mm)   //! the exact chain: the reference both q8 chains are measured against
+            var stx = Qwen3vState()
+            tt |> success(!twx.q8 && twx.n_deepstack == 3l, "exact-plane lane loaded, three deepstack taps")
+            for (nl in [1l, 2l, 6l]) {
+                var inscope stgx <- stage_qwen3v_tower(mm)
+                stgx.t.n_layer = nl
+                var twxs = Qwen3vTower()
+                mint_qwen3v_tower(stgx, twxs)
+                set_qwen3v_q8(true)
+                var inscope stgq <- stage_qwen3v_tower(mm)
+                set_qwen3v_q8(false)
+                stgq.t.n_layer = nl
+                var twq = Qwen3vTower()
+                mint_qwen3v_tower(stgq, twq)
+                var stq = Qwen3vState()
+                var stxs = Qwen3vState()
+                tt |> success(twq.q8 && !twxs.q8 && twq.n_layer == nl && twxs.n_layer == nl, "the {nl}-block towers, q8 and exact")
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 96, 96)
+                twin_encode(tt, twq, stq, twxs, stxs, "cb", 448, 448)
+                delete stq
+                delete stxs
+                delete twq
+                delete twxs
+            }
+            set_qwen3v_q8(true)
+            var tw <- load_qwen3v_tower(mm)
+            reset_qwen3v_q8()
+            var st = Qwen3vState()
+            tt |> success(tw.q8, "q8 lane loaded")
+            twin_encode(tt, tw, st, twx, stx, "cb", 96, 96)
+            twin_encode(tt, tw, st, twx, stx, "cb", 448, 448)
+            twin_encode(tt, tw, st, twx, stx, "cb", 640, 320)   //! non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
+            delete st
+            delete tw
+            // the exact-lane tower: its planes are not the q8 image, the driver declines and the CPU chain serves
+            let planes <- make_planes("cb", 96, 96)
+            var outx : array<float>
+            set_vulkan_tower(true)
+            let x0 = vulkan_tower_stats()
+            let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+            with_job_que() {
+                setup_dasllama_jobque_()
+                qwen3v_encode(twx, stx, planes, 96l, 96l, outx)
+            }
+            let x1 = vulkan_tower_stats()
+            tt |> equal(x1.encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
+            tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "the exact-lane tower never reached the q8 seat (its hook is the Metal driver's)")
+            tt |> success(long_length(outx) == 9l * qwen3v_row_width(twx), "the CPU chain served the exact-lane encode")
+            delete stx
+            delete twx
+            vulkan_tower_shutdown()
+        } else {
+            feint("dasVulkan is not built on this platform - the twin needs it\n")
+        }
     }
 }
 
@@ -409,9 +546,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
         set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
-        }
+        gpu_towers(false)   // this gate owns the CPU chain - the dumps are CPU-minted
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
@@ -441,9 +576,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             delete pout
             delete ptw
         }
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(true)
-        }
+        gpu_towers(true)
         delete st
         delete tw
     }

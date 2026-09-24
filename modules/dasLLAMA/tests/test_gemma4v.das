@@ -522,6 +522,7 @@ def test_gemma4v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, twx, stx, "cb", 96, 96)
             twin_encode(tt, tw, st, twx, stx, "cb", 336, 336)
             twin_encode(tt, tw, st, twx, stx, "green", 672, 336)
+            twin_encode(tt, tw, st, twx, stx, "cb", 768, 384)   //! 1152 rows, a 128-multiple: the aligned tile variant's canvas
             delete st
             delete tw
             // the exact-lane tower: its planes are not the q8 image, the driver declines and the CPU chain serves

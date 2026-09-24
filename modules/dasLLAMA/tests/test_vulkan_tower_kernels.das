@@ -15,6 +15,8 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles   // attn_row_oracle over every key: the bidirectional oracle
 require ?vulkan _compares
+require dasllama/dasllama_math   // setup_dasllama_jobque_ - the CPU attention oracle runs on the que
+require daslib/jobque_boost
 
 //! The vision towers' Vulkan kernel classes against their CPU oracles (a Vulkan device, else the
 //! cells skip): the bidirectional flash tiles, and - as the tower arc lands them - the tower-only
@@ -461,6 +463,281 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             t |> success(bad_geglu == 0, "tower_geglu: the clamped GEGLU-quick matches its closed form ({bad_geglu} of {nff} off)")
             t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_geglu: the bar reds a poisoned element")
             for (b in fixed_array(xd, yd, xbd, xb2d, qd, gd, ud, wd, td, xhd, xqd, xsd)) {
+                destroy_device_buf(b)
+            }
+            destroy_host_buf(host)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private LN_HS = 72   //! the SigLIP head width: off the flash tiles' 64 / 128, so the restride pads it to 128
+let private LN_HSP = 128
+
+[test]
+def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the biased-block classes: the fixture, one command buffer, the oracles and their controls
+    t0 |> run("the biased-block row classes (layernorm, bias+act, post-add+ln, the head restrides) == the CPU tower helpers") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_ln_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
+                    || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls() || !ensure_tower_rope_tab_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let d = ROWS_D
+            let rows = ROWS_N
+            let nd = rows * d
+            let dc = ROWS_HEADS * LN_HS    //! the compact attention width
+            let dp = ROWS_HEADS * LN_HSP   //! the padded one
+            var x <- row_fill(nd, 41, 7, 0.05, 2.1)
+            var y <- row_fill(nd, 17, 3, 0.04, 1.9)
+            var g <- row_fill(nd, 13, 5, 0.3, 14.0)   //! wide enough to reach both tails of the GELU (past +-10)
+            var q <- row_fill(rows * dc, 29, 11, 0.06, 2.8)
+            var qkv <- row_fill(rows * 3 * dc, 37, 5, 0.05, 2.2)   //! a fused [q | k | v] row: the rope runs on its k slot in place
+            let half = LN_HS / 2
+            var cos_t <- row_fill(rows * half, 31, 2, 0.02, 0.97)
+            var sin_t <- row_fill(rows * half, 19, 4, 0.03, 0.55)
+            var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   //! rows: ln w at 0, ln b at d, the bias at 2d, the next ln w at 3d (its bias reads the first ln's)
+            let bx = int64(nd) * 4l
+            let bw = int64(4 * d) * 4l
+            let bq = int64(rows * dc) * 4l
+            let bp = int64(rows * dp) * 4l
+            let bph = int64(rows * dp) * 2l
+            let xd = make_device_buf(bx)
+            let xbd = make_device_buf(bx)
+            let yd = make_device_buf(bx)
+            let gd = make_device_buf(bx)
+            let xb2d = make_device_buf(bx)
+            let wd = make_device_buf(bw)
+            let qd = make_device_buf(bq)
+            let qpd = make_device_buf(bp)
+            let qphd = make_device_buf(bph)
+            let qcd = make_device_buf(bq)
+            let bqkv = 3l * bq
+            let btab = int64(rows * half) * 4l
+            let qkvd = make_device_buf(bqkv)
+            let cosd = make_device_buf(btab)
+            let sind = make_device_buf(btab)
+            let hostb = 4l * bx + bp + bph + bq + bqkv
+            var host = make_host_buf(hostb, true, [cached = true])
+            unsafe {
+                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
+                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
+                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
+                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
+                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bq)
+                upload_region_at(qkvd, 0l, addr<uint8 const?>(qkv[0]), bqkv)
+                upload_region_at(cosd, 0l, addr<uint8 const?>(cos_t[0]), btab)
+                upload_region_at(sind, 0l, addr<uint8 const?>(sin_t[0]), btab)
+            }
+            var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(512u, 0u, 0u))
+            var pa_rope = TowerRopeTabArgs(sstride = uint(3 * dc), soff = uint(dc), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), half = uint(half), rows = uint(rows))
+            var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(1u, 2u, 0u))
+            var s_bias = set_tower_bias_act_cls(fixed_array(gd, wd), fixed_array(bx, bw), fixed_array(4u, 0u))
+            var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(1u, 8u, 16u, 0u))
+            var s_pad = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bq, bp), fixed_array(32u, 64u))
+            var s_pad16 = set_tower_hpad16_cls(fixed_array(qd, qphd), fixed_array(bq, bph), fixed_array(32u, 128u))
+            var s_unpad = set_tower_hunpad_cls(fixed_array(qpd, qcd), fixed_array(bp, bq), fixed_array(64u, 256u))
+            var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
+            var pa_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = 1u)
+            var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d))
+            var pa_rs = TowerRestrideArgs(rows = uint(rows), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
+            let wg4 = int64((nd / 4 + 255) / 256)
+            let wg_rs = int64((rows * dp + 255) / 256)
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
+                enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4)
+                enc_tower_hpad_cls(raw, h, s_pad, pa_rs, wg_rs)
+                enc_tower_hpad16_cls(raw, h, s_pad16, pa_rs, wg_rs)
+                enc_tower_hunpad_cls(raw, h, s_unpad, pa_rs, wg_rs)
+                enc_tower_rope_tab_cls(raw, h, s_rope, pa_rope, int64((rows * ROWS_HEADS * half + 255) / 256))
+                enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))   //! last: it rewrites x, which the layernorm reads whole
+                vhz_dep(raw, h, 1u | 2u | 4u | 16u | 64u | 128u | 256u | 512u, 0u, true)
+                cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
+                cmd_copy_range(raw, gd, 0l, host.buf, bx, bx)
+                cmd_copy_range(raw, xd, 0l, host.buf, 2l * bx, bx)
+                cmd_copy_range(raw, xb2d, 0l, host.buf, 3l * bx, bx)
+                cmd_copy_range(raw, qpd, 0l, host.buf, 4l * bx, bp)
+                cmd_copy_range(raw, qphd, 0l, host.buf, 4l * bx + bp, bph)
+                cmd_copy_range(raw, qcd, 0l, host.buf, 4l * bx + bp + bph, bq)
+                cmd_copy_range(raw, qkvd, 0l, host.buf, 4l * bx + bp + bph + bq, bqkv)
+            }
+            var qkv_dev : array<float>
+            qkv_dev |> resize(rows * 3 * dc)
+            var xb_dev : array<float>
+            var g_dev : array<float>
+            var x_dev : array<float>
+            var xb2_dev : array<float>
+            var qp_dev : array<float>
+            var qph_dev : array<uint16>
+            var qc_dev : array<float>
+            xb_dev |> resize(nd)
+            g_dev |> resize(nd)
+            x_dev |> resize(nd)
+            xb2_dev |> resize(nd)
+            qp_dev |> resize(rows * dp)
+            qph_dev |> resize(rows * dp)
+            qc_dev |> resize(rows * dc)
+            unsafe {
+                let hp = intptr(host.mapped)
+                memcpy(addr<void?>(xb_dev[0]), host.mapped, bx)
+                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bx)), bx)
+                memcpy(addr<void?>(x_dev[0]), reinterpret<void?>(hp + uint64(2l * bx)), bx)
+                memcpy(addr<void?>(xb2_dev[0]), reinterpret<void?>(hp + uint64(3l * bx)), bx)
+                memcpy(addr<void?>(qp_dev[0]), reinterpret<void?>(hp + uint64(4l * bx)), bp)
+                memcpy(addr<void?>(qph_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp)), bph)
+                memcpy(addr<void?>(qc_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph)), bq)
+                memcpy(addr<void?>(qkv_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph + bq)), bqkv)
+            }
+            // the oracles
+            var xb_ref : array<float>
+            xb_ref |> resize(nd)
+            layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
+            let bad_ln = mismatch_approx(xb_dev, xb_ref)
+            t |> success(bad_ln == 0, "tower_ln: the layernorm rows match layernorm_batch ({bad_ln} of {nd} off)")
+            t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_ln: the bar reds a poisoned element")
+            var g_ref := g
+            add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(rows))
+            gelu_tanh_lut_batch(g_ref, int64(d), int64(rows))
+            let bad_bias = mismatch_approx(g_dev, g_ref)
+            t |> success(bad_bias == 0, "tower_bias_act: the bias and the tanh GELU match add_bias_rows + gelu_tanh_lut_batch ({bad_bias} of {nd} off)")
+            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_bias_act: the bar reds a poisoned element")
+            var x_ref := x
+            var yb := y
+            add_bias_rows(yb, wn, int64(2 * d), int64(d), int64(rows))
+            add_inplace_rows(x_ref, yb, int64(nd))
+            let bad_add = mismatch_approx(x_dev, x_ref)
+            t |> success(bad_add == 0, "tower_post_add_ln: x += y + b ({bad_add} of {nd} off)")
+            var xb2_ref : array<float>
+            xb2_ref |> resize(nd)
+            layernorm_batch(xb2_ref, x_ref, wn, int64(3 * d), int64(d), int64(d), int64(rows), ROWS_EPS)
+            let bad_ln2 = mismatch_approx(xb2_dev, xb2_ref)
+            t |> success(bad_ln2 == 0, "tower_post_add_ln: the next layernorm over the updated rows ({bad_ln2} of {nd} off)")
+            t |> success(!approx(xb2_dev[nd - 1], xb2_ref[nd - 1] + 0.5), "tower_post_add_ln: the bar reds a poisoned element")
+            var bad_pad = 0
+            var bad_pad16 = 0
+            for (r in range(rows)) {
+                for (hh in range(ROWS_HEADS)) {
+                    for (lane in range(LN_HSP)) {
+                        let pi = (r * ROWS_HEADS + hh) * LN_HSP + lane
+                        let want = lane < LN_HS ? q[(r * ROWS_HEADS + hh) * LN_HS + lane] : 0.0
+                        if (qp_dev[pi] != want) {
+                            bad_pad++
+                        }
+                        if (uint(qph_dev[pi]) != f32_to_f16(want)) {
+                            bad_pad16++
+                        }
+                    }
+                }
+            }
+            t |> success(bad_pad == 0, "tower_hpad: the padded panel is the compact rows with zero pads, exactly ({bad_pad} off)")
+            t |> success(bad_pad16 == 0, "tower_hpad16: the f16 panel is that panel rounded to f16, bit for bit ({bad_pad16} off)")
+            let bad_unpad = mismatch_exact_count(qc_dev, q)
+            t |> success(bad_unpad == 0, "tower_hunpad: the compact rows come back off the padded panel exactly ({bad_unpad} off)")
+            // the rope on the fused row's k slot: the CPU form over the slot's rows gathered compact, the q and v slots untouched
+            var k_ref : array<float>
+            var k_dev : array<float>
+            k_ref |> resize(rows * dc)
+            k_dev |> resize(rows * dc)
+            var bad_slots = 0
+            for (r in range(rows)) {
+                for (i in range(dc)) {
+                    k_ref[r * dc + i] = qkv[r * 3 * dc + dc + i]
+                    k_dev[r * dc + i] = qkv_dev[r * 3 * dc + dc + i]
+                    if (qkv_dev[r * 3 * dc + i] != qkv[r * 3 * dc + i] || qkv_dev[r * 3 * dc + 2 * dc + i] != qkv[r * 3 * dc + 2 * dc + i]) {
+                        bad_slots++
+                    }
+                }
+            }
+            rope_neox_tab_rows(k_ref, int64(rows), int64(ROWS_HEADS), int64(LN_HS), cos_t, sin_t)
+            let bad_rope = mismatch_approx(k_dev, k_ref)
+            t |> success(bad_rope == 0, "tower_rope_tab: the k slot of the fused rows matches rope_neox_tab_rows ({bad_rope} of {rows * dc} off)")
+            t |> success(bad_slots == 0, "tower_rope_tab: the q and v slots stay untouched ({bad_slots} moved)")
+            t |> success(!approx(k_dev[0], k_ref[0] + 0.5), "tower_rope_tab: the bar reds a poisoned element")
+            for (b in fixed_array(xd, xbd, yd, gd, xb2d, wd, qd, qpd, qphd, qcd, qkvd, cosd, sind)) {
+                destroy_device_buf(b)
+            }
+            destroy_host_buf(host)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private PAT_HEADS = 16   //! the SigLIP head count: sixteen 72-wide heads through the padded 128 route
+
+[test]
+def test_vkt_tower_padded_attn(t0 : T?) {
+    t0 |> run("the padded attention route (pad, the h128 bidirectional tile, unpad) == attention_bidir at 72-wide heads") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let khr = !cm2_fa_on()
+            let fa_ok = khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+            if (!vk_moe_init() || !fa_ok || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let rows = TOWER_ROWS
+            let dc = PAT_HEADS * LN_HS
+            let dp = PAT_HEADS * LN_HSP
+            let scale = 1.0 / sqrt(float(LN_HS))
+            var q <- row_fill(rows * dc, 29, 11, 0.02, 0.9)
+            var k <- row_fill(rows * dc, 17, 3, 0.03, 1.4)
+            var v <- row_fill(rows * dc, 53, 7, 0.04, 1.7)
+            for (i in range(rows * dc)) {   //! the shadows round K/V through f16: the oracle sees the same values
+                k[i] = f16r(k[i])
+                v[i] = f16r(v[i])
+            }
+            let bc = int64(rows * dc) * 4l
+            let bp = int64(rows * dp) * 4l
+            let bph = int64(rows * dp) * 2l
+            let qd = make_device_buf(bc)
+            let kd = make_device_buf(bc)
+            let vd = make_device_buf(bc)
+            let qpd = make_device_buf(bp)
+            let kpd = make_device_buf(bph)
+            let vpd = make_device_buf(bph)
+            let attpd = make_device_buf(bp)
+            let attd = make_device_buf(bc)
+            var host = make_host_buf(bc, true, [cached = true])
+            unsafe {
+                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
+                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
+                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
+            }
+            var s_pq = set_tower_hpad_cls(fixed_array(qd, qpd), fixed_array(bc, bp), fixed_array(1u, 2u))
+            var s_pk = set_tower_hpad16_cls(fixed_array(kd, kpd), fixed_array(bc, bph), fixed_array(4u, 8u))
+            var s_pv = set_tower_hpad16_cls(fixed_array(vd, vpd), fixed_array(bc, bph), fixed_array(16u, 32u))
+            var s_fa = fa_stamp_set(khr, fixed_array(qpd, kpd, vpd, attpd), fixed_array(bp, bph, bph, bp), fixed_array(2u, 8u, 32u, 64u))
+            var s_un = set_tower_hunpad_cls(fixed_array(attpd, attd), fixed_array(bp, bc), fixed_array(64u, 128u))
+            var pa_rs = TowerRestrideArgs(rows = uint(rows), nheads = uint(PAT_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
+            var pa_fa = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
+            let wg_rs = int64((rows * dp + 255) / 256)
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tower_hpad_cls(raw, h, s_pq, pa_rs, wg_rs)
+                enc_tower_hpad16_cls(raw, h, s_pk, pa_rs, wg_rs)
+                enc_tower_hpad16_cls(raw, h, s_pv, pa_rs, wg_rs)
+                fa_bidir_enc(khr, LN_HSP, raw, h, s_fa, pa_fa, fa_wgs(khr, PAT_HEADS, rows))
+                enc_tower_hunpad_cls(raw, h, s_un, pa_rs, wg_rs)
+                vhz_dep(raw, h, 128u, 0u, true)
+                cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
+            }
+            var att_dev : array<float>
+            att_dev |> resize(rows * dc)
+            unsafe {
+                memcpy(addr<void?>(att_dev[0]), host.mapped, bc)
+            }
+            var att_ref : array<float>
+            var hp : array<float>
+            var attsc : array<float>
+            att_ref |> resize(rows * dc)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                attention_bidir(att_ref, q, k, v, hp, attsc, int64(rows), int64(dc), int64(PAT_HEADS), scale)
+            }
+            let bad = mismatch_approx(att_dev, att_ref)
+            t |> success(bad == 0, "the padded route matches attention_bidir over {PAT_HEADS} heads of {LN_HS} ({bad} of {rows * dc} off)")
+            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "the bar reds a poisoned element")
+            for (b in fixed_array(qd, kd, vd, qpd, kpd, vpd, attpd, attd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)
