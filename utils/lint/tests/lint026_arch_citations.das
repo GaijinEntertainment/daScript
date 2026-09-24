@@ -282,6 +282,18 @@ def test_arch_roots(t : T?) {
         t |> equal(count_of(out, "LINT026"), 0, "nothing under the build tree is reported\n{out}")
         t |> equal(rc, 0, "and the run is clean\n{out}")
     }
+    t |> run("another repository's checkout under a root is not source either - a folder with a .git is skipped") @(t : T?) {
+        let root = path_join(tmp_root(), "nestedrepo")
+        let vendored = path_join(root, "vendored")
+        mkdir_rec(path_join(vendored, ".git"))
+        plant_doc(vendored, "theirs.md", ["their_anchor"])
+        plant_code(vendored, "theirs.das", [Cite(doc = "BestPractices.md", anchor = "nope", fn = "only")])
+        plant_code(root, "ok.das", [])
+        var out : string
+        let rc = run_lint(root, out)
+        t |> equal(count_of(out, "LINT026"), 0, "nothing under the checkout is reported\n{out}")
+        t |> equal(rc, 0, "and the run is clean\n{out}")
+    }
     t |> run("a .md positional arms its folder with no .das compiled - the changed-document PR shape") @(t : T?) {
         let root = path_join(tmp_root(), "mdpos")
         mkdir_rec(root)

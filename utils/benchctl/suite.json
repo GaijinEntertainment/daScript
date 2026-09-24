@@ -27,7 +27,8 @@
             "core/gc/escape_free.das": "force_escape_free frees a non-escaping allocation at scope exit as a heap chunk under jit, and the child dies on 'not a chunk pointer'"
         },
         "aot": {
-            "compile/**": "times a child daslang -compile-only; the lane the parent runs in changes nothing about the child, and the interp lane already carries the group"
+            "compile/**": "times a child daslang -compile-only; the lane the parent runs in changes nothing about the child, and the interp lane already carries the group",
+            "core/gc/test01.das": "heap_collect cannot attribute the locals of a frame entered through a compiled frame - the AOT'd dastest runner calls run_impl - so the gc benchmarks measure nothing under aot"
         }
     }
 }

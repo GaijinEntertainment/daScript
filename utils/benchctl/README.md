@@ -23,6 +23,17 @@ Key capabilities:
 
 > benchctl uses a port of Go's benchstat command Welch's t-test for statistical significance implementation
 
+## Run records
+
+The `run` verb benchmarks a tree into one JSON record (`RunRecord` in `bench_history.das`), and
+`report` folds every record in a folder into the viewer's `data.json` (`Dataset`). A record carries
+the commit, the machine, the build, one status per lane, and one `FileResult` per benchmark file
+per lane: its status, exit code, seconds, message, the last log lines, and the samples - per arm,
+the minimum ns/op over the repeats, the median, the spread `(max - min) / min`, and the per-op
+allocation medians. Two readers: the stand's viewer, which plots `data.json`'s series and links
+each night's record, and a person opening a record to read a failure. A field neither reads is
+noise; a field only one reads is named here as that reader's.
+
 ## Prerequisites
 
 - daslang compiler with `sqlite` module support
