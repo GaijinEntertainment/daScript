@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`. Planned
-work: `../followup_metal.md` for anything about the Metal backend, `../followup_vulkan.md` for
-anything about the Vulkan backend, `../followup_general.md` for everything else.
+work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
+`../followup_general.md` otherwise.
 
 **A GPU kernel timing arm - code that dispatches a kernel to measure it rather than to serve a
 call - wherever the diff puts it, applies `../REVIEW_GPU_RACE.md` too.**
@@ -88,9 +88,10 @@ into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emit
 
 **A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
 a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
-that reports none - wrong flags, failed load, a device that declines.** A result row is a row
-carrying a time, a rate, or a per-kernel occupancy count. A run that matched nothing and
-reported success leaves a sidecar or a record untouched, and its caller cannot tell.
+that reports no result row, whatever stopped it - wrong flags, a failed load, a device that
+declines.** A result row is a row carrying a time, a rate, or a per-kernel occupancy count. A run
+that matched nothing and reported success leaves a sidecar or a record untouched, and its caller
+cannot tell.
 
 **A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads (wherever
 the lever lives - an engine file the bench requires included), or changes how such an arm reports
@@ -105,5 +106,6 @@ report one row per prompt, never one aggregate ratio alone.** Prompts differ in 
 lever helps, so a per-prompt loss hides inside a winning mean.
 
 **A diff that adds or changes a row measured over reps reports one number over ALL of them - a
-rep that refuses drops the whole row and reports the refusal, never a mean of the reps that
-landed.** A partial row reads like a measured one and is a different quantity.
+rep that refuses (its run cannot produce the rep's figure: a decline, a failed load, a session
+too small for its prompt) drops the whole row, and the row reports the refusal and no number.** A
+partial row reads like a measured one and is a different quantity.

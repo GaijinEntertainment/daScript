@@ -17,11 +17,12 @@ defect, a hand-written dot-product loop included** - the entry points are `mm_bl
 
 **A per-encode buffer in `dasllama/dasllama_vision_embedder.das` or a vision family file whose
 size follows the input - patch count, pixel count, clip frames - is a defect without
-`@exact_size`, and one reused across encodes rather than freshly allocated is a defect without
-`@scratch` - a nolint is not a substitute for either.** The annotation goes on the declaration,
-or on the callee parameter the buffer grows through; a buffer grown only through such a
-callee - one whose parameter carries `@scratch` and that reserves before it resizes - carries
-none of its own.
+`@exact_size` on its declaration - a nolint is not a substitute.**
+
+**A buffer in `dasllama/dasllama_vision_embedder.das` or a vision family file that outlives one
+encode and is reused by the next (a state field, a module global) is a defect unless `@scratch`
+sits on its declaration or on the parameter of every callee that grows it - a nolint is not a
+substitute.**
 
 **A debug or profiling leg in `dasllama/dasllama_vision_embedder.das` or a vision family file
 that is not `[cold_path]` is a defect** - a nolint is not a substitute.

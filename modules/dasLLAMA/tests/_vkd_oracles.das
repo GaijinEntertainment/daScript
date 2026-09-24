@@ -16,11 +16,27 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
+require dasllama/dasllama_vulkan_common   // upload_region_at: the sentinel fills
+require _compares   // NAN_SENTINEL_BITS
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
 
 let MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
+
+//! `bytes` of `word` into the device buffer `dev` at `off`
+def fill_upload(dev : uint64; off, bytes : int64; word : uint) {
+    var s : array<uint>
+    s |> resize(bytes / 4l)
+    for (v in s) {
+        v = word
+    }
+    upload_region_at(dev, off, unsafe(addr<uint8 const?>(s[0])), bytes)
+    delete s
+}
+
+//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
+def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
 
 def to_u4(w : array<uint>) : array<uint4> {
     var out : array<uint4>

@@ -10,8 +10,10 @@ asserts belong to every cell that calls it.
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**
 
-**A diff that adds a pinned test cell, or touches one, applies `REVIEW_PINNED_GATES.md` (beside
-this file) together with this list** - that checklist defines the kind.
+**A diff that touches a cell in the pinned set, or adds a cell whose expected value must be kept
+in step with something maintained outside the cell (a document, a checked-in table, a committed
+artifact's form, a roster, a knob list), applies `REVIEW_PINNED_GATES.md` (beside this file)
+together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -31,9 +33,10 @@ PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion -
-whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its header and joins the
-exempt list of `test_run_suites.das`'s suite-membership gate in the same change; weakening that
-gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
+whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its header - the file's top
+comment block - and joins the exempt list of `test_run_suites.das`'s suite-membership gate in
+the same change; weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner
+arms for every suite.
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
 touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
@@ -71,8 +74,8 @@ whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
-header of every test file that runs the cell, wherever the cell is defined.** A header is the
-file's top comment block; it names every fact the cells that file runs skip on.
+header - the file's top comment block - of every test file that runs the cell, wherever the cell
+is defined, so that the header names every fact the cells that file runs skip on.**
 
 **A diff that adds, moves, or removes a test file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -109,12 +112,18 @@ through `model_available` (`_model_tier.das`), one call per file; a test that ca
 and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is set.** Every
 other stocked fixture gates on its own presence.
 
-**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
-never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
-or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
+**A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
+cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
+never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
+calls no loader that bakes a `.dlim` (`load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
 `load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; the exact name
-`load_model_`, the plain GGUF load, bakes nothing.**
+`load_model_`, the plain GGUF load, bakes nothing); such a test loads a media carrier in memory
+from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty
+image path.** A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
+`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is where the rule matters: a disk bake
+under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
+direct-image load in another suite panics on the wrong identity.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -183,16 +192,14 @@ other driver setter it touched back where it found it; the unset call is the fam
 `set_asr_tower_fp32(false)` - returning the family to its policy default.** Why a hook left set changes what the next cell
 measures is `CLAUDE.md`'s "Metal fixtures".
 
-**A cell claiming a family serving lane that does not pin it through the family's own lane
-knobs - `set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` /
-`set_asr_tower_fp32` - or through a loader parameter that takes the lane, is a defect.** A
-runtime decline standing in for a pin measures whichever lane the box's policy picked.
+**A cell claiming a family serving lane pins it through the family's own lane knobs -
+`set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` -
+or through a loader parameter that takes the lane.** A runtime decline standing in for a pin
+measures whichever lane the box's policy picked.
 
-**A cell that loads a media carrier under a lane pin - a `set_<family>_q8`-class knob, or a
-`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - and whose subject is not that lane
-knob itself mints in memory from the family's `stage_*` staging - its `mint_*` twin, or
-`cache_via_image_staged` with an empty image path - never through a `.dlim`-baking loader.** A disk bake under a pinned lane GC-purges the serving lane's `.dlim`
-beside the model, and the next direct-image load in another suite panics on the wrong identity.
+**A cell asserting the unpinned default lane compares against the predicates the family's
+`*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
+hardcoded lane.** The default lane differs per box.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.
@@ -219,12 +226,6 @@ after that process starts is invisible to a config already read.
 **A cell that cannot set an environment-read knob before its reader starts names that knob's
 value in the text a red prints - the cell label or the assert.**
 
-**A cell asserting the UNPINNED default lane never compares against a hardcoded lane - it
-compares against the same predicates the family's own `*_serves_q8` accessor reads for its
-unpinned default: `float_batch_override_active()` and the family's would-the-GPU-serve call.**
-The default lane differs per box, so the assert is on the lane the policy selects, not on one
-predicate's own value.
-
 **A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
 an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture
 procedurally and pins its expectations in-repo.**
@@ -249,8 +250,10 @@ maxdiff on green as well as red, is a defect.**
 **A diff that adds or loosens an assert holding a figure the run measures - the difference
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
 tolerance, or past a floor or ceiling, ships in the same change a control that lands outside that
-bound in every cell that holds it.** A bound nothing has exceeded where it is applied is not known
-to discriminate there.
+bound in every cell that holds it; a control changes an input the computation reads (a zeroed
+weight region, a poisoned element, a mechanism unhooked) and re-runs the compare, so a value
+added to the output after the fact is not one.** A bound nothing has exceeded where it is applied
+is not known to discriminate there.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

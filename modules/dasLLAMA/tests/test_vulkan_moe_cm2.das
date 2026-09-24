@@ -7,9 +7,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
-require daslib/f16_cvt
-require math
-require ?vulkan _vk_kq_fixtures
+require _vk_kq_fixtures   // f16r and silu: the CPU reference rounds where the device stages halves, on every lane
 require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
@@ -21,10 +19,6 @@ require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells nam
 // loudly anywhere else. Without dasVulkan (or with no Vulkan device) every check feints cleanly.
 
 let NE = 3l   // experts per synthetic stack
-
-def private f16r(v : float) : float => f16_to_f32(f32_to_f16(v))
-
-def private silu(v : float) : float => v / (1.0 + exp(-v))
 
 // the window's activation rows: modest values so |gate| stays in the sane silu regime
 def private fill_x(var x : array<float>; npos, n : int64; sign : float) {

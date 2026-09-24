@@ -11,6 +11,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmup sanity check and the row statistic - shared with dasllama-server's in-process bench
 require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, a region a batched-row stream
 require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
+require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the image cell's engage witness, read in the vulkan half
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail the rows load on
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
@@ -461,7 +462,8 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
 
 // Best-of-`reps` for one image turn.
 struct private ImageTurn {
-    enc_ms : double = 1.0e30lf   // the embedder alone
+    enc_ms : double = 1.0e30lf   // the embedder alone, the best rep
+    enc_reps : array<double>     // every rep's encode ms, the spread beside the best
     pp_tok_s : double            // the spliced prefill: head tokens + soft-token rows + tail tokens, all positions
     tg_tok_s : double            // the decode
     n_rows : int64
@@ -471,12 +473,15 @@ struct private ImageTurn {
 def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : VisionImage;
                                prompt : string; reps : int; think : bool) : ImageTurn {
     var r = ImageTurn()
+    r.enc_reps |> reserve(reps)
     var st = VisionState()
     var rows : array<float>
     for (_rep in range(reps)) {
         let t_enc = ref_time_ticks()
         r.n_rows = encode_image_(emb, st, img, "bench", rows)
-        r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
+        let rep_ms = double(get_time_usec(t_enc)) / 1000.0lf
+        r.enc_reps |> push(rep_ms)
+        r.enc_ms = min(r.enc_ms, rep_ms)
         var chat <- create_chat_(m, "", int64(image_turn_steps()))
         set_thinking_(chat, think)   // default off: the timed shape is the answer, not a scratchpad
         // the SHIPPED walk end to end: the rows seam takes the pre-encoded (possibly
@@ -551,14 +556,25 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1, think)   // warm: JIT + first touch
+            var vt0 = (encodes = 0l, declines = 0l)
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let s0 = vulkan_tower_stats()
+                vt0 = (encodes = s0.encodes, declines = s0.declines)
+            }
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps, think)
+            var vk_served = false   // the engage witness: every timed rep's encode ran on the tower driver
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let s1 = vulkan_tower_stats()
+                vk_served = s1.encodes - vt0.encodes >= int64(reps)
+                print("lcpp_bench --image: vulkan tower encodes +{s1.encodes - vt0.encodes} of {reps}, declines +{s1.declines - vt0.declines} {vulkan_tower_declines()}\n")
+            }
             if (empty(turn.text)) {
                 // a duration over zero answer tokens prices nothing - refuse the cell by name
                 // (the Omni-30B greedy-flipped to an immediate stop under its own think-suppress
                 // form; --image-think prices that model's template-default turn instead)
                 print("lcpp_bench --image: the timed reply is EMPTY - no cell minted (try --image-think for a model whose suppress form derails it)\n")
             } else {
-                var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
+                var run = BenchRun(engine = "das", backend = gpu ? "metal" : (vk_served ? "vulkan" : "cpu"), flavor = flavor_stamp(accel ? "accel" : "tuned"),
                 exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
@@ -571,7 +587,12 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             run.tests |> insert("img:enc", BenchTest(ms = turn.enc_ms))
             run.tests |> insert("img:pp", BenchTest(tok_s = turn.pp_tok_s))
             run.tests |> insert("img:tg", BenchTest(tok_s = turn.tg_tok_s, text = turn.text))
-            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
+            let enc_reps = build_string() $(var wr) {
+                for (e in turn.enc_reps) {
+                    write(wr, " {e}")
+                }
+            }
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms (best of {reps}:{enc_reps}) | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
             print("  text: {turn.text}\n")
             var cell = BenchModel(gguf = base_name(model), arch = vision_family(emb),
                                   size_bytes = int64(stat(model).size))

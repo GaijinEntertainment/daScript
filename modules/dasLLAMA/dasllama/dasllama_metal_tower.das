@@ -978,17 +978,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     unsafe {
         upload_rows_padded(bx, addr(s.x[0]), npos, mp, d)
         zero_rows(bk, npos, nk64, d)
-        // the rope tables, packed per row as [cx q | sx q | cy q | sy q] — the CPU's bits
-        var tp = reinterpret<float?>(metal_buffer_contents(btabs))
-        for (r in range64(npos)) {
-            let rb = r * 4l * pairs
-            for (j in range64(pairs)) {
-                tp[rb + j] = s.cos_x[r * pairs + j]
-                tp[rb + pairs + j] = s.sin_x[r * pairs + j]
-                tp[rb + 2l * pairs + j] = s.cos_y[r * pairs + j]
-                tp[rb + 3l * pairs + j] = s.sin_y[r * pairs + j]
-            }
-        }
+        gemma4v_pack_rope_tabs(s, npos, pairs, reinterpret<float?>(metal_buffer_contents(btabs)))
     }
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
@@ -1435,7 +1425,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
             tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_DOWN], bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.down_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
-            let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
+            let k = qwen3v_tap_of(t, l)
             if (k >= 0l) {   // the tap merger chain over the live residual's [nout x 4d] merged view
                 let fo = t.ds_f + k * t.ds_f_stride
                 let wo = t.ds_w + k * t.ds_w_stride
@@ -1534,10 +1524,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let proj = t.proj_dim
     let hs_pad = max(64l, (hs + 31l) / 32l * 32l)
     let nwin = long_length(s.win_lo) - 1l
-    var max_wr = 0l
-    for (i in range64(nwin)) {
-        max_wr = max(max_wr, s.win_lo[i + 1l] - s.win_lo[i])
-    }
+    let max_wr = qwen25v_window_widest(s)
     let pd = q25v_patch_pad(t)
     //! hs/max_wr cap = the window kernel's tgmem tile (64 rows x 80); %4 npos = the merged row view
     if (d % 64l != 0l || ff % 64l != 0l || hs > 80l || hs % 2l != 0l || proj % 64l != 0l
@@ -1616,10 +1603,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
         for (r in range64(npos)) {
             sp[r] = uint(s.src_of[r])
         }
-        var wp = reinterpret<uint?>(metal_buffer_contents(bwlo))
-        for (i in range64(nwin + 1l)) {
-            wp[i] = uint(s.win_lo[i])
-        }
+        qwen25v_window_table(s, reinterpret<uint?>(metal_buffer_contents(bwlo)))
         zero_rows(bx, npos, rows_ext, d)
     }
     var bw_pl = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, t.post_ln_w))), uint64(d * 4l))
@@ -1654,7 +1638,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
         enc_tower_row_gather(enc, braw, bx, bsrc, u_d, u_totd, npos * d)
         for (l in range64(t.n_layer)) {
             let o = qwen25v_block_offs(t, l)
-            let full = t.n_wa_pattern <= 0l || (l + 1l) % t.n_wa_pattern == 0l
+            let full = qwen25v_layer_full(t, l)
             var bw_ln1 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, o.ln1_w))), uint64(d * 4l))
             var bw_ln2 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, o.ln2_w))), uint64(d * 4l))
             pf_enc_rms(enc, bx, 0ul, bw_ln1, bxb, u_d, u_eps, npos)
