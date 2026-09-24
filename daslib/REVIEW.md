@@ -50,14 +50,15 @@ construct's visit.
 a stack, never in a bare scalar.** A saved value kept in a scalar survives into the sibling
 construct's exit path and unbalances it.
 
-**A diff that adds or changes a daslib fact - code or a `//!` contract - that a second site
-must agree with records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides,
-whenever nothing fails on a mismatch: no lint, no compile error, no default-suite test (what
-`dastest` runs over `tests/` (repo root) with no flags).** The second site can sit anywhere,
-inside or outside this repository. The section a daslib file's pair lands in is the one that
-holds that file, or a new one in `ARCHITECTURE.md` or a companion when none does; a pair whose
-two sides are one syntax's spellings lands in `ARCHITECTURE_SYNTAX.md` with the other pairs of
-that syntax.
+**A diff that adds or changes something a second site must agree with - a daslib fact (code or a
+`//!` contract), or what a C++ name `aot_cpp.das` writes into generated code does or returns -
+records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides, whenever nothing
+fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest` runs over
+`tests/` (repo root) with no flags).** The second site can sit anywhere, inside or outside this
+repository. The section a pair lands in is the one holding its daslib file (for a C++ name, the
+emitter file that writes it), or a new one in `ARCHITECTURE.md` or a companion when none does; a
+pair whose two sides are one syntax's spellings lands in `ARCHITECTURE_SYNTAX.md` with the other
+pairs of that syntax.
 
 **When a diff changes the daslib side of a recorded pair so the two no longer match, it changes
 the other side in the same diff.** A change to the other side is reviewed under that side's

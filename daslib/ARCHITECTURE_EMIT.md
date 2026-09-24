@@ -4,6 +4,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 
 ## 5. aot_cpp
 
+- **`addr()` of a block local erases its type**: `preVisitExprRef2Ptr` writes
+  `das_ref(__context__, <expr>)` and the address goes on as `void *`, and a block literal is
+  a local of a `das_make_block<...>` type (`emitBlockLet`), whose `Block` base is not at
+  offset 0 - `das_make_block_base : Block, SimNode_ClosureBlock` puts the polymorphic base
+  first. So `das_ref` in `include/daScript/simulate/aot.h` returns the `Block` subobject for a
+  `Block`-derived type; the C++ data walker reads that address as a `Block`. The pair moves
+  together; nothing but the full `test_aot` lane fails on a mismatch.
 - **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
   name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
   enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +

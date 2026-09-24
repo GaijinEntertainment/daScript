@@ -4,11 +4,12 @@
 `ARCHITECTURE.md`. A layout change to a struct or class is a member added, removed, reordered,
 renamed or retyped, or a base changed. A diff that makes a layout change to a public struct or
 class under this folder, any struct declared in `debug_info.h` included, applies
-`skills/internal/abi_break_sweep.md` too. A diff that changes what a name under this folder
-resolves to for a `daslib/*.das` caller - a rename, a removal, or a new overload of a struct or
-member the AOT C++ emitter writes into generated code, or of a flag or field a daslib predicate
-reads - applies `daslib/REVIEW.md` too; checklist discovery walks changed paths only, so the
-C++ half never opens the daslib checklist on its own. A diff that adds, reorders or retypes a
+`skills/internal/abi_break_sweep.md` too. A diff that changes the signature, return type,
+overload set or existence of any name `daslib/aot_cpp.das` (repo root) writes into generated
+code, or what that name does or returns, applies `daslib/REVIEW.md` too; so does a diff that
+renames, retypes or removes a flag or field a function under `daslib/` (repo root) reads.
+Checklist discovery walks changed paths only, so the C++ half never opens the daslib checklist
+on its own. A diff that adds, reorders or retypes a
 member of a C++ type das binds through an annotation applies `src/builtin/REVIEW.md` too, for
 the same reason.
 
