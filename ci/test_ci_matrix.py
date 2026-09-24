@@ -16,9 +16,11 @@ WORKFLOWS = os.path.join(os.path.dirname(HERE), ".github", "workflows")
 
 
 def names(cells):
-    # the fast-math cell is a Release/none cell too, so its flag has to reach the name
-    return sorted("%s-%s-%s-%s%s" % (c["target"], c["architecture"], c["cmake_preset"], c["sanitizers"],
-                                     "-fastmath" if c.get("fast_math") == "ON" else "")
+    # the fast-math cell is a Release/none cell too, so its flag has to reach the name; a
+    # sanitizer cell is one job per phase, so the phase does too
+    return sorted("%s-%s-%s-%s%s%s" % (c["target"], c["architecture"], c["cmake_preset"], c["sanitizers"],
+                                       "-fastmath" if c.get("fast_math") == "ON" else "",
+                                       "" if c.get("phase", "all") == "all" else "-" + c["phase"])
                   for c in cells)
 
 
@@ -29,10 +31,10 @@ PR_BUILD = sorted([
     "darwin26-arm64-Debug-none", "darwin26-arm64-Release-none",
     "windows-32-Release-none", "windows-64-Release-none",
 ])
-NIGHTLY_ONLY_BUILD = sorted([
-    "windows-64-Debug-none", "linux-64-Release-asan", "linux-64-Release-tsan", "linux-64-Release-ubsan",
-    "linux-64-Release-none-fastmath",
-])
+NIGHTLY_ONLY_BUILD = sorted(
+    ["windows-64-Debug-none", "linux-64-Release-none-fastmath"]
+    + ["linux-64-Release-%s-%s" % (san, phase) for san in ("asan", "tsan", "ubsan")
+       for phase in ("tests", "slow", "backend")])
 
 
 class BuildMatrix(unittest.TestCase):
@@ -71,6 +73,15 @@ class BuildMatrix(unittest.TestCase):
             if cell["sanitizers"] != "none":
                 self.assertNotIn("release_target", cell, cell)
                 self.assertEqual(cell["build_name"], "linux_" + cell["sanitizers"])
+
+    def test_only_sanitizer_cells_split_into_phases(self):
+        # build.yml gates its three test steps on the phase; a cell that ran none of them would be
+        # a build with no signal, and a non-sanitizer cell split would multiply the per-PR matrix
+        for cell in ci_matrix.build_cells("schedule"):
+            if cell["sanitizers"] == "none":
+                self.assertEqual(cell["phase"], "all", cell)
+            else:
+                self.assertIn(cell["phase"], ("tests", "slow", "backend"), cell)
 
 
 class ExtendedMatrix(unittest.TestCase):
@@ -116,9 +127,24 @@ class WorkflowShapes(unittest.TestCase):
             self.assertEqual(op, "!=", "matrix.role %s '%s'" % (op, role))
             self.assertIn(role, ("core", "modules"), "matrix.role %s '%s'" % (op, role))
 
-    def test_nightly_only_build_cells_save_no_sccache_slot(self):
+    def test_every_cache_restore_runs_on_the_cron_too(self):
+        # the nightly cells are the slow ones; a restore gated off `schedule` is the old cold-build
+        # policy coming back
+        for name in ("build.yml", "extended_checks.yml"):
+            text = self.read(name)
+            for block in re.findall(r"- name: \"(?:Restore|Cache) [^\"]*\"\n((?:      .*\n)+)", text):
+                self.assertNotIn("github.event_name != 'schedule'", block, name)
+
+    def test_one_sanitizer_phase_writes_the_shared_slot(self):
         text = self.read("build.yml")
-        self.assertIn("if: github.ref == 'refs/heads/master' && matrix.nightly_only != 'ON'", text)
+        self.assertIn("if: github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend'", text)
+        self.assertNotIn("matrix.nightly_only", text)
+
+    def test_the_three_test_steps_gate_on_the_phase(self):
+        text = self.read("build.yml")
+        self.assertIn("if: matrix.phase == 'all' || matrix.phase == 'tests'", text)
+        self.assertIn("(matrix.phase == 'all' || matrix.phase == 'slow')", text)
+        self.assertIn("(matrix.phase == 'all' || matrix.phase == 'backend')", text)
 
     # the checks that run only on the nightly cron, pinned by name: moving another off the
     # per-PR path is a deliberate edit here, with its preflight mirror or platform reason stated
