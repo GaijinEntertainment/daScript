@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options stack = 524288
 
 // The SPIR-V dump differ: two DASLLAMA_VK_SPV_DUMP directories in, the stamps whose emitted words
 // moved, appeared or vanished out - the identity gate a kernel fold ships with. Exit 0 when every

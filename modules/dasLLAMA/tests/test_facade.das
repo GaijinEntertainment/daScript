@@ -7,7 +7,7 @@ require dasllama/dasllama   // the public facade — public-path tests exercise 
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/fio
-require _model_tier   // models_dir, ids_equal
+require _model_tier
 
 // The unified tokenizer facade (encode/decode/piece over auto-selected SPM/BPE) must produce
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.

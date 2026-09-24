@@ -5,8 +5,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_tokenizer
 require daslib/fio
 require daslib/strings_boost
-require _model_tier   // models_dir, ids_equal
-require _tokenizer_corpus   // parse_out_ids, drop_trailing_empty
+require _model_tier
+require _tokenizer_corpus
 
 // Tokenizer regression gates against the upstream test-tokenizer-0 corpora (the .inp/.out files
 // shipped next to each ggml-vocab-*.gguf), through the production facade (load_tokenizer_auto ->

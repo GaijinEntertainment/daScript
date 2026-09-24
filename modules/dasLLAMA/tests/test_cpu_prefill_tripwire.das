@@ -5,7 +5,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
-require _model_tier   // llama2c_dir (the tier carries no [init]: the prefill intent stays undeclared here by design)
+require _model_tier
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_

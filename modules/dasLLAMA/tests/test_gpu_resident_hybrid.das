@@ -19,7 +19,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the who
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
+require _resident_feed
 
 // The whole-model resident driver on a deltanet hybrid under DASLLAMA_GPU=1: the resident window
 // chain prefills the prompt (the recurrent layers through the conv + chunked scan over their device
@@ -114,7 +114,7 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
         let rq0 = q8k_requants()
-        var prefill_q8k_rq = RQ_NO_CENSUS   //! Q8_K requants the resident prefill alone dispatched (RQ_NO_CENSUS with no vulkan module)
+        var prefill_q8k_rq = RQ_NO_CENSUS
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
             prefill_q8k_rq = rq0 == RQ_NO_CENSUS ? RQ_NO_CENSUS : q8k_requants() - rq0
         }) $ {}

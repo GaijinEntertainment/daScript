@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
-require _model_tier   // llama2c_dir
+require _model_tier
 require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio

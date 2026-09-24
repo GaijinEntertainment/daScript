@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require _model_tier   // llama2c_dir, the logits compares
+require _model_tier
 
 [init]
 def private allow_cpu_prefill_intent() {

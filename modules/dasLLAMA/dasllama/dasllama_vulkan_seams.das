@@ -48,7 +48,7 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
         }
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             var pc = ArArgs(dim = uint(dim), add_on = add ? 1u : 0u, woff = 0u, eps = eps, ascale = ascale)
-            enc_cls_ar(raw, h, g_gpu.ar_set, pc, 1l)   // one workgroup owns the whole row (it reduces)
+            enc_cls_ar(raw, h, g_gpu.ar_set, pc, 1l)
             vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
             cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         }
@@ -107,7 +107,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
                 half = uint(half), neox = neox ? 1u : 0u, kpair0 = uint(kpair0),
                 npairs = uint(npairs), layerbase = 0u)
             enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
-            vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
+            vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
             cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
             cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
             cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)

@@ -17,7 +17,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
 require dasllama/dasllama_config
-require dasllama/dasllama_kqformat   // kq_rows_ok — the plane sizing's row check
+require dasllama/dasllama_kqformat
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend

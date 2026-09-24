@@ -1503,7 +1503,7 @@ def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSe
 
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
 def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64> {
-    let nb = kq_blocks_for(n, rows, fmt)   // strides live in arena_block_bytes — one source
+    let nb = kq_blocks_for(n, rows, fmt)
     let bb = arena_block_bytes(fmt)
     return (wq = nb * bb.wq, ws = nb * bb.ws)
 }
@@ -1705,7 +1705,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
 // probe — a divergent copy would desync the baked plan at the refusal boundary.
 // 0 = accept, 1 = VRAM budget, 2 = descriptor capacity, 3 = unplaceable row length.
 def vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
-    if (!kq_rows_ok(n, fmt)) {   // must precede stack_plane_bytes — its block math asserts
+    if (!kq_rows_ok(n, fmt)) {   // must precede stack_plane_bytes - its block math asserts
         return 3
     }
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -1731,7 +1731,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
     if (!vk_moe_init()) {
         return false
     }
-    if (!kq_rows_ok(n, fmt)) {   // unplaceable row length: this stack stays on the CPU
+    if (!kq_rows_ok(n, fmt)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined - row length {n} is not a {kq_unit(fmt)}-block multiple (fmt {fmt})\n")
         return false
     }
@@ -2160,7 +2160,7 @@ def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64
     if (!vk_moe_init() || empty(wq) || empty(ws)) {
         return -1l
     }
-    if (!kq_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
+    if (!kq_rows_ok(n, fmt)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined - row length {n} is not a {kq_unit(fmt)}-block multiple (fmt {fmt})\n")
         return -1l
     }

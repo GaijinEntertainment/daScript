@@ -16,7 +16,7 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_span_reset: the span rec
 require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
-require _compares   // logits_maxabs, logits_maxdiff: the compares behind the row bars
+require _compares
 
 //! The per-op tier's decode attention block and the decode FFN tail against a CPU reference:
 //! two attention quads (layers A and B), one expert stack pair, two positions, in both acts

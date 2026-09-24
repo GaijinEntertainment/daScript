@@ -430,9 +430,7 @@ def private rdec_dn_geom(t : Model) : RdecDnGeom {
     return RdecDnGeom()
 }
 
-//! the device planes the resident driver places, one row per plane (its row length, row count and format): the plan sums
-//! their bytes and the upload reserves and places them from the same list, so the two cannot drift; `ple_tbl` adds the
-//! token table the plan admitted
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array<tuple<n : int64; rows : int64; f : KqFmt>> {
     let c = t.config
     let dim = c.dim
@@ -482,7 +480,7 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array
             planes |> push((n = dim, rows = hid_l, f = lf.f3))
             planes |> push((n = hid_l, rows = dim, f = lf.f2))
         }
-        if (has_ple(c)) {   //! the ple gate and proj planes are q8 whatever the file's format
+        if (has_ple(c)) {
             planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
             planes |> push((n = c.n_embd_per_layer, rows = dim, f = KqFmt.q8))
         }
@@ -617,7 +615,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
             n_moe++
         }
     }
-    var inscope planes <- resident_planes(t, rdec_dn_geom(t), false)   //! the list the upload places: the plan's bytes are its planes' bytes
+    var inscope planes <- resident_planes(t, rdec_dn_geom(t), false)
     for (pl in planes) {
         p.weight_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
     }
@@ -1136,7 +1134,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     for (pl in planes) {
-        if (!kq_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
+        if (!kq_rows_ok(pl.n, pl.f)) {
             let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"   // pl refers into planes: read it before the delete
             delete planes
             delete need

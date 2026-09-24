@@ -7,8 +7,8 @@ require dastest/testing_boost public
 require math
 require strings   // starts_with: the roster cell finds an entry by its name's head
 require dasllama/dasllama_math
-require _compares   // logits_maxabs: the scale behind every relative bar
-require _vk_kq_fixtures   // hash_word: the synthetic quant bytes every plane filler hashes
+require _compares
+require _vk_kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
 require ?vulkan vulkan
@@ -252,7 +252,7 @@ def test_vkd_class_dispatch(t0 : T?) {
                 var h : VkHaz
                 var pc = VtArgs(n = uint(n), gain = 2.5)
                 enc_vkd_toy(raw, h, s, pc, int64(n))
-                vkd_run_copy(raw, h, ydev, host, bytes, 2u)   // ys (bit 2) reads back over the copy engine
+                vkd_run_copy(raw, h, ydev, host, bytes, 2u)
                 memcpy(addr<void?>(gpu[0]), host.mapped, bytes)
             }
             var bad = 0
@@ -861,7 +861,7 @@ def test_vkd_ar_class(t0 : T?) {
                 var h : VkHaz
                 var pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
                 enc_cls_ar(raw, h, s, pc, 1l)
-                vkd_run_copy(raw, h, yd, host, bytes, 8u | 1u)   // y + the updated x read back over the copy engine
+                vkd_run_copy(raw, h, yd, host, bytes, 8u | 1u)
                 memcpy(addr<void?>(yc[0]), host.mapped, bytes)
                 vkd_read_back(xd, host, bytes)
                 memcpy(addr<void?>(xc[0]), host.mapped, bytes)
@@ -1405,10 +1405,8 @@ def private mismatch_rel(got, want : array<float>; bar : float) : int {
 
 def private mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, 2e-3)
 
-//! a Q8_0 block scale off its reference past 2e-3 relative, the reference floored at 1e-6
 def private q8_scale_off(got, d_ref : float) : bool => abs(got - d_ref) > 2e-3 * max(d_ref, 1e-6)
 
-//! a dequantized Q8_0 value off its reference past one quant step of the reference scale plus 2e-3 relative
 def private q8_value_off(deq, want, d_ref : float) : bool => abs(deq - want) > d_ref + 2e-3 * abs(want)
 
 //! `mismatch_approx` over the `n` elements from `base`: one row's slice of a multi-row output
@@ -1639,7 +1637,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                         t |> success(bad == 0, "fmt {fmt} at {lanes} lanes per row: class kernel matches the CPU oracle ({bad} of {rows} rows off)")
                     }
                 }
-                if (kq_has_float_oracle(fmt)) {   //! the codebook packs, lane/mask composes and grid/sign gathers each have an independent float witness
+                if (kq_has_float_oracle(fmt)) {
                     var y_flt <- kq_gemv_float_oracle(fmt, wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "fmt {fmt}: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
@@ -9897,7 +9895,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let n = 300                  // two workgroups of 256 and a guarded tail
+            let n = 300
             let k = 5
             let ngate = 8
             let gidx = 6
@@ -9922,7 +9920,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 down[i] = float(int(hash_word(uint(i) + 37u) % 2001u)) * 0.001 - 1.0
             }
             for (i in range(ngate)) {
-                gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
+                gate[i] = float(i) * 0.5 - 2.0   //! gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
             }
             let x_bytes = int64(n) * 4l
             let w_bytes = int64(k) * 4l
@@ -10006,7 +10004,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
             }
             t |> success(moved > 0, "gate control: the gate moves the shared row's weight off 1 ({moved} of {n})")
             var s_poison := s_ref
-            s_poison[n - 1] += 0.01   // the bar's control: one element pushed past the bar must red
+            s_poison[n - 1] += 0.01
             t |> success(rel_mismatches(y_s, s_poison, 0, n) == 1, "combine control: the bar reds one poisoned element")
             delete xin
             delete w

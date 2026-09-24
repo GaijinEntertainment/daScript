@@ -11,7 +11,7 @@ require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard 
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
 require dasllama/dasllama_common
-require dasllama/dasllama_convert   // cvt_f32_to_f16: the f16 host copies of the router, the beta/alpha rows and the K/V mirrors
+require dasllama/dasllama_convert
 require dasllama/dasllama_par   // maybe_parallel_for: the N-row logits land a row a lane
 require vulkan
 require vulkan/vulkan_boost
@@ -46,6 +46,7 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 //! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
                     mir_elems, cos_elems, regions : int64) : bool {
@@ -150,7 +151,6 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes()) >> 20l} MB for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
     }
-    // the mirrors start at zero, never at garbage: a flash fragment straddling a window's end reads the unwritten rows past it - inside a plane and in the slack - and zero times a masked probability stays zero where a garbage NaN would not
     cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
         cmd_fill_zero(rawz, r.k_mirror, 0l, rd_mir_bytes())
         cmd_fill_zero(rawz, r.v_mirror, 0l, rd_mir_bytes())
@@ -306,7 +306,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),   //! the whole per-row feed planes: the one-row stamp reads row 0
+            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
     }
     // down GEMV -> ffnout
@@ -843,7 +843,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     let pout = arena_planes(fout, bout)
     // qkv + z GEMVs into one projection row: planes @0/1, regions@2, xq@3, xs@4, out@5
     L.s_dnqkv = arena_gemv_set_x(fqkv, pqkv, L.m_dnqkv.buf, g_rd.dn_proj_dev, (cd + di) * 4l * nb, VHZ_DNP)
-    L.s_dnz = arena_gemv_set_x(fz, pz, L.m_dnz.buf, g_rd.dn_proj_dev, (cd + di) * 4l * nb, VHZ_DNZ)   //! the z half of the row under its own class: the qkv and z GEMVs co-run, the step waits on both
+    L.s_dnz = arena_gemv_set_x(fz, pz, L.m_dnz.buf, g_rd.dn_proj_dev, (cd + di) * 4l * nb, VHZ_DNZ)
     if (g_rd.dn_ba_f32) {
         L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, smalls_dev, g_rd.norms_dev),
             fixed_array(g_rd.dn_ba_bytes, dim * 4l * nb, smalls_bytes, g_rd.norms_bytes),
@@ -1207,7 +1207,7 @@ def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs
     let dim = g_rd.dim
     let nb = g_rd.norms_bytes
     let rows = g_rd.nb
-    let xbytes = dim * 4l * rows   //! every arm binds the whole per-row planes: a one-row stamp reads row 0 of a buffer sized for the regions
+    let xbytes = dim * 4l * rows
     let bufs = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs)
     let sizes = fixed_array(xbytes, xbytes, nb, dim * rows, (dim / 32l) * 4l * rows)
     let bits = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ)
@@ -1286,7 +1286,7 @@ def private rd_ensure_fused_sets {
         L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
-            let nb = g_rd.nb   //! the whole per-row planes bound: the one-row epilogue reads row 0
+            let nb = g_rd.nb
             L.s_wo_ar = set_q8_gemv_ar_cls(fixed_array(po.wq, po.ws, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
                 fixed_array(po.wqb, po.wsb, L.qd * nb, (L.qd / 32l) * 4l * nb, dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * nb, (dim / 32l) * 4l * nb, 16l),
                 fixed_array(0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB2))
@@ -1297,7 +1297,7 @@ def private rd_ensure_fused_sets {
             L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
-                let rows = g_rd.nb   //! the whole per-row planes bound: the one-row epilogue reads row 0
+                let rows = g_rd.nb
                 L.s_down_ar = set_q8_gemv_ar_cls(fixed_array(p2.wq, p2.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
                     fixed_array(p2.wqb, p2.wsb, BATCH_HQ_BYTES, BATCH_HS_BYTES, dim * 4l * rows, dim * 4l * rows, g_rd.norms_bytes, dim * rows, (dim / 32l) * 4l * rows, 16l),
                     fixed_array(0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_FFO))
@@ -2450,7 +2450,7 @@ def vk_rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int
 
 //! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
 //! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
-[hot_path]   // per layer per batch-decode row
+[hot_path]
 def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
     read_kv_rows(l, pos, 1l, kp, vp)
 }
@@ -2726,7 +2726,7 @@ def private dnd_drop_slots(drop : block<(st : DnStep) : bool>) {
     }
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // a model drop, never the served token
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def vk_dn_step_invalidate {
     dnd_drop_slots() $(_st : DnStep) : bool {
         return true

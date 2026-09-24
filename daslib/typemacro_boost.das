@@ -727,17 +727,15 @@ def private tsi_stamp_methods(var st : StructurePtr; temMethods : array<Function
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE.md#typemacro-boost")]
 def private tsi_normalize_fields(var st : StructurePtr; var rules : Template; above : StructurePtr) {
     for (f in st.fields) {
         f._type = apply_template(rules, f.at, clone_type(f._type))
         if (f.init != null) {
             f.init = apply_template(rules, f.at, clone_expression(f.init))
         }
-        // a field the surviving concrete parent declares stays a parent field: its cast<auto> init is what binds the instance's slot to the parent's slot type
         if (above != null && find_structure_field(above, string(f.name)) != null) continue
         f.flags.parentType = false
-        // the chain is cut: a slot it declared (an override at any level, the finalizer) drops the parser's cast<auto> to the parent's slot, as infer does for a parentless class
         if (f.init != null && f.init is ExprCast) {
             let c = f.init as ExprCast
             if (c.castType != null && c.castType.baseType == Type.autoinfer) {

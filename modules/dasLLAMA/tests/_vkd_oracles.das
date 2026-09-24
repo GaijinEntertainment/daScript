@@ -12,8 +12,8 @@ require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_math   // dot_q51q8_scalar, mxfp4_fill_lut: the q51 and mx4 GEMV oracles are the CPU rail's own dots
-require dasllama/dasllama_math_default   // dot_mx4q8_scalar
+require dasllama/dasllama_math
+require dasllama/dasllama_math_default
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
 
@@ -125,8 +125,7 @@ def f16_gemm_walk(xf, recs : array<uint>; nrec, n, d, blkw : int; var y : array<
     }
 }
 
-// Q4_K x f16 GEMM oracle (the cm2 k4 tile's shape): per weight d*sc*q - dmin*mn off the
-// repacked planes, rounded f16 as the decode callback rounds, f16 activations — approx bars
+//! Q4_K x f16 GEMM oracle (the cm2 k4 tile's shape): per weight d*sc*q - dmin*mn off the repacked planes
 def k4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -295,8 +294,7 @@ def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     return <- none
 }
 
-// IQ4_XS GEMV float oracle: w = d*sc*LUT[q] straight off the plane bytes (q40 nibble tiling, the k4 row shape with
-// signed sc) — the gate that a wrong codebook pack in iq4_word cannot pass while staying self-consistent
+//! IQ4_XS GEMV float oracle: w = d*sc*LUT[q] straight off the plane bytes (q40 nibble tiling, the k4 row shape with signed sc)
 def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                             regions : array<uint>; n, d, nreg : int) : array<float> {
     let lut = iq4nl_lut()
@@ -317,8 +315,7 @@ def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// Q3_K GEMV float oracle: w = d * sc16 * (q - 4) straight off the plane bytes (qs lane at shift 2*(blk%4), hmask bit
-// blk, k6's 5-word scale row) — the witness a wrong lane/mask pick in k3_quad cannot pass while staying self-consistent
+//! Q3_K GEMV float oracle: w = d * sc16 * (q - 4) straight off the plane bytes (qs lane at shift 2*(blk%4), hmask bit blk, k6's 5-word scale row)
 def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                          regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
@@ -340,14 +337,13 @@ def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ3_S GEMV float oracle: w = d * (1 + 2s) * grid_byte * sign straight off the plane bytes ([qs 64][qh 8][signs 32],
-// the k4-shaped scale row) - the witness a wrong index/sign pick in the gather cannot pass
+//! IQ3_S GEMV float oracle: w = d * (1 + 2s) * grid_byte * sign straight off the plane bytes ([qs 64][qh 8][signs 32], the k4-shaped scale row)
 def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                            regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
         let dd = unpackHalf2x16(ws[sb * 2]).x
         for (blk in range(8)) {
-            let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))   // the row's 4-bit s field -> the signed (1 + 2s) sub-scale
+            let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))
             var bacc = 0.0
             for (e in range(32)) {
                 let l = e / 8
@@ -363,14 +359,13 @@ def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ3_XXS GEMV float oracle: w = d_halved * (2ls + 1) * halved_grid_byte * sign straight off the plane bytes
-// ([qs 64][aux 32], the iq3s-shaped scale row), signs through the CPU-side ksigns table
+//! IQ3_XXS GEMV float oracle: w = d_halved * (2ls + 1) * halved_grid_byte * sign straight off the plane bytes ([qs 64][aux 32], the iq3s-shaped scale row), signs through the CPU-side ksigns table
 def iq3xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                              regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
         let dd = unpackHalf2x16(ws[sb * 2]).x
         for (blk in range(8)) {
-            let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))   // the row's 4-bit field -> the (2ls + 1) sub-scale
+            let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))
             let aux = byte_u8(wq, sb * 96 + 64 + blk * 4) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 1) << 8) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 2) << 16) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 3) << 24)
             var bacc = 0.0
             for (e in range(32)) {
@@ -387,8 +382,7 @@ def iq3xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ2_S GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * sign straight off the plane bytes ([idx 32][signs 32][qh 8],
-// the k4-shaped scale row with UNSIGNED per-16 strips and the pre-eighth-ed d)
+//! IQ2_S GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * sign straight off the plane bytes ([idx 32][signs 32][qh 8], the k4-shaped scale row with UNSIGNED per-16 strips and the pre-eighth-ed d)
 def iq2s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                            regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
@@ -414,8 +408,7 @@ def iq2s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ2_XS GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * ksign straight off the plane words (32 u16 qs words per
-// superblock, no sign/qh planes - the 7-bit ksigns index rides bits 9..15; the k4-shaped scale row with UNSIGNED strips)
+//! IQ2_XS GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * ksign straight off the plane words (32 u16 qs words per superblock, no sign/qh planes - the 7-bit ksigns index rides bits 9..15; the k4-shaped scale row with UNSIGNED strips)
 def iq2xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                             regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
@@ -436,8 +429,7 @@ def iq2xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ2_XXS GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * ksign straight off the plane words (per block a grid word of
-// 4 byte indices + its aux32; the k4-shaped scale row with 8 UNSIGNED per-32 strips and the pre-eighth-ed d)
+//! IQ2_XXS GEMV float oracle: w = d8 * (1 + 2s) * grid_byte * ksign straight off the plane words (per block a grid word of 4 byte indices + its aux32; the k4-shaped scale row with 8 UNSIGNED per-32 strips and the pre-eighth-ed d)
 def iq2xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                              regions : array<uint>; n, d, nreg : int) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
@@ -445,7 +437,7 @@ def iq2xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
         for (b in range(8)) {
             let gw = wq[sb * 16 + b * 2]
             let aux = int(wq[sb * 16 + b * 2 + 1])
-            let sc = float(grid_sc(ws[sb * 2 + 1], uint(b)))   // the row's 4-bit field -> the (2ls + 1) sub-scale, as the class stage decodes it
+            let sc = float(grid_sc(ws[sb * 2 + 1], uint(b)))
             var bacc = 0.0
             for (l in range(4)) {
                 let idx = int((gw >> uint(8 * l)) & 0xFFu)
@@ -462,8 +454,7 @@ def iq2xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-// IQ3_S f16-feed GEMM reference over the device form: grid gather + sign flip per element
-// ([qs 64][qh 8][signs 32] rows, the k4-shaped scale row with signed (1 + 2s) sub-scales)
+//! IQ3_S f16-feed GEMM reference over the device form: grid gather + sign flip per element ([qs 64][qh 8][signs 32] rows, the k4-shaped scale row with signed (1 + 2s) sub-scales)
 def iq3sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -479,8 +470,7 @@ def iq3sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// IQ3_XXS f16-feed GEMM reference over the device form: halved-grid gather + ksigns sign per
-// element ([qs 64][aux 32] rows, the iq3s-shaped scale row with (2ls + 1) sub-scales and the halved d)
+//! IQ3_XXS f16-feed GEMM reference over the device form: halved-grid gather + ksigns sign per element ([qs 64][aux 32] rows, the iq3s-shaped scale row with (2ls + 1) sub-scales and the halved d)
 def iq3xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                           recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -496,9 +486,7 @@ def iq3xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// IQ2_S f16-feed GEMM reference over the device form: u64-grid gather (two words per 10-bit
-// index) + the block's own sign bytes ([idx 32][signs 32][qh 8] rows, the k4-shaped scale row
-// with UNSIGNED per-16 strips, d pre-eighth-ed)
+//! IQ2_S f16-feed GEMM reference over the device form: u64-grid gather (two words per 10-bit index) + the block's own sign bytes ([idx 32][signs 32][qh 8] rows, the k4-shaped scale row with UNSIGNED per-16 strips, d pre-eighth-ed)
 def iq2sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -516,9 +504,7 @@ def iq2sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// IQ2_XS f16-feed GEMM reference over the device form: u64-grid gather (two words per 9-bit
-// index) + ksigns-by-parity off each u16 qs word (32 u16 words per superblock, the k4-shaped
-// scale row with UNSIGNED strips, d pre-eighth-ed)
+//! IQ2_XS f16-feed GEMM reference over the device form: u64-grid gather (two words per 9-bit index) + ksigns-by-parity off each u16 qs word (32 u16 words per superblock, the k4-shaped scale row with UNSIGNED strips, d pre-eighth-ed)
 def iq2xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -534,9 +520,7 @@ def iq2xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// IQ2_XXS f16-feed GEMM reference over the device form: per block a grid word of 4 byte
-// indices (two u64 words each) + its aux32 (ksigns by parity) (16 uint words per superblock,
-// the k4-shaped scale row with 8 UNSIGNED per-32 strips, d pre-eighth-ed)
+//! IQ2_XXS f16-feed GEMM reference over the device form: per block a grid word of 4 byte indices (two u64 words each) + its aux32 (ksigns by parity) (16 uint words per superblock, the k4-shaped scale row with 8 UNSIGNED per-32 strips, d pre-eighth-ed)
 def iq2xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                           recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -555,8 +539,7 @@ def iq2xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// IQ4_NL f16-feed GEMM reference over the device form: q40's walk with the codebook in place
-// of (q - 8) (q40's 32-word rows + 8 f16 d)
+//! IQ4_NL f16-feed GEMM reference over the device form: q40's walk with the codebook in place of (q - 8) (q40's 32-word rows + 8 f16 d)
 def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
@@ -569,8 +552,7 @@ def iq4nlf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
-// Q2_K f16-feed GEMM reference over the device form: per-16 sc/min nibble pairs x d/dmin
-// (16-word rows + [d|dmin][16 pair bytes] scales)
+//! Q2_K f16-feed GEMM reference over the device form: per-16 sc/min nibble pairs x d/dmin (16-word rows + [d|dmin][16 pair bytes] scales)
 def k2f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {

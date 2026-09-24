@@ -393,8 +393,7 @@ class ChainLeafOwn : ChainMid {
     }
 }
 
-//! chain fixture under a concrete base: a template-level override of a template method (not abstract) with a concrete class
-//! surviving as the parent - the slot the chain declared is the instance's own past the cut, the concrete parent's slots stay its
+//! chain fixture under a concrete base: a template level overrides a non-abstract template method, ChainRoot stays the parent
 class ChainRoot {
     hits : int = 0
 
@@ -444,9 +443,9 @@ def test_tsi_template_chain(t : T?) {
         unsafe {
             var inscope m <- new RootedLeaf()
             m->bump()
-            t |> equal(m->run(5), 5 * 3 * 10 + 1)   // the mid level's accum, the root's hits
+            t |> equal(m->run(5), 5 * 3 * 10 + 1)
             var inscope b <- new RootedLeafBase()
-            t |> equal(b->run(5), 5 * 2 * 10)       // the base level's own accum
+            t |> equal(b->run(5), 5 * 2 * 10)
         }
     }
 }

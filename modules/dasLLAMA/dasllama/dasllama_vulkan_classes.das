@@ -106,9 +106,7 @@ class RmsWgBase {
     }
 }
 
-//! the residual step's one text - the add, the row stash and the sum-of-squares pass, then the Q8_0 requant of the normed
-//! row - over accessor overrides: the row kernels read `xs` / `aa` and stash the row in a slab, the q8 GEMV's epilogue reads
-//! `xres` / `y` and re-reads its row; each stamp's `pa` carries the step's fields under the same names
+//! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md sec.2.2ap): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
 [ |> template_struct_instance]
 class template ResidualT : RmsWgBase {
     @template_constant OUT_Q8 : bool = false    //!< the normed row quantized to Q8_0 blocks: `outq` and the block scales `outs` (the requant leaves)
@@ -121,8 +119,7 @@ class template ResidualT : RmsWgBase {
     def abstract stashed(k : uint) : float            //! ... read back
     def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
 
-    //! the norm weight at `e`, one under `no_norm`
-    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+    def norm_weight(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
 
     //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
     def apart(base, j : uint) : float => partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
@@ -157,7 +154,7 @@ class template ResidualT : RmsWgBase {
             return ss
         }
         let last = dim - 1u
-        while (k < dim) {   //! four columns a round, every load issued before the adds: a one-workgroup row kernel is its load rounds
+        while (k < dim) {
             let k1 = min(k + 256u, last)
             let k2 = min(k + 512u, last)
             let k3 = min(k + 768u, last)
@@ -217,10 +214,10 @@ class template ResidualT : RmsWgBase {
             var b = tid / 8u
             while (b < nblk) {
                 let base = b * 32u + lane8 * 4u
-                let v0 = nw(base) * (stashed(base) * inv)
-                let v1 = nw(base + 1u) * (stashed(base + 1u) * inv)
-                let v2 = nw(base + 2u) * (stashed(base + 2u) * inv)
-                let v3 = nw(base + 3u) * (stashed(base + 3u) * inv)
+                let v0 = norm_weight(base) * (stashed(base) * inv)
+                let v1 = norm_weight(base + 1u) * (stashed(base + 1u) * inv)
+                let v2 = norm_weight(base + 2u) * (stashed(base + 2u) * inv)
+                let v3 = norm_weight(base + 3u) * (stashed(base + 3u) * inv)
                 let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
                 let d = m / 127.0
                 let id = d != 0.0 ? 1.0 / d : 0.0
@@ -238,21 +235,19 @@ class template ResidualT : RmsWgBase {
     }
 }
 
-// the add+rmsnorm core: x/a/w members, the row stash, and the shared workgroup reduce — leaves
-// add their output members + kernels
 [ |> template_struct_instance]
 class template ArBase : ResidualT {
     @template_constant OUT_F32 : bool = false   //!< the normed row stored to `yo` as floats (the store leaves)
     @template_constant OUT_F16 : bool = false   //!< ... to `outh` as halves
-    @ssbo @binding = 0 xs : array<float>   // x rows, the residual stream — updated in place
-    @ssbo @binding = 1 aa : array<float>   // the add partner rows
-    @ssbo @binding = 2 wn : array<float>   // the norm weight row
+    @ssbo @binding = 0 xs : array<float>   //! the residual stream's rows, updated in place
+    @ssbo @binding = 1 aa : array<float>   //! the add partner rows
+    @ssbo @binding = 2 wn : array<float>   //! the norms plane: the norm weight row at `woff`, the post norm at `pwoff`, the bias row at `aboff`
     @ssbo @binding = 3 @template_gate = OUT_F32 yo : array<float>
     @ssbo @binding = 3 @template_gate = OUT_F16 outh : array<float16>
     @ssbo @binding = 3 @template_gate = OUT_Q8 outq : array<int8>
     @ssbo @binding = 10 @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
     @push_constant pa : ArArgs
-    @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
+    @workgroup row : float[8192]
 
     def override width : uint => pa.dim
     def override xin(i : uint) : float => xs[i]
@@ -266,7 +261,7 @@ class template ArBase : ResidualT {
     def override stashed(k : uint) : float => row[k]
     def override pre_partner(base, k : uint) : float => row[k]
 
-    //! the normed row out in the leaf's float form from `base`: four columns a round, every load issued before the stores (a one-workgroup row kernel is its load rounds)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def store_out(base : uint; inv : float) {
         let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
@@ -309,7 +304,6 @@ class template ArBase : ResidualT {
     def normed(k : uint; inv : float) : float => wn[pa.woff + k] * (row[k] * inv)
 }
 
-// ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
 [vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRms : ArBase {
     override OUT_F32 = true
@@ -327,7 +321,6 @@ class ClsArAddRms : ArBase {
 class template ArRqBase : ArBase {
     override OUT_Q8 = true
 
-    // quantize the normed row instead of storing it
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
         let ss = accum_row(rbase)
@@ -369,7 +362,7 @@ class template ArRqT : ArRqBase {
             var m = 0.0
             for [unroll] (r in range(8)) {
                 let e = base + uint(r) * 32u
-                let v = nw(e) * (row[e] * inv)
+                let v = norm_weight(e) * (row[e] * inv)
                 vals[r] = v
                 m = max(m, abs(v))
             }
@@ -392,7 +385,7 @@ class template ArRqT : ArRqBase {
         static_if (STOREX) {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
-                ystore[k] = nw(k) * (row[k] * inv)
+                ystore[k] = norm_weight(k) * (row[k] * inv)
                 k += 256u
             }
         }
@@ -633,7 +626,6 @@ class template ArCombG4Base : ArBase {
 class ClsArCombG4 : ArCombG4Base {
     override OUT_F32 = true
 
-    //! one column a round: the gemma-4 combine's own store
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
@@ -658,8 +650,6 @@ class ClsArCombG4F16B : ArCombG4Base {
     }
 }
 
-//! the gemma-4 combine that quantizes the next head's feed itself: the normed row into Q8_0 blocks (`ArBase.quant32`) instead
-//! of a float row a requant dispatch would read
 [vk_dispatch(name = "cls_ar_comb_g4_rq", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4Rq : ArCombG4Base {
     override OUT_Q8 = true
@@ -687,9 +677,7 @@ struct RqArgs {
     nblk : uint     // block / superblock count
 }
 
-//! the Q8 requant of a plane's elements: Q8_0 32-blocks (a subgroup per four, eight lanes a block, the xor amax fold) or,
-//! under `KBLK`, Q8_K superblocks (a subgroup per 256, eight values a lane, the five-shuffle amax) - the element load is the
-//! stamp's: a float plane from its base, or the activation of a gate / up pair
+//! the Q8 requant of a plane's elements - Q8_0 32-blocks, or Q8_K superblocks under `KBLK` - over the stamp's element load (`load4` / `load1`)
 [ |> template_struct_instance]
 class template RqT {
     @template_constant KBLK : bool = false   //!< Q8_K superblocks instead of Q8_0's 32-blocks
@@ -697,7 +685,7 @@ class template RqT {
     def abstract load4(eb : uint) : float4   //! the four elements from `eb` (the 32-block form)
     def abstract load1(e : uint) : float     //! element `e` (the superblock form)
 
-    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b]
+    //! called by a block's 8 co-active lanes: the xor 1/2/4 amax fold spans exactly those lanes
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def blk_store(b, lane8 : uint; v : float4) {
         let m = q8_amax3(max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w))))
@@ -768,11 +756,9 @@ class template RqPlainT : RqT {
     def override load1(e : uint) : float => src[pa.inbase + e]
 }
 
-// straight Q8_0 requant of f32 rows (the deltanet chain's quantize step)
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant : RqPlainT {}
 
-// straight Q8_K requant of f32 rows (the K-quant chains' mid-step re-quantize)
 [vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kRequant : RqPlainT {
     override KBLK = true
@@ -844,7 +830,7 @@ class template ActRqT : RqT {
 
     //! the up element paired with gate element `eb` (the 32-block form): with `ustride` the rows of `ulen` elements sit `ustride` apart
     def up_at(eb : uint) : uint {
-        let ul = max(pa.ulen, 1u)   //! the select evaluates both arms: the flat form's ulen is 0, and a modulo by it is a fault under GPU-assisted validation
+        let ul = max(pa.ulen, 1u)
         return pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
     }
 
@@ -855,7 +841,6 @@ class template ActRqT : RqT {
     def override load1(e : uint) : float => act_mul(gate[e], up[e])
 }
 
-// fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqT {}
 
@@ -967,9 +952,9 @@ struct EmbArgs {
 [ |> template_struct_instance]
 class template EmbGatherT {
     @template_constant WF : bool = false   //!< the f32 table instead of the q8 one
-    @ssbo @binding = 0 @role = "weight" @template_gate = "!WF" wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 @role = "weight" @template_gate = "!WF" wsh : array<float16>    // per-block weight scales
-    @ssbo @binding = 0 @role = "weight" @template_gate = WF wf : array<float>          // the f32 embd table, vocab x dim rows
+    @ssbo @binding = 0 @role = "weight" @template_gate = "!WF" wq : array<uint>
+    @ssbo @binding = 1 @role = "weight" @template_gate = "!WF" wsh : array<float16>
+    @ssbo @binding = 0 @role = "weight" @template_gate = WF wf : array<float>          //! the f32 embd table, vocab x dim rows
     @ssbo @binding = 2 ids : array<uint>       // one token id per row
     @ssbo @binding = 3 xout : array<float>
     @push_constant pa : EmbArgs
@@ -1852,8 +1837,6 @@ let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remain
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
 let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
-// the batch-tile class pick ladders: one arm per KqFmt member, stamped by kq_tile_stamp from the
-// `tile_<verb>_<tail>` placeholders; a format without the stamp fails the compile, never the run
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
     var r = false
@@ -1908,17 +1891,17 @@ def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDesc
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || kq_sb(fmt), "vk classes: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {   //! the KHR arm is one 128 x 128 tile for every column, the expert schedule's s and m pieces included
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
         return khr_cls_ensure(fmt)
     }
     if (tc == CM2_TC_E) {
         return cm2e_cls_ensure(fmt)
     }
-    if (fmt == int(KqFmt.q51)) {   //! the q51 rail is the expert schedule's: its s and e stamps; a dense q51 plane is declined at the plan
+    if (fmt == int(KqFmt.q51)) {
         verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
         return ensure_q51_batch_cm2s_cls()
     }
-    if (fmt == int(KqFmt.mx4)) {   //! the mx4 rail is the expert schedule's too: the loader tags only routed expert stacks mx4
+    if (fmt == int(KqFmt.mx4)) {
         verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
         return ensure_mx4_batch_cm2s_cls()
     }
@@ -2477,7 +2460,7 @@ class DnStepFused : RmsWgBase {
         if (tid < ds) {
             po = dout[tid] * dout[tid]
         }
-        let oinv = wg_rms_inv(po, ds, pa.eps, 0u)   //! every thread sums the partials in one order: the out-norm's inverse without a broadcast slot
+        let oinv = wg_rms_inv(po, ds, pa.eps, 0u)
         e = tid
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
@@ -4919,15 +4902,12 @@ class Q8Batch : MoeCmBase {
 // compose, the scale stage, and the per-block FMA (float order contractual per format) differ —
 // each is an override, and the devirtualizer inlines the family back to four standalone kernels.
 
-// deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane - the k5 and
-// q51 GEMVs and the k5 batch tile share it: one multiply spreads the four bits to their lanes
-// (the shifted copies never overlap, so no carry crosses a lane), one mask keeps bit 4 of each
+//! hb's four low bits to bit 4 of each byte lane: the multiply's shifted copies never overlap, so no carry crosses a lane
 def private k5_dep(hb : uint) : uint {
     return ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 }
 
-//! the K-quant word composes the decode GEMV leaves and the batch tiles share, one uint4 of four packed words each:
-//! Q5_K - the nibble half at `sh` (0 or 4) of four words with the 5th bits deposited from the block's qh byte lanes
+//! Q5_K - the nibble half at `sh` (0 or 4) of four packed words with the 5th bits deposited from the block's qh byte lanes
 def private k5_quad(r : uint4; qh, sh : uint) : uint4 {
     return uint4(((r.x >> sh) & KQC_LOW) | k5_dep(qh >> sh), ((r.y >> sh) & KQC_LOW) | k5_dep(qh >> (8u + sh)),
                  ((r.z >> sh) & KQC_LOW) | k5_dep(qh >> (16u + sh)), ((r.w >> sh) & KQC_LOW) | k5_dep(qh >> (24u + sh)))
@@ -4954,9 +4934,7 @@ def private k2_quad(q : uint4; sh : uint) : uint4 {
     return uint4((q.x >> sh) & m2, (q.y >> sh) & m2, (q.z >> sh) & m2, (q.w >> sh) & m2)
 }
 
-//! the grid formats' index-and-sign picks the decode GEMV leaves and the batch tiles share: the four grid words a lane pair
-//! reads (a two-word format's entry pair as i, i + 1) and their four sign nibbles; the class gathers them through its own
-//! grid slab and `iq3s_signed`. The sign nibbles of two sign bytes, low nibble first
+//! the sign nibbles of two sign bytes, low nibble first
 def private sgn4(sg0, sg1 : uint) : uint4 => uint4(sg0 & 15u, sg0 >> 4u, sg1 & 15u, sg1 >> 4u)
 
 //! IQ3_S: 9-bit indices from the qs word and the block's qh byte at lane pair `l0` (0 or 2)
@@ -4998,14 +4976,6 @@ def private iq2xs_idx4(qw : uint) : uint4 {
 
 def private iq2xs_sgn4(qw : uint) : uint4 => sgn4(ksign7((qw & 0xFFFFu) >> 9u), ksign7(qw >> 25u))
 
-// IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
-// SIGNED int8 lanes (kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it.
-// The codebook is four packed words picked by a dynamic vector index and byte-extracted: pure
-// ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV - `benchmarks/lcpp_bench.das` tg128, 5060 Ti)
-// the grid codebooks, one word per call - the staging loops copy them into workgroup memory once
-// per kernel (a few indexed reads per thread), so the local-array storage class (the slow path
-// of `followup_general.md` item 136) never sits on a hot path; the literal is kqformat's, baked
-// in by [grid_words] because a shader function cannot return a fixed array
 [grid_words(of = "iq3s_grid")]
 def iq3s_grid_word(i : int) : uint {}
 
@@ -5040,6 +5010,9 @@ def ksign7(v : uint) : uint {
     return v | ((t & 1u) << 7u)
 }
 
+//! the IQ4_NL codebook decode of one word of four nibble lanes into four SIGNED int8 lanes (kvalues_iq4nl), the sdot4
+//! operand form the batch tiles and the GEMV leaves share; the codebook is four packed words picked by a dynamic vector
+//! index and byte-extracted - pure ALU, where a fixed_array local was a Function-storage table 3.4x slower on the decode GEMV
 def private iq4_word(n : uint) : uint {
     let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)   // kvalues_iq4nl, 4 bytes per word
     let q0 = n & 15u
@@ -6907,7 +6880,6 @@ class template K4Cm2T : KqCm2BatchT {
     override DECV4 = true
     override SCACHE = true
 
-    //! the nibble's value under the cached scale pair: the iq4xs codebook's x d sc under IQLUT (SCIQ4 fills the cache off the two-word row, no minuend), else k4's d sc x q - dmin mn
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
             let g = e0 >> 5u
@@ -7155,7 +7127,6 @@ class template Q40Cm2T : KqCm2BatchT {
         }
     }
 
-    //! the nibble's value: the iq4nl codebook's under IQLUT, q40's centered nibble otherwise
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
@@ -7277,7 +7248,7 @@ class template Mx4Cm2T : KqCm2BatchT {
         let nib = (by >> ((e >> 4u) * 4u)) & 0xFu
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        return float16(mx4_dec4(nib, mx4_e8m0_half(ex)).x)   //! the one nibble in the low byte: the packed decode's first lane
+        return float16(mx4_dec4(nib, mx4_e8m0_half(ex)).x)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -7316,7 +7287,7 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
 }
 
 [ |> template_struct_instance]
-class template Iq4xsCm2T : K4Cm2T {   //! k4's nibble plane and cached-scale tile verbatim, the nibble read through the codebook and the cache filled off the two-word row
+class template Iq4xsCm2T : K4Cm2T {
     override IQLUT = true
     override SCIQ4 = true
 }
@@ -7615,7 +7586,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
 }
 
 [ |> template_struct_instance]
-class template Iq4nlCm2T : Q40Cm2T {   //! q40's nibble plane and tile verbatim, the nibble read through the codebook
+class template Iq4nlCm2T : Q40Cm2T {
     override IQLUT = true
 }
 
@@ -9414,7 +9385,6 @@ class Q8GemvAr : ResidualT {
     def override stashed(k : uint) : float => xres[k]
     def override pre_partner(base, k : uint) : float => apart(base, k)
 
-    //! the residual step over the finished rows, `ArRqBase.rq_row`'s text on the workgroup's 256 threads
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def epilogue {
         let inv = row_inv(accum_row(0u))

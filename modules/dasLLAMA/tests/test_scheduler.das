@@ -16,7 +16,7 @@ require daslib/fio
 require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
 require math
 require strings
-require _model_tier   // models_dir, ids_equal
+require _model_tier
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
 // scheduler ≡ generate bit-exact (1 stream), chunk-size invariance under classic prefill, staggered

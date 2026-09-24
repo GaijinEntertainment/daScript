@@ -1206,7 +1206,11 @@ the fp64 reference land on a representable float and differ from the input at ev
 construction (`copy_floats` writes over a 1e9 sentinel, `add_scale_inplace` uses positive
 operands with a negative scale so the result cannot be the input, `mul_inplace`'s multiplier is
 a multiple of 0.375 so it can never be one), and every cell asserts that count. A closing cell
-pins a zero count as a no-op on all eight.
+pins a zero count as a no-op on all eight. `test_f32_to_f16_forms` holds the row convert
+`cvt_f32_to_f16` (the resident decode's three host f16 copies) to the language's `float16()`
+cast bit for bit over the tail sweep, the halfway ties, the subnormal band, the largest half,
+both zeros and a value under the smallest subnormal, and holds its clamp past the half range
+where the cast overflows, with the un-clamped cast as the control.
 `test_math_activations.das` - model-free: the activation, norm and fp32 GEMM kernels against
 closed forms and in-test fp64 references over the same tail sweep. `softmax_sink` is gated per
 element plus the closed form its name carries - the row's sum plus the sink mass is one - at a

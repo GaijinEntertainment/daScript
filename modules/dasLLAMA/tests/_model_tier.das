@@ -21,7 +21,7 @@ require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 require dasllama/dasllama_env
-require _compares public   // logits_maxdiff, logits_maxabs, ids_equal: the compares, root-free for the model-free files
+require _compares public
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.

@@ -3,7 +3,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_convert   // cvt_f32_to_f16 - the row convert the tier's host copies ride
+require dasllama/dasllama_convert
 require math
 
 //! The [tuned] elementwise kernels - dot, dot_bf16, axpy, add_inplace, add_scale_inplace,
@@ -395,8 +395,6 @@ def test_zero_length(t : T?) {
     }
 }
 
-//! the two f32 -> f16 forms the tier writes: the row convert and the language's cast agree bit for bit inside the half
-//! range (the Vulkan host copies ride the row convert on this), and the convert clamps past it where the cast overflows
 def private f16_cast_bits(v : float) : uint16 => unsafe(reinterpret<uint16>(float16(v)))
 
 def private f16_form_mismatches(vals : array<float>) : int {
@@ -412,8 +410,7 @@ def private f16_form_mismatches(vals : array<float>) : int {
     return bad
 }
 
-//! the values a rounding difference would show on: the halfway ties between neighbouring halves, the subnormal band, the
-//! largest half, both zeros and a value under the smallest subnormal
+//! the values a rounding difference shows on: the halfway ties, the subnormal band, the largest half, both zeros, a value under the smallest subnormal
 def private f16_edge_values : array<float> {
     var edge : array<float>
     edge |> reserve(64 * 4 + 5)

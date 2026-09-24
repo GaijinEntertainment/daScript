@@ -9,7 +9,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_gguf   // rd_u32 / rd_u16 for the WAV reader
 require daslib/jobque_boost
 require math
-require _model_tier   // models_dir, read_wav_pcm16_mono
+require _model_tier
 
 // Silero-VAD tests. The forward gate is self-contained (the ~1.2 MB weights are checked in at
 // modules/dasLLAMA/models/silero_vad.bin) and drives a deterministic integer-LCG signal — the

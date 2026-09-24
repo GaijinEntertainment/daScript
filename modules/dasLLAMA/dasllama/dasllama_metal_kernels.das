@@ -13,7 +13,7 @@ require metal/msl_shader
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
-require dasllama/dasllama_kqformat   // [grid_words]: the grid codebooks' one literal, baked into the per-word accessors below
+require dasllama/dasllama_kqformat
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens
 
@@ -6341,8 +6341,6 @@ def private kmask_scales(sv : uint4; iq : uint) : uint4 {
         ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u))
 }
 
-// the grid codebooks, one word per call - the GEMV/mul_mm stage them into threadgroup memory once
-// per group, the mv twins read them directly; the literal is kqformat's, baked in by [grid_words]
 [grid_words(of = "iq3s_grid")]
 def public iq3s_gw(i : int) : uint {}
 

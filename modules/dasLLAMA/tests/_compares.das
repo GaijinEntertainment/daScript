@@ -8,7 +8,7 @@ options _dasllama_internal = true
 module _compares shared public
 
 require dasllama/dasllama_lint public
-require math   // abs
+require math
 
 //! Max |a[i] - b[i]| over two float arrays of one length (the shorter's, where they differ) - the compare behind every
 //! logits or kernel-output bar in the suites.

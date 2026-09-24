@@ -11,7 +11,7 @@ module _vk_probe_fixture shared public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
-require ../tests/_vk_kq_fixtures.das public   // hash_word: the synthetic quant bytes the kernel suite's fixtures hash, re-exported to the probes
+require ../tests/_vk_kq_fixtures.das public
 
 //! arms the device timestamp rail on the command `raw` is recording: the probe's stamps land from query 0
 def pfq_arm(raw : VkCommandBuffer) {

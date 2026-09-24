@@ -4,7 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require math
-require _compares   // logits_maxdiff
+require _compares
 
 [test]
 def test_silu(t : T?) {

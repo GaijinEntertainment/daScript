@@ -20,7 +20,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard 
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
-require dasllama/dasllama_kqformat   // kq_cm2e_aliases_m: the e column a 64-step format takes on its m stamp
+require dasllama/dasllama_kqformat
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 
@@ -182,7 +182,6 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
             let edelta = column_census(ecol.col) - e0
             let ewant = 3l * ecol.per_plane * layers * windows
-            //! a floor on both arms: the KHR tile and a 64-step format's m stamp (its e column) also serve the window's dense GEMMs
             t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per MoE layer per window ({edelta} over a floor of {ewant})")
         }
         }

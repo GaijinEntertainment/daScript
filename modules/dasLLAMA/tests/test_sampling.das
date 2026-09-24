@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require daslib/jobque_boost
 require daslib/fio
-require _model_tier   // models_dir
+require _model_tier
 
 // Phase-3 sampling API. Greedy (SamplingParams default: temp=0, penalty=1.0) must reproduce the
 // frozen greedy oracle bit-for-bit; temp>0 sampling must be deterministic under a fixed seed.

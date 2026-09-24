@@ -157,6 +157,9 @@ feeding an add contracts into one fma: contracting one kernel's sandwich column 
 ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp
 apart on a few percent of the row, and the batched rows drift from the session alone. Both forms
 spell that add as `mad` - the GLSL `Fma` instruction, fused by definition - so the driver has no
-contraction to choose; the plain column carries no multiply before its add.
+contraction to choose; the plain column carries no multiply before its add. The row kernel walks
+its row four columns a round - `accum_row` issues a round's four loads before its adds,
+`ArBase.store_out` its four loads before its stores - because a one-workgroup row kernel's time
+is its load rounds.
 `test_vkd_q8_gemv_ar_row_twin` holds the epilogue to the row kernel bit for bit on both columns,
 fed the GEMV's own y row.

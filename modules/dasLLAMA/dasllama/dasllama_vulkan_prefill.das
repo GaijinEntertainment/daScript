@@ -1700,7 +1700,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
             var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
             gemv_enc(f1, raw, h, gate_set, pcg, nfe)
             gemv_enc(f3, raw, h, up_set, pcg, nfe)
-            // the requant form follows the DOWN plane — its GEMV consumes hq/hs
+            // the requant form follows the DOWN plane - its GEMV consumes hq/hs
             var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(nfe / (dkq ? 256l : 32l)))
             let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
             if (dkq) {
@@ -1779,7 +1779,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = kq_unit(fmt)   // q8 takes 32-block Q8_0 activations
+    let unit = kq_unit(fmt)
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")

@@ -12,8 +12,8 @@ require dasllama/dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
-require ../tests/_model_tier.das   // ids_equal
-require ../tests/_tokenizer_corpus.das   // parse_out_ids, drop_trailing_empty
+require ../tests/_model_tier.das
+require ../tests/_tokenizer_corpus.das
 
 // Default fixture; override with a CLI path arg to test another BPE vocab (e.g. ggml-vocab-qwen2.gguf).
 let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/ggml-vocab-llama-bpe.gguf"

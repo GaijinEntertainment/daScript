@@ -16,8 +16,8 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
-require strings   // the tile-stamp macro's placeholder names
-require daslib/strings_boost   // split: the alias roster's words
+require strings
+require daslib/strings_boost
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32

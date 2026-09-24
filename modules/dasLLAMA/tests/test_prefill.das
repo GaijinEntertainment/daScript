@@ -5,8 +5,8 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama   // moe_gpu_drop_model: the Q8 cell serves both sides on the CPU lane under an armed tier
-require _model_tier   // llama2c_dir
+require dasllama/dasllama
+require _model_tier
 
 [init]
 def private allow_cpu_prefill_intent() {
