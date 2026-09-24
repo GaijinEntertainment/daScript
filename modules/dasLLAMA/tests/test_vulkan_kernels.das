@@ -1386,25 +1386,6 @@ def private ws_word(i : uint) : uint {
 // stay exact, except quants downstream of exp/tanh (GPU transcendentals differ by ulps — those
 // compare as signed bytes within +-1).
 
-def private approx(x, y : float) : bool => abs(x - y) <= 2e-3 * max(1.0, max(abs(x), abs(y)))
-
-def private mismatch_rel(got, want : array<float>; bar : float) : int {
-    var bad = 0
-    for (i in range(length(got))) {
-        let g = got[i]
-        let w = want[i]
-        if (!(abs(g - w) <= bar * max(1.0, max(abs(g), abs(w))))) {
-            if (bad < 6) {   // the eyeball dump: enough to tell tolerance drift from garbage
-                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
-            }
-            bad++
-        }
-    }
-    return bad
-}
-
-def private mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, 2e-3)
-
 def private q8_scale_off(got, d_ref : float) : bool => abs(got - d_ref) > 2e-3 * max(d_ref, 1e-6)
 
 def private q8_value_off(deq, want, d_ref : float) : bool => abs(deq - want) > d_ref + 2e-3 * abs(want)

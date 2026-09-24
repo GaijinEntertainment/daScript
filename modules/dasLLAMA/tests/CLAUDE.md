@@ -297,6 +297,12 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
+`test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision towers'
+kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128
+on the cm2 and KHR arms) against `attn_row_oracle` over every key, the causal twin as the control
+that the mask switch moves the output while the last row agrees, sentinel slack rows past kvlen as
+the tail-mask control, and the poisoned-element control on the bar; the tower-only classes join it
+as the arc lands them.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit

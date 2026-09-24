@@ -746,6 +746,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
     "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
     "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
+    // the bidirectional flash tiles (the vision towers' encoder attention, on both arms at the 64 head and the padded
+    // 128): their carriers are the vision mmprojs, no zoo row; their coverage is test_vkt_fa_bidir in
+    // test_vulkan_tower_kernels.das
+    "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

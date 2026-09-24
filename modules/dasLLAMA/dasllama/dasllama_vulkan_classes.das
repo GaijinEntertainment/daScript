@@ -3256,6 +3256,10 @@ def facm2_pick(r, c : uint; v, o : float) : float => max(v + FA_MAX_BIAS, o)
 [spirv_per_element]
 def facm2_mask(r, c : uint; v : float; qbase, kbase, win : uint) : float => (kbase + c > qbase + r || (win != 0u && kbase + c + win <= qbase + r)) ? -1.7e38 : v
 
+//! the bidirectional stamps' only mask: the key columns past kvlen
+[spirv_per_element, unused_argument(r)]
+def facm2_tail(r, c : uint; v : float; kbase, kvlen : uint) : float => kbase + c >= kvlen ? -1.7e38 : v
+
 [spirv_per_element, unused_argument(r, c)]
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 
@@ -3299,6 +3303,7 @@ class template FaT {
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
     @template_constant SINK : bool = false       //! the sink stamps (gpt-oss): the online softmax seeds its max with the head's sink logit and its sum with one - the phantom key with no value row
     @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
+    @template_constant CAUSAL : bool = true      //! the bidirectional stamps (the vision towers' encoder attention) clear it: every query row attends every key row, and the mask keeps only the tail past kvlen
     @workgroup @template_gate = KHR fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup @template_gate = KHR fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup @template_gate = KHR fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
@@ -3352,7 +3357,7 @@ class template FaT {
                 o[z] = 0.0
             }
             let qbase = pa.w0 + q0
-            let kend = pa.w0 + min(q0 + 16u, pa.rows)
+            let kend = CAUSAL ? pa.w0 + min(q0 + 16u, pa.rows) : kvlen
             var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u
             barrier()
             while [dont_unroll] (j < kend) {
@@ -3377,9 +3382,15 @@ class template FaT {
                     let idx = srow * 64u + key_col0 + uint(c)
                     let gk = j + key_col0 + uint(c)
                     let v = CAP ? softcap_exp(fs[idx], pa.cap) : fs[idx]
-                    let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
-                    fs[idx] = sv
-                    mloc = max(mloc, sv)
+                    static_if (CAUSAL) {
+                        let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
+                        fs[idx] = sv
+                        mloc = max(mloc, sv)
+                    } else {
+                        let sv = gk >= kvlen ? -3.0e38 : v
+                        fs[idx] = sv
+                        mloc = max(mloc, sv)
+                    }
                 }
                 mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
                 mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
@@ -3476,7 +3487,7 @@ class template FaT {
             }
             var o : OF
             let qbase = pa.w0 + q0
-            let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+            let kmax = CAUSAL ? pa.w0 + min(q0 + 64u, pa.rows) : kvlen   // causal bound (exclusive) of the tile's last row; every key row on the bidirectional stamps
             // a sliding layer's first step: the step below the tile's first query's window start
             var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u
             while [dont_unroll] (j < kmax) {
@@ -3487,8 +3498,14 @@ class template FaT {
                 static_if (CAP) {
                     coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
                 }
-                if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
-                    coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
+                static_if (CAUSAL) {
+                    if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
+                        coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
+                    }
+                } else {
+                    if (j + BC > kvlen) {   //! the padded tensor load reads the tail past kvlen as zero rows: a zero score, not a masked one
+                        coopmatPerElement(s, s, @@facm2_tail, j, kvlen)
+                    }
                 }
                 var rmax : SACC
                 coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
@@ -3567,6 +3584,13 @@ class FaCm2H64F16 : FaH64T {
     override OUT16 = true
 }
 
+//! the bidirectional twin (the vision towers' encoder attention: gemma4v at its native head width)
+[vk_dispatch(name = "fa_cm2_h64_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64Bidir : FaH64T {
+    typedef OT = float
+    override CAUSAL = false
+}
+
 [vk_dispatch(name = "fa_cm2_h64_sink_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H64Sink : FaH64T {
     typedef OT = float
@@ -3606,6 +3630,13 @@ class FaCm2H128 : FaH128T {
 class FaCm2H128F16 : FaH128T {
     typedef OT = float16
     override OUT16 = true
+}
+
+//! the bidirectional twin: the padded route of the 72- and 80-wide tower heads (gemma3v, qwen3v, qwen25v), zero pads exact
+[vk_dispatch(name = "fa_cm2_h128_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128Bidir : FaH128T {
+    typedef OT = float
+    override CAUSAL = false
 }
 
 // hs=256 (the deltanet hybrids' attention heads) at Bc=32; the gated leaves ride the [q | gate] panel
@@ -3693,6 +3724,13 @@ class FaKhrH64 : FaH64T {
     typedef OT = float
 }
 
+[vk_dispatch(name = "fa_khr_h64_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64Bidir : FaH64T {
+    override KHR = true
+    override CAUSAL = false
+    typedef OT = float
+}
+
 [vk_dispatch(name = "fa_khr_h64_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH64F16 : FaH64T {
     override KHR = true
@@ -3718,6 +3756,13 @@ class FaKhrH64SinkF16 : FaH64T {
 [vk_dispatch(name = "fa_khr_h128_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH128 : FaH128T {
     override KHR = true
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h128_bidir_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128Bidir : FaH128T {
+    override KHR = true
+    override CAUSAL = false
     typedef OT = float
 }
 

@@ -165,6 +165,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tower_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
@@ -307,7 +308,7 @@ def area_tests(area : string) : array<string> {
                     "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_rope_apply.das",
                     "test_sampling.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
-                    "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das",
+                    "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das", "test_vulkan_tower_kernels.das",
                     "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
     }
     var none : array<string>
