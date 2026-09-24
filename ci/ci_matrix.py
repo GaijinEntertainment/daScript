@@ -24,15 +24,23 @@ def is_nightly(event_name):
     return event_name in NIGHTLY_EVENTS
 
 
+SANITIZERS = ("asan", "tsan", "ubsan")
+# one nightly sanitizer job per step: the per-PR sweeps, the full AOT suite, the backend sweeps -
+# in one job they ran 2.5 to 4 hours back to back, and the tsan backend sweep never fit its cap
+SANITIZER_PHASES = ("tests", "slow", "backend")
+
+
 def _cells(target, architecture, presets, **props):
     props.setdefault("fast_math", "OFF")
+    props.setdefault("phase", "all")
     return [dict(target=target, architecture=architecture, cmake_preset=preset, sanitizers="none", **props)
             for preset in presets]
 
 
 def build_cells(event_name):
     """build.yml: Release + Debug on every platform per PR; the sanitizer cells and windows
-    64 Debug are nightly-only (each is a 40-55 minute job whose signal a day's cadence serves)."""
+    64 Debug are nightly-only. A sanitizer cell is three jobs, one per test step (`phase`);
+    every other cell runs every step (`phase` all)."""
     cmake = dict(build_system="cmake", cmake_generator="Ninja")
     cells = []
     cells += _cells("linux", 64, ["Debug", "Release"], release_target="linux", release_arch="x86_64",
@@ -58,14 +66,15 @@ def build_cells(event_name):
         cells += _cells("windows", 64, ["Debug"], release_target="windows", release_arch="x86_64",
                         runner="windows-latest", architecture_string="x64", archive_ext="zip",
                         jit_disabled="ON", nightly_only="ON", cmake_extra=WINDOWS_EXTRA, **cmake)
-        for san in ("asan", "tsan", "ubsan"):
-            cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
-                              runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
-                              fast_math="OFF", cmake_extra=CLANG, **cmake))
+        for san in SANITIZERS:
+            for phase in SANITIZER_PHASES:
+                cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
+                                  runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
+                                  fast_math="OFF", phase=phase, cmake_extra=CLANG, **cmake))
         # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
         cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
                           fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",
-                          nightly_only="ON",
+                          nightly_only="ON", phase="all",
                           cmake_extra="-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++", **cmake))
     return cells
 
