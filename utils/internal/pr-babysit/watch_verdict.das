@@ -22,19 +22,33 @@ def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : b
 }
 
 // "<bucket> <name>" check lines -> failing names + pending count; other buckets pass or skip.
-// A cancelled lane is red until it is re-run - between a cancel and a rerun it must not read as "nothing pending"
-def public classify_checks(checks : array<string>) : tuple<fails : array<string>; pending : int> {
-    var r : tuple<fails : array<string>; pending : int>
+// A cancelled lane is red until it is re-run - between a cancel and a rerun it must not read as "nothing pending".
+// A failing check named in `ignored` - a lane red on master with a control posted on the PR - is
+// reported apart and does not make the verdict red.
+def public classify_checks(checks : array<string>; ignored : array<string>) : tuple<fails : array<string>; ignored : array<string>; pending : int> {
+    var r : tuple<fails : array<string>; ignored : array<string>; pending : int>
     for (c in checks) {
+        var name = ""
         if (c |> starts_with("fail ")) {
-            r.fails |> push(slice(c, 5))
+            name = slice(c, 5)
         } elif (c |> starts_with("cancel ")) {
-            r.fails |> push(slice(c, 7))
+            name = slice(c, 7)
         } elif (c |> starts_with("pending ")) {
             r.pending++
         }
+        continue if (empty(name))
+        if (ignored |> has_value(name)) {
+            r.ignored |> push(name)
+        } else {
+            r.fails |> push(name)
+        }
     }
     return <- r
+}
+
+def public classify_checks(checks : array<string>) : tuple<fails : array<string>; ignored : array<string>; pending : int> {
+    let none : array<string>
+    return <- classify_checks(checks, none)
 }
 
 // process exit per verdict; keep_polling has none

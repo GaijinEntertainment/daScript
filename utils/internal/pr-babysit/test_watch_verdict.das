@@ -33,6 +33,17 @@ def test_watch_verdict(t : T?) {
         t |> equal(length(none.fails), 0)
         t |> equal(none.pending, 0)
     }
+    t |> run("an ignored check's red is reported apart and does not count as failed") @(t : T?) {
+        let r <- classify_checks(["fail build_windows_clangcl", "fail build_linux", "pending docs"], ["build_windows_clangcl"])
+        t |> equal(length(r.fails), 1)
+        t |> equal(r.fails[0], "build_linux")
+        t |> equal(length(r.ignored), 1)
+        t |> equal(r.ignored[0], "build_windows_clangcl")
+        t |> equal(r.pending, 1)
+        let only <- classify_checks(["fail build_windows_clangcl"], ["build_windows_clangcl"])
+        t |> equal(length(only.fails), 0, "a PR whose only red is the ignored lane reads as not red")
+        t |> equal(exit_for(watch_verdict(length(only.fails), only.pending, true, 0)), 0)
+    }
     t |> run("verdicts map to the documented exits; keep_polling has none") @(t : T?) {
         t |> equal(exit_for(WatchVerdict.ci_red), 2)
         t |> equal(exit_for(WatchVerdict.review_to_triage), 3)

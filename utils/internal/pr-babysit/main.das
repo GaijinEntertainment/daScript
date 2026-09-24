@@ -35,6 +35,9 @@ struct Config {
     @clarg_doc = "Resolve a review thread by GraphQL id (repeatable)"
     resolve : array<string>
 
+    @clarg_doc = "A check name whose red is master's, with the control posted on the PR - not counted by --watch (repeatable)"
+    ignore : array<string>
+
     @clarg_doc = "Watch poll interval, seconds"
     interval_sec : int = 30
 
@@ -166,9 +169,10 @@ def private watch(cfg : Config) : int {
             to_log(LOG_WARNING, "pr-babysit: api read failed, retrying\n")
             continue
         }
-        let cls <- classify_checks(checks)
+        let cls <- classify_checks(checks, cfg.ignore)
         let reviewed = reviews |> has_value(head)
-        let state = "tip {slice(head, 0, 9)}: {length(cls.fails)} failed, {cls.pending} pending, reviewed={reviewed}, unresolved={unresolved}"
+        let ignored_note = empty(cls.ignored) ? "" : ", {length(cls.ignored)} ignored ({join(cls.ignored, ", ")})"
+        let state = "tip {slice(head, 0, 9)}: {length(cls.fails)} failed, {cls.pending} pending{ignored_note}, reviewed={reviewed}, unresolved={unresolved}"
         if (state != last_state) {
             to_log(LOG_INFO, "pr-babysit: {state}\n")
             last_state = state

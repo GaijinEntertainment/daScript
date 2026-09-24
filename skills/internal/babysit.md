@@ -9,7 +9,9 @@ GitHub mechanics live in the tool:
 merge, `1` request/API failure, `2` CI red (failing checks named), `3` a review targets the
 tip with unresolved threads, `5` nothing actionable within the timeout. Run it BARE in the
 background, never piped - a pipeline reports the last command's exit code, and the exit code
-IS the verdict. When GitHub changes, fix the tool, not this file.
+IS the verdict. A lane red on master, with its control posted on the PR (Section 2), is passed
+as `--ignore "<check name>"` (repeatable) so the watch keeps reporting the lanes that are the
+PR's. When GitHub changes, fix the tool, not this file.
 
 ## 0. Stop rule
 
