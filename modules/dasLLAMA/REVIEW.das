@@ -148,7 +148,8 @@ var private AUDIO_SEAM_EXEMPT <- {
 }
 
 var private VISION_SEAM_EXEMPT <- {
-    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das"
+    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"
 }
 
 def private carried_families(carrier, kind_enum : string) : array<string> {
@@ -234,7 +235,7 @@ var private GPU_ROLES_METAL <- {
 }
 
 var private GPU_ROLES_VULKAN <- {
-    "classes", "common", "decode", "prefill", "seams", "dispatch"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false
