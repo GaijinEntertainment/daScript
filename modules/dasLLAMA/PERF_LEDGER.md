@@ -2717,27 +2717,33 @@ mode) and `DAS_TUNE_POLICY` unset (the box default; the untuned tier is what
 encodes +3 of 3), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every encode,
 the CPU tower chain - the q8 lane where the family has one, the exact f32 lane on qwen25v - and the
 decoder on the CPU too, so only the encode column is a tower-vs-tower reading) [direction-grade -
-two processes]. The encode is one image's tower time in ms and a tg figure is the decoder's tok/s,
-each the mean of the three timed reps: the bench's image cell logs that mean alone, so no spread
-(deviation, min or max) is recorded for the rows below.
+two processes]. The encode is one image's tower time in ms, the best of the three timed reps with
+the three listed beside it (the cell prints every rep), and a pp or tg figure is the decoder's
+best rep in tok/s.
 
-- **The four families, the driver against the CPU chain, encode ms:** gemma-4-E2B (gemma4v q8, 130
-  soft tokens) **35.2** against 706; gemma-3-4b (gemma3v q8, 256 tokens, the fixed 896 canvas -
-  4096 patch rows through 27 blocks) **165** against 14345; Qwen3-VL-4B (qwen3v q8 with the three
-  deepstack taps, 300 tokens) **262** against 1561; Qwen2.5-Omni-3B (qwen25v over the halfword twin,
-  391 tokens, the f32 per-window route) **179** against 7305 (162 on the slotted f16 route the arc
-  replaced: the window layers read K and V off the compact rows, `followup_vulkan.md` row 95's
-  staging lever). The captions read on both arms of every pair name the two cats and the remotes -
-  an observation of the served output, not a parity claim; the parity instruments are the twin
-  cells below and the chat pairs of `tests/test_vision_chat.das`.
-- **The E2B image row's decode with the resident driver's span pass hydrating the mirror's rows
-  before the CPU takes the image eval:** tg **188.4** on the `vk` arm, against 24.7 at the previous
-  tip on the same arm (the decode falling to the CPU after the span eval) and the `cpu` arm's 24.5
-  [direction-grade - two commits]. The caption the chat cell `test_vision_chat_e2b` reads under
-  `DASLLAMA_GPU=1` is that cell's own assert.
-- **The pp / tg columns are the decoder's**, not the tower's: on the `cpu` arm the decoder runs on the
-  CPU too (Qwen3-VL tg 14.0 against 56.0 on the Vulkan resident driver, Omni 18.8 against 102.7,
-  E2B 24.5 against 188.4).
+- **The four families, the driver against the CPU chain, encode ms (best of three, the three
+  beside):** gemma-4-E2B (gemma4v q8, 130 soft tokens) **35.2** (40.5 / 35.2 / 35.8) against 701.7
+  (715.1 / 701.7 / 708.4); gemma-3-4b (gemma3v q8, 256 tokens, the fixed 896 canvas - 4096 patch
+  rows through 27 blocks) **144.9** (168.1 / 144.9 / 146.1) against 14471 (14506 / 14471 / 14527);
+  Qwen3-VL-4B (qwen3v q8 with the three deepstack taps, 300 tokens) **247.9** (255.3 / 247.9 /
+  251.9) against 1680 (1719 / 1691 / 1680); Qwen2.5-Omni-3B (qwen25v over the halfword twin, 391
+  tokens, the f32 per-window route) **174.3** (219.6 / 180.3 / 174.3) against 7161 (7161 / 7198 /
+  7163) - the slotted f16 route the arc replaced read 162 (the window layers read K and V off the
+  compact rows, `followup_vulkan.md` row 95's staging lever). The first rep of a `vk` row carries
+  the tower's upload and pipeline builds. The captions read on both arms of every pair are the
+  same text and name the two cats and the remotes - an observation of the served output, not a
+  parity claim; the parity instruments are the twin cells below and the chat pairs of
+  `tests/test_vision_chat.das`.
+- **The image turn's decode with the resident driver's span pass hydrating the mirror's rows
+  before the CPU takes the image eval, tg tok/s on the `vk` arm against the `cpu` arm:** E2B
+  **189.0** against 24.4 (24.7 on the `vk` arm at the tip before the pass hydrated: the decode fell
+  to the CPU after the span eval), gemma-3-4b **106.2** against 15.2 (15.2 before), Qwen3-VL-4B
+  **70.3** against 14.0 (56.0 before), Omni **99.0** against 20.0 [direction-grade - two commits].
+  The caption the chat cell `test_vision_chat_e2b` reads under `DASLLAMA_GPU=1` is that cell's
+  own assert.
+- **The pp / tg columns are the decoder's**, not the tower's: on the `cpu` arm the decoder runs on
+  the CPU too, and pp reads within 10% on both arms (the image turn's prefill is the CPU's on
+  either: the Vulkan resident prefill declines the span eval).
 - **The driver's allocations at the largest shape the path serves - the 4096-row encode cap
   (`VT_MAX_ENCODE_ROWS`, the `shape` decline past it), which is gemma3v's fixed canvas exactly:**
   the qwen25v halfword twin uploaded whole, 32 layers x (4 x 1280^2 + 3 x 1280 x 3456) weights x 2
