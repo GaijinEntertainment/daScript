@@ -22,6 +22,7 @@ require math
 require strings
 require daslib/strings_boost
 require dasllama/dasllama_env
+require ../tests/_compares.das   // logits_maxdiff: the tolerance gate against the portable kernel
 
 let NTOK = 128l
 let ROUNDS = 6
@@ -31,14 +32,6 @@ def fillf(var a : array<float>; cnt : int64) {
     for (i in range64(cnt)) {
         a[i] = float(i % 13l) * 0.1 - 0.6
     }
-}
-
-def maxdiff(a, b : array<float>) : float {
-    var m = 0.0
-    for (av, bv in a, b) {
-        m = max(m, abs(av - bv))
-    }
-    return m
 }
 
 struct Cand {
@@ -126,7 +119,7 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
         } else {
             matmul_q8q8_batch(y, q, s, xqb, xsb, n, d, NTOK)
         }
-        let md = maxdiff(yref, y)
+        let md = logits_maxdiff(yref, y)
         ok[ci] = md < 1.0e-3
         if (!ok[ci]) {
             print("  !! {cands[ci].name} maxdiff {md} vs portable - REJECTED\n")

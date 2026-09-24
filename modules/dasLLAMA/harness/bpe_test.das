@@ -12,7 +12,7 @@ require dasllama/dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
-require ../tests/_model_tier.das
+require ../tests/_compares.das   // ids_equal
 require ../tests/_tokenizer_corpus.das
 
 // Default fixture; override with a CLI path arg to test another BPE vocab (e.g. ggml-vocab-qwen2.gguf).

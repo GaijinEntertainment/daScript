@@ -20,7 +20,7 @@ planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the hea
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list
 (`resident_planes`, a row length, a row count and a format per plane): the plan sums that list's
 bytes and the upload reserves and places the same list, so the two cannot drift; the router rows,
-the f32 beta / alpha rows and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
+the beta / alpha rows (f16 on the device) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
 the remedy that works - a shorter context, because the weights are fixed and the KV is not. The

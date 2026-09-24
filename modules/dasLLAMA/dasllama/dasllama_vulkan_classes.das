@@ -110,6 +110,7 @@ class RmsWgBase {
 [ |> template_struct_instance]
 class template ResidualT : RmsWgBase {
     @template_constant OUT_Q8 : bool = false    //!< the normed row quantized to Q8_0 blocks: `outq` and the block scales `outs` (the requant leaves)
+    @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`: the requant stamps and the GEMV epilogue read it, the store and combine stamps carry no such call and no branch for it
 
     def abstract width : uint                         //! the row's width
     def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
@@ -119,7 +120,13 @@ class template ResidualT : RmsWgBase {
     def abstract stashed(k : uint) : float            //! ... read back
     def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
 
-    def norm_weight(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+    def norm_weight(e : uint) : float {
+        static_if (NORM_SWITCH) {
+            return pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+        } else {
+            return wn[pa.woff + e]
+        }
+    }
 
     //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
     def apart(base, j : uint) : float => partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
@@ -198,10 +205,14 @@ class template ResidualT : RmsWgBase {
     // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
     def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, width(), pa.eps, 1u)
 
-    //! the row's norm inverse - one under `no_norm` (the reduce still runs: its barrier is every thread's)
+    //! the row's norm inverse - one under `no_norm` on a NORM_SWITCH stamp (the reduce still runs: its barrier is every thread's)
     def row_inv(ss : float) : float {
         let inv = rms_inv(ss)
-        return pa.no_norm != 0u ? 1.0 : inv
+        static_if (NORM_SWITCH) {
+            return pa.no_norm != 0u ? 1.0 : inv
+        } else {
+            return inv
+        }
     }
 
     //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0`: 8 lanes per 32-block, 32 blocks per pass
@@ -320,19 +331,12 @@ class ClsArAddRms : ArBase {
 [ |> template_struct_instance]
 class template ArRqBase : ArBase {
     override OUT_Q8 = true
+    override NORM_SWITCH = true
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
         let ss = accum_row(rbase)
         quant32(qb0, row_inv(ss))
-    }
-}
-
-[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
-class ArAddRmsRq : ArRqBase {
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
-    def run {
-        rq_row(0u, 0u)
     }
 }
 
@@ -347,7 +351,7 @@ class ClsArAddRmsRqB : ArRqBase {
 [ |> template_struct_instance]
 class template ArRqT : ArRqBase {
     @template_constant KBLK : bool = false    //!< the quant form: Q8_K superblocks (a scale per 256) instead of Q8_0's 32-blocks
-    @template_constant STOREX : bool = false  //!< the normed row stored to binding 5 as floats beside the quants
+    @template_constant STOREX : bool = false  //!< the normed row stored to `ystore` (binding 11) as floats beside the quants
     @ssbo @binding = 11 @template_gate = STOREX ystore : array<float>   //! the normed row beside the quants, for the consumers that read it as floats - past `outs`, so the set order stays quants, scales, row
 
     //! the Q8_K superblocks of the stashed row at inv: a 32-lane block a 256-block, eight values a lane - the block by the invocation id, as the requant class maps it, so the amax fold's masks stay inside it on any subgroup width
@@ -395,6 +399,10 @@ class template ArRqT : ArRqBase {
             quant32(0u, inv)
         }
     }
+}
+
+[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRq : ArRqT {
 }
 
 [vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
@@ -767,18 +775,31 @@ class Q8kRequant : RqPlainT {
 //! the requant of `elems` floats from element `inbase` of a `rq_cls` set into the feed a plane reads: Q8_K superblocks where
 //! `kq` (a `kq_sb` format), Q8_0 blocks otherwise - the one spelling of the pair every host requant site records
 def rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; kq : bool; inbase, elems : int64) {
+    var pcr = RqArgs(inbase = uint(inbase), nblk = uint(elems / kq_unit(kq)))
     if (kq) {
-        var pcr = RqArgs(inbase = uint(inbase), nblk = uint(elems / 256l))
-        enc_cls_q8k_rq(raw, h, rq_set, pcr, (elems / 8l + 255l) / 256l)
+        enc_cls_q8k_rq(raw, h, rq_set, pcr, rq_wgs(kq, elems))
     } else {
-        var pcr = RqArgs(inbase = uint(inbase), nblk = uint(elems / 32l))
-        enc_cls_dn_rq(raw, h, rq_set, pcr, (elems / 4l + 255l) / 256l)
+        enc_cls_dn_rq(raw, h, rq_set, pcr, rq_wgs(kq, elems))
     }
 }
 
 //! the same from element 0 into the feed of a plane in format `fmt` (the decode's per-plane sites)
 def rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; fmt : int; elems : int64) {
     rq_enc(raw, h, rq_set, kq_sb(fmt), 0l, elems)
+}
+
+//! the workgroups a requant or act+requant of `elems` floats dispatches: a Q8_K lane quantizes eight elements, a Q8_0 lane four
+def rq_wgs(kq : bool; elems : int64) : int64 => (elems / (kq ? 8l : 4l) + 255l) / 256l
+
+//! the activation + requant of `elems` gate/up floats into the feed the down plane reads (`pca` carries the site's act code
+//! and its offsets; its block count is set here): Q8_K where `kq`, Q8_0 otherwise - the one spelling of the pair
+def actrq_enc(raw : VkCommandBuffer; var h : VkHaz; var act_set : VkDescriptorSet; kq : bool; var pca : ActArgs; elems : int64) {
+    pca.nblk = uint(elems / kq_unit(kq))
+    if (kq) {
+        enc_q8k_actrq_cls(raw, h, act_set, pca, rq_wgs(kq, elems))
+    } else {
+        enc_q8_actrq_cls(raw, h, act_set, pca, rq_wgs(kq, elems))
+    }
 }
 
 // ===== act + requant (the FFN mid-chain elementwise family) =====
@@ -4799,8 +4820,8 @@ class MoeCmBase {
     }
 }
 
-// 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
-// barrier pair.
+//! a fork of the per-256 `KqBatchBase` shell kept apart on purpose: its per-32 f16 scale pass runs over 8-block steps
+//! (32x32 tiles through shared, K advancing 8 blocks per barrier pair), so only the 32x32 store (`MoeCmBase.store_y`) is shared
 [vk_dispatch(name = "q8_batch_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Batch : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words
@@ -9362,6 +9383,7 @@ struct GemvArArgs {
 [vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvAr : ResidualT {
     override OUT_Q8 = true
+    override NORM_SWITCH = true
     @ssbo @binding = 0 wq4 : array<uint4>          // weight quant words, vec4 view
     @ssbo @binding = 1 wsh : array<float16>        // per-block f16 weight scales
     @ssbo @binding = 2 xqw : array<uint>           // the GEMV's activation quant words

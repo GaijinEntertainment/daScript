@@ -744,9 +744,10 @@ under either of two summation orders, the one-step-off controls 0.42 and above; 
 carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
 per MoE layer per window, the expert schedule's m pieces dispatched the format's e column on the
-three expert planes once per MoE layer per window in cm2 mode (in mm mode the KHR tile also serves
-the window's dense GEMMs, so its count is a floor of two dispatches a plane per MoE layer per
-window), the token command's top-k count a whole multiple of the MoE layer count (the command
+three expert planes once per MoE layer per window in cm2 mode - exact where the format keeps its
+own e stamp, a floor where its e column is its m stamp (`KQ_CM2E_ALIASES_M`), since that stamp also
+serves the window's dense GEMMs (in mm mode the KHR tile serves them too, so its count is a floor of
+two dispatches a plane per MoE layer per window), the token command's top-k count a whole multiple of the MoE layer count (the command
 records once and resubmits), and on a device whose SM count splits the attention keys the
 unsplit twin served every step of the one-window cell and none of the two-window one; the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
@@ -856,6 +857,11 @@ exists, every image-suite arm is reachable from an area or listed as unclaimed),
 planners behind an area run, the argument contracts, the change-to-area map behind `--changed`,
 the `--exclude` filter's semantics, and a dry run of the runner with a no-op child binary.
 Requires `run` by bare same-dir name.
+`test_vk_spv_diff.das` - model-free: the SPIR-V dump differ (`harness/vk_spv_diff.das`, the
+identity gate a kernel fold's "byte-identical" claim rests on) - its four bins over two in-memory
+dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal
+of a dump with no stamp in it, and the directory read by stem. Requires the harness by relative
+path.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` and its first-paint projection

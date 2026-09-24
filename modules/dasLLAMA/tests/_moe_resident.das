@@ -185,7 +185,7 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
             t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per MoE layer per window ({edelta} over a floor of {ewant})")
         }
         }
-        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
         delete fed
         delete prompt
         delete toks

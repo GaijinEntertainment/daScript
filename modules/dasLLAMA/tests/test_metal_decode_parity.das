@@ -29,18 +29,6 @@ require _model_tier
 // rewind (n_past = 0 reuse) arm, and the leak gate. Skips cleanly without the model, off-Apple,
 // or with no Metal device.
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 // "start, start+1, …, last," — the kernel-robust confident fixture family (test_parity.das)
 def private counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
@@ -321,7 +309,7 @@ def private streams_match(a, b : array<array<int64>>) : bool {
         return false
     }
     for (x, y in a, b) {
-        if (!same(x, y)) {
+        if (!ids_equal(x, y)) {
             return false
         }
     }
@@ -866,7 +854,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     feint("metal decode declined (no Metal device?); GPU parity skipped\n")
                     return
                 }
-                t |> success(same(cpu16, gpu16), "40-token continuation matches the CPU control (CPU prefill -> GPU decode)")
+                t |> success(ids_equal(cpu16, gpu16), "40-token continuation matches the CPU control (CPU prefill -> GPU decode)")
             }
 
             // arm 2: Metal-prefill → GPU-decode (both residents live, one queue each)
@@ -883,7 +871,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 select_prefill_override("")
                 set_metal_prefill_min_npos(64l)
                 t |> success(hyb_decodes > 0l && hyb_prefills > 0l, "hybrid arm served on both devices")
-                t |> success(same(cpu16, hyb), "40-token continuation matches the CPU control (Metal prefill -> GPU decode)")
+                t |> success(ids_equal(cpu16, hyb), "40-token continuation matches the CPU control (Metal prefill -> GPU decode)")
             }
 
             // arm 13: the concurrent encoder + hazard tracker. Paranoid window isolates the
@@ -894,7 +882,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 set_metal_decode_hazard(true, false)
                 select_decode_override("metal")
                 let par <- continuation(tr, trg, prompt, 40, KVDtype.f16)
-                t |> success(same(cpu16, par), "40-token continuation matches the CPU control (PARANOID concurrent encode)")
+                t |> success(ids_equal(cpu16, par), "40-token continuation matches the CPU control (PARANOID concurrent encode)")
                 set_metal_decode_hazard(false, true)
                 let h0 = metal_hazard_stats()
                 let cnc <- continuation(tr, trg, prompt, 40, KVDtype.f16)
@@ -902,7 +890,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 select_decode_override("")
                 set_metal_decode_hazard(false, false)
                 set_metal_decode_concurrent(-1)
-                t |> success(same(cpu16, cnc), "40-token continuation matches the CPU control (STRICT concurrent encode)")
+                t |> success(ids_equal(cpu16, cnc), "40-token continuation matches the CPU control (STRICT concurrent encode)")
                 t |> success(hz.gated > h0.gated, "hz_gate saw the step's dispatches")
                 t |> success(hz.barriers - h0.barriers < hz.gated - h0.gated, "barrier elision engaged (barriers < gated dispatches)")
                 t |> equal(hz.undeclared, h0.undeclared)
@@ -921,7 +909,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 before = metal_decode_stats().decodes
                 let paged_gpu <- paged_greedy(tr, trg, prompt, 64l, 16, true)
                 t |> success(metal_decode_stats().decodes - before > 0l, "paged arm served on the GPU")
-                t |> success(same(paged_cpu, paged_gpu), "16-token paged continuation matches the CPU control")
+                t |> success(ids_equal(paged_cpu, paged_gpu), "16-token paged continuation matches the CPU control")
             }
 
             // arm 5: rewind — n_past = 0 reuse re-mirrors from scratch (watermark contract)
@@ -937,7 +925,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 before = metal_decode_stats().decodes
                 let rewind_gpu <- rewind_greedy(tr, trg, prompt, prompt2, 16)
                 t |> success(metal_decode_stats().decodes - before > 0l, "rewind arm served on the GPU")
-                t |> success(same(rewind_cpu, rewind_gpu), "16-token post-rewind continuation matches the CPU control")
+                t |> success(ids_equal(rewind_cpu, rewind_gpu), "16-token post-rewind continuation matches the CPU control")
             }
 
             // arm 6: session churn under a tiny LRU cap — retired sessions' mirrors evict
@@ -969,7 +957,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 let gpu8 <- continuation(tr, trg, prompt, 40, KVDtype.q8_0)
                 select_decode_override("")
                 t |> success(metal_decode_stats().decodes - before > 0l, "q8_0 arm served on the GPU")
-                t |> success(same(cpu8, gpu8), "40-token q8_0-cache continuation matches the CPU control")
+                t |> success(ids_equal(cpu8, gpu8), "40-token q8_0-cache continuation matches the CPU control")
                 single_step_gate(t, tr, trg, prompt, KVDtype.q8_0, 0.5, 0.25, "q8_0")
             }
 
@@ -985,7 +973,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 let gpu4 <- continuation(tr, trg, prompt, 40, KVDtype.tq4)
                 select_decode_override("")
                 t |> success(metal_decode_stats().decodes - before > 0l, "tq4 arm served on the GPU")
-                t |> success(same(cpu4, gpu4), "40-token tq4-cache continuation matches the CPU control")
+                t |> success(ids_equal(cpu4, gpu4), "40-token tq4-cache continuation matches the CPU control")
                 single_step_gate(t, tr, trg, prompt, KVDtype.tq4, 1.0, 2.0, "tq4")
             }
 
@@ -1004,7 +992,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 let gpu16s <- continuation(tr16, tr16g, prompt, 40, KVDtype.f16)
                 select_decode_override("")
                 t |> success(metal_decode_stats().decodes - before > 0l, "wscale16 arm served on the GPU")
-                t |> success(same(cpu16s, gpu16s), "40-token wscale16 continuation matches the CPU control")
+                t |> success(ids_equal(cpu16s, gpu16s), "40-token wscale16 continuation matches the CPU control")
                 set_wscale_f16(false)
                 delete tr16
                 delete tr16g
@@ -1026,7 +1014,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 let gpu_r <- continuation(trr, trrg, prompt, 40, KVDtype.f16)
                 select_decode_override("")
                 t |> success(metal_decode_stats().decodes - before > 0l, "reload arm served on the GPU")
-                t |> success(same(cpu_r, gpu_r), "40-token post-reload continuation matches the CPU control (weights-epoch guard)")
+                t |> success(ids_equal(cpu_r, gpu_r), "40-token post-reload continuation matches the CPU control (weights-epoch guard)")
                 delete trr
                 delete trrg
             }
@@ -1050,7 +1038,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     let gpu_k <- continuation(trk, trkg, prompt, 40, KVDtype.f16)
                     select_decode_override("")
                     t |> success(metal_decode_stats().decodes - before > 0l, "kq arm served on the GPU")
-                    t |> success(same(cpu_k, gpu_k), "40-token K-quant continuation matches the CPU control")
+                    t |> success(ids_equal(cpu_k, gpu_k), "40-token K-quant continuation matches the CPU control")
                     single_step_gate(t, trk, trkg, prompt, KVDtype.f16, 0.8, 0.5, "kq/f16")
                     single_step_gate(t, trk, trkg, prompt, KVDtype.q8_0, 0.8, 0.5, "kq/q8_0")
                     delete trk
@@ -1079,12 +1067,12 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 let dgpu16 <- continuation(trd, trdg, deep_p, 40, KVDtype.f16)
                 select_decode_override("")
                 t |> success(metal_decode_stats().decodes - before > 30l, "deep arm: decode steps past 2048 served on the GPU")
-                t |> success(same(dcpu16, dgpu16), "40-token continuation crossing depth 2048 matches the CPU control")
+                t |> success(ids_equal(dcpu16, dgpu16), "40-token continuation crossing depth 2048 matches the CPU control")
                 let dcpu8 <- continuation(trd, trd, deep_p, 40, KVDtype.q8_0)
                 select_decode_override("metal")
                 let dgpu8 <- continuation(trd, trdg, deep_p, 40, KVDtype.q8_0)
                 select_decode_override("")
-                t |> success(same(dcpu8, dgpu8), "40-token q8_0-KV continuation crossing depth 2048 matches the CPU control")
+                t |> success(ids_equal(dcpu8, dgpu8), "40-token q8_0-KV continuation crossing depth 2048 matches the CPU control")
                 delete deep_p
                 delete trd
                 delete trdg
@@ -1106,7 +1094,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     let d3gpu <- continuation(trd3, trd3g, deep_p3, 40, KVDtype.f16)
                     select_decode_override("")
                     t |> success(metal_decode_stats().decodes - before > 30l, "deep partD arm served on the GPU")
-                    t |> success(same(d3cpu, d3gpu), "40-token hs=128 continuation crossing depth 2048 matches the CPU control (partD)")
+                    t |> success(ids_equal(d3cpu, d3gpu), "40-token hs=128 continuation crossing depth 2048 matches the CPU control (partD)")
                     delete deep_p3
                     delete trd3
                     delete trd3g

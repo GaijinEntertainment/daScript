@@ -15,6 +15,7 @@ def private allow_cpu_prefill_intent() {
 require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
+require daslib/linq   // sequence_equal: the logits rows and the codec-encoded KV byte blobs compare element for element (byte equality IS bit-exactness for a same-dtype pair)
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
@@ -24,31 +25,6 @@ require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob set
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
-
-def feq(a, b : array<float>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
-// KV caches are codec-encoded byte blobs now — byte equality IS bit-exactness for a same-dtype pair
-def feq(a, b : array<uint8>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
 
 // forward_batch over the whole prompt (one batched pass from position 0) == N× forward.
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
@@ -63,9 +39,9 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
         }
         var sp <- make_run_state(c)
         forward_batch(tr, sp, prompt, n, 0l)
-        t |> success(feq(sr.logits, sp.logits), "{mode} last-position logits bit-exact")
-        t |> success(feq(sr.key_cache, sp.key_cache), "{mode} key cache bit-exact")
-        t |> success(feq(sr.value_cache, sp.value_cache), "{mode} value cache bit-exact")
+        t |> success(sequence_equal(sr.logits, sp.logits), "{mode} last-position logits bit-exact")
+        t |> success(sequence_equal(sr.key_cache, sp.key_cache), "{mode} key cache bit-exact")
+        t |> success(sequence_equal(sr.value_cache, sp.value_cache), "{mode} value cache bit-exact")
         delete sr
         delete sp
     }
@@ -89,9 +65,9 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
         }
         let tail <- [for (p in range64(split, n)); prompt[p]]
         forward_prefill(tr, sp, tail, n - split, split)
-        t |> success(feq(sr.logits, sp.logits), "{mode} continuation last-position logits bit-exact")
-        t |> success(feq(sr.key_cache, sp.key_cache), "{mode} continuation key cache bit-exact")
-        t |> success(feq(sr.value_cache, sp.value_cache), "{mode} continuation value cache bit-exact")
+        t |> success(sequence_equal(sr.logits, sp.logits), "{mode} continuation last-position logits bit-exact")
+        t |> success(sequence_equal(sr.key_cache, sp.key_cache), "{mode} continuation key cache bit-exact")
+        t |> success(sequence_equal(sr.value_cache, sp.value_cache), "{mode} continuation value cache bit-exact")
         delete sr
         delete sp
     }
@@ -138,7 +114,7 @@ def test_prefill_q8(t : T?) {
         pin_kernel_backend("portable")
         var tr <- load_checkpoint(MODEL_PATH)
         quantize_weights(tr)
-        moe_gpu_drop_model()   //! the claim is the CPU layer loop against forward(): an armed per-op tier would serve the Q8 planes' batched GEMMs on the device
+        moe_gpu_drop_model()   // the claim is the CPU layer loop against forward(): an armed per-op tier would serve the Q8 planes' batched GEMMs on the device
         var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
         let prompt <- encode(tk, "Once upon a time, there was a little girl", true, false)
         let long_prompt <- [for (i in range64(200l)); i % 200l + 1l]

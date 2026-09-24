@@ -9920,7 +9920,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 down[i] = float(int(hash_word(uint(i) + 37u) % 2001u)) * 0.001 - 1.0
             }
             for (i in range(ngate)) {
-                gate[i] = float(i) * 0.5 - 2.0   //! gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
+                gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
             }
             let x_bytes = int64(n) * 4l
             let w_bytes = int64(k) * 4l
@@ -9991,7 +9991,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 s_ref[i] = xin[i] + acc + g * sh[i]
                 u_ref[i] = xin[i] + acc + sh[i]
             }
-            //! the bar: both sides sum k f32 products in the same order over operands under 1, so only the driver's fma contraction and the device exp separate them - a few ulp of 1
+            // the bar: both sides sum k f32 products in the same order over operands under 1, so only the driver's fma contraction and the device exp separate them - a few ulp of 1
             let bad_r = rel_mismatches(y_r, r_ref, 0, n)
             t |> success(bad_r == 0, "routed combine matches the CPU sum ({bad_r} of {n} off)")
             let bad_s = rel_mismatches(y_s, s_ref, 0, n)
@@ -10003,9 +10003,12 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 moved++ if (y_s[i] != y_u[i])
             }
             t |> success(moved > 0, "gate control: the gate moves the shared row's weight off 1 ({moved} of {n})")
+            var r_poison := r_ref
+            r_poison[n - 1] += 0.01
+            t |> success(rel_mismatches(y_r, r_poison, 0, n) == 1, "routed combine control: the bar reds one poisoned element")
             var s_poison := s_ref
             s_poison[n - 1] += 0.01
-            t |> success(rel_mismatches(y_s, s_poison, 0, n) == 1, "combine control: the bar reds one poisoned element")
+            t |> success(rel_mismatches(y_s, s_poison, 0, n) == 1, "shared combine control: the bar reds one poisoned element")
             delete xin
             delete w
             delete down
@@ -10017,6 +10020,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
             delete r_ref
             delete s_ref
             delete u_ref
+            delete r_poison
             delete s_poison
         } else {
             t |> skip("dasVulkan not present")
@@ -10382,6 +10386,7 @@ def private vkd_run_copy(var raw; var h; dev : uint64; host; bytes : int64; bits
 
 //! the device: the recorded dispatches over `raw`, then each plane - `sizes[p]` bytes of `devs[p]` from its start - into `host` at `ats[p]` (`array` or `fixed_array` lists alike)
 def private vkd_run_copy(var raw; var h; devs; host; ats, sizes; bits : uint) {
+    assert(length(devs) == length(ats) && length(devs) == length(sizes), "vkd_run_copy: one host offset and one byte count per device plane")
     vhz_dep(raw, h, bits, 0u, true)
     for (dev, at, bytes in devs, ats, sizes) {
         cmd_copy_range(raw, dev, 0l, host.buf, at, bytes)
@@ -10390,14 +10395,11 @@ def private vkd_run_copy(var raw; var h; devs; host; ats, sizes; bits : uint) {
     submit_wait(raw)
 }
 
-//! `bytes` of `dev` back into `host` on a command of its own, after the dispatches already landed
+//! `bytes` of `dev` back into `host` on a transient command of its own, after the dispatches already landed
 def private vkd_read_back(dev : uint64; host; bytes : int64) {
-    var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    cmd_copy_whole(raw, dev, host.buf, bytes)
-    vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(raw)
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        cmd_copy_whole(raw, dev, host.buf, bytes)
+    }
 }
 
 //! the host select's picks and weights over the rows, `k` a row

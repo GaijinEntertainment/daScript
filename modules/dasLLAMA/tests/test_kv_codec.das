@@ -808,14 +808,6 @@ def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>
     delete s
 }
 
-def private worst_diff(a : array<float>; b : array<float>) : float {
-    var w = 0.0
-    for (va, vb in a, b) {
-        w = max(w, abs(va - vb))
-    }
-    return w
-}
-
 [test]
 def test_kv_q8_decode(t : T?) {
     t |> run("q8_0 KV: teacher-forced logits track f16, fused==std bit-exact under q8 (needs SmolLM2-135M)") @(t : T?) {
@@ -844,9 +836,9 @@ def test_kv_q8_decode(t : T?) {
             // trajectories are NOT compared — on a 135M model a near-tie argmax flips under f16
             // noise too, and one flip compounds the whole stream). Measured here: q8-vs-f32 noise
             // is the same order as f16-vs-f32 (~0.4-1.8 worst per step).
-            let w8 = worst_diff(lg16, lg8)
+            let w8 = logits_maxdiff(lg16, lg8)
             t |> success(w8 < 4.0, "q8/q8-vs-f16 teacher-forced logits within the structural bound (worst |diff| = {w8})")
-            let w8m = worst_diff(lg16, lg8m)
+            let w8m = logits_maxdiff(lg16, lg8m)
             t |> success(w8m < 4.0, "q8-K/f16-V-vs-f16 within the structural bound (worst |diff| = {w8m})")
             // fused vs std, BOTH under q8: identical kernels + identical query quants -> bit-exact
             var lg_bad = 0

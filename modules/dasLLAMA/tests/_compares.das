@@ -9,6 +9,7 @@ module _compares shared public
 
 require dasllama/dasllama_lint public
 require math
+require daslib/linq   // sequence_equal
 
 //! Max |a[i] - b[i]| over two float arrays of one length (the shorter's, where they differ) - the compare behind every
 //! logits or kernel-output bar in the suites.
@@ -29,15 +30,5 @@ def logits_maxabs(a : array<float>) : float {
     return m
 }
 
-//! Element-for-element equality of two id lists.
-def ids_equal(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
+//! Element-for-element equality of two id lists - the token oracles' compare, named for the sites that read it.
+def ids_equal(a, b : array<int64>) : bool => sequence_equal(a, b)

@@ -35,7 +35,7 @@ trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow
 its `BK` and `BN`, an e or s stamp's `BN` to equal `SCHED_M_ROWS` or `SCHED_S_ROWS`, and a
-scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_kq_gemv_grid_literals` holds every grid format's `<Fmt>GemvT` literal `GRID_WORDS` / `GRID_OFF` to the `KQ_GRID_<FMT>` chain the host fill reads (sec.2.2ab). `check_vk_extension_roster`
+scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_kq_gemv_grid_literals` holds every grid format's `<Fmt>GemvT` literal `GRID_WORDS` / `GRID_OFF` to the `KQ_GRID_<FMT>` chain the host fill reads (sec.2.2ab); it licenses no names. `check_vk_extension_roster`
 walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` probe
 `modules/dasVulkan/daslib/vulkan_boost.das` declares, and requires each inside `vk_ext_roster` in
 `dasllama_vulkan_common.das`, licensing no names.

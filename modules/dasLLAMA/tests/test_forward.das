@@ -20,18 +20,6 @@ let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
 let PROMPT_ORACLE <- [1l, 9038l, 2501l, 263l, 931l]
 
-def same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (va, vb in a, b) {
-        if (va != vb) {
-            return false
-        }
-    }
-    return true
-}
-
 [test]
 def test_forward_end_to_end(t : T?) {
     t |> run("forward + tokenizer match llama2.c (needs stories15M.bin)") @(t : T?) {
@@ -48,7 +36,7 @@ def test_forward_end_to_end(t : T?) {
         var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
         // BPE encoder vs llama2.c tokenization
         let pt <- encode(tk, "Once upon a time", true, false)
-        t |> success(same(pt, PROMPT_ORACLE), "encode prompt tokens")
+        t |> success(ids_equal(pt, PROMPT_ORACLE), "encode prompt tokens")
         // full forward + greedy decode, token-for-token (threads the classifier)
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
@@ -57,7 +45,7 @@ def test_forward_end_to_end(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "empty-prompt greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "empty-prompt greedy token-for-token")
             delete s
         }
         delete tk
@@ -89,7 +77,7 @@ def test_forward_q8(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "Q8 empty-prompt greedy token-for-token")
             delete s
         }
         delete tk
@@ -122,7 +110,7 @@ def test_forward_q8_pooled(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
+            t |> success(ids_equal(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
             delete s
         }
         delete tk
@@ -155,7 +143,7 @@ def test_forward_q4(t : T?) {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(same(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
+            t |> success(ids_equal(ids, ORACLE), "Q4 empty-prompt greedy matches oracle prefix")
             delete s
         }
         delete tk

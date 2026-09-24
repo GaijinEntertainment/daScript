@@ -76,7 +76,7 @@ def public try_find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want 
 def public find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryPropertyFlags) : uint {
     let i = try_find_memory_type(phys, type_bits, want)
     if (i < 0) {
-        panic("no suitable memory type")
+        panic("no memory type among the mask {type_bits} carries every property of {want}")
     }
     return uint(i)
 }

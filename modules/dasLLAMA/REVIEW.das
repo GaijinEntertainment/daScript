@@ -927,7 +927,7 @@ def private cm2_format_templates(exempt : table<string>) : array<string> {
     return <- out
 }
 
-//! the base a `class template X : Y {` line names, "" when the line names none
+//! the base a `class [template] X : Y {` line names, "" when the line names none
 def private cm2_template_base(line : string) : string {
     let colon = find(line, " : ")
     return colon < 0 ? "" : ident_prefix(slice(line, colon + 3))
@@ -976,10 +976,16 @@ def private kqformat_cm2e_aliases : array<string> {
     return <- none
 }
 
-//! a stamp's k step off its class lines: the template's 64 unless the stamp overrides BK
-def private stamp_bk(lines : array<string>) : int {
+//! a stamp's k step off its class lines: the cm2 template's BK unless the stamp overrides it
+def private stamp_bk(lines : array<string>; template_bk : int) : int {
     let over = literal_after(lines, "override BK = ")
-    return over < 0 ? 64 : over
+    return over < 0 ? template_bk : over
+}
+
+//! the cm2 template's own BK (`@template_constant BK : uint = N`), -1 when the line is not there
+def private cm2_template_bk : int {
+    var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
+    return literal_after(base_lines, "@template_constant BK : uint = ")
 }
 
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
@@ -998,28 +1004,45 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
     for (f in ladders) {
         let ladder = ident_prefix(slice(f.body, length("def ")))
         let placeholder = "tile_{slice(ladder, length(trio.ladder))}_{trio.tail}("
-        if (find(f.body, "kq_tile_stamp(") < 0 || find(f.body, placeholder) < 0) {
+        let stamp_at = find(f.body, "kq_tile_stamp(")
+        if (stamp_at < 0 || find(f.body, placeholder) < 0) {
             gate_finding(VK_CLASSES, f.line, "{ladder} is not stamped by `kq_tile_stamp` over `{placeholder}` - the stamp walks every KqFmt member, so a format without the class fails the compile instead of {trio.why}")
+            continue
+        }
+        //! a skip list takes a member off the ladder, and the innermost verify then panics at the format's first dispatch - the gate reads it so a cm2 template never hides behind one
+        let call = slice(f.body, stamp_at, find(f.body, ")", stamp_at))
+        let q0 = find(call, "\"")
+        continue if (q0 < 0)
+        for (word in split(slice(call, q0 + 1, find(call, "\"", q0 + 1)), " ")) {
+            continue if (empty(word))
+            for (tpl in templates) {
+                if (to_lower(slice(tpl, 0, length(tpl) - length("Cm2T"))) == word) {
+                    gate_finding(VK_CLASSES, f.line, "{ladder} skips {word} in its `kq_tile_stamp` list while `class template {tpl}` sits on the cm2 base - a skipped format panics at its first dispatch, so {trio.why}")
+                }
+            }
         }
     }
     let e_trio = trio.suffix == "Cm2EBatch"
     var inscope aliases <- kqformat_cm2e_aliases()
+    let base_bk = cm2_template_bk()
     for (tpl in templates) {
         let pfx = slice(tpl, 0, length(tpl) - length("Cm2T"))
         let fmt = to_lower(pfx)
         let dispatch = cm2_dispatch_name(fmt, trio.tail)
         if (e_trio) {
-            //! the e column steps k as the s column does (32 on the grid-codebook formats), so the s stamp's BK says whether an e stamp would differ from the 64-step m stamp
+            //! the e column steps k as the s column does (32 on the grid-codebook formats), so the s stamp's BK against the m stamp's says whether an e stamp would differ from the m stamp
             var inscope slines <- class_lines(VK_CLASSES, "class {pfx}Cm2SBatch")
-            let has_m = !empty(class_lines(VK_CLASSES, "class {pfx}Cm2MBatch"))
-            let e_is_m = has_m && !empty(slines) && stamp_bk(slines) == 64
+            var inscope mlines <- class_lines(VK_CLASSES, "class {pfx}Cm2MBatch")
+            let has_m = !empty(mlines)
+            let m_bk = stamp_bk(mlines, base_bk)
+            let e_is_m = has_m && !empty(slines) && stamp_bk(slines, base_bk) == m_bk
             let aliased = find_index(aliases, fmt) >= 0
             if (aliased && !has_m) {
                 gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but the file has no `class {pfx}Cm2MBatch` for its e column to alias")
             } elif (aliased && !e_is_m) {
-                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but its expert column steps k by {stamp_bk(slines)} (its s stamp's BK), not the m stamp's 64 - the format leaves the roster and keeps its own e stamp")
+                gate_finding(VK_CLASSES, "{tpl}: KQ_CM2E_ALIASES_M names {fmt} but its expert column steps k by {stamp_bk(slines, base_bk)} (its s stamp's BK), not the m stamp's {m_bk} - the format leaves the roster and keeps its own e stamp")
             } elif (!aliased && e_is_m) {
-                gate_finding(VK_CLASSES, "{tpl}: its expert column steps k by 64 (its s stamp's BK), so its e stamp is the m stamp byte for byte - {fmt} joins KQ_CM2E_ALIASES_M in dasllama_kqformat.das and ships no e stamp")
+                gate_finding(VK_CLASSES, "{tpl}: its expert column steps k by {m_bk} (its s stamp's BK), so its e stamp is the m stamp byte for byte - {fmt} joins KQ_CM2E_ALIASES_M in dasllama_kqformat.das and ships no e stamp")
             }
             if (aliased) {
                 if (find(classes, "class {pfx}{trio.suffix} : {tpl}") >= 0) {
@@ -1072,10 +1095,9 @@ def private vk_stamps(path : string) : array<VkStamp> {
             let from = length("[vk_dispatch(name = \"")
             pending = slice(line, from, find(line, "\"", from))
         } elif (!empty(pending) && line |> starts_with("class ")) {
-            let colon = find(line, " : ")
             out |> push(VkStamp(dispatch_name = pending, line = line_no,
                 cls = ident_prefix(slice(line, length("class "))),
-                base = colon < 0 ? "" : ident_prefix(slice(line, colon + 3))))
+                base = cm2_template_base(line)))
             cur = length(out) - 1
             pending = ""
         } elif (!(line |> starts_with("["))) {
@@ -1139,6 +1161,13 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
     }
     if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != d.s_rows) {
         gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({d.s_rows}) rows wide, the column the stamp serves")
+    }
+    if (st.dispatch_name |> ends_with("_cm2m_cls") && bn != d.m_rows) {
+        let head = slice(st.dispatch_name, 0, length(st.dispatch_name) - length("_cm2m_cls"))
+        let fmt = head |> starts_with("kq_batch_") ? slice(head, length("kq_batch_")) : slice(head, 0, find(head, "_batch"))
+        if (find_index(kqformat_cm2e_aliases(), fmt) >= 0) {
+            gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on the m stamp of {fmt}, whose expert column IS this stamp (KQ_CM2E_ALIASES_M) - the expert schedule's m pieces are SCHED_M_ROWS ({d.m_rows}) rows wide; keep BN or take the format off the roster and give it an e stamp")
+        }
     }
 }
 

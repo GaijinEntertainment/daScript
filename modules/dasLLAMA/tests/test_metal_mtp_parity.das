@@ -34,18 +34,6 @@ def private allow_cpu_prefill_intent() {
 // free-run). A plain-vs-plain control pins the harness at exactly zero. Skips cleanly without
 // the model, off-Apple, or with no Metal device; the large fixtures need DASLLAMA_PARITY_FULL.
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 def private greedy_top(logits : array<float>; vocab : int64) : int64 {
     var best = 0l
     var bv = logits[0]
@@ -300,7 +288,7 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
         t |> success(drafted > 0l, "{tag} {kind} k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
         let positions = mtp_pos_report()
         t |> success(find(positions, "p{depth} ") >= 0, "{tag} {kind} k{depth}: a round drafted position {depth} - the depth the arm names was reached ({positions})")
-        t |> success(same(plain, spec), "{tag} {kind} k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
+        t |> success(ids_equal(plain, spec), "{tag} {kind} k{depth}: speculative free-run == plain free-run ({COUNT_STEPS} tokens)")
         t |> success(sampled == (parked > 0l), "{tag} {kind} k{depth}: the sampled walk parks the next draw ({parked} rounds); the argmax walk parks none")
     }
     delete plain

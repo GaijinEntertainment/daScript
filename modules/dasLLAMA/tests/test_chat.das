@@ -14,6 +14,7 @@ require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/jobque_boost
 require daslib/fio
+require daslib/linq   // sequence_equal: the KV byte blobs
 require math
 require _model_tier   // model_available: presence + the >6 GiB PARITY_FULL tier gate
 
@@ -24,31 +25,6 @@ require _model_tier   // model_available: presence + the >6 GiB PARITY_FULL tier
 
 let SYS = "You are a helpful, friendly assistant. Keep answers concise."
 let USR = "Once upon a time"
-
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (va, vb in a, b) {
-        if (va != vb) {
-            return false
-        }
-    }
-    return true
-}
-
-// KV caches are codec-encoded byte blobs — byte equality IS bit-exactness for a same-dtype pair
-def private same(a, b : array<uint8>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (va, vb in a, b) {
-        if (va != vb) {
-            return false
-        }
-    }
-    return true
-}
 
 // Load capped to a tiny context: these cases only render prompts, and the session's KV cache is sized
 // to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB.
@@ -85,7 +61,7 @@ def test_chat_tinyllama_zephyr(t : T?) {
         want |> push_from(encode(raw, "\n<|user|>\n{USR}", false, false))
         want |> push(2l)
         want |> push_from(encode(raw, "\n<|assistant|>\n", false, false))
-        t |> success(same(engine_prefill(m, SYS, USR), want), "zephyr prefill token-for-token")
+        t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "zephyr prefill token-for-token")
         delete raw
         delete m
     }
@@ -108,7 +84,7 @@ def test_chat_gemma(t : T?) {
         want |> push_from(encode(raw, "\n", false, false))
         want |> push(106l)
         want |> push_from(encode(raw, "model\n", false, false))
-        t |> success(same(engine_prefill(m, SYS, USR), want), "gemma folded prefill token-for-token")
+        t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "gemma folded prefill token-for-token")
         delete raw
         delete m
     }
@@ -136,7 +112,7 @@ def test_chat_phi(t : T?) {
         want |> push_from(encode(raw, "\n", false, false))
         want |> push(32001l)
         want |> push_from(encode(raw, "\n", false, false))
-        t |> success(same(engine_prefill(m, SYS, USR), want), "phi prefill token-for-token")
+        t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "phi prefill token-for-token")
         delete raw
         delete m
     }
@@ -166,7 +142,7 @@ def test_chat_qwen(t : T?) {
         want |> push_from(bpe_encode(raw, "\n"))
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "assistant\n"))
-        t |> success(same(engine_prefill(m, SYS, USR), want), "qwen chatml prefill token-for-token")
+        t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "qwen chatml prefill token-for-token")
         delete raw
         delete m
     }
@@ -195,7 +171,7 @@ def test_chat_llama3(t : T?) {
         want |> push(eot)
         want |> push(sh); want |> push_from(bpe_encode(raw, "assistant")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n"))
-        t |> success(same(engine_prefill(m, SYS, USR), want), "llama3 header prefill token-for-token")
+        t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "llama3 header prefill token-for-token")
         delete raw
         delete m
     }
@@ -286,7 +262,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         want |> push_from(bpe_encode(raw, "\n"))
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "assistant\n"))
-        t |> success(same(got, want), "system tool block token-for-token")
+        t |> success(ids_equal(got, want), "system tool block token-for-token")
         delete c
         delete raw
         delete m
@@ -324,7 +300,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         want |> push(tcc)
         want |> push(ime)
         want |> push_from(bpe_encode(raw, "\n"))
-        t |> success(same(toks, want), "assistant tool-call turn token-for-token")
+        t |> success(ids_equal(toks, want), "assistant tool-call turn token-for-token")
 
         // ...and its result arrives: a user-framed turn, <tool_response> as plain text
         var results : array<string>
@@ -338,7 +314,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         want2 |> push_from(bpe_encode(raw, "\n"))
         want2 |> push(ims)
         want2 |> push_from(bpe_encode(raw, "assistant\n"))
-        t |> success(same(got2, want2), "tool-results turn token-for-token")
+        t |> success(ids_equal(got2, want2), "tool-results turn token-for-token")
         t |> success(c.history[2].role == Role.tool, "tool result recorded in the transcript")
         delete c
         delete raw
@@ -375,7 +351,7 @@ def test_chat_think_suppress(t : T?) {
         want |> push_from(bpe_encode(raw, "\n"))
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "assistant\n"))
-        t |> success(same(got, want), "thinking default renders unchanged")
+        t |> success(ids_equal(got, want), "thinking default renders unchanged")
         delete c
 
         // thinking off: the Jinja template's enable_thinking=false form
@@ -388,7 +364,7 @@ def test_chat_think_suppress(t : T?) {
         want2 |> push_from(bpe_encode(raw, "\n\n"))
         want2 |> push(thc)
         want2 |> push_from(bpe_encode(raw, "\n\n"))
-        t |> success(same(got2, want2), "set_thinking(false) appends <think>\\n\\n</think>\\n\\n")
+        t |> success(ids_equal(got2, want2), "set_thinking(false) appends <think>\\n\\n</think>\\n\\n")
         delete c2
         delete raw
         delete m
@@ -409,7 +385,7 @@ def test_chat_think_suppress(t : T?) {
         set_thinking(b, false)
         add_user(b, USR)
         let got_off <- render_turn(m, b)
-        t |> success(same(got_on, got_off), "no think tokens => prompt unchanged, no panic")
+        t |> success(ids_equal(got_on, got_off), "no think tokens => prompt unchanged, no panic")
         // the reply matcher is vocab-gated the same way: a chatml family without the think
         // tokens (qwen2.5) must NOT arm, or a literal "<think>" echo reclassifies the reply
         let ts = make_think_stream(b)
@@ -465,7 +441,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want |> push(cho)
         want |> push_from(encode(m, "thought\n", false, false))
         want |> push(chc)
-        t |> success(same(got, want), "default prefill token-for-token (instruct shape)")
+        t |> success(ids_equal(got, want), "default prefill token-for-token (instruct shape)")
         delete c
 
         // thinking ON: the <|think|> gate opens a system turn (even with no system prompt) and
@@ -485,7 +461,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want2 |> push_from(encode(m, "\n", false, false))
         want2 |> push(trn)
         want2 |> push_from(encode(m, "model\n", false, false))
-        t |> success(same(got2, want2), "thinking-ON prefill: <|think|> system gate + bare opener")
+        t |> success(ids_equal(got2, want2), "thinking-ON prefill: <|think|> system gate + bare opener")
         delete c2
 
         // thinking ON with a system prompt: the gate precedes the prompt text in the same turn
@@ -505,7 +481,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want3 |> push_from(encode(m, "\n", false, false))
         want3 |> push(trn)
         want3 |> push_from(encode(m, "model\n", false, false))
-        t |> success(same(got3, want3), "thinking-ON + system prompt: gate precedes the prompt text")
+        t |> success(ids_equal(got3, want3), "thinking-ON + system prompt: gate precedes the prompt text")
         delete c3
 
         // a mid-conversation set_thinking(true) cannot inject the gate (the system turn already
@@ -675,7 +651,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push(cho)
         want |> push_from(encode(m, "thought\n", false, false))
         want |> push(chc)
-        t |> success(same(got, want), "defs turn token-for-token")
+        t |> success(ids_equal(got, want), "defs turn token-for-token")
         delete c
 
         // call replay: the DSL block continues the model turn, which stays OPEN (no close parts)
@@ -702,7 +678,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push(q)
         want2 |> push_from(encode(m, "}", false, false))
         want2 |> push(tcc)
-        t |> success(same(toks, want2), "call replay token-for-token, turn left open")
+        t |> success(ids_equal(toks, want2), "call replay token-for-token, turn left open")
         t |> success(c2.turn_open, "the model turn is recorded open")
 
         // the result continues the OPEN turn in-turn — no user frame, no close before it
@@ -716,7 +692,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want3 |> push(tro)
         want3 |> push_from(encode(m, "response:get_weather\{temp:21}", false, false))
         want3 |> push(trr)
-        t |> success(same(got3, want3), "result turn token-for-token (in-turn, named)")
+        t |> success(ids_equal(got3, want3), "result turn token-for-token (in-turn, named)")
         delete c2
         delete m
     }
@@ -766,7 +742,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push(cho)
         want |> push_from(encode(m, "thought\n", false, false))
         want |> push(chc)
-        t |> success(same(got, want), "displaced results + close + user turn token-for-token")
+        t |> success(ids_equal(got, want), "displaced results + close + user turn token-for-token")
         delete c
 
         // [user, asst(calls), user] with NO results: only the leaked close heals
@@ -790,7 +766,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push(cho)
         want2 |> push_from(encode(m, "thought\n", false, false))
         want2 |> push(chc)
-        t |> success(same(got2, want2), "the leaked open turn closes before the user turn")
+        t |> success(ids_equal(got2, want2), "the leaked open turn closes before the user turn")
         delete c2
         delete m
     }
@@ -955,12 +931,13 @@ def test_chat_render_seam(t : T?) {
             t |> equal(a.session.n_past, long_length(toks), "rendered token count == evaled positions")
             t |> equal(length(b.history), length(a.history), "transcripts advance in lockstep")
             t |> equal(b.pending, "", "render_assistant consumed the pending text")
-            t |> success(same(b.stop_ids, a.stop_ids), "renderer resolves the same stop ids")
+            t |> success(ids_equal(b.stop_ids, a.stop_ids), "renderer resolves the same stop ids")
             // eval the rendered stream on a fresh session: byte-equal caches ⟺ identical tokens
             var s <- create_session(m)
             eval(m, s, toks)
-            t |> success(same(a.session.key_cache, s.key_cache), "key cache byte-equal: rendered == evaled")
-            t |> success(same(a.session.value_cache, s.value_cache), "value cache byte-equal: rendered == evaled")
+            //! the KV caches are codec-encoded byte blobs: byte equality IS bit-exactness for a same-dtype pair
+            t |> success(sequence_equal(a.session.key_cache, s.key_cache), "key cache byte-equal: rendered == evaled")
+            t |> success(sequence_equal(a.session.value_cache, s.value_cache), "value cache byte-equal: rendered == evaled")
             set_prefill_attn_mode(saved_mode)
             delete s
             delete b

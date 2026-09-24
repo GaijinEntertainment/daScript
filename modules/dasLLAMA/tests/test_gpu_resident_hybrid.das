@@ -128,7 +128,7 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
             }
         }
         let rel = kq ? (f16_feed_admits_kq() ? DN_LOGIT_BAR_REL_KQ_F16_FEED : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
-        feed_steps_within(t, "", n, fed.gpu, fed.cpu, toks, rel)
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, rel)
         delete fed
         delete prompt
         delete toks

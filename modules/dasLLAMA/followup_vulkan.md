@@ -1694,28 +1694,38 @@ module) is independent and can land any time - it is pure structure.
     benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
     arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b
     2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` on the same file the same hour.
-88. **The twins the dedup folds left as forks, and the rigs' folds still open.** Kept as forks
-    on a measured or a shape reason, not for a later fold: `gemv_shell` against `gemv_shell_n`
-    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ah - the leaves fold over which shell `run` calls,
-    both shells stay); `RouterGemvT`'s batched-column reduce and the per-head thread reduces of
-    `DnScanP3` and `AtPrep` (thread shapes, not the workgroup reduce `RmsWgBase.wg_rms_inv`
-    serves); `Q8Batch`'s per-32 f16 scale pass over 8-block steps against the per-256
-    `KqBatchBase` shell (the 32x32 store is shared through `MoeCmBase.store_y`, the rest is the
-    tile's own walk); the cm2 K5 / Q51 per-element 5th-bit deposits (16-bit lanes, not the packed
-    word `k5_dep` composes); in the rigs, `test_rope_apply.das`'s prefix-n maxdiff,
-    `gemm_1core_probe`'s harness maxdiff and `test_gpu_slot_swap.das`'s windowed `same_ids` (each a
-    different function from `_model_tier.das`'s, the `min`-length and window forms). Unmeasured
-    forks that take a probe row (`harness/vk_gemm_probe.das` / `vk_attn_probe.das` arms per shape on
-    the pod) BEFORE any fold, and stay forks with the number where the folded form reads slower by
-    more than noise: the 8-row and 4-row flash Q-tiles, `RouterGemm` against `DnBaGemm`, `MmBatchT`'s
-    two tile edges, the hand-unrolled register blocks of `DnScan` and the h128 batched attention, and
-    the batch tiles' `stage_w` lane helpers beyond the shared word composes (a scalar-lane helper
-    would move both families' SPIR-V). Rig folds still open in `test_vulkan_kernels.das`, each on
-    its one axis: the f32-mirror / f16-mirror cell pairs (`rope_b_pair`, `kv16_writers`,
-    `kv16_readers` against `test_vkd_rope_family` and the `da_attn` cells), the dn_ba pair, the fused
-    residual epilogue pair, the thirteen per-format tile plane builders, and the seven NEOX rope
-    oracle sites where `rope_scaled_neox_tab` fits their theta schedule.
-89. **The low-format N-row arc's review leftovers.** The kq kernel
+90. **The test rigs' folds still open.** In `test_vulkan_kernels.das`, each on its one axis: the
+    f32-mirror / f16-mirror cell pairs (`rope_b_pair`, `kv16_writers`, `kv16_readers` against
+    `test_vkd_rope_family` and the `da_attn` cells), the dn_ba pair, the fused residual epilogue
+    pair, the thirteen per-format tile plane builders, and the seven NEOX rope oracle sites where
+    `rope_scaled_neox_tab` fits their theta schedule.
+93. **The dedup folds arc's ruled forks and its probe-first bucket.** Twins the arc read and
+    left as forks, each on its measured or shape reason: `gemv_shell` vs `gemv_shell_n` (region
+    order, the 4x unroll and the column guard differ - ARCHITECTURE_GPU_VULKAN_GEMM.md 2.2ah);
+    the one-thread-broadcast out-norm reduces of `RouterGemvT`, `DnScanP3` and `AtPrep` (the
+    every-thread `wg_rms_inv` fold moves each stamp, and only `DnStepFused` had a cell pinning
+    the row bit for bit); `Q8Batch`'s per-32 f16 scale pass over 8-block steps (a fork of the
+    per-256 `KqBatchBase` shell - `store_y` is the shared text); the cm2 `K5Cm2T` / `Q51Cm2T`
+    fifth-bit deposits (each tile's slab layout differs from the GEMV quad's); `test_rope_apply`'s
+    prefix-n maxdiff and `test_gpu_slot_swap`'s windowed `same_ids` (the prefix and window forms
+    are not `logits_maxdiff` / `ids_equal`). The probe-first bucket - a fold only after a
+    `harness/vk_gemm_probe.das` / `vk_attn_probe.das` row on the pod reads flat: the 8-row / 4-row
+    flash Q-tiles (`FaT`), `RouterGemm` vs `DnBaGemm`, `MmBatchT`'s two tile edges, the
+    hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch tiles' `stage_w` lane
+    helpers against `KqGemvLeafT.grid4` (a buffer read vs an ALU-built table). The template folds
+    the post-arc audit named, each with a cell or a dump to pin it: the two `Kq*Stamp.visit`
+    ladder builders on one arm-maker block; the Q8 byte store spelled by `RqT.blk_store` /
+    `ResidualT.quant32` and by `RqT.run`'s KBLK arm / `ArRqT.quant_k`; the three `*_sgn4` sign
+    picks on one two-offset helper; the IQLUT lane arms of `K4Cm2T` and `Q40Cm2T` on
+    `KqCm2BatchT`; `resident_upload`'s placement walk reading `resident_planes` instead of
+    re-deriving each plane; `column_census` (`tests/_moe_resident.das`) and `REVIEW.das`'s
+    `cm2_dispatch_name` reading `kq_tile_stem` and the alias rewrite from `dasllama_kqformat.das`;
+    `kq_has_float_oracle` and `kq_gemv_float_oracle` sharing one format list; `hash_word` vs the
+    math module's `uint32_hash` (every synthetic fixture reshuffles). Untested branches the arc
+    added: the `[grid_words]` and `kq_tile_stamp` macro diagnostics (no failing fixture), and the
+    two decode call sites that now clamp past +-65504 through `cvt_f32_to_f16` where the old cast
+    gave +-inf (no plane carries such a value).
+92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s
     named constants - a sweep over every leaf and tile, not one arc's. The decode FFN entries the

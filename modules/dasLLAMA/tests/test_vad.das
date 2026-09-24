@@ -6,7 +6,6 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_vad
 require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_gguf   // rd_u32 / rd_u16 for the WAV reader
 require daslib/jobque_boost
 require math
 require _model_tier

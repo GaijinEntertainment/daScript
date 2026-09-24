@@ -699,9 +699,9 @@ def order_inplace(var buffer : array<auto(TT)>) {
     sort(buffer, $(a, b) => _::unique_key(a) < _::unique_key(b))
 }
 
-def order(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
+def order(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Sorts an iterator
-    var arr <- to_array(a)
+    var arr <- to_array(src)
     sort(arr, $(a, b) => _::unique_key(a) < _::unique_key(b))
     return to_sequence_move(arr)
 }
@@ -713,9 +713,9 @@ def order(arr : array<auto(TT)>) : array<TT -const -&> {
     return <- brr
 }
 
-def order_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
+def order_to_array(var src : iterator<auto(TT)>) : array<TT -const -&> {
     //! Sorts an iterator and returns an array
-    var arr <- to_array(a)
+    var arr <- to_array(src)
     sort(arr, $(a, b) => _::unique_key(a) < _::unique_key(b))
     return <- arr
 }

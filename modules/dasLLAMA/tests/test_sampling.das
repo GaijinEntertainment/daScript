@@ -23,18 +23,6 @@ let GEMMA2_GEN <- [235248l, 235321l, 235269l, 235248l, 235315l, 235269l, 235248l
                    235304l, 235269l, 235248l, 235274l, 235310l, 235269l, 235248l, 235274l, 235308l, 235269l,
                    235248l, 235274l, 235318l, 235269l, 235248l, 235274l, 235324l, 235269l, 235248l, 235274l]
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 [test]
 def test_sampling_greedy_matches_oracle(t : T?) {
     t |> run("greedy sampling generate reproduces the gemma2 oracle") @(t : T?) {
@@ -67,7 +55,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
         delete m
         set_prefill_attn_mode(pa)
         set_act_vec(pv)
-        t |> success(same(got, GEMMA2_GEN), "greedy generate token-for-token vs oracle")
+        t |> success(ids_equal(got, GEMMA2_GEN), "greedy generate token-for-token vs oracle")
     }
 }
 
@@ -197,7 +185,7 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
             }
             delete s
         }
-        t |> success(same(a, b) && length(a) == 32, "same seed => identical draws")
+        t |> success(ids_equal(a, b) && length(a) == 32, "same seed => identical draws")
     }
 }
 
@@ -236,6 +224,6 @@ def test_sampling_deterministic(t : T?) {
             delete s2
         }
         delete m
-        t |> success(same(a, b) && long_length(a) == n, "reproducible under a fixed seed")
+        t |> success(ids_equal(a, b) && long_length(a) == n, "reproducible under a fixed seed")
     }
 }

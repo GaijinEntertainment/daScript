@@ -268,8 +268,7 @@ def private arena_gemv_set_x(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb 
 //! a decode GEMV set over stack `si`'s planes: its quant and scale buffers, a region meta buffer, the activation pair and the output
 def private stack_gemv_set(si : int; meta : uint64; meta_bytes : int64; xq, xs : uint64; xq_bytes, xs_bytes : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
     let st & = unsafe(g_gpu.stacks[si])
-    return gemv_cls_set(st.fmt, fixed_array(st.wqbuf, st.wsbuf, meta, xq, xs, y), fixed_array(st.wqbytes, ws_range(si), meta_bytes, xq_bytes, xs_bytes, y_bytes),
-        fixed_array(0u, 0u, 0u, xbit, xbit, ybit))
+    return arena_gemv_set(st.fmt, (wq = st.wqbuf, ws = st.wsbuf, wqb = st.wqbytes, wsb = ws_range(si)), meta, meta_bytes, 0u, xq, xs, xq_bytes, xs_bytes, xbit, y, y_bytes, ybit)
 }
 
 //! ... over stack `sx`'s own activation scratch and `si`'s meta, the output at `y`
@@ -1205,17 +1204,17 @@ def private rq_stamp(kfmt : int; storex : bool) : RqStamp {
 //! the rows stamp binds the same five over the N-row command's planes
 def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs : uint64) : VkDescriptorSet {
     let dim = g_rd.dim
-    let nb = g_rd.norms_bytes
+    let norms_bytes = g_rd.norms_bytes
     let rows = g_rd.nb
     let xbytes = dim * 4l * rows
     let bufs = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs)
-    let sizes = fixed_array(xbytes, xbytes, nb, dim * rows, (dim / 32l) * 4l * rows)
+    let sizes = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows)
     let bits = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ)
     if (stamp == RqStamp.rq) return set_cls_ar_rq(bufs, sizes, bits)
     if (stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
     if (stamp == RqStamp.rqk) return set_cls_ar_rqk(bufs, sizes, bits)
     let bufs_x = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev)
-    let sizes_x = fixed_array(xbytes, xbytes, nb, dim * rows, (dim / 32l) * 4l * rows, xbytes)
+    let sizes_x = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows, xbytes)
     let bits_x = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB)
     if (stamp == RqStamp.rqx) return set_cls_ar_rqx(bufs_x, sizes_x, bits_x)
     return set_cls_ar_rqkx(bufs_x, sizes_x, bits_x)
@@ -1587,13 +1586,8 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
         rd_ts(raw, "{pfx}up")
         if ((nrow_bx & NROW_BX_ACTRQ) == 0) {
-            if (kq_sb(L.f2)) {
-                var pc_act_k = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 256l) * nr)
-                enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid * nrows / 8l + 255l) / 256l)
-            } else {
-                var pc_act = ActArgs(nelem = uint(hid) * nr, act = act, nblk = uint(hid / 32l) * nr)
-                enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid * nrows / 4l + 255l) / 256l)
-            }
+            var pc_act = ActArgs(nelem = uint(hid) * nr, act = act)
+            actrq_enc(raw, h, L.s_actrq, kq_sb(L.f2), pc_act, hid * nrows)
             rd_ts(raw, L.moe ? "m:sh_act" : "{pfx}actrq")
         }
     }
@@ -1616,8 +1610,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let ple = g_rd.ple
     let nr = uint(nrows)
     if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own Q8_0 quants of the rows
-        var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l) * nr)
-        enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim * nrows / 4l + 255l) / 256l)
+        rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
         rd_ts(raw, "p:rq_x")
     }
     var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(ple))
@@ -1702,16 +1695,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "m:e_up")
         let dkq = kq_sb(L.fe2)
         let slot_elems = k * nfe * nrows
-        var pca = ActArgs(nelem = uint(slot_elems), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(slot_elems / (dkq ? 256l : 32l)),
+        var pca = ActArgs(nelem = uint(slot_elems), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(slot_elems / kq_unit(dkq)),
             bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
-        let awgs = (slot_elems / (dkq ? 8l : 4l) + 255l) / 256l
         if (g_rd.exps_bias) {
             verify(!dkq, "vk decode: biased expert stacks feed a Q8_K down plane - the biased act has no Q8_K twin")
-            enc_q8_actrq_b_cls(raw, h, L.s_eact, pca, awgs)
-        } elif (dkq) {
-            enc_q8k_actrq_cls(raw, h, L.s_eact, pca, awgs)
+            enc_q8_actrq_b_cls(raw, h, L.s_eact, pca, rq_wgs(dkq, slot_elems))
         } else {
-            enc_q8_actrq_cls(raw, h, L.s_eact, pca, awgs)
+            actrq_enc(raw, h, L.s_eact, dkq, pca, slot_elems)
         }
         rd_ts(raw, "m:e_act")
     }
@@ -2456,9 +2446,8 @@ def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
 }
 
 //! the readback both rails are: layer `l`'s mirror rows [row0, row0 + nrows) into kp / vp from their first row, KV_READBACK_ROWS rows a submit
-[hot_path]
 def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null, "vk_rdec_read_kv before prepare")
+    assert(g_rd != null, "read_kv_rows before prepare")
     let L & = unsafe(g_rd.layers[l])
     if (L.mir_idx < 0l) {
         return
@@ -2786,15 +2775,8 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
     gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
     gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
-    let down_is_kq = !kq_block32(g_gpu.stacks[s2].fmt)
-    var pca = ActArgs(nelem = uint(nrows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU,
-        nblk = uint(nrows * nfe / (down_is_kq ? 256l : 32l)))
-    let awgs = (nrows * nfe / (down_is_kq ? 8l : 4l) + 255l) / 256l
-    if (down_is_kq) {
-        enc_q8k_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
-    } else {
-        enc_q8_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
-    }
+    var pca = ActArgs(nelem = uint(nrows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
+    actrq_enc(raw, h, fc.actrq_set, kq_sb(g_gpu.stacks[s2].fmt), pca, nrows * nfe)
     var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
     gemv_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, nrows * n)
 }

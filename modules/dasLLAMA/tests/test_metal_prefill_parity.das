@@ -26,18 +26,6 @@ require _model_tier
 // family test_parity.das established (high-entropy prompts flip on genuine near-ties, which are
 // not bugs). Skips cleanly without the model, off-Apple, or with no Metal device.
 
-def private same(a, b : array<int64>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
-
 // "1, 2, …, 120," — long enough to engage the resident path with margin (~300 llama-3 BPE tokens)
 def private counting_prompt() : string {
     return build_string() $(var w) {
@@ -438,7 +426,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     feint("metal prefill declined (no Metal device?); GPU parity skipped\n")
                     return
                 }
-                t |> success(same(cpu, gpu), "40-token continuation matches the CPU control (blob mul_mm, f32 activations)")
+                t |> success(ids_equal(cpu, gpu), "40-token continuation matches the CPU control (blob mul_mm, f32 activations)")
                 // the residency witness: a served prefill under the default knob pins the working
                 // set. Availability probes the API DIRECTLY, so a dead machinery cannot hide
                 // behind the macOS-<15 skip on a box whose OS serves the API.
@@ -512,9 +500,9 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     t |> equal(drows, dsites * (nres % 32l), "npos={nres}: every peeled site carried the {nres % 32l}-row remainder")
                     t |> equal(metal_prefill_tail_stats().sites - tail1.sites, 0l, "npos={nres}: tail off - the padded-tile path serves")
                     log_gen_texts(tr, "mm-tail/{nres}", cpu_r, gpu_r)
-                    t |> success(same(cpu_r, gpu_r), "npos={nres}: 24-token continuation matches the all-CPU control (GEMV tail)")
+                    t |> success(ids_equal(cpu_r, gpu_r), "npos={nres}: 24-token continuation matches the all-CPU control (GEMV tail)")
                     log_gen_texts(tr, "mm-tail-off/{nres}", cpu_r, gpu_p)
-                    t |> success(same(cpu_r, gpu_p), "npos={nres}: the tail-off twin matches the control too (A/B)")
+                    t |> success(ids_equal(cpu_r, gpu_p), "npos={nres}: the tail-off twin matches the control too (A/B)")
                     delete sl
                 }
                 // the alignment-guard leg: SmolLM2's dim 576 fails the b4 stripe's % 128, so
@@ -652,7 +640,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 clear_kernel_backend_pin()
                 select_kernel_backend(prior_backend)
                 set_wscale_f16(prior_wscale)
-                t |> success(same(cpu16, gpu16), "40-token wscale16 continuation matches the CPU control (s16 mul_mm + s16 classifier)")
+                t |> success(ids_equal(cpu16, gpu16), "40-token wscale16 continuation matches the CPU control (s16 mul_mm + s16 classifier)")
                 delete tr16
                 delete tr16g
             }
@@ -682,7 +670,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 clear_kernel_backend_pin()
                 select_kernel_backend(prior_backend)
                 set_wscale_f16(prior_wscale)
-                t |> success(same(cpuk, gpuk), "40-token kq continuation matches the CPU control (kq mul_mm + kq classifier)")
+                t |> success(ids_equal(cpuk, gpuk), "40-token kq continuation matches the CPU control (kq mul_mm + kq classifier)")
                 delete trk
                 delete trkg
             } else {
@@ -716,7 +704,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     set_metal_prefill_min_npos(64l)
                     t |> success(metal_prefill_stats().prefills - pfc0 == 2l,
                         "{kdt} chunks served on the GPU (fresh + start_pos > 0 continuation)")
-                    t |> success(same(cpu_c, gpu_c), "chunked {kdt} continuation matches the all-CPU control (M2.5)")
+                    t |> success(ids_equal(cpu_c, gpu_c), "chunked {kdt} continuation matches the all-CPU control (M2.5)")
                     delete cpu_c
                     delete gpu_c
                 }
@@ -755,7 +743,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     t |> success(metal_prefill_stats().prefills - pfs0 == 2l,
                         "{kdt} head + span both served on the GPU")
                     log_gen_texts(trs, "span/{kdt}", cpu_s, gpu_s)
-                    t |> success(same(cpu_s, gpu_s), "{kdt} span turn matches the all-CPU control")
+                    t |> success(ids_equal(cpu_s, gpu_s), "{kdt} span turn matches the all-CPU control")
                     delete cpu_s
                     delete gpu_s
                 }
@@ -862,7 +850,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     delete pick_s
                     t |> success(lmax < (fbars?[kdt] ?? 0.0), "{kdt} fused == splice on the GPU ({lmax})")
                     log_gen_texts(trf, "span-fused/{kdt}", cpu_f, gpu_f)
-                    t |> success(same(cpu_f, gpu_f), "{kdt} fused turn matches the all-CPU control")
+                    t |> success(ids_equal(cpu_f, gpu_f), "{kdt} fused turn matches the all-CPU control")
                     delete cpu_f
                     delete gpu_f
                     delete lg_fused
@@ -922,7 +910,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     to_log(LOG_INFO, "span-mrope/{kdt} grid-vs-sequential GPU prefill-logits maxdiff = {gdiff}\n")
                     t |> success(gdiff > 1e-3, "{kdt} the grid moves the GPU prefill logits ({gdiff})")
                     log_gen_texts(trm, "span-mrope/{kdt}", cpu_m, gpu_m)
-                    t |> success(same(cpu_m, gpu_m), "{kdt} mrope turn matches the all-CPU control")
+                    t |> success(ids_equal(cpu_m, gpu_m), "{kdt} mrope turn matches the all-CPU control")
                     delete cpu_m
                     delete gpu_m
                     delete lg_m
@@ -965,7 +953,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     t |> success(metal_prefill_stats().prefills - pfd0 == 1l,
                         "{kdt} deepstack turn served as ONE GPU prefill (no decline)")
                     log_gen_texts(trd_, "span-ds/{kdt}", cpu_d, gpu_d)
-                    t |> success(same(cpu_d, gpu_d), "{kdt} deepstack turn matches the all-CPU control")
+                    t |> success(ids_equal(cpu_d, gpu_d), "{kdt} deepstack turn matches the all-CPU control")
                     // the add's own contribution, per backend: lg(tails) − lg(zero-tails) on ONE
                     // backend cancels its noise (greedy tokens TIE on the counting fixture, so a
                     // skipped or misaligned GPU add needs this witness, not token equality)
@@ -1029,7 +1017,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     clear_kernel_backend_pin()
                     select_kernel_backend(prior_backend)
                     set_wscale_f16(prior_wscale)
-                    t |> success(same(cpu8, gpu8), "40-token dim-4096 continuation matches the CPU control (unfused prefill set)")
+                    t |> success(ids_equal(cpu8, gpu8), "40-token dim-4096 continuation matches the CPU control (unfused prefill set)")
                     delete tr8
                     delete tr8g
                 }
@@ -1067,7 +1055,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         select_decode_override("")
                         set_metal_prefill_min_npos(64l)
                     }
-                    t |> success(same(cpuq, gpuq), "GPU prefill x {kdt} KV: 24-token continuation matches the all-CPU control")
+                    t |> success(ids_equal(cpuq, gpuq), "GPU prefill x {kdt} KV: 24-token continuation matches the all-CPU control")
                     delete cpuq
                     delete gpuq
                 }

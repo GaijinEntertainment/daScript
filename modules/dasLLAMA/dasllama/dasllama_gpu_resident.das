@@ -492,7 +492,8 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array
     return <- planes
 }
 
-//! the recurrent layers' f32 beta / alpha rows on the f32 arm: device rows beside the planes, no arena block
+//! the recurrent layers' beta / alpha rows on the f32 arm: device f16 rows beside the planes (`vk_rdec_upload_dn_ba` halves
+//! the model's f32 rows), no arena block
 def private resident_dn_ba_f32_bytes(t : Model) : int64 {
     let c = t.config
     if (!t.dn_ba_f32) {
@@ -504,7 +505,7 @@ def private resident_dn_ba_f32_bytes(t : Model) : int64 {
             n++
         }
     }
-    return n * 2l * c.ssm_dt_rank * c.dim * 4l
+    return n * 2l * c.ssm_dt_rank * c.dim * 2l
 }
 
 //! the router planes: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated, and the f16 mirror the cm2 route's window GEMM reads (counted whatever the route, the plan's other terms run high too)
