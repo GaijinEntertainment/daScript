@@ -11,6 +11,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gpu_math   // ksign7 / iq3s_signed / softcap_exp - the ALU helpers shared with the Metal kernels
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum
@@ -1036,9 +1037,6 @@ struct ClsEpiArgs {
     nsupp : uint    //! suppressed token ids in `supp`
     rows : uint     //! logits rows in `y`, `vocab` apart: the N-row command's rows, 1 on the one-row command
 }
-
-//! gemma's logit softcap, cap * tanh(v / cap), in the exp form the CPU's softcap4 takes
-def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
 //! the classifier tail's epilogue in place over `rows` logits rows: the final logit softcap, then the
 //! checkpoint's suppressed ids pinned to -1e30 - after the cap, so the pin survives it
@@ -5105,14 +5103,6 @@ def private iq2s_grid_word(i : int) : uint {}
 [grid_words(of = "iq3xxs_grid")]
 def iq3xxs_grid_word(i : int) : uint {}
 
-// ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit
-// index, so the byte is idx | (parity << 7) - five ALU ops, nothing staged.
-def ksign7(v : uint) : uint {
-    var t = v ^ (v >> 4u)
-    t = t ^ (t >> 2u)
-    t = t ^ (t >> 1u)
-    return v | ((t & 1u) << 7u)
-}
 
 //! the IQ4_NL codebook decode of one word of four nibble lanes into four SIGNED int8 lanes (kvalues_iq4nl), the sdot4
 //! operand form the batch tiles and the GEMV leaves share; the codebook is four packed words picked by a dynamic vector
@@ -5141,12 +5131,6 @@ def grid_sc(w1, blk : uint) : int {
     return 1 + 2 * int((w1 >> (4u * blk)) & 15u)
 }
 
-//! sign-apply by xor-and-add: the magnitudes are odd, so no byte carries into the next
-def iq3s_signed(g, nib : uint) : uint {
-    let m1 = (nib * 0x00204081u) & 0x01010101u
-    let mask = m1 * 255u
-    return (g ^ mask) + m1
-}
 
 class KqBatchBase : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant planes (per-format block layout)

@@ -14,6 +14,7 @@ require daslib/typemacro_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common
+require dasllama/dasllama_gpu_math   // softcap_exp
 require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7m) for the tensor twins
 require dasllama/dasllama_metal_lens
 require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CPU twin of the split-scale dequant passes
@@ -38,6 +39,8 @@ require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CP
 
 [metal_dispatch(name = "pf_enc_bf16_mm_c", pso = "g_pf_pso_bf16_mm", tgmem = "metal_bf16_mulmm_msl_tgmem", tg = 128, grid = "mp/32, nd/64", params = "mp : int64, nd : int64")]
 class MetalBf16MulMm : MetalMmTileBase {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wbh : array<ushort4> //!< bf16 W rows, ushort4 view (row r elem k at (r*kdim+k)/4)
     @ssbo @binding = 2 @role = "read" xf : array<float4>   //!< raw f32 activations, float4 view
     @ssbo @binding = 3 @role = "write" y : array<float>
@@ -1258,7 +1261,7 @@ class template MetalKqMulMmIq3xxsTensorT : MetalKqMulMmSplitTensorBase {
         let tb0 = tbase + j * 72u + (sub >> 1u) * 32u + kh
         for [unroll_full] (k in range(4)) {
             let q3 = ile * 2u + uint(k) / 2u
-            let sgb = ksign7m((aux3 >> (7u * q3)) & 127u)
+            let sgb = ksign7((aux3 >> (7u * q3)) & 127u)
             let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
             let gw = gridw3xt[(qsw >> (8u * uint(k))) & 255u]
             let fsd = iq_sign_apply(float4(dsc), nib)
@@ -1348,7 +1351,7 @@ class template MetalKqMulMmIq2sTensorT : MetalKqMulMmSplitTensorBase {
             let idx2 = (((qw2 >> (8u * l2)) & 255u) | ((qh2 << (8u - 2u * l2)) & 0x300u)) * 2u + uint(k) % 2u
             let sgb2 = (sgw2 >> (8u * l2)) & 255u
             let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
-            let sw = iq3s_sw(iq2s_gw(int(idx2)), nib)
+            let sw = iq3s_signed(iq2s_gw(int(idx2)), nib)
             for [unroll_full] (c in range(4)) {
                 twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
             }
@@ -1423,9 +1426,9 @@ class template MetalKqMulMmIq2xsTensorT : MetalKqMulMmSplitTensorBase {
         for [unroll_full] (k in range(4)) {
             let w16 = (qw2 >> (16u * (uint(k) / 2u))) & 0xFFFFu
             let idx2 = (w16 & 511u) * 2u + uint(k) % 2u
-            let sgb2 = ksign7m(w16 >> 9u)
+            let sgb2 = ksign7(w16 >> 9u)
             let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
-            let sw = iq3s_sw(iq2xs_gw(int(idx2)), nib)
+            let sw = iq3s_signed(iq2xs_gw(int(idx2)), nib)
             for [unroll_full] (c in range(4)) {
                 twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
             }
@@ -1500,9 +1503,9 @@ class template MetalKqMulMmIq2xxsTensorT : MetalKqMulMmSplitTensorBase {
         for [unroll_full] (k in range(4)) {
             let q3 = ile * 2u + uint(k) / 2u
             let bidx = (gw2 >> (8u * q3)) & 255u
-            let sgb2 = ksign7m((aux2 >> (7u * q3)) & 127u)
+            let sgb2 = ksign7((aux2 >> (7u * q3)) & 127u)
             let nib = uint(k) % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u
-            let sw = iq3s_sw(iq2xxs_gw(int(bidx * 2u + uint(k) % 2u)), nib)
+            let sw = iq3s_signed(iq2xxs_gw(int(bidx * 2u + uint(k) % 2u)), nib)
             for [unroll_full] (c in range(4)) {
                 twb[tb0 + uint(k) * 4u + uint(c)] = float16(dsc * iq3s_sx(sw, uint(c)))
             }
@@ -2208,7 +2211,9 @@ class MetalMoeMulMmK6THR : MetalMoeMulMmK6TensorT {
     override REM = true
 }
 
-class MetalMoeMulMmBase : MetalMmTileBase {
+class template MetalMoeMulMmBase : MetalMmTileBase {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 ka : MoeMmArgs
@@ -2735,7 +2740,7 @@ def pf_p_weight(sr : float; jglob, qpos, window : uint; softcap : float; uend, u
     if (jglob < jlo || jglob >= cnt) {
         return 0.0
     }
-    let tv = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / softcap))) : sr
+    let tv = softcap > 0.0 ? softcap_exp(sr, softcap) : sr
     return exp(tv - m) * inv
 }
 
@@ -2761,7 +2766,7 @@ class MetalAttnRowstat {
         var j = jlo + lid
         while (j < cnt) {
             let sr = float(att[rowbase + j])
-            m = max(m, ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr)
+            m = max(m, ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr)
             j += nthreads
         }
         let mm = tg_max_all(m, red)
@@ -2770,7 +2775,7 @@ class MetalAttnRowstat {
         j = jlo + lid
         while (j < cnt) {
             let sr = float(att[rowbase + j])
-            sum += exp((ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr) - rowmax)
+            sum += exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
             j += nthreads
         }
         barrier()   // red[] free again: the max fold's reads are done
@@ -2910,6 +2915,8 @@ class MetalAttnQKMmTH : MetalAttnQKMmTensorT {
 
 [metal_dispatch(name = "enc_qk_mm_c", pso = "g_pf_pso_qkmm", tgmem = "metal_attn_qk_mm_msl_tgmem", tg = 128, grid = "mp/32, nk64/64, heads", params = "mp : int64, nk64 : int64, heads : int64")]
 class MetalAttnQKMm : MetalMmTileBase {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
     @ssbo @binding = 0 @role = "read" q : array<float4>    //!< [mp x qd/4], roped
     @ssbo @binding = 1 @role = "read" k : array<float4>    //!< [nk64 x kv_dim/4], roped (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" att : array<float16>   //!< [n_heads x qrows x np32] raw scores out, f16 slab
@@ -3066,6 +3073,8 @@ class MetalAttnAVMmTP : MetalAttnAVMmTensorT {
 
 [ |> template_struct_instance]
 class template MetalAttnAVMmSgT : MetalMmTileBase {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
     @ssbo @binding = 0 @role = "read" att : array<float16>  //!< [n_heads x qrows x np32] RAW scores, f16 slab
     @ssbo @binding = 1 @role = "read" v : array<float4>    //!< [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    //!< [mp x qd] attention output
@@ -3422,7 +3431,7 @@ class MetalG4aAttn {
             }
             //! tanh via the exp identity (the CPU softcap's form; Metal tanh NaNs past ~44)
             let raw = cs + rs
-            let sc = ka.cap * (1.0 - 2.0 / (1.0 + exp(raw * 2.0 / ka.cap)))
+            let sc = softcap_exp(raw, ka.cap)
             sarr[j - j0] = sc
             m = max(m, sc)
             j++
