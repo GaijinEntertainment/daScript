@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x462f14b19ca32cc7ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x4eeceb53fd612689ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -480,6 +480,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     let lto_run = main_ok && (target.lto || (g_env_jit.jit_probe_lto && !target.gen_exe))   //! the probe is the DLL rail's: an exe's link takes its LTO flags from --jit-lto alone
     if (main_ok) {
         for (p in g_split_parts) {
+            stamp_module_target(p.mod, p.tm)
             jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, lto_run ? "" : p.obj)   // an LTO partition leaves as bitcode: the pool optimizes it and emits no object
         }
     }

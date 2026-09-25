@@ -528,6 +528,19 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
     return rv
 }
 
+//! the optimizer reads the MODULE triple and data layout - its library-call table, type sizes and alignments, an
+//! instrumentation pass's shadow mapping - while codegen reads the target machine's; a module built for the host
+//! carries neither, so the target machine's go on it before the passes. A cross target's module has its own already
+def public stamp_module_target(mod : LLVMOpaqueModule?; tm : LLVMTargetMachineRef) {
+    return if (!empty(LLVMGetTarget(mod)))
+    let triple = LLVMGetTargetMachineTriple(tm)
+    LLVMSetTarget(mod, triple)
+    LLVMDisposeMessage(triple)
+    let dl = LLVMCreateTargetDataLayout(tm)
+    LLVMSetModuleDataLayout(mod, dl)
+    LLVMDisposeTargetData(dl)
+}
+
 // ===== extern-helper declaration =====
 // jit_add_extern declares one C++ runtime helper (add + global-mapping + function attrs, plus optional
 // per-arg attrs). Pair with jit_fn_type(signature) (llvm_dsl) to derive `typ` from a das signature.
