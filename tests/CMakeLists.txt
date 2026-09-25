@@ -45,22 +45,7 @@ if(NOT DAS_TOOLS_DISABLED)
     )
 
     if(NOT DAS_LLVM_DISABLED)
-        # Sanitizer builds JIT-link without -fsanitize unless told; forward it.
-        set(_DAS_JIT_LINKER_STRING "")
-        if(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
-            set(_DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=address")
-        elseif(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
-            set(_DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=undefined")
-        elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
-            set(_DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
-        endif()
-        # A sanitizer build links its JIT dll with the compiler that built daslang: c++ is g++
-        # on Ubuntu, whose asan/tsan runtime the clang-built binary cannot load.
-        set(_DAS_JIT_PATH_TO_LINKER "")
-        if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
-            set(_DAS_JIT_PATH_TO_LINKER "--jit-path-to-linker=${CMAKE_CXX_COMPILER}")
-        endif()
-        set(_DAS_JIT_FLAGS ${_DAS_JIT_LINKER_STRING} ${_DAS_JIT_PATH_TO_LINKER} $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3>)
+        set(_DAS_JIT_FLAGS ${DAS_JIT_LINKER_STRING} ${DAS_JIT_PATH_TO_LINKER} $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3>)
 
         # The sanitizer runtimes read these from the environment of the process under test, so
         # the target carries them - otherwise every caller repeats them and they drift apart.

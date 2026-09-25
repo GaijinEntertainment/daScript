@@ -755,6 +755,22 @@ FOREACH(_example ${DAS_ALL_EXAMPLES})
     ADD_DEPENDENCIES(${_example} ${DAS_MODULES_LIBS})
 ENDFOREACH()
 
+# A daslang built with -fsanitize=* JIT-links its artifacts against runtime libraries that
+# reference the sanitizer runtime: the link cmd takes the flag, and runs through the compiler
+# that built daslang - c++ is g++ on Ubuntu, whose asan/tsan runtime the clang-built binary cannot load.
+SET(DAS_JIT_LINKER_STRING "")
+IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+    SET(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=address")
+ELSEIF(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
+    SET(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=undefined")
+ELSEIF(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
+    SET(DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
+ENDIF()
+SET(DAS_JIT_PATH_TO_LINKER "")
+IF(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+    SET(DAS_JIT_PATH_TO_LINKER "--jit-path-to-linker=${CMAKE_CXX_COMPILER}")
+ENDIF()
+
 # run_examples — runs all .das files registered via ADD_EXAMPLE_RUN.
 # Each example is executed with `daslang <file>` and must exit cleanly.
 #
@@ -794,10 +810,14 @@ if(_rc)
 endif()
 ")
         IF(_do_exe)
+            SET(_exe_jit_args "")
+            IF(DAS_JIT_LINKER_STRING)
+                SET(_exe_jit_args " -- \"${DAS_JIT_LINKER_STRING}\" \"${DAS_JIT_PATH_TO_LINKER}\"")
+            ENDIF()
             FILE(APPEND ${_script}
 "message(STATUS \"Compiling to \${EXEDIR}/${_out_path}\")
 execute_process(
-    COMMAND \"\${DASLANG}\" -exe \"${_das}\" -output \"\${EXEDIR}/${_out_path}\"
+    COMMAND \"\${DASLANG}\" -exe \"${_das}\" -output \"\${EXEDIR}/${_out_path}\"${_exe_jit_args}
     WORKING_DIRECTORY \"\${WORKDIR}\"
     RESULT_VARIABLE _rc OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
 if(_rc)
