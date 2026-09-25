@@ -666,6 +666,7 @@ jobs:
     if: failure() && github.event_name == 'schedule'
     permissions:
       issues: write
+      actions: read
     uses: ./.github/workflows/nightly_issue.yml
     with:
       lane: nightly.yml
