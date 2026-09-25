@@ -1539,11 +1539,11 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
             let wqe = o.w[QWEN3V_GEMM_QKV]   //! the fused qkv rows: q, then k at d·d, v at 2d·d
             tw_mm(enc, f16w, bf16w, bwh, bblob, wqe, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_rope(enc, braw, 0ul, bcos, 0ul, bsin, u_d, u_hs, u_np_rope, u_neox, null, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             tw_mm(enc, f16w, bf16w, bwh, bblob, wqe + d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_rope(enc, braw, 0ul, bcos, 0ul, bsin, u_d, u_hs, u_np_rope, u_neox, null, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             tw_mm(enc, f16w, bf16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
@@ -1782,13 +1782,13 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
             //! the window kernel reads q/k/v compact (bq/bk/bv direct); full layers restride from braw
             tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN25V_GEMM_Q], bxb, bxh, full ? braw : bq, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, full ? braw : bq, 0ul, bblob, uint64(o.b[QWEN25V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, full ? braw : bq, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_rope(enc, full ? braw : bq, 0ul, bcos, 0ul, bsin, u_d, u_hs, u_np_rope, u_neox, null, null, npos * d / 2l)
             if (full) {
                 enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             }
             tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN25V_GEMM_K], bxb, bxh, full ? braw : bk, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, full ? braw : bk, 0ul, bblob, uint64(o.b[QWEN25V_GEMM_K] * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, full ? braw : bk, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_rope(enc, full ? braw : bk, 0ul, bcos, 0ul, bsin, u_d, u_hs, u_np_rope, u_neox, null, null, npos * d / 2l)
             if (full) {
                 enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             }
@@ -4392,10 +4392,9 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n1.gwoff, s.n1.gboff)
         st2_lin(enc, c, s.in_proj, b.bxb, t, b.bqkv)
         let qs = uint(s.in_proj.cout_p)
-        var kr = PkRopeArgs(t = uint(t), stride = qs, col = 0u, d = uint(d), dh = dh, pos0 = 0u)
-        enc_pk_rope(enc, b.bqkv, b.bcos, b.bsin, kr, t * (d / 2l))
-        kr.col = uint(d)
-        enc_pk_rope(enc, b.bqkv, b.bcos, b.bsin, kr, t * (d / 2l))
+        let u_dh = st2_u(c, dh)
+        enc_rope(enc, b.bqkv, 0ul, b.bcos, 0ul, b.bsin, u_d, u_dh, st2_u(c, uint(t * (d / 2l))), st2_u(c, 0u), null, st2_u(c, qs), t * (d / 2l))
+        enc_rope(enc, b.bqkv, uint64(d * 4l), b.bcos, 0ul, b.bsin, u_d, u_dh, st2_u(c, uint(t * (d / 2l))), st2_u(c, 0u), null, st2_u(c, qs), t * (d / 2l))
         var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bk[i], kc, nd)
         kc.sc = uint(2l * d)
@@ -5056,8 +5055,10 @@ def private pk_fr_layer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : Pock
         pk_add_ln(enc, c, b.x, b.xb, L.n1, b.xb, 0ul, d, tf.eps)
     }
     pk_lin(enc, c, L.in_proj, b.xb, 0ul, b.qkv, 0ul)
-    var kr = PkRopeStoreArgs(d = uint(d), dh = uint(d / tf.heads), pos = uint(p))
-    enc_pk_rope_store(enc, b.qkv, g_tw_pk_voice.bcos, g_tw_pk_voice.bsin, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], kr, d / 2l)
+    let dh = uint(d / tf.heads)
+    var kr = RopeStoreArgs(qd = uint(d), head_size = dh, npairs_q = uint(d / 2l), npairs = uint(d), neox = 0u, has_bias = 0u, rot = dh)
+    enc_rpst32_c(enc, b.qkv, b.qkv, uint64(2l * d * 4l), g_tw_pk_voice.bk[li], uint64(p * d * 4l), g_tw_pk_voice.bv[li], uint64(p * d * 4l),
+        g_tw_pk_voice.bcos, uint64(p * (d / tf.heads / 2l) * 4l), g_tw_pk_voice.bsin, g_one, kr, d)
     var ka = PkAttnArgs(t = 1u, qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(p), ctx = uint(tf.context))
     enc_pk_attn(enc, b.qkv, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], b.ctx, ka, tf.heads)
     pk_lin(enc, c, L.out_proj, b.ctx, 0ul, b.xb, 0ul)

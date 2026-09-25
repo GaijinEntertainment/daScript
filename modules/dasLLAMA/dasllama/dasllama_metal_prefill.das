@@ -2514,14 +2514,15 @@ class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
 
 [metal_dispatch(name = "enc_rope", pso = "g_pf_pso_rope", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRope {
-    @ssbo @binding = 0 @role = "readwrite" @off = "voff" v : array<float>     //!< [ntok x n], roped in place
-    @ssbo @binding = 1 @role = "weight" tcos : array<float>  //!< [ntok x head_size/2]
-    @ssbo @binding = 2 @role = "weight" tsin : array<float>
-    @uniform @binding = 3 n : uint          //!< row width (qd or kv_dim), % head_size
+    @ssbo @binding = 0 @role = "readwrite" @off = "voff" v : array<float>     //!< [ntok x stride] roped in place over n columns from voff
+    @ssbo @binding = 1 @role = "weight" @off = "toff" tcos : array<float>  //!< [ntok x head_size/2], bound at the first position's row
+    @ssbo @binding = 2 @role = "weight" @off = "toff" tsin : array<float>
+    @uniform @binding = 3 n : uint          //!< roped width (qd or kv_dim), % head_size
     @uniform @binding = 4 head_size : uint
     @uniform @binding = 5 npairs : uint     //!< ntok * n/2 — grid guard
     @uniform @binding = 6 neox : uint       //!< pair (j, j+half) instead of (2j, 2j+1); same table row j
     @uniform @binding = 7 @default = head_size rot : uint   //!< partial rotary width; null bind = full rope (== head_size)
+    @uniform @binding = 8 @default = n stride : uint   //!< the row stride; null bind = the rows are the roped width
 
     [metal_kernel(name="metal_rope_msl")]
     def metal_rope {
@@ -2537,7 +2538,7 @@ class MetalRope {
         let h = rem / half
         let j = rem % half
         let in_rotary = j < halfr   //! rotates the (j, j+rot/2) pair; the rest identity-cover [rot, hs)
-        let hb = p * n + h * head_size
+        let hb = p * stride + h * head_size
         let i = neox != 0u ? (in_rotary ? hb + j : hb + rot + (j - halfr)) : hb + 2u * j
         let i2 = neox != 0u ? (in_rotary ? i + halfr : i + (half - halfr)) : i + 1u
         let fcr = in_rotary ? tcos[p * halfr + j] : 1.0
@@ -6562,9 +6563,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     //! sliding layers rope with the swa row pair, whose rows are the class's own hs/2 wide
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                    enc_rope(enc, bq, 0ul, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, npos * qd_l / 2l)
+                    enc_rope(enc, bq, 0ul, bcos_l, 0ul, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, null, npos * qd_l / 2l)
                     if (!kvsh) {
-                        enc_rope(enc, bks[l], koff, bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, npos * kvd_l / 2l)
+                        enc_rope(enc, bks[l], koff, bcos_l, 0ul, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, null, npos * kvd_l / 2l)
                     }
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {

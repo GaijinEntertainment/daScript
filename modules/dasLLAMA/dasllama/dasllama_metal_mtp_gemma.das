@@ -250,7 +250,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         // rope on Q only: every pair is a Q pair, so the fused store's K/V lanes never run
         var rka = RopeStoreArgs(qd = uint(qd), head_size = uint(hs), npairs_q = uint(qd / 2l), npairs = uint(qd / 2l),
             neox = c.rope_neox ? 1u : 0u, has_bias = 0u, rot = uint(hs))
-        enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, g_one, rka, qd / 2l)
+        enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, 0ul, g_one, rka, qd / 2l)
         let lb = uint64(mirror_lbase(t, kdt, mr.cap_rows, kvl))
         let lkoff = mr.koff + lb
         let lvoff = mr.voff + lb

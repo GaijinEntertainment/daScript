@@ -270,9 +270,7 @@ var g_pso_st2_istft : MetalComputePipeline?
 var g_pso_pk_rows : MetalComputePipeline?
 var g_pso_pk_rows_elu : MetalComputePipeline?
 var g_pso_pk_row_scale : MetalComputePipeline?
-var g_pso_pk_rope : MetalComputePipeline?
 var g_pso_pk_attn : MetalComputePipeline?
-var g_pso_pk_rope_store : MetalComputePipeline?
 var g_pso_pk_add_ln : MetalComputePipeline?
 var g_pso_pk_gemv_f32 : MetalComputePipeline?
 var g_pso_pk_gemv_f32_ln_silu : MetalComputePipeline?

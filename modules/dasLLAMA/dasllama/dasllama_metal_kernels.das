@@ -1385,8 +1385,8 @@ class template MetalRopeStoreKvT {
     @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>    // raw v (the QKV buffer at the v offset)
     @ssbo @binding = 2 @off = "koff" kd : array<KT>  // mirror K row (bound at the (layer, pos) row offset)
     @ssbo @binding = 3 @off = "voff" vd : array<KT>
-    @ssbo @binding = 4 @role = "weight" tcos : array<float>  // [head_size/2] this position's rope row
-    @ssbo @binding = 5 @role = "weight" tsin : array<float>
+    @ssbo @binding = 4 @role = "weight" @off = "toff" tcos : array<float>  // [head_size/2] this position's rope row, bound at its row offset
+    @ssbo @binding = 5 @role = "weight" @off = "toff" tsin : array<float>
     @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 7 ka : RopeStoreArgs
     @template_constant CLAMP16 : bool = true
@@ -3644,9 +3644,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_pk_rows = compile_stamp(metal_pk_rows_msl, ok)
     g_pso_pk_rows_elu = compile_stamp(metal_pk_rows_elu_msl, ok)
     g_pso_pk_row_scale = compile_stamp(metal_pk_row_scale_msl, ok)
-    g_pso_pk_rope = compile_stamp(metal_pk_rope_msl, ok)
     g_pso_pk_attn = compile_stamp(metal_pk_attn_msl, ok)
-    g_pso_pk_rope_store = compile_stamp(metal_pk_rope_store_msl, ok)
     g_pso_pk_add_ln = compile_stamp(metal_pk_add_ln_msl, ok)
     g_pso_pk_gemv_f32 = compile_stamp(metal_pk_gemv_f32_msl, ok)
     g_pso_pk_gemv_f32_ln_silu = compile_stamp(metal_pk_gemv_f32_ln_silu_msl, ok)
@@ -4113,14 +4111,15 @@ def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : ui
     }
 }
 
-// fused rope + KV-row store: the v source binds the SAME QKV buffer at its v byte offset
+// fused rope + KV-row store: the v source binds the SAME QKV buffer at its v byte offset; toff = the
+// position's row in the rope tables (0 where the caller binds the row's own buffer)
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;
                    kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                   bcos, bsin, bbias : MetalBuffer?; var ka : RopeStoreArgs; npairs : int64) {
+                   bcos, bsin : MetalBuffer?; toff : uint64; bbias : MetalBuffer?; var ka : RopeStoreArgs; npairs : int64) {
     if (f16) {
-        enc_rpst16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bbias, ka, npairs)
+        enc_rpst16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, toff, bsin, bbias, ka, npairs)
     } else {
-        enc_rpst32_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bbias, ka, npairs)
+        enc_rpst32_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, toff, bsin, bbias, ka, npairs)
     }
 }
 
@@ -4547,8 +4546,8 @@ def metal_kernels_release {
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_dn_scan, g_pso_dn_gate, g_pso_dn_deint, g_pso_sigmul, g_pso_axpy_sig, g_mx4_vtab)
     release_handles(g_pso_st2_attn)
-    release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_rope, g_pso_pk_attn)
-    release_handles(g_pso_pk_rope_store, g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
+    release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn)
+    release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
     release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
     release_handles(g_pso_st2_adain_leaky, g_pso_st2_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
         g_pso_st2_src_low_torch, g_pso_st2_src_low_onnx, g_pso_st2_src_cumsum_torch, g_pso_st2_src_cumsum_onnx, g_pso_st2_src_noise,
@@ -11266,46 +11265,6 @@ class MetalPkRowScale {
     }
 }
 
-//! Rotary embedding over `d` columns from `col` of rows [t][stride] at positions pos0..: the
-//! adjacent pair (2j, 2j+1) of each head rotated by the engine's rope tables [pos][dh / 2] - the
-//! CPU's own libm angles, no device trigonometry.
-struct PkRopeArgs {
-    t : uint
-    stride : uint
-    col : uint
-    d : uint
-    dh : uint
-    pos0 : uint
-}
-
-[metal_dispatch(name = "enc_pk_rope", pso = "g_pso_pk_rope", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRope {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "read" tcos : array<float>
-    @ssbo @binding = 2 @role = "read" tsin : array<float>
-    @uniform @binding = 3 ka : PkRopeArgs
-
-    [metal_kernel(name="metal_pk_rope_msl")]
-    def metal_pk_rope {
-        let gid = gl_GlobalInvocationID.x
-        let pairs = ka.d / 2u
-        if (gid >= ka.t * pairs) {
-            return
-        }
-        let r = gid / pairs
-        let i = (gid % pairs) * 2u
-        let half = ka.dh / 2u
-        let tab = (ka.pos0 + r) * half + (i % ka.dh) / 2u
-        let c = tcos[tab]
-        let s = tsin[tab]
-        let base = r * ka.stride + ka.col + i
-        let v0 = x[base]
-        let v1 = x[base + 1u]
-        x[base] = v0 * c - v1 * s
-        x[base + 1u] = v0 * s + v1 * c
-    }
-}
-
 //! q [t][qs] at column qcol, k and v the caches' rows [.][d], o [t][d]; query i at position pos0 + i
 //! sees the keys up to itself, the last `ctx` of them when ctx is nonzero, 2048 at most; heads of PK_ATTN_HS
 //! (the literal 64 in the body - a kernel reads no module global); a threadgroup a (head, row) over staged scores.
@@ -11401,48 +11360,6 @@ class MetalPkAttn {
             }
             o[i * ka.d + h * 64u + lid] = tot / lsum
         }
-    }
-}
-
-//! One row [3d] of q, k, v at position `pos`: q and k rotated in place by the host's cos and sin
-//! table [pos][dh / 2][2], the rotated k and the v written to the caches' row `pos` - the frame
-//! loop's two rotations and two row copies as one.
-struct PkRopeStoreArgs {
-    d : uint
-    dh : uint
-    pos : uint
-}
-
-[metal_dispatch(name = "enc_pk_rope_store", pso = "g_pso_pk_rope_store", tg = 64, grid = "pairs/64", params = "pairs : int64")]
-class MetalPkRopeStore {
-    @ssbo @binding = 0 @role = "readwrite" qkv : array<float>
-    @ssbo @binding = 1 @role = "weight" tcos : array<float>   //!< [pos][dh / 2], the engine's rope table, written once a voice slot
-    @ssbo @binding = 2 @role = "weight" tsin : array<float>
-    @ssbo @binding = 3 @role = "write" kc : array<float>
-    @ssbo @binding = 4 @role = "write" vc : array<float>
-    @uniform @binding = 5 ka : PkRopeStoreArgs
-
-    [metal_kernel(name="metal_pk_rope_store_msl")]
-    def metal_pk_rope_store {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.d / 2u) {
-            return
-        }
-        let i = gid * 2u
-        let tab = ka.pos * (ka.dh / 2u) + (i % ka.dh) / 2u
-        let c = tcos[tab]
-        let s = tsin[tab]
-        let q0 = qkv[i]
-        let q1 = qkv[i + 1u]
-        qkv[i] = q0 * c - q1 * s
-        qkv[i + 1u] = q0 * s + q1 * c
-        let k0 = qkv[ka.d + i]
-        let k1 = qkv[ka.d + i + 1u]
-        let dst = ka.pos * ka.d + i
-        kc[dst] = k0 * c - k1 * s
-        kc[dst + 1u] = k0 * s + k1 * c
-        vc[dst] = qkv[2u * ka.d + i]
-        vc[dst + 1u] = qkv[2u * ka.d + i + 1u]
     }
 }
 

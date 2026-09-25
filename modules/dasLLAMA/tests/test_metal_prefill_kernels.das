@@ -2176,10 +2176,11 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
 }
 
 //! rows [7][96] rotated over 64 columns from column 16 (two heads of 32) at positions 5..: the CPU's `rope_rows` on the same columns
-def private pk_rope_gate(t : T?; dev, queue) {
-    let tag = "pk_rope"
+//! The codec's rope: MetalRope over rows at a stride from a column, the tables bound at a position's row
+def private rope_stride_gate(t : T?; dev, queue) {
+    let tag = "rope stride"
     var err : string
-    var pso = pipeline_from_source(dev, metal_pk_rope_msl, metal_pk_rope_msl_entry, metal_pk_rope_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let tt = 7
@@ -2208,15 +2209,25 @@ def private pk_rope_gate(t : T?; dev, queue) {
     var tcos : array<float>
     var tsin : array<float>
     build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(pos0 + tt), int64(dh))
-    let ka = PkRopeArgs(t = uint(tt), stride = uint(stride), col = uint(col), d = uint(d), dh = uint(dh), pos0 = uint(pos0))
     var bcos = buf_upload(dev, tcos)
     var bsin = buf_upload(dev, tsin)
+    var u_n = buf_u32(dev, uint(d))
+    var u_hs = buf_u32(dev, uint(dh))
+    var u_np = buf_u32(dev, uint(tt * d / 2))
+    var u_neox = buf_u32(dev, 0u)
+    var u_stride = buf_u32(dev, uint(stride))
+    let toff = uint64(pos0 * (dh / 2) * 4)
     let run <- @(bxx : MetalBuffer?) : bool {
         return st2_dispatch_64_lanes(t, queue, tag, pso, tt * d / 2) $(enc) {
-            metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, bcos, 0ul, 1)
-            metal_set_buffer(enc, bsin, 0ul, 2)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+            metal_set_buffer(enc, bxx, uint64(col * 4), 0)
+            metal_set_buffer(enc, bcos, toff, 1)
+            metal_set_buffer(enc, bsin, toff, 2)
+            metal_set_buffer(enc, u_n, 0ul, 3)
+            metal_set_buffer(enc, u_hs, 0ul, 4)
+            metal_set_buffer(enc, u_np, 0ul, 5)
+            metal_set_buffer(enc, u_neox, 0ul, 6)
+            metal_set_buffer(enc, u_hs, 0ul, 7)
+            metal_set_buffer(enc, u_stride, 0ul, 8)
         }
     }
     var bx = buf_upload(dev, x)
@@ -2232,6 +2243,11 @@ def private pk_rope_gate(t : T?; dev, queue) {
     }
     metal_release(bcos)
     metal_release(bsin)
+    metal_release(u_n)
+    metal_release(u_hs)
+    metal_release(u_np)
+    metal_release(u_neox)
+    metal_release(u_stride)
     metal_release(bx)
     metal_release(bx2)
     metal_release(pso)
@@ -2321,10 +2337,12 @@ def private pk_attn_gate(t : T?; dev, queue; ctx, n_old : int) {
 
 //! one row of q, k, v at position 5 over a 64-wide model of two heads: q and k rotated as
 //! `rope_rows` rotates them, the rotated k and the v landing on the caches' row 5
-def private pk_rope_store_gate(t : T?; dev, queue) {
-    let tag = "pk_rope_store"
+//! The frame loop's rope-and-store: MetalRopeStoreKvT's f32 stamp at neox 0, no bias, the whole head rotated,
+//! the tables bound at the position's row and the caches at its row
+def private rope_store_pocket_gate(t : T?; dev, queue) {
+    let tag = "rope_store f32 pocket"
     var err : string
-    var pso = pipeline_from_source(dev, metal_pk_rope_store_msl, metal_pk_rope_store_msl_entry, metal_pk_rope_store_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalRopeStoreF32_metal_rope_store_msl, MetalRopeStoreF32_metal_rope_store_msl_entry, MetalRopeStoreF32_metal_rope_store_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let d = 64
@@ -2361,17 +2379,22 @@ def private pk_rope_store_gate(t : T?; dev, queue) {
     var tcos : array<float>
     var tsin : array<float>
     build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
-    let ka = PkRopeStoreArgs(d = uint(d), dh = uint(dh), pos = uint(pos))
+    let ka = RopeStoreArgs(qd = uint(d), head_size = uint(dh), npairs_q = uint(d / 2), npairs = uint(d), neox = 0u, has_bias = 0u, rot = uint(dh))
     var bcos = buf_upload(dev, tcos)
     var bsin = buf_upload(dev, tsin)
+    var bbias = buf_fill(dev, 3 * d, 0.0)
+    let toff = uint64(pos * (dh / 2) * 4)
+    let roff = uint64(pos * d * 4)
     let run <- @(bxx : MetalBuffer?; bkk : MetalBuffer?; bvv : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, d / 2) $(enc) {
+        return st2_dispatch_64_lanes(t, queue, tag, pso, d) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, bcos, 0ul, 1)
-            metal_set_buffer(enc, bsin, 0ul, 2)
-            metal_set_buffer(enc, bkk, 0ul, 3)
-            metal_set_buffer(enc, bvv, 0ul, 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_buffer(enc, bxx, uint64(2 * d * 4), 1)
+            metal_set_buffer(enc, bkk, roff, 2)
+            metal_set_buffer(enc, bvv, roff, 3)
+            metal_set_buffer(enc, bcos, toff, 4)
+            metal_set_buffer(enc, bsin, toff, 5)
+            metal_set_buffer(enc, bbias, 0ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
         }
     }
     var bx = buf_upload(dev, qkv)
@@ -2406,6 +2429,7 @@ def private pk_rope_store_gate(t : T?; dev, queue) {
     metal_release(bv3)
     metal_release(bcos)
     metal_release(bsin)
+    metal_release(bbias)
     metal_release(bx)
     metal_release(bk)
     metal_release(bv)
@@ -3294,7 +3318,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var brhs = buf_u32(dev, uint(HEAD_SIZE))
                 var brnp = buf_u32(dev, uint(NPOS * QD / 2))
                 var brnx = buf_u32(dev, 0u)
-                var ropebufs <- [brv, brc, brs, brn, brhs, brnp, brnx, brhs]   // trailing brhs = rot (full rope)
+                var ropebufs <- [brv, brc, brs, brn, brhs, brnp, brnx, brhs, brn]   // trailing brhs = rot (full rope), brn = the row stride (contiguous rows)
                 let roperan = run_compute_1d(queue, pso_rope, ropebufs, uint(NPOS * QD / 2), 64u, err)
                 t |> success(roperan, "rope dispatch: {err}")
                 t |> equal(buf_mismatch_approx(brv, rvwant), 0)
@@ -3318,7 +3342,7 @@ def test_metal_prefill_kernels(t : T?) {
                 }
                 var brv2 = buf_upload(dev, rv)
                 var brnx1 = buf_u32(dev, 1u)
-                var ropebufs2 <- [brv2, brc, brs, brn, brhs, brnp, brnx1, brhs]
+                var ropebufs2 <- [brv2, brc, brs, brn, brhs, brnp, brnx1, brhs, brn]
                 let roperan2 = run_compute_1d(queue, pso_rope, ropebufs2, uint(NPOS * QD / 2), 64u, err)
                 t |> success(roperan2, "rope NEOX dispatch: {err}")
                 t |> equal(buf_mismatch_approx(brv2, rvwant), 0)
@@ -3356,7 +3380,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var brsp = buf_upload(dev, rsinp)
                 var brnx2 = buf_u32(dev, 1u)
                 var brot = buf_u32(dev, uint(prot))
-                var ropebufs3 <- [brv3, brcp, brsp, brn, brhs, brnp, brnx2, brot]
+                var ropebufs3 <- [brv3, brcp, brsp, brn, brhs, brnp, brnx2, brot, brn]
                 let roperan3 = run_compute_1d(queue, pso_rope, ropebufs3, uint(NPOS * QD / 2), 64u, err)
                 t |> success(roperan3, "rope partial-NEOX dispatch: {err}")
                 t |> equal(buf_mismatch_approx(brv3, rvwant), 0)
@@ -3425,12 +3449,12 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_rows_gate(t, dev, queue, false)
                 pk_rows_gate(t, dev, queue, true)
                 pk_row_scale_gate(t, dev, queue)
-                pk_rope_gate(t, dev, queue)
+                rope_stride_gate(t, dev, queue)
                 pk_attn_gate(t, dev, queue, 0, 10)
                 pk_attn_gate(t, dev, queue, 8, 10)
                 pk_attn_gate(t, dev, queue, 0, 300)   //! past one 256-key stride of the staged scores
                 pk_attn_gate(t, dev, queue, 8, 300)
-                pk_rope_store_gate(t, dev, queue)
+                rope_store_pocket_gate(t, dev, queue)
                 pk_add_ln_gate(t, dev, queue, 100)
                 pk_add_ln_gate(t, dev, queue, 300)
                 pk_add_ln_gate(t, dev, queue, 512)   //! two whole 256-lane strides
