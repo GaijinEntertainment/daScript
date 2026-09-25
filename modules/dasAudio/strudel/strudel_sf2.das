@@ -700,7 +700,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037,STYLE
                             result.sample_data |> resize(num_samples)
                             // bulk copy — data is little-endian int16, same as native on x86/x64
                             unsafe {
-                                memcpy(addr(result.sample_data[0]), addr(data[cursor]), sub_size)
+                                memcpy(addr(result.sample_data[0]), addr(data[cursor]), num_samples * 2)   //! an odd chunk's last byte is no sample; copying it wrote one past the array
                             }
                         }
                         cursor += sub_size

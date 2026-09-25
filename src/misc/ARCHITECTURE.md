@@ -12,6 +12,9 @@
 - `alloc_tracker.cpp` - the RelWithDebInfo C++ heap leak tracker: the live-allocation map, the
   exit-time report, and the per-frame symbolizer. `alloc_tracker_overrides.cpp` beside it carries
   the global `operator new`/`delete` that feed it, compiled into every binary and shared module.
+- `memory_model.cpp` - the context heaps' size-class and bump allocators (`MemoryModel`,
+  `LinearChunkAllocator`); `include/daScript/misc/memory_model.h` carries the decks and chunks
+  they split.
 
 The knobs are bound to daslang in `src/builtin/module_builtin_jobque.cpp`; each knob's caller
 contract is stated on its declaration in `include/daScript/misc/job_que.h`.
@@ -174,3 +177,41 @@ loads per file. The environment form is the one a build edge uses, and the reaso
 dastest worker subprocess, a `daslang -compile-only` a gate spawns per file, and a daslang-built
 `.exe` all inherit a variable and none of them would see a flag on the parent's command line.
 That is also why the recorder lives here, in the runtime library, rather than in the daslang CLI.
+
+## 10. Under AddressSanitizer the das heap tells ASan what it hands out
+
+ASan knows only the system allocator, and the context heaps take their memory from it in large
+decks and chunks that they split themselves - to ASan, a deck is one live block, so a read past a
+das object, or of a freed or swept one, lands in memory it believes is in use. In a build with
+ASan on (`DAS_ASAN`, `include/daScript/misc/das_asan.h`), the allocators poison everything they
+have not handed out and unpoison exactly the bytes of each request. The C++ runtime, the
+interpreter's nodes, AOT code and `--jit-sanitize` JIT code all read the same shadow memory, so
+every tier sees the same heap. Without ASan every hook compiles to nothing.
+
+- **The persistent heap hands every allocation to ASan.** Under ASan, `MemoryModel` sets
+  `maxShoeAllocation` to 0, so no request lands in a size-class deck: each one is its own
+  `das_aligned_alloc16` block, which ASan tracks with its own redzones and frees into its own
+  quarantine - a GC sweep frees what it finds dead the same way, so a collector that swept a live
+  object is a `heap-use-after-free` report rather than a wrong value. ASan bounds the block at its
+  rounded size, so a read inside the rounding padding goes unreported. `bytesAllocated` still counts the
+  rounded request, which keeps an exact heap count the same with ASan on and off. With no deck reserve
+  for the heap to be mostly free of, `collectHeapIfMostlyFree`'s first check counts growth from zero
+  instead.
+- **A linear heap poisons its chunk and unpoisons each allocation**; the object heap
+  (`LinearHeapAllocator`) allocates `DAS_ASAN_REDZONE` bytes more and poisons them from the exact
+  request on, so its objects stay bounded to the byte. The string heaps take no gap: their walks
+  (`forEachString`, the report) step from one string to the next by its length, which a gap would
+  break. A free in the middle of a linear chunk reclaims nothing; the object heap poisons it anyway,
+  so a stale pointer into it is reported, and the string heaps leave it readable for the same walks.
+- **The context stack poisons everything below its live frames**
+  (`StackAllocator`, `include/daScript/simulate/heap.h`): a push unpoisons the new frame and a pop
+  poisons the ones it releases, so a read or write past a frame into the free part of the stack is
+  reported, from the interpreter and from jitted code alike.
+- **An `array<T>` buffer poisons the elements between its length and its capacity**
+  (`DAS_ASAN_ANNOTATE_ARRAY`, `include/daScript/misc/das_asan.h`), in every place that changes the
+  capacity or the length through a stride: reserve, resize, and the push grow. A view over
+  foreign storage (`borrowed`) is never annotated. `clear` takes no stride, so it leaves the old
+  elements readable until the next grow - a missed report, never a false one. The JIT's inline
+  push does not keep the annotation, so an ASan host lowers every push to the runtime call
+  (`gate_array_push_back`, `modules/dasLLVM/daslib/llvm_jit_lower.das`).
+

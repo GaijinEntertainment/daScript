@@ -266,6 +266,7 @@ namespace das {
             if ( newCapacity > uint64_t(INT64_MAX) ) newCapacity = uint64_t(INT64_MAX);
             array_reserve(context, arr, newCapacity, stride, at);
         }
+        DAS_ASAN_ANNOTATE_ARRAY(arr, stride, arr.size, newSize);
         arr.size = newSize;
     }
 
