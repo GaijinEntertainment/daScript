@@ -10251,6 +10251,224 @@ struct TowerBiasArgs {
     act : uint
 }
 
+//! the tanh-LUT GELU (the vision towers, the whisper family) in the CPU form: the input and the output rounded through f16
+def tower_gelu_tanh(v : float) : float {
+    if (v <= -10.0) {
+        return 0.0
+    }
+    if (v >= 10.0) {
+        return v
+    }
+    let xr = float(float16(v))
+    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
+    return float(float16(g))
+}
+
+//! the erf GELU, the CPU `gelu_erf`'s rational erfc in f32
+def tower_gelu_erf(v : float) : float {
+    let z = abs(v) * 0.7071067811865476
+    let t = 1.0 / (1.0 + 0.5 * z)
+    let erfc = t * exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
+        t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 +
+        t * (-0.82215223 + t * 0.17087277)))))))))
+    let half_v_erfc = 0.5 * v * erfc
+    return v >= 0.0 ? v - half_v_erfc : half_v_erfc
+}
+
+//! the tower activations by `TowerBiasArgs.act` code
+def tower_act(v : float; act : uint) : float {
+    if (act == BIAS_ACT_NONE) {
+        return v
+    }
+    if (act == BIAS_ACT_GELU_ERF) {
+        return tower_gelu_erf(v)
+    }
+    if (act == BIAS_ACT_SILU) {
+        return v / (1.0 + exp(-v))
+    }
+    if (act == BIAS_ACT_RELU) {
+        return max(v, 0.0)
+    }
+    return tower_gelu_tanh(v)
+}
+
+// ===== the whisper decoder's fused row passes: a row pass and the Q8_0 requant of its output in one dispatch =====
+
+//! the Q8_0 block store the fused row classes share with `RqT.blk_store`: eight consecutive lanes hold a 32-block, four elements
+//! each, and `q8_amax3`'s xor fold spans exactly those lanes; a workgroup-reduction base for the norms
+class TowerRqStoreBase : RmsWgBase {
+    @ssbo @binding = 6 outq : array<int8>
+    @ssbo @binding = 7 outs : array<float>
+
+    def blk_store(b, lane8 : uint; v : float4) {
+        let m = q8_amax3(max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w))))
+        let d = m / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        if (lane8 == 0u) {
+            outs[b] = d
+        }
+        let qb = b * 32u + lane8 * 4u
+        outq[qb] = q8_quant1(v.x, id)
+        outq[qb + 1u] = q8_quant1(v.y, id)
+        outq[qb + 2u] = q8_quant1(v.z, id)
+        outq[qb + 3u] = q8_quant1(v.w, id)
+    }
+
+    def abstract rowval(e : uint; mean, inv : float) : float   //! the normed value at plane element `e` of the row whose statistics are `mean` and `inv`
+
+    //! the row's blocks quantized from `rowval` (32 blocks a pass over the 256 lanes)
+    def blk_pass(base, nblk, row : uint; mean, inv : float) {
+        let tid = gl_LocalInvocationID.x
+        let lane = tid % 32u
+        var b = (tid / 32u) * 4u + lane / 8u
+        while (b < nblk) {
+            let e = base + b * 32u + (lane % 8u) * 4u
+            let v = float4(rowval(e, mean, inv), rowval(e + 1u, mean, inv), rowval(e + 2u, mean, inv), rowval(e + 3u, mean, inv))
+            blk_store(row * nblk + b, lane % 8u, v)
+            b += 32u
+        }
+    }
+}
+
+//! the layernorm of a row and its Q8_0 requant in one dispatch: one workgroup a row, the normed value never lands in f32
+[vk_dispatch(name = "tower_ln_rq_cls", grid = "wgs", params = "wgs : int64")]
+class TowerLnRq : TowerRqStoreBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_ln_rq_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            s1 += x[base + i]
+            i += 256u
+        }
+        let s1w = wg_sum(s1, 0u)
+        let mean = s1w / float(pa.d)
+        var s2 = 0.0
+        i = tid
+        while (i < pa.d) {
+            let dv = x[base + i] - mean
+            s2 += dv * dv
+            i += 256u
+        }
+        let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+        blk_pass(base, pa.d / 32u, gl_WorkGroupID.x, mean, inv)
+    }
+
+    def override rowval(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.woff + e % pa.d] + wn[pa.boff + e % pa.d]
+}
+
+//! the residual post-add (x += ascale x (y + bias)), the next layernorm and its Q8_0 requant in one dispatch; `ln_on` = 0 adds alone
+[vk_dispatch(name = "tower_post_add_ln_rq_cls", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddLnRq : TowerRqStoreBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @push_constant pa : TowerLnArgs
+
+    [spirv_kernel(local_size_x = 256, name = "tower_post_add_ln_rq_cls_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.d
+        let tid = gl_LocalInvocationID.x
+        var s1 = 0.0
+        var i = tid
+        while (i < pa.d) {
+            let xv = x[base + i] + pa.ascale * (y[base + i] + wn[pa.boff + i])
+            x[base + i] = xv
+            s1 += xv
+            i += 256u
+        }
+        if (pa.ln_on != 0u) {
+            let s1w = wg_sum(s1, 0u)
+            let mean = s1w / float(pa.d)
+            var s2 = 0.0
+            i = tid
+            while (i < pa.d) {
+                let dv = x[base + i] - mean
+                s2 += dv * dv
+                i += 256u
+            }
+            let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
+            barrier()   //! every lane's x writes visible before the block pass reads the row across lanes
+            blk_pass(base, pa.d / 32u, gl_WorkGroupID.x, mean, inv)
+        }
+    }
+
+    def override rowval(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.lnoff + e % pa.d] + wn[pa.lnboff + e % pa.d]
+}
+
+struct TowerBiasRqArgs {
+    d : uint        //! the row width, a 32-multiple
+    nblk : uint     //! the plane's Q8_0 blocks
+    boff : uint     //! the bias row's base in wn
+    act : uint
+}
+
+//! the bias + activation of a plane and its Q8_0 requant in one dispatch (`RqT`'s grid: eight lanes a block), the source read alone
+[vk_dispatch(name = "tower_bias_act_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerBiasActRq : RqT {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 outq : array<int8>
+    @ssbo @binding = 3 outs : array<float>
+    @push_constant pa : TowerBiasRqArgs
+
+    def biased(e : uint) : float => tower_act(x[e] + wn[pa.boff + e % max(1u, pa.d)], pa.act)
+    def override load4(eb : uint) : float4 => float4(biased(eb), biased(eb + 1u), biased(eb + 2u), biased(eb + 3u))
+    def override load1(e : uint) : float => biased(e)
+}
+
+//! the chunked attention's combine with the row's head slice quantized in place of stored: the 64 lanes' values gathered, then
+//! lanes 0..15 write the slice's two Q8_0 blocks (the workgroup is one head slice wide)
+[vk_dispatch(name = "tower_wdec_attn_comb_rq_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
+class TowerWdecAttnCombRq : TowerRqStoreBase {
+    @ssbo @binding = 0 pms : array<float>
+    @ssbo @binding = 1 py : array<float>
+    @push_constant pa : TowerWdecCombArgs
+    @workgroup slice : float[64]
+
+    [spirv_kernel(local_size_x = 64, name = "tower_wdec_attn_comb_rq_cls_spv")]
+    def run {
+        let nr = max(1u, pa.nrows)
+        let h = gl_WorkGroupID.x / nr
+        let r = gl_WorkGroupID.x % nr
+        let lid = gl_LocalInvocationID.x
+        var mg = -3.0e38
+        var c = 0u
+        while (c < pa.nchunks) {
+            mg = max(mg, pms[((c * pa.nheads + h) * pa.nrows + r) * 2u])
+            c++
+        }
+        var tot = 0.0
+        c = 0u
+        while (c < pa.nchunks) {
+            let slot = (c * pa.nheads + h) * pa.nrows + r
+            tot += pms[slot * 2u + 1u] * exp(pms[slot * 2u] - mg)
+            c++
+        }
+        let inv = 1.0 / max(tot, 1.0e-30)
+        var acc = 0.0
+        c = 0u
+        while (c < pa.nchunks) {
+            let slot = (c * pa.nheads + h) * pa.nrows + r
+            acc += py[slot * WDEC_HS + lid] * exp(pms[slot * 2u] - mg)
+            c++
+        }
+        slice[lid] = acc * inv
+        barrier()
+        if (lid < 16u) {
+            let b0 = (r * pa.dim + h * WDEC_HS) / 32u
+            let v = float4(slice[lid * 4u], slice[lid * 4u + 1u], slice[lid * 4u + 2u], slice[lid * 4u + 3u])
+            blk_store(b0 + lid / 8u, lid % 8u, v)
+        }
+    }
+}
+
 //! a GEMM output's bias row added in place, then the activation `pa.act` names (`BIAS_ACT_*`): the tanh GELU is the CPU
 //! `gelu_tanh_lut`'s form with its f16 rounding of the input and the output (the LUT is the f16-domain twin of this), the
 //! erf GELU the CPU `gelu_erf`'s rational erfc in f32
@@ -10263,48 +10481,12 @@ class template TowerBiasActT {
     @ssbo @binding = 2 @template_gate = OUT16 outh : array<float16>
     @push_constant pa : TowerBiasArgs
 
-    def gelu_tanh(v : float) : float {
-        if (v <= -10.0) {
-            return 0.0
-        }
-        if (v >= 10.0) {
-            return v
-        }
-        let xr = float(float16(v))
-        let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
-        return float(float16(g))
-    }
-
-    def gelu_erf(v : float) : float {
-        let z = abs(v) * 0.7071067811865476
-        let t = 1.0 / (1.0 + 0.5 * z)
-        let erfc = t * exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
-            t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 +
-            t * (-0.82215223 + t * 0.17087277)))))))))
-        let half_v_erfc = 0.5 * v * erfc
-        return v >= 0.0 ? v - half_v_erfc : half_v_erfc
-    }
-
     def biased(e : uint) : float {
         var v = x[e]
         static_if (BIAS) {
             v += wn[pa.boff + e % max(1u, pa.d)]
         }
-        if (pa.act == BIAS_ACT_NONE) {
-            return v
-        }
-        if (pa.act == BIAS_ACT_GELU_ERF) {
-            let ge = gelu_erf(v)
-            return ge
-        }
-        if (pa.act == BIAS_ACT_SILU) {
-            return v / (1.0 + exp(-v))
-        }
-        if (pa.act == BIAS_ACT_RELU) {
-            return max(v, 0.0)
-        }
-        let g = gelu_tanh(v)
-        return g
+        return tower_act(v, pa.act)
     }
 
     def store(e : uint; v : float) : void {

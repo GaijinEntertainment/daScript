@@ -360,7 +360,10 @@ bias folded, the CPU chain's scaled transposed keys and its biased values - bit 
 positions past the batch left at the sentinel, then the chunked attention pair over the planes
 the store wrote against the CPU decoder form: the causal rows across a chunk boundary, the cross
 rows inside the first chunk with the second chunk's partial empty, the scaled-keys and
-causal-versus-cross controls); the audio fronts' classes - `test_vkt_tower_front_movers` (the k3
+causal-versus-cross controls), and its fused row passes (`test_vkt_wdec_fused_rq`: the layernorm, the post-add with its next
+norm, the bias + tanh GELU and the attention combine, each fused with the Q8_0 requant, byte for byte and scale for scale
+against the pass followed by `TowerClampRq`, the residual rows in place the same, a poisoned input moving each one's bytes);
+the audio fronts' classes - `test_vkt_tower_front_movers` (the k3
 s2 p1 im2col over two chunks with its pad and zero tail, the stem's im2col1d on both source
 layouts and strides, the qwen3a and canary feature shuffles, the rel-plane head gather with and
 without its bias, the clamp + halfword feed, the zero rows, the position-plane add (the bias class

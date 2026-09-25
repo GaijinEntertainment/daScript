@@ -237,19 +237,26 @@ the tile the tower chains ride (`VtTile`, the schedule records written as the to
 K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs
 columns a row - into head-major planes, run twice off each projection - the f16 resident plane, and the CPU chain's f32
 layout (kx pre-scaled and transposed, vx with its bias) on device planes of its own. That layout is
-read back into the decoder state only when a CPU reader can need it - the step's `rows` decline on
-a window's first batch, the step called on a state that is not the live window, another state's
-window taking the planes, and the driver's release (`wd_flush_cross_kv`, over a pending mark the
-cross-KV chain leaves) - so the served loop never pays the 61 MB copy a turbo window's layouts
-make, and a state's next window supersedes its pending one unread. The decode step is
+read back into the decoder state only when that state's own CPU reader can need it - the step's
+`rows` decline on a window's first batch, and the step called on it while it is not the live
+window (`wd_flush_cross_kv`, over a pending mark the cross-KV chain leaves) - so the served loop
+never pays the 61 MB copy a turbo window's layouts make, and a state's next window supersedes its
+pending one unread. The driver never writes into another state, which may already be gone: another
+state's window, and the release, drop the pending readback and mark the superseded state, whose
+next decode step panics under the one-live-window rule until it starts a window of its own. The decode step is
 one command buffer per batch: the token and position rows summed on the host and uploaded, then
-per layer the LN, the Q8_0 feed, the fused q|k|v GEMV (three regions of one dispatch, the N-column
-form over a batch's rows), the two f16 appends with the v bias folded, the chunked self attention
-(the q bias folded at the load), the o
-GEMV and the post-add with the next norm, the same over the cross memory, the fc1 GEMV, the bias +
-tanh-LUT GELU, the fc2 GEMV and the post-add with the next layer's first norm (the final norm on
-the last layer), then the tied-embedding logits GEMV over the last row alone and the logits
-readback - the CPU filter and sampler stay the parity anchor. A partial's workgroup
+per layer the LN with its Q8_0 feed in one dispatch (`TowerLnRq`, the first layer), the fused
+q|k|v GEMV (three regions of one dispatch, the N-column form over a batch's rows), the two f16
+appends with the v bias folded, the chunked self attention (the q bias folded at the load; its
+combine quantizes the row's head slice in place of storing it, `TowerWdecAttnCombRq`), the o GEMV
+and the post-add with the next norm and its feed (`TowerPostAddLnRq`), the same over the cross
+memory, the fc1 GEMV, the bias + tanh-LUT GELU with its feed (`TowerBiasActRq`), the fc2 GEMV and
+the post-add with the next layer's first norm and its feed (the final norm on the last layer,
+whose feed is the logits GEMV's), then the tied-embedding logits GEMV over the last row alone and
+the logits readback - the CPU filter and sampler stay the parity anchor. The fused passes land
+the same Q8_0 bytes as the row pass and the separate requant (`TowerClampRq`) - the block store is
+one text, eight consecutive lanes a block - and cost a token 66 dispatches where the separate
+passes cost 91, the dispatch floor of a decode step being its own launch and barrier. A partial's workgroup
 (`TowerWdecAttnPart`) is one chunk of 256 keys, one head and one row - the chunk's scores off the
 f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-key cross window
 spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnComb`) is one head and
