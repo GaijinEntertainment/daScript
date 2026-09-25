@@ -1367,7 +1367,7 @@ def emit_fold_array_lane(var spec : FoldArraySpec; var adapter : SourceAdapter?;
 //   return <- outBuf
 // Returns the raw array; the lane's wrapIter knob adds .to_sequence_move() at the outer invoke.
 [macro_function]
-def build_terminal_select_tail(bufName : string; selectLam : Expression?;
+def build_terminal_select_tail(bufName : string; bufElemType : TypeDeclPtr; selectLam : Expression?;
                                selectElemType : TypeDeclPtr; at : LineInfo) : array<Expression?> {
     var stmts : array<Expression?>
     if (selectLam == null) {
@@ -1385,6 +1385,13 @@ def build_terminal_select_tail(bufName : string; selectLam : Expression?;
         for ($i(elemName) in $i(bufName)) {
             $i(outBufName) |> push_clone($e(projBody))
         }
+    }
+    if (bufElemType.isSafeToDelete) {
+        stmts |> push <| qmacro_expr() {
+            delete $i(bufName)
+        }
+    }
+    stmts |> push <| qmacro_expr() {
         return <- $i(outBufName)
     }
     return <- stmts
@@ -3736,7 +3743,7 @@ def emit_reverse_backward_index_walk(var c : Captures; var ctx : EmitCtx; at : L
     var tailStmts : array<Expression?>
     var wrapIter = false
     if (termselLam != null) {
-        tailStmts |> push_from <| build_terminal_select_tail(bufName, termselLam, termselElemType, at)
+        tailStmts |> push_from <| build_terminal_select_tail(bufName, bufElemType, termselLam, termselElemType, at)
         wrapIter = ctx.expr_is_iterator
     } else {
         tailStmts |> push <| buffer_return(bufName, ctx.expr_is_iterator)
@@ -4033,7 +4040,7 @@ def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineIn
             $i(bufName) |> resize($i(takeLimName) <= 0 ? 0 : ($i(takeLimName) < length($i(bufName)) ? $i(takeLimName) : length($i(bufName))))
         }
     }
-    tailStmts |> push_from <| build_terminal_select_tail(bufName, terminalSelectLam, terminalSelectElemType, at)
+    tailStmts |> push_from <| build_terminal_select_tail(bufName, bufElemType, terminalSelectLam, terminalSelectElemType, at)
     return emit_fold_array_lane(FoldArraySpec(
         bufElemType = bufElemType,
         bufName = bufName,
@@ -5797,6 +5804,19 @@ def build_join_standalone_pieces(
 }
 
 [macro_function]
+def join_hash_decl(hashName : string; keyType, tupBType : TypeDeclPtr) : Expression? {
+    //! The join's build-side buckets, rebuilt per call: `inscope` frees them at scope exit, unless a bucket holds pointers its finalizer would free
+    if (tupBType.isSafeToDelete) {
+        return qmacro_expr() {
+            var inscope $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+        }
+    }
+    return qmacro_expr() {
+        var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
+    }
+}
+
+[macro_function]
 def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
     if (joinCall == null || (joinCall.arguments |> length) < 2) return null
     var srcb = joinCall.arguments[1]
@@ -6018,9 +6038,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
     if (pieces == null) return null
     var allStmts := pieces.preludeStmts
     if (!probeMode) {
-        allStmts |> push <| qmacro_expr() {
-            var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
-        }
+        allStmts |> push(join_hash_decl(hashName, keyType, tupBType))
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
                 // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
