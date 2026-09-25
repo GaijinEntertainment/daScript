@@ -114,6 +114,15 @@ class WorkflowShapes(unittest.TestCase):
             self.assertIn("matrix: ${{ fromJSON(needs.%s.outputs.matrix) }}" % job, text, name)
             self.assertIn("ci/ci_matrix.py ", text, name)
 
+    def test_only_nightly_yml_carries_a_cron(self):
+        # a workflow with a cron of its own is one a #nightly PR never arms
+        for name in sorted(os.listdir(WORKFLOWS)):
+            if not name.endswith(".yml") or name == "nightly.yml":
+                continue
+            text = self.read(name)
+            self.assertFalse(re.search(r"^  schedule:", text, re.M), "%s carries a cron of its own" % name)
+            self.assertFalse("uses: ./.github/workflows/nightly_issue.yml" in text, "%s files its own nightly issue" % name)
+
     def test_role_conditions_exclude_one_role_only(self):
         # `matrix.role == 'core'` would drop the step from the nightly `all` job; the only admitted
         # spelling names the role a step does NOT run in

@@ -63,6 +63,45 @@ jobs:
     uses: ./.github/workflows/build_matrix.yml
     with:
       lane: build_nightly
+
+  extended_checks:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/extended_checks.yml
+    with:
+      lane: extended_nightly
+
+  daspkg_index:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/nightly_daspkg_index.yml
+
+  imgui:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/nightly_imgui.yml
+
+  playground:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/nightly_playground.yml
+
+  vulkan:
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/nightly_vulkan.yml
+
   build_windows_relwithdebinfo_nightly:
   ###########################################################
     # RelWithDebInfo is useful as the leak-enabled Windows diagnostic, but it
@@ -565,9 +604,61 @@ jobs:
           | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
         true
 
+  lint:
+    # Whole-tree: new rules on unchanged files, generic bodies only a consumer instantiates,
+    # generated files, default flips - what the per-PR changed-set lint cannot see
+    needs: pre_job
+    if: needs.pre_job.outputs.nightly == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    env:
+      SCCACHE_GHA_ENABLED: "false"
+    steps:
+      - name: "SCM Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install system dependencies"
+        run: |
+          sudo bash ci/apt_install.sh \
+            libglfw3-dev \
+            libfreetype6-dev \
+            mesa-common-dev \
+            xorg-dev
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: "Configure"
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=OFF \
+            -DDAS_PUGIXML_DISABLED=OFF \
+            -DDAS_SQLITE_DISABLED=OFF \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+
+      - name: "Lint the whole tree"
+        run: cmake --build ./build --target check_lint_tree
+
   nightly_issue:
     needs:
       - build
+      - extended_checks
+      - lint
+      - daspkg_index
+      - imgui
+      - playground
+      - vulkan
       - build_windows_relwithdebinfo_nightly
       - build_windows_release_llvm_nightly
       - build_windows_mingw

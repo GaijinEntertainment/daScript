@@ -19,8 +19,7 @@ name: nightly daspkg index
 # skills/internal/abi_break_sweep.md); the step summary names the ref it swept.
 
 on:
-  schedule:
-    - cron: '30 2 * * *'
+  workflow_call:
   workflow_dispatch:
 
 defaults:
@@ -28,7 +27,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: nightly-daspkg-index-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -145,11 +144,3 @@ jobs:
     - name: "daspkg unit suite"
       run: cmake --build ./build --config Release --target run_tests_daspkg
 
-  nightly_issue:
-    needs: [index_sweep, daspkg_unit_macos]
-    if: failure() && github.event_name == 'schedule'
-    permissions:
-      issues: write
-    uses: ./.github/workflows/nightly_issue.yml
-    with:
-      lane: nightly_daspkg_index.yml
