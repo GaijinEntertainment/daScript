@@ -99,6 +99,9 @@ struct DastestArgs {
     @clarg_doc = "Compile every test with the CSE (common-subexpression-elimination) pass disabled (cop.disable_cse)"
     disable_cse : bool = false
 
+    @clarg_doc = "Run every test on the persistent heap (cop.persistent_heap), whose frees and sweeps an address-sanitizer build hands to its own allocator, so a stale pointer into them is reported; a test that pins the default heap's byte counts fails under it"
+    persistent_heap : bool = false
+
     @clarg_doc = "Compile every test with the DSE (dead-store-elimination) pass disabled (cop.disable_dse)"
     disable_dse : bool = false
 
