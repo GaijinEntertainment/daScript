@@ -20,6 +20,8 @@ static const char * EMITTER_FILES[] = {
     "llvm_jit.das",
     "llvm_jit_di.das",
     "llvm_jit_common.das",
+    "ir_dsl.das",
+    "llvm_jit_runtime.das",
     "llvm_boost.das",
     "llvm_macro.das",
     "llvm_jit_code.das",

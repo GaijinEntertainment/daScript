@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x8eul   // 0x8e: ++ and -- on a pointer lower to a GEP, not a runtime call
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x90ul   // 0x90: prologue and epilogue are IR helpers
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -190,6 +190,8 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)) * JIT_FNV_PRIME
     h = (h ^ uint64(CONTEXT_OFFSET_OF_EVAL_TOP)) * JIT_FNV_PRIME
     h = (h ^ uint64(SIMFUNCTION_OFFSET_OF_JIT_FUNCTION)) * JIT_FNV_PRIME
+    h = (h ^ uint64(ARRAY_MAGIC)) * JIT_FNV_PRIME
+    h = (h ^ uint64(ARRAY_LOCK_EXEMPT_FLAGS)) * JIT_FNV_PRIME
     // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()
@@ -826,9 +828,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     plan.size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
     // This policy must be set before compilation so stack-frame sizes include the prologue.
     plan.emit_prologue = prog.policies.emit_prologue
-    // If you're sure `dynamic` functions is not reachable set this flag
-    // to `true` and fail in runtime on `jit_trap` if they turns
-    // out to be reachable.
+    // strict: a standalone exe with a no_jit function fails the build (collect_standalone_functions)
     plan.exe_strict = true
     plan.config_out_path = string(prog.policies.jit_output_path)
     plan.output_path = plan.config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : plan.config_out_path

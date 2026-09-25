@@ -18,6 +18,7 @@ require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_lower
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_jit_runtime
 require llvm/daslib/llvm_jit_di
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_cpu_class
@@ -950,8 +951,7 @@ class public LlvmJitVisitor : AstVisitor {
                 get_context_param(),
                 get_line_info_ptr(funAt)    // at — used for stack-overflow throw
             )
-            var typ = g_fn_types[FN_JIT_PROLOGUE]
-            LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
+            build_jit_runtime_call(g_builder, JitRuntime.jit_prologue, params)
         }
         // allocate arguments (promoted to local variables). hasMakeBlock forces always-promote so
         // block-captured argument variables are addressable; could be narrowed to captured-only.
@@ -1009,8 +1009,7 @@ class public LlvmJitVisitor : AstVisitor {
                 prologue,
                 get_context_param()
             )
-            var typ = g_fn_types[FN_JIT_EPILOGUE]
-            LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_EPILOGUE), params, "")
+            build_jit_runtime_call(g_builder, JitRuntime.jit_epilogue, params)
         }
     }
 
@@ -3066,8 +3065,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_str_cmp(a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        var typ = g_fn_types[FN_JIT_STR_CMP]
-        return LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_STR_CMP), fixed_array(a, b), "")
+        return build_jit_runtime_call(g_builder, JitRuntime.jit_str_cmp, fixed_array(a, b))
     }
 
     def build_str_cat(a, b : LLVMOpaqueValue?; at : LineInfo) : LLVMOpaqueValue? {
@@ -3846,8 +3844,7 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at),
         )
-        var typ = g_fn_types[FN_JIT_ARRAY_LOCK]
-        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
+        build_jit_runtime_call(g_builder, JitRuntime.jit_array_lock, params)
     }
 
     def build_array_unlock(array_ptr : LLVMOpaqueValue?; at : LineInfo) {
@@ -3856,8 +3853,7 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),                                                     // context
             get_line_info_ptr(at)                                                    // at
         )
-        var typ = g_fn_types[FN_JIT_ARRAY_UNLOCK]
-        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_UNLOCK), params, "")
+        build_jit_runtime_call(g_builder, JitRuntime.jit_array_unlock, params)
     }
 
     def build_array_resize(array_ptr : LLVMOpaqueValue?; count : int; stride : int; at : LineInfo) {
@@ -3969,8 +3965,7 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at),
         )
-        var typ = g_fn_types[FN_JIT_TABLE_LOCK]
-        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_LOCK), params, "")
+        build_jit_runtime_call(g_builder, JitRuntime.jit_table_lock, params)
     }
 
     def build_table_unlock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
@@ -3979,8 +3974,7 @@ class public LlvmJitVisitor : AstVisitor {
             get_context_param(),
             get_line_info_ptr(at),
         )
-        var typ = g_fn_types[FN_JIT_TABLE_UNLOCK]
-        LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_UNLOCK), params, "")
+        build_jit_runtime_call(g_builder, JitRuntime.jit_table_unlock, params)
     }
 
     // Advance state.slot to the next live slot (ctrl byte > CTRL_TOMBSTONE) — the open-addressed

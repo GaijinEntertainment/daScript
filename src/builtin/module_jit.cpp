@@ -692,14 +692,6 @@ namespace das {
                 SideEffects::none, "das_get_jit_free_heap");
             addExternInline<DAS_BIND_FUN(das_get_jit_free_persistent)>(*this, lib, "get_jit_free_persistent",
                 SideEffects::none, "das_get_jit_free_persistent");
-            addExternInline<DAS_BIND_FUN(das_get_jit_array_lock)>(*this, lib, "get_jit_array_lock",
-                SideEffects::none, "das_get_jit_array_lock");
-            addExternInline<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
-                SideEffects::none, "das_get_jit_array_unlock");
-            addExternInline<DAS_BIND_FUN(das_get_jit_table_lock)>(*this, lib, "get_jit_table_lock",
-                SideEffects::none, "das_get_jit_table_lock");
-            addExternInline<DAS_BIND_FUN(das_get_jit_table_unlock)>(*this, lib, "get_jit_table_unlock",
-                SideEffects::none, "das_get_jit_table_unlock");
             addExternInline<DAS_BIND_FUN(das_get_jit_array_resize)>(*this, lib, "get_jit_array_resize",
                 SideEffects::none, "das_get_jit_array_resize");
             addExternInline<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
@@ -730,14 +722,8 @@ namespace das {
                 SideEffects::none, "das_get_context_globals_size");
             addExternInline<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",
                 SideEffects::none, "das_get_context_shared_size");
-            addExternInline<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
-                SideEffects::none, "das_get_jit_str_cmp");
             addExternInline<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
                 SideEffects::none, "das_get_jit_str_cat");
-            addExternInline<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
-                SideEffects::none, "das_get_jit_prologue");
-            addExternInline<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
-                SideEffects::none, "das_get_jit_epilogue");
             addExternInline<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
                 SideEffects::none, "das_get_jit_make_block");
             addExternInline<DAS_BIND_FUN(das_get_jit_try_recover)>(*this, lib, "get_jit_try_recover",
@@ -817,6 +803,13 @@ namespace das {
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "SIZE_OF_SIMNODE_INTEROP", uint32_t(sizeof(SimNode_AotInteropBase)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
+            addConstant<uint32_t>(*this, "ARRAY_MAGIC", uint32_t(DAS_ARRAY_MAGIC));
+            // array_lock / table_lock skip shared or hopeless containers; mask for define_lock / define_unlock (llvm_jit_runtime.das)
+            Array lockExempt;
+            lockExempt.flags = 0;
+            lockExempt.shared = true;
+            lockExempt.hopeless = true;
+            addConstant<uint32_t>(*this, "ARRAY_LOCK_EXEMPT_FLAGS", lockExempt.flags);
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_STOP_FLAGS", uint32_t(uint32_t(offsetof(Context, stopFlags))));
             addConstant<uint32_t>(*this, "SIMFUNCTION_OFFSET_OF_JIT_FUNCTION", uint32_t(uint32_t(offsetof(SimFunction, jitFunction))));
