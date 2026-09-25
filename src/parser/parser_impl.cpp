@@ -1237,7 +1237,7 @@ namespace das {
         }
     }
 
-    // src/ARCHITECTURE.md#require-resolution
+    // src/ast/ARCHITECTURE.md#module-scan-manifest
     static bool ast_requireGuardAvailable ( yyscan_t scanner, const string & guard ) {
         if ( guard.empty() ) return true;
         if ( guard.find('/') != string::npos ) {
@@ -1264,7 +1264,7 @@ namespace das {
         if ( modalias ) delete modalias;
     }
 
-    // src/ARCHITECTURE.md#require-resolution
+    // src/ast/ARCHITECTURE.md#module-scan-manifest
     void ast_requireModuleGroup ( yyscan_t scanner, string * group, bool pub, const LineInfo & atName, string * guard ) {
         if ( ast_requireGuardAvailable(scanner, guard) ) {
             for ( const auto & member : getModuleGroupMembers(*group) ) {

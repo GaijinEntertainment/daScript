@@ -41,6 +41,17 @@ the `daslib/builtin.das` (repo root) helpers they name are the other side of a r
   loop dispatches on `row.dynamic` and then on whether the row carries a das-visible name, so a
   kind it does not know replays as a native path or waits under a name nothing requires.
 
+- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix, the
+  whitespace a form allows - or changes when a guarded require or a guarded group member is
+  skipped, teaches every site that decides it the same spelling and the same skip-or-take
+  decision, in the same change: the text collector `getAllRequireReq` (`ast_parse.cpp`), the
+  parser's `ast_requireGuardAvailable` (`src/parser/parser_impl.cpp`), and the member walk
+  `moduleGroupMemberAvailable` (`src/builtin/module_builtin_rtti.cpp`).** The prerequisite walk collects
+  requires from the source text before any parse, so a spelling only the parser reads is a
+  module the walk never compiles, a decision the two make differently is a require the parse
+  takes with no module behind it, and a member the calls take but the require did not is a call
+  into a module that is not there.
+
 - **A diff that makes `requireModuleNow` (`ast_parse.cpp`) rebind another environment field
   the walk must put back puts that field in `LateRequireEnvScope`, in the same change.** The
   late walk runs mid-parse of another module, and a field restored by a plain statement after

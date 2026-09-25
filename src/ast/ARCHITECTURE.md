@@ -158,8 +158,20 @@ without a module's artifact pays nothing for it. A replayed nameless row whose m
 registered by the end of the scan - loaded at the scan, or by that fallback - gets the module's
 name written back into its manifest (the same key and dependency stamps, the row named), so the
 next start defers it as a start that recorded a clean load would; a row that never loads stays
-nameless. A load adds nothing to `$`: a module-cache record carries each
-builtin module's cumulative hash of
+nameless. A
+require guard (`require ?mod`) and `builtin_module_exists` ask whether the build has the
+module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
+loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
+Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
+requires unguarded, comes in through the guards dasLLAMA places on it. A guard whose name
+holds a `/` is a path instead: the guard is taken when the guard's own file resolves through the
+compile's `FileAccess` - the rail for a pure-das package, which has nothing C++ to guard on, and
+for a witness of a cross-package dependency. A guard the build does not have skips the require
+silently and without resolving the target, so a skipped require probes no file paths; a guard the
+build has over a target that does not resolve is the ordinary missing-module error. Neither form
+falls back to the target's own resolvability: a module's source directory sits in every checkout
+whatever the build configured. A load adds
+nothing to `$`: a module-cache record carries each builtin module's cumulative hash of
 mangled names, and a process that loaded a different set of C++ modules would otherwise fail
 every record on `$`, so a `vector<T>` of a handled element registers into the element's
 module (`vectorHomeModule`, `ast_handle.h`) whichever module builds it - a module that exists
@@ -178,12 +190,19 @@ module adds a member, once (`ast_module.cpp`, one process-wide registry under a 
 the life of the process like the native paths: a descriptor registers once per process, so a
 cleared registry could only lose members); the list comes back sorted by member path, since the
 scan registers in `readdir` order, which no platform promises. A member's guard is the guard a
-hand-written `require ?guard member` would carry - a module name, or a path
-when it holds a `/`; a descriptor whose das files sit in every checkout
-guards its row on the C++ module only a build configured with it has, since a
-member requiring a module the build lacks fails every requirer of the group,
-and a manifest cannot record what a build has - its key does not see the
-build's artifacts. Membership is tree-level, so the answer does not
+hand-written `require ?guard member` would carry - a module name, or a path when it holds a
+`/` - and is evaluated wherever the list is read; a descriptor whose das files sit in every
+checkout guards its row on the C++ module only a build configured with it has, since a member
+requiring a module the build lacks fails every requirer of the group, and a manifest cannot
+record what a build has - its key does not see the build's artifacts. The text collector
+(`getAllRequireReq`) and the parser (`ast_requireModuleGroup`) expand the same list into one
+require per member, the group's guard and `public` on each, a member's own guard on that member;
+a member resolves and fails as a require spelled by hand would, and a group nothing registered
+adds nothing. The collector reads `require[group]` with no space as the parser does. The
+requirer calls the members through `daslib/module_group`, whose `call_module_group` reads the
+same list at macro time (`module_group_for_each_member`, the `rtti` module, a path guard
+resolved through the compiling program's own access) and emits one qualified call per member, so
+the expansion and the calls agree on the set. Membership is tree-level, so the answer does not
 depend on the walk order - a module joins from its own descriptor, and the requirer names only
 the group; the module-cache record stamps the expansion (sec.1), so a member joining later
 re-parses the modules that require the group. With

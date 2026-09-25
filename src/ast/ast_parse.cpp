@@ -264,7 +264,7 @@ namespace das {
                                     continue;
                                 }
                             }
-                            // src/ARCHITECTURE.md#require-resolution
+                            // src/ast/ARCHITECTURE.md#module-scan-manifest
                             auto guardAvailable = [&](const string & guard) {
                                 if ( guard.empty() ) return true;
                                 if ( guard.find('/')!=string::npos ) {
@@ -283,7 +283,7 @@ namespace das {
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;
                             };
                             if ( isReq && src[0]=='[' ) {
-                                // src/ARCHITECTURE.md#require-resolution
+                                // src/ast/ARCHITECTURE.md#module-scan-manifest
                                 src ++;
                                 while ( src < src_end && isspaceE(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
                                     src ++;
