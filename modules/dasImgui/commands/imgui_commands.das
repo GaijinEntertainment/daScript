@@ -536,8 +536,7 @@ def public command_bindings_editor(var registry : CommandRegistry;
                                    var state : CommandBindingsEditorState) {
     if (!state.open) return
     var open = state.open
-    var p_open : bool?
-    unsafe { p_open = addr(open) }
+    var p_open = unsafe(addr(open))
     let visible = Begin("Edit bindings###dasimgui_command_bindings", p_open,
                         ImGuiWindowFlags.NoCollapse)
     state.open = open

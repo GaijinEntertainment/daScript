@@ -198,11 +198,9 @@ def perspective_vk_01(fovy, aspect, znear, zfar : float) : float4x4 {
 // ----- offscreen target + composite plumbing -----
 
 def rebuild_scene_target(w, h : int) {
-    unsafe {
-        delete g_target_fb
-        delete g_target_color
-        delete g_target_depth
-    }
+    delete g_target_fb
+    delete g_target_color
+    delete g_target_depth
     var samples : VkSampleCountFlags
     samples._1 = true
     var extra : VkImageUsageFlags
@@ -402,9 +400,7 @@ def draw_composite(cmd : CommandBuffer) {
     cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, g_quad_pipe_layout, 0u, sets, no_dyn)
     cmd_draw(cmd, 3u)
     delete no_dyn
-    unsafe {
-        delete sets
-    }
+    delete sets
 }
 
 [export]
@@ -444,20 +440,18 @@ def update {
 
 [export]
 def shutdown {
-    unsafe {
-        delete g_model
-        delete g_quad_pipeline
-        delete g_quad_pipe_layout
-        delete g_quad_pool
-        delete g_quad_layouts
-        delete g_quad_sampler
-        delete g_quad_vert
-        delete g_quad_frag
-        delete g_target_fb
-        delete g_target_color
-        delete g_target_depth
-        delete g_scene_pass
-    }
+    delete g_model
+    delete g_quad_pipeline
+    delete g_quad_pipe_layout
+    delete g_quad_pool
+    delete g_quad_layouts
+    delete g_quad_sampler
+    delete g_quad_vert
+    delete g_quad_frag
+    delete g_target_fb
+    delete g_target_color
+    delete g_target_depth
+    delete g_scene_pass
     delete g_scene
     harness_shutdown()
 }

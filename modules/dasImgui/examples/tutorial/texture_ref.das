@@ -105,9 +105,7 @@ def update() {
             separator()
 
             // Full image, then a tinted + bordered copy — same texture reused.
-            // the named-tuple argument mints an ImTextureRef temp — a handled-type
-            // local, unsafe-scoped like any minted ImTextureRef
-            unsafe {
+            unsafe {   // nolint:STYLE024 — the inliner mints an ImTextureRef local from the named tuple, which lint compiles unoptimized and never sees
                 image(TR_PIC, (user_texture_id = texture_ref(),
                                size = float2(float(g_tex_w), float(g_tex_h)),
                                uv0 = float2(0.0f, 0.0f),
@@ -116,7 +114,7 @@ def update() {
                                border_col = float4(0.6f, 0.6f, 0.6f, 1.0f)))
             }
             same_line(TR_GAP)
-            unsafe {
+            unsafe {   // nolint:STYLE024 — same minted ImTextureRef local
                 image(TR_TINT, (user_texture_id = texture_ref(),
                                 size = float2(float(g_tex_w), float(g_tex_h)),
                                 uv0 = float2(0.0f, 0.0f),

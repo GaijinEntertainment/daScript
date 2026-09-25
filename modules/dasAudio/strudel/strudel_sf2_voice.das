@@ -602,7 +602,7 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
     if (sid < 0 || sid >= length(sf2.samples)) return false
     let shdr = sf2.samples[sid]
 
-    unsafe { ma_sf2_voice_init(addr(out_voice), sr); }
+    ma_sf2_voice_init(unsafe(addr(out_voice)), sr)
 
     // sample addressing
     let start_offset = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.startAddrsOffset), 0) + get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.startAddrsCoarseOffset), 0) * 32768
@@ -689,7 +689,7 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
     }
     out_voice.vol_env.is_amp_env = 1
     out_voice.vol_env.midi_velocity = velocity
-    unsafe { ma_sf2_envelope_start(addr(out_voice.vol_env), sr); }
+    ma_sf2_envelope_start(unsafe(addr(out_voice.vol_env)), sr)
 
     // modulation envelope
     out_voice.mod_env.delay_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.delayModEnv), -12000))
@@ -700,7 +700,7 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
     out_voice.mod_env.sustain_level = clamp(1.0 - float(mod_sustain) / 1000.0, 0.0, 1.0)
     out_voice.mod_env.release_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.releaseModEnv), -12000))
     out_voice.mod_env.is_amp_env = 0
-    unsafe { ma_sf2_envelope_start(addr(out_voice.mod_env), sr); }
+    ma_sf2_envelope_start(unsafe(addr(out_voice.mod_env)), sr)
 
     // LFOs
     out_voice.mod_lfo_delay = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.delayModLFO), -12000))
@@ -726,8 +726,8 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
     let fc_norm = fc_hz / sr
     out_voice.filter.active = fc_norm < 0.499 ? 1 : 0
     if (out_voice.filter.active != 0) {
-        unsafe { ma_sf2_biquad_setup(addr(out_voice.filter), fc_norm); }
-        unsafe { ma_sf2_biquad_setup(addr(out_voice.filter_r), fc_norm); }
+        ma_sf2_biquad_setup(unsafe(addr(out_voice.filter)), fc_norm)
+        ma_sf2_biquad_setup(unsafe(addr(out_voice.filter_r)), fc_norm)
     }
 
     // volume — SF2 spec centibels + concave velocity curve
@@ -772,8 +772,8 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
         let new_fc_norm = new_fc_hz / sr
         out_voice.filter.active = new_fc_norm < 0.499 ? 1 : 0
         if (out_voice.filter.active != 0) {
-            unsafe { ma_sf2_biquad_setup(addr(out_voice.filter), new_fc_norm); }
-            unsafe { ma_sf2_biquad_setup(addr(out_voice.filter_r), new_fc_norm); }
+            ma_sf2_biquad_setup(unsafe(addr(out_voice.filter)), new_fc_norm)
+            ma_sf2_biquad_setup(unsafe(addr(out_voice.filter_r)), new_fc_norm)
         }
     }
     // Filter Q (centibels)

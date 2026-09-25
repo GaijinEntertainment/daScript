@@ -3,7 +3,7 @@ options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // nolint:STYLE029,STYLE030,LINT019 — umbrella fires each arch [init] registration; this file uses none of its re-exports (with dasMetal, only dasllama_common's)
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_load

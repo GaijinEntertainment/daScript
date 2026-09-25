@@ -443,7 +443,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
             if (excl > 0) {
                 for (i in range(length(sched.sf2_voices))) {
                     if (sched.sf2_meta[i].exclusive_class == excl && sched.sf2_voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(sched.sf2_voices[i])); }
+                        ma_sf2_voice_end_quick(unsafe(addr(sched.sf2_voices[i])))
                     }
                 }
             }
@@ -451,7 +451,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
             if (cutGroup != 0) {
                 for (i in range(length(sched.sf2_voices))) {
                     if (sched.sf2_meta[i].cut == cutGroup && sched.sf2_voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(sched.sf2_voices[i])); }
+                        ma_sf2_voice_end_quick(unsafe(addr(sched.sf2_voices[i])))
                     }
                 }
             }
@@ -649,7 +649,7 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
         if (sched.sf2_voices[si].finished == 0) {
             let meta & = unsafe(sched.sf2_meta[si])
             if (meta.note_off_sample >= 0 && meta.samples_elapsed >= meta.note_off_sample && sched.sf2_voices[si].released == 0) {
-                unsafe { ma_sf2_voice_note_off(addr(sched.sf2_voices[si])); }
+                ma_sf2_voice_note_off(unsafe(addr(sched.sf2_voices[si])))
             }
             let saved_atten = sched.sf2_voices[si].attenuation
             // per-hap gain (meta.gain) and the continuous per-orbit level both ride the attenuation,
@@ -1349,9 +1349,7 @@ def finalize(var sched : Scheduler) {
     for (m in sched.sf2_meta) {
         release_hrtf_pair(m.hrtf_l, m.hrtf_r)
     }
-    unsafe {
-        delete sched.sf2_voices
-    }
+    delete sched.sf2_voices
     // per-orbit buses — free native effect instances then send/output scratch buffers
     for (bus in sched.orbit_buses) {
         if (bus != null) {

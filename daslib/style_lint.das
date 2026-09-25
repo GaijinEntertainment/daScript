@@ -113,6 +113,7 @@ class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
     ascii_strings : bool = false
+    strict_smart_pointers : bool = true
     with_module_is_unsafe : bool = false
     warning_count : int = 0
     collect_warnings : bool = false
@@ -2720,7 +2721,7 @@ class StyleLintVisitor : AstVisitor {
         return ((!vt.flags.ref && (vt.hasClasses
                 || (vt.isStructure && vt.structType != null && vt.structType.flags.isClass)))
             || (!vt.isLocal && !vt.isGoodBlockType)
-            || (vt.flags.smartPtr && !v.flags.inScope)
+            || ((vt.flags.smartPtr || (strict_smart_pointers && vt.needInScope)) && !v.flags.inScope)
             || (v.flags.inScope && vt.isPointer && vt.firstType != null
                 && vt.firstType.isStructure && vt.firstType.structType != null
                 && vt.firstType.structType.flags.isClass))
@@ -2739,6 +2740,15 @@ class StyleLintVisitor : AstVisitor {
     def block_holds_delete(blk : ExprBlock?) : bool {
         for (st in blk.list) {
             return true if (st is ExprDelete || is_lowered_unsafe_delete(st))
+        }
+        return false
+    }
+
+    //! Neither `unsafe(a <- b)` nor `unsafe(a := b)` parses, so a block holding a move or a clone
+    //! anywhere in it has no narrow form to offer, whichever statement the one unsafe operation is.
+    def block_holds_move_or_clone(blk : ExprBlock?) : bool {
+        for (st in blk.list) {
+            return true if (st is ExprMove || st is ExprClone || is_lowered_unsafe_clone(st))
         }
         return false
     }
@@ -2771,7 +2781,21 @@ class StyleLintVisitor : AstVisitor {
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
     }
     def override preVisitExprCopy(expr : ExprCopy?) : void { st029_record_func(expr.func) }
-    def override preVisitExprMove(expr : ExprMove?) : void { st029_record_func(expr.func) }
+    //! Mirrors infer's move rules: a class moves only under unsafe, and so does a value that needs
+    //! inscope under strict_smart_pointers (a smart pointer moved by value when the option is off);
+    //! an untyped operand counts too, so a needed wrap is never reported as redundant.
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        st029_record_func(expr.func)
+        return if (expr.genFlags.generated || expr.left == null || expr.right == null)
+        let lt = expr.left._type
+        let rt = expr.right._type
+        if (lt == null || rt == null || lt.hasClasses) {
+            mark_unsafe_in_stack()
+        } elif (strict_smart_pointers ? rt.needInScope
+                : (rt.isPointer && rt.flags.smartPtr && !rt.flags.ref && !(expr.right is ExprAscend))) {
+            mark_unsafe_in_stack()
+        }
+    }
     def override preVisitExprClone(expr : ExprClone?) : void { st029_record_func(expr.func) }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.variable != null) st029_record_mod(expr.variable._module)
@@ -2950,11 +2974,10 @@ class StyleLintVisitor : AstVisitor {
                   blk.list[0] is ExprDelete ||
                   blk.list[0] is ExprReturn ||
                   blk.list[0] is ExprNew ||
-                  blk.list[0] is ExprClone ||
-                  is_lowered_unsafe_clone(blk.list[0]) ||
                   declaration_owns_unsafe(blk.list[0]) ||
                   is_module_with(blk.list[0]) ||
-                  block_holds_delete(blk))
+                  block_holds_delete(blk) ||
+                  block_holds_move_or_clone(blk))
                 && !frame.has_non_local_let_ref) {
             var narrowable = true
             if (blk.list[0] is ExprFor) {
@@ -3004,6 +3027,11 @@ def private ascii_strings_for(prog : ProgramPtr) : bool {
     return is_shipped_library_source(prog)
 }
 
+//! infer falls back to the host's policy, which lint cannot read; the policy header's default is on.
+def private strict_smart_pointers_for(prog : ProgramPtr) : bool {
+    return prog._options |> find_arg("strict_smart_pointers") ?as tBool ?? true
+}
+
 def private duplicate_regions_for(prog : ProgramPtr) : bool {
     let configured = prog._options |> find_arg("_duplicate_regions")
     if (configured is tBool) return configured as tBool
@@ -3039,6 +3067,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     let empty_enabled : table<string>
@@ -3079,6 +3108,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
@@ -3111,6 +3141,7 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     astVisitor.max_complexity = max_complexity_for(prog)
     astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.ascii_strings = ascii_strings_for(prog)
+    astVisitor.strict_smart_pointers = strict_smart_pointers_for(prog)
     astVisitor.with_module_is_unsafe = (prog._options |> find_arg("with_module_is_unsafe")) ?as tBool ?? false
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)

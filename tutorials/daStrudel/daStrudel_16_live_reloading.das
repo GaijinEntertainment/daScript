@@ -128,7 +128,7 @@ var g_reload_count : int = 0
 def save_my_state() {
     var data : array<uint8>
     data |> resize(4)
-    unsafe { *addr<int?>(data[0]) = g_reload_count; }
+    *unsafe(addr<int?>(data[0])) = g_reload_count
     live_store_bytes("tutorial15_reload_count", data)
 }
 
@@ -136,7 +136,7 @@ def save_my_state() {
 def restore_my_state() {
     var data : array<uint8>
     if (live_load_bytes("tutorial15_reload_count", data) && length(data) >= 4) {
-        unsafe { g_reload_count = *addr<int?>(data[0]); }
+        g_reload_count = *unsafe(addr<int?>(data[0]))
         g_reload_count ++
         to_log(LOG_INFO, "tutorial15: reload #{g_reload_count}\n")
     }

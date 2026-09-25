@@ -51,9 +51,7 @@ def capture_png(fname : string) {
     }
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
-    unsafe {
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
-    }
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
     // OpenGL origin is bottom-left; flip rows so the PNG is top-down.
     let row = w * 4
     var tmp : array<uint8>
@@ -67,10 +65,7 @@ def capture_png(fname : string) {
             memcpy(addr(pixels[b]), addr(tmp[0]), row)
         }
     }
-    var written : int
-    unsafe {
-        written = stbi_write_png(fname, w, h, 4, addr(pixels[0]), row)
-    }
+    let written = stbi_write_png(fname, w, h, 4, unsafe(addr(pixels[0])), row)
     // a silent write failure once shipped a "done" run that wrote nothing
     if (written == 0) panic("stbi_write_png failed: {fname}")
     delete pixels

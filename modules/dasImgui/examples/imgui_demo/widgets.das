@@ -2246,11 +2246,9 @@ def private DragDropCopySwapSection() {
                      size = float2(60.0f, 60.0f)))
                 drag_drop_source(WIDGETS_DD_COPY_SRC[n],
                                   (flags = ImGuiDragDropFlags.None)) {
-                    unsafe {
-                        var src_n = n
-                        SetDragDropPayload("DND_DEMO_CELL", addr(src_n),
-                            uint64(typeinfo sizeof(src_n)), ImGuiCond.None)
-                    }
+                    var src_n = n
+                    SetDragDropPayload("DND_DEMO_CELL", unsafe(addr(src_n)),
+                        uint64(typeinfo sizeof(src_n)), ImGuiCond.None)
                     let verb = (WIDGETS_DD_COPY_MODE == 0 ? "Copy"
                                  : (WIDGETS_DD_COPY_MODE == 1 ? "Move" : "Swap"))
                     text(WIDGETS_DD_COPY_PREVIEW[n],

@@ -228,28 +228,28 @@ def apply_post(var mono : array<float>; p : PostChain; rate : float) {   // noli
     var s : PostState
 
     if (p.filter.enabled) {
-        unsafe { djfilter_init(addr(s.dj), rate); }
+        djfilter_init(unsafe(addr(s.dj)), rate)
         s.dj.position = p.filter.position
         unsafe { djfilter_process(addr(s.dj), addr(st[0]), n); }
     }
     if (p.bandpass.enabled) {
-        unsafe { bandpass_init(addr(s.bp), rate); }
-        unsafe { bandpass_setup(addr(s.bp), p.bandpass.freq, max(p.bandpass.q, 0.01)); }
+        bandpass_init(unsafe(addr(s.bp)), rate)
+        bandpass_setup(unsafe(addr(s.bp)), p.bandpass.freq, max(p.bandpass.q, 0.01))
         unsafe { bandpass_process(addr(s.bp), addr(st[0]), n); }
     }
     if (p.drive.enabled) {
-        unsafe { waveshaper_init(addr(s.ws)); }
+        waveshaper_init(unsafe(addr(s.ws)))
         s.ws.drive = p.drive.drive
         unsafe { waveshaper_process(addr(s.ws), addr(st[0]), n); }
     }
     if (p.crush.enabled) {
-        unsafe { bitcrush_init(addr(s.bc)); }
+        bitcrush_init(unsafe(addr(s.bc)))
         s.bc.bits = p.crush.bits
         s.bc.coarse = p.crush.coarse
         unsafe { bitcrush_process(addr(s.bc), addr(st[0]), n); }
     }
     if (p.comp.enabled) {
-        unsafe { compressor_init(addr(s.comp), rate); }
+        compressor_init(unsafe(addr(s.comp)), rate)
         s.comp.threshold_db = p.comp.threshold
         s.comp.ratio = max(p.comp.ratio, 1.0)
         s.comp.knee_db = max(p.comp.knee, 0.0)
@@ -277,7 +277,7 @@ def apply_post(var mono : array<float>; p : PostChain; rate : float) {   // noli
         unsafe { delete ch; }
     }
     if (p.phaser.enabled) {
-        unsafe { phaser_init(addr(s.ph), rate); }
+        phaser_init(unsafe(addr(s.ph)), rate)
         s.ph.rate = p.phaser.rate
         s.ph.depth = clamp(p.phaser.depth, 0.0, 1.0)
         s.ph.center = p.phaser.center
@@ -285,7 +285,7 @@ def apply_post(var mono : array<float>; p : PostChain; rate : float) {   // noli
         unsafe { phaser_process(addr(s.ph), addr(st[0]), n); }
     }
     if (p.tremolo.enabled) {
-        unsafe { tremolo_init(addr(s.trem), rate); }
+        tremolo_init(unsafe(addr(s.trem)), rate)
         s.trem.rate = p.tremolo.rate
         s.trem.depth = clamp(p.tremolo.depth, 0.0, 1.0)
         unsafe { tremolo_process(addr(s.trem), addr(st[0]), n); }

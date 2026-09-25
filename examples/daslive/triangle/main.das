@@ -176,9 +176,7 @@ def update() {
     var vertices : Vertex[3]
     get_triangle_vertices(vertices)
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    unsafe {
-        glBufferSubData(GL_ARRAY_BUFFER, 0l, int64(typeinfo sizeof(vertices)), addr(vertices[0]))
-    }
+    glBufferSubData(GL_ARRAY_BUFFER, 0l, int64(typeinfo sizeof(vertices)), unsafe(addr(vertices[0])))
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 3)
     live_end_frame()

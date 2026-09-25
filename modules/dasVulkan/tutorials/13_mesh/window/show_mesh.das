@@ -48,9 +48,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     var inst_exts : array<string>
     inst_exts |> reserve(int(ext_count))
     for (i in range(int(ext_count))) {
-        unsafe {
-            inst_exts |> push(glfw_exts[i])
-        }
+        inst_exts |> push(unsafe(glfw_exts[i]))
     }
     var inscope instance <- create_instance("dasVulkan tutorial 13", make_api_version(1u, 3u, 0u), inst_exts)
     volkLoadInstance(boost_value_to_vk(instance))

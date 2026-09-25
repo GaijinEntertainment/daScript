@@ -234,9 +234,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
             var warm_sch <- create_scheduler(m, 2l, 64l, 64l, 64l)   // warm the JIT + kernel dispatch
             var wst <- drive(m, warm_sch, 2l, 16l, 4l, salt)
             delete wst
-            unsafe {
-                delete warm_sch
-            }
+            delete warm_sch
         }
         var nb = 1l
         while (nb <= bmax) {
@@ -246,9 +244,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
             print("B={nb}: {st.agg_tps} tok/s | ttft p50 {ms(pct(st.ttft_us, 0.5))}ms p95 {ms(pct(st.ttft_us, 0.95))}ms" +
                   " | inter-token p50 {ms(pct(st.itl_us, 0.5))}ms p95 {ms(pct(st.itl_us, 0.95))}ms\n")
             delete st
-            unsafe {
-                delete sch
-            }
+            delete sch
             nb *= 2l
         }
         // ===== 2. chunk interference: decode stall while a long prompt prefills =====
@@ -259,9 +255,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
             var itl <- interference_run(m, sch, long_p, salt)
             print("K={k}: {length(itl)} gaps | p50 {ms(pct(itl, 0.5))}ms | p95 {ms(pct(itl, 0.95))}ms | max {ms(pct(itl, 1.0))}ms\n")
             delete itl
-            unsafe {
-                delete sch
-            }
+            delete sch
         }
         // ===== 3. warm vs cold TTFT: the prefix-cache prefill collapse =====
         print("\n== warm vs cold TTFT for an identical {long_p}-token prompt (prefix cache) ==\n")
@@ -276,9 +270,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
             print("cold ttft {ms(c_us)}ms | warm ttft {ms(w_us)}ms ({ratio}x) | warm cached {warm.cached} tokens\n")
             delete cold
             delete warm
-            unsafe {
-                delete sch
-            }
+            delete sch
         }
     }
     delete chunks

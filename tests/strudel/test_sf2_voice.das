@@ -209,7 +209,7 @@ def private test_loop_mode_0(t : T?) {
         sample_data[i] = int16(sin(float(i) * 0.1) * 16000.0)
     }
     var cv : ma_sf2_voice
-    unsafe { ma_sf2_voice_init(addr(cv), 48000.0); }
+    ma_sf2_voice_init(unsafe(addr(cv)), 48000.0)
     cv.sample_start = 0
     cv.sample_end = 100
     cv.loop_start = 0
@@ -234,7 +234,7 @@ def private test_loop_mode_1(t : T?) {
         sample_data[i] = int16(sin(float(i) * 0.1) * 16000.0)
     }
     var cv : ma_sf2_voice
-    unsafe { ma_sf2_voice_init(addr(cv), 48000.0); }
+    ma_sf2_voice_init(unsafe(addr(cv)), 48000.0)
     cv.sample_start = 0
     cv.sample_end = 500
     cv.loop_start = 100
@@ -347,7 +347,7 @@ def test_c_voice_render(t : T?) {   // nolint:STYLE038 flat list of arms sharing
             var cc5 : int[128]; sf2_default_cc_values(cc5)
             var cv : ma_sf2_voice; var as5 = SF2VoiceAttenState()
             if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 36, 127, 9, cc5, cv, as5)) {
-                unsafe { ma_sf2_voice_end_quick(addr(cv)); }
+                ma_sf2_voice_end_quick(unsafe(addr(cv)))
                 var output : array<float>
                 output |> resize(96000)  // 1 second
                 unsafe {

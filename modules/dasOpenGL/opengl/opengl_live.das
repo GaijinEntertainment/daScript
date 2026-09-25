@@ -108,9 +108,7 @@ def screenshot(input : JsonValue?) : JsonValue? {
     return JV("no framebuffer") if (w <= 0 || h <= 0)
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
-    unsafe {
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
-    }
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
     // Flip vertically (OpenGL origin is bottom-left)
     let row_bytes = w * 4
     var temp : array<uint8>
@@ -124,9 +122,7 @@ def screenshot(input : JsonValue?) : JsonValue? {
             memcpy(addr(pixels[bot]), addr(temp[0]), row_bytes)
         }
     }
-    unsafe {
-        stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
-    }
+    stbi_write_png(fname, w, h, 4, unsafe(addr(pixels[0])), w * 4)
     return JV(ScreenshotResult(saved = fname, width = w, height = h))
 }
 
@@ -398,9 +394,7 @@ struct RecordStatusResult {
 def record_status(_input : JsonValue?) : JsonValue? {
     var dropped = 0
     if (recorder_active) {
-        unsafe {
-            dropped = stbi_apng_dropped(recorder.writer)
-        }
+        dropped = stbi_apng_dropped(recorder.writer)
     }
     return JV(RecordStatusResult(
         active    = recorder_active,

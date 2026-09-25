@@ -723,7 +723,7 @@ def public markdown_view_clear_syntax(var state : MarkdownViewState) {
 def public markdown_view_dispose(var state : MarkdownViewState) {
     //! Release a caller-owned view state during application shutdown.
     markdown_view_invalidate(state)
-    unsafe { delete state.nodes }
+    delete state.nodes
     delete state.image_bindings
     markdown_view_clear_syntax(state)
     state = MarkdownViewState()
@@ -780,10 +780,8 @@ def private prepare_view_state(doc : RichDocument const;
     retain_syntax_bindings(state, document_revision)
     markdown_view_invalidate(state)
     if (length(state.nodes) != count) {
-        unsafe {
-            delete state.nodes
-            state.nodes |> resize(count)
-        }
+        delete state.nodes
+        state.nodes |> resize(count)
     }
     state.document_revision = document_revision
     state.node_count = count
