@@ -3563,7 +3563,6 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_cross_kx = compile_stamp(metal_cross_kx_msl, ok)
     g_pso_cross_vx = compile_stamp(metal_cross_vx_msl, ok)
     g_pso_cross_vx_h = compile_stamp(metal_cross_vx_h_msl, ok)
-    g_pso_im2col3 = compile_stamp(metal_im2col3_msl, ok)
     g_pso_im2col2d = compile_stamp(metal_im2col2d_msl, ok)
     g_pso_wdec_attn_part = compile_stamp(metal_wdec_attn_part_msl, ok)
     g_pso_wdec_attn_comb = compile_stamp(metal_wdec_attn_comb_msl, ok)
@@ -3618,13 +3617,14 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_scan = compile_stamp(metal_dn_scan_msl, ok)
     g_pso_st2_im2col = compile_stamp(metal_st2_im2col_msl, ok)
     g_pso_st2_im2col_tr = compile_stamp(metal_st2_im2col_tr_msl, ok)
+    g_pso_st2_im2col_cm = compile_stamp(metal_st2_im2col_cm_msl, ok)
     g_pso_st2_conv_mm = compile_stamp(metal_st2_conv_mm_msl, ok)
     g_pso_st2_conv_tr_mm = compile_stamp(metal_st2_conv_tr_mm_msl, ok)
     g_pso_f32_exact_mm = compile_stamp(metal_f32_exact_mulmm_msl, ok)
     g_pso_st2_conv_exact_mm = compile_stamp(metal_st2_conv_exact_mm_msl, ok)
     g_pso_st2_conv_tr_exact_mm = compile_stamp(metal_st2_conv_tr_exact_mm_msl, ok)
     g_pso_st2_adain_leaky = compile_stamp(metal_st2_adain_leaky_msl, ok)
-    g_pso_st2_gather = compile_stamp(metal_st2_gather_msl, ok)
+    g_pso_row_gather = compile_stamp(metal_row_gather_msl, ok)
     g_pso_st2_concat = compile_stamp(metal_st2_concat_msl, ok)
     g_pso_st2_pool_dw = compile_stamp(metal_st2_pool_dw_msl, ok)
     g_pso_st2_lstm = compile_stamp(metal_st2_lstm_msl, ok)
@@ -3660,7 +3660,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_st2_adain_snake = compile_stamp(metal_st2_adain_snake_msl, ok)
     g_pso_st2_leaky = compile_stamp(metal_st2_leaky_msl, ok)
     g_pso_st2_axpy = compile_stamp(metal_st2_axpy_msl, ok)
-    g_pso_st2_add = compile_stamp(metal_st2_add_msl, ok)
+    g_pso_st2_add = compile_stamp(MetalSt2Add_metal_ew2_msl, ok)
     g_pso_st2_reflect1 = compile_stamp(metal_st2_reflect1_msl, ok)
     g_pso_dn_gate = compile_stamp(metal_dn_gate_msl, ok)
     g_pso_dn_deint = compile_stamp(metal_dn_deint_msl, ok)
@@ -4534,7 +4534,7 @@ def metal_kernels_release {
     release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
     release_handles(g_pso_ln, g_pso_gelu_erf, g_pso_gelu_lut, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp)
     release_handles(g_pso_rope2d, g_pso_head_restride, g_pso_geglu_quick, g_pso_cross_kx, g_pso_cross_vx, g_pso_cross_vx_h)
-    release_handles(g_pso_im2col3, g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res, g_pso_bias_gelu_lut)
+    release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res, g_pso_bias_gelu_lut)
     release_handles(g_pso_f32mm, g_pso_softcap, g_pso_suppress, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
@@ -4549,11 +4549,11 @@ def metal_kernels_release {
     release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
     release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
-    release_handles(g_pso_st2_adain_leaky, g_pso_st2_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
+    release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
         g_pso_st2_src_low_torch, g_pso_st2_src_low_onnx, g_pso_st2_src_cumsum_torch, g_pso_st2_src_cumsum_onnx, g_pso_st2_src_noise,
         g_pso_st2_src_sines_torch, g_pso_st2_src_sines_onnx, g_pso_st2_stft_reflect, g_pso_st2_stft_edge, g_pso_st2_istft)
     release_handles(g_pso_f32_exact_mm, g_pso_st2_conv_exact_mm, g_pso_st2_conv_tr_mm, g_pso_st2_conv_tr_exact_mm)
-    release_handles(g_pso_st2_im2col, g_pso_st2_im2col_tr, g_pso_st2_conv_mm, g_pso_st2_colstats, g_pso_st2_adain_snake, g_pso_st2_leaky, g_pso_st2_axpy, g_pso_st2_add, g_pso_st2_reflect1)
+    release_handles(g_pso_st2_im2col, g_pso_st2_im2col_tr, g_pso_st2_im2col_cm, g_pso_st2_conv_mm, g_pso_st2_colstats, g_pso_st2_adain_snake, g_pso_st2_leaky, g_pso_st2_axpy, g_pso_st2_add, g_pso_st2_reflect1)
     release_handles(g_pso_qkvrs16, g_pso_qkvrs32, g_pso_w13sw, g_pso_w13sw_sg, g_pso_gemv_b2, g_pso_gemv_b4)
     release_handles(g_pso_mv_b2, g_pso_mv_b4, g_pso_w13sw_b2, g_pso_w13sw_b4, g_pso_gemm_b, g_pso_gemm_b_sk)
     release_handles(g_pso_skred, g_pso_gemm64_b, g_pso_mm, g_pso_attnb16, g_pso_attnb32, g_pso_attnb_q8)
@@ -5411,39 +5411,6 @@ class MetalWdecAttnComb {
     }
 }
 
-// The whisper conv-frontend im2col (k=3, "same" pad): output row i is 3 x nch columns in
-// (dk, c) order — the loader's weight permute. `chmajor` picks the source layout: conv1 reads
-// the channel-major mel ([c][t]), conv2 the row-major y1 ([t][c]); `stride` is 1 or 2.
-[metal_dispatch(name = "enc_im2col3", pso = "g_pso_im2col3", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalIm2col3 {
-    @ssbo @binding = 0 @role = "read" src : array<float>
-    @ssbo @binding = 1 @role = "write" col : array<float>   // [rows x 3*nch]
-    @uniform @binding = 2 nch : uint
-    @uniform @binding = 3 srclen : uint     // source positions (the pad guard)
-    @uniform @binding = 4 stride : uint
-    @uniform @binding = 5 chmajor : uint
-    @uniform @binding = 6 total : uint
-
-    [metal_kernel(name="metal_im2col3_msl")]
-    def metal_im2col3 {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let w3 = 3u * nch
-        let i = gid / w3
-        let rem = gid % w3
-        let dk = rem / nch
-        let c = rem % nch
-        let sp = int(i * stride + dk) - 1
-        var v = 0.0
-        if (sp >= 0 && sp < int(srclen)) {
-            v = chmajor != 0u ? src[c * srclen + uint(sp)] : src[uint(sp) * nch + c]
-        }
-        col[gid] = v
-    }
-}
-
 // The qwen3a conv2d im2col (k=3, s=2, p=1, one [iw x ih] block, `sstride` floats per source
 // pixel): output row (oy*ow+ox) carries `kd` columns — cin*9 real ones in (ic, kh, kw) order
 // (conv2d_s2's walk) then zero pad, so the tile GEMM's kdim%32 holds at any cin.
@@ -5503,21 +5470,34 @@ class MetalBiasAddRes {
     }
 }
 
-// bias + the LUT-form GELU in one pass (the form-matched flavor — never substitute forms)
-[metal_dispatch(name = "enc_bias_gelu_lut", pso = "g_pso_bias_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalBiasGeluLut {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>
-    @uniform @binding = 2 dim : uint
-    @uniform @binding = 3 total : uint
+//! x [rows x n] = combine(x, v[i % n]) in place, one thread per element - the per-row broadcast of a vector:
+//! the bias add, the bias and the LUT-form GELU, the channel scale. The leaves carry their own entry names.
+[ |> template_struct_instance]
+class template MetalRowMapT {
+    @ssbo @binding = 0 @role = "readwrite" @off = "off" @span = "total*4" x : array<float>   //!< [rows x n], bound at the panel offset
+    @ssbo @binding = 1 @role = "weight" @off = "voff" v : array<float>     //!< [n]
+    @uniform @binding = 2 n : uint
+    @uniform @binding = 3 total : uint      //!< rows * n - grid guard
 
-    [metal_kernel(name="metal_bias_gelu_lut_msl")]
-    def metal_bias_gelu_lut {
+    def abstract combine(a, b : float) : float
+
+    def row_map_body {
         let gid = gl_GlobalInvocationID.x
         if (gid >= total) {
             return
         }
-        x[gid] = msl_gelu_lut_form(x[gid] + b[gid % dim])
+        x[gid] = combine(x[gid], v[gid % n])
+    }
+}
+
+// bias + the LUT-form GELU in one pass (the form-matched flavor — never substitute forms)
+[metal_dispatch(name = "enc_bias_gelu_lut", pso = "g_pso_bias_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalBiasGeluLut : MetalRowMapT {
+    def override combine(a, b : float) : float => msl_gelu_lut_form(a + b)
+
+    [metal_kernel(name="metal_bias_gelu_lut_msl")]
+    def metal_bias_gelu_lut {
+        row_map_body()
     }
 }
 
@@ -9817,11 +9797,26 @@ class template MetalEw2T {
     @ssbo @binding = 4 @role = "write" @template_gate = HX gh : array<float16>   // f16 twin of g (the dual-store stamps)
     @ssbo @binding = 5 @role = "read" @off = "toff" @template_gate = TOTB totb : array<uint>   // the device-side row count (the bucket rail's padded total)
     @uniform @binding = 6 @template_gate = TOTB row_elems : uint
+    @ssbo @binding = 7 @role = "write" @off = "ooff" @template_gate = OUT o : array<float>   // the out-of-place result (the in-place stamps erase it)
     @template_constant HAS_ASCALE : bool = false
     @template_constant HX : bool = false
     @template_constant TOTB : bool = false
+    @template_constant OUT : bool = false
+    @template_constant ACT : int = 0   //!< the combine, spelled as its literal: 0 silu(a)*b, 1 gelu_tanh(a)*b, 2 (a+b)*ascale, 3 a*sigmoid(b), 4 gelu_quick(a)*b
 
-    def abstract combine(a, b : float) : float
+    def combine(a, b : float) : float {
+        static_if (ACT == 0) {
+            return msl_silu_mul(a, b)
+        } static_elif (ACT == 1) {
+            return msl_geglu_mul(a, b)
+        } static_elif (ACT == 2) {
+            return (a + b) * ascale
+        } static_elif (ACT == 3) {
+            return a / (1.0 + exp(-b))
+        } else {
+            return msl_gelu_quick_lut_form(a) * b
+        }
+    }
 
     [metal_kernel]
     def metal_ew2 {
@@ -9837,7 +9832,11 @@ class template MetalEw2T {
         }
         let vv = g[gid]
         let res = combine(vv, u[gid])
-        g[gid] = res
+        static_if (OUT) {
+            o[gid] = res
+        } else {
+            g[gid] = res
+        }
         static_if (HX) {
             gh[gid] = float16(res)
         }
@@ -9849,30 +9848,22 @@ class template MetalEw2T {
 def private msl_silu_mul(a, b : float) : float => (a / (1.0 + exp(-a))) * b
 
 [metal_dispatch(name = "enc_swiglu", pso = "g_pso_swiglu", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSwiglu : MetalEw2T {
-    def override combine(a, b : float) : float => msl_silu_mul(a, b)
-}
+class MetalSwiglu : MetalEw2T {}
 
 [metal_dispatch(name = "enc_swiglu_hx", pso = "g_pso_swiglu_hx", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwigluHX : MetalEw2T {
     override HX = true
-
-    def override combine(a, b : float) : float => msl_silu_mul(a, b)
 }
 
 [metal_dispatch(name = "enc_swiglu_hxb", pso = "g_pso_swiglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwigluHXB : MetalEw2T {
     override HX = true
     override TOTB = true
-
-    def override combine(a, b : float) : float => msl_silu_mul(a, b)
 }
 
 [metal_dispatch(name = "enc_swiglu_b", pso = "g_pso_swiglu_b", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwigluB : MetalEw2T {
     override TOTB = true
-
-    def override combine(a, b : float) : float => msl_silu_mul(a, b)
 }
 
 // GeGLU twin (gemma line), the CPU's tanh-approx gelu via the exp identity — Metal tanh NaNs
@@ -9882,29 +9873,26 @@ def private msl_geglu_mul(a, b : float) : float => (
 
 [metal_dispatch(name = "enc_geglu", pso = "g_pso_geglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeglu : MetalEw2T {
-    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
+    override ACT = 1
 }
 
 [metal_dispatch(name = "enc_geglu_hxb", pso = "g_pso_geglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGegluHXB : MetalEw2T {
     override HX = true
     override TOTB = true
-
-    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
+    override ACT = 1
 }
 
 [metal_dispatch(name = "enc_geglu_b", pso = "g_pso_geglu_b", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGegluB : MetalEw2T {
     override TOTB = true
-
-    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
+    override ACT = 1
 }
 
 [metal_dispatch(name = "enc_geglu_hx", pso = "g_pso_geglu_hx", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGegluHX : MetalEw2T {
     override HX = true
-
-    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
+    override ACT = 1
 }
 
 // GEGLU-quick (gemma4v): gelu_quick(g)*u with the CPU's f16-table form — both binary16
@@ -9919,22 +9907,21 @@ def private msl_gelu_quick_lut_form(a : float) : float {
 
 [metal_dispatch(name = "enc_geglu_quick", pso = "g_pso_geglu_quick", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGegluQuick : MetalEw2T {
-    def override combine(a, b : float) : float => msl_gelu_quick_lut_form(a) * b
+    override ACT = 4
 }
 
 // residual add: x += y, scaled — gemma4 layer_out_scale scales the WHOLE layer output
 [metal_dispatch(name = "enc_add_c", pso = "g_pso_add", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalAdd : MetalEw2T {
+    override ACT = 2
     override HAS_ASCALE = true
-
-    def override combine(a, b : float) : float => (a + b) * ascale
 }
 
 // per-head sigmoid output gate (sigmoid_gate): x ⊙ σ(g) in place — the gated-attention
 // epilogue between the attention output and the out projection
 [metal_dispatch(name = "enc_sigmul", pso = "g_pso_sigmul", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSigmul : MetalEw2T {
-    def override combine(a, b : float) : float => a / (1.0 + exp(-b))
+    override ACT = 3
 }
 
 // Suppress-token pinning (gemma4): logits[ids[i]] = -1e30 after the soft cap — the CPU
@@ -10258,13 +10245,23 @@ class MetalAxpySig {
 }
 
 //! The im2col of one chunk: the whole [mp x kdim] panel, zeros past the taps, in the pad columns
-//! and in the pad rows; the conv's direction is the stamp's.
+//! and in the pad rows; the conv's direction and the source layout are the stamp's.
 [ |> template_struct_instance]
 class template MetalSt2Im2colT {
     @template_constant TRANSPOSED : bool = false
+    @template_constant CHMAJOR : bool = false
     @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t_in x cin]
     @ssbo @binding = 1 @role = "write" cols : array<float>   //!< [mp x kdim]
     @uniform @binding = 2 ka : St2ConvArgs
+
+    //! the source element at input row `st`, channel `ci`: rows of cin, or (CHMAJOR) channels of t_in
+    def src_at(st, ci : uint) : float {
+        static_if (CHMAJOR) {
+            return x[ci * ka.t_in + st]
+        } else {
+            return x[st * ka.cin + ci]
+        }
+    }
 
     def st2_im2col_body {
         let gid = gl_GlobalInvocationID.x
@@ -10282,16 +10279,27 @@ class template MetalSt2Im2colT {
             static_if (TRANSPOSED) {
                 let src = int(ka.r0 + r + ka.pad_l) - int(tap * ka.dil)
                 if (src >= 0 && uint(src) % ka.stride == 0u && uint(src) / ka.stride < ka.t_in) {
-                    v = x[(uint(src) / ka.stride) * ka.cin + ci]
+                    v = src_at(uint(src) / ka.stride, ci)
                 }
             } else {
                 let st = int((ka.r0 + r) * ka.stride + tap * ka.dil) - int(ka.pad_l)
                 if (st >= 0 && uint(st) < ka.t_in) {
-                    v = x[uint(st) * ka.cin + ci]
+                    v = src_at(uint(st), ci)
                 }
             }
         }
         cols[gid] = v
+    }
+}
+
+//! The channel-major source stamp: the whisper conv stem's first im2col reads the mel as [c][t].
+[metal_dispatch(name = "enc_st2_im2col_cm", pso = "g_pso_st2_im2col_cm", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Im2colCm : MetalSt2Im2colT {
+    override CHMAJOR = true
+
+    [metal_kernel(name="metal_st2_im2col_cm_msl")]
+    def metal_st2_im2col_cm {
+        st2_im2col_body()
     }
 }
 
@@ -10409,20 +10417,16 @@ class MetalSt2AdainLeaky : MetalSt2AdainT {
     }
 }
 
+//! LeakyReLU in place at the stage's slope - an ew1 map with the slope bound.
 [metal_dispatch(name = "enc_st2_leaky", pso = "g_pso_st2_leaky", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Leaky {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @uniform @binding = 1 slope : float
-    @uniform @binding = 2 total : uint
+class MetalSt2Leaky : MetalEw1BaseT {
+    @uniform @binding = 2 slope : float
+
+    def override map(a : float) : float => a > 0.0 ? a : a * slope
 
     [metal_kernel(name="metal_st2_leaky_msl")]
     def metal_st2_leaky {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let v = x[gid]
-        x[gid] = v > 0.0 ? v : v * slope
+        ew1_body()
     }
 }
 
@@ -10446,23 +10450,13 @@ class MetalSt2Axpy {
     }
 }
 
-//! out = (a + b) * scale, out may alias a: the residual sums (scale 1) and the AdaIN blocks' join (1 / sqrt 2).
+//! o = (g + u) * ascale out of place: the AdaIN blocks' join (1 / sqrt 2) and the generator's averaged stage sum
+//! into a third buffer; the in-place sums take the residual add (enc_add_c).
 [metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Add {
-    @ssbo @binding = 0 @role = "read" a : array<float>
-    @ssbo @binding = 1 @role = "read" b : array<float>
-    @ssbo @binding = 2 @role = "write" o : array<float>
-    @uniform @binding = 3 scale : float
-    @uniform @binding = 4 total : uint
-
-    [metal_kernel(name="metal_st2_add_msl")]
-    def metal_st2_add {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        o[gid] = (a[gid] + b[gid]) * scale
-    }
+class MetalSt2Add : MetalEw2T {
+    override ACT = 2
+    override HAS_ASCALE = true
+    override OUT = true
 }
 
 //! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1): the last stage's left reflect pad.
@@ -10487,24 +10481,26 @@ class MetalSt2Reflect1 {
 }
 
 //! out[r] = a[idx[r]] (+ b[r] when add_b) (+ cvec when add_c) over c columns.
-struct St2GatherArgs {
+//! o [t x c] = a[idx[r]] (+ b [t x c] when add_b) (+ cvec [c] when add_c): the row gather - a stem's
+//! window-sort reorder with the adds off, an embedding lookup with its position and type rows on.
+struct RowGatherArgs {
     c : uint
     add_b : uint
     add_c : uint
     total : uint
 }
 
-[metal_dispatch(name = "enc_st2_gather", pso = "g_pso_st2_gather", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Gather {
+[metal_dispatch(name = "enc_row_gather", pso = "g_pso_row_gather", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalRowGather {
     @ssbo @binding = 0 @role = "read" @off = "aoff" a : array<float>     //!< the rows gathered
     @ssbo @binding = 1 @role = "read" idx : array<uint>                    //!< [t] the row each output row copies
     @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     //!< [t x c], added when add_b
     @ssbo @binding = 3 @role = "weight" @off = "coff" cvec : array<float>  //!< [c], added when add_c
     @ssbo @binding = 4 @role = "write" o : array<float>
-    @uniform @binding = 5 ka : St2GatherArgs
+    @uniform @binding = 5 ka : RowGatherArgs
 
-    [metal_kernel(name="metal_st2_gather_msl")]
-    def metal_st2_gather {
+    [metal_kernel(name="metal_row_gather_msl")]
+    def metal_row_gather {
         let gid = gl_GlobalInvocationID.x
         if (gid >= ka.total) {
             return
@@ -10746,18 +10742,12 @@ class MetalSt2Attn {
 
 //! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
 [metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2GeluTanh {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @uniform @binding = 1 total : uint
+class MetalSt2GeluTanh : MetalEw1BaseT {
+    def override map(a : float) : float => 0.5 * a * (1.0 + st2_tanh(0.7978845608028654 * (a + 0.044715 * a * a * a)))
 
     [metal_kernel(name="metal_st2_gelu_tanh_msl")]
     def metal_st2_gelu_tanh {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let v = x[gid]
-        x[gid] = 0.5 * v * (1.0 + st2_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
+        ew1_body()
     }
 }
 
@@ -11249,19 +11239,12 @@ class MetalPkRowsElu : MetalPkRowsT {
 
 //! x [t][c] *= s[c]: a transformer layer's per-channel layer scale.
 [metal_dispatch(name = "enc_pk_row_scale", pso = "g_pso_pk_row_scale", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRowScale {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "weight" @off = "soff" s : array<float>
-    @uniform @binding = 2 c : uint
-    @uniform @binding = 3 total : uint
+class MetalPkRowScale : MetalRowMapT {
+    def override combine(a, b : float) : float => a * b
 
     [metal_kernel(name="metal_pk_row_scale_msl")]
     def metal_pk_row_scale {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        x[gid] *= s[gid % c]
+        row_map_body()
     }
 }
 

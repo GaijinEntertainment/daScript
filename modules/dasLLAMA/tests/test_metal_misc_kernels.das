@@ -1701,13 +1701,19 @@ def private bias_gelu_lut_gate(t : T?; dev, queue; nrows, dim : int) {
 // The conv-frontend im2col vs the CPU walk — bit-exact scatter with the "same"-pad zero
 // edges; both source layouts (chmajor mel vs row-major y1) and both strides.
 // Negative control recorded 2026-08-16: dropping the -1 pad shift redded all four cells.
+//! The whisper conv stem's im2col shapes on the shared stamps: k=3, "same" pad, the source channel-major
+//! (conv1, the CHMAJOR stamp) or row-major (conv2), the panel padded to the GEMM's 32 lattice with zeros.
 def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
     let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_im2col3_msl, metal_im2col3_msl_entry, metal_im2col3_msl_fastmath, err)
+    var pso = (chmajor
+        ? pipeline_from_source(dev, metal_st2_im2col_cm_msl, metal_st2_im2col_cm_msl_entry, metal_st2_im2col_cm_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_st2_im2col_msl, metal_st2_im2col_msl_entry, metal_st2_im2col_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
-    let total = rows * 3 * nch
+    let kdim = (3 * nch + 31) / 32 * 32
+    let mp = (rows + 31) / 32 * 32
+    let total = mp * kdim
     var src : array<float>
     src |> resize(srclen * nch)
     for (i in range(srclen * nch)) {
@@ -1719,28 +1725,20 @@ def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; ch
         for (dk in range(3)) {
             let sp = i * stride + dk - 1
             for (c in range(nch)) {
-                want[(i * 3 + dk) * nch + c] = (sp >= 0 && sp < srclen
+                want[i * kdim + dk * nch + c] = (sp >= 0 && sp < srclen
                     ? (chmajor ? src[c * srclen + sp] : src[sp * nch + c])
                     : 0.0)
             }
         }
     }
+    let ka = St2ConvArgs(cin = uint(nch), k = 3u, stride = uint(stride), pad_l = 1u, dil = 1u, t_in = uint(srclen), r0 = 0u, rows = uint(rows), xs = uint(nch))
     var bsrc = buf_upload(dev, src)
     var bcol = buf_fill(dev, total, -333.0)
-    var bnch = buf_u32(dev, uint(nch))
-    var bsl = buf_u32(dev, uint(srclen))
-    var bst = buf_u32(dev, uint(stride))
-    var bch = buf_u32(dev, chmajor ? 1u : 0u)
-    var btot = buf_u32(dev, uint(total))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bsrc, 0ul, 0)
         metal_set_buffer(enc, bcol, 0ul, 1)
-        metal_set_buffer(enc, bnch, 0ul, 2)
-        metal_set_buffer(enc, bsl, 0ul, 3)
-        metal_set_buffer(enc, bst, 0ul, 4)
-        metal_set_buffer(enc, bch, 0ul, 5)
-        metal_set_buffer(enc, btot, 0ul, 6)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
         metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -1749,11 +1747,6 @@ def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; ch
     }
     metal_release(bsrc)
     metal_release(bcol)
-    metal_release(bnch)
-    metal_release(bsl)
-    metal_release(bst)
-    metal_release(bch)
-    metal_release(btot)
     metal_release(pso)
     delete src
     delete want

@@ -1558,7 +1558,7 @@ def private st2_rows_gate(t : T?; dev, queue) {
     t |> success(pso_lk != null, "{tag} leaky pipeline: {err}")
     var pso_ax = pipeline_from_source(dev, metal_st2_axpy_msl, metal_st2_axpy_msl_entry, metal_st2_axpy_msl_fastmath, err)
     t |> success(pso_ax != null, "{tag} axpy pipeline: {err}")
-    var pso_add = pipeline_from_source(dev, metal_st2_add_msl, metal_st2_add_msl_entry, metal_st2_add_msl_fastmath, err)
+    var pso_add = pipeline_from_source(dev, MetalSt2Add_metal_ew2_msl, MetalSt2Add_metal_ew2_msl_entry, MetalSt2Add_metal_ew2_msl_fastmath, err)
     t |> success(pso_add != null, "{tag} add pipeline: {err}")
     var pso_rf = pipeline_from_source(dev, metal_st2_reflect1_msl, metal_st2_reflect1_msl_entry, metal_st2_reflect1_msl_fastmath, err)
     t |> success(pso_rf != null, "{tag} reflect1 pipeline: {err}")
@@ -1610,8 +1610,8 @@ def private st2_rows_gate(t : T?; dev, queue) {
         let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, pso_lk)
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_slope)), 4ul, 1)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_slope)), 4ul, 2)
             metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
         t |> success(ran, "{tag} leaky dispatch: {err2}")
@@ -1639,9 +1639,9 @@ def private st2_rows_gate(t : T?; dev, queue) {
             metal_set_pipeline(enc, pso_add)
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bbx, 0ul, 1)
-            metal_set_buffer(enc, bo, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 2)
             metal_set_bytes(enc, unsafe(addr<void?>(u_sc)), 4ul, 3)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 4)
+            metal_set_buffer(enc, bo, 0ul, 7)
             metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
         t |> success(ran, "{tag} add dispatch: {err2}")
@@ -1761,7 +1761,7 @@ def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float
 def private st2_gather_gate(t : T?; dev, queue) {
     let tag = "st2_gather"
     var err : string
-    var pso = pipeline_from_source(dev, metal_st2_gather_msl, metal_st2_gather_msl_entry, metal_st2_gather_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_row_gather_msl, metal_row_gather_msl_entry, metal_row_gather_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let c = 24
@@ -1780,7 +1780,7 @@ def private st2_gather_gate(t : T?; dev, queue) {
     var bidx = buf_upload(dev, idx)
     var bo = buf_fill(dev, nrows * c, -1.0e30)
     let run <- @(bax : MetalBuffer?; add_b, add_c : uint) : bool {
-        var ka = St2GatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
+        var ka = RowGatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
         return st2_dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bidx, 0ul, 1)
@@ -3160,10 +3160,11 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
 }
 
 // ===== the tower row gather (the qwen25v stem's window-sort reorder) =====
+//! The stem's window-sort reorder: MetalRowGather with both adds off over a full permutation
 def private tower_gather_gate(t : T?; dev, queue) {
     let tag = "tower_gather"
     var err : string
-    var pso = pipeline_from_source(dev, metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_row_gather_msl, metal_row_gather_msl_entry, metal_row_gather_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let nr = 37
@@ -3188,33 +3189,23 @@ def private tower_gather_gate(t : T?; dev, queue) {
     var bx = buf_upload(dev, xv)
     var bs = buf_upload(dev, src)
     var by = buf_fill(dev, nr * d, -1.0e30)
-    var u_d = uint(d)
-    var u_tot = uint(nr * d)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, bs, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+    let ka = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(nr * d))
+    let run <- @(bidx : MetalBuffer?) : bool {
+        return st2_dispatch_64_lanes(t, queue, tag, pso, nr * d) $(enc) {
+            metal_set_buffer(enc, bx, 0ul, 0)
+            metal_set_buffer(enc, bidx, 0ul, 1)
+            metal_set_buffer(enc, bx, 0ul, 2)
+            metal_set_buffer(enc, bx, 0ul, 3)
+            metal_set_buffer(enc, by, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        }
     }
-    t |> success(ran, "{tag} dispatch: {err}")
-    return if (!ran)
-    t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    if (invoke(run, bs)) {
+        t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    }
     src[nr / 2] = src[nr / 2] == 0u ? 1u : 0u
     var bs2 = buf_upload(dev, src)
-    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, bs2, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-    }
-    t |> success(ran2, "{tag} poison dispatch: {err}")
-    if (ran2) {
+    if (invoke(run, bs2)) {
         t |> success(buf_mismatch_exact(by, want, "{tag} poison (MUST mismatch)") > 0,
             "{tag}: a swapped gather index reds the exact compare")
     }

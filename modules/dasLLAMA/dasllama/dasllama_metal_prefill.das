@@ -2626,20 +2626,14 @@ class MetalQkRopeHX : MetalQkRopeT {
     override HX = true
 }
 
+//! x [nrows x n] += b [n] (the tower driver binds biases inside the model blob)
 [metal_dispatch(name = "enc_add_bias_rows", pso = "g_pf_pso_addbias", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalAddBiasRows {
-    @ssbo @binding = 0 @role = "readwrite" @off = "off" @span = "total*4" x : array<float>     //!< [nrows x n], updated in place (bound at the panel offset)
-    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>     //!< [n] (the tower driver binds biases inside the model blob)
-    @uniform @binding = 2 n : uint
-    @uniform @binding = 3 total : uint      //!< nrows * n — grid guard
+class MetalAddBiasRows : MetalRowMapT {
+    def override combine(a, b : float) : float => a + b
 
     [metal_kernel(name="metal_add_bias_rows_msl")]
     def metal_add_bias_rows {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        x[gid] += b[gid % n]
+        row_map_body()
     }
 }
 
@@ -3378,26 +3372,6 @@ class MetalTowerWinAttn {
     }
 }
 
-//! Gather full rows by index: y[r] = x[src[r]] — the stem's window-sort reorder, one thread
-//! per element.
-[metal_dispatch(name = "enc_tower_row_gather", pso = "g_pf_pso_twr_gather", tg = 256, grid = "total/256", params = "total : int64")]
-class MetalTowerRowGather {
-    @ssbo @binding = 0 @role = "read" x : array<float>
-    @ssbo @binding = 1 @role = "write" y : array<float>
-    @ssbo @binding = 2 @role = "read" src : array<uint>   //!< [nrows] source row per destination row
-    @uniform @binding = 3 d : uint
-    @uniform @binding = 4 total : uint    //!< nrows*d
-
-    [metal_kernel(name="metal_tower_row_gather_msl")]
-    def metal_tower_row_gather {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        y[gid] = x[src[gid / d] * d + gid % d]
-    }
-}
-
 //! The gemma4a Conformer attention's argument block (the sliding causal window + sinusoidal RPE).
 struct G4aAttnArgs {
     d : uint            //!< model width (rows are compact [npos x d])
@@ -4022,7 +3996,6 @@ var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_twr_flash : MetalComputePipeline?   //!< the tower flash (DK=DV=72 monomorph)
 var private g_pf_pso_twr_kvhc : MetalComputePipeline?    //!< its K/V per-head-contiguous f16 restride
 var private g_pf_pso_twr_win : MetalComputePipeline?     //!< the qwen2.5 ViT per-window attention
-var private g_pf_pso_twr_gather : MetalComputePipeline?  //!< its stem's window-sort row gather
 var private g_pf_pso_fc_pack : MetalComputePipeline?     //!< the FastConformer rel-pos attention's per-head operand pack
 var private g_pf_pso_fc_softmax : MetalComputePipeline?  //!< its shift-add + scale + softmax rows
 var private g_pf_pso_fc_unpack : MetalComputePipeline?   //!< its AV rows back to the compact output
@@ -4421,7 +4394,7 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_moe_mm_iq2s_t, g_pf_pso_moe_mm_iq2s_th, g_pf_pso_moe_mm_iq2s_th128, g_pf_pso_moe_mm_iq2s_thr)
     release_handles(g_pf_pso_moe_mm_iq2xs_t, g_pf_pso_moe_mm_iq2xs_th, g_pf_pso_moe_mm_iq2xs_th128, g_pf_pso_moe_mm_iq2xs_thr)
     release_handles(g_pf_pso_moe_mm_iq2xxs_t, g_pf_pso_moe_mm_iq2xxs_th, g_pf_pso_moe_mm_iq2xxs_th128, g_pf_pso_moe_mm_iq2xxs_thr)
-    release_handles(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc, g_pf_pso_twr_win, g_pf_pso_twr_gather)
+    release_handles(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc, g_pf_pso_twr_win)
     release_handles(g_pf_pso_fc_pack, g_pf_pso_fc_softmax, g_pf_pso_fc_unpack, g_pf_pso_cn_dw, g_pf_pso_pk_dw)
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_silu, g_pf_pso_g4a_axpy)
     release_handles(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu)
@@ -4593,7 +4566,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_twr_flash = compile_stamp(metal_tower_flash_msl, ok)
     g_pf_pso_twr_kvhc = compile_stamp(metal_tower_kv_hc_msl, ok)
     g_pf_pso_twr_win = compile_stamp(metal_tower_win_msl, ok)
-    g_pf_pso_twr_gather = compile_stamp(metal_tower_row_gather_msl, ok)
     g_pf_pso_fc_pack = compile_stamp(metal_fc_pack_msl, ok)
     g_pf_pso_fc_softmax = compile_stamp(metal_fc_softmax_msl, ok)
     g_pf_pso_fc_unpack = compile_stamp(metal_fc_unpack_msl, ok)
@@ -4862,7 +4834,7 @@ def pf_bf16_half_ready() : bool => psos_ready(fixed_array(g_pf_pso_bf16_mm_th, g
 //! simdgroup kernels, no tensor crown required).
 def pf_tower_flash_ready() : bool => psos_ready(fixed_array(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc))
 
-def pf_tower_win_ready() : bool => psos_ready(fixed_array(g_pf_pso_twr_win, g_pf_pso_twr_gather))
+def pf_tower_win_ready() : bool => psos_ready(fixed_array(g_pf_pso_twr_win, g_pso_row_gather))
 
 //! The FastConformer kernel set compiled — the blocks driver's device gate (LN, GLU, SiLU, axpy
 //! ride the shared/g4a kernels); the depthwise stamp follows the family's tap layout.

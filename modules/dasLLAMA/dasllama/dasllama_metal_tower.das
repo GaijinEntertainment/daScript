@@ -1772,7 +1772,8 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
-        enc_tower_row_gather(enc, braw, bx, bsrc, u_d, u_totd, npos * d)
+        var kg = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(npos * d))
+        enc_row_gather(enc, braw, 0ul, bsrc, g_one, 0ul, g_one, 0ul, bx, kg, npos * d)
         for (l in range64(t.n_layer)) {
             let o = qwen25v_block_offs(t, l)
             let full = qwen25v_layer_full(t, l)
@@ -1914,21 +1915,16 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
-    var u_nm = uniform_u32(uint(nm))
     var u_nm3 = uniform_u32(uint(3l * nm))
     var u_d = uniform_u32(uint(d))
     var u_3d = uniform_u32(uint(3l * d))
-    var u_tin = uniform_u32(uint(tin))
-    var u_s1 = uniform_u32(1u)
-    var u_s2 = uniform_u32(2u)
-    var u_z = uniform_u32(0u)
-    var u_totx1 = uniform_u32(uint(tin * 3l * nm))
     var u_totd1 = uniform_u32(uint(tin * d))
-    var u_totx2 = uniform_u32(uint(tt * 3l * d))
     var u_totd2 = uniform_u32(uint(tt * d))
+    var k1 = St2ConvArgs(cin = uint(nm), k = 3u, stride = 1u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tin), xs = uint(nm))
+    var k2 = St2ConvArgs(cin = uint(d), k = 3u, stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tt), xs = uint(d))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_im2col3(enc, bmel, bx1, u_nm, u_tin, u_s1, u_s1, u_totx1, tin * 3l * nm)   // chmajor=1: the mel is [c][t]
+        enc_st2_im2col_cm(enc, bmel, bx1, k1, mp1 * 3l * nm)   // the mel is [c][t]
         enc_f32_mm(enc, bblob, uint64(t.conv1_w_off * 4l), bx1, by1, 0ul, u_nm3, u_d, mp1, d)
         enc_add_bias_rows(enc, by1, 0ul, bblob, uint64(t.conv1_b_off * 4l), u_d, u_totd1, tin * d)
         if (t.gelu_tanh) {
@@ -1936,7 +1932,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
         } else {
             enc_gelu_erf(enc, by1, 0ul, u_totd1, tin * d)
         }
-        enc_im2col3(enc, by1, bx2, u_d, u_tin, u_s2, u_z, u_totx2, tt * 3l * d)   // chmajor=0: y1 is [t][c]
+        enc_st2_im2col(enc, by1, bx2, k2, mp2 * 3l * d)   // y1 is [t][c]
         enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
         enc_add_bias_rows(enc, bxo, 0ul, bblob, uint64(t.conv2_b_off * 4l), u_d, u_totd2, tt * d)
         if (t.gelu_tanh) {
@@ -1959,17 +1955,10 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     pool_release(g_tw_pool, by1, bytes_y1)
     pool_release(g_tw_pool, bx2, bytes_x2)
     pool_release(g_tw_pool, bxo, bytes_xo)
-    pool_release(g_upool, u_nm, 4ul)
     pool_release(g_upool, u_nm3, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_3d, 4ul)
-    pool_release(g_upool, u_tin, 4ul)
-    pool_release(g_upool, u_s1, 4ul)
-    pool_release(g_upool, u_s2, 4ul)
-    pool_release(g_upool, u_z, 4ul)
-    pool_release(g_upool, u_totx1, 4ul)
     pool_release(g_upool, u_totd1, 4ul)
-    pool_release(g_upool, u_totx2, 4ul)
     pool_release(g_upool, u_totd2, 4ul)
     return served
 }
@@ -3256,16 +3245,21 @@ def private st2_adain(enc : MetalComputeEncoder?; var c : St2GpuCtx; bin, bout :
     }
 }
 
+//! o = (a + b) * scale: the in-place sum (o == a) is the residual add, another o the out-of-place stamp.
 def private st2_add(enc : MetalComputeEncoder?; var c : St2GpuCtx; ba, bb, bo : MetalBuffer?; n : int64; scale : float) {
     let u_scale = st2_uf(c, scale)
     let u_n = st2_u(c, uint(n))
-    enc_st2_add(enc, ba, bb, bo, u_scale, u_n, n)
+    if (bo == ba) {
+        enc_add_c(enc, ba, 0ul, bb, 0ul, u_n, u_scale, n)
+    } else {
+        enc_st2_add(enc, ba, 0ul, bb, 0ul, u_n, u_scale, bo, 0ul, n)
+    }
 }
 
 def private st2_leaky(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx : MetalBuffer?; n : int64; slope : float) {
     let u_slope = st2_uf(c, slope)
     let u_n = st2_u(c, uint(n))
-    enc_st2_leaky(enc, bx, u_slope, u_n, n)
+    enc_st2_leaky(enc, bx, 0ul, u_n, u_slope, n)
 }
 
 def private st2_bilstm(enc : MetalComputeEncoder?; var c : St2GpuCtx; l : TtsBiLstm; sl : St2LstmSlot;
@@ -3318,8 +3312,8 @@ def private st2_res_blk(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2Ad
     st2_conv(enc, c, sl.c2, b.conv2, r.bc1, t1, bout)
     let n = t1 * b.dim_out
     if (b.upsample) {
-        var kg = St2GatherArgs(c = uint(b.dim_in_s), add_b = 0u, add_c = 0u, total = uint(t1 * b.dim_in_s))
-        enc_st2_gather(enc, bin, 0ul, r.bidx, bin, 0ul, bin, 0ul, r.bsc, kg, t1 * b.dim_in_s)
+        var kg = RowGatherArgs(c = uint(b.dim_in_s), add_b = 0u, add_c = 0u, total = uint(t1 * b.dim_in_s))
+        enc_row_gather(enc, bin, 0ul, r.bidx, bin, 0ul, bin, 0ul, r.bsc, kg, t1 * b.dim_in_s)
         if (b.learned_sc) {
             st2_conv(enc, c, sl.c1x1, b.conv1x1, r.bsc, t1, r.bsc2)
             st2_add(enc, c, bout, r.bsc2, bout, n, ST2_JOIN)
@@ -4033,8 +4027,8 @@ def private metal_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @ex
     let sl & = g_tw_st2_albert
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        var kg = St2GatherArgs(c = uint(a.emb_dim), add_b = 1u, add_c = 1u, total = uint(t * a.emb_dim))
-        enc_st2_gather(enc, c.slab, sl.word_emb, bids, c.slab, sl.pos_emb, c.slab, sl.type_emb, be, kg, t * a.emb_dim)
+        var kg = RowGatherArgs(c = uint(a.emb_dim), add_b = 1u, add_c = 1u, total = uint(t * a.emb_dim))
+        enc_row_gather(enc, c.slab, sl.word_emb, bids, c.slab, sl.pos_emb, c.slab, sl.type_emb, be, kg, t * a.emb_dim)
         st2_ln(enc, c, be, be, t, a.emb_dim, ST2_ALBERT_EPS, c.slab, sl.emb_ln.gwoff, sl.emb_ln.gboff)
         st2_lin(enc, c, sl.map_in, be, t, bx)
         let nd = t * d
@@ -4048,7 +4042,7 @@ def private metal_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @ex
             st2_ln(enc, c, bxb, bxb, t, d, ST2_ALBERT_EPS, c.slab, sl.attn_ln.gwoff, sl.attn_ln.gboff)
             st2_lin(enc, c, sl.ffn, bxb, t, bffn)
             let u_nf = st2_u(c, uint(t * ff))
-            enc_st2_gelu_tanh(enc, bffn, u_nf, t * ff)
+            enc_st2_gelu_tanh(enc, bffn, 0ul, u_nf, t * ff)
             st2_lin(enc, c, sl.ffn_out, bffn, t, bxb2)
             st2_add(enc, c, bxb2, bxb, bx, nd, 1.0)
             st2_ln(enc, c, bx, bx, t, d, ST2_ALBERT_EPS, c.slab, sl.full_ln.gwoff, sl.full_ln.gboff)
@@ -4103,8 +4097,8 @@ def private metal_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch
     let sl & = g_tw_st2_text
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        var kg = St2GatherArgs(c = uint(cc), add_b = 0u, add_c = 0u, total = uint(t * cc))
-        enc_st2_gather(enc, c.slab, sl.emb, bids, c.slab, 0ul, c.slab, 0ul, ba, kg, t * cc)
+        var kg = RowGatherArgs(c = uint(cc), add_b = 0u, add_c = 0u, total = uint(t * cc))
+        enc_row_gather(enc, c.slab, sl.emb, bids, c.slab, 0ul, c.slab, 0ul, ba, kg, t * cc)
         for (i in range(length(te.cnn))) {
             let src = i % 2 == 0 ? ba : bb
             let dst = i % 2 == 0 ? bb : ba
@@ -4403,16 +4397,16 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         enc_pk_attn(enc, b.bqkv, g_tw_pk_sc.bk[i], g_tw_pk_sc.bv[i], b.bctx, ka, tf.heads * t)
         st2_lin(enc, c, s.out_proj, b.bctx, t, b.bxb)
         if (s.has_s1) {
-            enc_pk_row_scale(enc, b.bxb, c.slab, s.scale1_off, u_d, u_nd, nd)
+            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
         }
         st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
         st2_lin(enc, c, s.ffn1, b.bxb, t, b.bh)
         let nf = t * s.ffn1.cout_p
-        enc_st2_gelu_tanh(enc, b.bh, st2_u(c, uint(nf)), nf)
+        enc_st2_gelu_tanh(enc, b.bh, 0ul, st2_u(c, uint(nf)), nf)
         st2_lin(enc, c, s.ffn2, b.bh, t, b.bxb)
         if (s.has_s2) {
-            enc_pk_row_scale(enc, b.bxb, c.slab, s.scale2_off, u_d, u_nd, nd)
+            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale2_off, u_d, u_nd, nd)
         }
         st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
     }
@@ -5063,14 +5057,14 @@ def private pk_fr_layer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : Pock
     enc_pk_attn(enc, b.qkv, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], b.ctx, ka, tf.heads)
     pk_lin(enc, c, L.out_proj, b.ctx, 0ul, b.xb, 0ul)
     if (L.has_s1) {
-        enc_pk_row_scale(enc, b.xb, c.slab, L.scale1_off, u_d, u_d, d)
+        enc_pk_row_scale(enc, b.xb, 0ul, c.slab, L.scale1_off, u_d, u_d, d)
     }
     pk_add_ln(enc, c, b.x, b.xb, L.n2, b.xb, 0ul, d, tf.eps)
     pk_lin(enc, c, L.ffn1, b.xb, 0ul, b.h, 0ul)
-    enc_st2_gelu_tanh(enc, b.h, st2_u(c, uint(tf.ffn)), tf.ffn)
+    enc_st2_gelu_tanh(enc, b.h, 0ul, st2_u(c, uint(tf.ffn)), tf.ffn)
     pk_lin(enc, c, L.ffn2, b.h, 0ul, b.xb, 0ul)
     if (L.has_s2) {
-        enc_pk_row_scale(enc, b.xb, c.slab, L.scale2_off, u_d, u_d, d)
+        enc_pk_row_scale(enc, b.xb, 0ul, c.slab, L.scale2_off, u_d, u_d, d)
     }
 }
 

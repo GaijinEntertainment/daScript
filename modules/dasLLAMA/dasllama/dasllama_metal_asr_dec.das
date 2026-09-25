@@ -443,7 +443,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
             // mlp (fc1 bias folds into the LUT-GELU pass, fc2's into the residual add)
             enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln2_w * 4l), bblobf, uint64(lo.ln2_b * 4l), g_wd_sxb, u_d, u_eps, n)
             wd_mm(enc, g_wd_boffs[bo + 8l], g_wd_sxb, g_wd_sh, u_d, u_ff, d, 4l * d, n)
-            enc_bias_gelu_lut(enc, g_wd_sh, bblobf, uint64(lo.fc1_b * 4l), u_ff, u_totff, n * 4l * d)
+            enc_bias_gelu_lut(enc, g_wd_sh, 0ul, bblobf, uint64(lo.fc1_b * 4l), u_ff, u_totff, n * 4l * d)
             wd_mm(enc, g_wd_boffs[bo + 9l], g_wd_sh, g_wd_sxb, u_ff, u_d, 4l * d, d, n)
             enc_bias_add_res(enc, g_wd_sx, g_wd_sxb, bblobf, uint64(lo.fc2_b * 4l), u_d, u_totd, n * d)
         }
