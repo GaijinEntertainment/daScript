@@ -82,7 +82,7 @@ def average_aggregate_m1(b : B?) {
 [benchmark]
 def bare_order_where_m1(b : B?) {
         b |> run("bare_order_where", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>)
+            var inscope rows <- _fold(g_db |> select_from(type<Car>)
                                 |> _where(_.price > 500)
                                 |> _order_by(_.price))
             b |> accept(rows)
@@ -143,7 +143,7 @@ def distinct_by_count_m1(b : B?) {
 [benchmark]
 def distinct_by_order_take_m1(b : B?) {
         b |> run("distinct_by_order_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>)
+            var inscope rows <- _fold(g_db |> select_from(type<Car>)
                                 |> _distinct_by(_.dealer_id)
                                 |> _order_by(_.price)
                                 |> take(10))
@@ -157,7 +157,7 @@ def distinct_by_order_take_m1(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m1(b : B?) {
         b |> run("distinct_by_order_to_array", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>)
+            var inscope rows <- _fold(g_db |> select_from(type<Car>)
                                 |> _distinct_by(_.dealer_id)
                                 |> _order_by(_.price))
             b |> accept(rows)
@@ -170,7 +170,7 @@ def distinct_by_order_to_array_m1(b : B?) {
 [benchmark]
 def distinct_count_m1(b : B?) {
         b |> run("distinct_count", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _select(_.brand) |> distinct())
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _select(_.brand) |> distinct())
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -192,7 +192,7 @@ def distinct_count_pred_m1(b : B?) {
 [benchmark]
 def distinct_take_m1(b : B?) {
         b |> run("distinct_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _select(_.brand) |> distinct() |> take(3))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _select(_.brand) |> distinct() |> take(3))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -237,7 +237,7 @@ def first_or_default_match_m1(b : B?) {
 [benchmark]
 def groupby_average_m1(b : B?) {
         b |> run("groupby_average", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               AvgPrice = _._1 |> select($(c : Car) => c.price) |> average())))
@@ -251,7 +251,7 @@ def groupby_average_m1(b : B?) {
 [benchmark]
 def groupby_count_m1(b : B?) {
         b |> run("groupby_count", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
             b |> accept(groups)
@@ -264,7 +264,7 @@ def groupby_count_m1(b : B?) {
 [benchmark]
 def groupby_first_m1(b : B?) {
         b |> run("groupby_first", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               FirstCar = _._1 |> first())))
@@ -278,7 +278,7 @@ def groupby_first_m1(b : B?) {
 [benchmark]
 def groupby_having_count_m1(b : B?) {
         b |> run("groupby_having_count", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _having(_._1 |> length >= 5)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
@@ -292,7 +292,7 @@ def groupby_having_count_m1(b : B?) {
 [benchmark]
 def groupby_having_hidden_sum_m1(b : B?) {
         b |> run("groupby_having_hidden_sum", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
@@ -306,7 +306,7 @@ def groupby_having_hidden_sum_m1(b : B?) {
 [benchmark]
 def groupby_having_post_where_m1(b : B?) {
         b |> run("groupby_having_post_where", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -321,7 +321,7 @@ def groupby_having_post_where_m1(b : B?) {
 [benchmark]
 def groupby_max_m1(b : B?) {
         b |> run("groupby_max", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               MaxPrice = _._1 |> select($(c : Car) => c.price) |> max())))
@@ -335,7 +335,7 @@ def groupby_max_m1(b : B?) {
 [benchmark]
 def groupby_min_m1(b : B?) {
         b |> run("groupby_min", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               MinPrice = _._1 |> select($(c : Car) => c.price) |> min())))
@@ -349,7 +349,7 @@ def groupby_min_m1(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m1(b : B?) {
         b |> run("groupby_multi_reducer", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               N = _._1 |> length,
@@ -365,7 +365,7 @@ def groupby_multi_reducer_m1(b : B?) {
 [benchmark]
 def groupby_select_order_m1(b : B?) {
         b |> run("groupby_select_order", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -380,7 +380,7 @@ def groupby_select_order_m1(b : B?) {
 [benchmark]
 def groupby_select_sum_m1(b : B?) {
         b |> run("groupby_select_sum", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.price % 100)
                                   |> _select((K = _._0, S = _._1 |> select($(c : Car) => c.price) |> sum())))
             b |> accept(groups)
@@ -393,7 +393,7 @@ def groupby_select_sum_m1(b : B?) {
 [benchmark]
 def groupby_sum_m1(b : B?) {
         b |> run("groupby_sum", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
                                               TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum())))
@@ -407,7 +407,7 @@ def groupby_sum_m1(b : B?) {
 [benchmark]
 def groupby_where_count_m1(b : B?) {
         b |> run("groupby_where_count", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _where(_.price > 500)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0, N = _._1 |> length)))
@@ -421,7 +421,7 @@ def groupby_where_count_m1(b : B?) {
 [benchmark]
 def groupby_where_sum_m1(b : B?) {
         b |> run("groupby_where_sum", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                                   |> _where(_.price > 500)
                                   |> _group_by(_.brand)
                                   |> _select((Brand = _._0,
@@ -450,7 +450,7 @@ def join_count_m1(b : B?) {
 [benchmark]
 def join_groupby_count_m1(b : B?) {
         b |> run("join_groupby_count", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                 |> _join(g_db |> select_from(type<Dealer>),
                          $(c : Car, d : Dealer) => c.dealer_id == d.id,
                          $(c : Car, d : Dealer) => (Brand = c.brand, DealerId = d.id))
@@ -466,7 +466,7 @@ def join_groupby_count_m1(b : B?) {
 [benchmark]
 def join_groupby_to_array_m1(b : B?) {
         b |> run("join_groupby_to_array", N) {
-            let groups <- _fold(g_db |> select_from(type<Car>)
+            var inscope groups <- _fold(g_db |> select_from(type<Car>)
                 |> _join(g_db |> select_from(type<Dealer>),
                          $(c : Car, d : Dealer) => c.dealer_id == d.id,
                          $(c : Car, d : Dealer) => (Brand = c.brand, Price = c.price))
@@ -483,7 +483,7 @@ def join_groupby_to_array_m1(b : B?) {
 [benchmark]
 def join_select_m1(b : B?) {
         b |> run("join_select", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _join(g_db |> select_from(type<Dealer>),
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _join(g_db |> select_from(type<Dealer>),
                                                                    $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                                                    $(c : Car, d : Dealer) => (CarName = c.name)))
             b |> accept(rows)
@@ -556,7 +556,7 @@ def min_aggregate_m1(b : B?) {
 [benchmark]
 def order_by_multi_key_m1(b : B?) {
         b |> run("order_by_multi_key", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>)
+            var inscope rows <- _fold(g_db |> select_from(type<Car>)
                                 |> _where(_.price > 500)
                                 |> _order_by_keys((_.brand, _.price), 0u))
             b |> accept(rows)
@@ -569,7 +569,7 @@ def order_by_multi_key_m1(b : B?) {
 [benchmark]
 def order_distinct_take_m1(b : B?) {
         b |> run("order_distinct_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Brand>) |> _select((value = _.value)) |> distinct() |> _order_by(_.value) |> take(5))
+            var inscope rows <- _fold(g_db |> select_from(type<Brand>) |> _select((value = _.value)) |> distinct() |> _order_by(_.value) |> take(5))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -580,7 +580,7 @@ def order_distinct_take_m1(b : B?) {
 [benchmark]
 def order_reverse_normalized_m1(b : B?) {
         b |> run("order_reverse_normalized", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.price) |> take(10))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.price) |> take(10))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -591,7 +591,7 @@ def order_reverse_normalized_m1(b : B?) {
 [benchmark]
 def order_take_desc_m1(b : B?) {
         b |> run("order_take_desc", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.price) |> take(10))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.price) |> take(10))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -602,7 +602,7 @@ def order_take_desc_m1(b : B?) {
 [benchmark]
 def reverse_distinct_by_m1(b : B?) {
         b |> run("reverse_distinct_by", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> reverse() |> _distinct_by(_.brand))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> reverse() |> _distinct_by(_.brand))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -613,7 +613,7 @@ def reverse_distinct_by_m1(b : B?) {
 [benchmark]
 def reverse_take_m1(b : B?) {
         b |> run("reverse_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.id) |> take(10))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.id) |> take(10))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -624,7 +624,7 @@ def reverse_take_m1(b : B?) {
 [benchmark]
 def reverse_take_select_m1(b : B?) {
         b |> run("reverse_take_select", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.id) |> take(10) |> _select(_.name))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by_descending(_.id) |> take(10) |> _select(_.name))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -646,7 +646,7 @@ def select_count_m1(b : B?) {
 [benchmark]
 def select_where_m1(b : B?) {
         b |> run("select_where", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _where(_.price > 500))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _where(_.price > 500))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -670,7 +670,7 @@ def select_where_count_m1(b : B?) {
 [benchmark]
 def select_where_order_take_m1(b : B?) {
         b |> run("select_where_order_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>)
+            var inscope rows <- _fold(g_db |> select_from(type<Car>)
                                 |> _where(_.price > 500)
                                 |> _order_by(_.price)
                                 |> take(10))
@@ -706,7 +706,7 @@ def single_match_m1(b : B?) {
 [benchmark]
 def skip_take_m1(b : B?) {
         b |> run("skip_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> skip(1000) |> take(100))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> skip(1000) |> take(100))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -739,7 +739,7 @@ def sort_first_m1(b : B?) {
 [benchmark]
 def sort_take_m1(b : B?) {
         b |> run("sort_take", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by(_.price) |> take(10))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by(_.price) |> take(10))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -750,7 +750,7 @@ def sort_take_m1(b : B?) {
 [benchmark]
 def sort_take_select_m1(b : B?) {
         b |> run("sort_take_select", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> _order_by(_.price) |> take(10) |> _select(_.name))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> _order_by(_.price) |> take(10) |> _select(_.name))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -783,7 +783,7 @@ def sum_where_m1(b : B?) {
 [benchmark]
 def take_count_m1(b : B?) {
         b |> run("take_count", N) {
-            let rows <- _fold(g_db |> select_from(type<Car>) |> take(1000))
+            var inscope rows <- _fold(g_db |> select_from(type<Car>) |> take(1000))
             b |> accept(rows)
             if (empty(rows)) {
                 b->failNow()
@@ -838,7 +838,7 @@ def take_while_match_m1(b : B?) {
 [benchmark]
 def to_array_filter_m1(b : B?) {
         b |> run("to_array_filter", N) {
-            let prices <- _fold(g_db |> select_from(type<Car>) |> _where(_.price > 500) |> _select(_.price))
+            var inscope prices <- _fold(g_db |> select_from(type<Car>) |> _where(_.price > 500) |> _select(_.price))
             b |> accept(prices)
             if (empty(prices)) {
                 b->failNow()
@@ -899,7 +899,7 @@ def cross_join_m1(b : B?) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db, 1000)
         b |> run("cross_join", 1000) {
-            let rows <- _sql(db |> select_from(type<Car>)
+            var inscope rows <- _sql(db |> select_from(type<Car>)
                                 |> _cross_join(db |> select_from(type<Dealer>),
                                                $(ca : Car, de : Dealer) => (CarId = ca.id, DealerId = de.id)))
             let c = length(rows)

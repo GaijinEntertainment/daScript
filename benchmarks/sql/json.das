@@ -91,7 +91,7 @@ def bare_last_m6f(b : B?) {
 [benchmark]
 def bare_order_where_m6f(b : B?) {
     b |> run("bare_order_where", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
                                    ._order_by(_.price)
                                    .to_array())
         b |> accept(rows)
@@ -161,7 +161,7 @@ def distinct_by_count_m6f(b : B?) {
 [benchmark]
 def distinct_by_order_take_m6f(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -172,7 +172,7 @@ def distinct_by_order_take_m6f(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m6f(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -183,7 +183,7 @@ def distinct_by_order_to_array_m6f(b : B?) {
 [benchmark]
 def distinct_count_m6f(b : B?) {
     b |> run("distinct_count", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._select(_.brand).distinct().to_array())
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._select(_.brand).distinct().to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -205,7 +205,7 @@ def distinct_count_pred_m6f(b : B?) {
 [benchmark]
 def distinct_take_m6f(b : B?) {
     b |> run("distinct_take", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand).distinct().take(3).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand).distinct().take(3).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -250,7 +250,7 @@ def first_or_default_match_m6f(b : B?) {
 [benchmark]
 def groupby_average_m6f(b : B?) {
     b |> run("groupby_average", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       AvgPrice = _._1 |> select($(c : Car) => c.price) |> average()))
@@ -265,7 +265,7 @@ def groupby_average_m6f(b : B?) {
 [benchmark]
 def groupby_count_m6f(b : B?) {
     b |> run("groupby_count", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
@@ -279,7 +279,7 @@ def groupby_count_m6f(b : B?) {
 [benchmark]
 def groupby_first_m6f(b : B?) {
     b |> run("groupby_first", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       FirstCar = _._1 |> first()))
@@ -294,7 +294,7 @@ def groupby_first_m6f(b : B?) {
 [benchmark]
 def groupby_having_count_m6f(b : B?) {
     b |> run("groupby_having_count", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._having(_._1 |> length >= 5)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -309,7 +309,7 @@ def groupby_having_count_m6f(b : B?) {
 [benchmark]
 def groupby_having_hidden_sum_m6f(b : B?) {
     b |> run("groupby_having_hidden_sum", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -324,7 +324,7 @@ def groupby_having_hidden_sum_m6f(b : B?) {
 [benchmark]
 def groupby_having_post_where_m6f(b : B?) {
     b |> run("groupby_having_post_where", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -340,7 +340,7 @@ def groupby_having_post_where_m6f(b : B?) {
 [benchmark]
 def groupby_max_m6f(b : B?) {
     b |> run("groupby_max", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MaxPrice = _._1 |> select($(c : Car) => c.price) |> max()))
@@ -355,7 +355,7 @@ def groupby_max_m6f(b : B?) {
 [benchmark]
 def groupby_min_m6f(b : B?) {
     b |> run("groupby_min", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MinPrice = _._1 |> select($(c : Car) => c.price) |> min()))
@@ -370,7 +370,7 @@ def groupby_min_m6f(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m6f(b : B?) {
     b |> run("groupby_multi_reducer", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       N = _._1 |> length,
@@ -387,7 +387,7 @@ def groupby_multi_reducer_m6f(b : B?) {
 [benchmark]
 def groupby_select_order_m6f(b : B?) {
     b |> run("groupby_select_order", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -403,7 +403,7 @@ def groupby_select_order_m6f(b : B?) {
 [benchmark]
 def groupby_select_sum_m6f(b : B?) {
     b |> run("groupby_select_sum", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._select(_.price)
                             ._group_by(_ % 100)
                             ._select((K = _._0, S = _._1 |> sum()))
@@ -418,7 +418,7 @@ def groupby_select_sum_m6f(b : B?) {
 [benchmark]
 def groupby_sum_m6f(b : B?) {
     b |> run("groupby_sum", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -433,7 +433,7 @@ def groupby_sum_m6f(b : B?) {
 [benchmark]
 def groupby_where_count_m6f(b : B?) {
     b |> run("groupby_where_count", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -448,7 +448,7 @@ def groupby_where_count_m6f(b : B?) {
 [benchmark]
 def groupby_where_sum_m6f(b : B?) {
     b |> run("groupby_where_sum", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>))
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>))
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
@@ -478,7 +478,7 @@ def join_count_m6f(b : B?) {
 [benchmark]
 def join_groupby_count_m6f(b : B?) {
     b |> run("join_groupby_count", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
                                       $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                       $(c : Car, d : Dealer) => (Brand = c.brand, DealerId = d.id))
                              |> _group_by(_.Brand)
@@ -493,7 +493,7 @@ def join_groupby_count_m6f(b : B?) {
 [benchmark]
 def join_groupby_to_array_m6f(b : B?) {
     b |> run("join_groupby_to_array", N) {
-        let groups <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
+        var inscope groups <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
                                       $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                       $(c : Car, _d : Dealer) => (Brand = c.brand, Price = c.price))
                              |> _group_by(_.Brand)
@@ -509,7 +509,7 @@ def join_groupby_to_array_m6f(b : B?) {
 [benchmark]
 def join_select_m6f(b : B?) {
     b |> run("join_select", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>)) |> _join(g_dealers,
                                     $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                     $(c : Car, d : Dealer) => (CarName = c.name, DealerId = d.id))
                            |> _select(_.CarName))
@@ -582,7 +582,7 @@ def min_aggregate_m6f(b : B?) {
 [benchmark]
 def order_by_multi_key_m6f(b : B?) {
     b |> run("order_by_multi_key", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
                                    ._order_by_keys((_.brand, _.price), 0u)
                                    .to_array())
         b |> accept(rows)
@@ -595,7 +595,7 @@ def order_by_multi_key_m6f(b : B?) {
 [benchmark]
 def order_distinct_take_m6f(b : B?) {
     b |> run("order_distinct_take", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand)._order_by(_).distinct().take(5).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand)._order_by(_).distinct().take(5).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -606,7 +606,7 @@ def order_distinct_take_m6f(b : B?) {
 [benchmark]
 def order_reverse_normalized_m6f(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).reverse().take(10).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).reverse().take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -617,7 +617,7 @@ def order_reverse_normalized_m6f(b : B?) {
 [benchmark]
 def order_take_desc_m6f(b : B?) {
     b |> run("order_take_desc", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._order_by_descending(_.price).take(10).to_array())
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._order_by_descending(_.price).take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -628,7 +628,7 @@ def order_take_desc_m6f(b : B?) {
 [benchmark]
 def reverse_distinct_by_m6f(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>).reverse()._distinct_by(_.brand).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>).reverse()._distinct_by(_.brand).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -639,7 +639,7 @@ def reverse_distinct_by_m6f(b : B?) {
 [benchmark]
 def reverse_take_m6f(b : B?) {
     b |> run("reverse_take", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -650,7 +650,7 @@ def reverse_take_m6f(b : B?) {
 [benchmark]
 def reverse_take_select_m6f(b : B?) {
     b |> run("reverse_take_select", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10)._select(_.name).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10)._select(_.name).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -672,7 +672,7 @@ def select_count_m6f(b : B?) {
 [benchmark]
 def select_where_m6f(b : B?) {
     b |> run("select_where", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500).to_array())
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -694,7 +694,7 @@ def select_where_count_m6f(b : B?) {
 [benchmark]
 def select_where_order_take_m6f(b : B?) {
     b |> run("select_where_order_take", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)
                                    ._order_by(_.price)
                                    .take(10)
                                    .to_array())
@@ -730,7 +730,7 @@ def single_match_m6f(b : B?) {
 [benchmark]
 def skip_take_m6f(b : B?) {
     b |> run("skip_take", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>)).skip(1000).take(100).to_array())
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>)).skip(1000).take(100).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -763,7 +763,7 @@ def sort_first_m6f(b : B?) {
 [benchmark]
 def sort_take_m6f(b : B?) {
     b |> run("sort_take", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -774,7 +774,7 @@ def sort_take_m6f(b : B?) {
 [benchmark]
 def sort_take_select_m6f(b : B?) {
     b |> run("sort_take_select", N) {
-        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10)._select(_.name).to_array())
+        var inscope rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10)._select(_.name).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -807,7 +807,7 @@ def sum_where_m6f(b : B?) {
 [benchmark]
 def take_count_m6f(b : B?) {
     b |> run("take_count", N) {
-        let rows <- _fold(unsafe(from_json(g_jv, type<Car>)).take(1000).to_array())
+        var inscope rows <- _fold(unsafe(from_json(g_jv, type<Car>)).take(1000).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -862,7 +862,7 @@ def take_while_match_m6f(b : B?) {
 [benchmark]
 def to_array_filter_m6f(b : B?) {
     b |> run("to_array_filter", N) {
-        let prices <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)._select(_.price).to_array())
+        var inscope prices <- _fold(unsafe(from_json(g_jv, type<Car>))._where(_.price > 500)._select(_.price).to_array())
         b |> accept(prices)
         if (empty(prices)) {
             b->failNow()
@@ -953,7 +953,7 @@ def zip_dot_product_3arg_m6f(b : B?) {
 [benchmark]
 def zip_reverse_to_array_m6f(b : B?) {
     b |> run("zip_reverse_to_array", N) {
-        let rows <- _fold(zip(unsafe(from_json(g_jv, type<Car>)), g_ys)
+        var inscope rows <- _fold(zip(unsafe(from_json(g_jv, type<Car>)), g_ys)
                           .reverse()
                           .to_array())
         b |> accept(rows)
@@ -968,7 +968,7 @@ def cross_join_m6f(b : B?) {
     let jv = fixture_json(1000)
     let dealers <- fixture_dealers_array()
     b |> run("cross_join", 1000) {
-        let rows <- cross_join_to_array(unsafe(from_json(jv, type<Car>)), dealers,
+        var inscope rows <- cross_join_to_array(unsafe(from_json(jv, type<Car>)), dealers,
                                         $(ca : Car, de : Dealer) => (CarId = ca.id, DealerId = de.id))
         let c = length(rows)
         b |> accept(c)

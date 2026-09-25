@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 
 require dastest/testing_boost
 require daslib/templates_boost
@@ -34,7 +35,7 @@ def reserve_unlocked(var arr : array<auto(T)>; n : int) {
 [template(typ1), unused_argument(typ1), sideeffects]
 def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace/{n}", n) {
-        var arr : array<ElemT>
+        var inscope arr : array<ElemT>
         reserve_unlocked(arr, n)
         for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
@@ -46,7 +47,7 @@ def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
 [template(typ1), unused_argument(typ1), sideeffects]
 def run_emplace_grow_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace_grow/{n}") {
-        var arr : array<ElemT>
+        var inscope arr : array<ElemT>
         for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
         }
