@@ -22,6 +22,7 @@ require _compares
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require daslib/jobque_boost
+require daslib/linq   // count - the sentinel bytes left in a quant plane
 
 //! The vision and audio towers' Vulkan kernel classes against their CPU oracles (a Vulkan device,
 //! else the cells skip): the bidirectional flash tiles, the tower row classes, the Conformer and
@@ -191,24 +192,6 @@ def test_vkt_fa_bidir(t0 : T?) {
     }
 }
 
-def private host_i8(host : HostBuf; off, n : int64) : array<int8> {
-    var a : array<int8>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(host.mapped) + uint64(off)), n)
-    }
-    return <- a
-}
-
-def private host_f32(host : HostBuf; off, n : int64) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(host.mapped) + uint64(off)), n * 4l)
-    }
-    return <- a
-}
-
 //! the Q8_0 planes' differences, byte for byte and scale for scale (the fused pass must land the separate pass's bytes exactly)
 def private q8_exact_off(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : array<float>) : int {
     var bad = 0
@@ -223,16 +206,6 @@ def private q8_exact_off(qd : array<int8>; sd : array<float>; qr : array<int8>; 
         }
     }
     return bad
-}
-
-def private i8_sentinels(q : array<int8>) : int {
-    var n = 0
-    for (v in q) {
-        if (int(v) == -128) {
-            n++
-        }
-    }
-    return n
 }
 
 //! the decode step's fused row passes: each lands the Q8_0 bytes of its row pass followed by `TowerClampRq`, byte for byte,
@@ -372,18 +345,18 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             ss |> reserve(8)
             for (i in range(8)) {
                 let wide = i == 4 || i == 5
-                qs |> emplace(host_i8(host, at, wide ? bqh : bq))
+                qs |> emplace(staged_i8(host.mapped, at, int(wide ? bqh : bq)))
                 at += wide ? bqh : bq
-                ss |> emplace(host_f32(host, at, (wide ? bsh : bs) / 4l))
+                ss |> emplace(staged_f32(host.mapped, at, int((wide ? bsh : bs) / 4l)))
                 at += wide ? bsh : bs
             }
-            var x2 <- host_f32(host, at, int64(nd))
-            var x3 <- host_f32(host, at + bx, int64(nd))
+            var x2 <- staged_f32(host.mapped, at, nd)
+            var x3 <- staged_f32(host.mapped, at + bx, nd)
             let names <- ["layernorm", "post-add + next norm", "bias + tanh GELU", "attention combine"]
             for (i in range(4)) {
                 let off = q8_exact_off(qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i])
                 t |> equal(off, 0, "{names[i]} fused with the requant lands the separate pass's Q8_0 bytes and scales ({off} differ)")
-                t |> equal(i8_sentinels(qs[2 * i + 1]), 0, "{names[i]}: every block written (no sentinel bytes left)")
+                t |> equal(count(qs[2 * i + 1], $(v) => int(v) == -128), 0, "{names[i]}: every block written (no sentinel bytes left)")
             }
             var xoff = 0
             for (a, b in x2, x3) {
@@ -408,8 +381,8 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             for (i in range(8)) {
                 let wide = i == 4 || i == 5
                 if (i % 2 == 1) {
-                    var qp <- host_i8(host, at, wide ? bqh : bq)
-                    var sp <- host_f32(host, at + (wide ? bqh : bq), (wide ? bsh : bs) / 4l)
+                    var qp <- staged_i8(host.mapped, at, int(wide ? bqh : bq))
+                    var sp <- staged_f32(host.mapped, at + (wide ? bqh : bq), int((wide ? bsh : bs) / 4l))
                     let moved = q8_exact_off(qp, sp, qs[i], ss[i])
                     t |> success(moved > 0, "{names[i / 2]}: the poisoned input moves the fused bytes ({moved} differ)")
                     delete qp
@@ -2317,6 +2290,16 @@ def private staged_u16(mapped : void?; byte_off : int64; n : int) : array<uint16
     a |> resize(n)
     unsafe {
         memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * 2l)
+    }
+    return <- a
+}
+
+//! `n` Q8_0 quant bytes read back from a mapped staging, `byte_off` bytes past its start
+def private staged_i8(mapped : void?; byte_off : int64; n : int) : array<int8> {
+    var a : array<int8>
+    a |> resize(n)
+    unsafe {
+        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n))
     }
     return <- a
 }
