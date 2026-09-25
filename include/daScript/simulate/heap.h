@@ -26,6 +26,7 @@ namespace das {
 
         void strip () {
             if ( stack ) {
+                DAS_ASAN_UNPOISON(stack, stackSize);
                 das_aligned_free16(stack);
                 stack = nullptr;
             }
@@ -56,6 +57,7 @@ namespace das {
 
         __forceinline void reset() {
             evalTop = stackTop = stack + stackSize;
+            if ( stack ) DAS_ASAN_POISON(stack, stackSize);
         }
 
         __forceinline bool push(uint32_t size, char * & EP, char * & SP ) {        // stack watermark
@@ -66,6 +68,7 @@ namespace das {
             EP = evalTop;
             SP = stackTop;
             stackTop -= size;
+            DAS_ASAN_UNPOISON(stackTop, size);
             evalTop = stackTop;
             return true;
         }
@@ -76,6 +79,7 @@ namespace das {
         }
 
         __forceinline void pop(char * EP, char * SP ) {    // restore stack to watermark
+            DAS_ASAN_POISON(stackTop, SP - stackTop);
             evalTop = EP;
             stackTop = SP;
         }
@@ -94,6 +98,7 @@ namespace das {
             EP = evalTop;
             SP = stackTop;
             stackTop -= size;
+            DAS_ASAN_UNPOISON(stackTop, size);
             evalTop = stack + et;
             return true;
         }
@@ -327,13 +332,24 @@ namespace das {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += size;
+#if DAS_ASAN
+                return allocateWithGap(size);
+#else
                 return model.allocate(size);
+#endif
             } else {
                 return nullptr;
             }
         }
         virtual void impl_free ( char * ptr, uint64_t size ) override;
         virtual char * impl_reallocate ( char * ptr, uint64_t oldSize, uint64_t newSize ) override;
+#if DAS_ASAN
+        __forceinline char * allocateWithGap ( uint64_t size ) {
+            char * ptr = model.allocate(size + DAS_ASAN_REDZONE);
+            if ( ptr ) DAS_ASAN_POISON(ptr + size, DAS_ASAN_REDZONE);
+            return ptr;
+        }
+#endif
         virtual int depth() const override;
         virtual uint64_t bytesAllocated() const override;
         virtual uint64_t totalAlignedMemoryAllocated() const override;

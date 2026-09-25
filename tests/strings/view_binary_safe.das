@@ -30,11 +30,6 @@ def private truncated(text : string; n : int) : array<uint8> {
     return <- b
 }
 
-def private raw_byte(buf : array<uint8>; idx : int) : int {
-    let p = unsafe(addr(buf[0]))
-    return int(unsafe(p[idx]))
-}
-
 def private str_byte(s : string; idx : int) : int {
     let p = unsafe(reinterpret<uint8 const?>(s))
     return int(unsafe(p[idx]))
@@ -177,8 +172,6 @@ def test_nul_write_string(t : T?) {
 [test]
 def test_bounded_find(t : T?) {
     var inscope cut <- truncated("abcdefgh", 3)
-    t |> equal(raw_byte(cut, 3), 'd', "the dropped bytes are still in the buffer")
-    t |> equal(raw_byte(cut, 4), 'e', "several of them, in fact")
     t |> equal(find(cut, "cd"), -1, "find never reads past size")
     t |> equal(find(cut, "cd", 0), -1, "find-from never reads past size")
     t |> equal(find(cut, 'd'), -1, "find char never reads past size")
@@ -191,7 +184,6 @@ def test_bounded_find(t : T?) {
     t |> equal(find(edge, "abcdefg"), -1, "a needle longer than the view misses")
     t |> equal(rfind(edge, "abcdefg"), -1, "rfind agrees")
     var inscope almost <- truncated("abcdef", 5)
-    t |> equal(raw_byte(almost, 5), 'f', "the byte the needle would need is right there")
     t |> equal(find(almost, "ef"), -1, "a needle that only matches past size misses")
     t |> equal(rfind(almost, "ef"), -1, "rfind agrees")
     t |> equal(find(almost, "de"), 3, "the same needle one byte earlier still hits")
@@ -229,7 +221,6 @@ def test_bounded_strip_and_trim(t : T?) {
     t |> equal(strip_left(both), "a  ", "strip_left leaves the trailing run")
     t |> equal(strip_right(both), "  a", "strip_right leaves the leading run")
     var inscope cut <- truncated("ab  cd", 4)
-    t |> equal(raw_byte(cut, 4), 'c', "the dropped bytes are still in the buffer")
     t |> equal(rtrim(cut), "ab", "the rtrim walker stops at size")
     t |> equal(strip_right(cut), "ab", "the strip_right walker stops at size")
     t |> equal(strip(cut), "ab", "so does strip")
@@ -243,7 +234,6 @@ def test_bounded_strip_and_trim(t : T?) {
 [test]
 def test_bounded_parse(t : T?) {
     var inscope digits <- truncated("12345678", 3)
-    t |> equal(raw_byte(digits, 3), '4', "the digits past size are still in the buffer")
     var cr = ConversionResult.ok
     var off = 0
     t |> equal(int(digits, cr, off), 123, "the parse stops at size, not at a terminator")
