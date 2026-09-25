@@ -241,11 +241,28 @@ var private GPU_ROLES_VULKAN <- {
     "classes", "common", "decode", "prefill", "seams", "dispatch", "tower"
 }
 
-// the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false
-// reds unless its file is listed here (the failing test ships with the kernel per the
-// checklist; adding to this set is a gate edit the master's weakening rule reviews).
-// Empty by design — no engine kernel has earned the opt-out.
-var private FASTMATH_OFF_EXEMPT : table<string>
+// the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
+// its kernel name is listed here against the test that reds under fast math (the failing test
+// ships with the kernel per the checklist; adding a row is a gate edit the master's weakening
+// rule reviews). The StyleTTS2 harmonic-source kernels earned theirs: under fast math
+// `st2_source_gate` in tests/test_metal_prefill_kernels.das reds on both resample laws (the
+// divisions approximate, the two-float cumsum's compensation folds away).
+var private FASTMATH_OFF_EXEMPT <- {
+    "metal_st2_src_low_msl" => "st2_source_gate",
+    "metal_st2_src_cumsum_msl" => "st2_source_gate",
+    "metal_st2_src_sines_msl" => "st2_source_gate"
+}
+
+//! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.
+def private metal_kernel_name(line : string) : string {
+    let at = find(line, "name")
+    return "" if (at < 0)
+    let q0 = find(line, "\"", at)
+    return "" if (q0 < 0)
+    let q1 = find(line, "\"", q0 + 1)
+    return "" if (q1 < 0)
+    return slice(line, q0 + 1, q1)
+}
 
 def private check_fastmath_default {
     var files : array<string>
@@ -255,9 +272,9 @@ def private check_fastmath_default {
         for (line in split(fread(p), "\n")) {
             line_no++
             continue if (find(line, "fastmath=false") < 0 && find(line, "fastmath = false") < 0)
-            if (!key_exists(FASTMATH_OFF_EXEMPT, p)) {
+            if (!key_exists(FASTMATH_OFF_EXEMPT, metal_kernel_name(line))) {
                 gate_finding(p, line_no,
-                    "kernel declares fastmath=false without an exemption naming the test that fails under fastmath - fastmath is the default; the opt-out ships its demonstrated breakage")
+                    "kernel declares fastmath=false without an exemption row naming the test that fails under fastmath - fastmath is the default; the opt-out ships its demonstrated breakage")
             }
         }
     }

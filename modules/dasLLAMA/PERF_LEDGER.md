@@ -11,6 +11,54 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-24) - the whole StyleTTS2 synthesis rides the Metal tower
+  (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y): seven seats from PL-BERT to the inverse STFT, the front
+  end on the f32-exact GEMM stamp and an f32 attention row kernel so the durations round as the
+  CPU's, the harmonic source the CPU's operation for operation, the decoder through the
+  generator and the inverse STFT as one command buffer.** Box: the M5 Max, every das figure `-jit`
+  on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section applied,
+  the kernel winners on their fallback bodies - the sidecar predates the binary) and
+  `DAS_LOG_LEVEL=info`, no other overrides unless named, one process at a time. The first 20
+  sentences of the g2p corpus through `harness/tts_synth.das --model <gguf> --voice <voice> --out
+  <dir> --limit 20` (the served q8 lane, every sentence timed from the first, so the first one
+  pays the slab build and the pipeline warm-up), the mean generation wall a sentence with its min
+  and max over the 20, and the real-time factor of the run; the CPU arm is a second process under
+  `DASLLAMA_METAL_TOWER=0` (`direction-grade`). The reference column is `harness/tts_ref_bench.py`
+  (`ARCHITECTURE_MEASUREMENT.md` sec.2.20a;
+  `~/Work/tts-ab/g2p/.venv-g2p/bin/python harness/tts_ref_bench.py --device mps --threads 8
+  --limit 20`, and `--device cpu --models kokoro-82m:af_heart` for the torch CPU row; torch
+  2.13.0, kokoro 0.9.4, kittentts 0.8.1, onnxruntime 1.29.0, `HF_HOME=~/Work/tts-ab/g2p/.hf`):
+  the same 20 sentences' `ps_espeak` phonemes fed to the packages' own models, generation only,
+  each sentence timed three times and the best kept, the mean of the 20; its audio runs shorter
+  on the kitten models (the package's per-voice speed prior and its 5000-sample trim), so the
+  compare is the wall a sentence, not the real-time factor.
+
+  | model | voice | audio | das tower, mean (min-max) | das CPU q8, mean (min-max) | reference |
+  |---|---|---|---|---|---|
+  | kokoro-82m | af_heart | 145.7 s | 112 ms (65-310), rtf 0.0154 | 331 ms (192-625), 0.0455 | torch MPS 147 ms (rtf 0.0200); torch CPU 8 threads 564 ms (0.0769) |
+  | kitten-nano | Bella | 242.4 s | 37 ms (21-131), 0.0031 | 192 ms (114-283), 0.0158 | onnxruntime CPU 8 threads 207 ms (0.0259, 160 s of audio) |
+  | kitten-mini | Bella | 206.6 s | 111 ms (60-412), 0.0107 | 352 ms (193-562), 0.0341 | onnxruntime CPU 8 threads 1463 ms (0.2018, 145 s of audio) |
+
+  The first sentence carries the slab build and the pipeline warm-up: on the tower arm it reads
+  310 ms on kokoro against the run's 65 ms floor, 131 against 21 on kitten-nano, 412 against 60
+  on kitten-mini. Where a sentence's time goes, from the served-lane cell's stage clocks
+  (`test_kitten_synthesis_metal` in `tests/test_tts_kitten.das`, the same tree, flags and box; a
+  first synthesis, so the slab build sits in the decoder clock): kitten-nano's 5.8 s sentence in
+  64.6 ms on the tower - bert 18.1, text 1.7, durations 3.9, prosody 3.4, decoder 37.2 (the decode
+  seat, two thirds of the sentence) - against 101.3 ms on the CPU q8 chain. Parity on the f32
+  lane, every seat fed the CPU chain's inputs (the parity rail's stage cells, `gpu_stage_checks` in
+  `tests/_tts_parity.das`, the same tree, flags and box): PL-BERT 3e-6, the text encoder 4e-7,
+  the duration encoder, raw durations and prosody under 2e-6, the durations token for token on
+  every stocked oracle case, the mixed source signal 4e-7; the decode seat 3e-3 to 7e-3 on
+  kitten-nano and under 2e-2 on kokoro against the CPU chain on the oracle's noise (the decoder
+  and generator keep the f16-staged GEMM; kitten-nano's small decoder amplifies that staging
+  twelvefold against kokoro's); the decode seat on the served q8 planes 2e-2 to 6e-2 (the CPU
+  chain quantizes its activations, the tower reads the weights dequantized at f32); the seam form
+  of the generator alone 1.2e-3 at most; the served lane's sample counts within a hundredth of the
+  CPU chain's (139600 against 140800 on the kitten-nano sentence, equal on kokoro's). The cells
+  ran through `tests/run.das -- --area tts` (`-jit`, the manifest above, the M5 Max). The remaining
+  cost and the f32-exact decoder question are `followup_metal.md` sec.27.
+
 - **LANDED (2026-09-24) - the FastConformer Metal chain's rel-pos attention rides the f32 GEMM
   builder per head (`ARCHITECTURE_GPU_TOWER.md` sec.2.2x), where the per-row kernel it replaced
   was most of the encode and lost to the CPU q8 lane past a minute of audio.** Box: the M5 Max,

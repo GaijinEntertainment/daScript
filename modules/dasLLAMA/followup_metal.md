@@ -735,6 +735,35 @@ in `stocked`). The work: decide whether the batch driver now serves the hybrid's
 then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
 CPU stack.
 
+## 27. The StyleTTS2 chain's remaining cost and precision
+
+The chain (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y) serves the whole synthesis; the measured record
+is `PERF_LEDGER.md`'s landed entry, and the walls this section names are `debug-jit` readings of a
+scratch probe over the seats on one kokoro sentence of 200 synthetic tokens on the M5 Max (no
+board row covers a synthesis). The items, each an A/B on `harness/tts_synth.das --prof` with the
+`tts.gen.gpu.*` buckets: the decoder and generator on the f32-exact GEMM stamp (the decode
+seat reads 3e-3 to 7e-3 from the CPU chain on kitten-nano, whose small decoder amplifies the f16
+staging twelvefold against kokoro's; the exact stamp costs the front end under 3 ms a sentence,
+the decoder and generator would pay its doubled tile traffic on every conv); the ALBERT
+attention's dot per key on one lane (a simdgroup per row leaves the 64-wide dot serial - the row
+kernel is 8 ms of a kokoro sentence's bert against 5 ms on the f16 attention trio it replaced);
+an f16 weight slab for the generator (the f16-staged GEMM converts W to half anyway; halves the
+weight traffic the 256-channel stage reads per row block); the first-call slab build (~85 ms
+on kokoro across the four parts), which a model load could take off the first synthesis; and
+the kokoro decode seat's 111 ms, two thirds of its sentence - the generator's ten stages of
+Snake blocks at 512 channels, where a wider N tile or the AdaIN pass folded into the conv's X
+loader are the A/Bs. The served-lane synthesis cell (`tests/_tts_parity.das`,
+`tts_gpu_synthesis`) gates counters and sample counts and logs its sample-wise waveform figure
+without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
+frame of shift - would gate the served lane end to end. Four host-fixed selects sit inside hot
+loops, which `REVIEW_GPU_KERNEL_BODY.md` names defects: the conv stamps' `transposed` in the X
+loader's source-index helper, the sines kernel's `torch_math` law and `captured`-noise selects,
+the STFT's `reflect`. Done = a forward and a transposed conv stamp (the exact twins too), a torch
+and an ONNX sines stamp reading noise from a buffer a noise-fill kernel hashes so the captured
+select goes, a reflect and a clamp STFT stamp - each with its census key, its gate and, for the
+source stamps, its fast-math exemption row - landing with the Pocket TTS driver PR. Pocket TTS
+has no driver yet - its generator is not a StyleTTS2 chain and needs its own hook slot first.
+
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
 `lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,

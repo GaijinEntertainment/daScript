@@ -4,9 +4,6 @@
 docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`. Planned
 work: `followup_general.md`.
 
-**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
-`REVIEW.md`.**
-
 **A family's synthesis entry point (`styletts2_synthesize`, `pocket_synthesize`) carries
 `[hot_path]`.**
 
@@ -14,13 +11,17 @@ work: `followup_general.md`.
 `dasllama/dasllama_g2p.das`) called below a family's synthesis entry point is a defect -
 phonemize before the entry point.**
 
-**A buffer reused across syntheses, or filled at load for syntheses to reuse, in a file this
-checklist routes that is not `@scratch` - on its declaration, or on the callee parameter it
-grows through - is a defect.** The annotation is what lets `[hot_path]` hold through every stage
-the entry point drives.
+**An array or table - a module global, or a field of the activation scratch struct one synthesis
+reuses for every stage (`St2Scratch`, `PocketScratch`; never the model struct) - that a synthesis
+sizes or fills, or that model load fills for syntheses to reuse, in a TTS source file under
+`dasllama/`, that is not `@scratch` on its declaration or on the callee parameter it grows
+through, is a defect.** The annotation is what lets `[hot_path]` hold through every stage the
+entry point drives. A TTS source file is `dasllama_tts.das`, `dasllama_tts_types.das`,
+`dasllama_tts_blocks.das`, `dasllama_styletts2.das`, a TTS family file, or a text front-end file.
 
-**A function that exists for debugging or profiling, in a file this checklist routes, that is
-not `[cold_path]` is a defect.**
+**A function that exists only for tests, debugging or profiling - a stats, trace or dump reader
+no synthesis entry point calls - in a TTS source file under `dasllama/`, that is not
+`[cold_path]`, is a defect.**
 
 **A GEMM in `dasllama/dasllama_styletts2.das` or a TTS family file that does not go through
 a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written dot-product
@@ -29,8 +30,8 @@ loops included.**
 **A block in `dasllama/dasllama_tts_blocks.das` that gains a rows form (token-major [T][C])
 ships its channel-major form and a cell in the `tests/` file that holds that kernel family's
 cells, holding the two at the dot-envelope bar - each element within a tolerance times the sum
-of `|w|*|x|` feeding it - in the same change.** The channel-major form is what the parity rail and any GPU driver are
-checked against.
+of `|w|*|x|` feeding it - in the same change.** The channel-major form is what the parity rail and
+any GPU driver are checked against.
 
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
 is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md` sec.2.28.
@@ -62,14 +63,13 @@ that outlives its load silently changes the lane of the next model loaded in the
 set in another context never arrives.
 
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
-the harmonic source builds (`dasllama/dasllama_tts_blocks.das`: the cycles, the resamples, the
-cumulative sum, wherever a refactor puts them) is a defect.** One float32 ulp of the accumulated
-phase is a hundredth of a radian, so only the reference's own operation order reproduces the
-reference.
+the CPU harmonic source builds in `dasllama/dasllama_tts_blocks.das` - the cycles, the resamples,
+the cumulative sum - is a defect.** One float32 ulp of the accumulated phase is a hundredth of a
+radian, so only the reference's own operation order reproduces the reference.
 
-**A diff that moves or rewrites any step of the phase the harmonic source builds
-(`dasllama/dasllama_tts_blocks.das`) without changing its arithmetic ships, in the PR body, the
-PCM hash of one synthesis per family before and after, and the two match.**
+**A diff that moves or rewrites any step of the phase the CPU harmonic source builds in
+`dasllama/dasllama_tts_blocks.das`, without changing its arithmetic, ships in the PR body the PCM
+hash of one synthesis per family before and after, and the two match.**
 
 **A tensor operator - a conv, a norm, an activation, a resampler, an LSTM, an RNG, or an STFT
 step - implemented in a TTS family file is a defect; it goes in
@@ -100,16 +100,15 @@ expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
 the call site instead.**
 
-**A diff that makes a windowed TTS stage - one that runs its input a window at a time over a
-carry, the state one window hands to the next - produce a different result on the f32 lane,
-beyond float noise, than the same stage run over the whole input in one pass is a defect.** This
-rule binds the stage a family file assembles from kernels; a window form inside one kernel ships
-bit-for-bit equality with the whole-row form instead (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53,
+**A diff that makes a windowed stage a family file assembles from kernels - one that runs its
+input a window at a time over a carry, the state one window hands to the next - produce a result
+on the f32 lane that differs from the same stage run over the whole input in one pass by more
+than float rounding (a few ulp per element) is a defect** (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53,
 `ARCHITECTURE_POCKET.md` sec.2.46).
 
-**A diff that adds a windowed TTS stage ships, in the same change, the cell that runs that stage
-windowed and over the whole input in one pass and holds the two together within float noise, in
-the `tests/` file that holds that stage's cells.**
+**A diff that adds a windowed stage a family file assembles from kernels ships, in the same
+change, the cell that runs that stage windowed and over the whole input in one pass and holds the
+two together within float rounding, in the `tests/` file that holds that stage's cells.**
 
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
 stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the

@@ -22,7 +22,9 @@ after it up to the next heading or the next provenance line. A tag (`external`,
 sits in, or, on a provenance line, the figures that line covers.
 
 A served turn is one whole request an engine serves, whatever the modality; a turn wall is its
-wall. A served-turn leg is prefill, decode, a batched decode row, or the turn end to end.
+wall. A served-turn leg is prefill, decode, a batched decode row, or the turn end to end; the wall
+of one internal stage of a turn (one model component's forward pass, one decoder block) is not a
+leg.
 
 An arm is one side of a pair held against the other. An instrument is a script that times a run
 itself and reports the wall or rate as its own result. The flags of a serving run are the tier
@@ -51,10 +53,11 @@ whatever the row's `workload` (text rows carry none; others are `image-chat`, `a
 
 **A `PERF_LEDGER.md` entry states a turn wall or a tok/s rate of the engine this repository
 builds only when `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`)
-or as the `-jit` script - or a board cell did.** A served-turn rate printed by an instrument that
-is neither `benchmarks/lcpp_bench.das` nor a board cell stays in that run's log: the ledger entry
-carries what the instrument decided - served, declined, how many rows it counted - never that
-rate.
+or as the `-jit` script - or a board cell did, or, for a modality `benchmarks/lcpp_bench.das` has
+no command-line flag for, the `harness/` instrument that produced it, named with its command
+line.** A served-turn wall or rate printed by any other instrument stays in that run's log: the
+ledger entry carries what the instrument decided - served, declined, how many rows it counted -
+never that wall or rate.
 
 **A pair of `-jit` readings held against each other keeps each arm's absolute wall or rate in the
 commit message or PR body that states the pair.**
@@ -88,13 +91,12 @@ another project - it rests on a measurement a cell or instrument of this reposit
 **A dated `PERF_LEDGER.md` row is never edited to correct it - a new dated row refutes it.**
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
-recorded to justify adopting code the change does not land.** That timing settles its adoption
-decision in the PR that lands the kernel. A negative result whose winner is the committed path is
-an entry, not a selection timing.
+recorded to justify adopting code the change does not land, when the committed path did not win
+it.** That timing settles its adoption decision in the PR that lands the kernel.
 
 **A diff that routes a served turn onto a code path no board cell exercises mints that cell in
-the same change.** A route is the end-to-end code path such a turn takes,
-including the path a run with no flags and no environment overrides takes.
+the same change.** A route is the end-to-end code path such a turn takes, including the default
+route - the one a run given no command-line arguments and no environment overrides takes.
 
 **A change that owes a board row no box of the author's can mint names instead, in the same
 change, an artifact that shows the route ran end to end - a record, a gate output, an
@@ -105,28 +107,37 @@ the leg, when the box refuses or skips it, or when `performance/gen_bench_record
 official` does not carry the model; it can mint a manual cell whenever it can run the documented
 command.
 
-**A diff that changes code a fat exe reaches from its `main` before or during its first served
-request copies into the PR body the `sanity:` lines and the `tune gate:` line of an `lcpp_bench`
-run of the fat exe the diff builds, or says that run printed none.** A fat exe is what `daspkg
+**A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
+`metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
+`benchmarks/lcpp_bench.das` requires directly copies into the PR body the `sanity:` lines and the
+`tune gate:` line of an `lcpp_bench` run of the fat exe built from the diff's tree, or says that
+run printed none.** A fat exe is what `daspkg
 release --fat <class>` builds (`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,
-and names that row in the PR body.** The board is the module's committed record of what serving costs; a kernel
-win that never lands there is invisible to the next regression check.
+and names that row in the PR body.** The board is the module's committed record of what serving
+costs; a kernel win that never lands there is invisible to the next regression check.
 
 **A rate or wall of any served-turn leg written down as a measurement rather than as a
 prediction is a defect unless it cites the committed board row it came from, or names harness,
-flags, environment overrides, box, the exe or script that ran it, and - for a figure computed
-over repeated timings - the repetition count and their spread: the standard deviation, or the
-min and max.**
+flags, environment overrides, box, the exe or script that ran it, and - for a figure aggregated
+over more than one timed run or input - the number of runs or inputs and the spread of the
+per-run figures: the standard deviation, or the min and max.**
 
 **A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
 figure computed from one - or changes what such a number measures, ships that number's
-alternate in the same change: another row of the same run at the same shape, or a
-reference-build row - a figure from a run of the third-party engine this module measures against
-- at the same shape, named with the command that produced it.** A number with no alternate
-beside it ranks nothing.
+alternate in the same change: a row from the same instrument on the same fixture and input size,
+with exactly one flag or environment override changed, or a third-party row - a figure from a
+run of a third-party program serving the same model on the same input size - that cites the
+architecture section holding its recipe.** A number with no alternate beside it cannot be
+compared to anything.
+
+**A diff that records a third-party row lands that row's recipe - the program, its command line,
+its version pin and the environment it ran under - in the same change, in the
+`ARCHITECTURE_MEASUREMENT*.md` section that describes the harness instrument the row is compared
+with; where no section describes that instrument, the diff adds one.** The next entry re-runs
+the reference from the section, not from the earlier entry's prose.
 
 **A figure a run of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the

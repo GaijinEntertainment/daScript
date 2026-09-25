@@ -174,7 +174,10 @@ blocks and merger alike - because the Metal tower reads f32 planes or the baked 
 A family file owns the hook SLOT for a stage the GPU can serve - a `var private` function pointer
 plus a `register_*` entry - and the Metal tower driver fills it at `[init]`. The direction is
 forced: the driver requires the family file for its types, so the family cannot require the driver
-back. A box with no driver leaves the slot empty and the CPU form runs.
+back. A box with no driver leaves the slot empty and the CPU form runs. A seat taken over a filled
+slot (a test's stub through `register_styletts2_gpu`, a record of seats) gives the displaced
+registration back on `unregister` - one level: the record keeps the registration it displaced,
+not a stack of them - so the driver's seats survive the test.
 
 Every hook answers "declined" in its own return - `false` for the block and front hooks, `-1` for
 the whole-chunk mel hook - so a decline is a fallback, never an outage, and the CPU form stays the

@@ -320,11 +320,12 @@ def main() : int {
     if (empty(g_cfg.only) && !g_cfg.no_preflight) {
         var out = ""
         let code = run([daslang, "utils/internal/preflight/main.das", "--", "--full"], out, 7200.0)
-        to_log(LOG_INFO, out)
         if (code != 0) {
+            to_log(LOG_ERROR, out)   //! the run's own gate lines, at the level the default log floor lets through
             to_log(LOG_ERROR, "preflight --full failed - fix each, validate with the TARGETED gate, never a second full run\n")
             return 2
         }
+        to_log(LOG_INFO, out)
     }
     if (empty(g_cfg.only)) {
         print_judgment_checklist()

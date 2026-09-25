@@ -3624,6 +3624,29 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_hist = compile_stamp(metal_dn_conv_hist_msl, ok)
     g_pso_dn_l2 = compile_stamp(metal_dn_l2norm_msl, ok)
     g_pso_dn_scan = compile_stamp(metal_dn_scan_msl, ok)
+    g_pso_st2_im2col = compile_stamp(metal_st2_im2col_msl, ok)
+    g_pso_st2_conv_mm = compile_stamp(metal_st2_conv_mm_msl, ok)
+    g_pso_f32_exact_mm = compile_stamp(metal_f32_exact_mulmm_msl, ok)
+    g_pso_st2_conv_exact_mm = compile_stamp(metal_st2_conv_exact_mm_msl, ok)
+    g_pso_st2_adain_leaky = compile_stamp(metal_st2_adain_leaky_msl, ok)
+    g_pso_st2_gather = compile_stamp(metal_st2_gather_msl, ok)
+    g_pso_st2_concat = compile_stamp(metal_st2_concat_msl, ok)
+    g_pso_st2_pool_dw = compile_stamp(metal_st2_pool_dw_msl, ok)
+    g_pso_st2_lstm = compile_stamp(metal_st2_lstm_msl, ok)
+    g_pso_st2_sigsum = compile_stamp(metal_st2_sigsum_msl, ok)
+    g_pso_st2_gelu_tanh = compile_stamp(metal_st2_gelu_tanh_msl, ok)
+    g_pso_st2_attn = compile_stamp(metal_st2_attn_msl, ok)
+    g_pso_st2_src_low = compile_stamp(metal_st2_src_low_msl, ok)
+    g_pso_st2_src_cumsum = compile_stamp(metal_st2_src_cumsum_msl, ok)
+    g_pso_st2_src_sines = compile_stamp(metal_st2_src_sines_msl, ok)
+    g_pso_st2_stft = compile_stamp(metal_st2_stft_msl, ok)
+    g_pso_st2_istft = compile_stamp(metal_st2_istft_msl, ok)
+    g_pso_st2_colstats = compile_stamp(metal_st2_colstats_msl, ok)
+    g_pso_st2_adain_snake = compile_stamp(metal_st2_adain_snake_msl, ok)
+    g_pso_st2_leaky = compile_stamp(metal_st2_leaky_msl, ok)
+    g_pso_st2_axpy = compile_stamp(metal_st2_axpy_msl, ok)
+    g_pso_st2_add = compile_stamp(metal_st2_add_msl, ok)
+    g_pso_st2_reflect1 = compile_stamp(metal_st2_reflect1_msl, ok)
     g_pso_dn_gate = compile_stamp(metal_dn_gate_msl, ok)
     g_pso_dn_deint = compile_stamp(metal_dn_deint_msl, ok)
     g_pso_sigmul = compile_stamp(MetalSigmul_metal_ew2_msl, ok)
@@ -4506,6 +4529,11 @@ def metal_kernels_release {
     release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_dn_scan, g_pso_dn_gate, g_pso_dn_deint, g_pso_sigmul, g_pso_axpy_sig, g_mx4_vtab)
+    release_handles(g_pso_st2_attn)
+    release_handles(g_pso_st2_adain_leaky, g_pso_st2_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
+        g_pso_st2_src_low, g_pso_st2_src_cumsum, g_pso_st2_src_sines, g_pso_st2_stft, g_pso_st2_istft)
+    release_handles(g_pso_f32_exact_mm, g_pso_st2_conv_exact_mm)
+    release_handles(g_pso_st2_im2col, g_pso_st2_conv_mm, g_pso_st2_colstats, g_pso_st2_adain_snake, g_pso_st2_leaky, g_pso_st2_axpy, g_pso_st2_add, g_pso_st2_reflect1)
     release_handles(g_pso_qkvrs16, g_pso_qkvrs32, g_pso_w13sw, g_pso_w13sw_sg, g_pso_gemv_b2, g_pso_gemv_b4)
     release_handles(g_pso_mv_b2, g_pso_mv_b4, g_pso_w13sw_b2, g_pso_w13sw_b4, g_pso_gemm_b, g_pso_gemm_b_sk)
     release_handles(g_pso_skred, g_pso_gemm64_b, g_pso_mm, g_pso_attnb16, g_pso_attnb32, g_pso_attnb_q8)
@@ -5522,27 +5550,123 @@ class MetalMmTileBase {
     }
 }
 
-// Dense f32-weight GEMM y[m x ndim] = x[m x kdim] . W^T: the attention QK mm form with head
-// indexing and the causal skip stripped — both operands stage f32 -> half tiles, f32
-// accumulate; ndim % 64, kdim % 32, M padded to 32.
-[metal_dispatch(name = "enc_f32_mm", pso = "g_pso_f32mm", tgmem = "metal_f32_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
-class MetalF32MulMm : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "weight" @off = "woff" w : array<float4>   // [ndim x kdim/4] weight rows
-    @ssbo @binding = 1 @role = "read" xf : array<float4>                  // [m x kdim/4] activations
-    @ssbo @binding = 2 @role = "write" @off = "yoff" @span = "mp*d*4" y : array<float>
-    @uniform @binding = 3 kdim : uint
-    @uniform @binding = 4 ndim : uint
-    // inherited ta = W tiles (k row, wrow col), tb = X tiles (token row, k col)
+//! One chunk of a rows conv: output rows [r0, r0 + rows) padded to mp, kdim = k * cin padded to 32.
+struct St2ConvArgs {
+    cin : uint
+    k : uint
+    stride : uint
+    pad_l : uint
+    dil : uint
+    t_in : uint
+    r0 : uint
+    rows : uint
+    transposed : uint
+}
 
-    [metal_kernel(name="metal_f32_mulmm_msl")]
-    def metal_f32_mulmm {
+//! The float4 index of output row rr's 8-run at column kk, or 0xFFFFFFFF where the run reads zeros.
+def st2_conv_b_src(rr, kk, rows, k, cin, transposed, r0, pad_l, dil, stride, t_in : uint) : uint {
+    if (rr >= rows || kk >= k * cin) {
+        return 0xFFFFFFFF
+    }
+    let tap = kk / cin
+    let ci = kk % cin
+    var src = -1
+    if (transposed != 0u) {
+        let q = int(r0 + rr + pad_l) - int(tap * dil)
+        if (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < t_in) {
+            src = q / int(stride)
+        }
+    } else {
+        let st = int((r0 + rr) * stride + tap * dil) - int(pad_l)
+        if (st >= 0 && uint(st) < t_in) {
+            src = st
+        }
+    }
+    return src < 0 ? 0xFFFFFFFF : (uint(src) * cin + ci) / 4u
+}
+
+//! y[m x ndim] = x[m x kdim] . W^T, f32 accumulate; ndim % 64, kdim % 32, m padded to 32; CONV: cin % 8.
+//! The stamps set the tile type: half tiles (TILET float16, SGT simdgroup_half8x8) stage the
+//! operands at f16, float tiles (EXACT) keep every product the f32 one.
+[ |> template_struct_instance]
+class template MetalF32MulMmT {
+    @template_constant CONV : bool = false
+    @template_constant DENSE : bool = true
+    @template_constant EXACT : bool = false
+    @ssbo @binding = 0 @role = "weight" @off = "woff" w : array<float4>   // [ndim x kdim/4] weight rows
+    @ssbo @binding = 1 @role = "read" xf : array<float4>                  // [m x kdim/4] activations (CONV: the [t_in x cin] rows)
+    @ssbo @binding = 2 @role = "write" @off = "yoff" @span = "mp*d*4" y : array<float>
+    @uniform @binding = 3 @template_gate = DENSE kdim_u : uint   //!< the dense stamps' K; the CONV stamps read it from their kargs
+    @uniform @binding = 4 ndim : uint
+    @uniform @binding = 5 @template_gate = CONV ka : St2ConvArgs
+    @workgroup ta : TILET[2048]   //!< W tiles (k row, wrow col)
+    @workgroup tb : TILET[1024]   //!< X tiles (token row, k col)
+
+    //! K padded to 32: the dense stamps' uniform, the CONV stamps' k*cin.
+    def k_padded() : uint {
+        static_if (CONV) {
+            return (ka.k * ka.cin + 31u) / 32u * 32u
+        } else {
+            return kdim_u
+        }
+    }
+
+    //! A W element at the tile type: the half stamps round it, the float stamps keep it.
+    def tile(v : float) : TILET {
+        return TILET(v)   // nolint:PERF020,LINT019 — the float stamps' identity cast
+    }
+
+    //! One W tile: four float4 rows staged at the tile type.
+    def stage_a(a0, a1, a2, a3 : float4; tA0 : uint) {
+        var va : TILET[16]
+        va[0] = tile(a0.x)
+        va[1] = tile(a0.y)
+        va[2] = tile(a0.z)
+        va[3] = tile(a0.w)
+        va[4] = tile(a1.x)
+        va[5] = tile(a1.y)
+        va[6] = tile(a1.z)
+        va[7] = tile(a1.w)
+        va[8] = tile(a2.x)
+        va[9] = tile(a2.y)
+        va[10] = tile(a2.z)
+        va[11] = tile(a2.w)
+        va[12] = tile(a3.x)
+        va[13] = tile(a3.y)
+        va[14] = tile(a3.z)
+        va[15] = tile(a3.w)
+        for [unroll_full] (i in range(16)) {
+            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+        }
+    }
+
+    def acc_quad(aB, bB : uint; var ma : SGT[4]; var mb : SGT[2]; var mc : simdgroup_float8x8[8]) {
+        var acur = unsafe(addr(ta[aB]))
+        var bcur = unsafe(addr(tb[bB]))
+        for [unroll_full] (_ik in range(4)) {
+            for [unroll_full] (i in range(4)) {
+                simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(2)) {
+                simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(8)) {
+                simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+            }
+            acur = unsafe(acur + 512)
+            bcur = unsafe(bcur + 256)
+        }
+    }
+
+    def f32_mm_body {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var mc : simdgroup_float8x8[8]
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
+        var ma : SGT[4]
+        var mb : SGT[2]
+        let kdim = k_padded()
         let kdim4 = kdim / 4u
         let lr0 = lid / 2u                  // A split: weight row + 16-k half
         let il0 = lid % 2u
@@ -5561,32 +5685,28 @@ class MetalF32MulMm : MetalMmTileBase {
             let a1 = w[srcA + 1u]
             let a2 = w[srcA + 2u]
             let a3 = w[srcA + 3u]
-            let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
-            let b0 = xf[srcB]
-            let b1 = xf[srcB + 1u]
-            var va : float16[16]
-            va[0] = float16(a0.x)
-            va[1] = float16(a0.y)
-            va[2] = float16(a0.z)
-            va[3] = float16(a0.w)
-            va[4] = float16(a1.x)
-            va[5] = float16(a1.y)
-            va[6] = float16(a1.z)
-            va[7] = float16(a1.w)
-            va[8] = float16(a2.x)
-            va[9] = float16(a2.y)
-            va[10] = float16(a2.z)
-            va[11] = float16(a2.w)
-            va[12] = float16(a3.x)
-            va[13] = float16(a3.y)
-            va[14] = float16(a3.z)
-            va[15] = float16(a3.w)
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            var b0 = float4(0.0)
+            var b1 = float4(0.0)
+            static_if (CONV) {
+                let srcB = st2_conv_b_src(mBase + lr1, kb * 32u + iy, ka.rows, ka.k, ka.cin, ka.transposed, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+                if (srcB != 0xFFFFFFFF) {
+                    b0 = xf[srcB]
+                    b1 = xf[srcB + 1u]
+                }
+            } else {
+                let srcB = (mBase + lr1) * kdim4 + (kb * 32u + iy) / 4u
+                b0 = xf[srcB]
+                b1 = xf[srcB + 1u]
             }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            stage_a(a0, a1, a2, a3, tA0)
+            static_if (EXACT) {
+                tg_store_float4(tb, ibB, b0)
+                tg_store_float4(tb, ibB + 4u, b1)
+            } else {
+                tg_store_half4(tb, ibB, b0)
+                tg_store_half4(tb, ibB + 4u, b1)
+            }
             barrier()
             acc_quad(aB, bB, ma, mb, mc)
             kb++
@@ -5596,6 +5716,59 @@ class MetalF32MulMm : MetalMmTileBase {
         for [unroll_full] (i in range(8)) {
             simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
         }
+    }
+}
+
+[metal_dispatch(name = "enc_f32_mm", pso = "g_pso_f32mm", tgmem = "metal_f32_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalF32MulMm : MetalF32MulMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+
+    [metal_kernel(name="metal_f32_mulmm_msl")]
+    def metal_f32_mulmm {
+        f32_mm_body()
+    }
+}
+
+//! The StyleTTS2 chain's rows conv as the GEMM with the im2col folded into the X loader.
+[metal_dispatch(name = "enc_st2_conv_mm", pso = "g_pso_st2_conv_mm", tgmem = "metal_st2_conv_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "ka.cin % 8")]
+class MetalSt2ConvMm : MetalF32MulMmT {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
+    override CONV = true
+    override DENSE = false
+
+    [metal_kernel(name="metal_st2_conv_mm_msl")]
+    def metal_st2_conv_mm {
+        f32_mm_body()
+    }
+}
+
+//! The f32-exact stamps: float tiles, twice the threadgroup memory, for the sites whose outputs
+//! round to integers or feed a phase (the StyleTTS2 front end).
+[metal_dispatch(name = "enc_f32_exact_mm", pso = "g_pso_f32_exact_mm", tgmem = "metal_f32_exact_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalF32ExactMm : MetalF32MulMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override EXACT = true
+
+    [metal_kernel(name="metal_f32_exact_mulmm_msl")]
+    def metal_f32_exact_mulmm {
+        f32_mm_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_conv_exact_mm", pso = "g_pso_st2_conv_exact_mm", tgmem = "metal_st2_conv_exact_mm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64", requires = "ka.cin % 8")]
+class MetalSt2ConvExactMm : MetalF32MulMmT {
+    typedef TILET = float
+    typedef SGT = simdgroup_float8x8
+    override CONV = true
+    override DENSE = false
+    override EXACT = true
+
+    [metal_kernel(name="metal_st2_conv_exact_mm_msl")]
+    def metal_st2_conv_exact_mm {
+        f32_mm_body()
     }
 }
 
@@ -10057,5 +10230,834 @@ class MetalAxpySig {
             return
         }
         y[gid] += x[gid] / (1.0 + exp(-g[gid / dim]))
+    }
+}
+
+//! The im2col of one chunk: the whole [mp x kdim] panel, zeros past the taps, in the pad columns and in the pad rows.
+[metal_dispatch(name = "enc_st2_im2col", pso = "g_pso_st2_im2col", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Im2col {
+    @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t_in x cin]
+    @ssbo @binding = 1 @role = "write" cols : array<float>   //!< [mp x kdim]
+    @uniform @binding = 2 ka : St2ConvArgs
+
+    [metal_kernel(name="metal_st2_im2col_msl")]
+    def metal_st2_im2col {
+        let gid = gl_GlobalInvocationID.x
+        let kdim = (ka.k * ka.cin + 31u) / 32u * 32u   //! k * cin on the GEMM's 32 lattice
+        let mp = (ka.rows + 31u) / 32u * 32u
+        if (gid >= mp * kdim) {
+            return
+        }
+        let r = gid / kdim
+        let j = gid % kdim
+        var v = 0.0
+        if (r < ka.rows && j < ka.k * ka.cin) {
+            let tap = j / ka.cin
+            let ci = j % ka.cin
+            if (ka.transposed != 0u) {
+                let src = int(ka.r0 + r + ka.pad_l) - int(tap * ka.dil)
+                if (src >= 0 && uint(src) % ka.stride == 0u && uint(src) / ka.stride < ka.t_in) {
+                    v = x[(uint(src) / ka.stride) * ka.cin + ci]
+                }
+            } else {
+                let st = int((ka.r0 + r) * ka.stride + tap * ka.dil) - int(ka.pad_l)
+                if (st >= 0 && uint(st) < ka.t_in) {
+                    v = x[uint(st) * ka.cin + ci]
+                }
+            }
+        }
+        cols[gid] = v
+    }
+}
+
+[metal_dispatch(name = "enc_st2_colstats", pso = "g_pso_st2_colstats", tgmem = "metal_st2_colstats_msl_tgmem", tg = 256, grid = "c", params = "c : int64")]
+class MetalSt2ColStats : MetalTgReduceBase {
+    @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t x c]
+    @ssbo @binding = 1 @role = "write" stats : array<float>  //!< [2 x c]: the means, then the squared deviations' sums
+    @uniform @binding = 2 t : uint
+    @uniform @binding = 3 c : uint
+    @workgroup mean_sh : float
+
+    [metal_kernel(name="metal_st2_colstats_msl")]
+    def metal_st2_colstats {
+        let ch = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        let nt = gl_WorkGroupSize.x
+        var s = 0.0
+        var r = lid
+        while (r < t) {
+            s += x[r * c + ch]
+            r += nt
+        }
+        s = simd_sum(s)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = s
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            mean_sh = tot / float(t)
+        }
+        barrier()
+        let mean = mean_sh
+        var q = 0.0
+        r = lid
+        while (r < t) {
+            let dv = x[r * c + ch] - mean
+            q += dv * dv
+            r += nt
+        }
+        q = simd_sum(q)
+        if (gl_SubgroupInvocationID == 0u) {
+            partial[gl_SubgroupID] = q
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += partial[sgi]
+                sgi++
+            }
+            stats[ch] = mean
+            stats[c + ch] = tot
+        }
+    }
+}
+
+struct St2AdainArgs {
+    c : uint
+    t : uint
+    eps : float
+    total : uint
+}
+
+//! AdaIN as the CPU folds it, then Snake or LeakyReLU(0.2); an affine-less norm binds ones and zeros; Snake's alpha binds on the Snake stamp alone.
+[ |> template_struct_instance]
+class template MetalSt2AdainT {
+    @template_constant SNAKE : bool = true
+    @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t x c]
+    @ssbo @binding = 1 @role = "write" y : array<float>      //!< [t x c], x itself allowed
+    @ssbo @binding = 2 @role = "read" stats : array<float>   //!< [2 x c] from the column stats
+    @ssbo @binding = 3 @role = "read" @off = "hoff" h : array<float>       //!< [2 x c] the AdaIN fc of the style: gamma, then beta
+    @ssbo @binding = 4 @role = "weight" @off = "gwoff" gw : array<float>   //!< [c] the norm's scale
+    @ssbo @binding = 5 @role = "weight" @off = "gboff" gb : array<float>   //!< [c] the norm's shift
+    @ssbo @binding = 6 @role = "weight" @off = "aoff" @template_gate = SNAKE alpha : array<float> //!< [c] Snake's alpha
+    @uniform @binding = 7 ka : St2AdainArgs
+
+    def adain_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.t * ka.c) {
+            return
+        }
+        let ci = gid % ka.c
+        let rs = 1.0 / sqrt(stats[ka.c + ci] / float(ka.t) + ka.eps)
+        let g = gw[ci]
+        let g1 = 1.0 + h[ci]
+        let scale = rs * g * g1
+        let shift = (gb[ci] - stats[ci] * rs * g) * g1 + h[ka.c + ci]
+        let v = x[gid] * scale + shift
+        static_if (SNAKE) {
+            let a = alpha[ci]
+            let sn = sin(a * v)
+            y[gid] = v + (1.0 / a) * (sn * sn)
+        } else {
+            y[gid] = v > 0.0 ? v : v * 0.2
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_st2_adain_snake", pso = "g_pso_st2_adain_snake", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2AdainSnake : MetalSt2AdainT {
+    [metal_kernel(name="metal_st2_adain_snake_msl")]
+    def metal_st2_adain_snake {
+        adain_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_adain_leaky", pso = "g_pso_st2_adain_leaky", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2AdainLeaky : MetalSt2AdainT {
+    override SNAKE = false
+
+    [metal_kernel(name="metal_st2_adain_leaky_msl")]
+    def metal_st2_adain_leaky {
+        adain_body()
+    }
+}
+
+[metal_dispatch(name = "enc_st2_leaky", pso = "g_pso_st2_leaky", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Leaky {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @uniform @binding = 1 slope : float
+    @uniform @binding = 2 total : uint
+
+    [metal_kernel(name="metal_st2_leaky_msl")]
+    def metal_st2_leaky {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let v = x[gid]
+        x[gid] = v > 0.0 ? v : v * slope
+    }
+}
+
+//! out = (zero ? 0 : out) + scale * y - the stage's averaged residual-block sum.
+[metal_dispatch(name = "enc_st2_axpy", pso = "g_pso_st2_axpy", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Axpy {
+    @ssbo @binding = 0 @role = "readwrite" o : array<float>
+    @ssbo @binding = 1 @role = "read" y : array<float>
+    @uniform @binding = 2 scale : float
+    @uniform @binding = 3 zero : uint
+    @uniform @binding = 4 total : uint
+
+    [metal_kernel(name="metal_st2_axpy_msl")]
+    def metal_st2_axpy {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let base = zero != 0u ? 0.0 : o[gid]
+        o[gid] = base + scale * y[gid]
+    }
+}
+
+//! out = (a + b) * scale, out may alias a: the residual sums (scale 1) and the AdaIN blocks' join (1 / sqrt 2).
+[metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Add {
+    @ssbo @binding = 0 @role = "read" a : array<float>
+    @ssbo @binding = 1 @role = "read" b : array<float>
+    @ssbo @binding = 2 @role = "write" o : array<float>
+    @uniform @binding = 3 scale : float
+    @uniform @binding = 4 total : uint
+
+    [metal_kernel(name="metal_st2_add_msl")]
+    def metal_st2_add {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        o[gid] = (a[gid] + b[gid]) * scale
+    }
+}
+
+//! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1): the last stage's left reflect pad.
+[metal_dispatch(name = "enc_st2_reflect1", pso = "g_pso_st2_reflect1", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Reflect1 {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @uniform @binding = 2 c : uint
+    @uniform @binding = 3 total : uint      //!< (t + 1) * c
+
+    [metal_kernel(name="metal_st2_reflect1_msl")]
+    def metal_st2_reflect1 {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / c
+        let ci = gid % c
+        let src = r == 0u ? 1u : r - 1u
+        y[gid] = x[src * c + ci]
+    }
+}
+
+//! out[r] = a[idx[r]] (+ b[r] when add_b) (+ cvec when add_c) over c columns.
+struct St2GatherArgs {
+    c : uint
+    add_b : uint
+    add_c : uint
+    total : uint
+}
+
+[metal_dispatch(name = "enc_st2_gather", pso = "g_pso_st2_gather", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Gather {
+    @ssbo @binding = 0 @role = "read" @off = "aoff" a : array<float>     //!< the rows gathered
+    @ssbo @binding = 1 @role = "read" idx : array<uint>                    //!< [t] the row each output row copies
+    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     //!< [t x c], added when add_b
+    @ssbo @binding = 3 @role = "weight" @off = "coff" cvec : array<float>  //!< [c], added when add_c
+    @ssbo @binding = 4 @role = "write" o : array<float>
+    @uniform @binding = 5 ka : St2GatherArgs
+
+    [metal_kernel(name="metal_st2_gather_msl")]
+    def metal_st2_gather {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let r = gid / ka.c
+        let ci = gid % ka.c
+        var v = a[idx[r] * ka.c + ci]
+        if (ka.add_b != 0u) {
+            v += b[gid]
+        }
+        if (ka.add_c != 0u) {
+            v += cvec[ci]
+        }
+        o[gid] = v
+    }
+}
+
+//! cat(x [t][c], res [t][rc] at stride rs when with_res, f0 at stride f0s, n at stride ns), zero-padded to width.
+struct St2ConcatArgs {
+    c : uint
+    rc : uint
+    rs : uint
+    f0s : uint
+    ns : uint
+    with_res : uint
+    width : uint
+    total : uint
+}
+
+[metal_dispatch(name = "enc_st2_concat", pso = "g_pso_st2_concat", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Concat {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "read" res : array<float>
+    @ssbo @binding = 2 @role = "read" f0 : array<float>
+    @ssbo @binding = 3 @role = "read" nd : array<float>
+    @ssbo @binding = 4 @role = "write" o : array<float>
+    @uniform @binding = 5 ka : St2ConcatArgs
+
+    [metal_kernel(name="metal_st2_concat_msl")]
+    def metal_st2_concat {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let r = gid / ka.width
+        let j = gid % ka.width
+        let rc = ka.with_res != 0u ? ka.rc : 0u
+        var v = 0.0
+        if (j < ka.c) {
+            v = x[r * ka.c + j]
+        } elif (j < ka.c + rc) {
+            v = res[r * ka.rs + (j - ka.c)]
+        } elif (j == ka.c + rc) {
+            v = f0[r * ka.f0s]
+        } elif (j == ka.c + rc + 1u) {
+            v = nd[r * ka.ns]
+        }
+        o[gid] = v
+    }
+}
+
+//! The depthwise transposed pool on rows: each output row gathers the input rows its taps reach, w [c][k].
+struct St2PoolArgs {
+    c : uint
+    k : uint
+    stride : uint
+    pad_l : uint
+    dil : uint
+    t_in : uint
+    total : uint
+}
+
+[metal_dispatch(name = "enc_st2_pool_dw", pso = "g_pso_st2_pool_dw", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2PoolDw {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>
+    @ssbo @binding = 3 @role = "weight" @off = "boff" b : array<float>
+    @uniform @binding = 4 ka : St2PoolArgs
+
+    [metal_kernel(name="metal_st2_pool_dw_msl")]
+    def metal_st2_pool_dw {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let p = gid / ka.c
+        let j = gid % ka.c
+        var acc = b[j]
+        var kk = 0u
+        while (kk < ka.k) {
+            let num = int(p + ka.pad_l) - int(kk * ka.dil)
+            if (num >= 0 && uint(num) % ka.stride == 0u && uint(num) / ka.stride < ka.t_in) {
+                acc += w[j * ka.k + kk] * x[(uint(num) / ka.stride) * ka.c + j]
+            }
+            kk++
+        }
+        y[gid] = acc
+    }
+}
+
+//! tanh clamped to +-15, where it already saturates: past that the fast-math tanh answers NaN, the CPU +-1.
+def st2_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
+
+//! One LSTM direction on 4 x hidden lanes; xg holds the GEMM's input gates x . w_ih^T + b as [t x xgs].
+struct St2LstmArgs {
+    t : uint
+    hidden : uint
+    xgs : uint       //!< the input-gate rows' stride (4 * hidden padded to the GEMM lattice)
+    ystride : uint
+    yoff : uint
+    reverse : uint
+}
+
+[metal_dispatch(name = "enc_st2_lstm", pso = "g_pso_st2_lstm", tgmem = "metal_st2_lstm_msl_tgmem", tg = "lanes", grid = "1", params = "lanes : int64")]
+class MetalSt2Lstm {
+    @ssbo @binding = 0 @role = "read" xg : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "weight" @off = "woff" whh : array<float4>   //!< [4 hidden x hidden] row-major, four inputs a load
+    @uniform @binding = 3 ka : St2LstmArgs
+    @workgroup hsh : float[256]
+    @workgroup gsh : float[1024]
+
+    [metal_kernel(name="metal_st2_lstm_msl")]
+    def metal_st2_lstm {
+        let lid = gl_LocalInvocationID.x
+        let hd = ka.hidden
+        let g = lid / hd
+        let j = lid % hd
+        let hd4 = hd / 4u
+        if (lid < hd) {
+            hsh[lid] = 0.0
+        }
+        var cst = 0.0
+        let t_first = ka.reverse != 0u ? ka.t - 1u : 0u   //! the direction, decided once: the step loop walks ti = t_first -/+ step
+        var step = 0u
+        while (step < ka.t) {
+            barrier()
+            var acc = 0.0
+            let wrow = (g * hd + j) * hd4
+            var i4 = 0u
+            while (i4 < hd4) {
+                let w4 = whh[wrow + i4]
+                let i = i4 * 4u
+                acc += w4.x * hsh[i] + w4.y * hsh[i + 1u] + w4.z * hsh[i + 2u] + w4.w * hsh[i + 3u]
+                i4++
+            }
+            gsh[lid] = acc
+            barrier()
+            if (g == 0u) {
+                let ti = ka.reverse != 0u ? t_first - step : t_first + step
+                let gi = xg[ti * ka.xgs + j] + gsh[j]
+                let gf = xg[ti * ka.xgs + hd + j] + gsh[hd + j]
+                let gg = xg[ti * ka.xgs + 2u * hd + j] + gsh[2u * hd + j]
+                let go = xg[ti * ka.xgs + 3u * hd + j] + gsh[3u * hd + j]
+                let si = 1.0 / (1.0 + exp(-gi))
+                let sf = 1.0 / (1.0 + exp(-gf))
+                let so = 1.0 / (1.0 + exp(-go))
+                cst = sf * cst + si * st2_tanh(gg)
+                let hn = so * st2_tanh(cst)
+                hsh[j] = hn
+                y[ti * ka.ystride + ka.yoff + j] = hn
+            }
+            step++
+        }
+    }
+}
+
+//! q, k, v and o as f32 rows [t][d], head h at column h * hs, hs at most 128.
+struct St2AttnArgs {
+    t : uint
+    d : uint
+    hs : uint
+    heads : uint
+}
+
+[metal_dispatch(name = "enc_st2_attn", pso = "g_pso_st2_attn", tg = 64, grid = "total/2", params = "total : int64")]
+class MetalSt2Attn {
+    @ssbo @binding = 0 @role = "read" q : array<float>
+    @ssbo @binding = 1 @role = "read" k : array<float>
+    @ssbo @binding = 2 @role = "read" v : array<float>
+    @ssbo @binding = 3 @role = "write" o : array<float>
+    @uniform @binding = 4 ka : St2AttnArgs
+
+    [metal_kernel(name="metal_st2_attn_msl")]
+    def metal_st2_attn {
+        let gid = gl_GlobalInvocationID.x
+        let row = gid / 32u
+        if (row >= ka.heads * ka.t) {   //! whole simdgroups: the rows align to them
+            return
+        }
+        let lane = gid % 32u
+        let h = row / ka.t
+        let i = row % ka.t
+        let qrow = i * ka.d + h * ka.hs
+        var acc : float[128]
+        var e0 = 0u
+        while (e0 < ka.hs) {
+            acc[e0] = 0.0
+            e0++
+        }
+        var m = -1.0e30
+        var l = 0.0
+        var j = lane
+        while (j < ka.t) {
+            let krow = j * ka.d + h * ka.hs
+            var sdot = 0.0
+            var e = 0u
+            while (e < ka.hs) {
+                sdot += q[qrow + e] * k[krow + e]
+                e++
+            }
+            let sc = sdot / sqrt(float(ka.hs))
+            let mn = max(m, sc)
+            let f = exp(m - mn)
+            let p = exp(sc - mn)
+            l = l * f + p
+            e = 0u
+            while (e < ka.hs) {
+                acc[e] = acc[e] * f + p * v[krow + e]
+                e++
+            }
+            m = mn
+            j += 32u
+        }
+        let mall = simd_max(m)
+        let f2 = exp(m - mall)
+        let lall = simd_sum(l * f2)
+        var e1 = 0u
+        while (e1 < ka.hs) {
+            let s = simd_sum(acc[e1] * f2)
+            if (lane == 0u) {
+                o[qrow + e1] = s / lall
+            }
+            e1++
+        }
+    }
+}
+
+//! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
+[metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2GeluTanh {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @uniform @binding = 1 total : uint
+
+    [metal_kernel(name="metal_st2_gelu_tanh_msl")]
+    def metal_st2_gelu_tanh {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let v = x[gid]
+        x[gid] = 0.5 * v * (1.0 + st2_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
+    }
+}
+
+[metal_dispatch(name = "enc_st2_sigsum", pso = "g_pso_st2_sigsum", tg = 64, grid = "t/64", params = "t : int64")]
+class MetalSt2SigSum {
+    @ssbo @binding = 0 @role = "read" logits : array<float>
+    @ssbo @binding = 1 @role = "write" raw : array<float>
+    @uniform @binding = 2 nb : uint
+    @uniform @binding = 3 ls : uint
+    @uniform @binding = 4 speed : float
+    @uniform @binding = 5 t : uint
+
+    [metal_kernel(name="metal_st2_sigsum_msl")]
+    def metal_st2_sigsum {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= t) {
+            return
+        }
+        var acc = 0.0
+        var j = 0u
+        while (j < nb) {
+            acc += 1.0 / (1.0 + exp(-logits[gid * ls + j]))
+            j++
+        }
+        raw[gid] = acc / speed   //! the CPU divides; a reciprocal multiply rounds a raw duration apart from it
+    }
+}
+
+struct St2SourceArgs {
+    n : uint
+    nlow : uint
+    nh : uint
+    up : uint
+    sr : float
+    sine_amp : float
+    noise_std : float
+    voiced_thr : float
+    torch_math : uint
+    captured : uint
+    seed : uint
+    total : uint
+}
+
+//! The cycles at sample i of harmonic h, the initial phase folded into sample 0 of the overtones.
+def st2_src_rad(f0 : array<float>; noise_u : array<float>; i, h, up : uint; sr : float) : float {
+    let cyc = f0[i / up] * float(h + 1u) / sr
+    let r = cyc - floor(cyc)
+    return (i == 0u && h > 0u) ? r + noise_u[h] : r
+}
+
+def st2_resize_taps(torch_math, n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
+    if (torch_math != 0u) {
+        let src = max(0.0, mad(1.0 / scale, float(to) + 0.5, -0.5))
+        i0 = min(uint(src), n - 1u)
+        i1 = min(i0 + 1u, n - 1u)
+        l1 = src - float(i0)
+        l0 = 1.0 - l1
+    } else {
+        let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(n - 1u))
+        i0 = min(uint(in_x), n - 1u)
+        i1 = min(i0 + 1u, n - 1u)
+        if (i0 == i1) {
+            l0 = 0.5
+            l1 = 0.5
+        } else {
+            l0 = abs(in_x - float(i1))
+            l1 = abs(in_x - float(i0))
+        }
+    }
+}
+
+//! onnxruntime's trilinear mix in the reference's operation order: the last channel averages itself at quarter weights
+//! through all seven fma terms, every other channel carries only its two nonzero terms (the zero-weight fmas are exact).
+def st2_resize_mix(torch_math : uint; x0, x1, l0, l1 : float; last : bool) : float {
+    if (torch_math != 0u) {
+        return mad(l0, x0, l1 * x1)
+    }
+    if (last) {
+        let q0 = (l0 * 0.5) * 0.5
+        let q1 = (l1 * 0.5) * 0.5
+        var acc = mad(q0, x0, q1 * x1)
+        acc = mad(q0, x0, acc)
+        acc = mad(q1, x1, acc)
+        acc = mad(q0, x0, acc)
+        acc = mad(q1, x1, acc)
+        acc = mad(q0, x0, acc)
+        return mad(q1, x1, acc)
+    }
+    let w0 = l0 * 0.5
+    let w1 = l1 * 0.5
+    var acc = mad(w0, x0, w1 * x1)
+    acc = mad(w0, x0, acc)
+    return mad(w1, x1, acc)
+}
+
+def st2_sin_big(phase : float) : float {
+    let k = round(phase * 0.15915493667125702)
+    var r = mad(-k, 6.25, phase)   //! 2 pi in pieces of five significant bits, so k times a piece is exact past a million radians
+    r = mad(-k, 0.033203125, r)
+    r = mad(-k, -1.781781975296326e-05, r)
+    r = mad(-k, -6.608047442568932e-13, r)
+    return sin(r)
+}
+
+[metal_dispatch(name = "enc_st2_src_low", pso = "g_pso_st2_src_low", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2SrcLow {
+    @ssbo @binding = 0 @role = "read" f0 : array<float>
+    @ssbo @binding = 1 @role = "read" noise_u : array<float>
+    @ssbo @binding = 2 @role = "write" low : array<float>    //!< [nh x nlow]
+    @uniform @binding = 3 ka : St2SourceArgs
+
+    [metal_kernel(name="metal_st2_src_low_msl", fastmath=false)]   //! the CPU's divisions and roundings
+    def metal_st2_src_low {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.nh * ka.nlow) {
+            return
+        }
+        let h = gid / ka.nlow
+        let k = gid % ka.nlow
+        var i0 = 0u
+        var i1 = 0u
+        var l0 = 0.0
+        var l1 = 0.0
+        st2_resize_taps(ka.torch_math, ka.n, k, 1.0 / float(ka.up), i0, i1, l0, l1)
+        let r0 = st2_src_rad(f0, noise_u, i0, h, ka.up, ka.sr)
+        let r1 = st2_src_rad(f0, noise_u, i1, h, ka.up, ka.sr)
+        low[gid] = st2_resize_mix(ka.torch_math, r0, r1, l0, l1, h + 1u == ka.nh)
+    }
+}
+
+[metal_dispatch(name = "enc_st2_src_cumsum", pso = "g_pso_st2_src_cumsum", tg = "nh", grid = "1", params = "nh : int64")]
+class MetalSt2SrcCumsum {
+    @ssbo @binding = 0 @role = "read" low : array<float>
+    @ssbo @binding = 1 @role = "write" lowc : array<float>   //!< [nh x nlow] the phase per frame
+    @uniform @binding = 2 ka : St2SourceArgs
+
+    [metal_kernel(name="metal_st2_src_cumsum_msl", fastmath=false)]   //! fast math folds the compensation away
+    def metal_st2_src_cumsum {
+        let h = gl_LocalInvocationID.x
+        if (h >= ka.nh) {
+            return
+        }
+        var acc = 0.0
+        var lo = 0.0
+        var k = 0u
+        if (ka.torch_math != 0u) {
+            while (k < ka.nlow) {
+                let x = low[h * ka.nlow + k]
+                let s = acc + x
+                let bv = s - acc
+                lo += (acc - (s - bv)) + (x - bv)
+                let s2 = s + lo
+                lo = lo - (s2 - s)
+                acc = s2
+                lowc[h * ka.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(ka.up)
+                k++
+            }
+        } else {
+            while (k < ka.nlow) {
+                acc += low[h * ka.nlow + k]
+                lowc[h * ka.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(ka.up)
+                k++
+            }
+        }
+    }
+}
+
+//! The source's own noise: a counter-keyed normal, two hashed uniforms through Box-Muller, not the CPU's PCG32 stream.
+def st2_hash_u32(x : uint) : uint {
+    var v = x * 0x9E3779B1u
+    v ^= v >> 15u
+    v *= 0x85EBCA77u
+    v ^= v >> 13u
+    v *= 0xC2B2AE3Du
+    v ^= v >> 16u
+    return v
+}
+
+def st2_hash_normal(seed, idx : uint) : float {
+    let sh = st2_hash_u32(seed)   //! the seed hashed first: xor-ing a raw seed into the counter aliases seeds a multiple of four apart
+    let a = st2_hash_u32(sh ^ (idx * 2u + 1u))
+    let b = st2_hash_u32(sh ^ (idx * 2u + 2u) ^ 0x6A09E667u)
+    let u1 = (float(a >> 8u) + 1.0) * (1.0 / 16777217.0)
+    let u2 = float(b >> 8u) * (1.0 / 16777216.0)
+    return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
+}
+
+[metal_dispatch(name = "enc_st2_src_sines", pso = "g_pso_st2_src_sines", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2SrcSines {
+    @ssbo @binding = 0 @role = "read" f0 : array<float>
+    @ssbo @binding = 1 @role = "read" lowc : array<float>
+    @ssbo @binding = 2 @role = "read" noise_n : array<float>     //!< [n x nh] when captured
+    @ssbo @binding = 3 @role = "weight" @off = "woff" lw : array<float>   //!< [nh] the source linear
+    @ssbo @binding = 4 @role = "weight" @off = "boff" lb : array<float>   //!< [1] its bias
+    @ssbo @binding = 5 @role = "write" har : array<float>
+    @uniform @binding = 6 ka : St2SourceArgs
+
+    [metal_kernel(name="metal_st2_src_sines_msl", fastmath=false)]   //! the CPU's divisions and roundings
+    def metal_st2_src_sines {
+        let i = gl_GlobalInvocationID.x
+        if (i >= ka.n) {
+            return
+        }
+        var i0 = 0u
+        var i1 = 0u
+        var l0 = 0.0
+        var l1 = 0.0
+        st2_resize_taps(ka.torch_math, ka.nlow, i, float(ka.up), i0, i1, l0, l1)
+        let uv = f0[i / ka.up] > ka.voiced_thr ? 1.0 : 0.0
+        let noise_amp = uv * ka.noise_std + (1.0 - uv) * ka.sine_amp / 3.0
+        var acc = lb[0]
+        var h = 0u
+        while (h < ka.nh) {
+            let phase = st2_resize_mix(ka.torch_math, lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
+            let s = st2_sin_big(phase) * ka.sine_amp
+            let nz = ka.captured != 0u ? noise_n[i * ka.nh + h] : st2_hash_normal(ka.seed, i * ka.nh + h)
+            acc += lw[h] * (s * uv + noise_amp * nz)
+            h++
+        }
+        har[i] = st2_tanh(acc)
+    }
+}
+
+//! spec rows [frames][2 bins], the magnitudes then the phases; a zero imaginary part on the negative real axis reads +pi.
+struct St2StftArgs {
+    n : uint
+    frames : uint
+    bins : uint
+    k : uint
+    hop : uint
+    pad : uint
+    reflect : uint
+    eps : float
+    total : uint
+}
+
+[metal_dispatch(name = "enc_st2_stft", pso = "g_pso_st2_stft", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSt2Stft {
+    @ssbo @binding = 0 @role = "read" har : array<float>
+    @ssbo @binding = 1 @role = "weight" @off = "reoff" wre : array<float>   //!< [bins x k]
+    @ssbo @binding = 2 @role = "weight" @off = "imoff" wim : array<float>
+    @ssbo @binding = 3 @role = "write" spec : array<float>
+    @uniform @binding = 4 ka : St2StftArgs
+
+    [metal_kernel(name="metal_st2_stft_msl")]
+    def metal_st2_stft {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.frames * ka.bins) {
+            return
+        }
+        let f = gid / ka.bins
+        let b = gid % ka.bins
+        var re = 0.0
+        var im = 0.0
+        var tap = 0u
+        while (tap < ka.k) {
+            var src = int(f * ka.hop + tap) - int(ka.pad)
+            if (src < 0) {
+                src = ka.reflect != 0u ? -src : 0
+            } elif (src >= int(ka.n)) {
+                src = ka.reflect != 0u ? 2 * (int(ka.n) - 1) - src : int(ka.n) - 1
+            }
+            let v = har[uint(src)]
+            re += wre[b * ka.k + tap] * v
+            im += wim[b * ka.k + tap] * v
+            tap++
+        }
+        spec[f * 2u * ka.bins + b] = sqrt(re * re + im * im + ka.eps)
+        spec[f * 2u * ka.bins + ka.bins + b] = im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+    }
+}
+
+//! From conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase; a non-negligible envelope divided out.
+struct St2IstftArgs {
+    tt : uint
+    stride : uint
+    bins : uint
+    k : uint
+    hop : uint
+    pad : uint
+    envelope : uint
+    n : uint
+}
+
+[metal_dispatch(name = "enc_st2_istft", pso = "g_pso_st2_istft", tg = 64, grid = "n/64", params = "n : int64")]
+class MetalSt2Istft {
+    @ssbo @binding = 0 @role = "read" y : array<float>
+    @ssbo @binding = 1 @role = "weight" @off = "reoff" wre : array<float>   //!< [k x bins] - the transposed conv's operand layout
+    @ssbo @binding = 2 @role = "weight" @off = "imoff" wim : array<float>
+    @ssbo @binding = 3 @role = "weight" @off = "wnoff" window : array<float> //!< [k]
+    @ssbo @binding = 4 @role = "write" wave : array<float>
+    @uniform @binding = 5 ka : St2IstftArgs
+
+    [metal_kernel(name="metal_st2_istft_msl")]
+    def metal_st2_istft {
+        let i = gl_GlobalInvocationID.x
+        if (i >= ka.n) {
+            return
+        }
+        let m = i + ka.pad
+        var acc = 0.0
+        var env = 0.0
+        var tap = 0u
+        while (tap < ka.k) {
+            if (m >= tap && (m - tap) % ka.hop == 0u) {
+                let q = (m - tap) / ka.hop
+                if (q < ka.tt) {
+                    var b = 0u
+                    while (b < ka.bins) {
+                        let mag = exp(y[q * ka.stride + b])
+                        let ph = sin(y[q * ka.stride + ka.bins + b])
+                        acc += mag * cos(ph) * wre[tap * ka.bins + b] - mag * sin(ph) * wim[tap * ka.bins + b]
+                        b++
+                    }
+                    env += window[tap] * window[tap]
+                }
+            }
+            tap++
+        }
+        wave[i] = (ka.envelope != 0u && env > 1e-11) ? acc / env : acc
     }
 }

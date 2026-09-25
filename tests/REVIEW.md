@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md` (this folder).
 
-**A test answers to its kind's checklist wherever the diff puts it:**
+**A test answers to its kind's checklist wherever under this folder the diff puts it:**
 a test that asserts on `require` path lookup, module compile order, or files under the module
 cache folder - `module_cache/REVIEW.md`;
 a test that runs a dasMetal kernel class or creates any Metal object - `metal/REVIEW.md`;

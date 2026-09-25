@@ -1796,3 +1796,20 @@
     commit and a dirty flag into the bundle, the released exe stamps that and never HEAD (the
     `-jit` script keeps HEAD), and `gen_bench_records` refuses a mint whose exe carries a dirty
     stamp or whose HEAD moved since the exe was built.
+
+165. **The TTS tests to fix at the end of the Metal-gaps arc, after its dedup pass.**
+   `tests/test_storyteller_restart.das`'s cell "a restart while the speech thread is still
+   loading its model skips the replaced story's queued sentences" is red on master (the same red
+   with the tower pinned off and on a master worktree): its premise - a speech thread starved
+   while the story is written, so a restart at frame 100 finds queued sentences to skip - no
+   longer holds on this box, and the cell asserts a skip that never comes. Done = the cell
+   constructs the starvation it asserts (a synthesis slowed under the test's control, or a
+   restart placed by the witness lines rather than a frame count), and the tts area runs green
+   through `tests/run.das -- --area tts`.
+
+166. **A `--tts` path in `benchmarks/lcpp_bench.das`.** The bench has no TTS cell, so every TTS
+   turn wall in `PERF_LEDGER.md` comes from `harness/tts_synth.das` under
+   `REVIEW_MEASUREMENT.md`'s harness carve-out and no board row records what a synthesis costs.
+   Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
+   voice and prints the per-sentence wall and the real-time factor as its other modalities do,
+   `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.

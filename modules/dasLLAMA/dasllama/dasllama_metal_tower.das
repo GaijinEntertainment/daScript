@@ -21,6 +21,11 @@ require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Conformer block loop
 require dasllama/dasllama_canary    // CanaryEncoder/CanaryState — the FastConformer block loop
 require dasllama/dasllama_parakeet  // ParakeetModel/ParakeetState — the same chain, parakeet's blob layout
+require dasllama/dasllama_styletts2
+require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tts_types
+require dasllama/dasllama_layout
+require daslib/f16_cvt
 require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
@@ -57,6 +62,9 @@ def metal_tower_declines : table<string; int64> {
 def set_metal_tower(on : bool) {
     g_tw_env_tower = on
 }
+
+//! The tower knob as it stands, for a cell that puts it back where it found it.
+def metal_tower_knob() : bool => g_tw_env_tower
 
 //! The qwen3v f16-W route's A/B seat (DASLLAMA_METAL_TOWER_F16's in-process twin).
 def set_metal_tower_f16(on : bool) {
@@ -100,6 +108,7 @@ def metal_tower_shutdown {
     }
     g_tw_q3a_key = 0ul
     g_tw_q3a_len = 0l
+    st2_slab_drop()
     pool_drain(g_tw_pool)
     g_tw_failed = false
 }
@@ -2264,8 +2273,1814 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     return served
 }
 
-//! g_tw_q3a_wpad keys on a host plane address - a weights-epoch drop makes that key lie, so
-//! the padded slab dies with the epoch like the region cache does
+let private ST2_IM2COL_CHUNK_MAX_BYTES = 64l * 1024l * 1024l   //!< the im2col chunk's byte ceiling
+let private ST2_CHUNK_ROWS = 4096l
+let private ST2_POST_WIDTH = 64l   //!< conv_post's row stride on the driver: its cout padded to the GEMM lattice
+let private ST2_MAX_STAGES = 8l    //!< bounds the distinct uniform values an encode binds (six a stage, eight more)
+let private ST2_MAX_UNIFORMS = 96
+let private ST2_MAX_BUFS = 32
+let private ST2_JOIN = 0.70710678118654752   //!< the AdaIN residual blocks' join: (out + shortcut) / sqrt 2
+let private ST2_LSTM_MAX_HIDDEN = 256l       //!< the recurrence kernel's lanes: four a unit, 1024 a threadgroup
+
+struct private St2ConvSlot {
+    woff : uint64
+    boff : uint64
+    cout_p : int64
+    kdim_p : int64
+    gathers : bool       //!< the GEMM gathers its own taps (cin % 8); else the im2col chunks feed it
+    u_kdim : MetalBuffer?
+    u_cout : MetalBuffer?
+}
+
+struct private St2NormSlot {
+    gwoff : uint64
+    gboff : uint64
+    aoff : uint64
+}
+
+struct private St2BlockSlots {
+    c1 : array<St2ConvSlot>
+    c2 : array<St2ConvSlot>
+    n1 : array<St2NormSlot>
+    n2 : array<St2NormSlot>
+}
+
+struct private St2ResSlots {
+    n1 : St2NormSlot
+    n2 : St2NormSlot
+    c1 : St2ConvSlot
+    c2 : St2ConvSlot
+    c1x1 : St2ConvSlot
+    pool_w : uint64
+    pool_b : uint64
+}
+
+struct private St2LstmSlot {
+    fx : St2ConvSlot
+    bx : St2ConvSlot
+    fhh : uint64
+    bhh : uint64
+}
+
+struct private St2SlabWriter {
+    @exact_size host : array<float>   //! sized once from the measure pass; the write pass only bumps `n`
+    n : int64
+    measure : bool
+}
+
+//! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel).
+def private sw_alloc(var w : St2SlabWriter; count : int64) : int64 {
+    let at = (w.n + 3l) / 4l * 4l
+    w.n = at + count
+    return at
+}
+
+def private sw_put(var w : St2SlabWriter; i : int64; v : float) {
+    if (!w.measure) {
+        w.host[i] = v
+    }
+}
+
+def private st2_ceil(n, m : int64) : int64 => (n + m - 1l) / m * m
+
+def private st2_conv_key(c : TtsConv1d) : uint64 {
+    unsafe {
+        if (c.q8) {
+            return intptr(addr(c.wq[0]))
+        }
+        if (!empty(c.w)) {
+            return intptr(addr(c.w[0]))
+        }
+        if (!empty(c.wt)) {
+            return intptr(addr(c.wt[0]))
+        }
+        return c.transposed ? intptr(addr(c.wtr[0])) : intptr(addr(c.wk[0]))
+    }
+}
+
+def private st2_conv_ok(c : TtsConv1d) : bool {
+    return (c.groups == 1l && c.k >= 1l && c.cin >= 1l && c.cout >= 1l && c.stride >= 1l && c.dilation >= 1l
+        && (c.q8 ? !empty(c.wq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk))))
+}
+
+def private sw_put_q8(var w : St2SlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
+    return if (w.measure)
+    var wq : array<uint8>
+    var ws : array<uint8>
+    wq |> reserve_resize(rows * cols)
+    ws |> reserve_resize(rows * cols / 32l * 2l)
+    let mr = g_active_needs_repack ? active_q8_layout_mr() : 1l
+    unsafe {
+        q8_gather_rows(addr<int8 const?>(q[0]), null, addr<float const?>(qs[0]), cols, rows, rows,
+            mr, g_active_needs_repack ? active_q8_kgroup() : 1l, g_active_needs_repack ? active_q8_wbias() : 0l, wq, ws)
+        let sp = addr<uint16 const?>(ws[0])
+        for (r in range64(rows)) {
+            for (j in range64(cols)) {
+                w.host[w0 + r * stride + j] = float(int8(wq[r * cols + j])) * f16_to_f32(uint(sp[(r * cols + j) / 32l]))
+            }
+        }
+    }
+}
+
+def private st2_slot_uniforms(w : St2SlabWriter; var s : St2ConvSlot) {
+    if (!w.measure) {
+        s.u_kdim = uniform_u32(uint(s.kdim_p))
+        s.u_cout = uniform_u32(uint(s.cout_p))
+    }
+}
+
+def private st2_slab_conv(var w : St2SlabWriter; c : TtsConv1d) : St2ConvSlot {
+    let kc = c.k * c.cin
+    var s = St2ConvSlot(cout_p = st2_ceil(c.cout, 64l), kdim_p = st2_ceil(kc, 32l), gathers = c.cin % 8l == 0l)
+    let w0 = sw_alloc(w, s.cout_p * s.kdim_p)
+    s.woff = uint64(w0 * 4l)
+    if (c.q8) {
+        sw_put_q8(w, c.wq, c.wqs, c.cout, kc, w0, s.kdim_p)
+    } elif (!w.measure) {
+        for (co in range64(c.cout)) {
+            for (ci in range64(c.cin)) {
+                for (tap in range64(c.k)) {
+                    var v = 0.0
+                    if (c.transposed) {
+                        v = !empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci]
+                    } else {
+                        v = !empty(c.wk) ? c.wk[(tap * c.cin + ci) * c.cout_s + co] : c.w[(co * c.cin + ci) * c.k + tap]
+                    }
+                    w.host[w0 + co * s.kdim_p + tap * c.cin + ci] = v
+                }
+            }
+        }
+    }
+    s.boff = st2_slab_raw(w, c.b, s.cout_p)
+    st2_slot_uniforms(w, s)
+    return s
+}
+
+def private st2_slab_linear(var w : St2SlabWriter; l : TtsLinear) : St2ConvSlot {
+    var s = St2ConvSlot(cout_p = st2_ceil(l.nout, 64l), kdim_p = st2_ceil(l.nin, 32l), gathers = false)
+    let w0 = sw_alloc(w, s.cout_p * s.kdim_p)
+    s.woff = uint64(w0 * 4l)
+    if (l.q8) {
+        sw_put_q8(w, l.wq, l.wqs, l.nout, l.nin, w0, s.kdim_p)
+    } elif (!w.measure) {
+        for (o in range64(l.nout)) {
+            for (i in range64(l.nin)) {
+                w.host[w0 + o * s.kdim_p + i] = !empty(l.w) ? l.w[o * l.nin + i] : l.wt[i * l.nout + o]
+            }
+        }
+    }
+    s.boff = st2_slab_raw(w, l.b, s.cout_p)
+    st2_slot_uniforms(w, s)
+    return s
+}
+
+//! n floats of src into the slab, zeros past its length (a window the model does not carry); the byte offset.
+def private st2_slab_raw(var w : St2SlabWriter; src : array<float>; n : int64) : uint64 {
+    let at = sw_alloc(w, n)
+    for (i in range64(min(n, long_length(src)))) {
+        sw_put(w, at + i, src[i])
+    }
+    return uint64(at * 4l)
+}
+
+def private st2_slab_lstm_dir(var w : St2SlabWriter; l : TtsLstm; var xs : St2ConvSlot; var hh : uint64&) {
+    var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
+    lin.w := l.w_ih
+    lin.b := l.b
+    xs = st2_slab_linear(w, lin)
+    hh = st2_slab_raw(w, l.w_hh, 4l * l.hidden * l.hidden)
+}
+
+def private st2_slab_lstm(var w : St2SlabWriter; l : TtsBiLstm) : St2LstmSlot {
+    var s : St2LstmSlot
+    st2_slab_lstm_dir(w, l.fwd, s.fx, s.fhh)
+    st2_slab_lstm_dir(w, l.bwd, s.bx, s.bhh)
+    return s
+}
+
+//! A norm's scale and shift rows (ones and zeros when it carries none).
+def private st2_slab_norm_rows(var w : St2SlabWriter; n : TtsNorm; c : int64) : St2NormSlot {
+    let g0 = sw_alloc(w, 2l * c)
+    for (i in range64(c)) {
+        sw_put(w, g0 + i, empty(n.w) ? 1.0 : n.w[i])
+        sw_put(w, g0 + c + i, empty(n.b) ? 0.0 : n.b[i])
+    }
+    return St2NormSlot(gwoff = uint64(g0 * 4l), gboff = uint64((g0 + c) * 4l))
+}
+
+def private st2_slab_norm(var w : St2SlabWriter; a : TtsAdaIn; alpha : TtsWeight; c : int64) : St2NormSlot {
+    var s = st2_slab_norm_rows(w, a.norm, c)
+    s.aoff = st2_slab_raw(w, alpha.a, c)
+    return s
+}
+
+def private st2_slab_block(var w : St2SlabWriter; b : St2GenResBlock) : St2BlockSlots {
+    var s : St2BlockSlots
+    let n = length(b.convs1)
+    s.c1 |> reserve(n)
+    s.c2 |> reserve(n)
+    s.n1 |> reserve(n)
+    s.n2 |> reserve(n)
+    for (j in range(n)) {
+        s.c1 |> push(st2_slab_conv(w, b.convs1[j]))
+        s.c2 |> push(st2_slab_conv(w, b.convs2[j]))
+        s.n1 |> push(st2_slab_norm(w, b.adain1[j], b.alpha1[j], b.c))
+        s.n2 |> push(st2_slab_norm(w, b.adain2[j], b.alpha2[j], b.c))
+    }
+    return <- s
+}
+
+def private st2_slab_res(var w : St2SlabWriter; b : St2AdainResBlk) : St2ResSlots {
+    var s = St2ResSlots(n1 = st2_slab_norm_rows(w, b.norm1.norm, b.dim_in_s), n2 = st2_slab_norm_rows(w, b.norm2.norm, b.dim_out),
+        c1 = st2_slab_conv(w, b.conv1), c2 = st2_slab_conv(w, b.conv2))
+    if (b.learned_sc) {
+        s.c1x1 = st2_slab_conv(w, b.conv1x1)
+    }
+    if (b.upsample) {
+        s.pool_w = st2_slab_raw(w, b.pool.w, b.pool.cin * b.pool.k)
+        s.pool_b = st2_slab_raw(w, b.pool.b, b.pool.cin)
+    }
+    return s
+}
+
+def private st2_slot_release(var s : St2ConvSlot) {
+    if (s.u_kdim != null) {
+        pool_release(g_upool, s.u_kdim, 4ul)
+        pool_release(g_upool, s.u_cout, 4ul)
+        s.u_kdim = null
+        s.u_cout = null
+    }
+}
+
+def private st2_res_release(var s : St2ResSlots) {
+    st2_slot_release(s.c1)
+    st2_slot_release(s.c2)
+    st2_slot_release(s.c1x1)
+}
+
+def private st2_lstm_release(var s : St2LstmSlot) {
+    st2_slot_release(s.fx)
+    st2_slot_release(s.bx)
+}
+
+struct private St2SlabBase {
+    buf : MetalBuffer?
+    key : uint64
+}
+
+struct private St2DecSlab : St2SlabBase {
+    ups : array<St2ConvSlot>
+    noise : array<St2ConvSlot>
+    blocks : array<St2BlockSlots>
+    post : St2ConvSlot
+    f0c : St2ConvSlot
+    nc : St2ConvSlot
+    asr_res : St2ConvSlot
+    encode : St2ResSlots
+    decode : array<St2ResSlots>
+    src_w : uint64
+    src_b : uint64
+    stft_re : uint64
+    stft_im : uint64
+    istft_re : uint64
+    istft_im : uint64
+    window : uint64
+}
+
+struct private St2PredSlab : St2SlabBase {
+    bert_enc : St2ConvSlot
+    de_lstm : array<St2LstmSlot>
+    dur_lstm : St2LstmSlot
+    dur_proj : St2ConvSlot
+    sh_lstm : St2LstmSlot
+    f0b : array<St2ResSlots>
+    nb : array<St2ResSlots>
+    f0_proj : St2ConvSlot
+    n_proj : St2ConvSlot
+}
+
+struct private St2AlbertSlab : St2SlabBase {
+    word_emb : uint64
+    pos_emb : uint64
+    type_emb : uint64
+    emb_ln : St2NormSlot
+    map_in : St2ConvSlot
+    q : St2ConvSlot
+    k : St2ConvSlot
+    v : St2ConvSlot
+    dense : St2ConvSlot
+    attn_ln : St2NormSlot
+    ffn : St2ConvSlot
+    ffn_out : St2ConvSlot
+    full_ln : St2NormSlot
+}
+
+struct private St2TextSlab : St2SlabBase {
+    emb : uint64
+    cnn : array<St2ConvSlot>
+    ln : array<St2NormSlot>
+    lstm : St2LstmSlot
+}
+
+var private g_tw_st2_dec : St2DecSlab
+var private g_tw_st2_pred : St2PredSlab
+var private g_tw_st2_albert : St2AlbertSlab
+var private g_tw_st2_text : St2TextSlab
+var private @scratch @exact_size g_tw_st2_style_fc : array<float>   //!< one style fc's output
+
+//! The q8 lane's repack layout, folded into every slab key: the same quants under another layout dequantize differently.
+def private st2_lane_key() : uint64 {
+    return 1ul if (!g_active_needs_repack)
+    return (uint64(active_q8_layout_mr()) * 31ul + uint64(active_q8_kgroup())) * 31ul + uint64(active_q8_wbias())
+}
+
+def private st2_key_fold(var key : uint64&; c : TtsConv1d) {
+    key = key * 31ul + st2_conv_key(c)
+}
+
+def private st2_key_block(var key : uint64&; b : St2GenResBlock) {
+    for (c in b.convs1) {
+        st2_key_fold(key, c)
+    }
+    for (c in b.convs2) {
+        st2_key_fold(key, c)
+    }
+}
+
+def private st2_key_res(var key : uint64&; b : St2AdainResBlk) {
+    st2_key_fold(key, b.conv1)
+    st2_key_fold(key, b.conv2)
+}
+
+def private st2_lin_key(l : TtsLinear) : uint64 {
+    unsafe {
+        if (l.q8) {
+            return intptr(addr(l.wq[0]))
+        }
+        return !empty(l.w) ? intptr(addr(l.w[0])) : intptr(addr(l.wt[0]))
+    }
+}
+
+def private st2_dec_key(d : St2Decoder) : uint64 {
+    var key = 7ul + st2_lane_key()
+    for (c in d.ups) {
+        st2_key_fold(key, c)
+    }
+    for (c in d.noise_convs) {
+        st2_key_fold(key, c)
+    }
+    for (b in d.noise_res) {
+        st2_key_block(key, b)
+    }
+    for (b in d.resblocks) {
+        st2_key_block(key, b)
+    }
+    st2_key_fold(key, d.conv_post)
+    st2_key_fold(key, d.asr_res)
+    st2_key_res(key, d.encode)
+    for (b in d.decode) {
+        st2_key_res(key, b)
+    }
+    return key
+}
+
+def private st2_arr_key(a : array<float>) : uint64 {
+    return 0ul if (empty(a))
+    unsafe {
+        return intptr(addr(a[0]))
+    }
+}
+
+def private st2_pred_key(p : St2Predictor) : uint64 {
+    var key = 11ul + st2_lane_key() * 31ul + st2_lin_key(p.bert_encoder)
+    for (l in p.lstms) {
+        key = key * 31ul + st2_arr_key(l.fwd.w_hh)
+    }
+    key = key * 31ul + st2_arr_key(p.lstm.fwd.w_hh)
+    key = key * 31ul + st2_arr_key(p.shared_lstm.fwd.w_hh)
+    for (b in p.f0) {
+        st2_key_res(key, b)
+    }
+    for (b in p.n) {
+        st2_key_res(key, b)
+    }
+    return key
+}
+
+def private st2_albert_key(a : St2Albert) : uint64 {
+    var key = 13ul + st2_lane_key() * 31ul + st2_lin_key(a.map_in)
+    key = key * 31ul + st2_lin_key(a.q)
+    key = key * 31ul + st2_lin_key(a.ffn)
+    return key * 31ul + st2_arr_key(a.word_emb.a)
+}
+
+def private st2_text_key(te : St2TextEncoder) : uint64 {
+    var key = 17ul + st2_lane_key() * 31ul + st2_arr_key(te.emb.a)
+    for (c in te.cnn) {
+        st2_key_fold(key, c)
+    }
+    return key * 31ul + st2_arr_key(te.lstm.fwd.w_hh)
+}
+
+//! Untracked: the slab is GPU-read-only and written once here, as the model weights are.
+[cold_path]
+def private st2_slab_upload(var base : St2SlabBase; var w : St2SlabWriter; key : uint64) : bool {
+    let bytes = uint64(long_length(w.host) * 4l)
+    base.buf = metal_new_buffer_untracked(g_dev, bytes)
+    if (base.buf == null) {
+        return false
+    }
+    unsafe {
+        memcpy(metal_buffer_contents(base.buf), addr(w.host[0]), bytes)
+    }
+    base.key = key
+    return true
+}
+
+def private st2_base_drop(var base : St2SlabBase) {
+    if (base.buf != null) {
+        metal_release(base.buf)
+        base.buf = null
+    }
+    base.key = 0ul
+}
+
+def private st2_dec_write(var w : St2SlabWriter; d : St2Decoder; var s : St2DecSlab) {
+    s.ups |> reserve(length(d.ups))
+    s.noise |> reserve(length(d.noise_convs))
+    s.blocks |> reserve(length(d.noise_res) + length(d.resblocks))
+    s.decode |> reserve(length(d.decode))
+    for (c in d.ups) {
+        s.ups |> push(st2_slab_conv(w, c))
+    }
+    for (c in d.noise_convs) {
+        s.noise |> push(st2_slab_conv(w, c))
+    }
+    for (b in d.noise_res) {
+        s.blocks |> emplace(st2_slab_block(w, b))
+    }
+    for (b in d.resblocks) {
+        s.blocks |> emplace(st2_slab_block(w, b))
+    }
+    s.post = st2_slab_conv(w, d.conv_post)
+    s.f0c = st2_slab_conv(w, d.f0_conv)
+    s.nc = st2_slab_conv(w, d.n_conv)
+    s.asr_res = st2_slab_conv(w, d.asr_res)
+    s.encode = st2_slab_res(w, d.encode)
+    for (b in d.decode) {
+        s.decode |> push(st2_slab_res(w, b))
+    }
+    s.src_w = st2_slab_raw(w, d.source_linear.w, d.source_linear.nin)
+    s.src_b = st2_slab_raw(w, d.source_linear.b, 1l)
+    s.stft_re = st2_slab_raw(w, d.stft_fwd_re.w, d.stft_fwd_re.cout * d.stft_fwd_re.k)
+    s.stft_im = st2_slab_raw(w, d.stft_fwd_im.w, d.stft_fwd_im.cout * d.stft_fwd_im.k)
+    s.istft_re = st2_slab_raw(w, d.stft_bwd_re.wt, d.stft_bwd_re.cin * d.stft_bwd_re.k)
+    s.istft_im = st2_slab_raw(w, d.stft_bwd_im.wt, d.stft_bwd_im.cin * d.stft_bwd_im.k)
+    s.window = st2_slab_raw(w, d.window.a, d.stft_bwd_re.k)
+}
+
+def private st2_dec_drop {
+    var s & = g_tw_st2_dec
+    st2_base_drop(s)
+    for (c in s.ups) {
+        st2_slot_release(c)
+    }
+    for (c in s.noise) {
+        st2_slot_release(c)
+    }
+    for (b in s.blocks) {
+        for (c in b.c1) {
+            st2_slot_release(c)
+        }
+        for (c in b.c2) {
+            st2_slot_release(c)
+        }
+    }
+    st2_slot_release(s.post)
+    st2_slot_release(s.f0c)
+    st2_slot_release(s.nc)
+    st2_slot_release(s.asr_res)
+    st2_res_release(s.encode)
+    for (b in s.decode) {
+        st2_res_release(b)
+    }
+    unsafe {
+        delete s.ups
+        delete s.noise
+        delete s.blocks
+        delete s.decode
+    }
+}
+
+def private st2_lin_ok(l : TtsLinear) : bool {
+    return l.nin >= 1l && l.nout >= 1l && (l.q8 ? !empty(l.wq) : (!empty(l.w) || !empty(l.wt)))
+}
+
+//! A linear the dense GEMM stamps serve: `nin` a multiple of 32, since the stamps read X's K columns to the padded width and the row buffers carry no zeroed pad.
+def private st2_gemm_lin_ok(l : TtsLinear) : bool => st2_lin_ok(l) && l.nin % 32l == 0l
+
+def private st2_res_ok(b : St2AdainResBlk) : bool {
+    return (st2_conv_ok(b.conv1) && st2_conv_ok(b.conv2) && (!b.learned_sc || st2_conv_ok(b.conv1x1))
+        && (!b.upsample || (b.pool.k >= 1l && long_length(b.pool.w) >= b.pool.cin * b.pool.k)))
+}
+
+//! Every conv and linear a part's slab writes, checked before the writer reads them: a seat's own
+//! shape gate covers its stage, the slab covers the whole part.
+def private st2_dec_ok(d : St2Decoder) : bool {
+    for (c in d.ups) {
+        return false if (!st2_conv_ok(c))
+    }
+    for (c in d.noise_convs) {
+        return false if (!st2_conv_ok(c))
+    }
+    for (b in d.decode) {
+        return false if (!st2_res_ok(b))
+    }
+    return (st2_conv_ok(d.conv_post) && st2_conv_ok(d.f0_conv) && st2_conv_ok(d.n_conv) && st2_conv_ok(d.asr_res)
+        && st2_res_ok(d.encode) && st2_lin_ok(d.source_linear))
+}
+
+def private st2_pred_ok(p : St2Predictor) : bool {
+    for (l in p.lstms) {
+        return false if (!st2_lstm_ok(l, l.fwd.nin))
+    }
+    for (b in p.f0) {
+        return false if (!st2_res_ok(b))
+    }
+    for (b in p.n) {
+        return false if (!st2_res_ok(b))
+    }
+    return (st2_gemm_lin_ok(p.bert_encoder) && st2_lstm_ok(p.lstm, p.lstm.fwd.nin) && st2_gemm_lin_ok(p.duration_proj)
+        && st2_lstm_ok(p.shared_lstm, p.shared_lstm.fwd.nin) && st2_conv_ok(p.f0_proj) && st2_conv_ok(p.n_proj))
+}
+
+def private st2_albert_ok(a : St2Albert) : bool {
+    return (st2_gemm_lin_ok(a.map_in) && st2_gemm_lin_ok(a.q) && st2_gemm_lin_ok(a.k) && st2_gemm_lin_ok(a.v) && st2_gemm_lin_ok(a.dense)
+        && st2_gemm_lin_ok(a.ffn) && st2_gemm_lin_ok(a.ffn_out) && a.q.nin == a.hidden && a.k.nin == a.hidden && a.v.nin == a.hidden && a.dense.nin == a.hidden)
+}
+
+def private st2_text_ok(te : St2TextEncoder) : bool {
+    for (c in te.cnn) {
+        return false if (!st2_conv_ok(c))
+    }
+    return st2_lstm_ok(te.lstm, te.lstm.fwd.nin)
+}
+
+[cold_path]
+def private st2_dec_attach(d : St2Decoder) : bool {
+    let key = st2_dec_key(d)
+    if (g_tw_st2_dec.buf != null && g_tw_st2_dec.key == key) {
+        return true
+    }
+    st2_dec_drop()
+    var w = St2SlabWriter(measure = true)
+    var probe : St2DecSlab
+    st2_dec_write(w, d, probe)
+    w.host |> reserve_resize(w.n)
+    w.n = 0l
+    w.measure = false
+    st2_dec_write(w, d, g_tw_st2_dec)
+    if (!st2_slab_upload(g_tw_st2_dec, w, key)) {
+        st2_dec_drop()
+        return false
+    }
+    return true
+}
+
+def private st2_pred_write(var w : St2SlabWriter; p : St2Predictor; var s : St2PredSlab) {
+    s.bert_enc = st2_slab_linear(w, p.bert_encoder)
+    s.de_lstm |> reserve(length(p.lstms))
+    for (l in p.lstms) {
+        s.de_lstm |> push(st2_slab_lstm(w, l))
+    }
+    s.dur_lstm = st2_slab_lstm(w, p.lstm)
+    s.dur_proj = st2_slab_linear(w, p.duration_proj)
+    s.sh_lstm = st2_slab_lstm(w, p.shared_lstm)
+    s.f0b |> reserve(length(p.f0))
+    s.nb |> reserve(length(p.n))
+    for (b in p.f0) {
+        s.f0b |> push(st2_slab_res(w, b))
+    }
+    for (b in p.n) {
+        s.nb |> push(st2_slab_res(w, b))
+    }
+    s.f0_proj = st2_slab_conv(w, p.f0_proj)
+    s.n_proj = st2_slab_conv(w, p.n_proj)
+}
+
+def private st2_pred_drop {
+    var s & = g_tw_st2_pred
+    st2_base_drop(s)
+    st2_slot_release(s.bert_enc)
+    for (l in s.de_lstm) {
+        st2_lstm_release(l)
+    }
+    st2_lstm_release(s.dur_lstm)
+    st2_slot_release(s.dur_proj)
+    st2_lstm_release(s.sh_lstm)
+    for (b in s.f0b) {
+        st2_res_release(b)
+    }
+    for (b in s.nb) {
+        st2_res_release(b)
+    }
+    st2_slot_release(s.f0_proj)
+    st2_slot_release(s.n_proj)
+    unsafe {
+        delete s.de_lstm
+        delete s.f0b
+        delete s.nb
+    }
+}
+
+[cold_path]
+def private st2_pred_attach(p : St2Predictor) : bool {
+    let key = st2_pred_key(p)
+    if (g_tw_st2_pred.buf != null && g_tw_st2_pred.key == key) {
+        return true
+    }
+    st2_pred_drop()
+    var w = St2SlabWriter(measure = true)
+    var probe : St2PredSlab
+    st2_pred_write(w, p, probe)
+    w.host |> reserve_resize(w.n)
+    w.n = 0l
+    w.measure = false
+    st2_pred_write(w, p, g_tw_st2_pred)
+    if (!st2_slab_upload(g_tw_st2_pred, w, key)) {
+        st2_pred_drop()
+        return false
+    }
+    return true
+}
+
+def private st2_albert_write(var w : St2SlabWriter; a : St2Albert; var s : St2AlbertSlab) {
+    s.word_emb = st2_slab_raw(w, a.word_emb.a, long_length(a.word_emb.a))
+    s.pos_emb = st2_slab_raw(w, a.pos_emb.a, long_length(a.pos_emb.a))
+    s.type_emb = st2_slab_raw(w, a.type_emb.a, a.emb_dim)
+    s.emb_ln = st2_slab_norm_rows(w, a.emb_ln, a.emb_dim)
+    s.map_in = st2_slab_linear(w, a.map_in)
+    s.q = st2_slab_linear(w, a.q)
+    s.k = st2_slab_linear(w, a.k)
+    s.v = st2_slab_linear(w, a.v)
+    s.dense = st2_slab_linear(w, a.dense)
+    s.attn_ln = st2_slab_norm_rows(w, a.attn_ln, a.hidden)
+    s.ffn = st2_slab_linear(w, a.ffn)
+    s.ffn_out = st2_slab_linear(w, a.ffn_out)
+    s.full_ln = st2_slab_norm_rows(w, a.full_ln, a.hidden)
+}
+
+def private st2_albert_drop {
+    var s & = g_tw_st2_albert
+    st2_base_drop(s)
+    st2_slot_release(s.map_in)
+    st2_slot_release(s.q)
+    st2_slot_release(s.k)
+    st2_slot_release(s.v)
+    st2_slot_release(s.dense)
+    st2_slot_release(s.ffn)
+    st2_slot_release(s.ffn_out)
+}
+
+[cold_path]
+def private st2_albert_attach(a : St2Albert) : bool {
+    let key = st2_albert_key(a)
+    if (g_tw_st2_albert.buf != null && g_tw_st2_albert.key == key) {
+        return true
+    }
+    st2_albert_drop()
+    var w = St2SlabWriter(measure = true)
+    var probe : St2AlbertSlab
+    st2_albert_write(w, a, probe)
+    w.host |> reserve_resize(w.n)
+    w.n = 0l
+    w.measure = false
+    st2_albert_write(w, a, g_tw_st2_albert)
+    if (!st2_slab_upload(g_tw_st2_albert, w, key)) {
+        st2_albert_drop()
+        return false
+    }
+    return true
+}
+
+def private st2_text_write(var w : St2SlabWriter; te : St2TextEncoder; var s : St2TextSlab) {
+    s.emb = st2_slab_raw(w, te.emb.a, long_length(te.emb.a))
+    s.cnn |> reserve(length(te.cnn))
+    s.ln |> reserve(length(te.cnn_ln))
+    for (c in te.cnn) {
+        s.cnn |> push(st2_slab_conv(w, c))
+    }
+    for (n in te.cnn_ln) {
+        s.ln |> push(st2_slab_norm_rows(w, n, te.c))
+    }
+    s.lstm = st2_slab_lstm(w, te.lstm)
+}
+
+def private st2_text_drop {
+    var s & = g_tw_st2_text
+    st2_base_drop(s)
+    for (c in s.cnn) {
+        st2_slot_release(c)
+    }
+    st2_lstm_release(s.lstm)
+    unsafe {
+        delete s.cnn
+        delete s.ln
+    }
+}
+
+[cold_path]
+def private st2_text_attach(te : St2TextEncoder) : bool {
+    let key = st2_text_key(te)
+    if (g_tw_st2_text.buf != null && g_tw_st2_text.key == key) {
+        return true
+    }
+    st2_text_drop()
+    var w = St2SlabWriter(measure = true)
+    var probe : St2TextSlab
+    st2_text_write(w, te, probe)
+    w.host |> reserve_resize(w.n)
+    w.n = 0l
+    w.measure = false
+    st2_text_write(w, te, g_tw_st2_text)
+    if (!st2_slab_upload(g_tw_st2_text, w, key)) {
+        st2_text_drop()
+        return false
+    }
+    return true
+}
+
+def private st2_slab_drop {
+    st2_dec_drop()
+    st2_pred_drop()
+    st2_albert_drop()
+    st2_text_drop()
+}
+
+struct private St2GpuCtx {
+    bufs : MetalBuffer? [ST2_MAX_BUFS]
+    bsizes : uint64 [ST2_MAX_BUFS]
+    n_bufs : int
+    us_v : uint [ST2_MAX_UNIFORMS]     //!< the value-keyed uniforms: a value binds once an encode
+    us_b : MetalBuffer? [ST2_MAX_UNIFORMS]
+    n_us : int
+    uf_v : float [ST2_MAX_UNIFORMS]
+    uf_b : MetalBuffer? [ST2_MAX_UNIFORMS]
+    n_uf : int
+    bh : MetalBuffer?
+    bytes_h : uint64
+    hcur : int64
+    hcap : int64
+    bstats : MetalBuffer?
+    exact : bool         //!< the GEMMs on the f32-exact stamps: the front end, whose durations round and whose F0 drives a phase
+    bytes_stats : uint64
+    bcols : MetalBuffer?
+    bytes_cols : uint64
+    slab : MetalBuffer?   //!< the part's slab every dispatch of the encode binds
+}
+
+def private st2_ctx_make(var c : St2GpuCtx; var slab : MetalBuffer?; h_floats, stats_c : int64; cols_bytes : uint64) {
+    c.slab = slab
+    c.bytes_h = uint64(max(h_floats, 1l) * 4l)
+    c.bh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_h)
+    c.hcap = max(h_floats, 1l)
+    c.bytes_stats = uint64(max(2l * stats_c, 2l) * 4l)
+    c.bstats = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_stats)
+    c.bytes_cols = max(cols_bytes, 64ul)
+    c.bcols = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_cols)
+}
+
+//! `rows` rows of `width` floats, the rows up to the 32 lattice zeroed.
+def private st2_rows_buf(var c : St2GpuCtx; rows, width : int64) : MetalBuffer? {
+    let mp = st2_ceil(rows, 32l)
+    let bytes = uint64(mp * width * 4l)
+    assert(c.n_bufs < ST2_MAX_BUFS)
+    var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
+    zero_rows(b, rows, mp, width)
+    c.bufs[c.n_bufs] = b
+    c.bsizes[c.n_bufs] = bytes
+    c.n_bufs++
+    return b
+}
+
+def private st2_ctx_release(var c : St2GpuCtx) {
+    for (i in range(c.n_bufs)) {
+        pool_release(g_tw_pool, c.bufs[i], c.bsizes[i])
+    }
+    pool_release(g_tw_pool, c.bh, c.bytes_h)
+    pool_release(g_tw_pool, c.bstats, c.bytes_stats)
+    pool_release(g_tw_pool, c.bcols, c.bytes_cols)
+    for (i in range(c.n_us)) {
+        pool_release(g_upool, c.us_b[i], 4ul)
+    }
+    for (i in range(c.n_uf)) {
+        pool_release(g_upool, c.uf_b[i], 4ul)
+    }
+}
+
+//! The uniform holding `v`, bound once an encode (the shape gates bound the distinct values).
+def private st2_u(var c : St2GpuCtx; v : uint) : MetalBuffer? {
+    for (i in range(c.n_us)) {
+        return c.us_b[i] if (c.us_v[i] == v)
+    }
+    assert(c.n_us < ST2_MAX_UNIFORMS)
+    c.us_v[c.n_us] = v
+    c.us_b[c.n_us] = uniform_u32(v)
+    c.n_us++
+    return c.us_b[c.n_us - 1]
+}
+
+def private st2_uf(var c : St2GpuCtx; v : float) : MetalBuffer? {
+    for (i in range(c.n_uf)) {
+        return c.uf_b[i] if (c.uf_v[i] == v)
+    }
+    assert(c.n_uf < ST2_MAX_UNIFORMS)
+    c.uf_v[c.n_uf] = v
+    c.uf_b[c.n_uf] = uniform_f32(v)
+    c.n_uf++
+    return c.uf_b[c.n_uf - 1]
+}
+
+def private st2_upload(b : MetalBuffer?; src : array<float>; n : int64) {
+    unsafe {
+        memcpy(metal_buffer_contents(b), addr(src[0]), uint64(n * 4l))
+    }
+}
+
+def private st2_readback(b : MetalBuffer?; var dst : array<float>; n : int64) {
+    unsafe {
+        memcpy(addr(dst[0]), metal_buffer_contents(b), uint64(n * 4l))
+    }
+}
+
+//! The style fc at the h cursor - (1 + gamma, beta) for an AdaLN site - and its byte offset.
+def private st2_style_rows(var c : St2GpuCtx; fc : TtsLinear; s : array<float>; cc : int64; ln_form : bool) : uint64 {
+    linear_vec(fc, s, g_tw_st2_style_fc)
+    let hoff = c.hcur
+    assert(hoff + 2l * cc <= c.hcap)
+    unsafe {
+        var p = reinterpret<float?>(metal_buffer_contents(c.bh)) + hoff
+        memcpy(p, addr(g_tw_st2_style_fc[0]), 2l * cc * 4l)
+        if (ln_form) {
+            for (i in range64(cc)) {
+                p[i] = p[i] + 1.0
+            }
+        }
+    }
+    c.hcur += 2l * cc
+    return uint64(hoff * 4l)
+}
+
+def private st2_chunk_rows(kdim_p : int64) : int64 => clamp(ST2_IM2COL_CHUNK_MAX_BYTES / (kdim_p * 4l) / 32l * 32l, 32l, ST2_CHUNK_ROWS)
+
+def private st2_cols_bytes(c : TtsConv1d) : uint64 {
+    return 0ul if (c.cin % 8l == 0l)
+    let kdim_p = st2_ceil(c.k * c.cin, 32l)
+    return uint64(st2_chunk_rows(kdim_p) * kdim_p * 4l)
+}
+
+def private st2_conv_args(cv : TtsConv1d; t_in, r0, rows : int64) : St2ConvArgs {
+    return St2ConvArgs(cin = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride),
+        pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in), r0 = uint(r0), rows = uint(rows),
+        transposed = cv.transposed ? 1u : 0u)
+}
+
+//! One rows conv and its bias into rows of stride slot.cout_p; the output row count.
+def private st2_conv(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2ConvSlot; cv : TtsConv1d;
+                     bx : MetalBuffer?; t_in : int64; by : MetalBuffer?) : int64 {
+    let t_out = conv1d_out_len(cv, t_in)
+    if (slot.gathers) {
+        var ka = st2_conv_args(cv, t_in, 0l, t_out)
+        if (c.exact) {
+            enc_st2_conv_exact_mm(enc, c.slab, slot.woff, bx, by, 0ul, slot.u_cout, ka, st2_ceil(t_out, 32l), slot.cout_p)
+        } else {
+            enc_st2_conv_mm(enc, c.slab, slot.woff, bx, by, 0ul, slot.u_cout, ka, st2_ceil(t_out, 32l), slot.cout_p)
+        }
+    }
+    var r0 = slot.gathers ? t_out : 0l
+    let chunk = st2_chunk_rows(slot.kdim_p)
+    while (r0 < t_out) {
+        let rows = min(chunk, t_out - r0)
+        var ka = st2_conv_args(cv, t_in, r0, rows)
+        let mp = st2_ceil(rows, 32l)
+        enc_st2_im2col(enc, bx, c.bcols, ka, mp * slot.kdim_p)
+        st2_mm(enc, c, slot.woff, c.bcols, by, uint64(r0 * slot.cout_p * 4l), slot.u_kdim, slot.u_cout, mp, slot.cout_p)
+        r0 += rows
+    }
+    let n = t_out * slot.cout_p
+    let u_n = st2_u(c, uint(n))
+    enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, u_n, n)
+    g_tower_convs++
+    return t_out
+}
+
+def private st2_mm(enc : MetalComputeEncoder?; c : St2GpuCtx; woff : uint64; bx, by : MetalBuffer?; yoff : uint64; u_kdim, u_cout : MetalBuffer?; mp, d : int64) {
+    if (c.exact) {
+        enc_f32_exact_mm(enc, c.slab, woff, bx, by, yoff, u_kdim, u_cout, mp, d)
+    } else {
+        enc_f32_mm(enc, c.slab, woff, bx, by, yoff, u_kdim, u_cout, mp, d)
+    }
+}
+
+def private st2_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2ConvSlot; bx : MetalBuffer?; rows : int64; by : MetalBuffer?) {
+    st2_mm(enc, c, slot.woff, bx, by, 0ul, slot.u_kdim, slot.u_cout, st2_ceil(rows, 32l), slot.cout_p)
+    let n = rows * slot.cout_p
+    let u_n = st2_u(c, uint(n))
+    enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, u_n, n)
+}
+
+def private st2_ln(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx, by : MetalBuffer?; rows, d : int64; eps : float; wbuf : MetalBuffer?; woff, boff : uint64) {
+    let u_d = st2_u(c, uint(d))
+    let u_eps = st2_uf(c, eps)
+    enc_ln(enc, bx, wbuf, woff, wbuf, boff, by, u_d, u_eps, rows)
+}
+
+//! AdaIN and the site's activation from bin into bout; the two may be one buffer.
+def private st2_adain(enc : MetalComputeEncoder?; var c : St2GpuCtx; bin, bout : MetalBuffer?; t, cc : int64;
+                      a : TtsAdaIn; ns : St2NormSlot; s : array<float>; snake : bool) {
+    let hoff = st2_style_rows(c, a.fc, s, cc, false)
+    let u_t = st2_u(c, uint(t))
+    let u_c = st2_u(c, uint(cc))
+    enc_st2_colstats(enc, bin, c.bstats, u_t, u_c, cc)
+    let n = t * cc
+    var ka = St2AdainArgs(c = uint(cc), t = uint(t), eps = ST2_ADAIN_EPS)
+    if (snake) {
+        enc_st2_adain_snake(enc, bin, bout, c.bstats, c.bh, hoff, c.slab, ns.gwoff, c.slab, ns.gboff, c.slab, ns.aoff, ka, n)
+    } else {
+        enc_st2_adain_leaky(enc, bin, bout, c.bstats, c.bh, hoff, c.slab, ns.gwoff, c.slab, ns.gboff, ka, n)
+    }
+}
+
+def private st2_add(enc : MetalComputeEncoder?; var c : St2GpuCtx; ba, bb, bo : MetalBuffer?; n : int64; scale : float) {
+    let u_scale = st2_uf(c, scale)
+    let u_n = st2_u(c, uint(n))
+    enc_st2_add(enc, ba, bb, bo, u_scale, u_n, n)
+}
+
+def private st2_leaky(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx : MetalBuffer?; n : int64; slope : float) {
+    let u_slope = st2_uf(c, slope)
+    let u_n = st2_u(c, uint(n))
+    enc_st2_leaky(enc, bx, u_slope, u_n, n)
+}
+
+def private st2_bilstm(enc : MetalComputeEncoder?; var c : St2GpuCtx; l : TtsBiLstm; sl : St2LstmSlot;
+                       bx : MetalBuffer?; t : int64; bxg_f, bxg_b, by : MetalBuffer?) {
+    let hd = l.fwd.hidden
+    st2_lin(enc, c, sl.fx, bx, t, bxg_f)
+    st2_lin(enc, c, sl.bx, bx, t, bxg_b)
+    var kf = St2LstmArgs(t = uint(t), hidden = uint(hd), xgs = uint(sl.fx.cout_p), ystride = uint(2l * hd), yoff = 0u, reverse = 0u)
+    enc_st2_lstm(enc, bxg_f, by, c.slab, sl.fhh, kf, 4l * hd)
+    var kb = St2LstmArgs(t = uint(t), hidden = uint(hd), xgs = uint(sl.bx.cout_p), ystride = uint(2l * hd), yoff = uint(hd), reverse = 1u)
+    enc_st2_lstm(enc, bxg_b, by, c.slab, sl.bhh, kb, 4l * hd)
+}
+
+struct private St2ResBufs {
+    br : MetalBuffer?
+    bpool : MetalBuffer?
+    bc1 : MetalBuffer?
+    bsc : MetalBuffer?
+    bsc2 : MetalBuffer?
+    bidx : MetalBuffer?    //!< the nearest-upsample row map [2 t]
+}
+
+def private st2_res_bufs(var c : St2GpuCtx; rows, width : int64) : St2ResBufs {
+    var r = St2ResBufs(br = st2_rows_buf(c, rows, width), bpool = st2_rows_buf(c, rows, width), bc1 = st2_rows_buf(c, rows, width),
+        bsc = st2_rows_buf(c, rows, width), bsc2 = st2_rows_buf(c, rows, width), bidx = st2_rows_buf(c, rows, 1l))
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(r.bidx))
+        for (i in range64(rows)) {
+            p[i] = uint(i / 2l)
+        }
+    }
+    return r
+}
+
+//! The CPU adain_res_blk, dispatch for dispatch, from bin [t][dim_in_s] into bout [t1][dim_out]; t1 back.
+def private st2_res_blk(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2AdainResBlk; sl : St2ResSlots; r : St2ResBufs;
+                        bin : MetalBuffer?; t : int64; s : array<float>; bout : MetalBuffer?) : int64 {
+    st2_adain(enc, c, bin, r.br, t, b.dim_in_s, b.norm1, sl.n1, s, false)
+    var t1 = t
+    if (b.upsample) {
+        t1 = conv1d_out_len(b.pool, t)
+        var ka = St2PoolArgs(c = uint(b.pool.cin), k = uint(b.pool.k), stride = uint(b.pool.stride), pad_l = uint(b.pool.pad_l),
+            dil = uint(b.pool.dilation), t_in = uint(t), total = uint(t1 * b.pool.cin))
+        enc_st2_pool_dw(enc, r.br, r.bpool, c.slab, sl.pool_w, c.slab, sl.pool_b, ka, t1 * b.pool.cin)
+        st2_conv(enc, c, sl.c1, b.conv1, r.bpool, t1, r.bc1)
+    } else {
+        st2_conv(enc, c, sl.c1, b.conv1, r.br, t1, r.bc1)
+    }
+    st2_adain(enc, c, r.bc1, r.bc1, t1, b.dim_out, b.norm2, sl.n2, s, false)
+    st2_conv(enc, c, sl.c2, b.conv2, r.bc1, t1, bout)
+    let n = t1 * b.dim_out
+    if (b.upsample) {
+        var kg = St2GatherArgs(c = uint(b.dim_in_s), add_b = 0u, add_c = 0u, total = uint(t1 * b.dim_in_s))
+        enc_st2_gather(enc, bin, 0ul, r.bidx, bin, 0ul, bin, 0ul, r.bsc, kg, t1 * b.dim_in_s)
+        if (b.learned_sc) {
+            st2_conv(enc, c, sl.c1x1, b.conv1x1, r.bsc, t1, r.bsc2)
+            st2_add(enc, c, bout, r.bsc2, bout, n, ST2_JOIN)
+        } else {
+            st2_add(enc, c, bout, r.bsc, bout, n, ST2_JOIN)
+        }
+    } elif (b.learned_sc) {
+        st2_conv(enc, c, sl.c1x1, b.conv1x1, bin, t1, r.bsc2)
+        st2_add(enc, c, bout, r.bsc2, bout, n, ST2_JOIN)
+    } else {
+        st2_add(enc, c, bout, bin, bout, n, ST2_JOIN)
+    }
+    return t1
+}
+
+//! A Snake residual block from bin into bout, the CPU `gen_res_block` dispatch for dispatch.
+def private st2_gen_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2GenResBlock; sl : St2BlockSlots;
+                              bxt, by1 : MetalBuffer?; bin, bout : MetalBuffer?; t : int64; s : array<float>) {
+    let n = t * b.c
+    for (j in range(length(b.convs1))) {
+        let src = j == 0 ? bin : bout
+        st2_adain(enc, c, src, bxt, t, b.c, b.adain1[j], sl.n1[j], s, true)
+        st2_conv(enc, c, sl.c1[j], b.convs1[j], bxt, t, by1)
+        st2_adain(enc, c, by1, by1, t, b.c, b.adain2[j], sl.n2[j], s, true)
+        st2_conv(enc, c, sl.c2[j], b.convs2[j], by1, t, bxt)
+        st2_add(enc, c, src, bxt, bout, n, 1.0)
+    }
+}
+
+struct private St2GenBufs {
+    by : MetalBuffer?
+    bsrc : MetalBuffer?
+    bsres : MetalBuffer?
+    bxt : MetalBuffer?
+    by1 : MetalBuffer?
+    bo : MetalBuffer?
+}
+
+def private st2_gen_bufs(var c : St2GpuCtx; floats_rows : int64) : St2GenBufs {
+    return St2GenBufs(by = st2_rows_buf(c, floats_rows, 1l), bsrc = st2_rows_buf(c, floats_rows, 1l), bsres = st2_rows_buf(c, floats_rows, 1l),
+        bxt = st2_rows_buf(c, floats_rows, 1l), by1 = st2_rows_buf(c, floats_rows, 1l), bo = st2_rows_buf(c, floats_rows, 1l))
+}
+
+//! The CPU generator_stage, dispatch for dispatch, from bx_in into bout.
+def private st2_stage(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; i : int64; g : St2GenBufs; bspec : MetalBuffer?;
+                      bx_in, bout : MetalBuffer?; var tt, cc : int64&; har_frames : int64; s : array<float>) {
+    let sl & = g_tw_st2_dec
+    st2_leaky(enc, c, bx_in, tt * cc, 0.1)
+    let src_t = st2_conv(enc, c, sl.noise[i], d.noise_convs[i], bspec, har_frames, g.bsrc)
+    st2_gen_res_block(enc, c, d.noise_res[i], sl.blocks[i], g.bxt, g.by1, g.bsrc, g.bsres, src_t, s)
+    let last = i == long_length(d.ups) - 1l
+    var t2 = st2_conv(enc, c, sl.ups[i], d.ups[i], bx_in, tt, last ? g.bxt : g.by)
+    let c2 = d.ups[i].cout
+    if (last) {
+        t2++
+    }
+    let n = t2 * c2
+    let u_n = st2_u(c, uint(n))
+    if (last) {
+        let u_c = st2_u(c, uint(c2))
+        enc_st2_reflect1(enc, g.bxt, g.by, u_c, u_n, n)
+    }
+    st2_add(enc, c, g.by, g.bsres, g.by, n, 1.0)
+    let nk = d.n_kernels
+    let nnoise = long_length(d.noise_res)
+    let u_scale = st2_uf(c, 1.0 / float(nk))
+    let u_one = st2_u(c, 1u)
+    let u_zero = st2_u(c, 0u)
+    for (j in range64(nk)) {
+        st2_gen_res_block(enc, c, d.resblocks[i * nk + j], sl.blocks[nnoise + i * nk + j], g.bxt, g.by1, g.by, g.bsres, t2, s)
+        enc_st2_axpy(enc, bout, g.bsres, u_scale, j == 0l ? u_one : u_zero, u_n, n)
+    }
+    tt = t2
+    cc = c2
+}
+
+//! The generator's shape, from the CPU chain's own length rules; false on any shape the kernels do not take.
+struct private St2Shape {
+    t_last : int64
+    c_last : int64
+    c_max : int64
+    t_post : int64
+    row_buf_floats : int64
+    style_fc_floats : int64
+    cols_bytes : uint64
+}
+
+def private st2_note_conv(var sh : St2Shape; c : TtsConv1d) : bool {
+    return false if (!st2_conv_ok(c))
+    sh.cols_bytes = max(sh.cols_bytes, st2_cols_bytes(c))
+    return true
+}
+
+def private st2_note_block(var sh : St2Shape; b : St2GenResBlock; t, c : int64) : bool {
+    let n = length(b.convs1)
+    return false if (b.c != c || n == 0 || length(b.convs2) != n || length(b.adain1) != n || length(b.adain2) != n
+        || length(b.alpha1) != n || length(b.alpha2) != n)
+    for (j in range(n)) {
+        let c1 & = unsafe(b.convs1[j])
+        let c2 & = unsafe(b.convs2[j])
+        return false if (!st2_note_conv(sh, c1) || !st2_note_conv(sh, c2)
+            || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
+            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t
+            || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c)
+    }
+    sh.style_fc_floats += int64(n) * 2l * 2l * c
+    return true
+}
+
+def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2Shape) : bool {
+    let nst = long_length(d.ups)
+    return false if (nst == 0l || nst > ST2_MAX_STAGES || t < 1l || har_frames < 1l || d.n_kernels < 1l
+        || long_length(d.noise_convs) != nst || long_length(d.noise_res) != nst || long_length(d.resblocks) != nst * d.n_kernels)
+    var tt = t
+    var cc = c
+    sh.c_max = max(sh.c_max, c)
+    sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(t, 32l) * c)
+    for (i in range64(nst)) {
+        let up & = unsafe(d.ups[i])
+        let nc & = unsafe(d.noise_convs[i])
+        return false if (!st2_note_conv(sh, up) || !st2_note_conv(sh, nc) || up.cin != cc || nc.cin != d.noise_convs[0].cin)
+        var t2 = conv1d_out_len(up, tt)
+        if (i == nst - 1l) {
+            t2++
+        }
+        let c2 = up.cout
+        return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2
+            || !st2_note_block(sh, d.noise_res[i], t2, c2))
+        for (j in range64(d.n_kernels)) {
+            return false if (!st2_note_block(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
+        }
+        sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(t2, 32l) * c2)
+        sh.c_max = max(sh.c_max, c2)
+        tt = t2
+        cc = c2
+    }
+    return false if (!st2_note_conv(sh, d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout > ST2_POST_WIDTH
+        || d.conv_post.cout < 2l * d.bins)
+    sh.t_post = conv1d_out_len(d.conv_post, tt)
+    sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(sh.t_post, 32l) * ST2_POST_WIDTH)
+    sh.t_last = tt
+    sh.c_last = cc
+    return true
+}
+
+//! The generator from the rows in bx through conv_post into bpost [t_post][ST2_POST_WIDTH].
+def private st2_generator_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; g : St2GenBufs; bx, bspec, bpost : MetalBuffer?;
+                                cx, t, har_frames : int64; s : array<float>) {
+    let nst = long_length(d.ups)
+    var tt = t
+    var cc = cx
+    for (i in range64(nst)) {
+        if (i % 2l == 0l) {
+            st2_stage(enc, c, d, i, g, bspec, bx, g.bo, tt, cc, har_frames, s)
+        } else {
+            st2_stage(enc, c, d, i, g, bspec, g.bo, bx, tt, cc, har_frames, s)
+        }
+    }
+    let bfin = nst % 2l == 1l ? g.bo : bx
+    st2_leaky(enc, c, bfin, tt * cc, 0.01)
+    st2_conv(enc, c, g_tw_st2_dec.post, d.conv_post, bfin, tt, bpost)
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
+def private metal_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx, t : int64; s : array<float>;
+                                      har_spec : array<float>; har_frames : int64; @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    var sh = St2Shape()
+    if (!st2_gen_shape(d, cx, t, har_frames, sh)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    var tc = ref_time_ticks()
+    if (!st2_dec_ok(d)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_dec_attach(d)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    asr_prof_add("tts.gen.gpu.slab", tc)
+    tc = ref_time_ticks()
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_dec.buf, sh.style_fc_floats, sh.c_max, sh.cols_bytes)
+    var g = st2_gen_bufs(c, sh.row_buf_floats)
+    var bx = st2_rows_buf(c, sh.row_buf_floats, 1l)
+    let spec_floats = har_frames * d.noise_convs[0].cin
+    var bspec = st2_rows_buf(c, spec_floats, 1l)
+    st2_upload(bx, x_rows, t * cx)
+    st2_upload(bspec, har_spec, spec_floats)
+    asr_prof_add("tts.gen.gpu.upload", tc)
+    tc = ref_time_ticks()
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        st2_generator_chain(enc, c, d, g, bx, bspec, g.by, cx, t, har_frames, s)
+    }
+    asr_prof_add("tts.gen.gpu.chain", tc)
+    if (ran) {
+        tc = ref_time_ticks()
+        let n_post = sh.t_post * ST2_POST_WIDTH
+        unsafe(scratch_resize(sc.gen_post, n_post))
+        var y & = unsafe(sc.gen_post)
+        st2_readback(g.by, y, n_post)
+        styletts2_istft(d, y, ST2_POST_WIDTH, sh.t_post, wave, sc)
+        g_tower_encodes++
+        g_tower_rows += sh.t_post
+        asr_prof_add("tts.gen.gpu.tail", tc)
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+//! The block's output row count, or -1 on a shape the kernels do not take.
+def private st2_res_shape(var sh : St2Shape; b : St2AdainResBlk; t : int64) : int64 {
+    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in
+        || !st2_note_conv(sh, b.conv1) || !st2_note_conv(sh, b.conv2) || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out
+        || b.conv2.cout != b.dim_out
+        || (b.learned_sc && (!st2_note_conv(sh, b.conv1x1) || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s)))
+    var t1 = t
+    if (b.upsample) {
+        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
+        t1 = conv1d_out_len(b.pool, t)
+        return -1l if (t1 != 2l * t)
+    }
+    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1)
+    sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
+    sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
+    sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(t1, 32l) * max(b.dim_in_s, b.dim_out))
+    return t1
+}
+
+//! The source's geometry for `f2` frames.
+struct private St2SourceShape {
+    samples : int64
+    nlow : int64
+    spec_frames : int64
+}
+
+let private ST2_MAX_DE_LSTMS = 8   //!< the duration encoder's LSTM stack the seat holds buffers for
+let private ST2_SRC_MAX_SAMPLES = 1l << 23   //!< past it `float(to) + 0.5` rounds, and the torch law's tap coordinate parts from the CPU's double form
+
+def private st2_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64; var ss : St2SourceShape) : bool {
+    ss.samples = f2 * cfg.upsample
+    ss.nlow = resize_len(ss.samples, 1.0 / float(cfg.upsample))
+    return false if (ss.samples < 1l || ss.samples >= ST2_SRC_MAX_SAMPLES || ss.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l || resize_len(ss.nlow, float(cfg.upsample)) != ss.samples)
+    let re & = unsafe(d.stft_fwd_re)
+    let im & = unsafe(d.stft_fwd_im)
+    return false if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed
+        || re.pad_l != 0l || re.pad_r != 0l || re.dilation != 1l || im.pad_l != 0l || im.pad_r != 0l || im.dilation != 1l || im.stride != re.stride
+        || d.source_linear.nin != cfg.n_harm || d.source_linear.nout != 1l || empty(d.source_linear.b) || empty(re.w) || empty(im.w))
+    ss.spec_frames = conv1d_out_len(re, ss.samples + 2l * ST2_STFT_PAD)
+    return ss.spec_frames >= 1l
+}
+
+def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; cfg : SineSourceCfg; ss : St2SourceShape;
+                             bf0, bnu, bnoise, blow, blowc, bhar, bspec : MetalBuffer?; captured : bool; seed : uint64) {
+    let nh = cfg.n_harm
+    var ka = St2SourceArgs(n = uint(ss.samples), nlow = uint(ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate,
+        sine_amp = cfg.sine_amp, noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, torch_math = cfg.torch_math ? 1u : 0u,
+        captured = captured ? 1u : 0u, seed = uint(seed ^ (seed >> 32ul)))
+    enc_st2_src_low(enc, bf0, bnu, blow, ka, nh * ss.nlow)
+    enc_st2_src_cumsum(enc, blow, blowc, ka, nh)
+    let sl & = g_tw_st2_dec
+    enc_st2_src_sines(enc, bf0, blowc, bnoise, c.slab, sl.src_w, c.slab, sl.src_b, bhar, ka, ss.samples)
+    let re & = unsafe(d.stft_fwd_re)
+    var ks = St2StftArgs(n = uint(ss.samples), frames = uint(ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride),
+        pad = uint(ST2_STFT_PAD), reflect = d.stft_pad_reflect ? 1u : 0u, eps = d.stft_eps)
+    enc_st2_stft(enc, bhar, c.slab, sl.stft_re, c.slab, sl.stft_im, bspec, ks, ss.spec_frames * d.bins)
+}
+
+//! The decode chain's shape: the front convs and the residual as the concat rows ask, the AdaIN
+//! residual blocks, the source, the generator, the inverse STFT.
+struct private St2DecShape : St2Shape {
+    ss : St2SourceShape = St2SourceShape()
+    dec_rows : int64
+    dec_width : int64
+    n_out : int64
+}
+
+def private st2_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; var sh : St2DecShape) : bool {
+    let bwd & = unsafe(d.stft_bwd_re)
+    return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !st2_note_conv(sh, d.f0_conv) || !st2_note_conv(sh, d.n_conv)
+        || !st2_note_conv(sh, d.asr_res) || d.f0_conv.cin != 1l || d.n_conv.cin != 1l || d.f0_conv.cout != 1l || d.n_conv.cout != 1l
+        || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames || d.asr_res.cin != text_c
+        || d.asr_res.cout % 64l != 0l || d.encode.dim_in != text_c + 2l || !st2_source_shape(d, source, f2, sh.ss)
+        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
+        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm))
+    sh.dec_rows = st2_res_shape(sh, d.encode, frames)
+    return false if (sh.dec_rows < 0l)
+    sh.dec_width = d.encode.dim_out
+    for (b in d.decode) {
+        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
+        sh.dec_rows = st2_res_shape(sh, b, sh.dec_rows)
+        return false if (sh.dec_rows < 0l)
+        sh.dec_width = b.dim_out
+    }
+    return false if (!st2_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, sh))
+    sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(frames, 32l) * max(d.encode.dim_in_s, text_c))
+    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
+    return sh.n_out >= 1l
+}
+
+struct private St2DecBufs {
+    bx : MetalBuffer?
+    basr : MetalBuffer?
+    bres : MetalBuffer?
+    bf0r : MetalBuffer?
+    bnr : MetalBuffer?
+    bf0d : MetalBuffer?
+    bnd : MetalBuffer?
+    bcat : MetalBuffer?
+    bnu : MetalBuffer?
+    bnoise : MetalBuffer?
+    blow : MetalBuffer?
+    blowc : MetalBuffer?
+    bhar : MetalBuffer?
+    bspec : MetalBuffer?
+    bwave : MetalBuffer?
+}
+
+def private st2_dec_bufs(var c : St2GpuCtx; d : St2Decoder; sh : St2DecShape; source : SineSourceCfg; text_c, frames, f2 : int64; captured : bool) : St2DecBufs {
+    let nh = source.n_harm
+    return St2DecBufs(bx = st2_rows_buf(c, sh.row_buf_floats, 1l), basr = st2_rows_buf(c, frames, text_c), bres = st2_rows_buf(c, frames, d.asr_res.cout),
+        bf0r = st2_rows_buf(c, f2, 1l), bnr = st2_rows_buf(c, f2, 1l), bf0d = st2_rows_buf(c, frames, ST2_POST_WIDTH), bnd = st2_rows_buf(c, frames, ST2_POST_WIDTH),
+        bcat = st2_rows_buf(c, sh.row_buf_floats, 1l), bnu = st2_rows_buf(c, nh, 1l), bnoise = st2_rows_buf(c, captured ? sh.ss.samples * nh : 1l, 1l),
+        blow = st2_rows_buf(c, nh * sh.ss.nlow, 1l), blowc = st2_rows_buf(c, nh * sh.ss.nlow, 1l), bhar = st2_rows_buf(c, sh.ss.samples, 1l),
+        bspec = st2_rows_buf(c, sh.ss.spec_frames * 2l * d.bins, 1l), bwave = st2_rows_buf(c, sh.n_out, 1l))
+}
+
+//! The encode block, then each decode block (re-concatenated where its width asks); the stream lands in bx.
+def private st2_decoder_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; b : St2DecBufs; g : St2GenBufs; r : St2ResBufs;
+                              text_c, frames : int64; s_ref : array<float>) {
+    let sl & = g_tw_st2_dec
+    let rc = uint(d.asr_res.cout)
+    var kc = St2ConcatArgs(c = uint(text_c), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
+        with_res = 0u, width = uint(d.encode.dim_in_s), total = uint(frames * d.encode.dim_in_s))
+    enc_st2_concat(enc, b.basr, b.bres, b.bf0d, b.bnd, b.bcat, kc, frames * d.encode.dim_in_s)
+    var tt = st2_res_blk(enc, c, d.encode, sl.encode, r, b.bcat, frames, s_ref, b.bx)
+    var cwr = d.encode.dim_out
+    var in_x = true
+    for (i in range(length(d.decode))) {
+        let blk & = unsafe(d.decode[i])
+        let src = in_x ? b.bx : g.bo
+        let dst = in_x ? g.bo : b.bx
+        if (blk.dim_in != cwr) {
+            var kc2 = St2ConcatArgs(c = uint(cwr), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
+                with_res = 1u, width = uint(blk.dim_in_s), total = uint(tt * blk.dim_in_s))
+            enc_st2_concat(enc, src, b.bres, b.bf0d, b.bnd, b.bcat, kc2, tt * blk.dim_in_s)
+            tt = st2_res_blk(enc, c, blk, sl.decode[i], r, b.bcat, tt, s_ref, dst)
+        } else {
+            tt = st2_res_blk(enc, c, blk, sl.decode[i], r, src, tt, s_ref, dst)
+        }
+        in_x = !in_x
+        cwr = blk.dim_out
+    }
+    if (!in_x) {   //! the generator ping-pongs bx and bo from bx: the stream lands in bx first
+        st2_add(enc, c, g.bo, g.bo, b.bx, tt * cwr, 0.5)
+    }
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
+def private metal_styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64;
+                                   f0, nrg : array<float>; f2 : int64; s_ref : array<float>; noise : TtsNoise; seed : uint64;
+                                   @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    var sh = St2DecShape()
+    if (!st2_decode_shape(d, text_c, source, frames, f2, noise, sh)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    var tc = ref_time_ticks()
+    if (!st2_dec_ok(d)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_dec_attach(d)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    asr_prof_add("tts.gen.gpu.slab", tc)
+    tc = ref_time_ticks()
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_dec.buf, sh.style_fc_floats, sh.c_max, sh.cols_bytes)
+    var g = st2_gen_bufs(c, sh.row_buf_floats)
+    var r = st2_res_bufs(c, sh.row_buf_floats, 1l)
+    var b = st2_dec_bufs(c, d, sh, source, text_c, frames, f2, noise.captured)
+    var asr_tm & = unsafe(sc.dec_asr_tm)
+    transpose_ct(asr, text_c, frames, asr_tm)
+    st2_upload(b.basr, asr_tm, frames * text_c)
+    st2_upload(b.bf0r, f0, f2)
+    st2_upload(b.bnr, nrg, f2)
+    st2_upload(b.bnu, noise.uniform, source.n_harm)
+    if (noise.captured) {
+        st2_upload(b.bnoise, noise.normal, sh.ss.samples * source.n_harm)
+    }
+    asr_prof_add("tts.gen.gpu.upload", tc)
+    tc = ref_time_ticks()
+    let sl & = g_tw_st2_dec
+    let bwd & = unsafe(d.stft_bwd_re)
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        st2_conv(enc, c, sl.f0c, d.f0_conv, b.bf0r, f2, b.bf0d)
+        st2_conv(enc, c, sl.nc, d.n_conv, b.bnr, f2, b.bnd)
+        st2_conv(enc, c, sl.asr_res, d.asr_res, b.basr, frames, b.bres)
+        st2_decoder_chain(enc, c, d, b, g, r, text_c, frames, s_ref)
+        st2_source_chain(enc, c, d, source, sh.ss, b.bf0r, b.bnu, b.bnoise, b.blow, b.blowc, b.bhar, b.bspec, noise.captured, seed)
+        st2_generator_chain(enc, c, d, g, b.bx, b.bspec, r.bc1, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, s_ref)
+        var ki = St2IstftArgs(tt = uint(sh.t_post), stride = uint(ST2_POST_WIDTH), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
+            pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out))
+        enc_st2_istft(enc, r.bc1, c.slab, sl.istft_re, c.slab, sl.istft_im, c.slab, sl.window, b.bwave, ki, sh.n_out)
+    }
+    asr_prof_add("tts.gen.gpu.chain", tc)
+    if (ran) {
+        unsafe(scratch_resize(wave, sh.n_out))
+        st2_readback(b.bwave, wave, sh.n_out)
+        g_tower_encodes++
+        g_tower_rows += sh.t_post
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+def private st2_lstm_ok(l : TtsBiLstm; nin : int64) : bool {
+    let hd = l.fwd.hidden
+    return (hd >= 4l && hd % 4l == 0l && hd <= ST2_LSTM_MAX_HIDDEN && l.bwd.hidden == hd && l.fwd.nin == nin && l.bwd.nin == nin && (2l * hd) % 32l == 0l
+        && long_length(l.fwd.w_hh) >= 4l * hd * hd && long_length(l.bwd.w_hh) >= 4l * hd * hd && long_length(l.fwd.b) >= 4l * hd
+        && long_length(l.fwd.w_ih) >= 4l * hd * nin && long_length(l.bwd.w_ih) >= 4l * hd * nin && long_length(l.bwd.b) >= 4l * hd)
+}
+
+struct private St2LstmBufs {
+    xf : MetalBuffer?
+    xb : MetalBuffer?
+    y : MetalBuffer?
+}
+
+def private st2_lstm_bufs(var c : St2GpuCtx; sl : St2LstmSlot; t, hd : int64) : St2LstmBufs {
+    return St2LstmBufs(xf = st2_rows_buf(c, t, sl.fx.cout_p), xb = st2_rows_buf(c, t, sl.bx.cout_p), y = st2_rows_buf(c, t, 2l * hd))
+}
+
+//! A prosody branch's blocks, then its single-channel projection into bout [t][ST2_POST_WIDTH].
+def private st2_branch(enc : MetalComputeEncoder?; var c : St2GpuCtx; blocks : array<St2AdainResBlk>; slots : array<St2ResSlots>; proj : TtsConv1d;
+                       pslot : St2ConvSlot; r : St2ResBufs; bx, ba, bb, bout : MetalBuffer?; frames : int64; s : array<float>) : int64 {
+    var t = frames
+    let nb = length(blocks)
+    for (i in range(nb)) {
+        if (i == 0) {
+            t = st2_res_blk(enc, c, blocks[i], slots[i], r, bx, t, s, ba)
+        } elif (i % 2 == 1) {
+            t = st2_res_blk(enc, c, blocks[i], slots[i], r, ba, t, s, bb)
+        } else {
+            t = st2_res_blk(enc, c, blocks[i], slots[i], r, bb, t, s, ba)
+        }
+    }
+    let src = nb == 0 ? bx : (nb % 2 == 1 ? ba : bb)
+    return st2_conv(enc, c, pslot, proj, src, t, bout)
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
+def private metal_styletts2_prosody(p : St2Predictor; en : array<float>; cc, frames : int64; s : array<float>;
+                                    @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var f2 : int64&; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let hd = p.shared_lstm.fwd.hidden
+    var sh = St2Shape()
+    if (frames < 1l || cc % 32l != 0l || !st2_lstm_ok(p.shared_lstm, cc) || length(p.f0) != length(p.n) || empty(p.f0)
+        || p.f0[0].dim_in_s != 2l * hd || p.n[0].dim_in_s != 2l * hd || p.f0_proj.cout != 1l || p.n_proj.cout != 1l
+        || !st2_note_conv(sh, p.f0_proj) || !st2_note_conv(sh, p.n_proj)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    var tf = frames
+    var tn = frames
+    for (i in range(length(p.f0))) {
+        return tw_decline(MetalTowerDecline.shape) if (i > 0 && (p.f0[i].dim_in_s != p.f0[i - 1].dim_out || p.n[i].dim_in_s != p.n[i - 1].dim_out))
+        tf = st2_res_shape(sh, p.f0[i], tf)
+        tn = st2_res_shape(sh, p.n[i], tn)
+        return tw_decline(MetalTowerDecline.shape) if (tf < 0l || tn < 0l)
+    }
+    return tw_decline(MetalTowerDecline.shape) if (tf != tn || p.f0_proj.cin != p.f0[length(p.f0) - 1].dim_out || p.n_proj.cin != p.n[length(p.n) - 1].dim_out
+        || conv1d_out_len(p.f0_proj, tf) != tf || conv1d_out_len(p.n_proj, tn) != tn)
+    sh.row_buf_floats = max(sh.row_buf_floats, st2_ceil(frames, 32l) * max(cc, 2l * hd))
+    if (!st2_pred_ok(p)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_pred_attach(p)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_pred.buf, sh.style_fc_floats, sh.c_max, sh.cols_bytes)
+    c.exact = true
+    var r = st2_res_bufs(c, sh.row_buf_floats, 1l)
+    var ben = st2_rows_buf(c, frames, cc)
+    var lb = st2_lstm_bufs(c, g_tw_st2_pred.sh_lstm, frames, hd)
+    var ba = st2_rows_buf(c, sh.row_buf_floats, 1l)
+    var bb = st2_rows_buf(c, sh.row_buf_floats, 1l)
+    var bf0 = st2_rows_buf(c, tf, ST2_POST_WIDTH)
+    var bn = st2_rows_buf(c, tn, ST2_POST_WIDTH)
+    var en_tm & = unsafe(sc.pr_en_tm)
+    transpose_ct(en, cc, frames, en_tm)
+    st2_upload(ben, en_tm, frames * cc)
+    let sl & = g_tw_st2_pred
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        st2_bilstm(enc, c, p.shared_lstm, sl.sh_lstm, ben, frames, lb.xf, lb.xb, lb.y)
+        st2_branch(enc, c, p.f0, sl.f0b, p.f0_proj, sl.f0_proj, r, lb.y, ba, bb, bf0, frames, s)
+        st2_branch(enc, c, p.n, sl.nb, p.n_proj, sl.n_proj, r, lb.y, ba, bb, bn, frames, s)
+    }
+    if (ran) {
+        unsafe(scratch_resize(f0, tf))
+        unsafe(scratch_resize(n, tn))
+        unsafe {
+            let pf = reinterpret<float const?>(metal_buffer_contents(bf0))
+            let pn = reinterpret<float const?>(metal_buffer_contents(bn))
+            for (i in range64(tf)) {
+                f0[i] = pf[i * ST2_POST_WIDTH]
+                n[i] = pn[i * ST2_POST_WIDTH]
+            }
+        }
+        f2 = tf
+        g_tower_encodes++
+        g_tower_rows += frames
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain"), unused_argument(sc)]   //! the seat's contract carries the scratch; this stage's rows cross as their own arrays
+def private metal_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let cc = p.bert_encoder.nout
+    let hidden = p.bert_encoder.nin
+    let sd = long_length(s)
+    let width = cc + sd
+    if (t < 1l || cc % 64l != 0l || hidden % 32l != 0l || width % 32l != 0l || empty(p.lstms) || length(p.lns) != length(p.lstms)
+        || long_length(bert) < t * hidden) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    for (l in p.lstms) {
+        return tw_decline(MetalTowerDecline.shape) if (!st2_lstm_ok(l, width) || 2l * l.fwd.hidden != cc)
+    }
+    if (length(p.lstms) > ST2_MAX_DE_LSTMS || !st2_pred_ok(p)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_pred_attach(p)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_pred.buf, 2l * cc * long_length(p.lns), cc, 0ul)
+    c.exact = true
+    var bbert = st2_rows_buf(c, t, hidden)
+    var bden = st2_rows_buf(c, t, cc)
+    var bx = st2_rows_buf(c, t, width)
+    var bs = st2_rows_buf(c, sd, 1l)
+    var lbs : St2LstmBufs [ST2_MAX_DE_LSTMS]
+    for (i in range(length(p.lstms))) {
+        lbs[i] = st2_lstm_bufs(c, g_tw_st2_pred.de_lstm[i], t, p.lstms[i].fwd.hidden)
+    }
+    st2_upload(bbert, bert, t * hidden)
+    st2_upload(bs, s, sd)
+    let sl & = g_tw_st2_pred
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        st2_lin(enc, c, sl.bert_enc, bbert, t, bden)
+        //! the style appended as a broadcast "residual" of stride 0; the width holds the f0/n columns out
+        var kc = St2ConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), total = uint(t * width))
+        enc_st2_concat(enc, bden, bs, bs, bs, bx, kc, t * width)
+        for (i in range(length(p.lstms))) {
+            let lb & = lbs[i]
+            st2_bilstm(enc, c, p.lstms[i], sl.de_lstm[i], bx, t, lb.xf, lb.xb, lb.y)
+            let hoff = st2_style_rows(c, p.lns[i].fc, s, cc, true)
+            st2_ln(enc, c, lb.y, lb.y, t, cc, ST2_ADAIN_EPS, c.bh, hoff, hoff + uint64(cc * 4l))
+            enc_st2_concat(enc, lb.y, bs, bs, bs, bx, kc, t * width)
+        }
+    }
+    if (ran) {
+        unsafe(scratch_resize(out, t * width))
+        st2_readback(bx, out, t * width)
+        g_tower_encodes++
+        g_tower_rows += t
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain"), unused_argument(sc)]
+def private metal_styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @scratch @exact_size var raw : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let width = p.lstm.fwd.nin
+    let hd = p.lstm.fwd.hidden
+    if (t < 1l || width % 32l != 0l || p.duration_proj.nin != 2l * hd || p.duration_proj.nout < 1l
+        || p.duration_proj.nout > 64l || speed <= 0.0 || !st2_pred_ok(p)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_pred_attach(p)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_pred.buf, 0l, 1l, 0ul)
+    c.exact = true
+    var bd = st2_rows_buf(c, t, width)
+    var lb = st2_lstm_bufs(c, g_tw_st2_pred.dur_lstm, t, hd)
+    var blog = st2_rows_buf(c, t, g_tw_st2_pred.dur_proj.cout_p)
+    var braw = st2_rows_buf(c, t, 1l)
+    st2_upload(bd, d, t * width)
+    let sl & = g_tw_st2_pred
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        st2_bilstm(enc, c, p.lstm, sl.dur_lstm, bd, t, lb.xf, lb.xb, lb.y)
+        st2_lin(enc, c, sl.dur_proj, lb.y, t, blog)
+        let u_nb = st2_u(c, uint(p.duration_proj.nout))
+        let u_ls = st2_u(c, uint(sl.dur_proj.cout_p))
+        let u_speed = st2_uf(c, speed)
+        let u_t = st2_u(c, uint(t))
+        enc_st2_sigsum(enc, blog, braw, u_nb, u_ls, u_speed, u_t, t)
+    }
+    if (ran) {
+        unsafe(scratch_resize(raw, t))
+        st2_readback(braw, raw, t)
+        g_tower_encodes++
+        g_tower_rows += t
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+def private st2_ids_buf(var c : St2GpuCtx; ids : array<int>) : MetalBuffer? {
+    let t = long_length(ids)
+    var b = st2_rows_buf(c, t, 1l)
+    unsafe {
+        var p = reinterpret<uint?>(metal_buffer_contents(b))
+        for (i in range64(t)) {
+            p[i] = uint(ids[i])
+        }
+    }
+    return b
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain"), unused_argument(sc)]
+def private metal_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let t = long_length(ids)
+    let d = a.hidden
+    let hs = a.heads > 0l ? d / a.heads : 0l
+    let ff = a.ffn.nout
+    if (t < 1l || t > a.max_pos || d % 64l != 0l || hs % 64l != 0l || hs > 128l || hs * a.heads != d || ff % 64l != 0l || a.emb_dim % 32l != 0l
+        || a.map_in.nin != a.emb_dim || a.map_in.nout != d || a.q.nout != d || a.k.nout != d || a.v.nout != d || a.dense.nout != d
+        || a.ffn.nin != d || a.ffn_out.nin != ff || a.ffn_out.nout != d || long_length(a.pos_emb.a) < t * a.emb_dim
+        || long_length(a.type_emb.a) < a.emb_dim || a.n_layers < 1l) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    for (id in ids) {
+        return tw_decline(MetalTowerDecline.shape) if (id < 0 || int64(id + 1) * a.emb_dim > long_length(a.word_emb.a))
+    }
+    if (!st2_albert_ok(a)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_albert_attach(a)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_albert.buf, 0l, 1l, 0ul)
+    c.exact = true
+    var bids = st2_ids_buf(c, ids)
+    var be = st2_rows_buf(c, t, a.emb_dim)
+    var bx = st2_rows_buf(c, t, d)
+    var bxb = st2_rows_buf(c, t, d)
+    var bxb2 = st2_rows_buf(c, t, d)
+    var bq = st2_rows_buf(c, t, d)
+    var bk = st2_rows_buf(c, t, d)
+    var bv = st2_rows_buf(c, t, d)
+    var bffn = st2_rows_buf(c, t, ff)
+    var ka = St2AttnArgs(t = uint(t), d = uint(d), hs = uint(hs), heads = uint(a.heads))
+    let sl & = g_tw_st2_albert
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        var kg = St2GatherArgs(c = uint(a.emb_dim), add_b = 1u, add_c = 1u, total = uint(t * a.emb_dim))
+        enc_st2_gather(enc, c.slab, sl.word_emb, bids, c.slab, sl.pos_emb, c.slab, sl.type_emb, be, kg, t * a.emb_dim)
+        st2_ln(enc, c, be, be, t, a.emb_dim, ST2_ALBERT_EPS, c.slab, sl.emb_ln.gwoff, sl.emb_ln.gboff)
+        st2_lin(enc, c, sl.map_in, be, t, bx)
+        let nd = t * d
+        for (_l in range64(a.n_layers)) {
+            st2_lin(enc, c, sl.q, bx, t, bq)
+            st2_lin(enc, c, sl.k, bx, t, bk)
+            st2_lin(enc, c, sl.v, bx, t, bv)
+            enc_st2_attn(enc, bq, bk, bv, bxb2, ka, a.heads * t)
+            st2_lin(enc, c, sl.dense, bxb2, t, bxb)
+            st2_add(enc, c, bxb, bx, bxb, nd, 1.0)
+            st2_ln(enc, c, bxb, bxb, t, d, ST2_ALBERT_EPS, c.slab, sl.attn_ln.gwoff, sl.attn_ln.gboff)
+            st2_lin(enc, c, sl.ffn, bxb, t, bffn)
+            let u_nf = st2_u(c, uint(t * ff))
+            enc_st2_gelu_tanh(enc, bffn, u_nf, t * ff)
+            st2_lin(enc, c, sl.ffn_out, bffn, t, bxb2)
+            st2_add(enc, c, bxb2, bxb, bx, nd, 1.0)
+            st2_ln(enc, c, bx, bx, t, d, ST2_ALBERT_EPS, c.slab, sl.full_ln.gwoff, sl.full_ln.gboff)
+        }
+    }
+    if (ran) {
+        unsafe(scratch_resize(out, t * d))
+        st2_readback(bx, out, t * d)
+        g_tower_encodes++
+        g_tower_rows += t
+        g_tower_blocks += a.n_layers
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+//! The text encoder hook; answers the CPU form's channel-major [c][t] rows.
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
+def private metal_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let t = long_length(ids)
+    let cc = te.c
+    var sh = St2Shape()
+    if (t < 1l || cc % 64l != 0l || length(te.cnn_ln) != length(te.cnn) || !st2_lstm_ok(te.lstm, cc) || 2l * te.lstm.fwd.hidden != cc) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    for (cv in te.cnn) {
+        return tw_decline(MetalTowerDecline.shape) if (!st2_note_conv(sh, cv) || cv.cin != cc || cv.cout != cc || conv1d_out_len(cv, t) != t || cv.transposed)
+    }
+    for (id in ids) {
+        return tw_decline(MetalTowerDecline.shape) if (id < 0 || int64(id + 1) * cc > long_length(te.emb.a))
+    }
+    if (!st2_text_ok(te)) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !st2_text_attach(te)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()
+    var c = St2GpuCtx()
+    st2_ctx_make(c, g_tw_st2_text.buf, 0l, 1l, sh.cols_bytes)
+    c.exact = true
+    var bids = st2_ids_buf(c, ids)
+    var ba = st2_rows_buf(c, t, cc)
+    var bb = st2_rows_buf(c, t, cc)
+    var lb = st2_lstm_bufs(c, g_tw_st2_text.lstm, t, te.lstm.fwd.hidden)
+    let sl & = g_tw_st2_text
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        var kg = St2GatherArgs(c = uint(cc), add_b = 0u, add_c = 0u, total = uint(t * cc))
+        enc_st2_gather(enc, c.slab, sl.emb, bids, c.slab, 0ul, c.slab, 0ul, ba, kg, t * cc)
+        for (i in range(length(te.cnn))) {
+            let src = i % 2 == 0 ? ba : bb
+            let dst = i % 2 == 0 ? bb : ba
+            st2_conv(enc, c, sl.cnn[i], te.cnn[i], src, t, dst)
+            st2_ln(enc, c, dst, dst, t, cc, ST2_ADAIN_EPS, c.slab, sl.ln[i].gwoff, sl.ln[i].gboff)
+            st2_leaky(enc, c, dst, t * cc, 0.2)
+        }
+        let bfin = length(te.cnn) % 2 == 1 ? bb : ba
+        st2_bilstm(enc, c, te.lstm, sl.lstm, bfin, t, lb.xf, lb.xb, lb.y)
+    }
+    if (ran) {
+        var rows & = unsafe(sc.te_a)
+        unsafe(scratch_resize(rows, t * cc))
+        st2_readback(lb.y, rows, t * cc)
+        unsafe(scratch_resize(out, cc * t))
+        transpose_tc(rows, t, cc, out)
+        g_tower_encodes++
+        g_tower_rows += t
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+def private metal_styletts2_driver : St2GpuDriver {
+    return St2GpuDriver(albert = @@metal_styletts2_albert, text = @@metal_styletts2_text, dur_enc = @@metal_styletts2_dur_enc,
+        durations = @@metal_styletts2_durations, prosody = @@metal_styletts2_prosody, decode = @@metal_styletts2_decode,
+        gen = @@metal_styletts2_generator)
+}
+
+//! The q3a pad and the StyleTTS2 slabs key on host plane addresses, which a weights-epoch drop makes lie.
 def private tw_weights_drop {
     if (g_tw_q3a_wpad != null) {
         metal_release(g_tw_q3a_wpad)
@@ -2273,6 +4088,7 @@ def private tw_weights_drop {
     }
     g_tw_q3a_key = 0ul
     g_tw_q3a_len = 0l
+    st2_slab_drop()
 }
 
 [init]
@@ -2300,4 +4116,5 @@ def dasllama_metal_tower_register {
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
     register_canary_gpu(@@metal_canary_blocks, @@metal_tower_serves)
     register_parakeet_gpu(@@metal_parakeet_blocks, @@metal_tower_serves)
+    register_styletts2_gpu(metal_styletts2_driver())
 }

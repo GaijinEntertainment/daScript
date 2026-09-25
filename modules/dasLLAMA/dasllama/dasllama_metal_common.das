@@ -236,6 +236,29 @@ var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 plan
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
+var g_pso_st2_im2col : MetalComputePipeline?
+var g_pso_st2_conv_mm : MetalComputePipeline?
+var g_pso_f32_exact_mm : MetalComputePipeline?
+var g_pso_st2_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_colstats : MetalComputePipeline?
+var g_pso_st2_adain_snake : MetalComputePipeline?
+var g_pso_st2_leaky : MetalComputePipeline?
+var g_pso_st2_axpy : MetalComputePipeline?
+var g_pso_st2_add : MetalComputePipeline?
+var g_pso_st2_reflect1 : MetalComputePipeline?
+var g_pso_st2_adain_leaky : MetalComputePipeline?
+var g_pso_st2_gather : MetalComputePipeline?
+var g_pso_st2_concat : MetalComputePipeline?
+var g_pso_st2_pool_dw : MetalComputePipeline?
+var g_pso_st2_lstm : MetalComputePipeline?
+var g_pso_st2_sigsum : MetalComputePipeline?
+var g_pso_st2_gelu_tanh : MetalComputePipeline?
+var g_pso_st2_attn : MetalComputePipeline?
+var g_pso_st2_src_low : MetalComputePipeline?
+var g_pso_st2_src_cumsum : MetalComputePipeline?
+var g_pso_st2_src_sines : MetalComputePipeline?
+var g_pso_st2_stft : MetalComputePipeline?
+var g_pso_st2_istft : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
 var g_pso_dn_gate : MetalComputePipeline?      // z-gated out-norm

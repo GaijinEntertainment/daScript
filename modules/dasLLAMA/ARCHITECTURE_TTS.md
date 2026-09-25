@@ -94,12 +94,13 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   prosody (F0, energy) -> decoder -> iSTFTNet generator, with a stopwatch per stage
   (`TtsTimings`) and `StyleTts2Trace` collecting the stage tensors the parity rail compares.
   The served carrier rides the image rail (sec.2.32) and every synthesis reuses one activation
-  carrier (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31). The generator carries the sec.2.14 hook slot
-  (`register_styletts2_generator_gpu`, `styletts2_generator_gpu_stats`): a driver takes the
-  rows-form input, the style and the source spectrum as rows and answers with the waveform or
-  declines; the SineGen phase chain and the harmonic STFT stay on the CPU in both routes
-  (sec.2.33), the trace rail keeps the CPU chain, and engage is read from the counters. No
-  driver fills the slot yet. The carrier also holds each family's DATA - the `KittenFamily` /
+  carrier (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31). The chain carries the sec.2.14 hook record
+  (`St2GpuDriver`, `register_styletts2_gpu`, `styletts2_gpu_stats(seat)`): seven seats - PL-BERT,
+  the text encoder, the duration encoder, the duration head, prosody, the decode seat (the
+  decoder through the source, the generator and the inverse STFT) and the generator seat the CPU
+  chain reaches after a declined decode - each fed the stage's inputs and answering with its
+  rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
+  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
   `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (sec.2.32); the family LOGIC that interprets those
@@ -253,8 +254,10 @@ served from an image older than its layout panics by name rather than indexing a
 The harmonic source's phase reaches 1e5 radians in float32, where one ulp is a hundredth of a
 radian, and the reference's sine is accurate at that argument. Only the reference's own
 operation order - the cumulative sum, the resampler's arithmetic, the multiply by the harmonic
-index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly, the scalar
-sine stays on libm, and the phase chain stays on the CPU in the GPU route.
+index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly and the
+scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
+compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
+sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y).
 
 ### 2.34 What a word sees around it {#tts-heteronym-context}
 

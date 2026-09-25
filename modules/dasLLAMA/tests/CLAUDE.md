@@ -262,7 +262,25 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
 `test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
 `requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
-`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. Shared fixtures
+`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. The StyleTTS2
+chain's kernel cells (the prefill file): the gathering conv GEMM on a forward conv (40
+channels - the k-run tail past the taps, dilation 3 with pads off both ends, 45 rows padded to
+64) and a stride-6 transposed one on both stamps - the f16-staged one on f16-exact operands (every
+product exact, so the 1e-3 bar covers the accumulation order alone) and the f32-exact one on
+operands off the f16 lattice at 2e-6, where the f16-staged stamp on the same operands must miss
+the bar (the stamp's control); the im2col route at 22 channels on a whole chunk and an offset
+one; the stats + fused AdaIN pair, Snake and leaky, at one stride with a tail and at two strides
+plus a tail; the elementwise rows on every grid tail, the residual join's scale included; the row
+gather with its adds off and on; the concat rows with and without the residual columns; the
+depthwise transposed pool; both LSTM directions on one gate set against a CPU recurrence (the
+fixture centred off tanh's saturation, asserted); the ALBERT attention rows against the CPU
+`attention_rows` at 37 and 100 rows; the sigmoid sums; the tanh GELU past its clamp; the harmonic
+source trio on either resample law against the CPU source chain itself - the phase frames within
+one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
+accumulator where the two laws part by whole cycles, and the driver's own noise draw (finite,
+repeatable per seed, moving with it); the STFT on either pad law and the inverse STFT with and
+without the window envelope. Each carries a poisoned input. The census row is one kitten-nano
+synthesis on the file's planes (`cov_tower_styletts2`). Shared fixtures
 (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
 in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
@@ -1149,7 +1167,31 @@ both sit, the American twin serves alone, an empty directory panics naming it.
 the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
-sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings.
+sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
+`test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
+`tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
+served lane every chunk's decode seat served, one tower encode per seat per chunk, the knob-off
+chunks declined by name at every seat (the generator seat's included), the generator seat never
+reached while the decode seat serves, the tower leg audible, the sample counts within a twentieth
+(the q8 CPU chain quantizes its activations, so its durations can round a frame apart); on the
+reference lane, one captured noise stream on both legs, the sample counts equal - the durations
+token for token. The sample-wise figures are logged, not gated: an uncaptured synthesis draws its
+noise on the tower (a hashed stream) and on the CPU (its PCG32 stream), and the source phase sits
+at a hundred thousand radians in f32, so an F0 a millionth apart moves whole ulps of it. The strict
+compares are the parity rail's stage cells, each stage's seat fed the CPU chain's inputs, on the
+f32 lane: PL-BERT within 5e-5 (reads 3e-6; the f16-staged route read 2e-3, which the bars sit
+under), the text encoder within 1e-5, the duration encoder, the raw durations and prosody within
+2e-5 (each reads under 2e-6), the rounded frame counts equal, the decode seat - the decoder through
+the source, the generator and the inverse STFT on the oracle's noise - within 5e-2 (reads 3e-3 to
+7e-3 on kitten-nano, under 2e-2 on kokoro) at the same sample count; and the decode seat again on
+the served q8 planes within 1e-1 (reads 2e-2 to 6e-2; the CPU chain quantizes its activations, the
+tower reads the weights dequantized at f32 through their f16 block scales) - the only numeric gate
+on the q8 slab writes. Each cell carries a scaled or
+reversed input as the compare's control. The seam check carries the generator seat alone on the
+oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
+the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
+staging on the lane each cell names, no `.dlim` baked. Where no Metal device serves, every cell
+skips loudly; a device that declines a stage is a red.
 The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
@@ -1162,7 +1204,10 @@ phonemized in both dialects, every British symbol proven to be in the model's ow
 the token count, `bf_emma` speaking, and the sample count of that synthesis held against the model
 driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
-a voice the model has never heard of refuses first, with no language to name).
+a voice the model has never heard of refuses first, with no language to name); the Metal cells of
+`_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
+synthesis across the tower knob on both lanes - as the kitten entry describes them; and, model-free,
+the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `harness/convert_pocket.py` and `harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback

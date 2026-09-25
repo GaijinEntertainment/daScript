@@ -39,6 +39,10 @@ kernel void mathcalls(device const float* a [[buffer(0)]],
     ic[i] = (min(abs(ia[i]), ib[i]) + max(ia[i], ib[i]));
     uc[i] = (min(ua[i], ub[i]) + max(ua[i], ub[i]));
     qc[i] = char(round((b[i] * 12.5f)));
+    c[i] += (((floor(x) + ceil(y)) + (atan(x) + atan2(y, x))) + (pow((abs(x) + 1.0f), y) + fmod(x, 3.0f)));
+    c[i] += (clamp(x, -1.0f, 1.0f) + fma(x, y, 0.5f));
+    vc[i] = (((vc[i] + (floor(u) + ceil(v))) + clamp(u, float4(-1.0f, -1.0f, -1.0f, -1.0f), float4(1.0f, 1.0f, 1.0f, 1.0f))) + fma(u, v, float4(0.5f, 0.5f, 0.5f, 0.5f)));
+    ic[i] += clamp(ia[i], -8, 8);
 \}
 "
 
@@ -53,11 +57,18 @@ def test_mathcalls_shape(t : T?) {
         t |> success(contains(mathcalls_msl, "sin(x)") && contains(mathcalls_msl, "cos(y)"), "sin/cos")
         t |> success(contains(mathcalls_msl, "saturate(x)"), "saturate")
         t |> success(contains(mathcalls_msl, "max(x, y)"), "binary max")
+        t |> success(contains(mathcalls_msl, "floor(x)") && contains(mathcalls_msl, "ceil(y)"), "floor/ceil")
+        t |> success(contains(mathcalls_msl, "atan(x)") && contains(mathcalls_msl, "atan2(y, x)"), "atan/atan2")
+        t |> success(contains(mathcalls_msl, "pow((abs(x) + 1.0f), y)") && contains(mathcalls_msl, "fmod(x, 3.0f)"), "pow/fmod")
+        t |> success(contains(mathcalls_msl, "clamp(x, -1.0f, 1.0f)"), "ternary clamp")
+        t |> success(contains(mathcalls_msl, "fma(x, y, 0.5f)"), "mad lowers to fma")
     }
     t |> run("mathcalls: vector + integer classes") <| @(t : T?) {
         t |> success(contains(mathcalls_msl, "exp(min(u, float4(4.0f, 4.0f, 4.0f, 4.0f)))"), "float4 exp/min (folded vector const)")
         t |> success(contains(mathcalls_msl, "saturate(u)") && contains(mathcalls_msl, "max(u, v)"), "float4 saturate/max")
         t |> success(contains(mathcalls_msl, "min(abs(ia[i]), ib[i])"), "signed-int abs + min")
+        t |> success(contains(mathcalls_msl, "clamp(ia[i], -8, 8)"), "signed-int clamp")
+        t |> success(contains(mathcalls_msl, "fma(u, v, float4(0.5f, 0.5f, 0.5f, 0.5f))") && contains(mathcalls_msl, "floor(u)"), "float4 mad/floor")
         t |> success(contains(mathcalls_msl, "min(ua[i], ub[i])") && contains(mathcalls_msl, "max(ua[i], ub[i])"), "uint min/max")
     }
     t |> run("mathcalls: round + f32/i8 converts (the quantize-kernel trio)") <| @(t : T?) {

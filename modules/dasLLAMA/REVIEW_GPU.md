@@ -1,12 +1,12 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_MTP_DECODE.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
-for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned
+work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
-**A diff that files GPU planned work in `followup_general.md` is a defect** - it goes to
-`followup_metal.md` or `followup_vulkan.md`.
+**A diff that files GPU planned work - work that would change a kernel, a GPU driver, or a
+dispatch - in `followup_general.md` is a defect** - it goes to `followup_metal.md` or
+`followup_vulkan.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
@@ -72,9 +72,10 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that divides one op's work across two or more dispatches - on a new path or on one that had
-a single dispatch - gates the path in the same change on the quantity the split divides (its K, key
-span or row count), or on the path's work size when it divides none of these. The gate's threshold,
+**A diff that divides one op's work across two or more dispatches at a work size where one
+dispatch's scratch buffer fits under the path's byte ceiling - the largest scratch buffer the path
+lets one dispatch allocate - on a new path or on one that had a single dispatch - gates the path
+in the same change on the quantity the split divides (its K, key span or row count), or on the path's work size when it divides none of these. The gate's threshold,
 or the decision to ship no gate, comes from measurements at the smallest and the largest value the
 quantity takes on the workloads the path serves, both in the PR body; no gate ships only where the
 split wins at both ends.** The small-work regression hides behind the big-work win.
@@ -122,8 +123,7 @@ and for Vulkan, in the driver's own file.**
 **A decline in a GPU driver file - `dasllama/dasllama_metal_*.das`, `dasllama/dasllama_*vulkan*.das`
 and `dasllama/dasllama_gpu_resident.das` - is counted only through a `DeclineCounter`
 (`dasllama/dasllama_metal_common.das`) or `VkDeclineCounter` (`dasllama/dasllama_vulkan_common.das`)
-and the `note_decline` / `note` call that file declares on it; a count storage type, or a
-hand-rolled count, outside those two files is a defect.**
+and the `note_decline` / `note` call its common file declares on it.**
 
 **Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
 whether the call carries a uniform attention span - however that parameter is derived; window
@@ -138,16 +138,14 @@ name - in the same change, in the row of `ARCHITECTURE_GPU.md` sec.1.5's role ta
 that fills, registers or borrows it.**
 
 **A diff that adds or removes a registered override only one GPU backend files
-(`register_*("metal", ...)` or `register_*("vulkan", ...)`), a `dasllama/dasllama_gpu_tier.das`
-seat Metal fills, a function one backend exports with no counterpart under the other backend's
-prefix - the same name after the prefix, the same role - called by code outside that backend's
-files, a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation the other lens lacks,
-or a decode or prefill behavior only one backend's drivers provide lands its own entry in
-`ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the same change - a tower-driver hook,
-a `register_<family>_gpu` call the tower driver makes for one model family, lands in that
-section's role-table tower row instead - even when the list already carries one of the same
-class.** One backend serving the same path faster or slower is
-not such a change.
+(`register_*("metal", ...)` or `register_*("vulkan", ...)`, a family hook a tower driver registers
+aside); a `dasllama/dasllama_gpu_tier.das` seat Metal fills; a function one backend exports with
+no counterpart under the other backend's prefix - the same name after the prefix, the same role -
+called by code outside that backend's files; a `[metal_dispatch]` or `[vk_dispatch]` argument or
+field annotation the other lens lacks; or a decode or prefill behavior only one backend's drivers
+provide - lands its own entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the
+same change, even when the list already carries one of the same class.** One backend serving the
+same path faster or slower is not such a change.
 
 **A change that can alter what a served GPU decode or prefill path computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both,
@@ -226,15 +224,15 @@ position the state it advances expects - `Session.dn_pos` for the host state, `D
 for a device mirror.** It runs the whole forward itself, so the engine's own forward-only guard
 never runs.
 
-**A module-level variable in a GPU driver file whose value depends on the installed model gets a
-model-swap discharge in the same change that adds it - a discharge is a path the model's drop runs
-that returns the variable to its no-model value.** The vulkan tier files discharge through
-`moe_gpu_model_marks_save_` / `moe_gpu_model_marks_restore_` / `moe_gpu_drop_model_`, a Vulkan
-driver file the `moe_gpu_model_marks_*` pair does not cover through a listener it registers with
-`register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop's sweep runs, and
-the Metal tier through `register_reload_prep` (`dasllama/dasllama_metal_common.das`). A global
-with no discharge survives a model swap and routes the next model's dispatches at the old model's
-planes.
+**A module-level variable in a GPU driver file whose value derives from any loaded model's weights
+(a served model, a draft or tower model, a TTS voice) gets a model-swap discharge in the same
+change that adds it: a path the unload or reload of those weights runs that returns the variable
+to its no-model value.** The discharge paths: for a Vulkan driver file, a reset
+`moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_` runs - in its body, or in a listener the
+file registers with `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the
+drop runs; for every Metal driver file, the tower driver included, `register_reload_prep`
+(`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
+routes the next model's dispatches at the old model's planes.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the

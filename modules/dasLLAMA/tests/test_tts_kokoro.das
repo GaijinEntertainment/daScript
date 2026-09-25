@@ -24,7 +24,9 @@ require _model_tier
 // performance/build_tts_data.das through harness/convert_kokoro.py and harness/kokoro_oracle.py):
 // the token rule against the reference pipeline, the parity rail of `_tts_parity.das` against
 // the PyTorch reference with captured noise, and a facade smoke cell that speaks one sentence
-// through the front end's own inventory.
+// through the front end's own inventory. The facade and Metal cells also need the front-end
+// packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the Metal cells skip where no Metal
+// device serves, and red where a present device declines a stage.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "kokoro-82m.gguf")
@@ -155,6 +157,13 @@ def private facade_data_missing(t : T?) : bool {
 }
 
 [test]
+def test_kokoro_synthesis_metal(t : T?) {
+    t |> run("kokoro: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
+        tts_gpu_synthesis(t, gguf_path(), "The tower serves the generator, and the words still land.", "af_heart")
+    }
+}
+
+[test]
 def test_kokoro_facade(t : T?) {
     t |> run("text in, speech out") @(t : T?) {
         if (facade_data_missing(t)) {
@@ -238,6 +247,16 @@ def test_kokoro_dialects(t : T?) {
             t |> success(n_gb != n_us, "the discriminator: the dialects speak {n_gb} and {n_us} samples")
             t |> equal(long_length(audio.pcm), n_gb, "bf_emma read the British inventory ({n_us} would be the American one)")
         }
+    }
+}
+
+[test]
+def test_seat_stats_refusal(t : T?) {
+    t |> run("a seat name no stage carries panics, so a misspelt key cannot read as zero counters") @(t : T?) {
+        let why = panic_text_of() {
+            styletts2_gpu_stats("generators")
+        }
+        t |> success(find(why, "no GPU seat named 'generators'") >= 0, "the refusal names the key: {why}")
     }
 }
 
