@@ -1742,6 +1742,16 @@ module) is independent and can land any time - it is pure structure.
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
+105. **The prefill window's partial token column on the l stamp.** The l tile takes its clamped
+    edge path on a partial 256-token column, at about a third of the rate: the probe's `wh` arm
+    read q / k / v / o 95 us at 1500 rows against 52 at 1536, fc2 357 against 185 (RTX PRO 4500).
+    The tower chains round their records to the column (`vt_tile_rows`); the resident prefill's
+    window chain does not, so a prompt whose last window has between 256 and 512 rows pays the
+    path on every dense GEMM the wave model sends to the l column. The lever is the same
+    rounding over the prefill's planes (they carry `TILE_READ_SLACK`, 128 rows, so the rounding
+    needs the cap raised to the column) or the pick rule preferring m on a partial l column; the
+    instrument is `harness/vk_gemm_probe.das`'s `wh` arm at the window's row counts and a pp row
+    with a prompt of 512 + 300 tokens against 512 + 256.
 104. **The audio tower arc's branches no cell reaches.** The audio hooks' `shape`, `device` and
     `memory` rejection arms (`vulkan_audio_tower_blocks`, `vulkan_audio_conv_front`,
     `vulkan_gemma4a_blocks`, `vulkan_gemma4a_chunk`, `vulkan_canary_blocks`,
@@ -1796,42 +1806,26 @@ module) is independent and can land any time - it is pure structure.
     bench's two Vulkan tower witness captures in `asr_measure_spec` (the bucket loop and the
     library loop). Each fold that moves a dispatch takes the family twin cells on the pod as its
     evidence.
-102. **The audio towers' second pass - the device levers left after the arc's parity, opened once
-    the arc's PR has landed and every carrier reads at or under its reference.** Three levers, in
-    the order the whisper wall names them (hp0x2 on the RTX PRO 4500: 3.46 s against whisper-cli's
-    3.70, of which the decoder's device steps take 1.1 s, the encoder 0.93 s and the host phases
-    the rest - `debug-jit`, the run `PERF_LEDGER.md`'s Vulkan audio tower section names:
-    `daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --asr -m turbo -r 2 --for-debug-purposes` on the pod
-    under `DASLLAMA_GPU_PROF=1`, whisper-cli's figure `external` from the whisper.cpp checkout that
-    section names). (1) The decode step is launch-bound: one token is 80 dispatches over a four-layer
-    turbo decoder, 746 us on the device and 905 us of host wall a batch - 9 us a dispatch, the
-    floor for separate dispatches with barriers - so the lever is fewer dispatches a layer: the LN
-    and its Q8_0 feed as one class, the bias + GELU into the fc1 GEMV's epilogue, the two f16
-    appends into the fused qkv GEMV's epilogue, the attention's partial and combine as one class
-    where the row's keys fit one chunk (a whole 30 s window's cross keys do), the seam with the
-    next norm already fused; the target is under forty dispatches a token, the instrument
-    `DASLLAMA_GPU_PROF=1` on the turbo hp0x2 row beside `test_whisper_vulkan_wdec`. (2) The
-    whisper GEMM tile reads behind ggml's q8_0 `MUL_MAT` at the encoder's shapes - fc1 251 us
-    against 165, q / k / v / o 97 against 84, fc2 260 + 16 under the split against 219 (ours
-    under `DASLLAMA_GPU_PROF=1`, ggml's `external` under `GGML_VK_PERF_LOGGER=1`, both runs in
-    `PERF_LEDGER.md`'s Vulkan audio tower section) - the
-    probe row `harness/vk_gemm_probe.das` cm2:q8 at 1500 x 1280 x 5120 and 1500 x 5120 x 1280,
-    the candidates the k loop's unroll at K 1280 (five superblocks) and a second row column for
-    the 60-tile shapes that fill an 82-SM card three quarters. (3) The host phases rows 99 and 101
-    name: the CPU log-mel over the clip on the Vulkan mel classes, the per-window cross-KV
-    readback of the CPU layouts. The ASR-decoder driver's engage counters and the bench's `--asr`
-    rows are the parity anchors; every step re-reads the whisper twins and the wdec twin.
+102. **The whisper decode step's remaining dispatches.** A token is 55 dispatches over a
+    four-layer turbo decoder after the row passes took their Q8_0 feed (`TowerLnRq`,
+    `TowerPostAddLnRq`, `TowerBiasActRq`, `TowerWdecAttnCombRq`; 0.77 ms on the device and 1.0 ms
+    of host wall for a three-row batch, ~9 us a dispatch the floor for separate dispatches with
+    barriers). What is left to fold: the two f16 appends (`TowerWdecKv` twice a layer) into one
+    dispatch or the fused qkv GEMV's epilogue; the attention's partial and combine as one class
+    where the row's keys fit one chunk (a window's 1500 cross keys are six chunks, so the self
+    attention alone qualifies); the instrument `DASLLAMA_GPU_PROF=1` on the turbo jfk row beside
+    `test_whisper_vulkan_wdec` and `test_vkt_wdec_fused_rq`. The reference is ahead on nothing
+    here (whisper-cli's decode reads 1.05 to 1.10 ms a token against 0.87), so this is a margin
+    row, not a parity one.
 101. **The Vulkan whisper decoder's host phases.** The driver serves the cross-KV and the decode
-    step (`ARCHITECTURE_GPU_TOWER_VULKAN.md` 2.2at); what stays on the host per window is the cross-KV's
-    readback of the CPU chain's kx / vx layouts (two f32 planes of nl x d x ta, 61 MB on
-    large-v3-turbo) written so the CPU chain can take a window whose first batch is wider than
-    the step's row cap, and per token the embedding rows' sum and upload, the logits readback
-    (n_vocab floats) and one submit-and-wait. The levers: skip the readback and let the wide
-    first batch recompute the memory on the CPU (a split of `whisper_cross_kv`'s CPU half the
-    fallback calls); the embedding gather as a kernel off the token id; a recorded command buffer
-    per batch width, resubmitted with the row count in its push constants; the prompt batch on the
-    tile past the row cap. The canary and Qwen3-ASR decoders are Model sessions on the box decode
-    policy already (2.16) and need nothing here.
+    step (`ARCHITECTURE_GPU_TOWER_VULKAN.md` 2.2at); the cross-KV's CPU layouts stay on the device
+    until a CPU reader needs them, and the encoder rows arrive device to device. What stays on the
+    host per token is the embedding rows' sum and upload, the logits readback (n_vocab floats) and
+    one submit-and-wait. The levers: the embedding gather as a kernel off the token id; a recorded
+    command buffer per batch width, resubmitted with the row count in its push constants; the
+    prompt batch on the tile past the row cap (today a first batch past `WD_ROW_CAP` declines
+    `rows` and lands the window's memory for the CPU chain). The canary and Qwen3-ASR decoders
+    are Model sessions on the box decode policy already (2.16) and need nothing here.
 100. **The FastConformer past the device's range.** The canary chain carries no row cap of its own
     (`vt_cn_rows_ok`): the scratch, the rel quartet and the plane R [cap x 2 cap - 1] f32 each
     bind as one range, so a clip declines `shape` only where the plane passes

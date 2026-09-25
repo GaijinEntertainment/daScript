@@ -3093,6 +3093,29 @@ other overrides alike.
   the tip under `DASLLAMA_GPU_PROF=1`: turbo hp0x2 **3578** with the pick (fc2 8.38 ms + the
   reduce 0.52 ms a chunk over 32 blocks, the wave model's four chunks) against **3674** with the
   split off (`DASLLAMA_CM2_SPLITK=1`, fc2 11.80 ms).
+- **The whisper parity pass (the same rig, `vk`, wall / encode over jfk / jfk3 / gb1 / hp0 /
+  hp0x2):** turbo **61 / 31**, **151 / 62**, **771 / 248**, **981 / 371**, **1941 / 719**, the
+  loop 1 / 2 / 8 / 12 / 23 windows a clip. The reference is whisper-cli on the pod's own Vulkan
+  build with its timestamps on (`external`, the recipe `ARCHITECTURE_MEASUREMENT.md` 2.20 carries:
+  each clip behind jfk in one process, the jfk-only process subtracted, the min of two): encode
+  36 / 70 / 342 / 444 / 886, total 101 / 252 / 1302 / 1646 / 3409, over 1 / 2 / 10 / 13 / 26
+  encoder runs - so the encoder reads 1.12x to 1.38x ahead a clip (31.2 ms a window against 34.5)
+  and the transcription 1.67x to 1.76x. Under `-nt` the reference decodes no timestamp tokens
+  and advances a whole 30 s a window (19 runs on hp0x2, encode 649, total 3170), a shape the das
+  loop does not run. The four levers, read on the jfk ledger (`DASLLAMA_GPU_PROF=1`): the block
+  chain 39.3 -> 29.0 ms - the l stamp's clamped edge path on the chunk's partial last token
+  column (1500 rows = five columns and 220), lifted by the GEMM records rounded to the column
+  (the probe's `wh` arm: q / k / v / o 95 -> 52 us, fc1 241 -> 173, fc2 357 -> 185 whole, split4
+  240 -> 158 + 16, against ggml's `MUL_MAT` 84 / 166 / 221; the m stamp 62 / 194 / 229 at either
+  count) - the cross-KV chain 15.8 -> 0.7 ms (the 61 MB CPU-layout readback made lazy), the stem
+  chain 2.1 -> 0.3 ms with the encoder rows handed to the decoder device to device and the
+  post-norm folded into the chain, the decode step 80 -> 55 dispatches a token (the row passes
+  carrying their Q8_0 feed; a three-row prompt batch 0.84 -> 0.77 ms on the device). The
+  served-row check the pass opened with: the resident prefill's tile pick beats both forced
+  columns on every model measured (pp512, `DASLLAMA_CM2_TILE` unset / 128 / 256: Llama-3.2-3B Q8
+  14792 / 11007 / 12442, gemma-3-1b 34671 / 34280 / 32909, E2B 16313 / 13196 / 14920, E4B 9804 /
+  8918 / 9496, gemma-2-2b 19540 / 18044 / 17533), and the wave model picks the faster column on
+  every 512-row shape the probe's `g3`, `gemma`, `tl` and default arms time.
 - **The driver's allocations at the largest shape the path serves, the 4096-row encode cap
   (`VT_MAX_ENCODE_ROWS`; whisper-class chunks stop at 1500 rows, gemma4a's at 768; canary has no
   row cap and declines `shape` only past the device's storage-buffer range):** the rel quartet
