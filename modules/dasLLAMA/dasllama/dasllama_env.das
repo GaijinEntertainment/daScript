@@ -86,7 +86,7 @@ struct public EngineEnv {
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public GpuTierEnv {
     @clarg_default_doc = "off"
-    @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the vision tower driver reads before any device init: the vision towers' block loops serve on the device only while it is on, and decline `device` otherwise."
+    @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
     @clarg_default_doc = "-1 (auto)"
@@ -371,8 +371,11 @@ struct public VulkanEnv {
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
 
-    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline."
+    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) and the audio towers' (the whisper-class towers, gemma4a, canary) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline."
     vk_tower : bool = true
+
+    @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 pins the CPU decoder, announced once as the knob decline."
+    vk_wdec : bool = true
 
     @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."
     vk_kv_merge : bool = true
@@ -803,6 +806,10 @@ struct public CoreEnv {
 
     @clarg_doc = "Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md."
     tune_mode : string = ""
+
+    @clarg_default_doc = "warning (daslang's to_log floor); tests/run.das sets info for itself and its children when unset"
+    @clarg_doc = "The to_log floor daslang reads per call (trace, debug, info, warning, error or critical); see skills/internal/environment_variables.md."
+    log_level : string = ""
 
     @clarg_doc = "Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md."
     tune_policy : string = ""

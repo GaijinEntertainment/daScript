@@ -33,7 +33,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
 | `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
 | `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
-| `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the vision tower driver reads before any device init: the vision towers' block loops serve on the device only while it is on, and decline `device` otherwise. |
+| `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
 | `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks; a pinned cap takes no headroom and reads no OS room. |
@@ -137,7 +137,8 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | off | Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths. |
-| `DASLLAMA_VK_TOWER` | flag | on | Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline. |
+| `DASLLAMA_VK_TOWER` | flag | on | Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) and the audio towers' (the whisper-class towers, gemma4a, canary) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline. |
+| `DASLLAMA_VK_WDEC` | flag | on | Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 pins the CPU decoder, announced once as the knob decline. |
 | `DASLLAMA_VK_KV_MERGE` | flag | on | Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B. |
 | `DASLLAMA_VK_FFN_SLICE` | flag | on | The last layer's FFN runs on the window's last 32 rows only (the classifier reads one); 0 runs it over the whole window for a same-build A/B. |
 | `DASLLAMA_VK_OVERLAP` | flag | on | Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role). |
@@ -290,6 +291,7 @@ Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends 
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
 | `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |
+| `DAS_LOG_LEVEL` | text | warning (daslang's to_log floor); tests/run.das sets info for itself and its children when unset | The to_log floor daslang reads per call (trace, debug, info, warning, error or critical); see skills/internal/environment_variables.md. |
 | `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_TUNE_COMPILE_FALLBACKS` | text | unset | Semicolon-separated kernel fallbacks for the generated tune probe. |
 | `JOBQUE_PROFILING` | flag | off | Compile the jobque marker rail in (read at COMPILE time by daslib/build_const). Without it trace_tag/trace_marker erase from the program; decode_prof --trace refuses on a build without it. |

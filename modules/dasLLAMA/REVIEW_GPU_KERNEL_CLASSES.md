@@ -33,11 +33,11 @@ contracts one and not the other; `mad` is the fused instruction by definition an
 driver nothing to choose. The shared text is one source in both modules, and a `mad` there would
 be a fused multiply-add the CPU oracle's `mad` - a multiply, then an add - does not reproduce.
 
-**A value the kernel class itself fixes - a tile width, not a number a loaded model or a request
-supplies - never reaches that kernel through a per-dispatch argument channel (a uniform, a
-`@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class as a
-`@template_constant`, or - for a class no template instantiates - compile it in as a module
-constant the class reads.**
+**A value that no model file and no request can change - a tile width, a math constant, a cap
+fixed by the model architecture the class serves - never reaches a kernel class through a
+per-dispatch argument channel (a uniform, a `@push_constant` field, a kargs field, an `@off` bind
+offset): stamp it into the class as a `@template_constant`, or - for a class no template
+instantiates - compile it in as a module constant the class reads.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
 a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
@@ -79,14 +79,14 @@ performs.** `weight` tells the generated builder the buffer needs no per-encode 
 `modules/dasLLAMA/tests/test_kernel_coverage.das` dispatches names in the PR body that row and its
 nonzero count for the new census key, from a census run of the class's backend.**
 
-**A diff that adds a GPU kernel class under `dasllama/` that no census row dispatches, where a
-census row could dispatch it - a model the census file can load, run the way the census runs it -
-adds that row, or that model, to `modules/dasLLAMA/tests/test_kernel_coverage.das` in the same
-change.**
+**A diff that adds a GPU kernel class under `dasllama/` that no census row of the class's backend
+dispatches, where such a row could dispatch it - a model the census file loads for that backend,
+run the way the census runs it - adds that row, or that model, to
+`modules/dasLLAMA/tests/test_kernel_coverage.das` in the same change.**
 
-**A diff that adds a GPU kernel class under `dasllama/` that no census row could dispatch - the
-model, the quant or the load shape sits outside what the census runs - names it in the blind-spot
-list of `modules/dasLLAMA/tests/test_kernel_coverage.das` for its backend -
+**A diff that adds a GPU kernel class under `dasllama/` that no census row of the class's backend
+could dispatch - the model, the quant or the load shape sits outside what the census runs -
+names it in the blind-spot list of `modules/dasLLAMA/tests/test_kernel_coverage.das` -
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
 census row reaches it, the stocked model that dispatches it where one does - one the `stocked`
 suite runs on a box that has it - and the model-free test cell that dispatches it.** The list is
@@ -124,11 +124,12 @@ and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=
 only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` - never reaches
 the device, so it does not count.
 
-**Never bind a scalar that the other bound scalars already determine - derive it in the kernel
-body instead.** Binding it separately adds a second place to get it wrong.
+**Never bind a scalar that the other bound scalars already determine by integer arithmetic -
+derive it in the kernel body from them instead.** Binding an integer count separately adds a
+second place to get it wrong.
 
-**A kernel-class method whose call sits nested inside a larger expression - as an argument, an
-operand or a subscript, but not as the whole right-hand side of a `let` or an assignment -
+**A kernel-class method whose returned value is used anywhere but as the whole right-hand side
+of a `let` or an assignment - an argument, an operand, a subscript, a `return`'s value -
 returns its value in one statement after compile-time folding: an arrow form (`=>`), or a
 `static_if` whose every arm is one `return`; a method that needs more than one statement hands
 its value back through a `var T&` parameter instead.** A kernel class compiles on both emitters

@@ -22,8 +22,9 @@ unmarked.** The annotation is a promise about how often the function runs, and t
 lint stops walking at it.
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` /
-`[no_env]` / `[no_io]` contract moves that annotation to the new name in the same change** - it
-is no new entry.
+`[no_env]` / `[no_io]` contract, where the function is still the region entry or the rarely-taken
+branch after the rename, moves that annotation to the new name in the same change** - it is no
+new entry.
 
 **A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function below the
 region entry is a defect - move it to the entry; an interior function carries only a

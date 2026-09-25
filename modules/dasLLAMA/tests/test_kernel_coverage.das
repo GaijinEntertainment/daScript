@@ -804,9 +804,56 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // gemma3v / qwen3v towers' (mmproj-gemma-3-4b-it-F16.gguf via test_gemma3v_vulkan_twin, mmproj-Qwen3VL-4B-Instruct-F16.gguf
     // via test_qwen3v_vulkan_twin) - no zoo row; their kernel coverage is test_vkt_fa_bidir in test_vulkan_tower_kernels.das
     "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
+    // the audio fronts' classes (the Vulkan tower driver's mel and conv seats - no zoo row, no audio carrier in the census);
+    // the carriers are the stocked mmproj-Qwen3-ASR-0.6B-bf16.gguf (test_qwen3a_vulkan_front in test_audio.das),
+    // mmproj-gemma-4-E2B-it-bf16.gguf (test_gemma4a_vulkan_twin) and canary-qwen-2.5b-encoder-f32.bin (test_canary_vulkan_twin);
+    // every covering cell below is in test_vulkan_tower_kernels.das
+    // the spectrum pair (Qwen3-ASR's mel); its coverage is test_vkt_tower_front_mel
+    "tower_spec_dft_cls_spv",
+    // the mel-major log store (Qwen3-ASR's mel); its coverage is test_vkt_tower_front_mel
+    "tower_mel_log_cls_spv",
+    // the qwen3a front's k3 s2 p1 im2col; its coverage is test_vkt_tower_front_movers
+    "tower_im2col_cls_spv",
+    // the qwen3a front's conv-out shuffle; its coverage is test_vkt_tower_front_movers
+    "tower_q3a_shuffle_cls_spv",
+    // the qwen3a front's bias + position rows finish; its coverage is test_vkt_tower_front_movers
+    "tower_q3a_finish_cls_spv",
+    // the LayerNorm + ReLU rows of the gemma4a subsample convs; its coverage is test_vkt_tower_front_movers
+    "tower_ln_relu_cls_spv",
+    // canary's per-feature mel normalization; its coverage is test_vkt_tower_front_mel
+    "tower_mel_norm_cls_spv",
+    // canary's length mask (the zero rows); its coverage is test_vkt_tower_front_movers
+    "tower_zero_rows_cls_spv",
+    // canary's front depthwise conv; its coverage is test_vkt_tower_front_mel
+    "tower_dw_conv_cls_spv",
+    // canary's feature rows (the feature shuffle); its coverage is test_vkt_tower_front_movers
+    "tower_feat_shuffle_cls_spv",
+    // canary's sinusoid rel table; its coverage is test_vkt_tower_front_mel
+    "tower_rel_sincos_cls_spv",
+    // the Conformer chains' cm2 feed (the clamp + halfword store) and canary's rel-plane attention (the head gather ahead of
+    // the rel GEMM, the tiled online softmax at both head widths): the two twins dispatch the feed, the gather and the
+    // 128-wide stamp (canary's head width); the 64-wide stamp serves no stocked carrier; their kernel coverage is
+    // test_vkt_tower_front_movers (the feed and the gather) and test_vkt_tower_cn_attn_rel_plane (both stamps) in
+    // test_vulkan_tower_kernels.das
+    "tower_head_gather_cls_spv", "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
+    // the whisper decoder's classes (the Vulkan ASR-decoder driver - no zoo row, no whisper carrier in the census): the K/V
+    // stores and the chunked attention's two halves, the stocked ggml-tiny.bin and ggml-large-v3-turbo.bin via
+    // test_whisper_vulkan_wdec in test_whisper.das; their kernel coverage is test_vkt_wdec_classes in
+    // test_vulkan_tower_kernels.das
+    "tower_wdec_kv_cls_spv", "tower_wdec_attn_part_cls_spv", "tower_wdec_attn_comb_cls_spv",
+    // the whisper-class conv stem's classes (the tower driver's conv seat - no zoo row): the k3 im2col and the position rows'
+    // add, the same two stocked whisper files via test_whisper_vulkan_twin in test_whisper.das; their kernel coverage is
+    // test_vkt_tower_front_movers in test_vulkan_tower_kernels.das
+    "tower_im2col1d_cls_spv",
+    // the pre-LN chain's f16-feed stamps (the cm2 arm: the norms and seams storing the feed, the biased restrides, the unpad and
+    // the bias + GELU storing it): the whisper twin and the gemma3v twin (mmproj-gemma-3-4b-it-F16.gguf) dispatch them; their
+    // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
+    "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
+    "tower_bias_act_cvt16_cls_spv",
     // the gemma4v tower's row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the stocked
     // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
-    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
+    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed also serves every audio
+    // chain's cm2 feed, dispatched by the audio twins; test_vkt_tower_front_movers covers it too)
     "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the biased-block (SigLIP) row classes: the layernorm, the bias with its GELU, the seam, the head restrides to the
@@ -819,6 +866,14 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // hidden and the rms seam (the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf, dispatched by test_qwen25v_vulkan_twin in
     // test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
     "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
+    // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),
+    // GLU, causal depthwise taps, windowed RPE attention (the 128-wide stamp serves the stocked mmproj-gemma-4-E2B-it-bf16.gguf's
+    // audio encoder through test_gemma4a_vulkan_twin in test_audio.das) and the plain residual seam; the FastConformer's
+    // centered depthwise conv (the stocked canary-qwen-2.5b-encoder-f32.bin through test_canary_vulkan_twin); the 64-wide
+    // attention stamp serves no stocked carrier; their kernel coverage is test_vkt_tower_conformer,
+    // test_vkt_tower_fastconformer and test_vkt_tower_rows
+    "tower_act_cls_spv", "tower_glu_sig_cls_spv", "tower_dw_conv5_cls_spv", "tower_g4a_attn_cls_spv", "tower_g4a_attn64_cls_spv",
+    "tower_post_add_plain_cls_spv", "tower_cn_dw_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

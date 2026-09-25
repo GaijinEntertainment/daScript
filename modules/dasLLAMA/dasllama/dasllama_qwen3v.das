@@ -892,7 +892,7 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
     return nout
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private q3v_blocks_gpu(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : bool {
     if (!g_q3v_gpu_blocks_set) {
         return false

@@ -2854,7 +2854,7 @@ best rep in tok/s.
   cb616x336; no q8 lane), the 5060 Ti's KHR arm 0.020 / 0.034 / 0.020. The slotted f16 window
   route read 0.16 to 0.79 on the 5060 Ti's cm2 arm and 1.53 on the pod's at 32 blocks - the
   coopmat tile's f16 staging compounds over the 28 window layers, which is why the window layers
-  attend in f32 on the compact rows (`ARCHITECTURE_GPU_TOWER.md` 2.2aq).
+  attend in f32 on the compact rows (`ARCHITECTURE_GPU_TOWER_VULKAN.md` 2.2aq).
 
   Provenance of the twin-cell figures: `test_gemma4v_vulkan_twin`, `test_gemma3v_vulkan_twin`,
   `test_qwen3v_vulkan_twin` and `test_qwen25v_vulkan_twin` (`tests/test_<family>.das`), each run
@@ -2864,3 +2864,189 @@ best rep in tok/s.
   box, RTX 5060 Ti 16 GB, driver 616.56), whose cm2 arm is likewise the default and whose KHR arm
   is `DASLLAMA_COOPMAT=mm`. A distance is the cell's own logged x-rms reading over one run of the
   cell; the cells log the reading on green and assert the bar.
+
+### From the Vulkan audio tower arc (2026-09-24)
+
+The instrument: the pod (RTX PRO 4500 Blackwell, driver 580.173, an AMD EPYC 7443 container at 48
+threads under the 62 GB cgroup cap), `daslang -jit benchmarks/lcpp_bench.das -- --asr -m <catalog
+substring> -r 2 --for-debug-purposes` (the rows stamp 16 threads) under `DASLLAMA_IMAGE=0
+DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=8 DASLLAMA_MODELS_DIR=/workspace/models
+WHISPER_CPP_MODELS=/workspace/models`, `DASLLAMA_COOPMAT` unset (cm2) and `DAS_TUNE_POLICY` unset
+(the untuned tier's fallback bodies); the `vk` arm `DASLLAMA_GPU=1` (the block loops on the Vulkan
+tower driver, the cell's engage line reading encodes +N over 3 transcriptions, declines +0, and
+the row stamped `vulkan` - the bench stamps `vulkan` only when the drivers served every clip,
+`ARCHITECTURE_MEASUREMENT.md` sec.2.20), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every
+encode, the CPU q8 chain, the decoder on the CPU too - so only the encode column is a tower-vs-tower
+reading; on the `vk` arm the decoder of the LLM-backed families rides the resident driver, which is
+most of the wall's drop on E2B and canary) [direction-grade - two processes]. A wall is the clip's
+transcription in ms, the best of two timed reps (the bench prints only the best, so the rows
+carry no spread); the encode is the clip's encoder time in ms from
+the cell's encode-split transcription (one per clip, `encode_ms` of the row). The five clips are
+the ASR corpus's jfk (11 s), jfk3 (33 s), gb1 (199 s), hp0 (273 s) and hp0x2 (547 s); canary's
+catalog row stops at gb1.
+
+The reference figures below are all `external`, each run on the pod: whisper.cpp at the pod's
+checkout built with Vulkan, `whisper-cli -m ggml-<model>-q8_0.bin -f <clip> -t 16 -bs 1 -bo 1
+-nf -nt` (`-ng` for its CPU arm); llama-mtmd-cli b10660 (Vulkan), `llama-mtmd-cli -m <model
+Q8_0> --mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99
+-t 16` (E2B with `-n 256`), two reps a clip, its encode the sum of the clip's `encoding done in
+N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda` on
+the CUDA box; ggml's per-op profile is the whisper-cli command above over turbo jfk under
+`GGML_VK_PERF_LOGGER=1`, its figures named by ggml op (`MUL_MAT`, `FLASH_ATTN_EXT`). The das
+per-dispatch and per-role readings (the chain's ms a chunk, fc1 / fc2 / q / k / v / o, a
+dispatch's us) are the same bench command under `DASLLAMA_GPU_PROF=1`; a forced split names its
+`DASLLAMA_CM2_SPLITK` value. The RTX 5060 Ti readings run on Boris's box (driver 616.56) as
+`bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --asr -m <catalog
+substring> -r 2 --for-debug-purposes` from the repo root under `DASLLAMA_GPU_PROF=1`, the pod's
+other overrides alike.
+
+- **Whisper large-v3-turbo (q8 encoder, 32 blocks at d 1280 / ff 5120 / 64-wide heads, 1500 rows
+  a 30 s chunk), the `vk` arm against the `cpu` arm, wall ms / encode ms:** jfk **419 / 109**
+  against 3395 / 2998; jfk3 **1306 / 219** against 7278 / 6120; gb1 **8000 / 1070** against 31608 /
+  25159; hp0 **9538 / 1527** against 45858 / 37482; hp0x2 **18616 / 2910** against 86941 / 70385 -
+  the encode 23x to 27x faster on the device, and the wall's remainder is the decoder on the CPU
+  (`followup_vulkan.md` row 101), 15.7 s of hp0x2's 18.6 s.
+- **Whisper tiny (q8, 4 blocks at d 384), wall / encode:** jfk **70 / 11** against 181 / 122; jfk3
+  **228 / 22** against 438 / 261; gb1 **1367 / 251** against 2015 / 834; hp0 **1707 / 176** against
+  2484 / 1056; hp0x2 **3341 / 453** against 4907 / 2151.
+- **The whisper reference exe on the pod's own Vulkan build (`external`, the whisper-cli command
+  above on the q8_0 siblings, `-ng` for the CPU arm; its `encode time` is the sum over the clip's
+  30 s chunks, its `total time` the transcription), against the das rows above:** turbo per-chunk
+  encode 35 to 40 ms on the device (hp0x2 660 ms over 19 chunks) against das's 153 ms a chunk
+  (2910 / 19) - a 4x encode gap; the transcription hp0x2 3.70 s against das's 18.6 s, the decoder
+  on the device there and on the CPU here; on the CPU arm the reference reads turbo hp0x2 encode
+  93.7 s / total 107.9 s against das's 70.4 s / 86.9 s. Tiny per-chunk encode 3.1 to 9.3 ms on
+  the device against das's 24 ms (453 / 19), total hp0x2 1.98 s against 3.34 s; the CPU arm 2.54 s
+  / 5.74 s against das's 2.15 s / 4.91 s. The reference's first clip on the device carries its
+  pipeline builds (tiny jfk 7.7 s, turbo 2.3 s of `encode time`), the das rows' warmup
+  transcription is outside the timed reps.
+- **The whisper rows again with the decoder on the Vulkan ASR-decoder driver (the per-window
+  cross-KV and every decode batch on the device; the encoder's GEMMs on the cm2 f16 feed, the conv
+  stem and mel still on the CPU), the same `vk` arm, wall ms / encode ms:** turbo jfk **136 / 77**,
+  jfk3 **289 / 163**, gb1 **1340 / 622**, hp0 **1857 / 995**, hp0x2 **3623 / 1830** - the wall 3x
+  to 6x under the CPU-decoder rows above, and hp0x2's transcription at the reference exe's 3.70 s;
+  the encode 96 ms a chunk (1830 / 19) against its 47 ms on the device - the CPU mel and stem and
+  the wake between chunks. Tiny jfk **40 / 30**, jfk3 **121 / 21**, gb1 **575 / 89**, hp0 **724 /
+  121**, hp0x2 **1451 / 271** against the reference's 1.98 s total on hp0x2.
+- **The same rows with the conv stem on the device too (the whisper-class chain's conv seat on
+  the cm2 feed; the mel the one CPU phase left), wall ms / encode ms:** turbo jfk **101 / 49**, jfk3
+  **236 / 98**, gb1 **1087 / 388**, hp0 **1450 / 601**, hp0x2 **2903 / 1122** - the transcription
+  under the reference exe's 3.70 s on hp0x2, the encode 59 ms a chunk (1122 / 19) against its 47 ms
+  on the device and the reference's 35 to 40; tiny jfk **33 / 19**, jfk3 **97 / 20**, gb1 **487 /
+  62**, hp0 **599 / 70**, hp0x2 **1170 / 120** against the reference's 1.98 s. Canary on the same
+  tip with the chain's row cap replaced by the device's range, the `vk` arm over all five clips
+  (`--asr-clips`), wall / encode: jfk **157 / 59**, jfk3 **433 / 140**, gb1 **1258 / 784**, hp0
+  **2288 / 1035** against the NeMo CUDA reference's `generate()` at 743 / 2213 / 3443 / 9022 ms
+  (`external`) - 4x
+  ahead on hp0; hp0x2 at this tip still declined on the front's own row cap (20.1 s, the CPU front)
+  and takes the next tip's row.
+- **The next tip - gemma4a's projector tail on the blocks chain and the canary front off its row
+  cap - E2B (`vk`, wall / encode):** jfk **184 / 18**, jfk3 **493 / 40**, gb1 **3194 / 190**, hp0
+  **3910 / 268** against llama-mtmd-cli's Vulkan encode 21 / 54 / 223 / 327 (`external`) - at or
+  under the reference on every clip; canary hp0x2 **4130 / 2577** on the device (6840 rows, the
+  plane R at 375 MB) against NeMo's 13508 ms (`external`).
+- **The whisper rows with the pre-LN chain's row passes folded into its f16 feed (six row passes
+  a block where twelve ran), wall / encode:** turbo jfk **95 / 44**, jfk3 **226 / 88**, gb1
+  **1095 / 354**, hp0 **1396 / 546**, hp0x2 **2710 / 1046** against the reference exe's 3.70 s
+  on hp0x2 - the chain 42.2 ms a chunk on the device (`DASLLAMA_GPU_PROF=1`, 450 dispatches,
+  was 47 ms over 642) against the reference's 37.4 ms of ops for the same chunk (`external`,
+  `GGML_VK_PERF_LOGGER=1`: its `MUL_MAT` ops on the q8_0 planes 23.1 ms - 128 x 84.5 us at k
+  1280, 32 x 219 us at k 5120, 32 x 165 us at m 5120 - and 14.3 ms of its other ops,
+  `FLASH_ATTN_EXT` among them); ours by role under `DASLLAMA_GPU_PROF=1`: fc2 11.8, fc1 8.0, q /
+  k / v / o 12.5, the attention 4.1, the row passes 3.7, the readback 1.7. Tiny jfk **32 / 3**, jfk3 **100 / 6**, gb1
+  **488 / 22**, hp0 **591 / 33**, hp0x2 **1171 / 66** against the reference's 1.98 s. Qwen3-ASR
+  on the same chain, wall / encode: jfk **83 / 15**, jfk3 **226 / 38**, gb1 **1427 / 213**, hp0
+  **1863 / 299**, hp0x2 **4299 / 626** against llama-mtmd-cli's Vulkan encode 21 / 177 / 307 / 403
+  / 831 (`external`) - under the reference on every clip (the 128-row windows' blocks 4.6 ms a
+  window on the device under `DASLLAMA_GPU_PROF=1`, 254 dispatches). E2B on this tip reads jfk **186 / 18**, jfk3 **493 / 40**, gb1 **3201
+  / 190**, hp0 **3921 / 268**; its hp0x2 row is the family's - 13,665 soft tokens pass the E2B
+  decoder's 8192-position context, on the CPU chain alike.
+- **The whisper chain's fc2 GEMM under the split-k pick (four 1280-deep chunks of its 5120 K into
+  the partial planes, the reduce after), every dispatch figure under `DASLLAMA_GPU_PROF=1`:** on
+  the RTX PRO 4500 the fc2 dispatch reads **260 + 16** us where it read 367 whole (8.3 + 0.5 ms a
+  chunk over 32 blocks, was 11.8), the chain **39.6 - 40.5 ms** a chunk on the device where it
+  read 42.2 (482 dispatches) against the reference's 37.4 (`external`); the turbo rows move inside
+  noise - jfk **114** vs 116 ms and hp0x2 **3458** vs 3456 with the split off
+  (`DASLLAMA_CM2_SPLITK=1`), the decoder's share of the wall. On the 36-SM RTX 5060 Ti the pick
+  refuses (60 tiles fill two waves there): forced, the same site reads 467 + 20 us in two chunks
+  (`DASLLAMA_CM2_SPLITK=2`) and 438 + 55 in four (`DASLLAMA_CM2_SPLITK=4`) against 477 whole.
+  Qwen3-ASR's 128-row windows (seven tiles at d 896) under a forced five-way split
+  (`DASLLAMA_CM2_SPLITK=5`) read the reduce as a loss - hp0 encode **314** where it read 299,
+  hp0x2 **658** where it read 626, 5% - so the chain's gate splits only at `VT_SK_MIN_ROWS` = 512
+  rows or more; past the gate the wave model picks the chunk count (`DASLLAMA_CM2_SPLITK` unset or
+  `0`), and the tower logs the pick once per model.
+- **Qwen3-ASR-0.6B (the whisper-class tower through its conv front, 18 blocks at d 896 / ff 3584,
+  128-row batch sets at tile 32 - the family's chunk is short), wall / encode:** jfk **628 / 541**
+  against 1319 / 684; jfk3 **1569 / 1429** against 3872 / 2017; gb1 **9244 / 7835** against 29437 /
+  11608; hp0 **13881 / 11465** against 42471 / 16256; hp0x2 **28114 / 24361** against 113686 /
+  32035 - the encode only 1.3x to 1.5x faster: at 128 rows an encode is one 128 x 896 batch on the
+  32-wide tile, and the per-encode fixed cost (the residual upload, the meta rebuild, the readback)
+  is the column; a lever for the fronts row (`followup_vulkan.md` row 99) or a batching of the
+  family's chunks.
+- **Canary-Qwen 2.5B (the FastConformer encoder, 32 blocks at d 1024 / ff 4096 / 128-wide heads,
+  the rel table at 2 npos - 1 rows a clip), wall / encode:** jfk **505 / 407** against 2233 / 1120;
+  jfk3 **1585 / 1296** against 6802 / 3084; gb1 **9500 / 9057** against 33780 / 20697 - the encode
+  2.3x to 2.7x faster; the full bidirectional rel-pos attention at O(npos^2 hs) a head is the
+  column at gb1's 2496 rows (the wall is the encode there: 9.1 of 9.5 s).
+- **Gemma-4 E2B audio (the Conformer, 12 blocks at d 1024 / ff 4096 / 128-wide heads, the chunk-12
+  windowed attention, 320-row
+  and 768-row batch sets on one residency), wall / encode:** jfk **461 / 295** against 3126 / 854;
+  jfk3 **1306 / 849** against 9392 / 2533; gb1 **8067 / 5017** against 62576 / 15183; hp0 **10570 /
+  6904** against 86876 / 20871 - the encode 2.9x to 3.0x faster; the wall's larger drop is the
+  E2B decoder on the resident driver.
+- **The arc's tip on the pod (`vk`, every row stamped `vulkan`, declines 0; wall / encode over
+  jfk / jfk3 / gb1 / hp0 / hp0x2):** whisper turbo **93 / 41**, **213 / 83**, **1042 / 334**,
+  **1383 / 513**, **2685 / 983**; Qwen3-ASR **80 / 14**, **224 / 37**, **1430 / 217**, **1866 /
+  303**, **4305 / 648** against llama-mtmd-cli's 21 / 177 / 307 / 403 / 831 (`external`) - under
+  the reference on every clip; canary **156 / 59**, **431 / 137**, **1263 / 787**, **2275 /
+  1022**, **4224 / 2579** against NeMo's 743 / 2213 / 3443 / 9022 / 13508 (`external`); E2B **185 /
+  -**, **493 / -**, **3210 / -**, **3917 / -** (the E2B ASR row takes no hp0x2: 13665 audio
+  tokens exceed its decoder's 8192-token context, the facade's own refusal). The split-k A/B at
+  the tip under `DASLLAMA_GPU_PROF=1`: turbo hp0x2 **3578** with the pick (fc2 8.38 ms + the
+  reduce 0.52 ms a chunk over 32 blocks, the wave model's four chunks) against **3674** with the
+  split off (`DASLLAMA_CM2_SPLITK=1`, fc2 11.80 ms).
+- **The driver's allocations at the largest shape the path serves, the 4096-row encode cap
+  (`VT_MAX_ENCODE_ROWS`; whisper-class chunks stop at 1500 rows, gemma4a's at 768; canary has no
+  row cap and declines `shape` only past the device's storage-buffer range):** the rel quartet
+  (`vt_rel_bufs`) at a 4096-row canary encode's 2 x 4096 = 8192 rows and d 1024
+  - the f32 table 8192 x 1024 x 4 = 33,554,432 bytes, its Q8_0 quants 8,388,608, their scales 8192 x
+  1024 / 32 x 4 = 1,048,576, the projected rows another 33,554,432 - about 76 MB; gemma4a's quartet
+  is 13 rows, under 60 KB. The per-encode device scratch follows the vision arc's list above at each
+  family's d and ff with no padded panels (every audio head is 64 or 128 wide): about 441 MB for
+  turbo at 4096 rows (d 1280, ff 5120: eleven f32 row buffers 230 MB, two hidden buffers 168 MB, the
+  f16 K/V shadows 21 MB, the Q8_0 feed 22 MB) and about 353 MB for canary and E2B (d 1024, ff 4096).
+  The weights uploaded whole: turbo's Q8_0 plane 32 x (4 x 1280^2 + 2 x 1280 x 5120) = 629 M
+  weights, about 629 MB of quants plus 39 MB of f16 scales; canary's and E2B's eleven records a
+  block, 8 d^2 + 4 d ff = 25.2 M weights a block - 806 M weights, about 806 MB plus 50 MB of
+  scales, over canary's 32 blocks and 302 M, about 302 MB plus 19 MB, over E2B's 12. One resident
+  a family (`g_vt_aud`, `g_vt_g4a`, `g_vt_cn`), released by the model drop's sweep.
+- **The allocations that scale with the input or the model, by formula (bytes), at two shapes:**
+  the fc2 split-k partial planes, nsplit x cap x d x 4 (cap = the rows rounded up to 64) - turbo's
+  four-way split over 1500 rows 4 x 1536 x 1280 x 4 = 31,457,280, the pick's ceiling of eight planes
+  at 4096 rows and d 1280 167,772,160; canary's rel plane, cap x (2 cap - 1) x 4 - gb1's 2496 rows
+  49,830,144, hp0x2's 6840 rows (cap 6848) 375,133,440. The ASR decoder driver, with nl layers, d,
+  ta encoder positions (1500) and tmax text positions (448): the cross K/V planes kx / vx at nl x d
+  x ta x 4 each and their f16 halves kxr / vxr at nl x d x ta x 2 each - turbo (nl 4, d 1280)
+  30,720,000 and 15,360,000, large-v3 (nl 32) 245,760,000 and 122,880,000; the self K/V caches kc
+  / vc at nl x d x tmax x 2 each - turbo 4,587,520, large-v3 36,700,160; the host readback of the
+  cross K/V at 2 x nl x d x ta x 4 - turbo 61,440,000, large-v3 491,520,000; the attention
+  partials pms at nchunks x heads x 8 x 2 x 4 and py at nchunks x heads x 8 x 64 x 4 (nchunks = the
+  longer of ta and tmax over 256 keys: 6 chunks, 20 heads) - 7,680 and 245,760 on both; the weight
+  gather uploads the decoder's Q8_0 plane whole, its quant bytes plus 2 bytes a block scale, staged
+  through host arrays of the same sizes.
+- **The device chain's distance from the exact f32 CPU chain at the tip, rel_l2 (the CPU q8 chain's
+  own distance beside):** gemma4a E2B over jfk 0.0554 against 0.0550 (the device 0.0134 from the
+  CPU q8 chain); canary over jfk's log-mel 0.0233 against 0.0220 (0.0213 from the CPU q8 chain);
+  the whisper-class blocks over the synthetic mel of the Metal blocks cell, on the 5060 Ti (the pod
+  stocks no f32 mmproj): qwen2audio 0.0528 against 0.0684, voxtral 0.1706 against 0.1741, omni-3b
+  0.0753 against 0.0790; the 5060 Ti's gemma4a and canary readings 0.0540 / 0.0229 against 0.0560 /
+  0.0220. Whisper tiny and turbo transcribe jfk to the same text on the CPU q8 chain and the device
+  chain, turbo with one near-tie token of 28 flipped.
+
+  Provenance of the twin-cell figures: `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
+  `test_encoder_blocks_vulkan` (`tests/test_audio.das`) and `test_whisper_vulkan_twin`
+  (`tests/test_whisper.das`), each run through dastest under `-jit` with `--test-names` naming the
+  cell, `DASLLAMA_GPU=1`, `DASLLAMA_IMAGE=0`, `DASLLAMA_ALLOW_UNTUNED=1`, `DAS_JOBQUE_THREADS=8`,
+  `DAS_TUNE_POLICY` unset; the box is the pod on its cm2 arm unless the sentence names the 5060 Ti
+  (Boris's box, RTX 5060 Ti 16 GB, driver 616.56, cm2 arm). A distance is the cell's own logged
+  rel_l2 over one run of the cell; the cells log the reading on green and assert the 1.5x bar.

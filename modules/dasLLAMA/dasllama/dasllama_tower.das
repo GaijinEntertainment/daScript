@@ -427,6 +427,18 @@ def tower_stage_f32_pad_row_stride(var blob : array<float>; src : array<float>;
     }
 }
 
+//! The plane form: ``rows`` rows of ``src_stride`` floats read from ``src`` at ``src_off``, each landing at its padded pitch.
+def tower_stage_f32_pad_row_stride(var blob : array<float>; src : PlaneF; src_off,
+                                   wo, rows, src_stride, dst_stride : int64) {
+    unsafe {
+        var dp = addr(blob[wo])
+        let sp = plane_at(src, src_off)
+        for (r in range64(rows)) {
+            copy_floats(dp + r * dst_stride, sp + r * src_stride, src_stride)
+        }
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {

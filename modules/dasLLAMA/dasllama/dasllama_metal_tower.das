@@ -820,6 +820,7 @@ def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, w
     if (t.q8) {
         return tw_decline(MetalTowerDecline.quant_mode)
     }
+    canary_pos_table(t, st, npos, ww)
     return fc_run(t.blob, t.image_map != null, t.d_model, t.n_ff, t.n_head, t.conv_kernel, t.n_layer, t.eps, st.pos_emb,
         st.x, npos, ww, false) $(l) {
         return t.layers[l]

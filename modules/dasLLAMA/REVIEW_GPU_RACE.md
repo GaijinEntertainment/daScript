@@ -33,8 +33,8 @@ kernel silently.
 
 **An ordered argument list into a generated setter (the `set_*(bufs, sizes, gbits)` function a
 `[vk_dispatch]` class's family generates) carries one entry per distinct `@binding` number the
-class and its base declare, in ascending order - fields sharing a binding share one entry, a
-number nothing declares gets none.** The setter checks only how many arguments it got, never
+stamp keeps - the class and its base declare it and no template gate drops it for that stamp - in
+ascending order; fields sharing a binding share one entry, a number nothing keeps gets none.** The setter checks only how many arguments it got, never
 which field each position carries; such a list restates no binding number, so it is not a
 hand-binding arm.
 

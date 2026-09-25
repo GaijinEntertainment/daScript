@@ -229,6 +229,7 @@ struct CanaryState {
     mel : array<float>        // frame-major [n_len × n_mel]
     n_len : int64
     n_valid : int64           // real mel frame count (n_in / hop) — drives the conv length mask
+    mel_ready : bool          //! the spectrum half ran over the windowed frames (the device front computes its own)
     // mel scratch
     pre : array<float>
     padded : array<float>
@@ -668,7 +669,15 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
 //! frames past ``valid`` are zeroed (the seq-len mask). FRAME-major ``[n_len × n_mel]``.
 [hot_path]
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
+    canary_window_frames(m, samples, st)
+    canary_mel_spectrum(m, st)
+}
+
+//! the mel's CPU half: preemphasis, the reflection-free zero pad, the windowed frames into ``st.xw`` (``st.n_len``,
+//! ``st.n_valid`` filled); the spectrum half follows - [[canary_mel_spectrum]] on the CPU, or the device front's head
+def canary_window_frames(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
     let n_in = long_length(samples)
+    st.mel_ready = false
     ensure_length(st.pre, n_in)
     for (i in range(int(n_in))) {
         st.pre[i] = samples[i]
@@ -692,7 +701,6 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     }
 
     let n_fft = m.n_fft
-    let n_bins = m.n_fb
     let n_mel = m.n_mel
     st.n_len = (n_padded - n_fft) / CN_HOP + 1l
     let n_len = st.n_len
@@ -714,6 +722,17 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
             }
         }
     }
+    st.n_valid = n_in / CN_HOP
+}
+
+//! the mel's spectrum half off ``st.xw``: DFT (twiddle gemm), power, the mel dot and log, the per-feature normalization
+//! over the valid frames with the tail masked; frame-major ``st.mel`` [n_len x n_mel]
+def canary_mel_spectrum(m : CanaryEncoder; var st : CanaryState) {
+    let n_fft = m.n_fft
+    let n_bins = m.n_fb
+    let n_mel = m.n_mel
+    let n_len = st.n_len
+    ensure_length(st.mel, n_len * n_mel)
     ensure_length(st.reim, n_len * n_bins * 2l)
     for (i in range64(n_len * n_bins * 2l)) {
         st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
@@ -738,8 +757,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     }
 
     // per-feature normalization over the valid frames, applied to all; tail masked to 0
-    let valid = n_in / CN_HOP
-    st.n_valid = valid
+    let valid = st.n_valid
     for (j in range64(n_mel)) {
         var sum = 0.0lf
         for (i in range64(valid)) {
@@ -761,6 +779,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
             st.mel[i * n_mel + j] = 0.0
         }
     }
+    st.mel_ready = true
 }
 
 // ===== conv subsampling =====
@@ -847,14 +866,86 @@ def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<floa
     cn_relu_rows(out, rows * ch)
 }
 
+//! the CPU subsample front: the stride-2 convs, the feature rows and the input projection into ``st.x``; returns the encoder rows
+def private cn_front_cpu(m : CanaryEncoder; var st : CanaryState) : int64 {
+    let d = m.d_model
+    let nch = m.n_sub_ch
+    let n_mel = m.n_mel
+    // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
+    let t1 = (st.n_len - 1l) / 2l + 1l
+    let w1 = (n_mel - 1l) / 2l + 1l
+    // valid time lengths propagate through the stride-2 convs (the length mask)
+    let l0 = cn_conv_out_len(st.n_valid)
+    let l2 = cn_conv_out_len(l0)
+    cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
+    cn_mask_rows(st.y0, l0, t1, w1 * nch)                         // mask before conv2 (depthwise)
+    cn_conv_dw(m, st.y2, st.y0, m.c2_w, m.c2_b, w1, t1)          // -> y2 [t2 × w2 × nch]
+    let t2 = (t1 - 1l) / 2l + 1l
+    let w2 = (w1 - 1l) / 2l + 1l
+    cn_conv_pw(m, st.y3, st.y2, st.xqi, st.xsi, m.c3_w, m.c3_b, t2 * w2)   // -> y3
+    cn_mask_rows(st.y3, l2, t2, w2 * nch)                        // mask before conv5 (depthwise)
+    cn_conv_dw(m, st.y5, st.y3, m.c5_w, m.c5_b, w2, t2)         // -> y5 [t3 × w3 × nch]
+    let t3 = (t2 - 1l) / 2l + 1l
+    let w3 = (w2 - 1l) / 2l + 1l
+    cn_conv_pw(m, st.y6, st.y5, st.xqi, st.xsi, m.c6_w, m.c6_b, t3 * w3)   // -> y6
+
+    let tt = t3
+    let feat = w3 * nch
+    ensure_length(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
+    for (t in range64(tt)) {
+        for (fr in range64(w3)) {
+            for (c in range64(nch)) {
+                st.xf[t * feat + fr + w3 * c] = st.y6[(t * w3 + fr) * nch + c]
+            }
+        }
+    }
+    ensure_length(st.x, tt * d)
+    cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
+    add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
+    return tt
+}
+
 // ===== encoder =====
 
-//! the GPU block hook: after the subsample front + inproj + pos table, the 32 FastConformer blocks on st.x
+//! the Transformer-XL rel-position table [ww x d] into `st.pos_emb`, (sin, cos) interleaved, row w = tt - 1 - w; the q8
+//! lane's requant beside it - the CPU chain's per-encode input, and the Metal chain's (the Vulkan chain builds its own on
+//! the device)
+def canary_pos_table(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
+    let d = m.d_model
+    ensure_length(st.pos_emb, ww * d)
+    for (w in range64(ww)) {
+        let rel = double(tt - 1l - w)
+        for (k in range64(d / 2l)) {
+            let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
+            let theta = float(freq * rel)
+            st.pos_emb[w * d + 2l * k] = sin(theta)
+            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
+        }
+    }
+    if (m.q8) {
+        cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
+    }
+}
+
+//! the GPU block hook: after the subsample front + inproj, the 32 FastConformer blocks on st.x; the pos table is the hook's
+//! own (`canary_pos_table` on the host, or the device's)
 typedef CanaryGpuBlocksFn = function<(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) : bool>
 typedef CanaryServesFn = function<() : bool>
 var private g_cn_gpu : CanaryGpuBlocksFn
 var private g_cn_serves : CanaryServesFn
 var private g_cn_gpu_set = false
+
+//! the GPU front hook: off the windowed frames ``st.xw``, the mel spectrum, the subsample stack and the input projection
+//! into ``st.x``; returns the encoder rows tt, or -1 declined (the CPU front runs whole)
+typedef CanaryFrontGpuFn = function<(m : CanaryEncoder; var st : CanaryState) : int64>
+var private g_cn_front : CanaryFrontGpuFn
+var private g_cn_front_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_canary_front_gpu(fn : CanaryFrontGpuFn) {
+    g_cn_front = fn
+    g_cn_front_set = true
+}
 var private g_cn_serves_set = false
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
@@ -865,8 +956,7 @@ def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
     g_cn_serves_set = true
 }
 
-//! Would the Metal driver serve the block loop — the lane policy asks (a serving driver wants
-//! the f32 blob, so the un-pinned encoder lane defaults to exact); false on CPU builds or knob-off.
+//! the lane policy's question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
 def canary_gpu_serves() : bool => g_cn_serves_set && invoke(g_cn_serves)
 
 enum private CnLane {
@@ -898,7 +988,7 @@ def canary_enc_serves_q8() : bool {
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private cn_announce_lane(q8 : bool) {
-    var why = "the CPU default (DASLLAMA_METAL_TOWER off, or no Metal FastConformer driver)"
+    var why = "the default lane (no GPU driver serving the exact encoder)"
     if (g_cn_pin != CnLane.unset) {
         why = "pinned via set_canary_enc_q8"
     } elif (canary_gpu_serves()) {
@@ -1101,64 +1191,27 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
 [hot_path]
 def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     let d = m.d_model
-    let nch = m.n_sub_ch
-    let n_mel = m.n_mel
     // the conformer block loop walks the thrice-subsampled frame count
     dispatch_phase_encode(cn_conv_out_len(cn_conv_out_len(cn_conv_out_len(st.n_len))))
 
-    // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
-    let t1 = (st.n_len - 1l) / 2l + 1l
-    let w1 = (n_mel - 1l) / 2l + 1l
-    // valid time lengths propagate through the stride-2 convs (the length mask)
-    let l0 = cn_conv_out_len(st.n_valid)
-    let l2 = cn_conv_out_len(l0)
-    cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
-    cn_mask_rows(st.y0, l0, t1, w1 * nch)                         // mask before conv2 (depthwise)
-    cn_conv_dw(m, st.y2, st.y0, m.c2_w, m.c2_b, w1, t1)          // -> y2 [t2 × w2 × nch]
-    let t2 = (t1 - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
-    cn_conv_pw(m, st.y3, st.y2, st.xqi, st.xsi, m.c3_w, m.c3_b, t2 * w2)   // -> y3
-    cn_mask_rows(st.y3, l2, t2, w2 * nch)                        // mask before conv5 (depthwise)
-    cn_conv_dw(m, st.y5, st.y3, m.c5_w, m.c5_b, w2, t2)         // -> y5 [t3 × w3 × nch]
-    let t3 = (t2 - 1l) / 2l + 1l
-    let w3 = (w2 - 1l) / 2l + 1l
-    cn_conv_pw(m, st.y6, st.y5, st.xqi, st.xsi, m.c6_w, m.c6_b, t3 * w3)   // -> y6
-
-    let tt = t3
-    let feat = w3 * nch
-    ensure_length(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
-    for (t in range64(tt)) {
-        for (fr in range64(w3)) {
-            for (c in range64(nch)) {
-                st.xf[t * feat + fr + w3 * c] = st.y6[(t * w3 + fr) * nch + c]
-            }
-        }
+    var tt = -1l
+    if (g_cn_front_set) {
+        tt = invoke(g_cn_front, m, st)
     }
-    ensure_length(st.x, tt * d)
-    cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
-    add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
+    if (tt < 0l) {
+        if (!st.mel_ready) {
+            canary_mel_spectrum(m, st)
+        }
+        tt = cn_front_cpu(m, st)
+    }
 
-    // rel-pos embedding table [W × d], interleaved (sin, cos); W = 2T−1
     let ww = 2l * tt - 1l
-    ensure_length(st.pos_emb, ww * d)
-    for (w in range64(ww)) {
-        let rel = double(tt - 1l - w)
-        for (k in range64(d / 2l)) {
-            let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
-            let theta = float(freq * rel)
-            st.pos_emb[w * d + 2l * k] = sin(theta)
-            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
-        }
-    }
-    if (m.q8) {   // the pos input is layer-invariant — quantize its rows once per encode
-        cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
-    }
-
     var gpu_served = false
     if (g_cn_gpu_set) {
         gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
     }
     if (!gpu_served) {
+        canary_pos_table(m, st, tt, ww)
         cn_blocks_cpu(m, st, tt, ww)
     }
 
@@ -1198,7 +1251,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
                       samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                       var detected_lang : string&) : int {
     let tp = ref_time_ticks()
-    canary_log_mel(enc, samples, s.cst)
+    canary_window_frames(enc, samples, s.cst)
     let n_audio = canary_encode(enc, s.cst)   // s.cst.out holds [n_audio × proj_dim] soft tokens
     asr_prof_add("cn.encode", tp)
 

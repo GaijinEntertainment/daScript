@@ -1,6 +1,7 @@
 // The Vulkan tower twins' shared instrument - the seat guard, the three-way encode (the exact chain, the CPU q8 chain,
-// the device chain) with its counters and bar, the input poison and the exact-lane decline - one text the four vision
-// families' test files call with their own tower, state and encode; no fixture root beside it.
+// the device chain) with its counters and bar, the input poison and the exact-lane decline, the audio twins' rel_l2
+// bar with its hold and poison, the Vulkan knob's capture and restore - one text the vision and audio families' test
+// files call with their own tower, state and encode; no fixture root beside it.
 
 options gen2
 options _dasllama_internal = true
@@ -11,13 +12,45 @@ require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
+require daslib/defer
 require math
 require _compares   // logits_maxdiff
+require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require ?das_metal dasllama/dasllama_metal_tower
+require ?das_metal dasllama/dasllama_metal_asr_dec
 require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_asr_dec
 
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
+let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
+
+//! the Vulkan tower knob as the cell found it (false on a build without dasVulkan)
+def vulkan_tower_knob() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vulkan_tower_on()
+    } else {
+        return false
+    }
+}
+
+//! puts back the Vulkan tower knob a cell captured with `vulkan_tower_knob` (a no-op without dasVulkan)
+[unused_argument(on)]
+def restore_vulkan_tower(on : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        set_vulkan_tower(on)
+    }
+}
+
+//! the CPU-decoder claims pin every whisper ASR-decoder driver off (a hook that serves silently stops the cell measuring the CPU chain)
+def set_every_gpu_wdec(on : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_wdec(on)
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        set_vulkan_wdec(on)
+    }
+}
 
 //! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
 def set_every_gpu_tower(on : bool) {
@@ -26,6 +59,19 @@ def set_every_gpu_tower(on : bool) {
     }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         set_vulkan_tower(on)
+    }
+}
+
+//! a front's witness follows its route: on the f16 GEMM feed (cm2 or KHR) the front served every dispatch, off it
+//! (DASLLAMA_COOPMAT=sdot4) the driver declined `device` and served none while the blocks served either way
+def front_served(tt : T?; tag : string; convs_delta, expected, declines_delta : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (vulkan_tower_front_route()) {
+            tt |> equal(convs_delta, expected, "{tag}: the front served every dispatch on the device (convs delta = {expected})")
+        } else {
+            tt |> equal(convs_delta, 0l, "{tag}: off the f16 GEMM feed the front stays on the CPU (convs delta)")
+            tt |> success(declines_delta >= 1l && key_exists(vulkan_tower_declines(), "device"), "{tag}: the front recorded the `device` decline off the feed")
+        }
     }
 }
 
@@ -85,6 +131,10 @@ def twin_three_way(tt : T?; family, kind : string; w, h : int; patch : int64; ex
         var gpu : array<float>
         var ncpu = 0l
         var ngpu = 0l
+        let knob = vulkan_tower_on()
+        defer() {
+            set_vulkan_tower(knob)
+        }
         set_vulkan_tower(false)
         with_job_que() {
             setup_dasllama_jobque_()
@@ -150,6 +200,38 @@ def exact_lane_declines(tt : T?; tw_exact : auto(TW); var st_exact : auto(ST); e
         tt |> equal(vulkan_tower_stats().encodes - x0.encodes, 0l, "the exact-lane tower never dispatched")
         tt |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 1l, "the exact-lane tower reached the blocks seat and the driver declined quant_mode")
         tt |> equal(long_length(outx), expected_len, "the CPU chain served the exact-lane encode")
+    }
+}
+
+//! the device chain's rel_l2 from the exact chain held within `slack` x the CPU q8 chain's own plus `floor`; returns the bar, 0 when a compare could not run
+def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer : int64; slack, floor : double) : double {
+    var q8_ex = TowerParityStats()
+    var dev_ex = TowerParityStats()
+    var dev_q8 = TowerParityStats()
+    let ok = (tower_parity_stats(t, "{tag} cpu q8 vs exact", exact, cpu, q8_ex)
+        && tower_parity_stats(t, "{tag} vulkan vs exact", exact, dev, dev_ex)
+        && tower_parity_stats(t, "{tag} vulkan vs cpu q8", cpu, dev, dev_q8))
+    if (!ok) {
+        return 0.0lf
+    }
+    let bar = slack * q8_ex.rel_l2 + floor
+    t |> success(dev_ex.rel_l2 <= bar, "{tag} vulkan blocks {n_layer}L: the device chain sits within {slack}x the CPU q8 chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {q8_ex.rel_l2})")
+    return bar
+}
+
+//! a device encode over the same input held to the bar a clean three-way set (a later encode on the residency, a fresh one after a shutdown)
+def tower_twin_held(t : T?; tag : string; exact, dev : array<float>; bar : double) {
+    var st = TowerParityStats()
+    if (tower_parity_stats(t, "{tag} vulkan vs exact", exact, dev, st)) {
+        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
+    }
+}
+
+//! the input poison: a device encode over a tower with zeroed GEMM planes must EXCEED the bar the clean chains set
+def tower_twin_poison(t : T?; tag : string; exact, poisoned : array<float>; bar : double) {
+    var st = TowerParityStats()
+    if (tower_parity_stats(t, "{tag} poisoned vulkan vs exact", exact, poisoned, st)) {
+        t |> success(st.rel_l2 > bar, "{tag}: a zeroed block through the device chain EXCEEDS the bar ({st.rel_l2} vs {bar})")
     }
 }
 

@@ -226,6 +226,12 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
     return <- built
 }
 
+//! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites
+//! (no `.dlim` written, no sibling-lane GC); the tag is the staging's own lane.
+def mint_qwen3a_tower(var st : Qwen3aStaging; var out : Qwen3aTower) {
+    cache_via_image_staged(st, out, "", st.e.core.q8 ? "qwen3a-q8" : "qwen3a-f32")
+}
+
 //! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live tower.
 def stage_qwen3a_tower(path : string) : Qwen3aStaging {

@@ -13,9 +13,10 @@ family check that picks the arm is the dispatch, not an arm. A diff that adds a 
 the carrier only at the union field, the finalize line, the kind value, and the one-line arms;
 a prompt, a decode loop, a caps value, or a language rule in the carrier is a defect.
 
-**A GEMM against model weights in an ASR family file - one `dasllama/dasllama_<family>.das`
-holding a single speech-recognition family - that does not go through a `*_mm` wrapper or
-`mm_blob_b` is a defect, hand-written dot-product loops included.**
+**A GEMM against model weights in an ASR family file - `dasllama/dasllama_whisper.das`,
+`dasllama_parakeet.das`, `dasllama_canary.das`, `dasllama_qwen3a.das` or `dasllama_gemma4a.das`,
+and a new file that holds one speech-recognition family's CPU model - that does not go through a
+`*_mm` wrapper or `mm_blob_b` is a defect, hand-written dot-product loops included.**
 
 **An activation-by-activation product in an ASR family file that does not go through
 `gemm_f32_jo` is a defect, hand-written loops included.**

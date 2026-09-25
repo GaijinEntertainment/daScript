@@ -34,7 +34,8 @@ def logits_maxabs(a : array<float>) : float {
 def ids_equal(a, b : array<int64>) : bool => sequence_equal(a, b)
 
 //! The kernel cells' relative bar: within 2e-3 of the larger magnitude, floored at 1 - the device's reassociation and its
-//! transcendentals against the CPU oracle.
+//! transcendentals against the CPU oracle. An f16 store rounds at 2^-11 = 4.9e-4 relative, f32 sums of up to 4096 terms
+//! drift n x 6e-8 <= 2.5e-4, the device transcendentals ~1e-6; 2e-3 covers each with margin.
 def approx(x, y : float) : bool => abs(x - y) <= 2e-3 * max(1.0, max(abs(x), abs(y)))
 
 //! The elements of `got` off `want` by more than `bar` relative (floored at 1), the first six logged for the eyeball -

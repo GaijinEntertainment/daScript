@@ -16,10 +16,12 @@ not), a named constant or a `require` under `dasllama/` lands in the file whose 
 an `ARCHITECTURE_*.md` companion's sec.1, or a role row of `ARCHITECTURE_GPU.md` sec.1.5 - names
 its concern, unless that charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the concern; a diff may instead change that charter line in the same
-change. Another file's charter naming the same kind of code does not license the landing.** `ARCHITECTURE.md`'s sec.1 routing
-block names the companion that holds each file's charter line. A driver arm is host code that
-ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
-a hook or capability registry.
+change. Another file's charter naming the same kind of code does not license the landing.**
+`ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line.
+
+**A concern that a two-file role row of `ARCHITECTURE_GPU.md` sec.1.5 scopes to one backend
+("on Vulkan ...", "Metal's ...", "on a build without das_metal" - the Vulkan file) licenses only
+that backend's file; a concern the row names without a backend licenses both.**
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
 adding a family, format or arm the parenthetical does not name lands it in the file whose

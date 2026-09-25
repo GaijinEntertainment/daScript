@@ -203,7 +203,8 @@ def private das_exe() : string {
 def private spawn_root(single : string; var output : string&) : int {
     let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/modules/dasLLAMA/tests/_single_thread_root.das\" 2>&1"
     let win = get_platform_name() == "windows"
-    let armed = win ? "set \"DASLLAMA_SINGLE_THREAD={single}\"&& {cmd}" : "DASLLAMA_SINGLE_THREAD={single} {cmd}"
+    //! the announce is an info record, dropped at to_log's default floor - the child runs at info
+    let armed = win ? "set \"DASLLAMA_SINGLE_THREAD={single}\"&& set \"DAS_LOG_LEVEL=info\"&& {cmd}" : "DASLLAMA_SINGLE_THREAD={single} DAS_LOG_LEVEL=info {cmd}"
     return unsafe(popen_timeout(armed, 300.0, $(f) {
         if (f != null) {
             output = fread(f)

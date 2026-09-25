@@ -143,6 +143,8 @@ var private AUDIO_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das",
     "modules/dasLLAMA/benchmarks/asr/asr_bench.das",
     "utils/dasllama-convert/main.das"
 }
@@ -238,7 +240,7 @@ var private GPU_ROLES_METAL <- {
 }
 
 var private GPU_ROLES_VULKAN <- {
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless

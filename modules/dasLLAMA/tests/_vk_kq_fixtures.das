@@ -1,6 +1,8 @@
 options gen2
 options _dasllama_internal = true
 
+module _vk_kq_fixtures shared public   //! shared: the harness's probe fixture (a shared module) requires it
+
 require daslib/f16_cvt
 require math
 
