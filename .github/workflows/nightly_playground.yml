@@ -16,9 +16,7 @@ name: nightly playground
 # belongs to the per-PR lanes), and there is no compile step to accelerate.
 
 on:
-  schedule:
-    # after extended_checks' 04:00 sweep, while the build boxes are idle
-    - cron: '30 4 * * *'
+  workflow_call:
   workflow_dispatch:
     inputs:
       filter:
@@ -39,7 +37,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: nightly-playground-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -150,11 +148,3 @@ jobs:
         if-no-files-found: ignore
         retention-days: 14
 
-  nightly_issue:
-    needs: [verify_samples, wasm_specs]
-    if: failure() && github.event_name == 'schedule'
-    permissions:
-      issues: write
-    uses: ./.github/workflows/nightly_issue.yml
-    with:
-      lane: nightly_playground.yml

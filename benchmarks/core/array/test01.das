@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 
 require dastest/testing_boost
 require daslib/templates_boost
@@ -34,9 +35,9 @@ def reserve_unlocked(var arr : array<auto(T)>; n : int) {
 [template(typ1), unused_argument(typ1), sideeffects]
 def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace/{n}", n) {
-        var arr : array<ElemT>
+        var inscope arr : array<ElemT>
         reserve_unlocked(arr, n)
-        for (i in range(n)) {
+        for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
         }
     }
@@ -46,8 +47,8 @@ def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
 [template(typ1), unused_argument(typ1), sideeffects]
 def run_emplace_grow_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace_grow/{n}") {
-        var arr : array<ElemT>
-        for (i in range(n)) {
+        var inscope arr : array<ElemT>
+        for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
         }
     }
@@ -72,13 +73,13 @@ def run_reserve_bench(var typ1 : auto(ElemT), b : B?, n : int) {
 def run_move_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     var arr <- [for (_ in range(n)); default<ElemT> ]
     b |> run("move/{n}", n) {
-        for (i in range(n)) {
+        for (_i in range(n)) {
             var tmp <- arr
             strictEqual(b, length(arr), 0)
             strictEqual(b, length(tmp), n)
-            arr <- tmp
-            tmp <- arr
-            arr <- tmp
+            arr <- tmp  // nolint:PERF030 the target was just moved out of; the moves are what this measures
+            tmp <- arr  // nolint:PERF030
+            arr <- tmp  // nolint:PERF030
         }
     }
 }

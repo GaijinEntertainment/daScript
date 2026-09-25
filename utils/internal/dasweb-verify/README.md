@@ -61,7 +61,7 @@ node --test                              # unit tests for the pure helpers
 
 `--base-url` points it at a staging box; `--headed` shows the browser.
 Exit code 0 = every planned row passed, 1 = at least one FAIL. In CI it runs
-as `nightly_playground.yml` (04:30) and appends its table to the step summary.
+as `nightly_playground.yml` and appends its table to the step summary.
 
 ### What "it runs" means
 

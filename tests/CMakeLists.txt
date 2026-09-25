@@ -132,8 +132,15 @@ endif()
 # LLVM-AOT (LLVM-backend .o) mirror of run_tests_aot: test bodies bound from the
 # statically-linked self-registering objects and run jitted. Opt-in, not in CI.
 if(TARGET test_llvm_aot)
+    # under tsan the whole corpus outruns the 1800 s suite watchdog, and its process-spawning
+    # tests miss their own deadlines; the sweep keeps tests/language, as the JIT sweep does
+    if(DAS_USE_SANITIZER STREQUAL "tsan")
+        set(_DAS_LLVM_AOT_TEST_DIR ${PROJECT_SOURCE_DIR}/tests/language)
+    else()
+        set(_DAS_LLVM_AOT_TEST_DIR ${PROJECT_SOURCE_DIR}/tests/)
+    endif()
     add_das_target(run_tests_llvm_aot
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${PROJECT_SOURCE_DIR}/tests/
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${_DAS_LLVM_AOT_TEST_DIR}
         DEPENDS test_llvm_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (LLVM-AOT)"

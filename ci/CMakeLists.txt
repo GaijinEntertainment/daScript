@@ -70,14 +70,15 @@ function(das_lane_group name comment)
 endfunction()
 
 set(DAS_EXTENDED_CORE
-    check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_rpm_spec
+    check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack
     check_example_games check_dasllama_site run_tests_bench_updater
     run_tests_pr_babysit check_dasgen run_tests_review_md run_tests_dastest
     check_lint_changed check_ast_verify_changed check_gated_das check_review_gates
     check_standalone_exes check_format check_format_exe run_utils_tests)
 if(NOT WIN32)
-    # check_model_mint: its test stands in a shell script for daslang, which Windows cannot exec
-    list(APPEND DAS_EXTENDED_CORE run_tests_dap_bridge check_model_mint)
+    # check_model_mint: its test stands in a shell script for daslang, which Windows cannot exec;
+    # check_rpm_spec: the .rpm is a Linux package, and its fixture's exec bits mean nothing on NTFS
+    list(APPEND DAS_EXTENDED_CORE run_tests_dap_bridge check_model_mint check_rpm_spec)
 endif()
 
 set(DAS_EXTENDED_MODULES
@@ -128,9 +129,9 @@ das_lane_group(run_build_mingw_isolated "Retrying the mingw lane's sweeps in iso
 das_lane_group(run_site "Running the site lane's checks"
     run_imgui2rst run_vulkan2rst stage_doc_assets)
 das_lane_group(run_nightly "Running everything CI runs only on the cron"
-    run_build_nightly ${DAS_EXTENDED_NIGHTLY})
+    run_build_nightly ${DAS_EXTENDED_NIGHTLY} check_lint_tree)
 das_lane_group(run_all "Running every lane this configure can build"
-    run_extended_all run_doc run_build run_build_nightly)
+    run_extended_all run_doc run_build run_build_nightly check_lint_tree)
 
 # A lane runs daslang against the tree's own shared modules and descriptors. Under a single
 # ninja invocation a relink lands while another lane is reading that module, and its descriptor
@@ -157,7 +158,7 @@ foreach(_lane ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTL
               run_tests_jit run_tests_jit_isolated
               run_tests_aot run_tests_aot_subset run_tests_llvm_aot
               run_tests_slow run_standalone_sweep_aot standalone_sweep_jit
-              check_ast_verify_tree run_examples dry_run_tutorials
+              check_ast_verify_tree check_lint_tree run_examples dry_run_tutorials
               check_docs_generated run_imgui2rst run_vulkan2rst stage_doc_assets)
     if(TARGET ${_lane})
         add_dependencies(${_lane} das_build_products)

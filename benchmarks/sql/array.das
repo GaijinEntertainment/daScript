@@ -3,30 +3,19 @@ options persistent_heap
 
 require _common public
 
-// Per-source array benchmark lane. All shared fixtures built once in [init]. Functions stay named
+// Per-source array benchmark lane. All shared fixtures built once, as globals. Functions stay named
 // <family>_m3f so the results collector pivots (family x source) unchanged.
 
 let N = 100000
 let GJ_DEALERS = 100
 
-var g_arr : array<Car>
-var g_dealers : array<Dealer>
-var g_ys : array<int>
-var g_brands : array<int>
-var g_orders : array<OrderWithLines>
-var g_gj_dealers_matched : array<Dealer>
-var g_gj_dealers_unmatched : array<Dealer>
-
-[init]
-def array_bench_init {
-    g_arr <- fixture_array(N)
-    g_dealers <- fixture_dealers_array()
-    g_ys <- make_ints(N)
-    g_brands <- make_brands(N)
-    g_orders <- fixture_orders_nested(N)
-    g_gj_dealers_matched <- dealers_with_offset(0)
-    g_gj_dealers_unmatched <- dealers_with_offset(GJ_DEALERS)
-}
+var g_arr <- fixture_array(N)
+var g_dealers <- fixture_dealers_array()
+var g_ys <- make_ints(N)
+var g_brands <- make_brands(N)
+var g_orders <- fixture_orders_nested(N)
+var g_gj_dealers_matched <- dealers_with_offset(0)
+var g_gj_dealers_unmatched <- dealers_with_offset(GJ_DEALERS)
 
 [finalize]
 def array_bench_fini {
@@ -125,7 +114,7 @@ def bare_last_m3f(b : B?) {
 [benchmark]
 def bare_order_where_m3f(b : B?) {
     b |> run("bare_order_where", N) {
-        let rows <- _fold(each(g_arr)._where(_.price > 500)
+        var inscope rows <- _fold(each(g_arr)._where(_.price > 500)
                                    ._order_by(_.price)
                                    .to_array())
         b |> accept(rows)
@@ -195,12 +184,10 @@ def distinct_by_count_m3f(b : B?) {
 [benchmark]
 def distinct_by_order_take_m3f(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -208,12 +195,10 @@ def distinct_by_order_take_m3f(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m3f(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -221,7 +206,7 @@ def distinct_by_order_to_array_m3f(b : B?) {
 [benchmark]
 def distinct_count_m3f(b : B?) {
     b |> run("distinct_count", N) {
-        let rows <- _fold(each(g_arr)._select(_.brand).distinct().to_array())
+        var inscope rows <- _fold(each(g_arr)._select(_.brand).distinct().to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -232,12 +217,10 @@ def distinct_count_m3f(b : B?) {
 [benchmark]
 def distinct_count_pred_m3f(b : B?) {
     b |> run("distinct_count_pred", N) {
-        unsafe {
-            let c = _fold(each(g_arr) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(each(g_arr) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -245,12 +228,10 @@ def distinct_count_pred_m3f(b : B?) {
 [benchmark]
 def distinct_take_m3f(b : B?) {
     b |> run("distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._select(_.brand).distinct().take(3).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._select(_.brand).distinct().take(3).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -292,7 +273,7 @@ def first_or_default_match_m3f(b : B?) {
 [benchmark]
 def groupby_average_m3f(b : B?) {
     b |> run("groupby_average", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       AvgPrice = _._1 |> select($(c : Car) => c.price) |> average()))
@@ -307,7 +288,7 @@ def groupby_average_m3f(b : B?) {
 [benchmark]
 def groupby_count_m3f(b : B?) {
     b |> run("groupby_count", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
@@ -321,7 +302,7 @@ def groupby_count_m3f(b : B?) {
 [benchmark]
 def groupby_first_m3f(b : B?) {
     b |> run("groupby_first", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       FirstCar = _._1 |> first()))
@@ -336,7 +317,7 @@ def groupby_first_m3f(b : B?) {
 [benchmark]
 def groupby_having_count_m3f(b : B?) {
     b |> run("groupby_having_count", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._having(_._1 |> length >= 5)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -351,7 +332,7 @@ def groupby_having_count_m3f(b : B?) {
 [benchmark]
 def groupby_having_hidden_sum_m3f(b : B?) {
     b |> run("groupby_having_hidden_sum", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._having(_._1 |> select($(c : Car) => c.price) |> sum > 50000)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -366,7 +347,7 @@ def groupby_having_hidden_sum_m3f(b : B?) {
 [benchmark]
 def groupby_having_post_where_m3f(b : B?) {
     b |> run("groupby_having_post_where", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -382,7 +363,7 @@ def groupby_having_post_where_m3f(b : B?) {
 [benchmark]
 def groupby_max_m3f(b : B?) {
     b |> run("groupby_max", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MaxPrice = _._1 |> select($(c : Car) => c.price) |> max()))
@@ -397,7 +378,7 @@ def groupby_max_m3f(b : B?) {
 [benchmark]
 def groupby_min_m3f(b : B?) {
     b |> run("groupby_min", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MinPrice = _._1 |> select($(c : Car) => c.price) |> min()))
@@ -412,7 +393,7 @@ def groupby_min_m3f(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m3f(b : B?) {
     b |> run("groupby_multi_reducer", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       N = _._1 |> length,
@@ -429,7 +410,7 @@ def groupby_multi_reducer_m3f(b : B?) {
 [benchmark]
 def groupby_select_order_m3f(b : B?) {
     b |> run("groupby_select_order", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -445,7 +426,7 @@ def groupby_select_order_m3f(b : B?) {
 [benchmark]
 def groupby_select_sum_m3f(b : B?) {
     b |> run("groupby_select_sum", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._select(_.price)
                             ._group_by(_ % 100)
                             ._select((K = _._0, S = _._1 |> sum()))
@@ -460,7 +441,7 @@ def groupby_select_sum_m3f(b : B?) {
 [benchmark]
 def groupby_sum_m3f(b : B?) {
     b |> run("groupby_sum", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       TotalPrice = _._1 |> select($(c : Car) => c.price) |> sum()))
@@ -475,7 +456,7 @@ def groupby_sum_m3f(b : B?) {
 [benchmark]
 def groupby_where_count_m3f(b : B?) {
     b |> run("groupby_where_count", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -490,7 +471,7 @@ def groupby_where_count_m3f(b : B?) {
 [benchmark]
 def groupby_where_sum_m3f(b : B?) {
     b |> run("groupby_where_sum", N) {
-        let groups <- _fold(each(g_arr)
+        var inscope groups <- _fold(each(g_arr)
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
@@ -520,7 +501,7 @@ def join_count_m3f(b : B?) {
 [benchmark]
 def join_groupby_count_m3f(b : B?) {
     b |> run("join_groupby_count", N) {
-        let groups <- _fold(g_arr |> _join(g_dealers,
+        var inscope groups <- _fold(g_arr |> _join(g_dealers,
                                           $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                           $(c : Car, d : Dealer) => (Brand = c.brand, DealerId = d.id))
                                  |> _group_by(_.Brand)
@@ -535,7 +516,7 @@ def join_groupby_count_m3f(b : B?) {
 [benchmark]
 def join_groupby_to_array_m3f(b : B?) {
     b |> run("join_groupby_to_array", N) {
-        let groups <- _fold(g_arr |> _join(g_dealers,
+        var inscope groups <- _fold(g_arr |> _join(g_dealers,
                                           $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                           $(c : Car, d : Dealer) => (Brand = c.brand, Price = c.price))
                                  |> _group_by(_.Brand)
@@ -551,7 +532,7 @@ def join_groupby_to_array_m3f(b : B?) {
 [benchmark]
 def join_select_m3f(b : B?) {
     b |> run("join_select", N) {
-        let rows <- _fold(g_arr |> _join(g_dealers,
+        var inscope rows <- _fold(g_arr |> _join(g_dealers,
                                         $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                         $(c : Car, d : Dealer) => (CarName = c.name, DealerId = d.id))
                                |> _select(_.CarName))
@@ -568,7 +549,7 @@ def join_where_count_m3f(b : B?) {
         let c = _fold(g_arr |> _join(g_dealers,
                                     $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                     $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
-                           |> _where(_.CarPrice > 500)  // nolint:PERF013 macro-generated `+= 1`
+                           |> _where(_.CarPrice > 500)
                            |> count())
         b |> accept(c)
         if (c == 0) {
@@ -624,7 +605,7 @@ def min_aggregate_m3f(b : B?) {
 [benchmark]
 def order_by_multi_key_m3f(b : B?) {
     b |> run("order_by_multi_key", N) {
-        let rows <- _fold(each(g_arr)._where(_.price > 500)
+        var inscope rows <- _fold(each(g_arr)._where(_.price > 500)
                                    ._order_by_keys((_.brand, _.price), 0u)
                                    .to_array())
         b |> accept(rows)
@@ -637,12 +618,10 @@ def order_by_multi_key_m3f(b : B?) {
 [benchmark]
 def order_distinct_take_m3f(b : B?) {
     b |> run("order_distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_brands)._order_by(_).distinct().take(5).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_brands)._order_by(_).distinct().take(5).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -650,12 +629,10 @@ def order_distinct_take_m3f(b : B?) {
 [benchmark]
 def order_reverse_normalized_m3f(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._order_by(_.price).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -663,7 +640,7 @@ def order_reverse_normalized_m3f(b : B?) {
 [benchmark]
 def order_take_desc_m3f(b : B?) {
     b |> run("order_take_desc", N) {
-        let rows <- _fold(each(g_arr)._order_by_descending(_.price).take(10).to_array())
+        var inscope rows <- _fold(each(g_arr)._order_by_descending(_.price).take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -674,12 +651,10 @@ def order_take_desc_m3f(b : B?) {
 [benchmark]
 def reverse_distinct_by_m3f(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse()._distinct_by(_.brand).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr).reverse()._distinct_by(_.brand).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -687,12 +662,10 @@ def reverse_distinct_by_m3f(b : B?) {
 [benchmark]
 def reverse_take_m3f(b : B?) {
     b |> run("reverse_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -700,12 +673,10 @@ def reverse_take_m3f(b : B?) {
 [benchmark]
 def reverse_take_select_m3f(b : B?) {
     b |> run("reverse_take_select", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse().take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr).reverse().take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -727,7 +698,7 @@ def select_many_m3f(b : B?) {
         // collection-selector yields a zero-copy view of o.lines via `each` — NOT `to_sequence`, whose
         // const-array overload clones the array per order (linq.das `var b := a`); that clone is not part of
         // select_many and would skew the baseline. This is the shape the correlated reader emits.
-        let rows <- select_many_pair(g_orders, $(o : OrderWithLines) => unsafe(each(o.lines)),
+        var inscope rows <- select_many_pair(g_orders, $(o : OrderWithLines) => unsafe(each(o.lines)),
             $(o : OrderWithLines; l : Line) => (id = o.id, sku = l.sku))
         let c = length(rows)
         b |> accept(c)
@@ -740,7 +711,7 @@ def select_many_m3f(b : B?) {
 [benchmark]
 def select_where_m3f(b : B?) {
     b |> run("select_where", N) {
-        let rows <- _fold(each(g_arr)._where(_.price > 500).to_array())
+        var inscope rows <- _fold(each(g_arr)._where(_.price > 500).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -762,7 +733,7 @@ def select_where_count_m3f(b : B?) {
 [benchmark]
 def select_where_order_take_m3f(b : B?) {
     b |> run("select_where_order_take", N) {
-        let rows <- _fold(each(g_arr)._where(_.price > 500)
+        var inscope rows <- _fold(each(g_arr)._where(_.price > 500)
                                    ._order_by(_.price)
                                    .take(10)
                                    .to_array())
@@ -798,7 +769,7 @@ def single_match_m3f(b : B?) {
 [benchmark]
 def skip_take_m3f(b : B?) {
     b |> run("skip_take", N) {
-        let rows <- _fold(each(g_arr).skip(1000).take(100).to_array())
+        var inscope rows <- _fold(each(g_arr).skip(1000).take(100).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -831,12 +802,10 @@ def sort_first_m3f(b : B?) {
 [benchmark]
 def sort_take_m3f(b : B?) {
     b |> run("sort_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -844,12 +813,10 @@ def sort_take_m3f(b : B?) {
 [benchmark]
 def sort_take_select_m3f(b : B?) {
     b |> run("sort_take_select", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_arr)._order_by(_.price).take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -879,7 +846,7 @@ def sum_where_m3f(b : B?) {
 [benchmark]
 def take_count_m3f(b : B?) {
     b |> run("take_count", N) {
-        let rows <- _fold(each(g_arr).take(1000).to_array())
+        var inscope rows <- _fold(each(g_arr).take(1000).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -934,7 +901,7 @@ def take_while_match_m3f(b : B?) {
 [benchmark]
 def to_array_filter_m3f(b : B?) {
     b |> run("to_array_filter", N) {
-        let prices <- _fold(each(g_arr)._where(_.price > 500)._select(_.price).to_array())
+        var inscope prices <- _fold(each(g_arr)._where(_.price > 500)._select(_.price).to_array())
         b |> accept(prices)
         if (empty(prices)) {
             b->failNow()
@@ -987,12 +954,10 @@ def where_join_count_m3f(b : B?) {
 [benchmark]
 def zip_count_pred_m3f(b : B?) {
     b |> run("zip_count_pred", N) {
-        unsafe {
-            let c = _fold(each(g_ys) |> zip(each(g_ys)) |> _select(int64(_._0) * int64(_._1)) |> count($(v) => v > 50000l))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(each(g_ys) |> zip(each(g_ys)) |> _select(int64(_._0) * int64(_._1)) |> count($(v) => v > 50000l))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -1022,12 +987,10 @@ def zip_dot_product_3arg_m3f(b : B?) {
 [benchmark]
 def zip_reverse_to_array_m3f(b : B?) {
     b |> run("zip_reverse_to_array", N) {
-        unsafe {
-            let rows <- _fold(each(g_ys) |> zip(each(g_ys)) |> reverse() |> to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(each(g_ys) |> zip(each(g_ys)) |> reverse() |> to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -1037,7 +1000,7 @@ def cross_join_m3f(b : B?) {
     let cars <- fixture_array(1000)
     let dealers <- fixture_dealers_array()
     b |> run("cross_join", 1000) {
-        let rows <- cross_join(cars, dealers, $(ca : Car, de : Dealer) => (CarId = ca.id, DealerId = de.id))
+        var inscope rows <- cross_join(cars, dealers, $(ca : Car, de : Dealer) => (CarId = ca.id, DealerId = de.id))
         let c = length(rows)
         b |> accept(c)
         if (c != 1000 * DEALER_COUNT) {
@@ -1049,7 +1012,7 @@ def cross_join_m3f(b : B?) {
 [benchmark]
 def group_join_count_matched(b : B?) {
     b |> run("group_join_count_matched", N) {
-        let rows <- _fold(g_gj_dealers_matched |> _group_join(g_arr,
+        var inscope rows <- _fold(g_gj_dealers_matched |> _group_join(g_arr,
                                                  $(d : Dealer, c : Car) => d.id == c.dealer_id,
                                                  $(d : Dealer, cs : array<Car>) => (id = d.id, n = length(cs))) |> to_array())
         b |> accept(length(rows))
@@ -1062,7 +1025,7 @@ def group_join_count_matched(b : B?) {
 [benchmark]
 def group_join_count_unmatched(b : B?) {
     b |> run("group_join_count_unmatched", N) {
-        let rows <- _fold(g_gj_dealers_unmatched |> _group_join(g_arr,
+        var inscope rows <- _fold(g_gj_dealers_unmatched |> _group_join(g_arr,
                                                  $(d : Dealer, c : Car) => d.id == c.dealer_id,
                                                  $(d : Dealer, cs : array<Car>) => (id = d.id, n = length(cs))) |> to_array())
         b |> accept(length(rows))

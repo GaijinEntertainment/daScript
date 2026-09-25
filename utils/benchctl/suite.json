@@ -13,9 +13,6 @@
     "repeat": 3,
     "timeout_seconds": 900,
     "files": {
-        "core/array/test01.das": {
-            "skip": "allocates ~19 GB under persistent_heap and gets OOM-killed; unskip once the benchmark is fixed"
-        },
         "compile/utils.das": {
             "timeout_seconds": 7200
         }
