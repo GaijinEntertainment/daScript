@@ -46,6 +46,7 @@ struct SuiteCtx {
     keep_alive : bool = false
     stackOnException : bool = false
     disable_cse : bool = false
+    persistent_heap : bool = false
     disable_dse : bool = false
     disable_temp_string_reclaim : bool = false
     disable_inline : bool = false
@@ -108,6 +109,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.debugger = args.debugger
     ctx.stackOnException = args.stack_on_exception
     ctx.disable_cse = args.disable_cse
+    ctx.persistent_heap = args.persistent_heap
     ctx.disable_dse = args.disable_dse
     ctx.disable_temp_string_reclaim = args.disable_temp_string_reclaim
     ctx.disable_inline = args.disable_inline
@@ -135,9 +137,7 @@ struct FileCtx {
 
 def FileCtx(ctx : SuiteCtx) : FileCtx {
     var res <- internalFileCtx(ctx)
-    unsafe {
-        res.context = addr(this_context())
-    }
+    res.context = unsafe(addr(this_context()))
     return <- res
 }
 
@@ -188,6 +188,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.debugger = ctx.debugger
             cop.keep_alive = ctx.keep_alive
             cop.disable_cse = ctx.disable_cse
+            if (ctx.persistent_heap) {
+                cop.persistent_heap = true
+            }
             cop.disable_dse = ctx.disable_dse
             cop.disable_temp_string_reclaim = ctx.disable_temp_string_reclaim
             cop.disable_inline = ctx.disable_inline
@@ -290,9 +293,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
 
                         }
                         if (module_result.failed + module_result.errors == 0) {
-                            unsafe {
-                                file_ctx.context = addr(*context)
-                            }
+                            file_ctx.context = unsafe(addr(*context))
                             run_queued_benchmarks(ctx, file_ctx, res)
                         }
                         res += module_result
@@ -548,7 +549,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
             clonedMessages |> push(clone_string(m))
         }
         delete testMessages
-        testMessages <- clonedMessages  // nolint:PERF030 - deleted on the line above; the check cannot see the delete
+        testMessages <- clonedMessages
     }
     if (!empty(testLocation)) {
         testLocation = clone_string(testLocation)
@@ -710,21 +711,21 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
             }
 
             benchmarking.on_start <- @capture(& selfCtx, & suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
-                unsafe {
+                unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
                     selfCtx |> invoke_in_context("bench_on_start_impl", suite_ctx, benchmarking, file_ctx, func_type, name, sub_name)
                 }
             }
 
             benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
-                unsafe {
-                    var with_func_type = stats
-                    with_func_type.func_type = func_type
+                var with_func_type = stats
+                with_func_type.func_type = func_type
+                unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
                     selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, with_func_type)
                 }
             }
         }
 
-        unsafe {
+        unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
             *file_ctx.context |> invoke_in_context(func, benchmarking)
         }
     } recover {
