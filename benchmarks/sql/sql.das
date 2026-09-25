@@ -10,14 +10,13 @@ require _common public
 let N = 100000
 
 var g_db : SqlRunner <- open_sqlite(":memory:")
-var g_ys : array<int>
+var g_ys <- make_ints(N)
 
 [init]
 def sql_bench_init {
     g_db |> exec("PRAGMA foreign_keys = ON")
     fixture_db(g_db, N)
     fixture_db_brands(g_db, N)
-    g_ys <- make_ints(N)
 }
 
 [finalize]

@@ -9,14 +9,12 @@ require _common public
 let N = 100000
 
 var g_jv : JsonValue?
-var g_dealers : array<Dealer>
-var g_ys : array<int>
+var g_dealers <- fixture_dealers_array()
+var g_ys <- make_ints(N)
 
 [init]
 def json_bench_init {
     g_jv = fixture_json(N)
-    g_dealers <- fixture_dealers_array()
-    g_ys <- make_ints(N)
 }
 
 [finalize]
@@ -163,12 +161,10 @@ def distinct_by_count_m6f(b : B?) {
 [benchmark]
 def distinct_by_order_take_m6f(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -176,12 +172,10 @@ def distinct_by_order_take_m6f(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m6f(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -200,12 +194,10 @@ def distinct_count_m6f(b : B?) {
 [benchmark]
 def distinct_count_pred_m6f(b : B?) {
     b |> run("distinct_count_pred", N) {
-        unsafe {
-            let c = _fold(from_json(g_jv, type<Car>) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(from_json(g_jv, type<Car>) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -213,12 +205,10 @@ def distinct_count_pred_m6f(b : B?) {
 [benchmark]
 def distinct_take_m6f(b : B?) {
     b |> run("distinct_take", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand).distinct().take(3).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand).distinct().take(3).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -605,12 +595,10 @@ def order_by_multi_key_m6f(b : B?) {
 [benchmark]
 def order_distinct_take_m6f(b : B?) {
     b |> run("order_distinct_take", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand)._order_by(_).distinct().take(5).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._select(_.brand)._order_by(_).distinct().take(5).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -618,12 +606,10 @@ def order_distinct_take_m6f(b : B?) {
 [benchmark]
 def order_reverse_normalized_m6f(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -642,12 +628,10 @@ def order_take_desc_m6f(b : B?) {
 [benchmark]
 def reverse_distinct_by_m6f(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>).reverse()._distinct_by(_.brand).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>).reverse()._distinct_by(_.brand).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -655,12 +639,10 @@ def reverse_distinct_by_m6f(b : B?) {
 [benchmark]
 def reverse_take_m6f(b : B?) {
     b |> run("reverse_take", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -668,12 +650,10 @@ def reverse_take_m6f(b : B?) {
 [benchmark]
 def reverse_take_select_m6f(b : B?) {
     b |> run("reverse_take_select", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>).reverse().take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -783,12 +763,10 @@ def sort_first_m6f(b : B?) {
 [benchmark]
 def sort_take_m6f(b : B?) {
     b |> run("sort_take", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -796,12 +774,10 @@ def sort_take_m6f(b : B?) {
 [benchmark]
 def sort_take_select_m6f(b : B?) {
     b |> run("sort_take_select", N) {
-        unsafe {
-            let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(from_json(g_jv, type<Car>)._order_by(_.price).take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }

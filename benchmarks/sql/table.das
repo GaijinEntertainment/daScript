@@ -12,15 +12,13 @@ let N = 100000
 typedef CarKV = tuple<key : int; value : Car>
 typedef DKV = tuple<key : int; value : Dealer>
 
-var g_t : table<int; Car>
-var g_dealers : array<Dealer>
+var g_t <- fixture_table(N)
+var g_dealers <- fixture_dealers_array()
 var g_dealer_t : table<int; Dealer>   // dealers keyed by id — the join_probe srcB
 var g_dealer_kv : array<DKV>          // same rows pre-materialized in slot order — the build-side baseline
 
 [init]
 def table_bench_init {
-    g_t <- fixture_table(N)
-    g_dealers <- fixture_dealers_array()
     for (d in g_dealers) {
         g_dealer_t |> insert(d.id, d)
     }
@@ -166,12 +164,10 @@ def distinct_by_count_m7(b : B?) {
 [benchmark]
 def distinct_by_order_take_m7(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._distinct_by(_.value.dealer_id)._order_by(_.value.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._distinct_by(_.value.dealer_id)._order_by(_.value.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -179,12 +175,10 @@ def distinct_by_order_take_m7(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m7(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._distinct_by(_.value.dealer_id)._order_by(_.value.price).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._distinct_by(_.value.dealer_id)._order_by(_.value.price).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -203,12 +197,10 @@ def distinct_count_m7(b : B?) {
 [benchmark]
 def distinct_count_pred_m7(b : B?) {
     b |> run("distinct_count_pred", N) {
-        unsafe {
-            let c = _fold(each_kv(g_t) |> _distinct_by(_.value.brand) |> count($(c) => c.value.year > 2009))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(each_kv(g_t) |> _distinct_by(_.value.brand) |> count($(c) => c.value.year > 2009))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -216,12 +208,10 @@ def distinct_count_pred_m7(b : B?) {
 [benchmark]
 def distinct_take_m7(b : B?) {
     b |> run("distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._select(_.value.brand).distinct().take(3).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._select(_.value.brand).distinct().take(3).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -640,12 +630,10 @@ def order_by_multi_key_m7(b : B?) {
 [benchmark]
 def order_distinct_take_m7(b : B?) {
     b |> run("order_distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._select(_.value.brand)._order_by(_).distinct().take(5).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._select(_.value.brand)._order_by(_).distinct().take(5).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -653,12 +641,10 @@ def order_distinct_take_m7(b : B?) {
 [benchmark]
 def order_reverse_normalized_m7(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._order_by(_.value.price).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._order_by(_.value.price).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -716,12 +702,10 @@ def point_lookup_scan_m7(b : B?) {
 [benchmark]
 def reverse_distinct_by_m7(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t).reverse()._distinct_by(_.value.brand).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t).reverse()._distinct_by(_.value.brand).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -729,12 +713,10 @@ def reverse_distinct_by_m7(b : B?) {
 [benchmark]
 def reverse_take_m7(b : B?) {
     b |> run("reverse_take", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -742,12 +724,10 @@ def reverse_take_m7(b : B?) {
 [benchmark]
 def reverse_take_select_m7(b : B?) {
     b |> run("reverse_take_select", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t).reverse().take(10)._select(_.value.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t).reverse().take(10)._select(_.value.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -859,12 +839,10 @@ def sort_first_m7(b : B?) {
 [benchmark]
 def sort_take_m7(b : B?) {
     b |> run("sort_take", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._order_by(_.value.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._order_by(_.value.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -872,12 +850,10 @@ def sort_take_m7(b : B?) {
 [benchmark]
 def sort_take_select_m7(b : B?) {
     b |> run("sort_take_select", N) {
-        unsafe {
-            let rows <- _fold(each_kv(g_t)._order_by(_.value.price).take(10)._select(_.value.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each_kv(g_t)._order_by(_.value.price).take(10)._select(_.value.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }

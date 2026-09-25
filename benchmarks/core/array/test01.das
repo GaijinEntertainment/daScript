@@ -36,7 +36,7 @@ def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace/{n}", n) {
         var arr : array<ElemT>
         reserve_unlocked(arr, n)
-        for (i in range(n)) {
+        for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
         }
     }
@@ -47,7 +47,7 @@ def run_emplace_bench(var typ1 : auto(ElemT), b : B?, n : int) {
 def run_emplace_grow_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     b |> run("emplace_grow/{n}") {
         var arr : array<ElemT>
-        for (i in range(n)) {
+        for (_i in range(n)) {
             arr |> emplace(default<ElemT>)
         }
     }
@@ -72,13 +72,13 @@ def run_reserve_bench(var typ1 : auto(ElemT), b : B?, n : int) {
 def run_move_bench(var typ1 : auto(ElemT), b : B?, n : int) {
     var arr <- [for (_ in range(n)); default<ElemT> ]
     b |> run("move/{n}", n) {
-        for (i in range(n)) {
+        for (_i in range(n)) {
             var tmp <- arr
             strictEqual(b, length(arr), 0)
             strictEqual(b, length(tmp), n)
-            arr <- tmp
-            tmp <- arr
-            arr <- tmp
+            arr <- tmp  // nolint:PERF030 the target was just moved out of; the moves are what this measures
+            tmp <- arr  // nolint:PERF030
+            arr <- tmp  // nolint:PERF030
         }
     }
 }

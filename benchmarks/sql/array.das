@@ -3,30 +3,19 @@ options persistent_heap
 
 require _common public
 
-// Per-source array benchmark lane. All shared fixtures built once in [init]. Functions stay named
+// Per-source array benchmark lane. All shared fixtures built once, as globals. Functions stay named
 // <family>_m3f so the results collector pivots (family x source) unchanged.
 
 let N = 100000
 let GJ_DEALERS = 100
 
-var g_arr : array<Car>
-var g_dealers : array<Dealer>
-var g_ys : array<int>
-var g_brands : array<int>
-var g_orders : array<OrderWithLines>
-var g_gj_dealers_matched : array<Dealer>
-var g_gj_dealers_unmatched : array<Dealer>
-
-[init]
-def array_bench_init {
-    g_arr <- fixture_array(N)
-    g_dealers <- fixture_dealers_array()
-    g_ys <- make_ints(N)
-    g_brands <- make_brands(N)
-    g_orders <- fixture_orders_nested(N)
-    g_gj_dealers_matched <- dealers_with_offset(0)
-    g_gj_dealers_unmatched <- dealers_with_offset(GJ_DEALERS)
-}
+var g_arr <- fixture_array(N)
+var g_dealers <- fixture_dealers_array()
+var g_ys <- make_ints(N)
+var g_brands <- make_brands(N)
+var g_orders <- fixture_orders_nested(N)
+var g_gj_dealers_matched <- dealers_with_offset(0)
+var g_gj_dealers_unmatched <- dealers_with_offset(GJ_DEALERS)
 
 [finalize]
 def array_bench_fini {
@@ -195,12 +184,10 @@ def distinct_by_count_m3f(b : B?) {
 [benchmark]
 def distinct_by_order_take_m3f(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -208,12 +195,10 @@ def distinct_by_order_take_m3f(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m3f(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -232,12 +217,10 @@ def distinct_count_m3f(b : B?) {
 [benchmark]
 def distinct_count_pred_m3f(b : B?) {
     b |> run("distinct_count_pred", N) {
-        unsafe {
-            let c = _fold(each(g_arr) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(each(g_arr) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -245,12 +228,10 @@ def distinct_count_pred_m3f(b : B?) {
 [benchmark]
 def distinct_take_m3f(b : B?) {
     b |> run("distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._select(_.brand).distinct().take(3).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._select(_.brand).distinct().take(3).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -568,7 +549,7 @@ def join_where_count_m3f(b : B?) {
         let c = _fold(g_arr |> _join(g_dealers,
                                     $(c : Car, d : Dealer) => c.dealer_id == d.id,
                                     $(c : Car, d : Dealer) => (CarPrice = c.price, DealerId = d.id))
-                           |> _where(_.CarPrice > 500)  // nolint:PERF013 macro-generated `+= 1`
+                           |> _where(_.CarPrice > 500)
                            |> count())
         b |> accept(c)
         if (c == 0) {
@@ -637,12 +618,10 @@ def order_by_multi_key_m3f(b : B?) {
 [benchmark]
 def order_distinct_take_m3f(b : B?) {
     b |> run("order_distinct_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_brands)._order_by(_).distinct().take(5).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_brands)._order_by(_).distinct().take(5).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -650,12 +629,10 @@ def order_distinct_take_m3f(b : B?) {
 [benchmark]
 def order_reverse_normalized_m3f(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._order_by(_.price).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -674,12 +651,10 @@ def order_take_desc_m3f(b : B?) {
 [benchmark]
 def reverse_distinct_by_m3f(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse()._distinct_by(_.brand).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr).reverse()._distinct_by(_.brand).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -687,12 +662,10 @@ def reverse_distinct_by_m3f(b : B?) {
 [benchmark]
 def reverse_take_m3f(b : B?) {
     b |> run("reverse_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -700,12 +673,10 @@ def reverse_take_m3f(b : B?) {
 [benchmark]
 def reverse_take_select_m3f(b : B?) {
     b |> run("reverse_take_select", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr).reverse().take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr).reverse().take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -831,12 +802,10 @@ def sort_first_m3f(b : B?) {
 [benchmark]
 def sort_take_m3f(b : B?) {
     b |> run("sort_take", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -844,12 +813,10 @@ def sort_take_m3f(b : B?) {
 [benchmark]
 def sort_take_select_m3f(b : B?) {
     b |> run("sort_take_select", N) {
-        unsafe {
-            let rows <- _fold(each(g_arr)._order_by(_.price).take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_arr)._order_by(_.price).take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -987,12 +954,10 @@ def where_join_count_m3f(b : B?) {
 [benchmark]
 def zip_count_pred_m3f(b : B?) {
     b |> run("zip_count_pred", N) {
-        unsafe {
-            let c = _fold(each(g_ys) |> zip(each(g_ys)) |> _select(int64(_._0) * int64(_._1)) |> count($(v) => v > 50000l))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(each(g_ys) |> zip(each(g_ys)) |> _select(int64(_._0) * int64(_._1)) |> count($(v) => v > 50000l))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -1022,12 +987,10 @@ def zip_dot_product_3arg_m3f(b : B?) {
 [benchmark]
 def zip_reverse_to_array_m3f(b : B?) {
     b |> run("zip_reverse_to_array", N) {
-        unsafe {
-            let rows <- _fold(each(g_ys) |> zip(each(g_ys)) |> reverse() |> to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        let rows <- _fold(each(g_ys) |> zip(each(g_ys)) |> reverse() |> to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
