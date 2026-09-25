@@ -1260,7 +1260,13 @@ namespace das {
         thread([=]() mutable {
             daScriptEnvironment::setBound(bound);
             if ( debuggerThreadWait(generation) ) {
+                auto & forkStack = forkContext->stack;
+                char * EP = nullptr;
+                char * SP = nullptr;
+                bool reserved = lambda.stackOffset && lambda.stackOffset < forkStack.size()
+                    && forkStack.push(forkStack.size() - lambda.stackOffset, EP, SP);
                 das_invoke<void>::invoke(forkContext.get(), lineinfo, lambda);
+                if ( reserved ) forkStack.pop(EP, SP);
             }
             forkContext.reset();
             shutdownThreadLocalDebugAgent();
