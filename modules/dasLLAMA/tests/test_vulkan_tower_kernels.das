@@ -191,6 +191,23 @@ def test_vkt_fa_bidir(t0 : T?) {
     }
 }
 
+//! the rows a GEMM record carries: rounded up to the cm2 token column so the stamp's last column is whole, the raw count off cm2
+[test]
+def test_vkt_tile_rows(t0 : T?) {
+    t0 |> run("a GEMM record's rows round up to the l column; the s and m columns and the batch tile keep the raw count") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(vt_tile_rows(VtTile(v = 0, tc = 256l), 1500l), 1536l, "whisper's 1500-row chunk on the l column")
+            t |> equal(vt_tile_rows(VtTile(v = 0, tc = 256l), 1536l), 1536l, "a whole column count stays")
+            t |> equal(vt_tile_rows(VtTile(v = 0, tc = 256l), 1152l), 1280l, "four and a half l columns round to five")
+            t |> equal(vt_tile_rows(VtTile(v = 0, tc = 128l), 1500l), 1500l, "the m column keeps the raw count (its partial column takes the fast path)")
+            t |> equal(vt_tile_rows(VtTile(v = 0, tc = 32l), 13l), 13l, "the s column keeps the raw count (gemma4a's rel record over its 13 rows)")
+            t |> equal(vt_tile_rows(VtTile(v = 3, tc = 0l), 1500l), 1500l, "the q8 batch tile carries the raw count")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 let private ROWS_D = 256          //! the row classes' width: four 64-wide heads (the gemma4v head width), a 64-multiple
 let private ROWS_N = 37           //! rows: off every tile and workgroup multiple
 let private ROWS_FF = 512

@@ -493,7 +493,8 @@ def private vt_dev_buf(var r : VtResident; bytes : int64) : uint64 => soft_devic
 def private vt_host_buf(var r : VtResident; bytes : int64; cached : bool) : HostBuf => soft_host_buf(r.oom, bytes, cached)
 
 //! the row cap of an encode: the flash tiles' 64-row alignment
-def private vt_cap_rows(rows : int64) : int64 => (rows + 63l) / 64l * 64l
+//! the scratch's row capacity: the l column's multiple, so a GEMM record rounded to its column (`vt_tile_rows`) stores inside every plane
+def private vt_cap_rows(rows : int64) : int64 => (rows + 255l) / 256l * 256l
 
 //! the largest buffer the scratch at `cap` rows binds: the range decline reads it against the device's limit
 def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : bool) : int64 {
@@ -1289,15 +1290,16 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
         for (l in range64(t.n_layer)) {
             let lo = t.layers[l]
             let ws = fixed_array(lo.ff_up, lo.ff_down, lo.q, lo.k, lo.v, lo.o, lo.attn_k_rel, lo.conv_pw1, lo.conv_pw2, lo.ff_up_1, lo.ff_down_1)
+            let tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)   //! each record's tile, in `ws` order
             for (g in range64(VT_G4A_GEMMS)) {
                 let rid = l * VT_G4A_GEMMS + g
-                let rows = g == VT_G4A_REL ? rel_cap_rows : npos
+                let rows = vt_tile_rows(tiles[g], g == VT_G4A_REL ? rel_cap_rows : npos)
                 let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
                 g_vt_maps[rid] = vt_sched_map(mp, cur, rid, ws[g] / q8e, rows, groups)
             }
         }
-        g_vt_maps[nrec - 2l] = vt_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, npos, g_p)
-        g_vt_maps[nrec - 1l] = vt_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, npos, g_p)
+        g_vt_maps[nrec - 2l] = vt_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, vt_tile_rows(vp, npos), g_p)
+        g_vt_maps[nrec - 1l] = vt_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, vt_tile_rows(vp, npos), g_p)
     }
     let bx = npos * d * 4l
     let bo = npos * tail_dim * 4l
@@ -1609,9 +1611,10 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
         for (l in range64(t.n_layer)) {
             let lo = t.layers[l]
             let ws = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, lo.pos_w, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+            let tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)   //! each record's tile, in `ws` order
             for (g in range64(VT_CN_GEMMS)) {
                 let rid = l * VT_CN_GEMMS + g
-                let rows = g == VT_CN_POS ? ww : npos
+                let rows = vt_tile_rows(tiles[g], g == VT_CN_POS ? ww : npos)
                 let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
                 g_vt_maps[rid] = vt_sched_map(mp, cur, rid, ws[g] / q8e, rows, groups)
             }
@@ -2163,7 +2166,8 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             let ws = fixed_array(o.q_w, o.k_w, o.v_w, o.o_w, o.fc1_w, o.fc2_w)
             for (g in range64(VT_LN_GEMMS)) {
                 let rid = l * VT_LN_GEMMS + g
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, ws[g] / q8e, npos, g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
+                let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
+                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, ws[g] / q8e, vt_tile_rows(tile, npos), g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
             }
         }
     }
@@ -2188,8 +2192,9 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
     var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u, ksplit = uint(sk.ksplit))
-    var pc_red = SkRedArgs(nelem = uint(nd), k = uint(sk.nsplit), ybase = 0u)
-    let wg_red = (nd + 1_023l) / 1_024l
+    let nd_fc2 = vt_tile_rows(tile_fc2, npos) * d   //! the partial planes' stride is the fc2 record's rows, the rounded count
+    var pc_red = SkRedArgs(nelem = uint(nd_fc2), k = uint(sk.nsplit), ybase = 0u)
+    let wg_red = (nd_fc2 + 1_023l) / 1_024l
     var pc_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_gelu = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = fc1_act)
     let t0 = ref_time_ticks()
@@ -2525,7 +2530,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     var s_conv2 = r.sets_front[skey]
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), tt, g_d)
+    let map_off = vt_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(mel.data[0])), nm * tin * 4l)
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     let bx = tt * d * 4l

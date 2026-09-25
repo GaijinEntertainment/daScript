@@ -110,6 +110,7 @@ struct private WdResident {
     xkv_q_dev : uint64
     xkv_s_dev : uint64
     xkv_proj_dev : uint64
+    ta_gemm : int64           //! the cross-KV GEMM record's rows: `ta` rounded up to the tile's token column (`vt_tile_rows`); the projection plane holds them
     kx_dev : uint64
     vx_dev : uint64
     xkv_meta : HostBuf
@@ -261,10 +262,10 @@ def private wd_site_meta(woffs : array<int64>) : HostBuf {
 [cold_path]
 def private wd_xkv_set : VkDescriptorSet {
     let r & = g_wd
-    let bt = r.ta * r.d * 4l
+    let bt = r.ta_gemm * r.d * 4l
     if (r.xkv_tile.tc > 0l) {
         return cm2_cls_set(int(KqFmt.q8), r.xkv_tile.tc, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xh_dev, r.xkv_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, (r.ta + TILE_READ_SLACK) * r.d * 2l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_TMP))
+            fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, (r.ta_gemm + TILE_READ_SLACK) * r.d * 2l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_TMP))
     }
     let bq = r.ta * r.d
     return q8_batch_cls_set(r.xkv_tile.v, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xkv_q_dev, r.xkv_s_dev, r.xkv_proj_dev),
@@ -301,7 +302,7 @@ def private wd_sets {
         fixed_array(bx, bkx, bkx, bpms, bpy, r.norms_bytes), fixed_array(WD_CQ, WD_KXR, WD_VXR, WD_PARTIALS, WD_PARTIALS, 0u))
     r.s_comb = set_tower_wdec_attn_comb_cls(fixed_array(r.pms_dev, r.py_dev, r.att_dev), fixed_array(bpms, bpy, bx), fixed_array(WD_PARTIALS, WD_PARTIALS, WD_ATT))
     if (r.cm2) {
-        r.s_xfeed = set_tower_clamp_cvt_cls(fixed_array(r.xin_dev, r.xh_dev), fixed_array(bt, (r.ta + TILE_READ_SLACK) * d * 2l), fixed_array(WD_XIN, WD_XFEED))
+        r.s_xfeed = set_tower_clamp_cvt_cls(fixed_array(r.xin_dev, r.xh_dev), fixed_array(bt, (r.ta_gemm + TILE_READ_SLACK) * d * 2l), fixed_array(WD_XIN, WD_XFEED))
     } else {
         r.s_xfeed = set_tower_clamp_rq_cls(fixed_array(r.xin_dev, r.xkv_q_dev, r.xkv_s_dev), fixed_array(bt, r.ta * d, r.ta * d / q8e * 4l), fixed_array(WD_XIN, WD_XFEED, WD_XFEED))
     }
@@ -429,6 +430,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.nvocab = w.n_vocab
     r.cm2 = vt_cm2_feed()
     r.xkv_tile = vt_tile(r.cm2, d, r.ta)
+    r.ta_gemm = vt_tile_rows(r.xkv_tile, r.ta)
     r.oom = false
     if (!wd_ensure_classes(r.cm2, r.xkv_tile)) {
         return false
@@ -461,7 +463,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.logits_dev = wd_dev_buf(r.nvocab * 4l)
     r.xin_dev = wd_dev_buf(bt)
     if (r.cm2) {
-        r.xh_dev = wd_dev_buf((r.ta + TILE_READ_SLACK) * d * 2l)
+        r.xh_dev = wd_dev_buf((r.ta_gemm + TILE_READ_SLACK) * d * 2l)
         r.xkv_q_dev = wd_dev_buf(64l)
         r.xkv_s_dev = wd_dev_buf(64l)
     } else {
@@ -469,7 +471,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
         r.xkv_q_dev = wd_dev_buf(r.ta * d)
         r.xkv_s_dev = wd_dev_buf(r.ta * d / q8e * 4l)
     }
-    r.xkv_proj_dev = wd_dev_buf(bt)
+    r.xkv_proj_dev = wd_dev_buf(r.ta_gemm * d * 4l)
     r.kx_dev = wd_dev_buf(nl * d * r.ta * 4l)
     r.vx_dev = wd_dev_buf(nl * d * r.ta * 4l)
     let groups = vt_tile_groups(r.xkv_tile, d, r.ta)
@@ -526,8 +528,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     var cur = 2l * nl * 4l
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
-        g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, ta, groups)
-        g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, ta, groups)
+        g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_gemm, groups)
+        g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_gemm, groups)
     }
     upload_region_at(r.xin_dev, 0l, unsafe(addr<uint8 const?>(enc_out[0])), bt)
     var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)

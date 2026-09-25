@@ -2799,7 +2799,8 @@ def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISP
     return double(get_time_usec(t0)) / double(SUBMITS * dispatches)
 }
 
-def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+//! `baseline` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
+def private run_shape(name : string; d, n, cnt : int; baseline : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
     let wtiles = (d + MM_TILE - 1) / MM_TILE
@@ -2839,17 +2840,19 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
         let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd)
         let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-        var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
-        var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        for (_k in range(DISPATCHES)) {
-            enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+        if (baseline) {
+            var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
+            var raw = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var hz : VkHaz
+            for (_k in range(DISPATCHES)) {
+                enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+            }
+            vk_check(vkEndCommandBuffer(raw), null)
+            per_us = usec_per_dispatch(raw)
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        per_us = usec_per_dispatch(raw)
         if (g_gpu.coopmat_mode == COOPMAT_CM2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
             let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
@@ -2876,9 +2879,13 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
         }
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    let tflops = flop / (per_us * 1000000.0lf)
-    let ms = per_us / 1000.0lf
-    print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s  timing-only\n")
+    if (baseline) {
+        let tflops = flop / (per_us * 1000000.0lf)
+        let ms = per_us / 1000.0lf
+        print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s  timing-only\n")
+    } else {
+        print("{name}: d={d} K={n} cnt={cnt}  the cm2 stamps alone\n")
+    }
     if (cm2l_us > 0.0lf) {
         let ltf = flop / (cm2l_us * 1000000.0lf)
         let mtf = flop / (cm2m_us * 1000000.0lf)
@@ -3788,7 +3795,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -4054,6 +4061,24 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("g3 down", 1152, 6912, 512, sk)
         }
         run_shape_split("g3 wo  ", 1152, 1024, 512, 2)
+        return
+    }
+    if (only == "wh") {
+        // whisper large-v3-turbo encoder role shapes over one 30 s chunk (1500 rows, d 1280, ff 5120): q/k/v/o, fc1, fc2 and fc2 under the split-k ladder
+        run_shape("wh qkvo", 1280, 1280, 1500, baseline = false)
+        run_shape("wh fc1 ", 5120, 1280, 1500, baseline = false)
+        run_shape("wh fc2 ", 1280, 5120, 1500, baseline = false)
+        for (sk in [2, 4]) {
+            run_shape_split("wh fc2 ", 1280, 5120, 1500, sk)
+        }
+        run_shape_split("wh qkvo", 1280, 1280, 1500, 2)
+        // the same shapes at 1536 rows - every l column full - against the partial last column 1500 rows leave the l stamp
+        run_shape("wh1536 qkvo", 1280, 1280, 1536, baseline = false)
+        run_shape("wh1536 fc1 ", 5120, 1280, 1536, baseline = false)
+        run_shape("wh1536 fc2 ", 1280, 5120, 1536, baseline = false)
+        for (sk in [2, 4]) {
+            run_shape_split("wh1536 fc2 ", 1280, 5120, 1536, sk)
+        }
         return
     }
     if (only == "gemma") {

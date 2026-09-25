@@ -8604,7 +8604,7 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
 }
 
 struct SkRedArgs {
-    nelem : uint   //! one partial plane's float count (rows x d): any count - the reduce guards its four-wide tail element by element
+    nelem : uint   //! one partial plane's float count (the GEMM record's rows x d - the rounded count a tower record carries): any count - the reduce guards its four-wide tail element by element
     k : uint       // planes
     ybase : uint   // the sum's element base in y (the smalls' beta or alpha rows; 0 for a plane of its own)
 }
@@ -12913,6 +12913,11 @@ def vt_tile(cm2 : bool; width, rows : int64) : VtTile {
 def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(int(KqFmt.q8), t.tc) : q8_batch_cls_ensure(t.v)
 
 def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_tiles_at(width, rows, t.tc) : vt_gemm_groups(width, rows)
+
+//! the rows a GEMM record carries: on the l column the encode's rounded up to 256, so the l stamp's last column is whole and takes its
+//! fast path (a partial column runs its clamped edge path; the s and m stamps load a partial column unclamped and clamp the store, and a
+//! record on them keeps the raw count, as does the batch tile off cm2)
+def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? (rows + 255l) / 256l * 256l : rows
 
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (t.tc > 0l) {
