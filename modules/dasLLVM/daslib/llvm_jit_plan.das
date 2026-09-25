@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x90ul   // 0x90: prologue and epilogue are IR helpers
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x91ul   // 0x91: a host module carries its target machine's triple and data layout before the optimizer runs
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

@@ -8106,6 +8106,7 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
     // pipeline's TTI cost model stays generic and produces redistributable shapes (host-tuned loop
     // unroll / vectorize would otherwise get baked into the emitted object).
     with_default_target_machine(opt_level, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
+        stamp_module_target(g_mod, targetMachine)
         let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
         if (err != null) {
             let msg = LLVMGetErrorMessage(err)
