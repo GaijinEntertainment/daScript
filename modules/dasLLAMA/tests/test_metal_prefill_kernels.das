@@ -15,6 +15,8 @@ require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + t
 require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only the tag-less mismatch compares stay local
 require ?das_metal _metal4_probe
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
+require dasllama/dasllama_tts_blocks
+require daslib/jobque_boost
 require math
 
 // The Phase-6 GPU prefill kernels vs their dasLLAMA CPU twins on synthetic data. rmsnorm /
@@ -1235,6 +1237,1242 @@ def private g4a_attn_gate(t : T?; dev, queue) {
     delete want
 }
 
+// ===== the StyleTTS2 chain's kernels (the tower driver's TTS seats) =====
+//! f16-exact fixture values: every product is exact, so the bars below cover only the f32
+//! accumulation order (conv_mm) or the reduction order and sin() rounding (adain_snake)
+def private st2_f16(seed : int; scale, bias : float) : float => float(float16(scale * float(seed) + bias))
+
+def private st2_conv_fixture(dev; transposed : bool) : St2ConvArgs {
+    //! forward: 40 channels (an 8-run never straddles a tap; the k-run tail lands past the taps -
+    //! kdim 280 pads to 288), dilation 3 with pad 9 reaches off both ends of the 45 rows, which pad
+    //! to 64 (the pad-rows regime); transposed: stride 6 skips the source rows the taps miss
+    if (transposed) {
+        return St2ConvArgs(cin = 40u, k = 12u, stride = 6u, pad_l = 3u, dil = 1u, t_in = 8u, r0 = 0u, rows = 48u, transposed = 1u)
+    }
+    return St2ConvArgs(cin = 40u, k = 7u, stride = 1u, pad_l = 9u, dil = 3u, t_in = 45u, r0 = 0u, rows = 45u, transposed = 0u)
+}
+
+//! the CPU twin of the kernel's gather: the input row output row r's tap reaches, or -1
+def private st2_conv_src(dev; ka : St2ConvArgs; r, tap : int) : int {
+    if (ka.transposed != 0u) {
+        let q = int(ka.r0) + r + int(ka.pad_l) - tap * int(ka.dil)
+        return (q >= 0 && q % int(ka.stride) == 0 && q / int(ka.stride) < int(ka.t_in)) ? q / int(ka.stride) : -1
+    }
+    let st = (int(ka.r0) + r) * int(ka.stride) + tap * int(ka.dil) - int(ka.pad_l)
+    return (st >= 0 && st < int(ka.t_in)) ? st : -1
+}
+
+//! the conv GEMM on either stamp: the f16-staged one on f16-exact operands (every product exact,
+//! the bar the accumulation order's), the f32-exact one on operands off the f16 lattice at a
+//! bar the f16 stamp must exceed on the same fixture (the stamp's control)
+def private st2_conv_gate(t : T?; dev, queue; transposed : bool; exact : bool) {
+    let tag = (exact ? "st2_conv_exact_mm " : "st2_conv_mm ") + (transposed ? "transposed" : "forward")
+    var err : string
+    var pso : MetalComputePipeline?
+    if (exact) {
+        pso = pipeline_from_source(dev, metal_st2_conv_exact_mm_msl, metal_st2_conv_exact_mm_msl_entry, metal_st2_conv_exact_mm_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, metal_st2_conv_mm_msl, metal_st2_conv_mm_msl_entry, metal_st2_conv_mm_msl_fastmath, err)
+    }
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    var pso_half : MetalComputePipeline?
+    if (exact) {
+        pso_half = pipeline_from_source(dev, metal_st2_conv_mm_msl, metal_st2_conv_mm_msl_entry, metal_st2_conv_mm_msl_fastmath, err)
+        t |> success(pso_half != null, "{tag} f16-staged control pipeline: {err}")
+        return if (pso_half == null)
+    }
+    let off16 = exact ? 1.0 / 3.0 : 1.0   //! a factor that takes the operands off the f16 lattice
+    let ka = st2_conv_fixture(dev, transposed)
+    let cin = int(ka.cin)
+    let k = int(ka.k)
+    let kdim = (k * cin + 31) / 32 * 32
+    let cout = 64
+    let t_in = int(ka.t_in)
+    let rows = int(ka.rows)
+    let mp = (rows + 31) / 32 * 32
+    var x : array<float>
+    x |> resize(t_in * cin)
+    for (i in range(t_in * cin)) {
+        x[i] = st2_f16((i * 7) % 41, 0.05, -1.0) * off16
+    }
+    var w : array<float>
+    w |> resize(cout * kdim)   //! the pad columns past k * cin stay zero, as the slab's do
+    for (co in range(cout)) {
+        for (j in range(k * cin)) {
+            w[co * kdim + j] = st2_f16(((co + 1) * (j + 3)) % 37, 0.03, -0.5) * off16
+        }
+    }
+    let rel = exact ? 2e-6 : 1e-3
+    let absf = exact ? 2e-6 : 1e-3
+    var want : array<float>
+    want |> resize(mp * cout)   //! the resize's zeros are the expected pad rows
+    for (r in range(rows)) {
+        for (co in range(cout)) {
+            var acc = 0.0lf
+            for (tap in range(k)) {
+                let src = st2_conv_src(dev, ka, r, tap)
+                continue if (src < 0)
+                for (ci in range(cin)) {
+                    acc += double(x[src * cin + ci]) * double(w[co * kdim + tap * cin + ci])
+                }
+            }
+            want[r * cout + co] = float(acc)
+        }
+    }
+    var bw = buf_upload(dev, w)
+    var by = buf_fill(dev, mp * cout, -1.0e30)
+    let run_once <- @(bxx : MetalBuffer?; p : MetalComputePipeline?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, p)
+            metal_set_buffer(enc, bw, 0ul, 0)
+            metal_set_buffer(enc, bxx, 0ul, 1)
+            metal_set_buffer(enc, by, 0ul, 2)
+            var u_kdim = uint(kdim)
+            var u_ndim = uint(cout)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_kdim)), 4ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_ndim)), 4ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_threadgroup_memory_length(enc, p == pso_half ? metal_st2_conv_mm_msl_tgmem : (exact ? metal_st2_conv_exact_mm_msl_tgmem : metal_st2_conv_mm_msl_tgmem), 0)
+            metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(cout / 64), 1u), uint3(128u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bx = buf_upload(dev, x)
+    return if (!invoke(run_once, bx, pso))
+    t |> equal(buf_mismatch_bars(by, want, rel, absf, tag), 0)
+    if (exact && invoke(run_once, bx, pso_half)) {
+        t |> success(buf_mismatch_bars(by, want, rel, absf, "{tag} f16-staged stamp on the same operands (MUST mismatch)") > 0,
+            "{tag}: the f16-staged stamp misses the exact bar on operands off the f16 lattice (the stamp's control)")
+    }
+    x[(t_in / 2) * cin + 5] += 2.0   //! a mid-row element every output row near it reads
+    var bx2 = buf_upload(dev, x)
+    if (invoke(run_once, bx2, pso)) {
+        t |> success(buf_mismatch_bars(by, want, rel, absf, "{tag} x poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned input element reds the bars")
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(bx2)
+    metal_release(by)
+    metal_release(pso)
+    if (pso_half != null) {
+        metal_release(pso_half)
+    }
+}
+
+//! the im2col route (a channel count off the 8-run, the noise convs' 22): whole and offset chunks, exact
+def private st2_im2col_gate(t : T?; dev, queue; r0, rows : int; transposed : bool) {
+    let tag = (transposed ? "st2_im2col transposed r0 " : "st2_im2col r0 ") + "{r0} rows {rows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_im2col_msl, metal_st2_im2col_msl_entry, metal_st2_im2col_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let ka = St2ConvArgs(cin = 22u, k = 12u, stride = 6u, pad_l = 3u, dil = 1u, t_in = 30u, r0 = uint(r0), rows = uint(rows), transposed = transposed ? 1u : 0u)
+    let cin = 22
+    let kdim = 288
+    var x : array<float>
+    x |> resize(30 * cin)
+    for (i in range(30 * cin)) {
+        x[i] = st2_f16((i * 5) % 43, 0.07, -1.5)
+    }
+    var want : array<float>
+    want |> resize(32 * kdim)   //! zeros past the taps, the pad columns and the pad rows
+    for (r in range(rows)) {
+        for (tap in range(12)) {
+            let src = st2_conv_src(dev, ka, r, tap)
+            continue if (src < 0)
+            for (ci in range(cin)) {
+                want[r * kdim + tap * cin + ci] = x[src * cin + ci]
+            }
+        }
+    }
+    var bcols = buf_fill(dev, 32 * kdim, -1.0e30)
+    let run_once <- @(bxx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_buffer(enc, bcols, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
+            metal_dispatch_threadgroups(enc, uint3(uint((32 * kdim + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bx = buf_upload(dev, x)
+    return if (!invoke(run_once, bx))
+    t |> equal(buf_mismatch_bars(bcols, want, 0.0, 0.0, tag), 0)
+    var hit = -1
+    for (tap in range(12)) {   //! an input row the first chunk row's taps reach, on either geometry
+        hit = st2_conv_src(dev, ka, 0, tap)
+        break if (hit >= 0)
+    }
+    t |> success(hit >= 0, "{tag}: the first row reads some input row")
+    x[hit * cin + 3] += 2.0
+    var bx2 = buf_upload(dev, x)
+    if (invoke(run_once, bx2)) {
+        t |> success(buf_mismatch_bars(bcols, want, 0.0, 0.0, "{tag} x poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned input element reds the compare")
+    }
+    metal_release(bx)
+    metal_release(bx2)
+    metal_release(bcols)
+    metal_release(pso)
+}
+
+//! column stats + fused AdaIN against the CPU formula at 24 channels: one stride with a tail, two strides plus a tail
+def private st2_adain_gate(t : T?; dev, queue; nrows : int; snake : bool) {
+    let tag = snake ? "st2_adain_snake t{nrows}" : "st2_adain_leaky t{nrows}"
+    var err : string
+    var pso_st = pipeline_from_source(dev, metal_st2_colstats_msl, metal_st2_colstats_msl_entry, metal_st2_colstats_msl_fastmath, err)
+    t |> success(pso_st != null, "{tag} colstats pipeline: {err}")
+    var pso : MetalComputePipeline?
+    if (snake) {
+        pso = pipeline_from_source(dev, metal_st2_adain_snake_msl, metal_st2_adain_snake_msl_entry, metal_st2_adain_snake_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, metal_st2_adain_leaky_msl, metal_st2_adain_leaky_msl_entry, metal_st2_adain_leaky_msl_fastmath, err)
+    }
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null || pso_st == null)
+    let c = 24
+    let n = nrows * c
+    var x : array<float>
+    x |> resize(n)
+    for (i in range(n)) {
+        x[i] = st2_f16((i * 11) % 53, 0.04, -1.1)
+    }
+    var h : array<float>
+    var gw : array<float>
+    var gb : array<float>
+    var alpha : array<float>
+    h |> resize(2 * c)
+    gw |> resize(c)
+    gb |> resize(c)
+    alpha |> resize(c)
+    for (i in range(c)) {
+        h[i] = st2_f16((i * 3) % 17, 0.02, -0.1)
+        h[c + i] = st2_f16((i * 5) % 19, 0.03, -0.2)
+        gw[i] = st2_f16((i * 7) % 13, 0.05, 0.7)
+        gb[i] = st2_f16((i * 2) % 11, 0.01, -0.05)
+        alpha[i] = st2_f16((i * 3) % 7, 0.1, 0.3)
+    }
+    let ka = St2AdainArgs(c = uint(c), t = uint(nrows), eps = 1e-5)
+    var want_st : array<float>
+    var want : array<float>
+    want_st |> resize(2 * c)
+    want |> resize(n)
+    for (ci in range(c)) {
+        var mean = 0.0lf
+        for (r in range(nrows)) {
+            mean += double(x[r * c + ci])
+        }
+        mean /= double(nrows)
+        var ssq = 0.0lf
+        for (r in range(nrows)) {
+            let d = double(x[r * c + ci]) - mean
+            ssq += d * d
+        }
+        want_st[ci] = float(mean)
+        want_st[c + ci] = float(ssq)
+        let rs = 1.0 / sqrt(float(ssq) / float(nrows) + 1e-5)
+        let g1 = 1.0 + h[ci]
+        let scale = rs * gw[ci] * g1
+        let shift = (gb[ci] - float(mean) * rs * gw[ci]) * g1 + h[c + ci]
+        for (r in range(nrows)) {
+            let v = x[r * c + ci] * scale + shift
+            let sn = sin(alpha[ci] * v)
+            want[r * c + ci] = snake ? v + (1.0 / alpha[ci]) * (sn * sn) : (v > 0.0 ? v : v * 0.2)
+        }
+    }
+    var bst = buf_fill(dev, 2 * c, -1.0e30)
+    var by = buf_fill(dev, n, -1.0e30)
+    var bh = buf_upload(dev, h)
+    var bgw = buf_upload(dev, gw)
+    var bgb = buf_upload(dev, gb)
+    var balpha = buf_upload(dev, alpha)
+    let run_once <- @(bxx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_st)
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_buffer(enc, bst, 0ul, 1)
+            var u_t = uint(nrows)
+            var u_c = uint(c)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_t)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_c)), 4ul, 3)
+            metal_set_threadgroup_memory_length(enc, metal_st2_colstats_msl_tgmem, 0)
+            metal_dispatch_threadgroups(enc, uint3(uint(c), 1u, 1u), uint3(256u, 1u, 1u))
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_buffer(enc, by, 0ul, 1)
+            metal_set_buffer(enc, bst, 0ul, 2)
+            metal_set_buffer(enc, bh, 0ul, 3)
+            metal_set_buffer(enc, bgw, 0ul, 4)
+            metal_set_buffer(enc, bgb, 0ul, 5)
+            metal_set_buffer(enc, balpha, 0ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bx = buf_upload(dev, x)
+    return if (!invoke(run_once, bx))
+    t |> equal(buf_mismatch_bars(bst, want_st, 1e-4, 1e-5, "{tag} stats"), 0)
+    t |> equal(buf_mismatch_bars(by, want, 1e-4, 1e-5, tag), 0)
+    x[3 * c + 5] += 2.0
+    var bx2 = buf_upload(dev, x)
+    if (invoke(run_once, bx2)) {
+        t |> success(buf_mismatch_bars(bst, want_st, 1e-4, 1e-5, "{tag} stats x poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned input element reds the stats")
+        t |> success(buf_mismatch_bars(by, want, 1e-4, 1e-5, "{tag} x poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned input element reds the rows")
+    }
+    metal_release(bx)
+    metal_release(bx2)
+    metal_release(bst)
+    metal_release(by)
+    metal_release(bh)
+    metal_release(bgw)
+    metal_release(bgb)
+    metal_release(balpha)
+    metal_release(pso)
+    metal_release(pso_st)
+}
+
+//! leaky (in place), axpy on both zero regimes, add, reflect - every total off the 64-lane grid, so the tail threadgroup runs
+def private st2_rows_gate(t : T?; dev, queue) {
+    let tag = "st2 rows"
+    var err : string
+    var pso_lk = pipeline_from_source(dev, metal_st2_leaky_msl, metal_st2_leaky_msl_entry, metal_st2_leaky_msl_fastmath, err)
+    t |> success(pso_lk != null, "{tag} leaky pipeline: {err}")
+    var pso_ax = pipeline_from_source(dev, metal_st2_axpy_msl, metal_st2_axpy_msl_entry, metal_st2_axpy_msl_fastmath, err)
+    t |> success(pso_ax != null, "{tag} axpy pipeline: {err}")
+    var pso_add = pipeline_from_source(dev, metal_st2_add_msl, metal_st2_add_msl_entry, metal_st2_add_msl_fastmath, err)
+    t |> success(pso_add != null, "{tag} add pipeline: {err}")
+    var pso_rf = pipeline_from_source(dev, metal_st2_reflect1_msl, metal_st2_reflect1_msl_entry, metal_st2_reflect1_msl_fastmath, err)
+    t |> success(pso_rf != null, "{tag} reflect1 pipeline: {err}")
+    return if (pso_lk == null || pso_ax == null || pso_add == null || pso_rf == null)
+    let c = 24
+    let nrows = 9
+    let n = nrows * c   //! 216: three threadgroups and a 24-lane tail
+    var a : array<float>
+    var b : array<float>
+    a |> resize(n)
+    b |> resize(n)
+    for (i in range(n)) {
+        a[i] = st2_f16((i * 7) % 31, 0.1, -1.5)
+        b[i] = st2_f16((i * 5) % 29, 0.1, -1.4)
+    }
+    var want_lk : array<float>
+    var want_ax0 : array<float>
+    var want_ax1 : array<float>
+    var want_add : array<float>
+    var want_rf : array<float>
+    want_lk |> resize(n)
+    want_ax0 |> resize(n)
+    want_ax1 |> resize(n)
+    want_add |> resize(n)
+    want_rf |> resize(n + c)
+    var neg_at = -1
+    for (i in range(n)) {
+        want_lk[i] = a[i] > 0.0 ? a[i] : a[i] * 0.1
+        if (neg_at < 0 && a[i] < 0.0) {
+            neg_at = i
+        }
+        want_ax0[i] = a[i] + 0.25 * b[i]
+        want_ax1[i] = 0.25 * b[i]
+        want_add[i] = a[i] + b[i]
+    }
+    for (r in range(nrows + 1)) {
+        for (ci in range(c)) {
+            want_rf[r * c + ci] = a[(r == 0 ? 1 : r - 1) * c + ci]
+        }
+    }
+    var bo = buf_fill(dev, n + c, -1.0e30)
+    let u_slope = 0.1
+    let u_scale = 0.25
+    let u_n = uint(n)
+    let u_c = uint(c)
+    let u_nrf = uint(n + c)
+    let run_leaky <- @(bxx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_lk)
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_slope)), 4ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 2)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} leaky dispatch: {err2}")
+        return ran
+    }
+    let run_axpy <- @(bax, bbx : MetalBuffer?; zero : uint) : bool {
+        var err2 : string
+        var u_zero = zero
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_ax)
+            metal_set_buffer(enc, bax, 0ul, 0)
+            metal_set_buffer(enc, bbx, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_scale)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_zero)), 4ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 4)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} axpy dispatch: {err2}")
+        return ran
+    }
+    let run_add <- @(bax, bbx : MetalBuffer?; scale : float) : bool {
+        var err2 : string
+        var u_sc = scale
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_add)
+            metal_set_buffer(enc, bax, 0ul, 0)
+            metal_set_buffer(enc, bbx, 0ul, 1)
+            metal_set_buffer(enc, bo, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_sc)), 4ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 4)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} add dispatch: {err2}")
+        return ran
+    }
+    let run_reflect <- @(bax : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_rf)
+            metal_set_buffer(enc, bax, 0ul, 0)
+            metal_set_buffer(enc, bo, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_c)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_nrf)), 4ul, 3)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + c + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} reflect1 dispatch: {err2}")
+        return ran
+    }
+    var bx = buf_upload(dev, a)
+    if (invoke(run_leaky, bx)) {
+        t |> equal(buf_mismatch_bars(bx, want_lk, 0.0, 0.0, "{tag} leaky"), 0)
+        t |> success(neg_at >= 0 && want_lk[neg_at] != a[neg_at], "{tag} leaky: the output differs from the input at [{neg_at}]")
+        a[neg_at] += 2.0
+        var bx2 = buf_upload(dev, a)
+        if (invoke(run_leaky, bx2)) {
+            t |> success(buf_mismatch_bars(bx2, want_lk, 0.0, 0.0, "{tag} leaky poison (MUST mismatch)") > 0, "{tag} leaky: a poisoned element reds the compare")
+        }
+        a[neg_at] -= 2.0
+        metal_release(bx2)
+    }
+    metal_release(bx)
+    var ba = buf_upload(dev, a)
+    var bb = buf_upload(dev, b)
+    if (invoke(run_axpy, ba, bb, 0u)) {
+        t |> equal(buf_mismatch_bars(ba, want_ax0, 1e-6, 1e-6, "{tag} axpy accumulate"), 0)
+    }
+    buf_store(ba, a)
+    if (invoke(run_axpy, ba, bb, 1u)) {
+        t |> equal(buf_mismatch_bars(ba, want_ax1, 1e-6, 1e-6, "{tag} axpy zero"), 0)
+    }
+    b[7] += 2.0
+    var bb2 = buf_upload(dev, b)
+    buf_store(ba, a)
+    if (invoke(run_axpy, ba, bb2, 1u)) {
+        t |> success(buf_mismatch_bars(ba, want_ax1, 1e-6, 1e-6, "{tag} axpy poison (MUST mismatch)") > 0, "{tag} axpy: a poisoned y element reds the compare")
+    }
+    buf_store(ba, a)
+    if (invoke(run_axpy, ba, bb2, 0u)) {
+        t |> success(buf_mismatch_bars(ba, want_ax0, 1e-6, 1e-6, "{tag} axpy accumulate poison (MUST mismatch)") > 0, "{tag} axpy accumulate: a poisoned y element reds the compare")
+    }
+    b[7] -= 2.0
+    buf_store(ba, a)
+    if (invoke(run_add, ba, bb, 1.0)) {
+        t |> equal(buf_mismatch_bars(bo, want_add, 0.0, 0.0, "{tag} add"), 0)
+    }
+    if (invoke(run_add, ba, bb2, 1.0)) {
+        t |> success(buf_mismatch_bars(bo, want_add, 0.0, 0.0, "{tag} add poison (MUST mismatch)") > 0, "{tag} add: a poisoned b element reds the compare")
+    }
+    var want_join : array<float>
+    want_join |> resize(n)
+    for (i in range(n)) {
+        want_join[i] = (a[i] + b[i]) * 0.70710678
+    }
+    if (invoke(run_add, ba, bb, 0.70710678)) {
+        t |> equal(buf_mismatch_bars(bo, want_join, 1e-6, 1e-7, "{tag} add scaled (the residual join)"), 0)
+    }
+    if (invoke(run_add, ba, bb2, 0.70710678)) {
+        t |> success(buf_mismatch_bars(bo, want_join, 1e-6, 1e-7, "{tag} add scaled poison (MUST mismatch)") > 0, "{tag} add scaled: a poisoned b element reds the compare")
+    }
+    var sentinel : array<float>
+    sentinel |> resize(n + c)
+    for (i in range(n + c)) {
+        sentinel[i] = -1.0e30
+    }
+    buf_store(bo, sentinel)
+    if (invoke(run_reflect, ba)) {
+        t |> equal(buf_mismatch_bars(bo, want_rf, 0.0, 0.0, "{tag} reflect1"), 0)
+    }
+    a[c + 2] += 2.0   //! row 1: the reflected row 0 and row 2 both read it
+    var ba2 = buf_upload(dev, a)
+    if (invoke(run_reflect, ba2)) {
+        t |> success(buf_mismatch_bars(bo, want_rf, 0.0, 0.0, "{tag} reflect1 poison (MUST mismatch)") > 0, "{tag} reflect1: a poisoned source row reds the compare")
+    }
+    metal_release(ba)
+    metal_release(ba2)
+    metal_release(bb)
+    metal_release(bb2)
+    metal_release(bo)
+    metal_release(pso_lk)
+    metal_release(pso_ax)
+    metal_release(pso_add)
+    metal_release(pso_rf)
+}
+
+//! a 64-lane dispatch of one pipeline over `total` elements
+def private st2_dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block<(enc : MetalComputeEncoder?)>) : bool {
+    var err2 : string
+    let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        invoke(blk, enc)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err2}")
+    return ran
+}
+
+def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float> {
+    var a : array<float>
+    a |> resize(n)
+    for (i in range(n)) {
+        a[i] = st2_f16((i * seed_mul) % 47, scale, bias)
+    }
+    return <- a
+}
+
+//! the row gather with its add flags off and on, exact, a poisoned source row as the control
+def private st2_gather_gate(t : T?; dev, queue) {
+    let tag = "st2_gather"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_gather_msl, metal_st2_gather_msl_entry, metal_st2_gather_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let c = 24
+    let nrows = 9
+    var a <- st2_fill(16 * c, 7, 0.05, -1.0)
+    let b <- st2_fill(nrows * c, 5, 0.03, 0.2)
+    let cv <- st2_fill(c, 3, 0.02, -0.1)
+    var idx : array<uint>
+    idx |> resize(nrows)
+    for (r in range(nrows)) {
+        idx[r] = uint((r * 5 + 3) % 16)
+    }
+    var ba = buf_upload(dev, a)
+    var bb = buf_upload(dev, b)
+    var bcv = buf_upload(dev, cv)
+    var bidx = buf_upload(dev, idx)
+    var bo = buf_fill(dev, nrows * c, -1.0e30)
+    let run <- @(bax : MetalBuffer?; add_b, add_c : uint) : bool {
+        var ka = St2GatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
+        return st2_dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
+            metal_set_buffer(enc, bax, 0ul, 0)
+            metal_set_buffer(enc, bidx, 0ul, 1)
+            metal_set_buffer(enc, bb, 0ul, 2)
+            metal_set_buffer(enc, bcv, 0ul, 3)
+            metal_set_buffer(enc, bo, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        }
+    }
+    var want : array<float>
+    want |> resize(nrows * c)
+    for (r in range(nrows)) {
+        for (j in range(c)) {
+            want[r * c + j] = a[int(idx[r]) * c + j]
+        }
+    }
+    if (invoke(run, ba, 0u, 0u)) {
+        t |> equal(buf_mismatch_bars(bo, want, 0.0, 0.0, "{tag} plain"), 0)
+    }
+    for (r in range(nrows)) {
+        for (j in range(c)) {
+            want[r * c + j] += b[r * c + j] + cv[j]
+        }
+    }
+    if (invoke(run, ba, 1u, 1u)) {
+        t |> equal(buf_mismatch_bars(bo, want, 0.0, 0.0, "{tag} with the row and column adds"), 0)
+    }
+    a[int(idx[4]) * c + 2] += 2.0
+    var ba2 = buf_upload(dev, a)
+    if (invoke(run, ba2, 1u, 1u)) {
+        t |> success(buf_mismatch_bars(bo, want, 0.0, 0.0, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned source row reds the compare")
+    }
+    metal_release(ba)
+    metal_release(ba2)
+    metal_release(bb)
+    metal_release(bcv)
+    metal_release(bidx)
+    metal_release(bo)
+    metal_release(pso)
+}
+
+//! the concat rows with and without the residual columns, strided f0 / n columns, exact
+def private st2_concat_gate(t : T?; dev, queue; with_res : bool) {
+    let tag = with_res ? "st2_concat with res" : "st2_concat no res"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_concat_msl, metal_st2_concat_msl_entry, metal_st2_concat_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let c = 24
+    let rc = 16
+    let rs = 64
+    let nrows = 7
+    let f0s = 4
+    let width = with_res ? 48 : 32
+    let x <- st2_fill(nrows * c, 7, 0.05, -1.0)
+    var res <- st2_fill(nrows * rs, 5, 0.03, 0.2)
+    let f0 <- st2_fill(nrows * f0s, 3, 1.5, 80.0)
+    let nd <- st2_fill(nrows * f0s, 11, 0.1, -3.0)
+    var want : array<float>
+    want |> resize(nrows * width)
+    let rcw = with_res ? rc : 0
+    for (r in range(nrows)) {
+        for (j in range(c)) {
+            want[r * width + j] = x[r * c + j]
+        }
+        for (j in range(rcw)) {
+            want[r * width + c + j] = res[r * rs + j]
+        }
+        want[r * width + c + rcw] = f0[r * f0s]
+        want[r * width + c + rcw + 1] = nd[r * f0s]
+    }
+    var bx = buf_upload(dev, x)
+    var bf0 = buf_upload(dev, f0)
+    var bnd = buf_upload(dev, nd)
+    var bo = buf_fill(dev, nrows * width, -1.0e30)
+    let run <- @(bres : MetalBuffer?) : bool {
+        var ka = St2ConcatArgs(c = uint(c), rc = uint(rc), rs = uint(rs), f0s = uint(f0s), ns = uint(f0s), with_res = with_res ? 1u : 0u,
+            width = uint(width), total = uint(nrows * width))
+        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows * width) $(enc) {
+            metal_set_buffer(enc, bx, 0ul, 0)
+            metal_set_buffer(enc, bres, 0ul, 1)
+            metal_set_buffer(enc, bf0, 0ul, 2)
+            metal_set_buffer(enc, bnd, 0ul, 3)
+            metal_set_buffer(enc, bo, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        }
+    }
+    var bres = buf_upload(dev, res)
+    if (invoke(run, bres)) {
+        t |> equal(buf_mismatch_bars(bo, want, 0.0, 0.0, tag), 0)
+    }
+    if (with_res) {
+        res[3 * rs + 5] += 2.0
+    } else {
+        want[3 * width + c] += 2.0   //! the expectation moves off the true f0 column: the compare must red
+    }
+    var bres2 = buf_upload(dev, res)
+    if (invoke(run, bres2)) {
+        t |> success(buf_mismatch_bars(bo, want, 0.0, 0.0, "{tag} poison (MUST mismatch)") > 0, "{tag}: the poison reds the compare")
+    }
+    metal_release(bx)
+    metal_release(bres)
+    metal_release(bres2)
+    metal_release(bf0)
+    metal_release(bnd)
+    metal_release(bo)
+    metal_release(pso)
+}
+
+//! the depthwise transposed pool at stride 2 against the CPU gather, taps off both ends
+def private st2_pool_gate(t : T?; dev, queue) {
+    let tag = "st2_pool_dw"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_pool_dw_msl, metal_st2_pool_dw_msl_entry, metal_st2_pool_dw_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let c = 24
+    let k = 3
+    let stride = 2
+    let pad_l = 1
+    let t_in = 9
+    let t_out = (t_in - 1) * stride - 2 * pad_l + (k - 1) + 1
+    var x <- st2_fill(t_in * c, 7, 0.05, -1.0)
+    let w <- st2_fill(c * k, 5, 0.1, -0.15)
+    let b <- st2_fill(c, 3, 0.02, 0.05)
+    var want : array<float>
+    want |> resize(t_out * c)
+    for (p in range(t_out)) {
+        for (j in range(c)) {
+            var acc = double(b[j])
+            for (kk in range(k)) {
+                let num = p + pad_l - kk
+                continue if (num < 0 || num % stride != 0 || num / stride >= t_in)
+                acc += double(w[j * k + kk]) * double(x[(num / stride) * c + j])
+            }
+            want[p * c + j] = float(acc)
+        }
+    }
+    var bw = buf_upload(dev, w)
+    var bb = buf_upload(dev, b)
+    var by = buf_fill(dev, t_out * c, -1.0e30)
+    let run <- @(bxx : MetalBuffer?) : bool {
+        var ka = St2PoolArgs(c = uint(c), k = uint(k), stride = uint(stride), pad_l = uint(pad_l), dil = 1u, t_in = uint(t_in), total = uint(t_out * c))
+        return st2_dispatch_64_lanes(t, queue, tag, pso, t_out * c) $(enc) {
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_buffer(enc, by, 0ul, 1)
+            metal_set_buffer(enc, bw, 0ul, 2)
+            metal_set_buffer(enc, bb, 0ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        }
+    }
+    var bx = buf_upload(dev, x)
+    if (invoke(run, bx)) {
+        t |> equal(buf_mismatch_bars(by, want, 1e-5, 1e-6, tag), 0)
+    }
+    x[4 * c + 6] += 2.0
+    var bx2 = buf_upload(dev, x)
+    if (invoke(run, bx2)) {
+        t |> success(buf_mismatch_bars(by, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned input row reds the compare")
+    }
+    metal_release(bx)
+    metal_release(bx2)
+    metal_release(bw)
+    metal_release(bb)
+    metal_release(by)
+    metal_release(pso)
+}
+
+def private st2_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
+
+
+//! both LSTM directions on one input-gate set against a CPU recurrence: 8 units (32 lanes), 13 steps, a padded gate stride
+def private st2_lstm_gate(t : T?; dev, queue) {
+    let tag = "st2_lstm"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_lstm_msl, metal_st2_lstm_msl_entry, metal_st2_lstm_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let hd = 8
+    let steps = 13
+    let xgs = 64
+    var xg <- st2_fill(steps * xgs, 7, 0.05, -1.15)   //! centred, so no gate saturates and the poison stays visible
+    let whh <- st2_fill(4 * hd * hd, 5, 0.012, -0.28)
+    var want : array<float>
+    want |> resize(steps * 2 * hd)
+    for (dir in range(2)) {
+        var h : array<float>
+        var cs : array<float>
+        h |> resize(hd)
+        cs |> resize(hd)
+        for (step in range(steps)) {
+            let ti = dir == 1 ? steps - 1 - step : step
+            var hn : array<float>
+            hn |> resize(hd)
+            for (j in range(hd)) {
+                var g : float[4]
+                for (gi in range(4)) {
+                    var acc = double(xg[ti * xgs + gi * hd + j])
+                    for (i in range(hd)) {
+                        acc += double(whh[(gi * hd + j) * hd + i]) * double(h[i])
+                    }
+                    g[gi] = float(acc)
+                }
+                cs[j] = st2_sigmoid(g[1]) * cs[j] + st2_sigmoid(g[0]) * st2_tanh(g[2])
+                hn[j] = st2_sigmoid(g[3]) * st2_tanh(cs[j])
+                want[ti * 2 * hd + dir * hd + j] = hn[j]
+            }
+            h := hn
+        }
+    }
+    var peak = 0.0
+    for (v in want) {
+        peak = max(peak, abs(v))
+    }
+    t |> success(peak < 0.98, "{tag}: the fixture's outputs stay off tanh's saturation (peak {peak}), so a poison can move them")
+    var bw = buf_upload(dev, whh)
+    var by = buf_fill(dev, steps * 2 * hd, -1.0e30)
+    let run <- @(bxgx : MetalBuffer?; dir : int) : bool {
+        var err2 : string
+        var ka = St2LstmArgs(t = uint(steps), hidden = uint(hd), xgs = uint(xgs), ystride = uint(2 * hd), yoff = uint(dir * hd), reverse = uint(dir))
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bxgx, 0ul, 0)
+            metal_set_buffer(enc, by, 0ul, 1)
+            metal_set_buffer(enc, bw, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+            metal_set_threadgroup_memory_length(enc, metal_st2_lstm_msl_tgmem, 0)
+            metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(uint(4 * hd), 1u, 1u))
+        }
+        t |> success(ran, "{tag} dir {dir} dispatch: {err2}")
+        return ran
+    }
+    var bxg = buf_upload(dev, xg)
+    if (invoke(run, bxg, 0) && invoke(run, bxg, 1)) {
+        t |> equal(buf_mismatch_bars(by, want, 1e-4, 1e-5, tag), 0)
+    }
+    xg[6 * xgs + 2 * hd + 3] += 2.0
+    var bxg2 = buf_upload(dev, xg)
+    if (invoke(run, bxg2, 0) && invoke(run, bxg2, 1)) {
+        t |> success(buf_mismatch_bars(by, want, 1e-4, 1e-5, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned input gate reds the compare")
+    }
+    metal_release(bxg)
+    metal_release(bxg2)
+    metal_release(bw)
+    metal_release(by)
+    metal_release(pso)
+}
+
+//! the ALBERT attention rows against the CPU `attention_rows`: two heads of 64, rows off (37) and past (100) the 32-lane split
+def private st2_attn_gate(t : T?; dev, queue; nrows : int) {
+    let tag = "st2_attn t{nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_attn_msl, metal_st2_attn_msl_entry, metal_st2_attn_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let heads = 2
+    let hs = 64
+    let d = heads * hs
+    var q <- st2_fill(nrows * d, 7, 0.02, -0.4)
+    var k <- st2_fill(nrows * d, 5, 0.03, -0.6)
+    var vv <- st2_fill(nrows * d, 3, 0.05, -1.1)
+    var want : array<float>
+    with_job_que() {
+        setup_dasllama_jobque_()
+        attention_rows(q, k, vv, int64(nrows), int64(d), int64(heads), want)
+    }
+    var bq = buf_upload(dev, q)
+    var bv = buf_upload(dev, vv)
+    var bo = buf_fill(dev, nrows * d, -1.0e30)
+    let run <- @(bkk : MetalBuffer?) : bool {
+        var err2 : string
+        var ka = St2AttnArgs(t = uint(nrows), d = uint(d), hs = uint(hs), heads = uint(heads))
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bq, 0ul, 0)
+            metal_set_buffer(enc, bkk, 0ul, 1)
+            metal_set_buffer(enc, bv, 0ul, 2)
+            metal_set_buffer(enc, bo, 0ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+            metal_dispatch_threadgroups(enc, uint3(uint((heads * nrows + 1) / 2), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bk = buf_upload(dev, k)
+    if (invoke(run, bk)) {
+        t |> equal(buf_mismatch_bars(bo, want, 1e-5, 1e-6, tag), 0)
+    }
+    k[(nrows / 2) * d + 70] += 3.0   //! a key of the second head: every query row's softmax moves
+    var bk2 = buf_upload(dev, k)
+    if (invoke(run, bk2)) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned key reds the compare")
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bk2)
+    metal_release(bv)
+    metal_release(bo)
+    metal_release(pso)
+}
+
+//! the sigmoid sums over 50 of 64 columns at 1/1.3 speed
+def private st2_sigsum_gate(t : T?; dev, queue) {
+    let tag = "st2_sigsum"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_sigsum_msl, metal_st2_sigsum_msl_entry, metal_st2_sigsum_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let nrows = 37
+    let nb = 50
+    let ls = 64
+    var lg <- st2_fill(nrows * ls, 7, 0.3, -5.0)
+    var want : array<float>
+    want |> resize(nrows)
+    for (r in range(nrows)) {
+        var acc = 0.0lf
+        for (j in range(nb)) {
+            acc += double(st2_sigmoid(lg[r * ls + j]))
+        }
+        want[r] = float(acc) * (1.0 / 1.3)
+    }
+    var braw = buf_fill(dev, nrows, -1.0e30)
+    let run <- @(blg : MetalBuffer?) : bool {
+        var u_nb = uint(nb)
+        var u_ls = uint(ls)
+        var u_speed = 1.3
+        var u_t = uint(nrows)
+        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows) $(enc) {
+            metal_set_buffer(enc, blg, 0ul, 0)
+            metal_set_buffer(enc, braw, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_nb)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_ls)), 4ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_speed)), 4ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_t)), 4ul, 5)
+        }
+    }
+    var blg = buf_upload(dev, lg)
+    if (invoke(run, blg)) {
+        t |> equal(buf_mismatch_bars(braw, want, 1e-5, 1e-6, tag), 0)
+    }
+    lg[5 * ls + 7] += 6.0
+    var blg2 = buf_upload(dev, lg)
+    if (invoke(run, blg2)) {
+        t |> success(buf_mismatch_bars(braw, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned logit reds the compare")
+    }
+    metal_release(blg)
+    metal_release(blg2)
+    metal_release(braw)
+    metal_release(pso)
+}
+
+//! the tanh-form GELU in place, a value past the clamp among the rows
+def private st2_gelu_gate(t : T?; dev, queue) {
+    let tag = "st2_gelu_tanh"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_gelu_tanh_msl, metal_st2_gelu_tanh_msl_entry, metal_st2_gelu_tanh_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let n = 216
+    var x <- st2_fill(n, 7, 0.25, -3.0)
+    x[17] = 40.0
+    x[18] = -40.0
+    var want : array<float>
+    want |> resize(n)
+    for (i in range(n)) {
+        let v = x[i]
+        want[i] = 0.5 * v * (1.0 + st2_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
+    }
+    let run <- @(bxx : MetalBuffer?) : bool {
+        var u_n = uint(n)
+        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+            metal_set_buffer(enc, bxx, 0ul, 0)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 1)
+        }
+    }
+    var bx = buf_upload(dev, x)
+    if (invoke(run, bx)) {
+        t |> equal(buf_mismatch_bars(bx, want, 1e-5, 1e-6, tag), 0)
+        t |> success(want[3] != x[3], "{tag}: the output differs from the input at [3]")
+    }
+    x[9] += 2.0
+    var bx2 = buf_upload(dev, x)
+    if (invoke(run, bx2)) {
+        t |> success(buf_mismatch_bars(bx2, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned element reds the compare")
+    }
+    metal_release(bx)
+    metal_release(bx2)
+    metal_release(pso)
+}
+
+def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
+    let tag = torch_math ? "st2_source torch law" : "st2_source onnx law"
+    var err : string
+    var pso_low = pipeline_from_source(dev, metal_st2_src_low_msl, metal_st2_src_low_msl_entry, metal_st2_src_low_msl_fastmath, err)
+    t |> success(pso_low != null, "{tag} low pipeline: {err}")
+    var pso_cum = pipeline_from_source(dev, metal_st2_src_cumsum_msl, metal_st2_src_cumsum_msl_entry, metal_st2_src_cumsum_msl_fastmath, err)
+    t |> success(pso_cum != null, "{tag} cumsum pipeline: {err}")
+    var pso_sin = pipeline_from_source(dev, metal_st2_src_sines_msl, metal_st2_src_sines_msl_entry, metal_st2_src_sines_msl_fastmath, err)
+    t |> success(pso_sin != null, "{tag} sines pipeline: {err}")
+    return if (pso_low == null || pso_cum == null || pso_sin == null)
+    let up = 300
+    let nh = 3
+    let frames = 700   //! 210000 samples: the phases past a hundred thousand radians, where a fast sin loses them
+    let n = frames * up
+    let nlow = int(resize_len(int64(n), 1.0 / float(up)))
+    let sr = 24000.0
+    var f0 : array<float>
+    f0 |> resize(frames)
+    for (i in range(frames)) {
+        f0[i] = i % 3 == 2 ? 0.0 : float(float16(180.0 + 0.3 * float(i % 97)))
+    }
+    let nu <- st2_fill(nh, 3, 0.1, 0.2)
+    let noise <- st2_fill(n * nh, 7, 0.4, -0.9)
+    var lw <- st2_fill(nh, 5, 0.3, 0.2)
+    var lb : array<float>
+    lb |> push(0.05)
+    let ka = St2SourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = sr, sine_amp = 0.1, noise_std = 0.003,
+        voiced_thr = 10.0, torch_math = torch_math ? 1u : 0u, captured = 1u, seed = 77u)
+    let cfg = SineSourceCfg(upsample = int64(up), sample_rate = sr, n_harm = int64(nh), sine_amp = 0.1, noise_std = 0.003, voiced_thr = 10.0, torch_math = torch_math)
+    var cr = SineSourceCarry()
+    sine_carry_reset(cr, int64(nh), int64(nlow))
+    var sines : array<float>
+    let rows = sine_source(cfg, f0, int64(frames), nu, 0l, int64(nlow), cr, noise, 0l, sines)
+    t |> equal(rows, int64(n), "{tag}: the CPU source mixes every sample")
+    var want_lowc : array<float>
+    want_lowc |> resize(nh * nlow)
+    for (h in range(nh)) {
+        for (k in range(nlow)) {
+            want_lowc[h * nlow + k] = cr.lowc[int64(h) * cr.stride + int64(k)]
+        }
+    }
+    var lin = TtsLinear(nin = int64(nh), nout = 1l)
+    lin.w := lw
+    lin.b := lb
+    var want_har : array<float>
+    linear_rows(lin, sines, int64(n), want_har)
+    tanh_inplace(want_har, int64(n))
+    var bnu = buf_upload(dev, nu)
+    var bnoise = buf_upload(dev, noise)
+    var blw = buf_upload(dev, lw)
+    var blb = buf_upload(dev, lb)
+    var blow = buf_fill(dev, nh * nlow, -1.0e30)
+    var blowc = buf_fill(dev, nh * nlow, -1.0e30)
+    var bhar = buf_fill(dev, n, -1.0e30)
+    let run <- @(bf0 : MetalBuffer?; kax : St2SourceArgs) : bool {
+        var err2 : string
+        var kk = kax
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_low)
+            metal_set_buffer(enc, bf0, 0ul, 0)
+            metal_set_buffer(enc, bnu, 0ul, 1)
+            metal_set_buffer(enc, blow, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(kk)), uint64(typeinfo sizeof(kk)), 3)
+            metal_dispatch_threadgroups(enc, uint3(uint((nh * nlow + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+            metal_set_pipeline(enc, pso_cum)
+            metal_set_buffer(enc, blow, 0ul, 0)
+            metal_set_buffer(enc, blowc, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(kk)), uint64(typeinfo sizeof(kk)), 2)
+            metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(uint(nh), 1u, 1u))
+            metal_set_pipeline(enc, pso_sin)
+            metal_set_buffer(enc, bf0, 0ul, 0)
+            metal_set_buffer(enc, blowc, 0ul, 1)
+            metal_set_buffer(enc, bnoise, 0ul, 2)
+            metal_set_buffer(enc, blw, 0ul, 3)
+            metal_set_buffer(enc, blb, 0ul, 4)
+            metal_set_buffer(enc, bhar, 0ul, 5)
+            metal_set_bytes(enc, unsafe(addr<void?>(kk)), uint64(typeinfo sizeof(kk)), 6)
+            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    var bf0 = buf_upload(dev, f0)
+    if (invoke(run, bf0, ka)) {
+        t |> equal(buf_mismatch_bars(blowc, want_lowc, 1.2e-7, 0.0, "{tag} lowc (the phase frames, within one ulp of the CPU carry)"), 0)
+        t |> equal(buf_mismatch_bars(bhar, want_har, 2e-6, 2e-7, "{tag} har"), 0)
+    }
+    let har_captured <- buf_download(bhar, n, type<float>)
+    {   // the long cumsum: 40000 low-rate frames of one harmonic, where a plain f32 sum and a double one part by cycles
+        let nlong = 40000
+        var lowl : array<float>
+        var wantl : array<float>
+        lowl |> resize(nlong)
+        wantl |> resize(nlong)
+        var acc64 = 0.0lf
+        var accf = 0.0
+        var accp = 0.0
+        for (k in range(nlong)) {
+            lowl[k] = float(float16(0.0071 + 0.0003 * float(k % 13)))
+            acc64 += double(lowl[k])
+            accf = torch_math ? float(acc64) : accf + lowl[k]
+            accp += lowl[k]
+            wantl[k] = ((accf * 2.0) * PI) * float(up)
+        }
+        t |> success(abs(float(acc64) - accp) > 0.01, "{tag} long cumsum: the two laws part by {abs(float(acc64) - accp)} cycles over {nlong} frames (the leg's control)")
+        var blowl = buf_upload(dev, lowl)
+        var blowcl = buf_fill(dev, nlong, -1.0e30)
+        var kl = ka
+        kl.nlow = uint(nlong)
+        kl.nh = 1u
+        var err3 : string
+        let ranl = with_compute_encoder(queue, err3) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso_cum)
+            metal_set_buffer(enc, blowl, 0ul, 0)
+            metal_set_buffer(enc, blowcl, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(kl)), uint64(typeinfo sizeof(kl)), 2)
+            metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(1u, 1u, 1u))
+        }
+        t |> success(ranl, "{tag} long cumsum dispatch: {err3}")
+        if (ranl) {
+            t |> equal(buf_mismatch_bars(blowcl, wantl, 2e-7, 1e-3, "{tag} long cumsum"), 0)
+            var wantp := wantl
+            wantp[nlong - 1] += 2.0   //! two radians on the last frame: the bars are a few ulps of a phase in the thousands
+            t |> success(buf_mismatch_bars(blowcl, wantp, 2e-7, 1e-3, "{tag} long cumsum poison (MUST mismatch)") > 0, "{tag} long cumsum: a moved last frame reds the compare (the compare's control)")
+        }
+        metal_release(blowl)
+        metal_release(blowcl)
+    }
+    f0[4] += 40.0   //! a voiced frame: every later phase moves
+    var bf02 = buf_upload(dev, f0)
+    if (invoke(run, bf02, ka)) {
+        t |> success(buf_mismatch_bars(blowc, want_lowc, 1.2e-7, 0.0, "{tag} lowc poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the lowc compare")
+        t |> success(buf_mismatch_bars(bhar, want_har, 2e-6, 2e-7, "{tag} har poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the har compare")
+    }
+    var ka_own = ka
+    ka_own.captured = 0u
+    if (invoke(run, bf0, ka_own)) {
+        var own1 <- buf_download(bhar, n, type<float>)
+        var in_tanh_range = true
+        for (v in own1) {
+            in_tanh_range = in_tanh_range && abs(v) <= 1.0
+        }
+        t |> success(in_tanh_range, "{tag}: the driver's own noise draw stays within tanh's range")
+        t |> success(buf_mismatch_bars(bhar, har_captured, 2e-6, 2e-7, "{tag} own draw vs captured (MUST mismatch)") > 0, "{tag}: the own draw differs from the captured rows")
+        if (invoke(run, bf0, ka_own)) {
+            t |> equal(buf_mismatch_bars(bhar, own1, 0.0, 0.0, "{tag} own draw repeat"), 0)
+        }
+        for (other in [78u, 81u]) {   //! 81 = 77 xor 4: a raw-seed xor into the counter would alias it to a shuffled 77
+            ka_own.seed = other
+            if (invoke(run, bf0, ka_own)) {
+                t |> success(buf_mismatch_bars(bhar, own1, 2e-6, 2e-7, "{tag} own draw seed {other} (MUST mismatch)") > 0, "{tag}: seed {other} draws other noise than seed 77")
+            }
+        }
+    }
+    metal_release(bf0)
+    metal_release(bf02)
+    metal_release(bnu)
+    metal_release(bnoise)
+    metal_release(blw)
+    metal_release(blb)
+    metal_release(blow)
+    metal_release(blowc)
+    metal_release(bhar)
+    metal_release(pso_low)
+    metal_release(pso_cum)
+    metal_release(pso_sin)
+}
+
+//! the STFT as two convs over the padded signal on either pad law, magnitudes and phases
+def private st2_stft_gate(t : T?; dev, queue; reflect : bool) {
+    let tag = reflect ? "st2_stft reflect" : "st2_stft edge"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_stft_msl, metal_st2_stft_msl_entry, metal_st2_stft_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let n = 40
+    let k = 8
+    let hop = 4
+    let pad = 2
+    let bins = 3
+    let frames = (n + 2 * pad - k) / hop + 1
+    var har <- st2_fill(n, 7, 0.05, -0.9)
+    let wre <- st2_fill(bins * k, 5, 0.2, -0.7)
+    var wim <- st2_fill(bins * k, 3, 0.15, -0.5)
+    wim[2 * k + 5] = 0.0
+    var want : array<float>
+    want |> resize(frames * 2 * bins)
+    for (f in range(frames)) {
+        for (b in range(bins)) {
+            var re = 0.0lf
+            var im = 0.0lf
+            for (tap in range(k)) {
+                var src = f * hop + tap - pad
+                if (src < 0) {
+                    src = reflect ? -src : 0
+                } elif (src >= n) {
+                    src = reflect ? 2 * (n - 1) - src : n - 1
+                }
+                re += double(wre[b * k + tap]) * double(har[src])
+                im += double(wim[b * k + tap]) * double(har[src])
+            }
+            want[f * 2 * bins + b] = float(sqrt(re * re + im * im + 1e-9lf))
+            let imf = float(im)
+            let ref = float(re)
+            want[f * 2 * bins + bins + b] = imf == 0.0 ? (ref < 0.0 ? PI : 0.0) : atan2(imf, ref)
+        }
+    }
+    var bre = buf_upload(dev, wre)
+    var bim = buf_upload(dev, wim)
+    var bspec = buf_fill(dev, frames * 2 * bins, -1.0e30)
+    let run <- @(bh : MetalBuffer?) : bool {
+        var ka = St2StftArgs(n = uint(n), frames = uint(frames), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
+            reflect = reflect ? 1u : 0u, eps = 1e-9)
+        return st2_dispatch_64_lanes(t, queue, tag, pso, frames * bins) $(enc) {
+            metal_set_buffer(enc, bh, 0ul, 0)
+            metal_set_buffer(enc, bre, 0ul, 1)
+            metal_set_buffer(enc, bim, 0ul, 2)
+            metal_set_buffer(enc, bspec, 0ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        }
+    }
+    var bh = buf_upload(dev, har)
+    if (invoke(run, bh)) {
+        t |> equal(buf_mismatch_bars(bspec, want, 1e-4, 1e-5, tag), 0)
+    }
+    har[1] += 2.0   //! the first frame's reflected tap reads it
+    var bh2 = buf_upload(dev, har)
+    if (invoke(run, bh2)) {
+        t |> success(buf_mismatch_bars(bspec, want, 1e-4, 1e-5, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned sample reds the compare")
+    }
+    metal_release(bh)
+    metal_release(bh2)
+    metal_release(bre)
+    metal_release(bim)
+    metal_release(bspec)
+    metal_release(pso)
+}
+
+//! the inverse STFT from log-magnitude / phase rows against a CPU overlap-add twin, with and without the envelope
+def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
+    let tag = envelope ? "st2_istft envelope" : "st2_istft plain"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_st2_istft_msl, metal_st2_istft_msl_entry, metal_st2_istft_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let tt = 9
+    let stride = 8
+    let bins = 3
+    let k = 8
+    let hop = 4
+    let pad = 2
+    let n = (tt - 1) * hop + k - 2 * pad
+    var y <- st2_fill(tt * stride, 7, 0.15, -1.2)
+    let wre <- st2_fill(k * bins, 5, 0.2, -0.7)   //! [k][bins], the transposed conv's operand layout
+    let wim <- st2_fill(k * bins, 3, 0.15, -0.5)
+    let window <- st2_fill(k, 11, 0.1, 0.3)
+    var want : array<float>
+    want |> resize(n)
+    for (i in range(n)) {
+        let m = i + pad
+        var acc = 0.0lf
+        var env = 0.0lf
+        for (tap in range(k)) {
+            continue if (m < tap || (m - tap) % hop != 0)
+            let q = (m - tap) / hop
+            continue if (q >= tt)
+            for (b in range(bins)) {
+                let mag = exp(y[q * stride + b])
+                let ph = sin(y[q * stride + bins + b])
+                acc += double(mag * cos(ph) * wre[tap * bins + b]) - double(mag * sin(ph) * wim[tap * bins + b])
+            }
+            env += double(window[tap] * window[tap])
+        }
+        want[i] = float((envelope && env > 1e-11lf) ? acc / env : acc)
+    }
+    var bre = buf_upload(dev, wre)
+    var bim = buf_upload(dev, wim)
+    var bwn = buf_upload(dev, window)
+    var bw = buf_fill(dev, n, -1.0e30)
+    let run <- @(byy : MetalBuffer?) : bool {
+        var ka = St2IstftArgs(tt = uint(tt), stride = uint(stride), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
+            envelope = envelope ? 1u : 0u, n = uint(n))
+        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+            metal_set_buffer(enc, byy, 0ul, 0)
+            metal_set_buffer(enc, bre, 0ul, 1)
+            metal_set_buffer(enc, bim, 0ul, 2)
+            metal_set_buffer(enc, bwn, 0ul, 3)
+            metal_set_buffer(enc, bw, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        }
+    }
+    var by = buf_upload(dev, y)
+    if (invoke(run, by)) {
+        t |> equal(buf_mismatch_bars(bw, want, 1e-4, 1e-5, tag), 0)
+    }
+    y[4 * stride + 1] += 2.0   //! a log-magnitude: every sample its frame overlaps moves
+    var by2 = buf_upload(dev, y)
+    if (invoke(run, by2)) {
+        t |> success(buf_mismatch_bars(bw, want, 1e-4, 1e-5, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned magnitude reds the compare")
+    }
+    metal_release(by)
+    metal_release(by2)
+    metal_release(bre)
+    metal_release(bim)
+    metal_release(bwn)
+    metal_release(bw)
+    metal_release(pso)
+}
+
 // ===== the tower row gather (the qwen25v stem's window-sort reorder) =====
 def private tower_gather_gate(t : T?; dev, queue) {
     let tag = "tower_gather"
@@ -1494,6 +2732,34 @@ def test_metal_prefill_kernels(t : T?) {
                 fc_unpack_gate(t, dev, queue)
                 fc_dw_gate(t, dev, queue, false)
                 fc_dw_gate(t, dev, queue, true)
+                st2_conv_gate(t, dev, queue, false, false)
+                st2_conv_gate(t, dev, queue, true, false)
+                st2_conv_gate(t, dev, queue, false, true)
+                st2_conv_gate(t, dev, queue, true, true)
+                st2_im2col_gate(t, dev, queue, 0, 5, false)
+                st2_im2col_gate(t, dev, queue, 3, 2, false)
+                st2_im2col_gate(t, dev, queue, 0, 5, true)
+                st2_im2col_gate(t, dev, queue, 2, 3, true)
+                st2_adain_gate(t, dev, queue, 37, true)
+                st2_adain_gate(t, dev, queue, 520, true)
+                st2_adain_gate(t, dev, queue, 37, false)
+                st2_rows_gate(t, dev, queue)
+                st2_gather_gate(t, dev, queue)
+                st2_concat_gate(t, dev, queue, true)
+                st2_concat_gate(t, dev, queue, false)
+                st2_pool_gate(t, dev, queue)
+                st2_lstm_gate(t, dev, queue)
+                st2_attn_gate(t, dev, queue, 20)
+                st2_attn_gate(t, dev, queue, 37)
+                st2_attn_gate(t, dev, queue, 100)
+                st2_sigsum_gate(t, dev, queue)
+                st2_gelu_gate(t, dev, queue)
+                st2_source_gate(t, dev, queue, true)
+                st2_source_gate(t, dev, queue, false)
+                st2_stft_gate(t, dev, queue, true)
+                st2_stft_gate(t, dev, queue, false)
+                st2_istft_gate(t, dev, queue, true)
+                st2_istft_gate(t, dev, queue, false)
                 tower_gather_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the

@@ -561,6 +561,10 @@ class MathCalls {
         ic[i] = min(abs(ia[i]), ib[i]) + max(ia[i], ib[i])
         uc[i] = min(ua[i], ub[i]) + max(ua[i], ub[i])
         qc[i] = int8(round(b[i] * 12.5))
+        c[i] += (floor(x) + ceil(y)) + (atan(x) + atan2(y, x)) + (pow(abs(x) + 1.0, y) + fmod(x, 3.0))
+        c[i] += clamp(x, -1.0, 1.0) + mad(x, y, 0.5)
+        vc[i] = vc[i] + (floor(u) + ceil(v)) + clamp(u, float4(-1.0), float4(1.0)) + mad(u, v, float4(0.5))
+        ic[i] += clamp(ia[i], -8, 8)
     }
 }
 
@@ -1324,6 +1328,19 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.math.max.u32",
         "call.math.round.f32",
         "call.math.round.f32v",
+        "call.math.floor.f32",
+        "call.math.ceil.f32",
+        "call.math.atan.f32",
+        "call.math.atan2.f32",
+        "call.math.pow.f32",
+        "call.math.fmod.f32",
+        "call.math.clamp.f32",
+        "call.math.mad.f32",
+        "call.math.floor.f32v",
+        "call.math.ceil.f32v",
+        "call.math.clamp.f32v",
+        "call.math.mad.f32v",
+        "call.math.clamp.i32",
         "cvt.f32.i8",
         "cvt.i8.f32",
         // statements

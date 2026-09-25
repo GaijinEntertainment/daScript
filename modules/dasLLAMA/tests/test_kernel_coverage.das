@@ -1,4 +1,5 @@
-// The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it.
+// The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it; the
+// StyleTTS2 tower row needs kitten-nano.gguf under models_dir() and the kitten family on, and skips without them.
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -24,6 +25,8 @@ require dasllama/dasllama_canary    // the cov_tower FastConformer row
 require dasllama/dasllama_parakeet  // the cov_tower parakeet row
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
+require dasllama/dasllama_styletts2
+require dasllama/dasllama_tts_types   // nolint:STYLE030,LINT019 — read only inside the Apple half
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
@@ -598,6 +601,33 @@ def private cov_tower(t : T?) {
         cov_tower_gemma3v(t)
         cov_tower_qwen25v(t)
         cov_tower_qwen3v(t)
+        cov_tower_styletts2(t)
+    }
+}
+
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_styletts2(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), "kitten-nano.gguf")
+        if (family_on(t, "kitten") && model_available(t, path)) {
+            var inscope stg <- stage_styletts2(path, false)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope m = StyleTts2Model()
+            mint_styletts2(stg, m)
+            var inscope ids : array<int>
+            ids |> resize(48)
+            for (i in range(48)) {
+                ids[i] = 1 + i % (int(m.n_symbols) - 1)
+            }
+            var inscope style : array<float>
+            styletts2_style(m, m.voice_names[0], 0, style)
+            var inscope noise = TtsNoise()
+            var tm = TtsTimings()
+            var inscope sc = St2Scratch()
+            with_job_que() {
+                setup_dasllama_jobque()
+                styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
+            }
+        }
     }
 }
 

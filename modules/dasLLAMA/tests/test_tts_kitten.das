@@ -22,7 +22,9 @@ require _model_tier
 // token rule. Model-gated (`kitten-<size>.gguf` + `tts_oracle/kitten_<size>/` under models_dir(),
 // both minted by performance/build_tts_data.das through harness/convert_kitten.py and
 // harness/kitten_oracle.py): the parity rail of `_tts_parity.das` per size, and a facade smoke
-// cell that speaks one sentence.
+// cell that speaks one sentence. The facade and Metal cells also need the front-end packs
+// (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the Metal cells skip where no Metal
+// device serves, and red where a present device declines a stage.
 
 [test]
 def test_symbol_map(t : T?) {
@@ -84,6 +86,7 @@ def private facade_smoke(t : T?; size : string) {
         var inscope c <- caps(m)
         t |> equal(c.sample_rate, 24000)
         t |> equal(length(c.voices), 8)
+        let served0 = styletts2_gpu_stats("decode").served
         var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
         t |> equal(audio.sample_rate, 24000)
         // 51 characters of text: well over a second of speech, under ten
@@ -97,7 +100,8 @@ def private facade_smoke(t : T?; size : string) {
         t |> success(finite, "every sample finite")
         t |> success(peak > 0.05, "peak {peak}: the model spoke")
         let tm & = audio.timings
-        t |> success(tm.total_us > 0l && tm.generator_us > 0l && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
+        let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
+        t |> success(tm.total_us > 0l && (tm.generator_us > 0l || gen_on_tower) && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
         t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
         to_log(LOG_INFO, "{size} facade: {length(audio.pcm)} samples, peak {peak}; {timings_line(tm, audio.sample_rate)}\n")
     }
@@ -113,9 +117,9 @@ def test_kitten_facade(t : T?) {
 // the generator hook under test: declines, or serves a silent waveform of the CPU chain's length
 var private g_hook_serves = false
 
-[unused_argument(d, x_rows, c, s, har_spec, har_frames)]
+[unused_argument(d, x_rows, c, s, har_spec, har_frames, sc)]
 def private generator_stub(d : St2Decoder; x_rows : array<float>; c, t : int64; s : array<float>;
-                           har_spec : array<float>; har_frames : int64; var wave : array<float>) : bool {
+                           har_spec : array<float>; har_frames : int64; var wave : array<float>; var sc : St2Scratch) : bool {
     if (!g_hook_serves) {
         return false
     }
@@ -137,9 +141,9 @@ struct HookProbe {
 def private hook_probe(path : string) : HookProbe {
     var r = HookProbe()
     var inscope m <- load_tts_model(path)
-    register_styletts2_generator_gpu(@@generator_stub)
+    register_styletts2_gpu(St2GpuDriver(gen = @@generator_stub))   // the generator seat alone: the decode seat empty, so the CPU chain reaches it
     defer() {
-        unregister_styletts2_generator_gpu()   // no driver fills the slot: the seat goes back empty
+        unregister_styletts2_gpu()
     }
     g_hook_serves = false
     let s0 = styletts2_generator_gpu_stats()
@@ -181,6 +185,13 @@ def test_kitten_generator_hook(t : T?) {
             t |> equal(r.served_after_serve, 1, "the serving hook is counted")
             t |> success(r.silent_after_serve, "the served waveform reached the facade")
         }
+    }
+}
+
+[test]
+def test_kitten_synthesis_metal(t : T?) {
+    t |> run("nano: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
+        tts_gpu_synthesis(t, gguf_path("nano"), "The tower serves the generator, and the words still land.", "Bella")
     }
 }
 

@@ -1,8 +1,8 @@
 options gen2
 options indenting = 4
 
-// Real-GPU behavioral gate for the Phase-6 math builtins (exp/log/sqrt/rsqrt/sin/cos/tanh/abs/
-// saturate/min/max — float scalar + float4 + int/uint classes). fastmath=false pins the precise
+// Real-GPU behavioral gate for the math builtins (exp/log/sqrt/rsqrt/sin/cos/tanh/abs/saturate/
+// min/max/floor/ceil/atan/atan2/pow/fmod/clamp/mad — float scalar + float4 + int/uint classes). fastmath=false pins the precise
 // MSL math path: fast::sin/cos carry an ABSOLUTE ~2^-11 error bound that would swamp the oracle
 // tolerance, while the precise set stays within a few ULP of the CPU libm reference. abs/min/max/
 // saturate and the integer forms compare exact; transcendentals compare with fapprox.
@@ -43,16 +43,21 @@ class MathCalls {
         c[i] += log(abs(x) + 1.0)
         c[i] += exp2(min(y, 8.0)) + log2(abs(y) + 1.5)
         c[i] += uint_bits_to_float((ua[i] & 0x007FFFFFu) | 0x3F800000u)   // as_type bitcast, valid-float bits
+        c[i] += ((floor(x) + ceil(y)) + (atan(x) + atan2(y, x + 0.25))) + (pow(abs(x) + 1.0, 0.5 * y) + fmod(x, 3.0))   //! off the origin: Metal's atan2(0, 0) is NaN where libm answers 0
+        c[i] += clamp(x, -1.0, 1.0) + mad(x, y, 0.5)
         let u = va[i]
         let v = vb[i]
         vc[i] = (((exp(min(u, float4(4.0))) + sqrt(abs(u))) + (rsqrt(abs(v) + float4(1.0)) + tanh(u))) +
             ((sin(u) + cos(v)) + (saturate(u) + max(u, v))))
         vc[i] = vc[i] + round(v)
+        vc[i] = (vc[i] + (floor(u) + ceil(v))) + (clamp(u, float4(-1.0), float4(1.0)) + mad(u, v, float4(0.5)))
         vc[i] = uint_bits_to_float(float_bits_to_uint(vc[i]))             // 4-lane round-trip, bit-exact
         ic[i] = min(abs(ia[i]), ib[i]) + max(ia[i], ib[i])
         ic[i] += float_bits_to_int(y)                                     // negative floats bit-exact too
+        ic[i] += clamp(ia[i], -8, 8)
         uc[i] = min(ua[i], ub[i]) + max(ua[i], ub[i])
         uc[i] += float_bits_to_uint(x) & 0x7FFFFFFFu
+        uc[i] += clamp(ua[i], 2u, 20u)
         qc[i] = int8(round(b[i] * 12.5))
     }
 }
@@ -92,10 +97,13 @@ def test_math_gpu_vs_cpu(t : T?) { // nolint:STYLE038 - linear GPU-vs-CPU compar
         }
         // k=0: x=-11, y=-4: exp(-11)+sqrt(11)+rsqrt(5)+tanh(-11)+sin(-11)+cos(-4)+saturate(-11)+max(-11,-4),
         // then += float(qa[0]) = -125, then += log(|x|+1) = log(12),
-        // then += exp2(-4) + log2(5.5), then += bits((0&0x7FFFFF)|0x3F800000) = 1.0
+        // then += exp2(-4) + log2(5.5), then += bits((0&0x7FFFFF)|0x3F800000) = 1.0,
+        // then += floor(-11) + ceil(-4) + atan(-11) + atan2(-4, -10.75) + 12^-2 + fmod(-11, 3),
+        // then += clamp(-11) + mad(-11, -4, 0.5)
         t |> success(fapprox(oracle.c[0], exp(-11.0) + sqrt(11.0) + rsqrt(5.0) + tanh(-11.0) +
-            sin(-11.0) + cos(-4.0) + 0.0 + (-4.0) - 125.0 + log(12.0) + exp2(-4.0) + log2(5.5) + 1.0), "the oracle itself computed")
-        t |> equal(oracle.ic[0], min(9, -3) + max(-9, -3) + float_bits_to_int(-4.0))
+            sin(-11.0) + cos(-4.0) + 0.0 + (-4.0) - 125.0 + log(12.0) + exp2(-4.0) + log2(5.5) + 1.0 +
+            (-11.0 - 4.0 + atan(-11.0) + atan2(-4.0, -10.75) + 1.0 / 144.0 - 2.0) + (-1.0 + 44.5)), "the oracle itself computed")
+        t |> equal(oracle.ic[0], min(9, -3) + max(-9, -3) + float_bits_to_int(-4.0) + clamp(-9, -8, 8))
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var gpu_bad = -1
             with_metal_device() $(dev : MetalDevice?) {

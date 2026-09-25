@@ -1332,10 +1332,21 @@ def private sgmat_zero_fill(sgname : string) : string {
 }
 
 // scalar/vector math builtins with a 1:1 MSL spelling (das math-module names). Unary set is
-// float-family (abs also signed-int); min/max take any numeric class. Fastmath is a kernel-level
-// property; single ops stay correctly rounded under MTLMathModeSafe (Phase-4 measured fact).
+// float-family (abs also signed-int); the binary set and clamp take any numeric class, mad lowers
+// to fma on the float classes only (MSL has no integer fma). Metal's atan2(0, 0) is NaN where
+// libm answers 0: a kernel that can reach the origin guards it itself. Fastmath is a kernel-level property; single ops stay correctly rounded under
+// MTLMathModeSafe.
 let private MSL_MATH_UNARY : table<string> <- {
-    "exp", "log", "exp2", "log2", "sqrt", "rsqrt", "sin", "cos", "tanh", "abs", "saturate", "round"
+    "exp", "log", "exp2", "log2", "sqrt", "rsqrt", "sin", "cos", "tanh", "abs", "saturate", "round", "floor", "ceil", "atan"
+}
+
+let private MSL_MATH_BINARY : table<string> <- {
+    "min", "max", "atan2", "pow", "fmod"
+}
+
+//! das spelling -> MSL spelling for the three-argument builtins
+let private MSL_MATH_TERNARY : table<string; string> <- {
+    "clamp" => "clamp", "mad" => "fma"
 }
 
 // daslib/math_bits' same-size bit reinterprets (scalar + 2/3/4-lane) — MSL as_type<T>(x)
@@ -1397,7 +1408,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         note(ctx, "call.{cname}")
         return "__das_{cname}({a}, {b})"
     }
-    if (cname == "min" || cname == "max") {
+    if (key_exists(MSL_MATH_BINARY, cname)) {
         if (na != 2) {
             err(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
@@ -1414,6 +1425,29 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let b = emit_value(ctx, ec.arguments[1])
         note(ctx, "call.math.{cname}.{acls}")
         return "{cname}({a}, {b})"
+    }
+    if (key_exists(MSL_MATH_TERNARY, cname)) {
+        if (na != 3) {
+            err(ctx, ec.at, "{cname} takes exactly three arguments")
+            return "/*call {cname}*/"
+        }
+        if (reject_cpu_only_width(ctx, ec.at, ec.arguments[0]._type)) {
+            return "/*call {cname}*/"
+        }
+        let acls = census_class(ec.arguments[0]._type)
+        if (!(acls |> starts_with("f")) && !(acls |> starts_with("i")) && !(acls |> starts_with("u"))) {
+            err(ctx, ec.at, "{cname} lowers for numeric classes only - argument is {acls}")
+            return "/*call {cname}*/"
+        }
+        if (cname == "mad" && !(acls |> starts_with("f"))) {
+            err(ctx, ec.at, "mad lowers for float classes only (MSL has no integer fma) - argument is {acls}")
+            return "/*call {cname}*/"
+        }
+        let a = emit_value(ctx, ec.arguments[0])
+        let b = emit_value(ctx, ec.arguments[1])
+        let c = emit_value(ctx, ec.arguments[2])
+        note(ctx, "call.math.{cname}.{acls}")
+        return "{MSL_MATH_TERNARY?[cname] ?? cname}({a}, {b}, {c})"
     }
     if (cname == "simd_sum" || cname == "simd_max") {
         if (na != 1) {

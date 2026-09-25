@@ -2,6 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
+
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it.
 
@@ -10,10 +11,10 @@ asserts belong to every cell that calls it.
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list, wherever the diff puts the
 file.**
 
-**A diff that touches a cell in the pinned set, or adds a cell whose expected value must be kept
-in step with something maintained outside the cell (a document, a checked-in table, a committed
-artifact's form, a roster, a knob list), applies `REVIEW_PINNED_GATES.md` (beside this file)
-together with this list.**
+**A diff that touches a cell in the pinned set, or adds a cell or an assert whose expected value
+must be kept in step with something maintained outside the cell (a document, a checked-in table, a
+committed artifact's form, a roster, a knob list) or that a checked-in table names as its
+evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -25,11 +26,11 @@ asserts on; a comment-only edit reaches none.
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
 stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
 `run.das` accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names
-the box in the PR body.** A run without
-`DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
+the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and
+passes.
 
-**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form between
-PRs; a PR that ships on it never ran the coverage it dropped.
+**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form
+between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion -
@@ -148,20 +149,20 @@ tokenizer, the ids, one line per side.** A red, or a suspicious green, must be r
 log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
-claims about what the cell exercises is asserted in that cell.** A cap, a resize, or a counter
-showing the path ran is not evidence the number was reached; a device's geometry (subgroup width,
-SM count) is no coverage claim.
+claims about what the cell exercises is asserted in that cell - by an assert on the count, or, for
+a count the cell passes as a literal argument to the kernel it dispatches, by comparing every
+output element that count covers against the oracle over an output filled with a sentinel before
+the dispatch.** A count the dispatch pads, clamps or derives from that literal gets its own assert.
+A cap, a resize, or a counter showing the path ran is not evidence the number was reached; a
+device's geometry (subgroup width, SM count) is no coverage claim.
 
-**A token-parity cell over a text-generation prompt whose continuation can tie - a freeform
-cell - whose two sides can round differently - different lanes, backends, batch shapes or kernel
-forms - is a defect: use the forced-feed logits-tolerance
-form, the same fixed tokens fed to both sides and logits compared within a bar.** A counting
-cell - one whose prompt forces a continuation that cannot tie, so greedy tokens are fixed -
-stays token-exact.
-
-**A token-exact compare over a text-generation prompt whose continuation can tie - a freeform
-compare - states in the cell what makes its two sides one code path -
-the shared entry point, or an assert pinning the lane.**
+**A freeform token-parity cell - a token-exact compare over a text-generation prompt whose
+continuation can tie - stays token-exact only when its two sides run one code path, and states in
+the cell what makes them one (the shared entry point, or an assert pinning the lane); a freeform
+cell whose sides can round differently (different lanes, backends, batch shapes or kernel forms)
+uses the forced-feed logits-tolerance form - the same fixed tokens fed to both sides, logits
+compared within a bar.** A counting cell - one whose prompt forces a continuation that cannot tie,
+so greedy tokens are fixed - stays token-exact.
 
 **An ASR family with no token-for-token oracle cell is a defect** - the cell compares a
 transcript against a reference leg, external dump or CPU control alike.
@@ -181,20 +182,20 @@ defect.**
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter - a
 `set_*` / `pin_*` call in `dasllama/` that changes the driver's route, the serving lane or the
 engage mode for the rest of the process - whose value the cell's claim depends on, even when
-the claim needs it at its DEFAULT value; a family serving-lane pin is the cell's own, never the
-file's `[init]`, and a claim that needs the lane unset establishes it with the family's own unset
-call - `reset_<family>_q8`, canary's `reset_canary_enc_q8`, whisper's `set_asr_fp32(false)` and
-`set_asr_tower_fp32(false)`.**
+the claim needs it at its DEFAULT value; a family serving lane is pinned by the cell itself, never
+by the file's `[init]`, through a lane setter - a call whose value the family's loader reads to
+pick its lane, or a facade call that makes that call (`set_<family>_q8`; `set_styletts2_q8` for
+kitten and kokoro; `set_tts_q8`, which pins every TTS family; `set_canary_enc_q8`; whisper's
+`set_asr_fp32` / `set_asr_tower_fp32`) - or through a loader parameter that takes the lane, and a
+claim that needs the lane unset establishes it with the unset call paired with the setter it pins
+through - `reset_<name>_q8` for a `set_<name>_q8` (`reset_tts_q8` for the TTS facade), whisper's
+`set_asr_fp32(false)` and `set_asr_tower_fp32(false)`.** A cell that counts on the box declining
+the other lane, instead of pinning, measures whichever lane the box's policy picked.
 
 **A cell that sets a family pin or a driver setter - directly, through a helper it calls, or
-through a loader parameter that takes the lane - returns with that pin unset through the family's
-own unset call and that setter back where it found it.** A pin left set makes the next cell measure
-this cell's lane, not its own.
-
-**A cell claiming a family serving lane pins it through the family's own lane knobs -
-`set_<family>_q8`, canary's `set_canary_enc_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32` -
-or through a loader parameter that takes the lane.** A runtime decline standing in for a pin
-measures whichever lane the box's policy picked.
+through a loader parameter that takes the lane - returns with that pin unset through the unset
+call paired with the setter it pinned through, and that setter back where it found it.** A pin
+left set makes the next cell measure this cell's lane, not its own.
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
@@ -208,12 +209,12 @@ Metal driver hook that runs the model's decode or prefill stages on the GPU - on
 two routes' outputs, not one whose subject is the GPU route's decline, runs its CPU stages on a
 PLANAR model (the non-blob form, the only one CPU inference reads) and the stages the override
 selects on that model's blob twin (`blob_twin(t, path, seq_cap)`, `_metal_blob_twin.das`), in one
-session.** The planar
-model and its blob twin share one shape, so one session serves both.
+session.** The planar model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` -
-every suite but `model-free` and `stocked` - tags it with its family.** The family tag is the token passed to `family_on(t, name)`
-(`_model_tier.das`). An untagged block runs under every `--family` filter.
+every suite but `model-free` and `stocked` - tags it with its family.** The family tag is the
+token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block runs under every
+`--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`

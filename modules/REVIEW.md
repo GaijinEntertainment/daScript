@@ -14,21 +14,18 @@ declarations, and the structs their `@push_constant` members name - applies
 that the full `test_aot` lane (`preflight --full`, or a manual dispatch of `build.yml` on the
 branch) ran green on the diff's head commit.** Per-PR CI compiles only the language subset.
 
-**In its own `initDependencies`, a C++ module calls `Module::require("<name>")` for every in-tree
-module its CMake target links, and calls `initDependencies()` on each module that call returns -
-in the same change as the link.** A module no other module requires is left unloaded, and the
+**In its own hand-written `initDependencies`, a C++ module calls `Module::require("<name>")` for
+every in-tree module its CMake target links, and calls `initDependencies()` on each module that
+call returns - in the same change as the link.** A module no other module requires is left unloaded, and the
 linking module's imports are resolved before any of its code runs, so its next load fails on the
 missing sibling.
 
-**A module whose `dasClangBind`-generated binding depends on another in-tree module declares
-that dependency in its `bind_*.das` - `require_modules` when the binding uses the other module's
-types, `require_load_modules` when the module's shared library links against the other's library
-and the binding uses none of its types.** `require_modules` puts the other module's types into this
-module's type library, so both modules binding the same C++ types resolve to one copy.
-
-**Never hand-write a module dependency into a `dasClangBind`-generated file - declare it in the
-module's `bind_*.das` instead.** The binder emits `initDependencies` from `require_modules` and
-`require_load_modules`.
+**A diff that makes a `dasClangBind`-generated binding depend on another in-tree module declares
+that dependency in the module's `bind_*.das` - `require_modules` when the binding uses the other
+module's types, `require_load_modules` when only the shared library links against the other's -
+never by hand in the generated file.** The binder emits `initDependencies` from those two lists,
+and `require_modules` puts the other module's types into this module's type library, so both
+modules binding the same C++ types resolve to one copy.
 
 **A diff that hand-binds a function in a module's own C++ - a function the module's
 `bind_*.das` binder would otherwise generate - makes that binder's `skip_function` override

@@ -11,8 +11,10 @@ root).
 
 - **A new emitter capability ships a text fixture under `tests/msl/` (repo root) and a census
   kind per emit shape, in the same change.** A new emitter capability is a new emit site or a
-  newly accepted construct, including the path a `[metal_kernel]` takes when it has no `name=`
-  argument. A census kind is the construct label the emitter records at emit time, declared in
+  newly accepted construct - a builtin the emitter did not lower before, or an existing builtin
+  it now lowers for an operand type or pointee type it rejected before - including the path a
+  `[metal_kernel]` takes when it has no `name=` argument. A census kind is the construct label
+  the emitter records at emit time, declared in
   `declared_msl_census` (`tests/msl/_msl_common.das`, repo root); an emit shape is one distinct
   text the site can produce (a renamed twin is a second shape). Two emit shapes sharing one
   kind lets either one go untested.
@@ -22,17 +24,16 @@ root).
   macro declares for it - a module-level global holding the kernel's MSL text or a compile
   option - or the difference it makes to the emitted text.
 
-- **A diff that adds an MSL emitter rejection, widens an existing one's condition, or changes a
-  rejection's message text ships a `tests/msl/_fail_closed/` (repo root) fixture asserting that
-  rejection's needle, in the same change.** An error needle is the substring of the compile
-  error that names the rejected construct; `REVIEW.das` checks the fixture-and-assert pairing
-  both directions (`check_fail_closed_sync`, `tests/msl/test_msl_fail_closed.das` (repo root)).
+- **A diff that adds an MSL emitter rejection a `[metal_kernel]` body can reach, widens an
+  existing one's condition, or changes a rejection's message text ships a
+  `tests/msl/_fail_closed/` (repo root) fixture asserting that rejection's needle, in the same
+  change.** An error needle is the substring of the compile error that names the rejected
+  construct.
 
 - **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
   kernel behavioral change is a change to what an existing kernel computes, or a diff that
-  makes the emitter produce arithmetic, indexing, or synchronization it did not produce before
-  - a newly accepted construct that lowers to a read, an index, or a barrier; a CPU-oracle
-  test compares the GPU result against a CPU-computed expectation.
+  makes the emitter produce arithmetic, indexing, or synchronization it did not produce before;
+  a CPU-oracle test compares the GPU result against a CPU-computed expectation.
 
 - **A change visible only in the emitted text ships a `tests/msl/` (repo root) fixture.** The
   fixture asserts the emitted text that the change alters.
@@ -43,7 +44,7 @@ root).
 - **A new or changed host extern under `modules/dasMetal/src/` ships a host-side test under
   `tests/metal/` (repo root) in the same change.** A changed public function in
   `metal/das_metal_boost.das` fires this rule too. The test reports a `feint` - dastest's skip
-  result - when no Metal device is present. A regression in dasMetal alone must fail here, not in a consumer module's tests.
+  result - when no Metal device is present.
 
 - **Weakening `REVIEW.das`'s descriptor check is a defect.** That check requires every
   `matmul2d_descriptor` written in `metal/msl_emit.das` to set `relaxed_precision = true`.
@@ -79,7 +80,7 @@ root).
   it silently.
 
 - **Never take the das function name, or the operand's pointee type, out of how
-  `metal/msl_emit.das` picks a lowering.** The emitter reads those two properties to choose the
-  emitted MSL for each builtin - the tmm2d A stream is the pointee case - and nothing else
-  distinguishes them; the das front end accepts whatever a generic stub binds, so the emitter is
-  the only place a wrong operand is caught.
+  `metal/msl_emit.das` picks a lowering - keep both as the lowering key.** Nothing else
+  distinguishes the builtins (the tmm2d A stream is the pointee case), and the das front end
+  accepts whatever a generic stub binds, so the emitter is the only place a wrong operand is
+  caught.

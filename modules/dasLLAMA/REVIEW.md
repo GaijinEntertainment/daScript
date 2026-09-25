@@ -147,8 +147,8 @@ it settles.**
 **A new call that runs a matrix multiply over f32 weight rows - `matmul_batch`, `mm_blob_b`,
 `mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
-against), where a faster-format twin already serves the same weights and shape, is a defect - call
-that twin instead.** A site that must stay f32 for another reason is ledgered on its own file's
+against), where a faster-format twin on the same backend already serves the same weights and
+shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is ledgered on its own file's
 sec.1 charter line - the line naming what that file holds - in an `ARCHITECTURE_*.md` companion; a
 comment at the call site does not discharge this.
 

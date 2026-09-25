@@ -200,6 +200,23 @@ applies after the reference pin moves. On Apple boxes `performance/setup_asr_rig
 second, Metal-ON copy of the same patched checkout, because `-ngl` on a Metal-OFF build is
 inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
 
+### 2.20a The TTS reference instrument
+
+`harness/tts_ref_bench.py` is the reference number-maker every das TTS wall in `PERF_LEDGER.md`
+is held against: it feeds the g2p corpus's `ps_espeak` phoneme strings to the kokoro and KittenTTS
+packages' own models (`hexgrad/Kokoro-82M` through `kokoro`'s `KModel`; the KittenTTS ONNX
+files through `onnxruntime`'s CPU provider with the package's tokenizer, style rows and per-voice
+speed prior), times generation only - the front end is out of the compare on both sides - and
+prints the mean wall a sentence and the real-time factor, each sentence timed `--passes` times
+with the best kept, after one untimed warm-up call. It runs under the g2p experiment's venv
+(`~/Work/tts-ab/g2p/.venv-g2p`, with `HF_HOME` at that experiment's hub cache) and prints the
+torch, kokoro, kittentts and onnxruntime versions it ran with, so a ledger entry names them beside
+the command. Its kitten audio runs shorter than das's for the same phonemes (the package's speed
+prior and its 5000-sample trim), so a das row is compared on the wall a sentence, never on the
+real-time factor. No board cell covers a synthesis (`followup_general.md` 166 plans the bench's
+`--tts` path), so the das side of the compare is `harness/tts_synth.das` under
+`REVIEW_MEASUREMENT.md`'s harness rule.
+
 ### 2.40 A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 
 `dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune
