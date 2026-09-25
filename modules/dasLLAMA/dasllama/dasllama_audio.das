@@ -1279,9 +1279,9 @@ def private enc_gelu_batch(t : AudioTower; var x : array<float>; d, npos : int64
     }
 }
 
-//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
-//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
-def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+//! the conv stem over one chunk into `s.x`: the conv hook where it serves (its output may stay on the device until the block
+//! hook takes it), else the CPU im2col + GEMM pair and the position rows
+def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     if (mel.n_len != AUDIO_CHUNK_FRAMES || mel.n_mel != t.n_mel) {
         panic("audio_encode: mel chunk is {mel.n_mel}x{mel.n_len}, want {t.n_mel}x{AUDIO_CHUNK_FRAMES}")
     }
@@ -1293,7 +1293,6 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     trace_tag(TRACE_TAG_ENC_CONV)
     if (g_tw_conv_gpu_set && empty(g_audio_ref_dir) && invoke(g_tw_conv_gpu, t, s, mel)) {
         asr_prof_add("enc.conv", tc)
-        encoder_blocks(t, s, tt)
         return
     }
 
@@ -1333,8 +1332,42 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     }
     asr_prof_add("enc.conv", tc)
     diff_stage("after_conv_pos", s.x, tt * d)
+}
 
+//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
+//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
+def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+    audio_encode_stem(t, s, mel)
+    encoder_blocks(t, s, t.n_ctx)
+}
+
+//! the stem, then the blocks with the tower's post-norm folded where the final hook serves (true: `s.xb` holds the normed rows),
+//! else the blocks alone (false: `s.x` holds their output and the caller norms it)
+def audio_encode_blocks_final(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
+    audio_encode_stem(t, s, mel)
+    let tt = t.n_ctx
+    if (g_tw_blocks_final_set && empty(g_audio_ref_dir)) {
+        dispatch_phase_encode(tt)
+        let te = ref_time_ticks()
+        if (invoke(g_tw_blocks_final, t, s, tt)) {
+            asr_prof_add("enc.blocks.gpu", te)
+            return true
+        }
+    }
     encoder_blocks(t, s, tt)
+    return false
+}
+
+typedef TowerBlocksFinalGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
+var private g_tw_blocks_final : TowerBlocksFinalGpuFn
+var private g_tw_blocks_final_set = false
+
+//! the blocks-with-post-norm seat: a driver that runs the block loop and the tower's post-norm in one chain fills it; the
+//! whisper encode asks this seat first and falls to the blocks seat plus the CPU norm
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_tower_blocks_final_gpu(fn : TowerBlocksFinalGpuFn) {
+    g_tw_blocks_final = fn
+    g_tw_blocks_final_set = true
 }
 
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>

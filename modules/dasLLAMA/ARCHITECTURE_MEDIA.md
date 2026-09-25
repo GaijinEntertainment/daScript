@@ -177,7 +177,9 @@ A family file owns the hook SLOT for a stage the GPU can serve - a `var private`
 plus a `register_*` entry - and a tower driver fills it at `[init]`: the Metal driver on a Metal
 build, the Vulkan driver (`dasllama_vulkan_tower.das`) on a build without das_metal, for the
 blocks seats it serves and the front seats it fills (qwen3a's mel and conv front, gemma4a's
-whole chunk, canary's front). The direction is forced: the driver requires the family file for its
+whole chunk, canary's front, and the whisper-class blocks-with-post-norm seat
+`register_tower_blocks_final_gpu`, which the whisper encode asks before the blocks seat and the
+CPU norm). The direction is forced: the driver requires the family file for its
 types, so the family cannot require the driver back. A box with no driver leaves the slot empty
 and the CPU form runs. A seat taken over a filled slot (a test's stub through
 `register_styletts2_gpu` or `register_pocket_gpu`, a record of seats whose names and per-seat call

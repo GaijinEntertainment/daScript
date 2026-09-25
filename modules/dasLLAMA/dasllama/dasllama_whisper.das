@@ -985,8 +985,9 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
 //! decoder's cross-attention reads (via whisper_cross_kv).
 [hot_path]
 def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
-    audio_encode_blocks(t, s, mel)
-    layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
+    if (!audio_encode_blocks_final(t, s, mel)) {
+        layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
+    }
 }
 
 // ===== decoder =====

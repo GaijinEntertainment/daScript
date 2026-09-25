@@ -65,6 +65,14 @@ def set_vulkan_tower(on : bool) {
     g_vt_env_tower = on
 }
 
+var private g_vt_env_blocks = true
+
+//! Test A/B seat: pin the whisper-class block hooks off while the conv stem still serves - the stem's device rows must land for the
+//! CPU block loop (its `knob` decline)
+def set_vulkan_tower_blocks(on : bool) {
+    g_vt_env_blocks = on
+}
+
 def vulkan_tower_on : bool => g_vt_env_tower
 
 //! The fronts' route: the audio fronts ride the f16 GEMM feed (cm2 or KHR); off it (the sdot4 mode) every front declines
@@ -308,6 +316,8 @@ struct private VtResident {
     s_cn_attn_r : VkDescriptorSet
     s_cn_rel_sincos : VkDescriptorSet   //! the sinusoid rel table's writer
     x_ready : bool
+    x_pend_ptr : float?       //! the stem's rows still on the device (`x_dev`) and the host array they are owed to; 0 bytes = none pending
+    x_pend_bytes : int64
     tail_cap : int64          //! the projector tail's row capacity (gemma4a; 0 = none): the out-proj rows, the projected rows, their readback
     tail_dim : int64
     tail_out_dev : uint64
@@ -598,6 +608,8 @@ def private vt_release_scratch(var r : VtResident) {
 
 [cold_path]
 def private vt_release(var r : VtResident) {
+    vt_x_flush(r)   //! the stem's device rows die with the scratch: a pending readback lands first
+    g_vt_aud_out_bytes = 0l
     vt_release_scratch(r)
     if (r.key != 0ul) {
         destroy_device_buf(r.wq_dev)
@@ -2129,8 +2141,12 @@ def private vt_ln_scratch(var r : VtResident; nl, npos, d, ff, hs, dp, g_d, g_ff
 
 //! the caller keys `r` first
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+//! `final_w` >= 0 folds the tower's post-norm (its weight row at `final_w`, bias at `final_b`, both inside the norms plane) into the
+//! last block's post-add and lands the normed rows in `xb` (f32); else the blocks' output lands in `x`
 def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bool; fc1_act : uint; eps : float;   // nolint:STYLE038 — the dispatch chain is the shape
-                        norms_base, d, ff, hs, hsp, nheads, npos : int64; khr : bool; v, vff : int; var x : array<float>) : bool {
+                        norms_base, d, ff, hs, hsp, nheads, npos : int64; khr : bool; v, vff : int; var x : array<float>;
+                        final_w : int64 = -1l; final_b : int64 = -1l; var xb : array<float>& = g_vt_no_rows) : bool {
+    let final = final_w >= 0l
     let q8e = kq_elems(KqFmt.q8)
     let nl = long_length(offs)
     let dp = nheads * hsp
@@ -2304,63 +2320,116 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             }
             let last = l + 1l == nl
             pc_post.boff = uint(o.fc2_b - norms_base)
-            pc_post.ln_on = last ? 0u : 1u
+            pc_post.ln_on = (last && !final) ? 0u : 1u
             if (!last) {
                 pc_post.lnoff = uint(offs[l + 1l].ln1_w - norms_base)
                 pc_post.lnboff = uint(offs[l + 1l].ln1_b - norms_base)
+            } elif (final) {
+                pc_post.lnoff = uint(final_w - norms_base)
+                pc_post.lnboff = uint(final_b - norms_base)
             }
-            if (cm2) {
+            if (cm2 && !(last && final)) {
                 enc_tower_post_add_ln16_cls(raw, h, r.s_post_d_ln16, pc_post, npos)
             } else {
-                enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)
+                enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)   //! the post-norm's rows land f32 in xb: the readback's plane on the final chain
             }
             vt_pt(raw, VtProfRole.post_add)
         }
-        vhz_dep(raw, h, VT_X, 0u, true)
-        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+        vhz_dep(raw, h, final ? VT_XB : VT_X, 0u, true)
+        cmd_copy_range(raw, final ? r.xb_dev : r.x_dev, 0l, r.host.buf, 0l, bx)
         vt_pt(raw, VtProfRole.copy_out)
         pfq_end(raw)
     }
     if (vk_prof()) {
         vt_prof_report("whisper-class", nl, npos, get_time_usec(t0))
     }
+    if (final) {
+        g_vt_aud_out_ptr = intptr(unsafe(addr(xb[0])))
+        g_vt_aud_out_bytes = bx
+        g_vt_aud_out_dev = r.xb_dev
+        return vt_served(r, xb, bx, npos, nl)
+    }
+    g_vt_aud_out_bytes = 0l
     return vt_served(r, x, bx, npos, nl)
 }
 
+var private g_vt_no_rows : array<float>   //! the chain's xb default where no final norm lands
+var private g_vt_aud_out_ptr = 0ul        //! the last final chain's readback target and the device plane holding the same rows: the decoder's
+var private g_vt_aud_out_bytes = 0l       //! cross-KV takes the plane device to device instead of uploading the host copy
+var private g_vt_aud_out_dev = 0ul
+
+//! the device plane holding the encoder rows a caller is about to upload from `rows` (`bytes` long), or 0 when the tower did not
+//! land those rows: the whisper cross-KV chain copies them device to device and skips the host upload
+def vulkan_tower_enc_out(rows : float const?; bytes : int64) : uint64
+    => (g_vt_aud_out_bytes == bytes && g_vt_aud_out_ptr == intptr(rows) && g_vt_aud.key != 0ul) ? g_vt_aud_out_dev : 0ul
+
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vulkan_audio_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool {
+//! the stem's pending rows landed in the host array they are owed to (a no-op with none pending)
+def private vt_x_flush(var r : VtResident) {
+    if (r.x_pend_bytes == 0l) {
+        return
+    }
+    let bx = r.x_pend_bytes
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        vhz_dep(raw, h, VT_X, 0u, true)
+        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+    }
+    unsafe {
+        memcpy(reinterpret<void?>(r.x_pend_ptr), r.host.mapped, bx)
+    }
+    r.x_pend_bytes = 0l
+    r.x_pend_ptr = null
+}
+
+//! a decline after the stem served: the stem's rows land in `s.x` first, since the CPU block loop reads them
+def private vt_aud_decline(var r : VtResident; why : VulkanTowerDecline) : bool {
+    vt_x_flush(r)
+    return vt_decline(r, why)
+}
+
+def private vt_aud_blocks(t : AudioTower; var s : EncoderState; npos : int64; final : bool) : bool {
     var r & = g_vt_aud
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
+    if (!g_vt_env_tower || !g_vt_env_blocks) {
+        return vt_aud_decline(r, VulkanTowerDecline.knob)
     }
     if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+        return vt_aud_decline(r, VulkanTowerDecline.quant_mode)
     }
     let d = t.d_model
     let ff = t.n_ff
     let hs = d / t.n_head
     let hsp = 64l
     if (hs != 64l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l) {
-        return vt_decline(r, VulkanTowerDecline.shape)
+        return vt_aud_decline(r, VulkanTowerDecline.shape)
     }
     let arm = vt_arm(r)
     if (!arm.ok) {
+        vt_x_flush(r)
         return false
     }
     let khr = arm.khr
     if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, d, 0l, false, false))) {
-        return vt_decline(r, VulkanTowerDecline.shape)
+        return vt_aud_decline(r, VulkanTowerDecline.shape)
     }
     let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
     let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
     if (!vt_aud_ensure(khr, hsp, v, vff)) {
-        return vt_decline(r, VulkanTowerDecline.device)
+        return vt_aud_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_aud_attach(r, t)) {
-        return vt_decline(r, VulkanTowerDecline.memory)
+        return vt_aud_decline(r, VulkanTowerDecline.memory)
     }
-    return vt_ln_chain(r, g_vt_ln_offs, t.has_k_bias, t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF, t.eps, t.layers_off, d, ff, hs, hsp, t.n_head, npos, khr, v, vff, s.x)
+    r.x_pend_bytes = 0l   //! the chain takes the stem's rows off the device: the pending readback is superseded
+    let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
+    if (final) {
+        return vt_ln_chain(r, g_vt_ln_offs, t.has_k_bias, act, t.eps, t.layers_off, d, ff, hs, hsp, t.n_head, npos, khr, v, vff, s.x, t.lnp_w_off, t.lnp_b_off, s.xb)
+    }
+    return vt_ln_chain(r, g_vt_ln_offs, t.has_k_bias, act, t.eps, t.layers_off, d, ff, hs, hsp, t.n_head, npos, khr, v, vff, s.x)
 }
+
+def private vulkan_audio_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool => vt_aud_blocks(t, s, npos, false)
+
+def private vulkan_audio_tower_blocks_final(t : AudioTower; var s : EncoderState; npos : int64) : bool => vt_aud_blocks(t, s, npos, true)
 
 //! a whisper-class tower has a conv stem when its q8 layers start past the stem's conv2 plane (a conv-less core - qwen3a's - starts at 0)
 def private vt_aud_has_conv(t : AudioTower) : bool => t.qlayers_off > 0l
@@ -2372,7 +2441,7 @@ def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
         g_vt_ln_offs[l] = enc_layer_offsets(t, l)
     }
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let rows_n = t.n_layer * t.layer_stride
+    let rows_n = t.n_layer * t.layer_stride + 2l * t.d_model   //! the layers' norms and biases, then the post-norm's weight and bias rows that follow them
     let key = vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, rows_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key == key) {
         return true
@@ -2559,17 +2628,13 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
         var pc_pos = TowerBiasArgs(d = uint(tt * d), nelem = uint(tt * d), boff = uint(2l * d), act = BIAS_ACT_NONE)   //! the position plane as one bias row the width of the rows
         enc_tower_bias_act_cls(raw, h, r.s_stem_pos_add, pc_pos, rq_wgs(false, tt * d))
         vt_pt(raw, VtProfRole.post_add)
-        vhz_dep(raw, h, VT_X, 0u, true)
-        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
-        vt_pt(raw, VtProfRole.copy_out)
         pfq_end(raw)
     }
     if (vk_prof()) {
         vt_prof_report("whisper-class stem", 2l, tt, get_time_usec(t0))
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-    }
+    r.x_pend_ptr = unsafe(addr(s.x[0]))   //! the stem's rows stay on the device for the block chain; a decline lands them (`vt_x_flush`)
+    r.x_pend_bytes = bx
     r.x_ready = true
     g_vt_convs++
     if (!r.served_said) {
@@ -4039,6 +4104,7 @@ def dasllama_vulkan_tower_register {
         register_qwen3v_gpu_blocks(@@vulkan_qwen3v_blocks)
         register_qwen25v_gpu_blocks(@@vulkan_qwen25v_blocks)
         register_tower_blocks_gpu(@@vulkan_audio_tower_blocks, @@vulkan_tower_serves_exact)
+        register_tower_blocks_final_gpu(@@vulkan_audio_tower_blocks_final)
         register_tower_conv_gpu(@@vulkan_audio_conv_front)
         register_gemma4a_gpu(@@vulkan_gemma4a_blocks, @@vulkan_tower_serves_exact)
         register_canary_gpu(@@vulkan_canary_blocks, @@vulkan_tower_serves_exact)

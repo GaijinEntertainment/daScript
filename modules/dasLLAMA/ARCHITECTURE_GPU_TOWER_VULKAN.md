@@ -149,6 +149,16 @@ rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 ag
 RTX PRO 4500). A record on the s or m column keeps the raw count - those stamps load a partial
 column unclamped and clamp the store, and a plane sized to the record (gemma4a's 13-row rel
 projection) holds nothing past it. The rounded rows past the live count are the same dead rows.
+
+The whisper-class stem leaves its rows on the device (`x_ready`, a pending readback naming the
+encoder state's `x`), and the block chain takes them there; a block hook that declines after the
+stem served lands them first (`vt_x_flush`), as does the resident's release, so the CPU block loop
+reads what the stem computed and the served loop never copies them out. The whisper encode asks
+the blocks-with-post-norm seat (`register_tower_blocks_final_gpu`) before the blocks seat: on it
+the chain folds the tower's post-norm into the last block's post-add (the f32 post-add over the
+post-norm's rows, which ride the norms plane behind the layers'), reads the normed rows back into
+`xb` instead of `x`, and records the device plane holding them (`vulkan_tower_enc_out`), which the
+whisper cross-KV chain copies device to device in place of the host upload.
 Under `DASLLAMA_GPU_PROF=1` every dispatch of an
 audio chain writes a timestamp with a role (`VtProfRole`), and `vt_prof_report` prints the chain's
 device time per role beside the host wall after the encode - the ledger the levers are read from.
@@ -219,7 +229,9 @@ classes read at rebased offsets, and the K/V planes and the step scratch are siz
 the cross K/V as f16 [layer][head][ta][hs] (unscaled; the attention carries the whole hs^-0.5),
 the self cache as f16 [layer][head][tmax][hs].
 
-The cross-KV chain is one command buffer per window: the encoder rows fed once (the halfword
+The cross-KV chain is one command buffer per window: the encoder rows fed once (copied device to
+device off the tower's plane when the tower landed exactly these rows - `vulkan_tower_enc_out`,
+counted as a handoff - else uploaded from the host; then the halfword
 store on the cm2 feed, the Q8_0 requant on the mul_mm tiles), then per layer the ck and cv GEMMs on
 the tile the tower chains ride (`VtTile`, the schedule records written as the tower's) and the
 K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs

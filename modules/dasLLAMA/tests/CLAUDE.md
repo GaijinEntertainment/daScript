@@ -946,7 +946,11 @@ default load: the decoder pinned to the CPU chain and then on the Vulkan ASR-dec
 tower serving the encoder on both legs, the texts token for token with the flips logged, the
 counters proving the window's cross-KV and twenty or more decode batches served with no decline,
 the knob-off leg's knob decline with zero windows and zero steps counted, then the f32 decoder rail's `quant_mode` decline with the CPU
-still transcribing; the same skips as the tower twin), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
+still transcribing; the same skips as the tower twin, plus the handoff count: every served window took the encoder rows
+off the tower's plane device to device), `test_whisper_vulkan_wdec_flush` (tiny: a nine-row first batch through a served
+window declines `rows`, the pending cross-KV readback lands, and the CPU chain's logits over it match the knob-off chain's
+token and bar), `test_whisper_vulkan_stem_flush` (tiny: the block hooks pinned off through `set_vulkan_tower_blocks`, the
+stem's device rows land at the `knob` decline and the CPU blocks over them transcribe the all-CPU chain's text), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims

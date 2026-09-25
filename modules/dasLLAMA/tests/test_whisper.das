@@ -752,6 +752,8 @@ def test_whisper_vulkan_wdec(t : T?) {
                     tt |> success(d2.steps - d1.steps >= 20l, "the decode batches served on the device ({d2.steps - d1.steps})")
                     tt |> success(d2.tokens - d1.tokens >= d2.steps - d1.steps, "the token rows cover the steps")
                     tt |> equal(d2.declines, d1.declines, "the device leg recorded no decline")
+                    tt |> equal(d2.handoffs - d1.handoffs, d2.windows - d1.windows, "every served window took the encoder rows off the tower's plane, device to device")
+                    tt |> equal(d1.handoffs, d0.handoffs, "and the knob-off leg took none")
                 }
                 let cpu_text = segs_text(cpu_segs)
                 let dev_text = segs_text(dev_segs)
@@ -768,6 +770,73 @@ def test_whisper_vulkan_wdec(t : T?) {
             } else {
                 tt |> skip("dasVulkan not present")
             }
+        }
+    }
+}
+
+//! the stem's rows stay on the device for the block chain; with the block hooks pinned off they land in `s.x` at the decline and the
+//! CPU block loop transcribes over them: the same text as the all-CPU chain, the stem counter up, the block counter still
+[test]
+def test_whisper_vulkan_stem_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the stem's pending readback lands at the block hooks' decline; the CPU blocks over it match the all-CPU chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!jit_enabled()) {
+                tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(tt, model_path)) {
+                return
+            }
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            if (!vulkan_twin_seat(tt)) {
+                return
+            }
+            let tower_was_on = vulkan_tower_on()
+            let wdec_was_on = vulkan_wdec_on()
+            defer() {
+                set_vulkan_tower(tower_was_on)
+                set_vulkan_tower_blocks(true)
+                set_vulkan_wdec(wdec_was_on)
+            }
+            set_vulkan_wdec(false)
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- load_asr_model(model_path)
+            var cpu_segs : array<TranscribeSegment>
+            var stem_segs : array<TranscribeSegment>
+            with_job_que() {
+                setup_dasllama_jobque_()
+                set_vulkan_tower(false)
+                var inscope sc <- create_session(m)
+                transcribe(m, sc, samples) $(seg) {
+                    cpu_segs |> push_clone(seg)
+                }
+                set_vulkan_tower(true)
+                set_vulkan_tower_blocks(false)
+                let s0 = vulkan_tower_stats()
+                let knob0 = vulkan_tower_declines()?["knob"] ?? 0l
+                var inscope sg <- create_session(m)
+                transcribe(m, sg, samples) $(seg) {
+                    stem_segs |> push_clone(seg)
+                }
+                let s1 = vulkan_tower_stats()
+                tt |> success(s1.convs > s0.convs, "the stem served on the device ({s1.convs - s0.convs} dispatches)")
+                tt |> equal(s1.encodes, s0.encodes, "the block hooks served nothing")
+                tt |> success((vulkan_tower_declines()?["knob"] ?? 0l) > knob0, "and recorded the knob decline the stem's rows landed at")
+            }
+            to_log(LOG_INFO, "ggml-tiny.bin stem flush: all-CPU '{segs_text(cpu_segs)}' / device stem + CPU blocks '{segs_text(stem_segs)}'\n")
+            assert_segs_token_identical(tt, cpu_segs, stem_segs, "ggml-tiny.bin jfk all-CPU / device stem + CPU blocks")
+            delete cpu_segs
+            delete stem_segs
+            delete m
+            vulkan_tower_shutdown()
+        } else {
+            tt |> skip("dasVulkan not present")
         }
     }
 }

@@ -24,6 +24,7 @@ require dasllama/dasllama_vulkan_tower
 var private g_wd_env = true
 var private g_wd_declines : VkDeclineCounter
 var private g_wd_windows = 0l
+var private g_wd_handoffs = 0l   //! cross-KV windows whose encoder rows came device to device off the tower's plane
 var private g_wd_steps = 0l
 var private g_wd_tokens = 0l
 var private g_wd_us_gpu = 0l
@@ -152,9 +153,9 @@ var private @scratch @exact_size g_wd_maps : array<uint>
 
 //! Engage / decline counters: `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them,
 //! `declines` = every decline but the knob's (a pinned-off driver is policy, not a failure).
-def vulkan_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64> {
+def vulkan_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64; handoffs : int64> {
     let policy = (g_wd_declines.counts?["{VulkanWdecDecline.knob}"] ?? 0l)
-    return (windows = g_wd_windows, steps = g_wd_steps, tokens = g_wd_tokens, declines = g_wd_declines.total - policy)
+    return (windows = g_wd_windows, steps = g_wd_steps, tokens = g_wd_tokens, declines = g_wd_declines.total - policy, handoffs = g_wd_handoffs)
 }
 
 //! The declines-by-reason table (a copy), keyed by `VulkanWdecDecline` value names.
@@ -564,7 +565,12 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
         g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_gemm, groups)
         g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_gemm, groups)
     }
-    upload_region_at(r.xin_dev, 0l, unsafe(addr<uint8 const?>(enc_out[0])), bt)
+    let enc_dev = vulkan_tower_enc_out(unsafe(addr<float const?>(enc_out[0])), bt)   //! the tower's own plane of these rows, taken device to device
+    if (enc_dev == 0ul) {
+        upload_region_at(r.xin_dev, 0l, unsafe(addr<uint8 const?>(enc_out[0])), bt)
+    } else {
+        g_wd_handoffs++
+    }
     var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_g = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     let total = ta * hh * hs
@@ -581,6 +587,11 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
         pfq_begin(raw)
         pfq_ts(raw)
+        if (enc_dev != 0ul) {
+            vhz_dep(raw, h, 0u, WD_XIN, true)
+            cmd_copy_range(raw, enc_dev, 0l, r.xin_dev, 0l, bt)
+            vt_pt(raw, VtProfRole.copy_out)
+        }
         vt_feed_enc(raw, h, r.cm2, r.s_xfeed, pc_rq, ta * d)
         vt_pt(raw, VtProfRole.rq)
         for (l in range64(nl)) {
