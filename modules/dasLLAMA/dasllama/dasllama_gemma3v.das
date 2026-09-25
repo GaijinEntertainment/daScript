@@ -707,7 +707,7 @@ def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; var
 //! Encode a letterboxed, normalized canvas (`vision_normalize` planes, w×h) into `out` =
 //! [nout × proj_dim] soft tokens. The canvas is FIXED at image_px² (the learned position table
 //! covers exactly that grid); returns nout = (image_px / patch / merge)².
-[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#vk-tower-encode-chains")]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64;
                    var out : array<float>) : int64 {
     if (w != t.image_px || h != t.image_px) {

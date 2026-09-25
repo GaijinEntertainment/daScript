@@ -105,7 +105,8 @@ that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over ALL of them - a
-rep that refuses (its run cannot produce the rep's figure: a decline, a failed load, a session
-too small for its prompt) drops the whole row, and the row reports the refusal and no number.** A
-partial row reads like a measured one and is a different quantity.
+**A diff that adds or changes a row measured over reps reports one number over ALL of them. A rep
+refuses when it produced no figure, or when it ran on a backend other than the row's backend
+stamp - the backend name the row records as having served the row. One refusing rep drops the
+whole row, and the row reports the refusal and its reason and no number.** A partial row reads
+like a measured one and is a different quantity.

@@ -183,6 +183,20 @@ end - tower and decoder both. An unflagged family keeps the CPU by design, and a
 GPU leg reds the row: the `--ngl` arms assert that the tower engage counters moved, so a family
 whose tower silently falls back fails instead of publishing a CPU wall under a GPU heading.
 
+On a Vulkan box the CPU arm's row stamps `backend = "vulkan"` when the Vulkan drivers served
+every clip (the tower every encode with no decline; on whisper the ASR-decoder driver every window
+too), keeps `backend = "cpu"` when they served none, and fails loudly with no number when they
+served some clips but not all. The cell prints, per clip, the tower's encode and decline deltas
+and, on whisper, the decoder's window and decode-batch deltas, plus one closing line counting
+the fully served clips - the engage witness behind the stamp. The Vulkan readings live in
+`PERF_LEDGER.md`, not in the records, against these references, each run on the pod: whisper.cpp's
+own Vulkan build, `whisper-cli -m ggml-<model>-q8_0.bin -f <clip> -t 16 -bs 1 -bo 1 -nf -nt`
+(`-ng` for its CPU arm; `GGML_VK_PERF_LOGGER=1` for the per-op table); llama-mtmd-cli b10660
+(Vulkan), `llama-mtmd-cli -m <model Q8_0> --mmproj <mmproj bf16> --audio <clip> -p "Transcribe
+the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
+`encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py
+--device cuda`.
+
 Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its
 own spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe takes
 `-ngl 99`, and the NeMo bench script takes `--device mps`. The remaining two reference legs

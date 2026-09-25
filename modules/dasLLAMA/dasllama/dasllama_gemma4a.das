@@ -244,6 +244,7 @@ struct Gemma4aState {
     prpe : array<float>       // projected RPE [13 × d_model]
     sc : array<float>         // per-query score window
     out : array<float>        // projected soft tokens [npos × proj_dim]
+    out_ready : bool          //! the device blocks hook ran the projector tail and filled `out`: the CPU tail stands down
     tmp : array<float>        // output-proj scratch [npos × proj_dim]
     xqi : array<int8>         // q8 activation image — per-site requant (clamps differ per site)
     xsi : array<float>
@@ -620,8 +621,7 @@ def register_gemma4a_gpu(fn : Gemma4aGpuBlocksFn; serves : Gemma4aServesFn) {
     g_g4a_serves_set = true
 }
 
-//! Would the Metal tower serve the block loop — the lane policy asks (a serving driver wants
-//! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
+//! the lane policy's question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
 def gemma4a_gpu_serves() : bool => g_g4a_serves_set && invoke(g_g4a_serves)
 
 //! the whole-chunk GPU hook: DFT -> mel -> subsample convs -> inproj -> blocks off g4a_window_frames
@@ -680,7 +680,7 @@ def gemma4a_serves_q8() : bool => g4a_serve_q8()
 
 // the lane changes what a load mints and serves, so the load says which and why
 def private g4a_announce_lane() {
-    var why = "the CPU default (no Metal Conformer driver serving)"
+    var why = "the default lane (no GPU driver serving the exact encoder)"
     if (g_g4a_pin != G4aLane.unset) {
         why = "pinned via set_gemma4a_q8"
     } elif (gemma4a_gpu_serves()) {
@@ -958,9 +958,10 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 
     if (g_g4a_gpu_set) {
         tprof = ref_time_ticks()
+        st.out_ready = false
         if (invoke(g_g4a_gpu, enc, st, npos)) {
             asr_prof_add("g4a.enc.blocks.gpu", tprof)
-            return g4a_encode_tail(enc, st, npos)
+            return g4a_tail_after_gpu(enc, st, npos)
         }
     }
 
@@ -1069,11 +1070,13 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
         asr_prof_add("g4a.enc.ffn", tprof)
     }
 
-    return g4a_encode_tail(enc, st, npos)
+    return g4a_projector_tail(enc, st, npos)
 }
 
-//! output projection -> weightless RMSNorm -> mm input projection; the tail stays CPU on both routes
-def private g4a_encode_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
+def private g4a_tail_after_gpu(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64
+    => st.out_ready ? npos : g4a_projector_tail(enc, st, npos)
+
+def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
     let d = enc.d_model
     let tprof = ref_time_ticks()
     ensure_length(st.tmp, npos * enc.proj_dim)
@@ -1106,10 +1109,11 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
         if (g_g4a_chunk_set) {
             let tg = ref_time_ticks()
             g4a_window_frames(enc, samples, off, len, st)
+            st.out_ready = false
             n = invoke(g_g4a_chunk, enc, st, st.n_len)
             if (n >= 0l) {
                 asr_prof_add("g4a.enc.chunk.gpu", tg)
-                n = g4a_encode_tail(enc, st, n)
+                n = g4a_tail_after_gpu(enc, st, n)
             }
         }
         if (n < 0l) {

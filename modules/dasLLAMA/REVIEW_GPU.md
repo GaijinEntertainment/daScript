@@ -34,9 +34,9 @@ kernel no longer runs at that shape measures the wrong kernel silently.
 **A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
 `dasllama/dasllama_vulkan_tower.das`), a kernel class or builder a tower dispatches, the
 `[metal_dispatch]` emission those builders are generated from (`dasllama/dasllama_metal_lens.das`),
-the Metal ASR decoder (`dasllama/dasllama_metal_asr_dec.das`), a kernel class the ASR decoder
-dispatches or a builder it borrows, or `dasllama/dasllama_metal_common.das` applies
-`REVIEW_TOWER.md` too.**
+an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_vulkan_asr_dec.das`),
+a kernel class an ASR decoder dispatches or a builder it borrows, or
+`dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
@@ -95,14 +95,15 @@ function - by showing that for every shape the encoder dispatches that class on,
 picks is the one that function's value names.** The `grid=` spec carries no number for these
 classes, so nothing else ties the two.
 
-**A key that decides whether uploaded bytes or encoded GPU work may be reused compares every
-input that content was built from - every span, element type, layout, position, offset and model
-shape, the row count, each row's session by its `uid`, and, for every device buffer the content
-reads that a grow can free and allocate again, a counter bumped on each such rebuild - never a
-session pointer, and never a host address, an offset or a handle alone.** An address, offset or
-handle names whatever occupies it now, and the scheduler moves sessions in memory as it admits and
-erases streams, so a key without the other inputs, or with a session pointer in place of the
-`uid`, reuses stale content silently.
+**A key that decides whether uploaded bytes, a cached descriptor set or bind list, or encoded GPU
+work may be reused compares every input that content was built from - every span, element type,
+layout, position, offset and model shape, the row count, and each row's session by its `uid`,
+never by a session pointer.** The scheduler moves sessions in memory as it admits and erases
+streams, so a pointer key reuses stale content silently.
+
+**A reuse key over content that reads a device buffer that growing frees and allocates again
+also compares a counter bumped on each reallocation, or the reallocation drops every cached entry
+built over the old buffer - never a host address, an offset or a handle alone.** An address, offset or handle names whatever occupies it now.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -147,18 +148,19 @@ provide - lands its own entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetr
 same change, even when the list already carries one of the same class.** One backend serving the
 same path faster or slower is not such a change.
 
-**A change that can alter what a served GPU decode or prefill path computes or selects ships
-GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both,
-for each of the three that the changed path serves.** That is anything a served GPU decode or
-prefill call executes or that selects what it executes - a driver, a kernel class it dispatches,
+**A change that can alter what a GPU decode or prefill call on a session computes or selects
+ships GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside
+both, for each of the three that the changed call serves.** That is anything such a call
+executes or that selects what it executes - a driver, a kernel class it dispatches,
 that class's builder, a servability gate, a race that picks which kernel serves, a forwarder
 default, a weight-region or residency path, the tier forwarders and the Vulkan tier-dispatch
 seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through.
 
-**A change to a served GPU decode or prefill path that ships no parity runs names both compares
-in the PR body: its emitted kernels byte-identical before and after - the `*_msl` globals or the
-AIR (Metal's compiled shader IR) they build into, the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes -
-and the host's stamp and dispatch selection unchanged on every input.** Only both compares
+**A change that can alter what a GPU decode or prefill call on a session computes or selects and
+ships no parity runs names both compares in the PR body: its emitted kernels byte-identical
+before and after - the `*_msl` globals or the AIR (Metal's compiled shader IR) they build into,
+the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes - and the host's stamp and dispatch selection
+unchanged on every input.** Only both compares
 together show the change cannot alter what the path computes or selects.
 
 **A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - applies

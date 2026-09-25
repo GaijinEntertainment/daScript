@@ -109,7 +109,11 @@ starts, so the carrier is still whole and its caller keeps serving it.
 An image's identity names the active matmul backend, so the backend is selected before any
 identity is computed or compared. `image_identity` is a pure formatter over `DlimConfiguration`;
 the backend select happens inside the config's CPU source, so a caller needs no ordering ritual of
-its own. A load pins the box profile first because that pin can change the backend, and the parse
+its own. The config's Vulkan source reads the device's caps off the tier's own device once that is
+up, and before then off one probe instance per process whose answer it keeps: a probe instance
+reloads the driver's ICD, and the loader's static TLS pool runs out after about a hundred reloads,
+after which every instance the process asks for answers `ERROR_INCOMPATIBLE_DRIVER`. A load pins
+the box profile first because that pin can change the backend, and the parse
 runs the same load select the gguf loader runs, before any kernel touches planes packed for that
 backend. A family whose plane bytes no box property shapes (the TTS f32 carrier: layouts minted
 from the model's own geometry) registers its tag config-free, and `image_config_for` keys its

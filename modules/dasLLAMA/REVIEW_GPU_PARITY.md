@@ -27,14 +27,16 @@ evidence.**
 **Metal parity or driver-against-itself evidence counts only when a cell assert or a logged
 before/after reading shows the Metal driver's own counters rose across each changed call: the
 step counters `metal_decode_stats`, `metal_batch_decode_stats` and `metal_prefill_stats`, or
-`metal_tower_stats`'s encodes for the tower driver.**
+`metal_tower_stats`'s encodes for the tower driver, or `metal_wdec_stats`'s windows for the
+ASR-decoder driver.**
 
 **A Vulkan run is armed by `DASLLAMA_GPU=1` - never `--ngl` - and shows it by a log line naming
 the tier that serves the changed path: `resident driver armed` for the whole-model driver; for
 the per-op tier a `GPU MoE tier:` line reporting a rail `resident` (the rail and its layers, a
 timing or streamed-span tail allowed), never one reading `declined`, `stopped at layer` or
-`stays on the CPU` - or, for the tower driver, a cell assert that `vulkan_tower_stats`'s encodes
-rose.** A Vulkan log with neither measured the CPU.
+`stays on the CPU` - or a cell assert that the driver's counter rose: `vulkan_tower_stats`'s
+encodes for the tower driver, `vulkan_wdec_stats`'s windows for the ASR-decoder driver.** A
+Vulkan log with neither measured the CPU.
 
 **Vulkan parity or driver-against-itself evidence counts only when the run armed the mirror
 codec - the K/V mirror's element type, f16 or f32 - that the changed path reads.**

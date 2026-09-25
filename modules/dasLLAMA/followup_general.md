@@ -1628,11 +1628,11 @@
 147. **Checklist grooming - the structural findings the rule-document round did not open a file
     for.** Each is a followability class from `skills/review_md.md` (repo root), named by file
     and rule head; none blocks a verdict today, and each is settled by a rewrite, not a ruling.
-    (a) `REVIEW_GPU.md` "A change that can alter what a served GPU decode or prefill path
+    (a) `REVIEW_GPU.md` "A change that can alter what a GPU decode or prefill call on a session
     computes or selects" - the criterion is carried by an enumeration of the things that count
     and a second enumeration of the things that do not; state the property instead. (b)
     `REVIEW_GPU.md` "A diff that changes a tile, grid, threadgroup, or uniform constant shows
-    the value at that constant's authoritative site" - four sentences of where to read each
+    the value at every authoritative site its kind has" - four sentences of where to read each
     constant kind; the how-to belongs in `ARCHITECTURE_GPU.md`. (c) `REVIEW_GPU.md` "Never
     decide a kernel row's validity or owner by scanning the per-bucket base and count arrays"
     and "Never test the validity of a row in the bucket-ordered buffer ... against the pad

@@ -12,16 +12,21 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
 
-**In a kernel's main loop, a branch whose answer is the same for every thread of the dispatch, and
-whose deciding value the host fixes before it records the dispatch, is a defect. This covers a
-bounds guard, a tail guard, a nested loop's own bound, and a push-constant count tested inside an
-`[unroll]` loop whose live iterations run different bodies. Stamp the deciding value - a
-`@template_constant`, or a module constant the class reads where no template instantiates it;
-never a push constant, uniform or kargs field; for a guard outside an `[unroll]` loop, you may
-instead clamp the index so the guarded work runs on a live value and its result is never
-stored.** Inside an `[unroll]` loop a clamp folds every dead iteration against a live one and
-costs what the branch saves, while a count whose every live iteration runs the same body costs
-nothing - the GPU compiler hoists it.
+**Inside the body of a kernel's main loop - a loop whose trip count grows with the work one
+thread of the dispatch does, per element or per row - a bounds guard, a tail guard, a nested
+loop's own bound, or an `[unroll]` count whose live iterations run different bodies, when its
+answer is the same for every thread and the host fixes its deciding value before it records the
+dispatch, is a defect: stamp the deciding value as a `@template_constant`, or a module constant
+the class reads where no template instantiates it, never a push constant, uniform or kargs field;
+where the value is a per-call extent (a row, key or frame count), peel the loop instead - the
+full chunks under the stamped chunk bound, then one tail pass that carries the guard.** An
+`[unroll]` count whose every live iteration runs the same body is no such branch - the GPU
+compiler hoists it.
+
+**Outside an `[unroll]` loop, a main-loop guard of that kind may instead clamp the index so the
+guarded work runs on a live value - an index inside the extent - whose result is never stored.**
+Inside an `[unroll]` loop a clamp folds every dead iteration - one past the live count - against a
+live one and costs what the branch saves.
 
 **A chunk-stepping `[metal_dispatch]` kernel (its main loop steps fixed-size chunks with no
 partial-last-chunk check) declares each alignment it assumes on a value the builder receives - a

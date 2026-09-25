@@ -2,7 +2,10 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+`../followup_metal.md`. A cell is as `REVIEW.md` (beside this file) defines it. A kernel-unit
+cell is a cell that
+itself dispatches a `[vk_dispatch]` or `[metal_dispatch]` class, or itself calls a CPU kernel in
+`../dasllama/dasllama_math*.das`, rather than through a serving call in `../dasllama/`.
 
 **A diff that changes a kernel's dispatch grid - the count its dispatch needs, or its workgroup
 size - updates every gate that dispatches that kernel, in the same change; a gate is any call
@@ -26,8 +29,7 @@ same change.** A stale gate reads the wrong buffer and passes on garbage that ha
 **A kernel-unit cell that compares a row of floats it indexes by an id - the classifier's logits
 rows by token id, a router's by expert - over synthetic rows and does not log the measured max
 difference with the row and the id it sits at is a defect.** A red, or a suspicious green, must
-say how far and where, not only how many. A cell is a `t |> run` block, or a helper that asserts
-on `t`.
+say how far and where, not only how many.
 
 **A kernel-unit cell whose output no CPU-oracle compare covers is a defect: the compare sits in
 that cell, or - where the cell compares two kernel forms against each other - in a cell of the

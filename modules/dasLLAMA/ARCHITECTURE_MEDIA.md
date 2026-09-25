@@ -126,14 +126,16 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
   baked tag) at load, one-line arms. Outside a family's own file, an audio family type is named
   only here, in `dasllama_asr.das`'s union field and one-line arms (the ASR rail's own carrier),
-  in the metal family hooks (`dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`), in
+  in the GPU family hooks (`dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`,
+  `dasllama_vulkan_tower.das`, `dasllama_vulkan_asr_dec.das` - each fills the family's own seat
+  with its tower and state), in
   `benchmarks/asr/asr_bench.das` (the ASR bench pins a family serving knob for its correctness
   rail), in `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
   design), and in files under `tests/` - the set `REVIEW.das`'s `check_family_seams` enforces,
   its licensed namers (`AUDIO_SEAM_EXEMPT`) being `dasllama_asr.das`,
-  `dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`, `benchmarks/asr/asr_bench.das` and
-  `utils/dasllama-convert/main.das`; the Vulkan tower driver serves no audio tower and is not
-  licensed here.
+  `dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`, `dasllama_vulkan_tower.das`,
+  `dasllama_vulkan_asr_dec.das`, `benchmarks/asr/asr_bench.das` and
+  `utils/dasllama-convert/main.das`.
 
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
@@ -172,16 +174,30 @@ blocks and merger alike - because the Metal tower reads f32 planes or the baked 
 ### 2.14 Family GPU hooks install from the driver and always decline {#tower-gpu-hook}
 
 A family file owns the hook SLOT for a stage the GPU can serve - a `var private` function pointer
-plus a `register_*` entry - and the Metal tower driver fills it at `[init]`. The direction is
-forced: the driver requires the family file for its types, so the family cannot require the driver
-back. A box with no driver leaves the slot empty and the CPU form runs. A seat taken over a filled
-slot (a test's stub through `register_styletts2_gpu`, a record of seats) gives the displaced
-registration back on `unregister` - one level: the record keeps the registration it displaced,
-not a stack of them - so the driver's seats survive the test.
+plus a `register_*` entry - and a tower driver fills it at `[init]`: the Metal driver on a Metal
+build, the Vulkan driver (`dasllama_vulkan_tower.das`) on a build without das_metal, for the
+blocks seats it serves and the front seats it fills (qwen3a's mel and conv front, gemma4a's
+whole chunk, canary's front). The direction is forced: the driver requires the family file for its
+types, so the family cannot require the driver back. A box with no driver leaves the slot empty
+and the CPU form runs. A seat taken over a filled slot (a test's stub through
+`register_styletts2_gpu`, a record of seats) gives the displaced registration back on
+`unregister` - one level: the record keeps the registration it displaced, not a stack of them - so
+the driver's seats survive the test.
 
-Every hook answers "declined" in its own return - `false` for the block and front hooks, `-1` for
-the whole-chunk mel hook - so a decline is a fallback, never an outage, and the CPU form stays the
-reference.
+Every hook answers "declined" in its own return - `false` for the block hooks and qwen3a's mel and
+front hooks, `-1` for the hooks that return a row count (gemma4a's whole chunk, canary's front) -
+so a decline is a fallback, never an outage, and the CPU form stays the reference. A family calls
+its hook on either lane: the Metal driver declines the q8 encoder and the Vulkan driver the exact
+one, each as a counted non-policy `quant_mode` decline, which under the driver's required mode
+panics - a caller that pins a lane pins the one its driver serves. While the stage-diff witness is
+armed (`set_audio_encode_ref_dir`), the whisper-class tower skips its conv and block hooks and runs
+the CPU forms: the witness diffs the CPU stages' rows against reference dumps, and a stage the
+device served leaves nothing to diff.
+
+A hook that serves past its seat - the gemma4a blocks hook running the projector tail - says so
+on the state it filled (`Gemma4aState.out_ready`), and the family's CPU tail reads the flag before
+it runs; the flag is cleared before every hook call, so a hook that stops at its seat leaves the
+CPU tail in force.
 
 A family whose hook takes a whole stage splits its encode at the seam the driver needs: a
 `*_stem_cols` / `*_window_frames` half both routes run (im2col or windowing, plus every buffer the

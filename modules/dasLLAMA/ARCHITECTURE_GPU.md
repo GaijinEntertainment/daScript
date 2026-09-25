@@ -1,10 +1,12 @@
 # dasLLAMA Architecture - GPU backends
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's. This document carries
-section 1.5: the GPU backend role table with its closed asymmetry lists.
-`ARCHITECTURE_GPU_RACE_SHAPES.md` beside it carries section 2.2b - the tensor-GEMM and
-fused-attention shapes that measured out. The Metal tower's attention routes and its encode
-chains are `ARCHITECTURE_GPU_TOWER.md` sections 2.2w-2.2x, the Vulkan tower's 2.2aq-2.2ar.
+section 1.5: the GPU backend role table with its closed asymmetry lists. Beside it,
+`ARCHITECTURE_GPU_RACE_SHAPES.md` carries section 2.2b - the tensor-GEMM and fused-attention
+shapes that measured out; `ARCHITECTURE_GPU_TOWER.md` carries 2.2w-2.2x (the Metal tower's
+attention routes and encode chains); `ARCHITECTURE_GPU_TOWER_VULKAN.md` carries 2.2aq-2.2ar (the
+Vulkan tower's) and 2.2at (the Vulkan ASR-decoder driver); `ARCHITECTURE_GPU_QUANT_PLANES.md` carries 2.2y-2.2z, the Metal quant plane
+reads.
 
 ### 1.5 GPU backends {#gpu-backends}
 
@@ -13,13 +15,13 @@ that a question answered for one backend has an obvious address in the other. Th
 
 | role | holds | must not hold |
 |---|---|---|
-| the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the kernel-side quant-decode helpers and the per-word codebook accessors (`[grid_words]` bakes each from `dasllama_kqformat`'s one literal at compile time - the bytes live there, the home carries the baked copy), the derived-access/PSO census; on Vulkan the one device buffer kernel data fills (`kq_grid_dev`, the grid codebooks) and the host-side ensure/set/enc pick ladders and grid rules over its own class stamps (`gemv_*`, `q8_gemv_gu_n_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*`, `f16_gemm_*`, `da_slab_*`, and the tile trios `khr_cls_*` / `cm2e_cls_*` / `cm2_cls_*` that `kq_tile_stamp` stamps over `KqFmt`) | device state other than `kq_grid_dev`, engine types |
+| the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the kernel-side quant-decode helpers and the per-word codebook accessors (`[grid_words]` bakes each from `dasllama_kqformat`'s one literal at compile time - the bytes live there, the home carries the baked copy), the derived-access/PSO census; on Vulkan the one device buffer kernel data fills (`kq_grid_dev`, the grid codebooks) and the host-side ensure/set/enc pick ladders and grid rules over its own class stamps (`gemv_*`, `q8_gemv_gu_n_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*`, `f16_gemm_*`, `da_slab_*`, and the tile trios `khr_cls_*` / `cm2e_cls_*` / `cm2_cls_*` that `kq_tile_stamp` stamps over `KqFmt`); the tower row classes' mode selectors and family constants - `TowerBiasActT`'s act selector (`BIAS_ACT_NONE` / `_GELU_TANH` / `_GELU_ERF` / `_SILU` / `_RELU`, relu for canary's subsample stack) and `Q3A_TOK_PER_CHUNK`, `G4A_ATTN_PAST`, `G4A_ATTN_CAP`, `WDEC_HS`, which the drivers check against the family before they serve | device state other than `kq_grid_dev`, engine types |
 | `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler, host-side quant-decode helpers (Metal's `iq4_lut`), the family's registrant of a tier seat that names a size the device state keeps (Metal's `dn_mirror_room`) | driver policy |
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower`, `dasllama_vulkan_tower` (the vision ViT chains over the q8 image, qwen25v's over the halfword twin; on a build without das_metal it fills the gemma4v and gemma3v hook slots and the blocks-only seats `register_qwen3v_gpu_blocks` and `register_qwen25v_gpu_blocks`, the Vulkan seats of those two families) | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the qwen25v window ViT, the gemma4a Conformer chain with its mel/conv front, the FastConformer chain canary and parakeet share - one block body over `CanaryLayerOffs`, parakeet's offsets mapped onto it with no GEMM biases and the tap-major depthwise stamp - the whole StyleTTS2 synthesis (kitten and kokoro on both weight lanes: seven seats from PL-BERT to the inverse STFT, the front end on the f32-exact GEMM stamp, the source chain the CPU's operation for operation, `ARCHITECTURE_GPU_TOWER.md` sec.2.2y) - the conv frontends + the qwen3a padded-weight slab and GPU front/mel) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, qwen25v, encoder_blocks, tower-conv, qwen3a-front, qwen3a-mel, gemma4a, gemma4a-chunk, canary, parakeet (`register_parakeet_gpu`) and StyleTTS2 (`register_styletts2_gpu`, the seven-seat record) hooks; the FastConformer chain borrows `enc_fc_pack` / `enc_fc_softmax` / `enc_fc_unpack` around `enc_f32_mm`, `enc_cn_dw` / `enc_pk_dw`, and the `enc_st2_*` row, LSTM, attention and source kernels around `enc_st2_conv_mm` / `enc_st2_conv_exact_mm` | decoder state |
-| the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
+| the tower driver<br>`dasllama_metal_tower`, `dasllama_vulkan_tower` (the vision ViT chains over the q8 image, qwen25v's over the halfword twin, and the audio chains over the q8 image - the whisper-class towers with their conv stem, the gemma4a Conformer with its chunk front and projector tail, the canary FastConformer with its front, the qwen3a front and mel; on a build without das_metal it fills the gemma4v and gemma3v hook slots, the blocks-only seats `register_qwen3v_gpu_blocks` and `register_qwen25v_gpu_blocks`, the Vulkan seats of those two families, and the audio seats `register_tower_blocks_gpu`, `register_tower_conv_gpu`, `register_qwen3a_front_gpu`, `register_qwen3a_mel_gpu`, `register_gemma4a_gpu`, `register_gemma4a_chunk_gpu`, `register_canary_gpu` and `register_canary_front_gpu`; parakeet's seat is Metal's) | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the qwen25v window ViT, the gemma4a Conformer chain with its mel/conv front, the FastConformer chain canary and parakeet share - one block body over `CanaryLayerOffs`, parakeet's offsets mapped onto it with no GEMM biases and the tap-major depthwise stamp - the whole StyleTTS2 synthesis (kitten and kokoro on both weight lanes: seven seats from PL-BERT to the inverse STFT, the front end on the f32-exact GEMM stamp, the source chain the CPU's operation for operation, `ARCHITECTURE_GPU_TOWER.md` sec.2.2y) - the conv frontends + the qwen3a padded-weight slab and GPU front/mel) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, qwen25v, encoder_blocks, tower-conv, qwen3a-front, qwen3a-mel, gemma4a, gemma4a-chunk, canary, parakeet (`register_parakeet_gpu`) and StyleTTS2 (`register_styletts2_gpu`, the seven-seat record) hooks; the FastConformer chain borrows `enc_fc_pack` / `enc_fc_softmax` / `enc_fc_unpack` around `enc_f32_mm`, `enc_cn_dw` / `enc_pk_dw`, and the `enc_st2_*` row, LSTM, attention and source kernels around `enc_st2_conv_mm` / `enc_st2_conv_exact_mm` | decoder state |
+| the ASR-decoder driver<br>`dasllama_metal_asr_dec`, `dasllama_vulkan_asr_dec` | the whisper decoder on the GPU: Metal's 34B weight blob or Vulkan's row-major q8 gather, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (`register_whisper_cross_kv_gpu`, `register_whisper_decode_gpu`; family registries in `dasllama_whisper`); on a build without das_metal the Vulkan driver fills them (`ARCHITECTURE_GPU_TOWER_VULKAN.md` 2.2at) | kernel bodies, LLM session state |
 | the assistant-drafter driver<br>`dasllama_metal_mtp_gemma` | the gemma-4 assistant drafter on Metal: the sidecar blob upload, the Q-only layer chain reading the TARGET mirror at the two capture layers with the decode's own attention kernels, the speculative round over the batch driver's same-slab verify; registers the `metal` round override and delegates head-less-drafter-less models to `metal_mtp_spec_round` | kernel bodies, mirror ownership |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro and its dispatch-support macros (`compile_stamp`, `release_handles`) | anything else |
 
@@ -40,6 +42,10 @@ that a question answered for one backend has an obvious address in the other. Th
   `check_device_creation_sites` walks `dasllama/` for a device or queue creation outside the two
   `_common` files and licenses `dasllama_metal_gemm.das` plus the two tuner race entries
   (`metal_tensor_race`, `metal_tensor_race_decode`), which run before the driver inits.
+- **`REVIEW.das`'s `check_gpu_role_partition` licenses this table's roles** - Metal's `kernels`,
+  `common`, `decode`, `prefill`, `gemm`, `shapes`, `tower`, `asr_dec`, `lens`, `mtp_gemma`;
+  Vulkan's `classes`, `common`, `decode`, `prefill`, `seams`, `dispatch`, `tower`, `asr_dec` -
+  and finds a `dasllama_<backend>_<role>.das` with any other role.
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** - vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
@@ -56,29 +62,29 @@ that a question answered for one backend has an obvious address in the other. Th
   kernel-home entry ledgers, not a new placement. The tower's own objects (the ones buffer,
   its scratch pool, the qwen3a padded-weight slab) release through `metal_tower_shutdown`,
   and the slab additionally drops with the weights epoch through the tower's reload prep.
-- **The Vulkan tower driver serves the vision ViT chains only** - the audio and TTS towers on the
-  Vulkan tier stay CPU; the vision towers serve their q8 lanes on the CPU chain and on the driver
-  alike, so its `serves` answer to the lane policy is no. Likewise the non-causal media span: Metal serves it through
-  `AttnArgs.uend` - including the FUSED image turn (head + media rows + tail as ONE eval, the
-  per-query mask through `AttnArgs.ulo`); the Vulkan resident prefill declines span evals
-  (`followup_general.md` #23's remaining half) and registers the split-span capability
-  (`register_prefill_override_split_span`), so `eval_embd_span_` keeps the three-eval splice
-  while vulkan is the active override. The qwen mrope quantum rides the same shape through a
-  second capability seat (`register_prefill_override_mrope_tables`): Metal's `enc_rope` reads
-  the per-token table rows `prefill_rope_tables` builds from the grid map, so it serves mrope
-  unchanged and registers the seat; an override without it (vulkan builds angles from a scalar
-  position) declines the quantum to the CPU loop by name. The deepstack quantum is the third
-  seat (`register_prefill_override_ds_adds`): Metal uploads the caller's wide quantum WHOLE
-  (the `Session.wide_src` borrow), slices x and the slice-major ds planes on-device through
-  the offset-bound head restride, and encodes one `enc_add` at the slice offset after each
-  tapped layer's residual - no new kernel (the CPU-side split, `ds_split_quantum`, survives
-  as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
-  deepstack quanta by name, so Metal serves them and Vulkan does not. The E-series PLE pre-step
-  is two gate seats, one per direction: `register_ple_gpu_gate` for a prefill override that builds
-  the side input on device off the stashed token ids (Metal and Vulkan register it),
-  `register_ple_gpu_decode_gate` for a decode override that gathers the token's row on device
-  (Vulkan alone); the hub skips the CPU pre-step only for the direction whose gate answers yes,
-  so the Metal decode keeps reading the CPU-built side input.
+- **The Vulkan tower driver serves the vision ViT chains, the audio block loops and the audio
+  fronts, and the Vulkan ASR-decoder driver serves the whisper decoder** - TTS towers stay CPU on
+  Vulkan; the towers serve their q8 lanes on the CPU chain and on the driver alike, so its
+  `serves` answer to the lane policy is no. Likewise the
+  non-causal media span: Metal serves it through `AttnArgs.uend` - including the FUSED image turn
+  (head + media rows + tail as ONE eval, the per-query mask through `AttnArgs.ulo`); the Vulkan
+  resident prefill declines span evals (`followup_general.md` #23's remaining half) and registers
+  the split-span capability (`register_prefill_override_split_span`), so `eval_embd_span_` keeps
+  the three-eval splice while vulkan is the active override. The qwen mrope quantum rides the same
+  shape through a second capability seat (`register_prefill_override_mrope_tables`): Metal's
+  `enc_rope` reads the per-token table rows `prefill_rope_tables` builds from the grid map, so it
+  serves mrope unchanged and registers the seat; an override without it (vulkan builds angles
+  from a scalar position) declines the quantum to the CPU loop by name. The deepstack quantum is
+  the third seat (`register_prefill_override_ds_adds`): Metal uploads the caller's wide quantum
+  WHOLE (the `Session.wide_src` borrow), slices x and the slice-major ds planes on-device through
+  the offset-bound head restride, and encodes one `enc_add` at the slice offset after each tapped
+  layer's residual - no new kernel (the CPU-side split, `ds_split_quantum`, survives as the
+  CPU-loop fallback and the warm/MTP edge); an override without the seat declines deepstack
+  quanta by name, so Metal serves them and Vulkan does not. The E-series PLE pre-step is two gate
+  seats, one per direction: `register_ple_gpu_gate` for a prefill override that builds the side input
+  on device off the stashed token ids (Metal and Vulkan), `register_ple_gpu_decode_gate` for a decode
+  override that gathers the token's row on device (Vulkan alone); the hub skips the CPU pre-step only
+  for the direction whose gate answers yes, so the Metal decode reads the CPU-built side input.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
   and on the Vulkan whole-model driver**: the Metal decode, batch and prefill drivers bind the
   width per layer (dense trunks, no MTP; the batch sizes its panels to the wider width and carries
@@ -285,16 +291,10 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
 - **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2an): a
   bare-argmax stream's token id lands in place of its logits row; Metal lands every row's logits.
 
-Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
-
-The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
-2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
-`ARCHITECTURE_GPU_VULKAN_ATTN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o, 2.2an and 2.2as in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2ao-2.2ap in
-`ARCHITECTURE_GPU_VULKAN_NROW.md`; 2.2r-2.2v in
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
-
-Section 2.2b, the tensor-GEMM and fused-attention shapes that measured out, is
-`ARCHITECTURE_GPU_RACE_SHAPES.md`; sections 2.2w-2.2x and 2.2aq-2.2ar, the tower attention routes
-and the tower drivers' encode chains, are `ARCHITECTURE_GPU_TOWER.md`; sections 2.2y-2.2z, the Metal quant plane
-reads, are `ARCHITECTURE_GPU_QUANT_PLANES.md`.
+Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched. The
+Vulkan resident driver's sections live in its companions: 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai
+and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in `ARCHITECTURE_GPU_VULKAN_ATTN.md`;
+2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o, 2.2an and 2.2as
+in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2ao-2.2ap in `ARCHITECTURE_GPU_VULKAN_NROW.md`;
+2.2r-2.2v in `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in
+`ARCHITECTURE_GPU_VULKAN_MOE.md`.

@@ -116,15 +116,15 @@ other stocked fixture gates on its own presence.
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that bakes a `.dlim` (`load_model`, `load_model_cached`, `load_model_image`,
+calls no loader that bakes a `.dlim` - a loader that, with `DASLLAMA_IMAGE` unset, writes a
+`.dlim` beside the model: `load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; the exact name
-`load_model_`, the plain GGUF load, bakes nothing); such a test loads a media carrier in memory
-from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty
-image path.** A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
-`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is where the rule matters: a disk bake
-under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
-direct-image load in another suite panics on the wrong identity.
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`, and a new
+loader of that kind joins this list in the same change; such a test loads a media carrier in
+memory from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with
+an empty image path.** A disk bake under a lane pin (a `set_<family>_q8`-class knob or a Metal
+tensor-crowns pin) purges the serving lane's `.dlim` beside the model, and the next direct-image
+load in another suite panics on the wrong identity.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -246,8 +246,10 @@ dump, with no exact-value generator - one whose values are exactly representable
 every box produces the same bytes - is a defect.** A generator running libm transcendentals is
 not exact-value: it is not float-portable.
 
-**An embedder-parity cell that does not name its fixture, or does not log the measured
-maxdiff on green as well as red, is a defect.**
+**An embedder-parity cell - one comparing an encoder's output rows against a second source, another
+encode chain (the CPU exact, the CPU q8 or the device chain) or an oracle dump - that does not
+name its fixture in its label or a logged line, or does not log the measured maxdiff on green as
+well as red, is a defect.**
 
 **A diff that adds or loosens an assert holding a figure the run measures - the difference
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
@@ -270,13 +272,18 @@ reads passes on a broken kernel.
 
 **An ASR cell comparing transcripts across two serving lanes - a lane is a weight format the
 family serves, one chain (CPU or device) over one format, or one kernel form of one format -
-asserts WORD equality when the pair is a crowned kernel form and its tensor twin, and TOKEN
-equality otherwise.** A crowned kernel form is the one the tuner measured fastest and armed as the
-serving one; its tensor twin is the same kernel written on Metal's tensor primitives, and the
-twins' rounding legitimately flips tokens.
+asserts WORD equality when the pair is a crowned kernel form and its tensor twin; TOKEN equality
+when the two sides differ only in the decoder (one encoder's rows feed both); and otherwise TOKEN
+equality, or the transcripts' text equal with the encoder output rows held either within a
+tolerance of the other side's or by the twin bar - the device chain's distance from the exact
+chain within a stated multiple of the CPU q8 chain's own.** A crowned kernel form is the one the tuner measured fastest and
+armed as the serving one; its tensor twin is the same kernel written on Metal's tensor primitives,
+and the twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
-a forced-feed logits compare within a tolerance bar - never to a looser text compare.**
+a forced-feed logits compare within a tolerance bar, or to equal transcript text with the encoder
+output rows held within a tolerance of the other side's or by the twin bar - never to a text
+compare alone.**
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`
 never names that module's types in its signature - leave a parameter that would carry one

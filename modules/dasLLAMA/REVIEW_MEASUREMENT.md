@@ -6,10 +6,12 @@ doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Me
 
 A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
 percentage of two such numbers, which counts as produced by the runs its sides came from - or an
-error or agreement reading (a cosine, a max-abs error) a test's tolerance is set from. A figure
-rule below binds a figure this change writes or changes - in the repo, in a commit message, or in
-its PR body. It does not bind a figure a changed line carries unchanged. A figure on a page a
-`site*/` folder checklist owns (repo root) answers to that checklist instead of this one; a
+error or agreement reading (a cosine, a max-abs error) a test's tolerance is set from, or that a
+change cites as evidence that a tolerance set for another cell, model or tier holds for the cell,
+model or tier the change adds or alters. A figure rule below binds a figure this change writes or
+changes - in the repo, in a commit message, or in its PR body. It does not bind a figure a
+changed line carries unchanged. A figure on a page a `site*/` folder checklist owns (repo root)
+answers to that checklist instead of this one; a
 reading a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for the
 tolerance value itself, and to this list for naming the box and flags it was read on.
 
@@ -94,18 +96,19 @@ another project - it rests on a measurement a cell or instrument of this reposit
 recorded to justify adopting code the change does not land, when the committed path did not win
 it.** That timing settles its adoption decision in the PR that lands the kernel.
 
-**A diff that routes a served turn onto a code path no board cell exercises mints that cell in
-the same change.** A route is the end-to-end code path such a turn takes, including the default
-route - the one a run given no command-line arguments and no environment overrides takes.
+**A diff that routes a served turn, or a media encode a turn takes (an image, a video frame or an
+audio chunk), onto a code path no board cell exercises mints that cell in the same change.** A
+route is the end-to-end code path such a turn takes, including the default route - the one a run
+given no command-line arguments and no environment overrides takes.
 
 **A change that owes a board row no box of the author's can mint names instead, in the same
 change, an artifact that shows the route ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.** A box cannot mint a spawned cell when no rig leg drives
-the leg, when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog
-official` does not carry the model; it can mint a manual cell whenever it can run the documented
-command.
+the path the owed row measures, when the box refuses or skips it, or when
+`performance/gen_bench_records.das --catalog official` does not carry the model; it can mint a
+manual cell whenever it can run the documented command.
 
 **A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
 `metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module

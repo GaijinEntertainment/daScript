@@ -12,6 +12,7 @@ require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmu
 require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, a region a batched-row stream
 require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
 require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the image cell's engage witness, read in the vulkan half
+require ?vulkan dasllama/dasllama_vulkan_asr_dec   // nolint:STYLE030,LINT019 — the --asr rows' decoder-half witness, read in the vulkan half
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail the rows load on
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
@@ -171,6 +172,10 @@ struct Args {
     @clarg_doc = "ASR cell mode: -m becomes a CATALOG substring (display name or das_model), not a path. Times transcribe best-of--r over the model's corpus buckets and emits the same BenchModel cell the LLM rows use"
     asr : bool
 
+    @clarg_name = "asr-clips"
+    @clarg_doc = "ASR cell: comma list of corpus clips timed in place of the catalog row's buckets (a lever loop's one clip, or the long clips a row's list stops before)"
+    asr_clips : string = ""
+
     @clarg_doc = "Parity pregate mode: run -m's frozen pinned-greedy fixture from the model-set table (model_specs.das) and exit — 0 only on token-for-token, with both decoded texts printed; no timings. The board driver runs this before a model's first cell"
     parity : bool
 
@@ -266,9 +271,10 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
     return best
 }
 
-// One catalog model's timed buckets -> a BenchModel cell, appended to `jsonModels`. The gpu
-// arm (--ngl) rides the f32 tower rail; a row that never dispatches the tower (Conformer
-// families, or a regression) FAILS the leg.
+//! one catalog model's timed buckets -> a BenchModel cell appended to `jsonModels`; on Metal the gpu arm (--ngl) rides the
+//! f32 tower rail and a row that never dispatches the tower FAILS the leg; on Vulkan the row stamps `vulkan` when the drivers
+//! served every clip (the tower, and the decoder on whisper) and FAILS when they served some but not all
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
 def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu, accel : bool) : bool {
     let model_path = asr_model_path(spec)
     var m <- (empty(spec.das_mmproj)
@@ -294,7 +300,11 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         run.files |> emplace(file_identity("{spec.root}{spec.das_mmproj}", "mmproj"))
     }
     run.files |> reserve(length(run.files) + length(spec.buckets))
+    var vk_tower_served_clips = 0   // nolint:LINT003,LINT019 — counted in the vulkan static_if half
+    var vk_wdec_served_clips = 0    // nolint:LINT003,LINT019 — same
+    var clips = 0
     for (wav in spec.buckets) {
+        clips++
         var samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
@@ -307,13 +317,34 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             wd_win0 = metal_wdec_stats().windows
             pf_n0 = metal_prefill_stats().prefills
         }
+        var vt0 = (encodes = 0l, declines = 0l)   // nolint:LINT002,LINT019 — read in the vulkan static_if half; the other flavors see it unused
+        var vk_wdec0 = (windows = 0l, steps = 0l, declines = 0l)   // nolint:LINT002,LINT019 — same
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let s0 = vulkan_tower_stats()
+            vt0 = (encodes = s0.encodes, declines = s0.declines)
+            let w0 = vulkan_wdec_stats()
+            vk_wdec0 = (windows = w0.windows, steps = w0.steps, declines = w0.declines)
+        }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let vt1 = vulkan_tower_stats()
+            print("lcpp_bench --asr: vulkan tower encodes +{vt1.encodes - vt0.encodes} over {reps + 1} transcriptions, declines +{vt1.declines - vt0.declines} {vulkan_tower_declines()}\n")
+            if (vt1.encodes > vt0.encodes && vt1.declines == vt0.declines) {
+                vk_tower_served_clips++
+            }
+            if (m.kind == AsrKind.whisper) {
+                let w1 = vulkan_wdec_stats()
+                print("lcpp_bench --asr: vulkan wdec windows +{w1.windows - vk_wdec0.windows}, decode batches +{w1.steps - vk_wdec0.steps} over {reps + 1} transcriptions {vulkan_wdec_declines()}\n")
+                if (w1.windows > vk_wdec0.windows && w1.declines == vk_wdec0.declines) {
+                    vk_wdec_served_clips++
+                }
+            }
+        }
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            //! only families with a Metal tower driver (AudioTower, the gemma4a Conformer, the canary / parakeet FastConformer)
-            let tower_kind = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
+            let is_metal_tower_family = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
                 || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a
                 || m.kind == AsrKind.canary || m.kind == AsrKind.parakeet)
-            if (gpu && tower_kind && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
+            if (gpu && is_metal_tower_family && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
                 leg_ok = false
             }
@@ -351,7 +382,26 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
                 var ltext = ""
                 var lenc = 0.0lf
+                clips++
+                var lt0 = (encodes = 0l, declines = 0l)   // nolint:LINT002,LINT019 — read in the vulkan static_if half; the other flavors see it unused
+                var lw0 = (windows = 0l, declines = 0l)   // nolint:LINT002,LINT019 — same
+                static_if (typeinfo builtin_module_exists(vulkan)) {
+                    let s0 = vulkan_tower_stats()
+                    lt0 = (encodes = s0.encodes, declines = s0.declines)
+                    let w0 = vulkan_wdec_stats()
+                    lw0 = (windows = w0.windows, declines = w0.declines)
+                }
                 lib_ms += measure_das(m, samples, reps, spec.lang, ltext, lenc)
+                static_if (typeinfo builtin_module_exists(vulkan)) {
+                    let lt1 = vulkan_tower_stats()
+                    if (lt1.encodes > lt0.encodes && lt1.declines == lt0.declines) {
+                        vk_tower_served_clips++
+                    }
+                    let lw1 = vulkan_wdec_stats()
+                    if (m.kind == AsrKind.whisper && lw1.windows > lw0.windows && lw1.declines == lw0.declines) {
+                        vk_wdec_served_clips++
+                    }
+                }
                 run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
                 delete samples
             }
@@ -359,6 +409,16 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             print("lcpp_bench --asr: {spec.display} librispeech25 total {lib_ms} ms ({lib_audio} s audio, {length(lib)} clips)\n")
         }
         delete lib
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let vk_served = clips > 0 && vk_tower_served_clips == clips && (m.kind != AsrKind.whisper || vk_wdec_served_clips == clips)
+        if (vk_served && !gpu) {
+            run.backend = "vulkan"
+            print("lcpp_bench --asr: {spec.display} - the Vulkan drivers served every clip of {clips} (the row stamps `vulkan`)\n")
+        } elif (!gpu && (vk_tower_served_clips > 0 || vk_wdec_served_clips > 0)) {
+            print("lcpp_bench --asr: LOUD FAIL - {spec.display}: the Vulkan drivers served {vk_tower_served_clips} tower / {vk_wdec_served_clips} decoder clips of {clips}, so the row is neither a CPU row nor a Vulkan one - no number\n")
+            leg_ok = false
+        }
     }
     var cell = BenchModel(gguf = spec.das_model, arch = spec.display,
                           size_bytes = int64(stat(model_path).size))
@@ -373,7 +433,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 //! on the standard Metal rail; whisper/parakeet decoders keep their own paths (wdec driver /
 //! CPU by design). A measured gpu row without tower engagement, or a chat-decoder row without
 //! prefill engagement, exits the leg non-zero.
-def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
+def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool; clip_override : string) : bool {
     allow_cpu_prefill()   //! Conformer/planar decoder paths still CPU-prefill by protocol
     if (accel && gpu) {
         print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
@@ -425,9 +485,15 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
                 continue
             }
             found = true
-            if (!asr_measure_spec(spec, reps, threads, jsonModels, gpu, accel)) {
+            var row = clone(spec)
+            if (!empty(clip_override)) {
+                row.buckets <- split(clip_override, ",")
+                row.libri_short = ""   //! the override times the clips asked for and nothing beside them
+            }
+            if (!asr_measure_spec(row, reps, threads, jsonModels, gpu, accel)) {
                 all_ok = false
             }
+            delete row
         }
     }
     if (!all_ok) {
@@ -1461,7 +1527,7 @@ def main() : int {
     let pin_desc = "{lcpp_mask_on() ? "hard mask" : "QoS classified"} (bench-forced)"
     say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? pin_desc : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel) ? 0 : 1
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads, gpu, cfg.accel, cfg.asr_clips) ? 0 : 1
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {

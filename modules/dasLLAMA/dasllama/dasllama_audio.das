@@ -1337,9 +1337,6 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     encoder_blocks(t, s, tt)
 }
 
-// ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
-// cannot be required from here). Serves the whole block loop or declines; the CPU loop below
-// stays the correct fallback. The diff-stage rail keeps the CPU loop (its dumps ARE the point).
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
 typedef TowerServesFn = function<() : bool>
 var private g_tw_blocks_gpu : TowerBlocksGpuFn
@@ -1355,8 +1352,7 @@ def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
     g_tw_serves_set = true
 }
 
-//! Would the Metal tower serve a block loop — the lane policies ask (a serving driver wants
-//! f32 planes, so the family lane defaults to exact); false on CPU builds or with the knob off.
+//! the lane policies' question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def audio_tower_gpu_serves() : bool => g_tw_serves_set && invoke(g_tw_serves)
 
@@ -1375,6 +1371,7 @@ def register_tower_conv_gpu(fn : TowerConvGpuFn) {
 //! The pre-LN transformer block loop over ``npos`` positions of the residual stream in ``s.x``
 //! (token-major). Shared by the whisper conv frontend above and the qwen3a conv2d frontend —
 //! any frontend that leaves ``npos × d_model`` rows in ``s.x`` can run the blocks.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
     dispatch_phase_encode(npos)
     if (g_tw_blocks_gpu_set && empty(g_audio_ref_dir)) {

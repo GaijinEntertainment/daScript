@@ -9,13 +9,22 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
+require daslib/defer
 require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes off-GPU + the blocks parity cell
+require ?vulkan dasllama/dasllama_vulkan_tower
+require dasllama/dasllama_gemma4a
+require dasllama/dasllama_canary
+require dasllama/dasllama_qwen3a
+require _tower_twin
 
-// Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder test
-// needs the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skips without it.
-// The oracle constants come from llama-mtmd-debug (CPU backend).
+// Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder tests
+// need the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skip without it.
+// The oracle constants come from llama-mtmd-debug (CPU backend). The Vulkan twins skip without
+// their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16 mmproj, the
+// canary f32 encoder, the Qwen3-ASR bf16 mmproj), without jfk.wav, without a Vulkan device under
+// DASLLAMA_GPU=1, and on a build with das_metal; the qwen3a front also skips when interpreted.
 
 [test]
 def test_gelu_erf(t : T?) {
@@ -145,9 +154,11 @@ def test_ultravox_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
+            let tower_was_on = vulkan_tower_knob()
+            defer() {
+                restore_vulkan_tower(tower_was_on)
             }
+            set_every_gpu_tower(false)
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
@@ -193,9 +204,11 @@ def test_voxtral_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
+            let tower_was_on = vulkan_tower_knob()
+            defer() {
+                restore_vulkan_tower(tower_was_on)
             }
+            set_every_gpu_tower(false)
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
@@ -219,6 +232,524 @@ def test_voxtral_tower(t : T?) {
             t |> success(abs(mx - 1.459851) < 5e-2, "max")
         }
         delete tw   // image-backed planes are locked views — only the finalizer may release them
+    }
+}
+
+let private TWIN_SLACK_AUDIO = double(TWIN_SLACK_VK)
+
+def private audio_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer : int64) : double
+    => tower_twin_bar(t, tag, exact, cpu, dev, n_layer, TWIN_SLACK_AUDIO, TWIN_REL_L2_FLOOR)
+
+//! the exact (f32) tower encoded with the knob on: the driver dispatches nothing - no block, no front - records the
+//! `quant_mode` decline, and the CPU chain serves the encode (`encode` returns the output's length)
+[cold_path, unused_argument(t, tag, expected_len, encode)]
+def private exact_lane_declines_audio(t : T?; tag : string; expected_len : int64; encode : block<() : int64>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        set_vulkan_tower(true)
+        let x0 = vulkan_tower_stats()
+        let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+        var n = 0l
+        with_job_que() {
+            setup_dasllama_jobque_()
+            n = invoke(encode)
+        }
+        let x1 = vulkan_tower_stats()
+        let dq = (vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0
+        t |> equal(x1.encodes - x0.encodes, 0l, "{tag}: the exact (f32) tower never dispatched a block with the knob on")
+        t |> equal(x1.convs - x0.convs, 0l, "{tag}: the exact (f32) tower never dispatched a front with the knob on")
+        t |> success(dq >= 1l, "{tag}: the exact tower reached the driver and it declined quant_mode ({dq} declines)")
+        t |> equal(n, expected_len, "{tag}: the CPU chain served the exact-lane encode")
+    }
+}
+
+def private zero_q8(var q : array<int8>; off, n : int64) {
+    for (i in range64(n)) {
+        q[off + i] = int8(0)
+    }
+}
+
+//! one zeroed block moves a 32-block tower less than its own q8 chain's noise, so the poison zeroes an eighth of the blocks
+def private poison_blocks(n_layer : int64) : int64 => max(1l, n_layer / 8l)
+
+//! `zero_block` >= 0 zeroes the q8 GEMM planes of `poison_blocks` blocks from that block on
+def private mint_aud(path : string; q8 : bool; zero_block : int64) : AudioTower {
+    var inscope stg <- stage_audio_tower(path, q8)
+    if (zero_block >= 0l) {
+        for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
+            zero_q8(stg.qblob, stg.e.qlayers_off + b * stg.e.qlayer_stride, stg.e.qlayer_stride)
+        }
+    }
+    var tw = AudioTower()
+    mint_audio_tower(stg, tw, q8)
+    return <- tw
+}
+
+[cold_path]
+def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let path = path_join(models_dir(), file)
+        if (!model_available(t, path) || !vulkan_twin_seat(t)) {
+            return
+        }
+        let tag = "{family} synthetic mel"
+        let tower_was_on = vulkan_tower_on()
+        defer() {
+            set_vulkan_tower(tower_was_on)
+        }
+        var twx <- mint_aud(path, false, -1l)
+        var tw <- mint_aud(path, true, -1l)
+        t |> success(!twx.q8 && tw.q8, "{tag}: the exact and the q8 towers minted")
+        if (layers_claimed > 0l) {
+            t |> equal(tw.n_layer, layers_claimed, "{tag}: the tower's depth is the {layers_claimed} blocks the cell names")
+        }
+        var mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        mel.data |> resize(tw.n_mel * AUDIO_CHUNK_FRAMES)
+        for (i in range(length(mel.data))) {
+            mel.data[i] = sin(float(i) * 0.0137) * 0.8 + sin(float(i) * 0.00291) * 0.5
+        }
+        var encx <- make_encoder_state(twx)
+        var enc <- make_encoder_state(tw)
+        set_vulkan_tower(false)
+        var cpu_out : array<float>
+        let s0 = vulkan_tower_stats()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            audio_encode(twx, encx, mel)
+            audio_encode(tw, enc, mel)
+            cpu_out := enc.out
+            set_vulkan_tower(true)
+            audio_encode(tw, enc, mel)
+        }
+        let s1 = vulkan_tower_stats()
+        if (s1.encodes == s0.encodes) {
+            to_log(LOG_INFO, "{tag} vulkan blocks: the driver declined - {vulkan_tower_declines()}\n")
+        }
+        t |> equal(s1.encodes - s0.encodes, 1l, "{tag}: exactly the device leg dispatched")
+        t |> equal(s1.blocks - s0.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
+        t |> equal(s1.rows - s0.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
+        let bar = audio_twin_bar(t, tag, encx.out, cpu_out, enc.out, tw.n_layer)
+        if (bar > 0.0lf) {
+            var twp <- mint_aud(path, true, tw.n_layer / 2l)
+            var encp <- make_encoder_state(twp)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                audio_encode(twp, encp, mel)
+            }
+            t |> equal(vulkan_tower_stats().encodes - s1.encodes, 1l, "{tag} poison: the device served the poisoned encode")
+            tower_twin_poison(t, tag, encx.out, encp.out, bar)
+            delete encp
+            delete twp
+        }
+        var encx2 <- make_encoder_state(twx)
+        exact_lane_declines_audio(t, tag, long_length(encx.out)) $() : int64 {
+            audio_encode(twx, encx2, mel)
+            return long_length(encx2.out)
+        }
+        delete encx2
+        delete cpu_out
+        delete enc
+        delete encx
+        delete tw
+        delete twx
+        vulkan_tower_shutdown()
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
+//! `zero_block` >= 0 zeroes the eleven q8 GEMM planes of `poison_blocks` blocks from that block on
+def private mint_g4a(mm : string; q8 : bool; zero_block : int64) : Gemma4aEncoder {
+    set_gemma4a_q8(q8)
+    defer() {
+        reset_gemma4a_q8()
+    }
+    var inscope stg <- stage_gemma4a_encoder(mm)
+    if (zero_block >= 0l) {
+        let d = stg.e.d_model
+        let ff = stg.e.n_ff
+        for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
+            let lo = stg.layers[b]
+            for (w in fixed_array(lo.q, lo.k, lo.v, lo.o, lo.attn_k_rel, lo.conv_pw2)) {
+                zero_q8(stg.qblob, w, d * d)
+            }
+            for (w in fixed_array(lo.ff_up, lo.ff_down, lo.ff_up_1, lo.ff_down_1)) {
+                zero_q8(stg.qblob, w, d * ff)
+            }
+            zero_q8(stg.qblob, lo.conv_pw1, d * 2l * d)
+        }
+    }
+    var enc = Gemma4aEncoder()
+    mint_gemma4a_encoder(stg, enc)
+    return <- enc
+}
+
+//! the first 3 s of a clip: an encode short enough to size the residency's scratch under the full clip's
+def private clip_head(samples : array<float>) : array<float> {
+    let n = min(long_length(samples), 3l * AUDIO_SAMPLE_RATE)
+    return <- [for (i in range64(n)); samples[i]]
+}
+
+//! a short encode then the full clip on one residency: the rel projection sets must follow the rebuilt scratch
+[cold_path]
+def private g4a_twin_legs(t : T?; mm : string; enc : Gemma4aEncoder; samples, exact : array<float>; bar : double; encodes0 : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let head <- clip_head(samples)
+        var st2 = Gemma4aState()
+        var dev_head : array<float>
+        var dev_again : array<float>
+        var dev_fresh : array<float>
+        with_job_que() {
+            setup_dasllama_jobque_()
+            gemma4a_encode_all(enc, st2, head, dev_head)
+            gemma4a_encode_all(enc, st2, samples, dev_again)
+            vulkan_tower_shutdown()
+            gemma4a_encode_all(enc, st2, samples, dev_fresh)
+        }
+        t |> success(vulkan_tower_stats().encodes - encodes0 >= 3l, "gemma4a jfk: the short, the regrown and the fresh encodes ran on the device")
+        tower_twin_held(t, "gemma4a jfk regrown scratch", exact, dev_again, bar)
+        tower_twin_held(t, "gemma4a jfk after shutdown", exact, dev_fresh, bar)
+        var encp <- mint_g4a(mm, true, enc.n_layer / 2l)
+        var stp = Gemma4aState()
+        var poisoned : array<float>
+        with_job_que() {
+            setup_dasllama_jobque_()
+            gemma4a_encode_all(encp, stp, samples, poisoned)
+        }
+        tower_twin_poison(t, "gemma4a jfk", exact, poisoned, bar)
+        delete stp
+        delete encp
+        delete st2
+    }
+}
+
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def test_gemma4a_vulkan_twin(tst : T?) {
+    tst |> run("gemma4a E2B: the Vulkan Conformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(t, mm) || !vulkan_twin_seat(t)) {
+                return
+            }
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            let tower_was_on = vulkan_tower_on()
+            defer() {
+                set_vulkan_tower(tower_was_on)
+            }
+            var encx <- mint_g4a(mm, false, -1l)
+            var enc <- mint_g4a(mm, true, -1l)
+            t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
+            var stx = Gemma4aState()
+            var st = Gemma4aState()
+            var exact : array<float>
+            var cpu : array<float>
+            var dev : array<float>
+            var n_exact = 0l
+            var n_cpu = 0l
+            var n_dev = 0l
+            set_vulkan_tower(false)
+            let s0 = vulkan_tower_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                n_exact = gemma4a_encode_all(encx, stx, samples, exact)
+                n_cpu = gemma4a_encode_all(enc, st, samples, cpu)
+                set_vulkan_tower(true)
+                n_dev = gemma4a_encode_all(enc, st, samples, dev)
+            }
+            let s1 = vulkan_tower_stats()
+            if (s1.encodes == s0.encodes) {
+                to_log(LOG_INFO, "gemma4a jfk vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
+            }
+            let n_chunks = s1.encodes - s0.encodes
+            t |> equal(n_cpu, n_exact, "gemma4a jfk: the q8 chain's token count")
+            t |> equal(n_dev, n_exact, "gemma4a jfk: the device chain's token count")
+            t |> success(n_chunks >= 1l, "gemma4a jfk: the device served the chunk encodes ({n_chunks})")
+            t |> equal(s1.blocks - s0.blocks, n_chunks * enc.n_layer, "gemma4a jfk: every block of every served encode ran on the driver")
+            front_served(t, "gemma4a jfk", s1.convs - s0.convs, n_chunks, s1.declines - s0.declines)
+            let bar = audio_twin_bar(t, "gemma4a jfk", exact, cpu, dev, enc.n_layer)
+            if (bar > 0.0lf) {
+                g4a_twin_legs(t, mm, enc, samples, exact, bar, s1.encodes)
+            }
+            var stx2 = Gemma4aState()
+            var exact2 : array<float>
+            exact_lane_declines_audio(t, "gemma4a jfk", n_exact) $() : int64 {
+                return gemma4a_encode_all(encx, stx2, samples, exact2)
+            }
+            delete exact2
+            delete stx2
+            delete stx
+            delete st
+            delete enc
+            delete encx
+            vulkan_tower_shutdown()
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! `zero_block` >= 0 zeroes the eleven q8 GEMM planes of `poison_blocks` blocks from that block on
+def private mint_cn(path : string; q8 : bool; zero_block : int64) : CanaryEncoder {
+    var inscope stg <- stage_canary_encoder(path, q8)
+    if (zero_block >= 0l) {
+        let d = stg.e.d_model
+        let ff = stg.e.n_ff
+        for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
+            let lo = stg.layers[b]
+            for (w in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.pos_w, lo.o_w, lo.pw2_w)) {
+                zero_q8(stg.qblob, w, d * d)
+            }
+            for (w in fixed_array(lo.ff1a_w, lo.ff1b_w, lo.ff2a_w, lo.ff2b_w)) {
+                zero_q8(stg.qblob, w, d * ff)
+            }
+            zero_q8(stg.qblob, lo.pw1_w, d * 2l * d)
+        }
+    }
+    var enc = CanaryEncoder()
+    mint_canary_encoder(stg, enc)
+    return <- enc
+}
+
+//! a short encode then the full clip on one residency: the scratch and the rel quartet must regrow under it
+[cold_path]
+def private cn_twin_legs(t : T?; path : string; enc : CanaryEncoder; samples, exact : array<float>; bar : double; encodes0 : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let head <- clip_head(samples)
+        var st2 = CanaryState()
+        var dev_again : array<float>
+        var dev_fresh : array<float>
+        with_job_que() {
+            setup_dasllama_jobque_()
+            canary_log_mel(enc, head, st2)
+            canary_encode(enc, st2)
+            canary_log_mel(enc, samples, st2)
+            canary_encode(enc, st2)
+            dev_again := st2.out
+            vulkan_tower_shutdown()
+            canary_encode(enc, st2)
+            dev_fresh := st2.out
+        }
+        t |> equal(vulkan_tower_stats().encodes - encodes0, 3l, "canary jfk: the short, the regrown and the fresh encodes ran on the device")
+        tower_twin_held(t, "canary jfk regrown scratch", exact, dev_again, bar)
+        tower_twin_held(t, "canary jfk after shutdown", exact, dev_fresh, bar)
+        var encp <- mint_cn(path, true, enc.n_layer / 2l)
+        var stp = CanaryState()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            canary_log_mel(encp, samples, stp)
+            canary_encode(encp, stp)
+        }
+        tower_twin_poison(t, "canary jfk", exact, stp.out, bar)
+        delete stp
+        delete encp
+        delete dev_again
+        delete dev_fresh
+        delete st2
+    }
+}
+
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def test_canary_vulkan_twin(tst : T?) {
+    tst |> run("canary-qwen 2.5B: the Vulkan FastConformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+            if (!model_available(t, path) || !vulkan_twin_seat(t)) {
+                return
+            }
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            let tower_was_on = vulkan_tower_on()
+            defer() {
+                set_vulkan_tower(tower_was_on)
+            }
+            var encx <- mint_cn(path, false, -1l)
+            var enc <- mint_cn(path, true, -1l)
+            t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
+            var stx = CanaryState()
+            var st = CanaryState()
+            var cpu : array<float>
+            var n_exact = 0l
+            var n_cpu = 0l
+            var n_dev = 0l
+            set_vulkan_tower(false)
+            let s0 = vulkan_tower_stats()
+            with_job_que() {
+                setup_dasllama_jobque_()
+                canary_log_mel(encx, samples, stx)
+                n_exact = canary_encode(encx, stx)
+                canary_log_mel(enc, samples, st)
+                n_cpu = canary_encode(enc, st)
+                cpu := st.out
+                set_vulkan_tower(true)
+                n_dev = canary_encode(enc, st)
+            }
+            let s1 = vulkan_tower_stats()
+            if (s1.encodes == s0.encodes) {
+                to_log(LOG_INFO, "canary jfk vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
+            }
+            t |> equal(n_cpu, n_exact, "canary jfk: the q8 chain's frame count")
+            t |> equal(n_dev, n_exact, "canary jfk: the device chain's frame count")
+            t |> equal(s1.encodes - s0.encodes, 1l, "canary jfk: the device served the encode")
+            t |> equal(s1.blocks - s0.blocks, enc.n_layer, "canary jfk: every block ran on the driver")
+            front_served(t, "canary jfk", s1.convs - s0.convs, 1l, s1.declines - s0.declines)
+            let bar = audio_twin_bar(t, "canary jfk", stx.out, cpu, st.out, enc.n_layer)
+            if (bar > 0.0lf) {
+                cn_twin_legs(t, path, enc, samples, stx.out, bar, s1.encodes)
+            }
+            var stx2 = CanaryState()
+            exact_lane_declines_audio(t, "canary jfk", n_exact) $() : int64 {
+                canary_log_mel(encx, samples, stx2)
+                return canary_encode(encx, stx2)
+            }
+            delete stx2
+            delete cpu
+            delete stx
+            delete st
+            delete enc
+            delete encx
+            vulkan_tower_shutdown()
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def test_encoder_blocks_vulkan(tst : T?) {
+    tst |> run("qwen2audio tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel, 32 layers") @(t : T?) {
+        vulkan_blocks_twin(t, "qwen2audio", "qwen2audio-mmproj-f32.gguf", 32l)
+    }
+    tst |> run("voxtral tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel") @(t : T?) {
+        vulkan_blocks_twin(t, "voxtral", "voxtral-mini-mmproj-f32.gguf", 0l)
+    }
+    tst |> run("omni-3b audio tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel") @(t : T?) {
+        vulkan_blocks_twin(t, "omni-3b", "mmproj-omni-3b-f32.gguf", 0l)
+    }
+}
+
+//! the qwen3a tower staged and minted in memory under the lane pin, the pin reset after; `zero_block` >= 0 zeroes the
+//! q8 GEMM planes of `poison_blocks` blocks from that block on
+def private mint_q3a(path : string; q8 : bool; zero_block : int64) : Qwen3aTower {
+    set_qwen3a_q8(q8)
+    defer() {
+        reset_qwen3a_q8()
+    }
+    var inscope stg <- stage_qwen3a_tower(path)
+    if (zero_block >= 0l) {
+        let nl = stg.e.core.n_layer
+        for (b in range64(zero_block, min(nl, zero_block + poison_blocks(nl)))) {
+            zero_q8(stg.core.qblob, stg.e.core.qlayers_off + b * stg.e.core.qlayer_stride, stg.e.core.qlayer_stride)
+        }
+    }
+    var tw = Qwen3aTower()
+    mint_qwen3a_tower(stg, tw)
+    return <- tw
+}
+
+//! the input poison: a q8 tower with `poison_blocks` blocks zeroed from `zero_block` on, through the device chain over
+//! `win`, must EXCEED the bar the clean chains set
+[cold_path, unused_argument(t, tag, path, zero_block, win, exact, bar)]
+def private q3a_poison_leg(t : T?; tag, path : string; zero_block : int64; win : MelChunk; exact : array<float>; bar : double) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var twp <- mint_q3a(path, true, zero_block)
+        var encp <- make_encoder_state(twp.core)
+        var csp = Qwen3aConvState()
+        let p0 = vulkan_tower_stats()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            qwen3a_encode(twp, encp, csp, win)
+        }
+        t |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{tag} poison: the device served the poisoned encode")
+        tower_twin_poison(t, tag, exact, encp.out, bar)
+        delete csp
+        delete encp
+        delete twp
+    }
+}
+
+[test]
+def test_qwen3a_vulkan_front(tst : T?) {
+    tst |> run("qwen3a: the Vulkan mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+            if (!model_available(t, path) || !vulkan_twin_seat(t)) {
+                return
+            }
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present")
+                return
+            }
+            let tower_was_on = vulkan_tower_on()
+            defer() {
+                set_vulkan_tower(tower_was_on)
+            }
+            var twx <- mint_q3a(path, false, -1l)
+            var tw <- mint_q3a(path, true, -1l)
+            t |> success(!twx.core.q8 && tw.core.q8 && tw.cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
+            set_vulkan_tower(false)
+            let m0 = vulkan_tower_stats()
+            let mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+            let m1 = vulkan_tower_stats()
+            t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
+            set_vulkan_tower(true)
+            let dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+            let m2 = vulkan_tower_stats()
+            t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
+            t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
+            t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
+            let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
+            t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
+            var encx <- make_encoder_state(twx.core)
+            var enc <- make_encoder_state(tw.core)
+            var csx = Qwen3aConvState()
+            var cs = Qwen3aConvState()
+            var cpu_out : array<float>
+            for (off in [0l, QWEN3A_WINDOW]) {
+                let tag = "qwen3a jfk mel+front+blocks at {off}"
+                let win <- qwen3a_mel_window(mel, off)
+                let dev_win <- qwen3a_mel_window(dev_mel, off)
+                let n_chunks = dev_win.n_len / QWEN3A_CHUNK
+                set_vulkan_tower(false)
+                let s0 = vulkan_tower_stats()
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    qwen3a_encode(twx, encx, csx, win)
+                    qwen3a_encode(tw, enc, cs, win)
+                    cpu_out := enc.out
+                    set_vulkan_tower(true)
+                    qwen3a_encode(tw, enc, cs, dev_win)
+                }
+                let s1 = vulkan_tower_stats()
+                if (s1.convs == s0.convs) {
+                    to_log(LOG_INFO, "{tag}: the driver declined - {vulkan_tower_declines()}\n")
+                }
+                front_served(t, tag, s1.convs - s0.convs, n_chunks, s1.declines - s0.declines)
+                t |> equal(s1.encodes - s0.encodes, 1l, "{tag}: the block loop served the window")
+                let bar = audio_twin_bar(t, tag, encx.out, cpu_out, enc.out, tw.core.n_layer)
+                if (off == 0l && bar > 0.0lf) {
+                    q3a_poison_leg(t, tag, path, tw.core.n_layer / 2l, dev_win, encx.out, bar)
+                }
+            }
+            delete cpu_out
+            delete enc
+            delete encx
+            delete tw
+            delete twx
+            vulkan_tower_shutdown()
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 
@@ -341,9 +872,8 @@ def test_encoder_oracle(t : T?) {
             mel.data[i] = 1.0
         }
         var enc <- make_encoder_state(tw)
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(false)   // this gate owns the CPU encoder; the GPU rung is its own test
-        }
+        let tower_was_on = vulkan_tower_knob()
+        set_every_gpu_tower(false)
         with_job_que() {
             setup_dasllama_jobque_()
             audio_encode(tw, enc, mel)
@@ -351,6 +881,7 @@ def test_encoder_oracle(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             set_metal_tower(true)
         }
+        restore_vulkan_tower(tower_was_on)
         // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
         // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
         // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.

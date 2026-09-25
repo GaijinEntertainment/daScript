@@ -546,7 +546,7 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
             let nsplit = 8
             let ybase = 16   // the rows land past a header the kernels must leave alone
             let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows   //! the KHR tile loads and stores whole 16-row fragments: the x and y planes carry the spare rows, as the prefill's do
-            let yn = ybase + rows_alloc * d
+            let yn = ybase + rows_alloc * d + (khr ? 16 : 0)   //! a ragged d's last fragment may spill up to 15 elements past the plane on the KHR tile: the spare keeps the probe inside the buffer
             var wh : array<float16>
             var xh : array<float16>
             wh |> resize(d * n)
@@ -585,7 +585,9 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
                     nan_sentinel_upload(pd, part_bytes, 0l)   // the split arm's partial planes: a chunk the GEMM skipped would sum a stale plane into the reduce
                     var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
                     var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
-                    var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
+                    let bk = int(F16G_BK)
+                    let ksplit = max(bk, ((n / nsplit + bk - 1) / bk) * bk)   //! the class walks K in F16G_BK steps: a chunk shorter than a step would re-sum the first step, so a short K leaves the tail chunks empty (zero planes) instead
+                    var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(ksplit))
                     enc_f16_gemm_cm2_cls(raw, h, sp, pc2, f16_gemm_wgs(false, int64(rows), int64(d)) * int64(nsplit))
                     var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
                     enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
@@ -649,6 +651,7 @@ def test_vkd_f16_gemm(t0 : T?) {
             f16_gemm_cell(t, "ba-like", 32, 512, 70)
             f16_gemm_cell(t, "router-like", 200, 1024, 130)
             f16_gemm_cell(t, "odd router", 61, 512, 41)   //! rows x d off every 4-multiple: the reduce's element-guarded tail
+            f16_gemm_cell(t, "rel plane, ragged d, short K", 2495, 64, 37)   // canary's rel-plane GEMM shape, the cm2 twin of the KHR cell's arm
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -670,6 +673,8 @@ def test_vkd_f16_gemm_khr(t0 : T?) {
             f16_gemm_cell(t, "ba-like", 32, 512, 70, true)
             f16_gemm_cell(t, "ple-like", 256, 1536, 77, true)   // E2B's projection geometry over one layer slice, rows off the 16-row fragment
             f16_gemm_cell(t, "one fragment", 16, 64, 16, true)
+            f16_gemm_cell(t, "rel plane, ragged d, short K", 2495, 64, 37, true)   // canary's rel-plane GEMM: d = 2 npos - 1 off every fragment, K = the head width
+            f16_gemm_cell(t, "rel plane, ragged d, 128 K", 2495, 128, 37, true)
         } else {
             t |> skip("dasVulkan not present")
         }
