@@ -944,7 +944,11 @@ namespace das
             collect = (collectStrings && sTotal && sUsed < sTotal - sTotal / 3)
                 || (hTotal && hUsed < hTotal / 3);
             gcPressureInitialized = true;
+#if DAS_ASAN
+            gcHeapBaseline = 0; gcStringBaseline = 0;
+#else
             gcHeapBaseline = hUsed; gcStringBaseline = sUsed;
+#endif
         }
         collect |= (hUsed > gcHeapBaseline && hUsed - gcHeapBaseline >= gcHeapBudget)
             || (collectStrings && sUsed > gcStringBaseline && sUsed - gcStringBaseline >= gcStringBudget);
