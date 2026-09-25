@@ -1168,8 +1168,13 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
         )
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
+    // a compiler driver loads every module daslang would, by the same modules/*/.das_module scan
+    let scan_all = register_all_modules && !g_target_is_wasm
+    if (scan_all) {
+        LLVMBuildCall2(builder, das_ensure_env_type, LLVMAddFunctionWithType(g_mod, "das_require_dynamic_modules", das_ensure_env_type), array<LLVMValueRef>(), "")
+    }
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
-        if (key_exists(used_modules, das_name) || key_exists(force_dynamic_modules, das_name)) {
+        if (!scan_all && (key_exists(used_modules, das_name) || key_exists(force_dynamic_modules, das_name))) {
             has_cpp_modules = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
             let rel = compute_modules_relative_suffix(path)
@@ -1192,7 +1197,7 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
     LLVMBuildCall2(builder, init_modules_type, init_modules_fn, array<LLVMValueRef>(), "")
 
     // Dynamic modules load Quiet (sibling DT_NEEDED ordering): retry after the last registration
-    if (ships_dynamic && !g_target_is_wasm) {
+    if (ships_dynamic && !g_target_is_wasm && !scan_all) {
         let fin_dyn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
         let fin_dyn_name = guest ? "jit_lib_finalize_dynamic_modules" : "jit_finalize_dynamic_modules"
         var fin_dyn = LLVMAddFunctionWithType(g_mod, fin_dyn_name, fin_dyn_type)
@@ -1294,8 +1299,9 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         needs_whole_lib = true
     }
 
-    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE_EXE.md sec.1)
-    if (needs_whole_lib) {
+    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE_EXE.md sec.1);
+    // a register-all exe's module scan registers them itself
+    if (needs_whole_lib && !(register_all_modules && !g_target_is_wasm)) {
         let reg_native_path_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(
                 types.LLVMVoidPtrType(), // const char * mod_name
