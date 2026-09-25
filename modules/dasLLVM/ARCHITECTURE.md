@@ -144,7 +144,7 @@ bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FE
 and `cpu_supports`-based tune eligibility all follow), `DAS_JIT_BASELINE` (build for a CPU class
 instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
 `ARCHITECTURE_TARGET_FEATURES.md` sec.10), `--jit-debug` / `-g` (emit DWARF or CodeView debug
-info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), and the
+info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), `--jit-sanitize` / `options jit_sanitize` (`address` runs LLVM's `asan` pass after the optimizer on functions marked `sanitize_address`; `undefined` runs `bounds-checking`; a sanitizer host defaults to its own, `none` to nothing; an exe or a library links with `-fsanitize=` for the host's sanitizers and the requested ones, through `clang++` unless a linker is named; an ASan host lowers every array push to the runtime call, which keeps the buffer's container annotation - `src/misc/ARCHITECTURE.md` sec.10), and the
 runtime escape API `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the
 caller passes the knob name it acts for). The announce contract: an override announces at the point it
 CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the caller-supplied knob

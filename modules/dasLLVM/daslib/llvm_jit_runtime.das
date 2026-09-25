@@ -89,6 +89,15 @@ def private define_unlock(name, what : string) : LLVMOpaqueValue? {
     }
 }
 
+//! `__asan_poison_memory_region` / `__asan_unpoison_memory_region` over `size` bytes at `p` - the calls
+//! StackAllocator's pop and push make on an asan host
+def private asan_region(which : string; p, size : Ir) {
+    let typ = jit_fn_type($(p : void?; size : uint64) : void {})
+    LLVMBuildCall2(ir_builder(), typ, declare_extern_fn("__asan_{which}_memory_region", typ), fixed_array(p.v, size.v), "")
+}
+
+def private address(p : Ir) : Ir => ir(LLVMBuildPtrToInt(ir_builder(), p.v, g_prim_t.t_int64, ""))
+
 //! StackAllocator::push (heap.h) into the caller's stack state, then the Prologue a stack walk reads (simulate.h);
 //! StackAllocator's stack and stackTop are the pointers beside its evalTop
 def private define_prologue(name : string) : LLVMOpaqueValue? {
@@ -102,6 +111,9 @@ def private define_prologue(name : string) : LLVMOpaqueValue? {
         store(field(arg(3), g_t_stack_state, 1), top)
         store(stackTopP, newTop)
         store(evalTopP, newTop)
+        if (JIT_HOST_ASAN) {
+            asan_region("unpoison", newTop, zext64(arg(2)))
+        }
         let pt = jit_struct_type(type<tuple<info : void?; fileName : void?; functionLine : void?; stackSize : int; flags : int>>)
         let is_jit = ir(1u)
         for (i, v in range(5), fixed_array(ir(LLVMConstNull(g_prim_t.LLVMVoidPtrType())), arg(0), arg(1), arg(2), is_jit)) {
@@ -114,6 +126,11 @@ def private define_prologue(name : string) : LLVMOpaqueValue? {
 def private define_epilogue(name : string) : LLVMOpaqueValue? {
     return ir_function(name, jit_fn_type($(stackState, ctx : void?) : void {}), 1, -1) {
         let evalTopP = offset(arg(1), CONTEXT_OFFSET_OF_EVAL_TOP)
+        if (JIT_HOST_ASAN) {
+            let top = load_ptr(ptr_slot(evalTopP, 1))
+            let saved = load_ptr(field(arg(0), g_t_stack_state, 1))
+            asan_region("poison", top, address(saved) - address(top))
+        }
         store(evalTopP, load_ptr(field(arg(0), g_t_stack_state, 0)))
         store(ptr_slot(evalTopP, 1), load_ptr(field(arg(0), g_t_stack_state, 1)))
     }
