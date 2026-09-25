@@ -196,10 +196,11 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
     // and avoids the timeout>0 interleave) and, on abnormal exit, fold it into
     // the crashed file's log so the stack is surfaced under the failing test.
     //! the path is minted, never pre-created: a file created and closed here draws a scanner's open on
-    //! Windows, and the shell's `2>` then fails with a sharing violation - the child reads as crashed
+    //! Windows, and the shell's `2>` then fails with a sharing violation - the child reads as crashed.
+    //! cmd carries the file and --worker-index, so its hash keeps two workers spawned in one tick apart
     let tdRes = temp_directory_result()
     g_stderr_seq++
-    let errPath = (tdRes is value) ? path_join(tdRes as value, "dastest_stderr_{ref_time_ticks()}_{g_stderr_seq}.txt") : ""
+    let errPath = (tdRes is value) ? path_join(tdRes as value, "dastest_stderr_{hash(cmd)}_{ref_time_ticks()}_{g_stderr_seq}.txt") : ""
     if (empty(errPath)) {
         // The point of this is to NOT silently lose crash diagnostics, so make
         // the temp-dir failure visible rather than quietly dropping stderr.
