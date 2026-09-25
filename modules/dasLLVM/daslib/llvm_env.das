@@ -105,7 +105,13 @@ def private ambient_rows() : array<EnvDocRow> {
         EnvDocRow(name = "PROCESSOR_IDENTIFIER", kind = "text", dflt = "unset",
             doc = "Half of the Windows tune box identity (measurements are a property of the box AND its OS)."),
         EnvDocRow(name = "OS", kind = "text", dflt = "unset",
-            doc = "The other half of the Windows tune box identity.")
+            doc = "The other half of the Windows tune box identity."),
+        EnvDocRow(name = "ASAN_OPTIONS", kind = "text", dflt = "unset",
+            doc = "The asan runtime's options; the sanitizer tests add exitcode for the children they start, so a stop reads off the exit code."),
+        EnvDocRow(name = "UBSAN_OPTIONS", kind = "text", dflt = "unset",
+            doc = "The ubsan runtime's options; the sanitizer tests add exitcode for the children they start, as for ASAN_OPTIONS."),
+        EnvDocRow(name = "DAS_LOG_LEVEL", kind = "text", dflt = "warning",
+            doc = "The runtime's log floor; the sanitizer tests set info for their children, so the IR dump and the announce print.")
     ]
 }
 

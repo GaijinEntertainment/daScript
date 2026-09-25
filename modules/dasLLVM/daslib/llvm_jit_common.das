@@ -541,6 +541,16 @@ def public stamp_module_target(mod : LLVMOpaqueModule?; tm : LLVMTargetMachineRe
     LLVMDisposeTargetData(dl)
 }
 
+//! asan instruments only the functions that carry `sanitize_address`
+def public mark_sanitize_address(mod : LLVMOpaqueModule?) {
+    let attr = LLVMCreateEnumAttribute(LLVMGetModuleContext(mod), LLVMGetEnumAttributeKindForName("sanitize_address"), 0ul)
+    var fn = LLVMGetFirstFunction(mod)
+    while (fn != null) {
+        LLVMAddAttributeToFunction(fn, attr)
+        fn = LLVMGetNextFunction(fn)
+    }
+}
+
 // ===== extern-helper declaration =====
 // jit_add_extern declares one C++ runtime helper (add + global-mapping + function attrs, plus optional
 // per-arg attrs). Pair with jit_fn_type(signature) (llvm_dsl) to derive `typ` from a das signature.
