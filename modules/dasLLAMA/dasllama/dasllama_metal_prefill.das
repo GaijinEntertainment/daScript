@@ -482,13 +482,11 @@ class MetalPleGatherQ40 : MetalPleGatherKqT {
 }
 
 [metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleFinish {
+class MetalPleFinish : MetalTgReduceBase {
     @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [mp x n_layers*ple] position-major model_proj·embd
     @ssbo @binding = 1 @role = "weight" pnorm : array<float> //!< [ple] proj-norm weight
     @ssbo @binding = 2 @role = "readwrite" y : array<float>     //!< [n_layers x npos x ple] side input, in place
     @uniform @binding = 4 ka : PleArgs
-    @workgroup partial : float[32]
-    @workgroup inv_sh : float
 
     [metal_kernel(name="metal_ple_finish_msl")]
     def metal_ple_finish {
@@ -496,23 +494,9 @@ class MetalPleFinish {
         let p = gl_WorkGroupID.y
         let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
         let v = proj[p * (ka.nlayers * ka.ple) + l * ka.ple + i] * ka.inv_sd
-        let ss = simd_sum(v * v)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (i == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            inv_sh = rsqrt(tot / float(ka.ple) + ka.eps)
-        }
-        barrier()
+        let inv = tg_rms_inv(v * v, ka.ple, ka.eps)
         let yi = (l * ka.npos + p) * ka.ple + i
-        y[yi] = (y[yi] + pnorm[i] * (v * inv_sh)) * ka.inv_s2
+        y[yi] = (y[yi] + pnorm[i] * (v * inv)) * ka.inv_s2
     }
 }
 
@@ -2611,17 +2595,7 @@ class template MetalQkRopeT {
         var v1 = x[i2]
         let live = p < ka.nreal   //! workgroup-uniform - the barrier below never diverges
         if (live && ka.donorm != 0u) {
-            let s1 = simd_sum(v0 * v0 + v1 * v1)
-            if (gl_SubgroupInvocationID == 0u) {
-                part[gl_SubgroupID] = s1
-            }
-            barrier()
-            var total = 0.0
-            var sg = 0u
-            while (sg < gl_NumSubgroups) {
-                total += part[sg]
-                sg++
-            }
+            let total = tg_sum_all(v0 * v0 + v1 * v1, part)
             let inv = 1.0 / sqrt(total / float(hs) + ka.eps)
             v0 = w[i - hb] * (v0 * inv)
             v1 = w[i2 - hb] * (v1 * inv)
@@ -2777,7 +2751,6 @@ class MetalAttnRowstat {
     @ssbo @binding = 2 @role = "write" stat : array<float>  //!< [n_heads x qrows x 2]: rowmax, 1/sum
     @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> //!< [nheads]; null = identity
     @workgroup red : float[4]
-    @workgroup bcast : float
 
     [metal_kernel(name="metal_attn_rowstat_msl")]
     def metal_attn_rowstat {
@@ -2796,29 +2769,8 @@ class MetalAttnRowstat {
             m = max(m, ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr)
             j += nthreads
         }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        if (lid == 0u) {
-            var mm = red[0]
-            var sgi = 1u
-            while (sgi < gl_NumSubgroups) {
-                mm = max(mm, red[sgi])
-                sgi++
-            }
-            if (ka.hass != 0u) {
-                mm = max(mm, sink[h])
-            }
-            bcast = mm
-        }
-        barrier()
-        let rowmax = bcast
+        let mm = tg_max_all(m, red)
+        let rowmax = ka.hass != 0u ? max(mm, sink[h]) : mm
         var sum = 0.0
         j = jlo + lid
         while (j < cnt) {
@@ -2826,18 +2778,9 @@ class MetalAttnRowstat {
             sum += exp((ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr) - rowmax)
             j += nthreads
         }
-        sum = simd_sum(sum)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = sum
-        }
-        barrier()
+        barrier()   // red[] free again: the max fold's reads are done
+        var tot = tg_sum_all(sum, red)
         if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += red[sgi]
-                sgi++
-            }
             if (ka.hass != 0u) {
                 tot += exp(max(sink[h] - rowmax, -80.0))
             }
@@ -3676,7 +3619,6 @@ class MetalFcSoftmax : MetalTgReduceBase {
     @ssbo @binding = 1 @role = "read" sr : array<float>     //!< [mp x wwpad] rel scores (Q+v)·pos_hᵀ
     @ssbo @binding = 2 @role = "readwrite" p : array<float> //!< [mp x nkp] the probability rows (the exp pass writes, the normalize pass scales in place)
     @uniform @binding = 3 ka : FcAttnArgs
-    @workgroup max_sh : float
 
     [metal_kernel(name="metal_fc_softmax_msl")]
     def metal_fc_softmax {
@@ -3701,26 +3643,7 @@ class MetalFcSoftmax : MetalTgReduceBase {
             m = max(m, (sc[crow + k] + sr[rrow + k]) * ka.scale)
             k += nt
         }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = m
-        }
-        barrier()
-        if (lid == 0u) {
-            var mm = partial[0]
-            var sgi = 1u
-            while (sgi < gl_NumSubgroups) {
-                mm = max(mm, partial[sgi])
-                sgi++
-            }
-            max_sh = mm
-        }
-        barrier()
-        let mx = max_sh
+        let mx = tg_max(m)
         var l = 0.0
         k = lid
         while (k < ka.npos) {
@@ -3729,22 +3652,9 @@ class MetalFcSoftmax : MetalTgReduceBase {
             l += e
             k += nt
         }
-        l = simd_sum(l)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = l
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            inv_sh = 1.0 / tot
-        }
-        barrier()
-        let inv = inv_sh
+        barrier()   // partial[] free again: the max fold's reads are done
+        let tot = tg_sum(l)
+        let inv = 1.0 / tot
         k = lid
         while (k < ka.npos) {
             p[prow + k] *= inv

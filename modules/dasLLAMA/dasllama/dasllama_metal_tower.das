@@ -5041,7 +5041,7 @@ def private pk_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; var
 
 def private pk_add_ln(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx, ba : MetalBuffer?; ns : St2NormSlot; by : MetalBuffer?; yoff : uint64; d : int64; eps : float) {
     var ka = PkAddLnArgs(dim = uint(d), eps = eps)
-    enc_pk_add_ln(enc, bx, ba, c.slab, ns.gwoff, c.slab, ns.gboff, by, yoff, ka)
+    enc_pk_add_ln(enc, bx, ba, c.slab, ns.gwoff, c.slab, ns.gboff, by, yoff, ka, 1l)
 }
 
 //! One backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1; the

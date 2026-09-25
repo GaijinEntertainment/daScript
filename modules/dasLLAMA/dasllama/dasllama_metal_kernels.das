@@ -284,7 +284,51 @@ def private sq_mask_window(var scores : auto(SS); c0, n, wstart, lid, nt : uint)
     }
 }
 
-// Softmax half 1: row max — strided local, simd butterfly, cross-simdgroup partials through red[].
+//! The cross-simdgroup fold over red[], the simdgroups' slots a barrier already fenced: the sum, and the max.
+def public tg_fold_sum(red : auto(RR); n : uint) : float {
+    var tot = 0.0
+    var sgi = 0u
+    while (sgi < n) {
+        tot += red[sgi]
+        sgi++
+    }
+    return tot
+}
+
+def public tg_fold_max(red : auto(RR); n : uint) : float {
+    var mm = red[0]
+    var sgi = 1u
+    while (sgi < n) {
+        mm = max(mm, red[sgi])
+        sgi++
+    }
+    return mm
+}
+
+//! The threadgroup sum (max) of v that every lane holds after one barrier: each simdgroup's fold lands in
+//! red[gl_SubgroupID], the cross-simdgroup fold runs on every lane. A lane may still be reading red[] when
+//! the next fold writes it, so two folds in a row take a barrier between them.
+def public tg_sum_all(v : float; var red : auto(RR)) : float {
+    let s = simd_sum(v)
+    if (gl_SubgroupInvocationID == 0u) {
+        red[gl_SubgroupID] = s
+    }
+    barrier()
+    let tot = tg_fold_sum(red, gl_NumSubgroups)
+    return tot
+}
+
+def public tg_max_all(v : float; var red : auto(RR)) : float {
+    let m = simd_max(v)
+    if (gl_SubgroupInvocationID == 0u) {
+        red[gl_SubgroupID] = m
+    }
+    barrier()
+    let mm = tg_fold_max(red, gl_NumSubgroups)
+    return mm
+}
+
+// Softmax half 1: row max — strided local, then the threadgroup fold through red[].
 def private sq_score_max(scores : auto(SS); var red : float[16]; n, lid, nt : uint) : float {
     var m = -3.0e38
     var j = lid
@@ -292,21 +336,7 @@ def private sq_score_max(scores : auto(SS); var red : float[16]; n, lid, nt : ui
         m = max(m, scores[j])
         j += nt
     }
-    m = max(m, simd_shuffle_xor(m, 16u))
-    m = max(m, simd_shuffle_xor(m, 8u))
-    m = max(m, simd_shuffle_xor(m, 4u))
-    m = max(m, simd_shuffle_xor(m, 2u))
-    m = max(m, simd_shuffle_xor(m, 1u))
-    if (gl_SubgroupInvocationID == 0u) {
-        red[gl_SubgroupID] = m
-    }
-    barrier()
-    var mm = red[0]
-    var sgi = 1u
-    while (sgi < gl_NumSubgroups) {
-        mm = max(mm, red[sgi])
-        sgi++
-    }
+    let mm = tg_max_all(m, red)
     return mm
 }
 
@@ -320,21 +350,7 @@ def private sq_exp_sum(var scores : auto(SS); var red : float[16]; mm : float; n
         l += w
         j += nt
     }
-    l += simd_shuffle_xor(l, 16u)
-    l += simd_shuffle_xor(l, 8u)
-    l += simd_shuffle_xor(l, 4u)
-    l += simd_shuffle_xor(l, 2u)
-    l += simd_shuffle_xor(l, 1u)
-    if (gl_SubgroupInvocationID == 0u) {
-        red[gl_SubgroupID] = l
-    }
-    barrier()
-    var tot = red[0]
-    var sgi = 1u
-    while (sgi < gl_NumSubgroups) {
-        tot += red[sgi]
-        sgi++
-    }
+    let tot = tg_sum_all(l, red)
     return tot
 }
 
@@ -1248,28 +1264,16 @@ class MetalEmbedK6 {
     }
 }
 
-// tg_rms_inv is fenced on both sides - every caller reads inv_sh straight after the call
+//! The threadgroup reductions over partial[] - tg_sum_all's contract: every lane holds the result after
+//! one barrier, and two folds in a row take a barrier between them.
 class MetalTgReduceBase {
     @workgroup partial : float[32]          // one per simdgroup at the 1024-thread dispatch
-    @workgroup inv_sh : float
 
-    def tg_rms_inv(ss : float; lid, dim : uint; eps : float) {
-        let s = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = s
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            inv_sh = rsqrt(tot / float(dim) + eps)
-        }
-        barrier()
-    }
+    def tg_sum(v : float) : float => tg_sum_all(v, partial)
+    def tg_max(v : float) : float => tg_max_all(v, partial)
+
+    //! rsqrt(mean + eps) of the squares summed into ss - the RMS norm's inverse scale
+    def tg_rms_inv(ss : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(ss, partial) / float(dim) + eps)
 }
 
 // Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
@@ -1302,8 +1306,7 @@ class template MetalAddRmsT : MetalTgReduceBase {
             ss += vv * vv
             k += gl_WorkGroupSize.x
         }
-        tg_rms_inv(ss, lid, dim, eps)
-        let inv = inv_sh
+        let inv = tg_rms_inv(ss, dim, eps)
         k = lid
         while (k < dim) {
             let ov = w[k] * (xrow[k] * inv)
@@ -1351,8 +1354,7 @@ class MetalPreAddRms : MetalTgReduceBase {
             ssa += av * av
             k += gl_WorkGroupSize.x
         }
-        tg_rms_inv(ssa, lid, dim, eps)
-        let inva = inv_sh
+        let inva = tg_rms_inv(ssa, dim, eps)
         // x += a·inva·wpa; stage x; reduction 2: mean(x²) → inv_x
         var ssx = 0.0
         k = lid
@@ -1363,8 +1365,8 @@ class MetalPreAddRms : MetalTgReduceBase {
             ssx += xv * xv
             k += gl_WorkGroupSize.x
         }
-        tg_rms_inv(ssx, lid, dim, eps)
-        let invx = inv_sh
+        barrier()   // partial[] free again: the first fold's reads are done
+        let invx = tg_rms_inv(ssx, dim, eps)
         k = lid
         while (k < dim) {
             y[k] = wffn[k] * (xrow[k] * invx)
@@ -1495,17 +1497,7 @@ class MetalRopeStoreHF16 {
         var v = (isQ || isK ? qk[base + lid] : vs[base + lid]) + (has_bias != 0u ? bias[bbase + lid] : 0.0)
         if (isQ || isK) {
             if (has_norm != 0u) {
-                let s1 = simd_sum(v * v)
-                if (gl_SubgroupInvocationID == 0u) {
-                    part[gl_SubgroupID] = s1
-                }
-                barrier()
-                var total = 0.0
-                var sg = 0u
-                while (sg < gl_NumSubgroups) {
-                    total += part[sg]
-                    sg++
-                }
+                let total = tg_sum_all(v * v, part)
                 let inv = 1.0 / sqrt(total / float(hs) + eps)
                 v = w[(isK ? hs : 0u) + lid] * (v * inv)
             }
@@ -4909,8 +4901,7 @@ class template MetalRmsNormT : MetalTgReduceBase {
             ss += vv * vv
             k += gl_WorkGroupSize.x
         }
-        tg_rms_inv(ss, lid, dim, eps)
-        let inv = inv_sh
+        let inv = tg_rms_inv(ss, dim, eps)
         k = lid
         while (k < dim) {
             let ov = w[k] * (x[row * dim + k] * inv)
@@ -4935,59 +4926,68 @@ class MetalRmsNormHX : MetalRmsNormT {
     override HX = true
 }
 
-// LayerNorm (weight + bias), the tower/embedder norm: two-pass mean then POPULATION variance,
-// affine out. In-place safe: the write loop's x read is per-element by its owner, after both
-// reduction barriers (gemma4uv calls it in place).
+// LayerNorm (weight + bias) over rows, the tower/embedder norm: two-pass mean then POPULATION variance,
+// affine out; the ADD stamp folds a residual add into the first pass (x += a in place, the norm of the sum).
+// In-place safe: the write loop's x read is per-element by its owner, after both reduction barriers
+// (gemma4uv calls it in place). The leaves declare the bindings; the body reads dim and eps through the accessors.
+[ |> template_struct_instance]
+class template MetalLayerNormT : MetalTgReduceBase {
+    @template_constant ADD : bool = false
+
+    def abstract ln_dim : uint
+    def abstract ln_eps : float
+
+    def ln_body {
+        let row = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        let n = ln_dim()
+        let base = row * n
+        var ss = 0.0
+        var k = lid
+        while (k < n) {
+            static_if (ADD) {
+                let v = x[base + k] + a[base + k]
+                x[base + k] = v
+                ss += v
+            } else {
+                ss += x[base + k]
+            }
+            k += gl_WorkGroupSize.x
+        }
+        let tot = tg_sum(ss)
+        let mean = tot / float(n)
+        var vs = 0.0
+        k = lid
+        while (k < n) {
+            let dv = x[base + k] - mean
+            vs += dv * dv
+            k += gl_WorkGroupSize.x
+        }
+        barrier()   // partial[] free again: the mean fold's reads are done
+        let inv = tg_rms_inv(vs, n, ln_eps())
+        k = lid
+        while (k < n) {
+            y[base + k] = (x[base + k] - mean) * inv * w[k] + b[k]
+            k += gl_WorkGroupSize.x
+        }
+    }
+}
+
 [metal_dispatch(name = "enc_ln", pso = "g_pso_ln", tgmem = "metal_layernorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
-class MetalLayerNorm : MetalTgReduceBase {
+class MetalLayerNorm : MetalLayerNormT {
     @ssbo @binding = 0 x : array<float>     // [nrows x dim] source
     @ssbo @binding = 1 @role = "weight" @off = "woff" w : array<float>     // [dim]
     @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     // [dim]
     @ssbo @binding = 3 y : array<float>     // [nrows x dim] out (x aliasing safe, see header)
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 eps : float
-    @workgroup mean_sh : float               // the mean pass folds its own; only the variance pass takes the base's rsqrt fold
+
+    def override ln_dim : uint => dim
+    def override ln_eps : float => eps
 
     [metal_kernel(name="metal_layernorm_msl")]
     def metal_layernorm {
-        let row = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var k = lid
-        while (k < dim) {
-            ss += x[row * dim + k]
-            k += gl_WorkGroupSize.x
-        }
-        ss = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            mean_sh = tot / float(dim)
-        }
-        barrier()
-        let mean = mean_sh
-        var vs = 0.0
-        k = lid
-        while (k < dim) {
-            let dv = x[row * dim + k] - mean
-            vs += dv * dv
-            k += gl_WorkGroupSize.x
-        }
-        tg_rms_inv(vs, lid, dim, eps)
-        let inv = inv_sh
-        k = lid
-        while (k < dim) {
-            y[row * dim + k] = (x[row * dim + k] - mean) * inv * w[k] + b[k]
-            k += gl_WorkGroupSize.x
-        }
+        ln_body()
     }
 }
 
@@ -5303,7 +5303,6 @@ class MetalWdecAttnPart {
     @uniform @binding = 13 nrows_u : uint
     @workgroup scores : float[256]
     @workgroup partial : float[32]
-    @workgroup red_sh : float
 
     [metal_kernel(name="metal_wdec_attn_part_msl")]
     def metal_wdec_attn_part {   // nolint:STYLE038 — the phases are barrier-coupled, the kernel body is the shape
@@ -5339,26 +5338,7 @@ class MetalWdecAttnPart {
             mx = max(mx, scores[t])
             t += gl_WorkGroupSize.x
         }
-        var bm = 16u
-        while (bm >= 1u) {
-            mx = max(mx, simd_shuffle_xor(mx, bm))
-            bm /= 2u
-        }
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = mx
-        }
-        barrier()
-        if (lid == 0u) {
-            var tm = -3.0e38
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tm = max(tm, partial[sgi])
-                sgi++
-            }
-            red_sh = tm
-        }
-        barrier()
-        let m = red_sh
+        let m = tg_max_all(mx, partial)
         var ss = 0.0
         t = lid
         while (t < nloc) {
@@ -5367,22 +5347,12 @@ class MetalWdecAttnPart {
             ss += e
             t += gl_WorkGroupSize.x
         }
-        ss = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
+        barrier()   // partial[] free again: the max fold's reads are done
+        let tot = tg_sum_all(ss, partial)   // its barrier also fences the exp pass for the V loop
         if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
             pms[slot * 2u] = nloc > 0u ? m : -3.0e38
             pms[slot * 2u + 1u] = tot
         }
-        barrier()
         var j = lid
         while (j < hs) {
             var acc = 0.0
@@ -9830,17 +9800,7 @@ class MetalQkNorm {
         let rbase = gl_WorkGroupID.y * rstride + (isK ? soffe : 0u) + h * hs
         let wbase = gl_WorkGroupID.y * rstride + (isK ? koffe : 0u) + h * hs
         let v = x[rbase + lid]
-        let s1 = simd_sum(v * v)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = s1
-        }
-        barrier()
-        var total = 0.0
-        var sg = 0u
-        while (sg < gl_NumSubgroups) {
-            total += part[sg]
-            sg++
-        }
+        let total = tg_sum_all(v * v, part)
         let inv = 1.0 / sqrt(total / float(hs) + eps)
         x[wbase + lid] = w[(isK ? woffe : 0u) + lid] * (v * inv)
     }
@@ -10360,7 +10320,6 @@ class MetalSt2ColStats : MetalTgReduceBase {
     @ssbo @binding = 1 @role = "write" stats : array<float>  //!< [2 x c]: the means, then the squared deviations' sums
     @uniform @binding = 2 t : uint
     @uniform @binding = 3 c : uint
-    @workgroup mean_sh : float
 
     [metal_kernel(name="metal_st2_colstats_msl")]
     def metal_st2_colstats {
@@ -10373,22 +10332,8 @@ class MetalSt2ColStats : MetalTgReduceBase {
             s += x[r * c + ch]
             r += nt
         }
-        s = simd_sum(s)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = s
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            mean_sh = tot / float(t)
-        }
-        barrier()
-        let mean = mean_sh
+        let tot = tg_sum(s)
+        let mean = tot / float(t)
         var q = 0.0
         r = lid
         while (r < t) {
@@ -10396,20 +10341,11 @@ class MetalSt2ColStats : MetalTgReduceBase {
             q += dv * dv
             r += nt
         }
-        q = simd_sum(q)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = q
-        }
-        barrier()
+        barrier()   // partial[] free again: the mean fold's reads are done
+        let qtot = tg_sum(q)
         if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
             stats[ch] = mean
-            stats[c + ch] = tot
+            stats[c + ch] = qtot
         }
     }
 }
@@ -11395,10 +11331,10 @@ class MetalPkAttn {
     @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
     @workgroup po : float[512]
     @workgroup red : float[8]
-    @workgroup stat : float[2]
+    @workgroup lsum : float
 
-    //! the scaled scores of keys j0.. into the stage, and their softmax weights; stat[1] their sum
-    def pk_attn_scores(h, j0, nk, lid, sg, lane : uint) {
+    //! the scaled scores of keys j0.. into the stage, and their softmax weights; lsum their sum
+    def pk_attn_scores(h, j0, nk, lid : uint) {
         var m = -1.0e30
         var j = lid
         while (j < nk) {
@@ -11413,22 +11349,7 @@ class MetalPkAttn {
             m = max(m, sdot)
             j += 256u
         }
-        m = simd_max(m)
-        if (lane == 0u) {
-            red[sg] = m
-        }
-        barrier()
-        if (lid == 0u) {
-            var mm = red[0]
-            var si = 1u
-            while (si < 8u) {
-                mm = max(mm, red[si])
-                si++
-            }
-            stat[0] = mm
-        }
-        barrier()
-        let mall = stat[0]
+        let mall = tg_max_all(m, red)
         var l = 0.0
         j = lid
         while (j < nk) {
@@ -11437,20 +11358,10 @@ class MetalPkAttn {
             l += pw
             j += 256u
         }
-        l = simd_sum(l)
-        barrier()
-        if (lane == 0u) {
-            red[sg] = l
-        }
-        barrier()
+        barrier()   // red[] free again, and the exp pass fenced for the V loop
+        let tot = tg_sum_all(l, red)
         if (lid == 0u) {
-            var tot = 0.0
-            var si = 0u
-            while (si < 8u) {
-                tot += red[si]
-                si++
-            }
-            stat[1] = tot
+            lsum = tot
         }
     }
 
@@ -11467,7 +11378,7 @@ class MetalPkAttn {
             qh[lid] = q[i * ka.qs + ka.qcol + h * 64u + lid] / sqrt(float(64u))
         }
         barrier()
-        pk_attn_scores(h, j0, nk, lid, gl_SubgroupID, gl_SubgroupInvocationID)
+        pk_attn_scores(h, j0, nk, lid)
         let parts = 256u / 64u
         if (lid < parts * 64u) {
             let e = lid % 64u
@@ -11488,7 +11399,7 @@ class MetalPkAttn {
                 tot += po[pp * 64u + lid]
                 pp++
             }
-            o[i * ka.d + h * 64u + lid] = tot / stat[1]
+            o[i * ka.d + h * 64u + lid] = tot / lsum
         }
     }
 }
@@ -11535,64 +11446,30 @@ class MetalPkRopeStore {
     }
 }
 
-//! One row: x += a in place, then y = LayerNorm(x) * w + b at `yoff` - a layer's residual join and
-//! the norm after it as one dispatch (a is read out before y is written, so y may alias it).
+//! Rows [nrows x dim]: x += a in place, then y = LayerNorm(x) * w + b at `yoff` - a layer's residual join
+//! and the norm after it as one dispatch (a is read out before y is written, so y may alias it): the
+//! ADD stamp of the LayerNorm body.
 struct PkAddLnArgs {
     dim : uint
     eps : float
 }
 
-[metal_dispatch(name = "enc_pk_add_ln", pso = "g_pso_pk_add_ln", tgmem = "metal_pk_add_ln_msl_tgmem", tg = 256, grid = "1")]
-class MetalPkAddLn : MetalTgReduceBase {
+[metal_dispatch(name = "enc_pk_add_ln", pso = "g_pso_pk_add_ln", tgmem = "metal_pk_add_ln_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalPkAddLn : MetalLayerNormT {
+    override ADD = true
     @ssbo @binding = 0 @role = "readwrite" x : array<float>
     @ssbo @binding = 1 @role = "read" a : array<float>
     @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>
     @ssbo @binding = 3 @role = "weight" @off = "boff" b : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : PkAddLnArgs
-    @workgroup mean_sh : float
+
+    def override ln_dim : uint => ka.dim
+    def override ln_eps : float => ka.eps
 
     [metal_kernel(name="metal_pk_add_ln_msl")]
     def metal_pk_add_ln {
-        let lid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var k = lid
-        while (k < ka.dim) {
-            let v = x[k] + a[k]
-            x[k] = v
-            ss += v
-            k += gl_WorkGroupSize.x
-        }
-        ss = simd_sum(ss)
-        if (gl_SubgroupInvocationID == 0u) {
-            partial[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += partial[sgi]
-                sgi++
-            }
-            mean_sh = tot / float(ka.dim)
-        }
-        barrier()
-        let mean = mean_sh
-        var vs = 0.0
-        k = lid
-        while (k < ka.dim) {
-            let dv = x[k] - mean
-            vs += dv * dv
-            k += gl_WorkGroupSize.x
-        }
-        tg_rms_inv(vs, lid, ka.dim, ka.eps)
-        let inv = inv_sh
-        k = lid
-        while (k < ka.dim) {
-            y[k] = (x[k] - mean) * inv * w[k] + b[k]
-            k += gl_WorkGroupSize.x
-        }
+        ln_body()
     }
 }
 
@@ -11637,13 +11514,10 @@ class template MetalPkGemvT {
     @uniform @binding = 12 ka : PkGemvArgs
     @workgroup xs : float[4096]   // == PK_GEMV_MAX_NIN
     @workgroup red : float[4]
-    @workgroup stat : float[2]
 
     //! x into the stage: as it is, or normalized and modulated.
     def pk_gemv_stage {
         let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let lane = gl_SubgroupInvocationID
         var k = lid
         static_if (NORM_MOD_IN) {
             var s = 0.0
@@ -11651,16 +11525,8 @@ class template MetalPkGemvT {
                 s += x[k]
                 k += 128u
             }
-            s = simd_sum(s)
-            if (lane == 0u) {
-                red[sg] = s
-            }
-            barrier()
-            if (lid == 0u) {
-                stat[0] = (red[0] + red[1] + red[2] + red[3]) / float(ka.nin)
-            }
-            barrier()
-            let mean = stat[0]
+            let tot = tg_sum_all(s, red)
+            let mean = tot / float(ka.nin)
             var vs = 0.0
             k = lid
             while (k < ka.nin) {
@@ -11668,16 +11534,9 @@ class template MetalPkGemvT {
                 vs += dv * dv
                 k += 128u
             }
-            vs = simd_sum(vs)
-            if (lane == 0u) {
-                red[sg] = vs
-            }
-            barrier()
-            if (lid == 0u) {
-                stat[1] = rsqrt((red[0] + red[1] + red[2] + red[3]) / float(ka.nin) + ka.eps)
-            }
-            barrier()
-            let inv = stat[1]
+            barrier()   // red[] free again: the mean fold's reads are done
+            let vtot = tg_sum_all(vs, red)
+            let inv = rsqrt(vtot / float(ka.nin) + ka.eps)
             k = lid
             while (k < ka.nin) {
                 let v = (x[k] - mean) * inv * lw[k] + lb[k]
