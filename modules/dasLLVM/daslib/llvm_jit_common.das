@@ -841,10 +841,16 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     // NO willreturn: this aborts (DAS_FATAL_ERROR) on any mismatch, so it may not return normally.
     jit_add_extern(FN_JIT_HANDLED_ABI_CHECK_REPORT, jit_fn_type($() : void {}),
         get_jit_handled_abi_check_report(), fixed_array(nounwind))
-    jit_add_extern(FN_JIT_ALLOC_HEAP, jit_fn_type($(size : int; ctx : void?) : void? {}),
+    var alloc_heap = jit_add_extern(FN_JIT_ALLOC_HEAP, jit_fn_type($(size : int; ctx : void?) : void? {}),
         get_jit_alloc_heap(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
-    jit_add_extern(FN_JIT_ALLOC_PERSISTENT, jit_fn_type($(size : int; ctx : void?) : void? {}),
+    var alloc_persistent = jit_add_extern(FN_JIT_ALLOC_PERSISTENT, jit_fn_type($(size : int; ctx : void?) : void? {}),
         get_jit_alloc_persistent(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
+    //! the object size LLVM's bounds checks read off the call; a vec3 load past a 12-byte object would be UB against it
+    if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS) {
+        for (alloc in fixed_array(alloc_heap, alloc_persistent)) {
+            LLVMAddAttributeToFunction(alloc, LLVMCreateEnumAttribute(g_ctx, LLVMGetEnumAttributeKindForName("allocsize"), 0xFFFFFFFFul))
+        }
+    }
     jit_add_extern(FN_JIT_FREE_HEAP, jit_fn_type($(bytes : void?; size : int; ctx : void?) : void {}),
         get_jit_free_heap(), fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw), (nocapture, [0, 2]))
     jit_add_extern(FN_JIT_FREE_PERSISTENT, jit_fn_type($(bytes, ctx : void?) : void {}),
