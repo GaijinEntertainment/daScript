@@ -683,8 +683,17 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         // source instead of streaming them all through the captured pipe.
         let failuresOnlyFlag = test_args.failures_only ? " --failures-only" : ""
         let useAotFlag = test_args.use_aot ? " --use-aot" : ""
+        //! the JIT reads its --jit-* flags off the worker's own command line, so each one crosses to the worker
+        let jitFlags = build_string() $(var w) {
+            for (i in range(dashdash + 1, length(raw_args))) {
+                if (dashdash >= 0 && raw_args[i] |> starts_with("--jit-")) {
+                    w |> write(" ")
+                    w |> write(raw_args[i])
+                }
+            }
+        }
         let cmdPrefix = "{launchPrefix} {jitstr} {aotstr} --"
-        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}{stackExcFlag}{failuresOnlyFlag}{useAotFlag}"
+        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}{stackExcFlag}{failuresOnlyFlag}{useAotFlag}{jitFlags}"
         let batchSize = max(1, test_args.batch)
         // Group files into batches of batchSize. Each batch is run by one worker
         // subprocess (batchCmd); per-file singleCmds are kept so a crash can be
