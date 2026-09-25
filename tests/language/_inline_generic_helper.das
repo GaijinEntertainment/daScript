@@ -2,6 +2,8 @@ options gen2
 
 module _inline_generic_helper public
 
+require _inline_scope_helper
+
 // fixture for the cross-origin generic-instance fence (optimization_auto_inline_functions):
 // a generic defined HERE and instantiated from the test module produces an instance whose
 // fromGeneric->module differs from the compiling module. heuristic sites inside such an
@@ -17,4 +19,10 @@ def small_boost(x : int) : int => x + 1
 
 def public gscale(a : auto(TT); k : TT) : TT {
     return tiny_scale_helper(small_boost(a)) * k
+}
+
+def with_auto_inline_visibility_mid(blk : block<(root : string) : void>) {
+    with_auto_inline_visibility_root() $(root) {
+        invoke(blk, root)
+    }
 }

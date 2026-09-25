@@ -5,6 +5,8 @@ options gen2
 
 module _inline_unsafe_helper public
 
+require daslib/fio
+
 def sum_via_ptr(src : array<int>; blk : block<(v : int) : int>) : int {
     // multi-statement block-form unsafe body
     var total = 0
@@ -55,4 +57,13 @@ def scaled_bits(x : int; k : int) : int {
         r = int(reinterpret<uint>(x)) * k
     }
     return r
+}
+
+def auto_inline_visibility_root() : string {
+    var error : string
+    let root = temp_directory(error)
+    if (!empty(error)) {
+        panic("cannot create temporary directory: {error}")
+    }
+    return root
 }

@@ -7,6 +7,8 @@ options gen2
 
 module _inline_scope_helper public
 
+require _inline_unsafe_helper
+
 var private secret_bias = 7
 
 def private hidden_boost(x : int) : int => x + secret_bias
@@ -47,4 +49,9 @@ def scoped_filter_sum(src : array<int>; blk : block<(v : int) : bool>) : int {
         }
     }
     return total
+}
+
+def with_auto_inline_visibility_root(blk : block<(root : string) : void>) {
+    let root = auto_inline_visibility_root()
+    invoke(blk, root)
 }

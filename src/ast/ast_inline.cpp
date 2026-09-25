@@ -210,12 +210,12 @@ namespace das {
         };
 
         // ----- cross-module reference scan (splice gate) -----
-        // a spliced body re-resolves in the DESTINATION module; the scan sorts references
-        // that stop resolving there into CrossVerdict's two severities
 
         struct CrossVerdict {
             string hard;        // symbol that stops the splice outright
             string hardWhy;     // ... with the reason to report
+            string invisibleSymbol;
+            string invisibleModule;
             string scope;       // symbol that needs the with (module) wrapper
         };
 
@@ -228,7 +228,13 @@ namespace das {
             Module * mod;
             Module * dest;
             bool underscoreExempt;  // callee lives in the program module: its _:: already bound here
-            void scopeNeed ( const string & name ) {
+            void noteModuleUse ( const string & name, Module * owner ) {
+                if ( owner && owner!=mod && dest
+                    && !dest->isVisibleDirectly(owner) ) {
+                    verdict.invisibleSymbol = name;
+                    verdict.invisibleModule = owner->name;
+                    return;
+                }
                 if ( verdict.scope.empty() ) verdict.scope = name;
             }
             void checkName ( const string & name, bool generatedNode, Function * fn ) {
@@ -265,13 +271,17 @@ namespace das {
                     }
                     // a foreign instance re-resolves only through the origin-generic
                     // fallback, which needs the origin module visible - hence the wrapper
-                    if ( fn->module!=dest ) scopeNeed(origin->name);
+                    if ( fn->module!=dest ) {
+                        noteModuleUse(origin->name, origin->module);
+                    }
                 }
                 if ( fn->privateFunction || origin->privateFunction ) {
-                    if ( fn->module!=dest && origin->module!=dest ) scopeNeed(origin->name);
+                    if ( fn->module!=dest && origin->module!=dest ) {
+                        noteModuleUse(origin->name, origin->module);
+                    }
                 }
                 if ( dest && origin->module && !dest->isVisibleDirectly(origin->module) ) {
-                    scopeNeed(origin->name);
+                    noteModuleUse(origin->name, origin->module);
                 }
             }
             virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
@@ -300,10 +310,14 @@ namespace das {
                 if ( !expr->variable || !verdict.hard.empty() ) return;
                 checkName(expr->name, expr->generated, nullptr);
                 if ( expr->variable->private_variable ) {
-                    if ( expr->variable->module!=dest ) scopeNeed(expr->variable->name);
+                    if ( expr->variable->module!=dest ) {
+                        noteModuleUse(expr->variable->name,
+                            expr->variable->module);
+                    }
                 } else if ( dest && expr->isGlobalVariable() && expr->variable->module
                     && !dest->isVisibleDirectly(expr->variable->module) ) {
-                    scopeNeed(expr->variable->name);
+                    noteModuleUse(expr->variable->name,
+                        expr->variable->module);
                 }
             }
         };
@@ -2073,6 +2087,15 @@ namespace das {
                     auto & verdict = privateUse(calleeFn, originModule);
                     if ( !verdict.hard.empty() ) {
                         siteFail(site, "can't inline " + subj.name + " across modules: " + verdict.hardWhy, callLike->at);
+                        return false;
+                    }
+                    if ( !verdict.invisibleSymbol.empty() ) {
+                        siteFail(site, "can't inline " + subj.name
+                            + " across modules: body references '"
+                            + verdict.invisibleSymbol + "' from module "
+                            + verdict.invisibleModule
+                            + ", which is not visible at the call site",
+                            callLike->at);
                         return false;
                     }
                     // scope-only needs splice under a generated with (module <origin>);
