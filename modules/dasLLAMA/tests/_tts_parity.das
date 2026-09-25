@@ -64,7 +64,7 @@ def private peak_of(pcm : array<float>) : float {
 def private within_twentieth(n, m : int64) : bool => abs(n - m) * 20l < m
 
 //! The verdict where the tower served nothing: a skip where no Metal device serves, a red where a present device declined. Always false.
-def private tower_served(t : T?; msg, declines : string) : bool {
+def tower_served(t : T?; msg, declines : string) : bool {
     if (find(declines, "device") < 0) {
         t |> failure("{msg}: the tower declined (declines {declines})")
     } else {
@@ -272,7 +272,7 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
 }
 
 //! `g` with one element moved by twice what the rel-rms bar tolerates over the whole row: the smallest wrong output the bar must catch.
-def private one_wrong(g, cpu : array<float>; bar : float) : array<float> {
+def one_wrong(g, cpu : array<float>; bar : float) : array<float> {
     var w := g
     let n = long_length(cpu)
     return <- w if (n < 1l)
@@ -298,7 +298,7 @@ def private gpu_stage_verdict(t : T?; tag, stage : string; g, cpu, gp : array<fl
     return true
 }
 
-def private scaled(a : array<float>; k : float) : array<float> {
+def scaled(a : array<float>; k : float) : array<float> {
     var r := a
     for (v in r) {
         v *= k

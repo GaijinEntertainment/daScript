@@ -50,7 +50,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that
   measured out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - sec.2.2w-2.2x: the Metal tower attention routes, and the Metal
-  tower driver's encode chains.
+  tower driver's encode chains; sec.2.2au-2.2aw: the StyleTTS2 synthesis chain and the Pocket TTS
+  codec and frames seats.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - sec.2.2aq-2.2ar: the Vulkan tower's row classes and
   attention routes, and the Vulkan tower driver's encode chains; sec.2.2at: the Vulkan
   ASR-decoder driver.

@@ -180,7 +180,7 @@ blocks seats it serves and the front seats it fills (qwen3a's mel and conv front
 whole chunk, canary's front). The direction is forced: the driver requires the family file for its
 types, so the family cannot require the driver back. A box with no driver leaves the slot empty
 and the CPU form runs. A seat taken over a filled slot (a test's stub through
-`register_styletts2_gpu`, a record of seats) gives the displaced registration back on
+`register_styletts2_gpu` or `register_pocket_gpu`, a record of seats) gives the displaced registration back on
 `unregister` - one level: the record keeps the registration it displaced, not a stack of them - so
 the driver's seats survive the test.
 

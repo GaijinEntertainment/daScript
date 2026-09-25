@@ -20,6 +20,8 @@ require daslib/rtti   // this_context().last_exception: the refusals are read as
 require strings
 require math
 require _tts_oracle
+require _tts_parity
+require ?das_metal dasllama/dasllama_metal_tower
 require _tts_corpus   // the corpus sentences the oracle prepared: the prepare-parity cell's inputs
 require _model_tier
 
@@ -30,7 +32,35 @@ require _model_tier
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
 // Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
 // it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent. The
-// quiet-floor cell needs pocket-tts-en-kq.gguf alone.
+// quiet-floor cell needs pocket-tts-en-kq.gguf alone. The Metal cells skip on a build without the
+// das_metal module and need a Metal device that serves the tower (they red where a present device
+// declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
+// stocked, the served frames cell also unless the oracle carries two voices' stage cases; the
+// cells that hold the CPU chain pin the tower off for their run.
+
+let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 lane: reads 9e-7 on the exact stamps (M5 Max, -jit)
+let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
+let GPU_CODEC_SERVED_BAR = 5e-2   //! the codec seat on the served planes: reads 1.3e-2 on the q8 file, 7.7e-3 on the kq file on the M5 Max (the CPU quantizes its activations, the tower feeds them f32)
+let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
+let GPU_FRAME_FREE_BAR = 1e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max
+
+//! The tower knob off for a cell that holds the CPU chain; the knob it found, for the restore.
+def private tower_pin_off() : bool {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let found = metal_tower_knob()
+        set_metal_tower(false)
+        return found
+    } else {
+        return false
+    }
+}
+
+[unused_argument(found)]   //! off-Apple there is no knob
+def private tower_restore(found : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(found)
+    }
+}
 
 def private gguf_path() : string {
     return path_join(models_dir(), "pocket-tts-en.gguf")
@@ -289,6 +319,10 @@ def test_pocket_parity(t : T?) {
             reset_pocket_q8()
         }
         set_pocket_q8(false)   // the parity rail holds the f32 lane
+        let knob = tower_pin_off()
+        defer() {
+            tower_restore(knob)
+        }
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         t |> success(!m.q8, "the reference lane serves f32")
@@ -414,6 +448,10 @@ def test_pocket_codec_stream(t : T?) {
             set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
         }
         set_pocket_q8(false)   // the f32 lane: the served GEMMs' result depends on how many rows they batch
+        let knob = tower_pin_off()
+        defer() {
+            tower_restore(knob)
+        }
         var inscope m <- load_pocket(path)
         var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
         let frames = int64(c.n_frames)
@@ -472,6 +510,10 @@ def test_pocket_frames(t : T?) {
             reset_pocket_q8()
         }
         set_pocket_q8(false)
+        let knob = tower_pin_off()
+        defer() {
+            tower_restore(knob)
+        }
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         var done = 0
@@ -521,6 +563,472 @@ def test_pocket_frames(t : T?) {
             break if (done >= 2)
         }
         t |> success(done > 0, "at least one stage case ran")
+    }
+}
+
+
+//! The codec seat on the Metal tower against the CPU chain over the oracle's latents, on the f32
+//! lane: the served leg within GPU_CODEC_BAR with the bar's control and the compare's control, one
+//! tower encode a call, and the knob-off leg bit-equal to the CPU chain with its decline recorded.
+[test]
+def test_pocket_codec_metal(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            defer() {
+                reset_pocket_q8()
+            }
+            set_pocket_q8(false)
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            var inscope m <- load_pocket(path)
+            var inscope sc = PocketScratch()
+            var done = 0
+            for (c in man.cases) {
+                continue if (!c.stages)
+                var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+                let frames = int64(c.n_frames)
+                let tag = "{c.id} {c.voice} codec"
+                set_metal_tower(false)
+                var inscope a : array<float>
+                pocket_decode_latents(m, dump["latent"].f, frames, sc, a)
+                set_metal_tower(true)
+                let h0 = pocket_gpu_stats("codec")
+                let e0 = metal_tower_stats().encodes
+                var inscope b : array<float>
+                pocket_decode_latents(m, dump["latent"].f, frames, sc, b)
+                let h1 = pocket_gpu_stats("codec")
+                let e1 = metal_tower_stats().encodes
+                return if (h1.served - h0.served != 1 && !tower_served(t, tag, "{metal_tower_declines()}"))
+                t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
+                t |> equal(e1 - e0, 1l, "{tag}: one tower encode")
+                t |> equal(length(b), length(a), "{tag}: the sample count")
+                let d = rel_rms(b, a)
+                to_log(LOG_INFO, "pocket {tag}: rel-rms {d} against the CPU chain over {length(a)} samples (bar {GPU_CODEC_BAR})\n")
+                t |> success(d <= GPU_CODEC_BAR, "{tag}: rel-rms {d} within {GPU_CODEC_BAR}")
+                var inscope w <- one_wrong(b, a, GPU_CODEC_BAR)
+                t |> success(rel_rms(w, a) > GPU_CODEC_BAR, "{tag}: one sample moved by twice the bar reds it (the bar's control)")
+                var inscope lat_x <- scaled(dump["latent"].f, 3.0)
+                var inscope bp : array<float>
+                pocket_decode_latents(m, lat_x, frames, sc, bp)
+                t |> success(rel_rms(bp, a) > GPU_CODEC_BAR, "{tag}: the x3-scaled latents red the bar (the compare's control)")
+                set_metal_tower(false)
+                let hk0 = pocket_gpu_stats("codec")
+                let d0 = metal_tower_declines()
+                var inscope off : array<float>
+                pocket_decode_latents(m, dump["latent"].f, frames, sc, off)
+                let hk1 = pocket_gpu_stats("codec")
+                let d1 = metal_tower_declines()
+                t |> equal(hk1.calls - hk0.calls, 1, "{tag}: the knob-off leg still reaches the hook")
+                t |> equal(hk1.served - hk0.served, 0, "{tag}: the knob-off leg serves nothing")
+                t |> equal((d1?["knob"] ?? 0l) - (d0?["knob"] ?? 0l), 1l, "{tag}: the knob-off leg records its decline")
+                t |> equal(rel_rms(off, a), 0.0, "{tag}: the knob-off leg is the CPU chain")
+                done++
+                break if (done >= 2)
+            }
+            t |> success(done > 0, "at least one stage case ran")
+        }
+    } else {
+        t |> skip("no Metal module in this build")
+    }
+}
+
+//! The codec seat on the served planes of the q8 and kq files against each file's own CPU chain
+//! over the oracle's latents, within GPU_CODEC_SERVED_BAR with the bar's one-sample control, one
+//! hook call served and one encode a call.
+[test]
+def test_pocket_codec_metal_served(t : T?) {
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            reset_pocket_q8()
+            var files = 0
+            for (path in [q8_gguf_path(), kq_gguf_path()]) {
+                continue if (!model_available(t, path))
+                files++
+                var inscope m <- load_pocket(path)
+                var inscope sc = PocketScratch()
+                for (c in man.cases) {
+                    continue if (!c.stages)
+                    var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+                    let frames = int64(c.n_frames)
+                    let tag = "{c.id} {base_name(path)} codec served"
+                    set_metal_tower(false)
+                    var inscope a : array<float>
+                    pocket_decode_latents(m, dump["latent"].f, frames, sc, a)
+                    set_metal_tower(true)
+                    let h0 = pocket_gpu_stats("codec")
+                    let e0 = metal_tower_stats().encodes
+                    var inscope b : array<float>
+                    pocket_decode_latents(m, dump["latent"].f, frames, sc, b)
+                    let h1 = pocket_gpu_stats("codec")
+                    let e1 = metal_tower_stats().encodes
+                    return if (h1.served - h0.served != 1 && !tower_served(t, tag, "{metal_tower_declines()}"))
+                    t |> equal(e1 - e0, 1l, "{tag}: one tower encode")
+                    t |> equal(length(b), length(a), "{tag}: the sample count")
+                    let d = rel_rms(b, a)
+                    to_log(LOG_INFO, "pocket {tag}: rel-rms {d} against the CPU chain over {length(a)} samples (bar {GPU_CODEC_SERVED_BAR})\n")
+                    t |> success(d <= GPU_CODEC_SERVED_BAR, "{tag}: rel-rms {d} within {GPU_CODEC_SERVED_BAR}")
+                    var inscope w <- one_wrong(b, a, GPU_CODEC_SERVED_BAR)
+                    t |> success(rel_rms(w, a) > GPU_CODEC_SERVED_BAR, "{tag}: one sample moved by twice the bar reds it (the bar's control)")
+                    var inscope lx <- scaled(dump["latent"].f, 3.0)
+                    var inscope bx : array<float>
+                    pocket_decode_latents(m, lx, frames, sc, bx)
+                    t |> success(rel_rms(bx, a) > GPU_CODEC_SERVED_BAR, "{tag}: the x3-scaled latents red the bar (the compare's control)")
+                    break
+                }
+            }
+            if (files == 0) {
+                t |> skip("neither served file is stocked")
+            }
+        }
+    } else {
+        t |> skip("no Metal module in this build")
+    }
+}
+
+//! The frames one teacher-forced loop left in the scratch: the latents, the conditioning rows and the EOS logits.
+def private frame_rows(m : PocketModel; sc : PocketScratch; frames : int64) : tuple<lat : array<float>; conds : array<float>; eos : array<float>> {
+    var r : tuple<lat : array<float>; conds : array<float>; eos : array<float>>
+    r.lat |> resize(frames * m.latent_dim)
+    for (i in range64(frames * m.latent_dim)) {
+        r.lat[i] = sc.latents[i]
+    }
+    r.conds |> resize(frames * m.backbone.d)
+    for (i in range64(frames * m.backbone.d)) {
+        r.conds[i] = sc.conds[i]
+    }
+    r.eos |> resize(frames)
+    for (i in range64(frames)) {
+        r.eos[i] = sc.eos_logits[i]
+    }
+    return <- r
+}
+
+def private same_rng(a, b : TtsRng) : bool {
+    return a.state == b.state && a.inc == b.inc && a.has_spare == b.has_spare && (!a.has_spare || a.spare == b.spare)
+}
+
+[test]
+def test_pocket_seat_stats(t : T?) {
+    t |> run("a seat name no stage carries panics, so a misspelt key cannot read as zero counters") @(t : T?) {
+        let why = panic_text_of() {
+            pocket_gpu_stats("heads")
+        }
+        t |> success(find(why, "no GPU seat named 'heads'") >= 0, "the refusal names the key: {why}")
+    }
+    t |> run("the record names its seats in dispatch order, and each name reads its counters") @(t : T?) {
+        var inscope seats <- pocket_gpu_seats()
+        t |> equal(length(seats), 2, "two seats")
+        t |> equal(seats[0], "codec", "the codec first")
+        t |> equal(seats[1], "frames", "the frame loop second")
+        for (s in seats) {
+            let st = pocket_gpu_stats(s)
+            t |> success(st.served <= st.calls, "{s}: served never past called")
+        }
+    }
+}
+
+//! The frames seat on the Metal tower against the CPU chain on the f32 lane, teacher-forced on the
+//! oracle's noise and frames: the latents, the conditioning rows and the EOS logits within
+//! GPU_FRAME_BAR with the bar's one-element control and the x3-scaled noise as the compare's
+//! control, the generator left where the CPU loop leaves it, one hook call served, one encode a
+//! batch, the knob-off leg bit-equal to the CPU chain with its decline recorded; then the free run
+//! served.
+[test]
+def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs, in the order the counters read
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            defer() {
+                reset_pocket_q8()
+            }
+            set_pocket_q8(false)
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            var inscope m <- load_pocket(path)
+            var inscope sc = PocketScratch()
+            var done = 0
+            for (c in man.cases) {
+                continue if (!c.stages || c.voice != "alba")
+                var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+                let tag = "{c.id} {c.voice} frames"
+                var inscope ids <- pocket_text_ids(m, c.prepared)
+                var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+                var tm = TtsTimings()
+                var inscope x0 := dump["x0"].f
+                var inscope x1 := dump["x1"].f
+                let fae = c.n_frames - c.eos_frame
+                set_metal_tower(false)
+                rng_seed(sc.rng, uint64(c.seed))
+                let fc = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                var inscope cpu <- frame_rows(m, sc, fc)
+                let rng_cpu = sc.rng
+                set_metal_tower(true)
+                let h0 = pocket_gpu_stats("frames")
+                let e0 = metal_tower_stats().encodes
+                rng_seed(sc.rng, uint64(c.seed))
+                let fg = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                let h1 = pocket_gpu_stats("frames")
+                let e1 = metal_tower_stats().encodes
+                return if (h1.served - h0.served != 1 && !tower_served(t, tag, "{metal_tower_declines()}"))
+                t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
+                t |> equal(fg, fc, "{tag}: the frame count")
+                t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
+                let batch = metal_pocket_frame_batch()
+                t |> equal(e1 - e0, (fc + batch) / batch + 1l, "{tag}: one tower encode a batch of {batch}, and the codec's")
+                var inscope gpu <- frame_rows(m, sc, fg)
+                let dl = rel_rms(gpu.lat, cpu.lat)
+                let dc = rel_rms(gpu.conds, cpu.conds)
+                let de = rel_rms(gpu.eos, cpu.eos)
+                to_log(LOG_INFO, "pocket {tag}: rel-rms latents {dl} conds {dc} eos {de} against the CPU chain over {fc} frames (bar {GPU_FRAME_BAR})\n")
+                t |> success(dl <= GPU_FRAME_BAR && dc <= GPU_FRAME_BAR && de <= GPU_FRAME_BAR, "{tag}: the latents, conditioning and EOS logits within {GPU_FRAME_BAR}")
+                var inscope w <- one_wrong(gpu.lat, cpu.lat, GPU_FRAME_BAR)
+                t |> success(rel_rms(w, cpu.lat) > GPU_FRAME_BAR, "{tag}: one latent moved by twice the bar reds it (the bar's control)")
+                var inscope x0x <- scaled(x0, 3.0)
+                rng_seed(sc.rng, uint64(c.seed))
+                let fx = pocket_synthesize(m, ids, vs, man.temp, fae, x0x, x1, tm, sc)
+                var inscope gx <- frame_rows(m, sc, min(fx, fc))
+                t |> success(rel_rms(gx.lat, cpu.lat) > GPU_FRAME_BAR, "{tag}: the x3-scaled noise reds the bar (the compare's control)")
+                var inscope x1x <- scaled(x1, 3.0)
+                rng_seed(sc.rng, uint64(c.seed))
+                let fx1 = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1x, tm, sc)
+                var inscope gx1 <- frame_rows(m, sc, min(fx1, fc))
+                t |> success(rel_rms(gx1.conds, cpu.conds) > GPU_FRAME_BAR && rel_rms(gx1.eos, cpu.eos) > GPU_FRAME_BAR, "{tag}: the x3-scaled forced frames red the conditioning and EOS bars (their control)")
+                set_metal_tower(false)
+                let hk0 = pocket_gpu_stats("frames")
+                let d0 = metal_tower_declines()
+                rng_seed(sc.rng, uint64(c.seed))
+                let fo = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                var inscope off <- frame_rows(m, sc, fo)
+                let hk1 = pocket_gpu_stats("frames")
+                let d1 = metal_tower_declines()
+                t |> equal(hk1.calls - hk0.calls, 1, "{tag}: the knob-off leg still reaches the hook")
+                t |> equal(hk1.served - hk0.served, 0, "{tag}: the knob-off leg serves nothing")
+                t |> equal((d1?["knob"] ?? 0l) - (d0?["knob"] ?? 0l), 2l, "{tag}: the knob-off leg records its decline at both seats")
+                t |> success(fo == fc && rel_rms(off.lat, cpu.lat) == 0.0, "{tag}: the knob-off leg is the CPU chain")
+                var inscope none : array<float>
+                rng_seed(sc.rng, uint64(c.seed))
+                let free_cpu = pocket_synthesize(m, ids, vs, man.temp, fae, none, none, tm, sc)
+                var inscope cpu_free <- frame_rows(m, sc, free_cpu)
+                let rng_free = sc.rng
+                set_metal_tower(true)
+                let hf0 = pocket_gpu_stats("frames")
+                rng_seed(sc.rng, uint64(c.seed))
+                let free = pocket_synthesize(m, ids, vs, man.temp, fae, none, none, tm, sc)
+                let hf1 = pocket_gpu_stats("frames")
+                t |> equal(hf1.served - hf0.served, 1, "{tag}: the free run serves on the tower")
+                t |> success(speech_stats(sc.wave).rms > 0.01, "{tag}: the free run carries speech")
+                t |> equal(free, free_cpu, "{tag}: the free run makes the CPU chain's frame count")
+                t |> success(same_rng(sc.rng, rng_free), "{tag}: the free run's generator ends where the CPU loop's does")
+                var inscope gpu_free <- frame_rows(m, sc, min(free, free_cpu))
+                let df = rel_rms(gpu_free.lat, cpu_free.lat)
+                to_log(LOG_INFO, "pocket {tag}: free run {free} frames against the oracle's {c.n_frames}, rel-rms latents {df} against the CPU chain's free run on the same seed (bar {GPU_FRAME_FREE_BAR}), {timings_line(tm, m.sample_rate)}\n")
+                t |> success(df <= GPU_FRAME_FREE_BAR, "{tag}: the free run's latents within {GPU_FRAME_FREE_BAR} of the CPU chain's on the same noise")
+                var inscope wf <- one_wrong(gpu_free.lat, cpu_free.lat, GPU_FRAME_FREE_BAR)
+                t |> success(rel_rms(wf, cpu_free.lat) > GPU_FRAME_FREE_BAR, "{tag}: one latent moved by twice the bar reds it (the bar's control)")
+                rng_seed(sc.rng, uint64(c.seed) + 1ul)
+                let free_other = pocket_synthesize(m, ids, vs, man.temp, fae, none, none, tm, sc)
+                var inscope gpu_other <- frame_rows(m, sc, min(free_other, free_cpu))
+                t |> success(rel_rms(gpu_other.lat, cpu_free.lat) > GPU_FRAME_FREE_BAR, "{tag}: the next seed's free run reds the bar (the compare's control)")
+                let batch_found = metal_pocket_frame_batch()
+                set_metal_pocket_frame_batch(3l)
+                let eb0 = metal_tower_stats().encodes
+                rng_seed(sc.rng, uint64(c.seed))
+                let f3 = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                let eb1 = metal_tower_stats().encodes
+                var inscope b3 <- frame_rows(m, sc, f3)
+                t |> equal(f3, fc, "{tag}: batches of three make the frame count")
+                t |> equal(eb1 - eb0, (fc + 3l) / 3l + 1l, "{tag}: one tower encode a batch of three, and the codec's")
+                t |> success(rel_rms(b3.lat, cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
+                set_metal_pocket_frame_batch(0l)
+                t |> equal(metal_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
+                set_metal_pocket_frame_batch(batch_found)
+                register_pocket_gpu(PocketGpuDriver())   //! the seats taken by an empty record: the tower's registration is displaced
+                let ht0 = pocket_gpu_stats("frames")
+                rng_seed(sc.rng, uint64(c.seed))
+                let ft = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                let ht1 = pocket_gpu_stats("frames")
+                t |> equal(ht1.calls - ht0.calls, 0, "{tag}: an empty record reaches no hook")
+                t |> equal(ft, fc, "{tag}: and the CPU chain speaks")
+                unregister_pocket_gpu()   //! given back: the displaced registration serves again
+                let hr0 = pocket_gpu_stats("frames")
+                rng_seed(sc.rng, uint64(c.seed))
+                let fr = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                let hr1 = pocket_gpu_stats("frames")
+                t |> equal(hr1.served - hr0.served, 1, "{tag}: the registration given back serves again")
+                t |> equal(fr, fc, "{tag}: at the frame count")
+                done++
+                break if (done >= 2)
+            }
+            t |> success(done > 0, "at least one stage case ran")
+        }
+    } else {
+        t |> skip("no Metal module in this build")
+    }
+}
+
+//! The frames seat on the served planes of the q8 and kq files against each file's own CPU chain,
+//! teacher-forced on the oracle's noise and frames: the latents within GPU_FRAME_SERVED_BAR with
+//! the bar's one-element control, the frame count equal, one hook call served, one encode a batch;
+//! the distance to the f32 oracle logged beside the CPU chain's.
+[test]
+def test_pocket_frames_metal_served(t : T?) {
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            reset_pocket_q8()
+            var files = 0
+            for (path in [q8_gguf_path(), kq_gguf_path()]) {
+                continue if (!model_available(t, path))
+                files++
+                var inscope m <- load_pocket(path)
+                var inscope sc = PocketScratch()
+                var voices_seen : table<string; bool>
+                for (c in man.cases) {
+                    continue if (!c.stages || key_exists(voices_seen, c.voice))   //! one case a voice: the second voice's slot displaces the first's within the process
+                    voices_seen[c.voice] = true
+                    var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+                    let tag = "{c.id} {c.voice} {base_name(path)} frames served"
+                    var inscope ids <- pocket_text_ids(m, c.prepared)
+                    var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+                    var tm = TtsTimings()
+                    var inscope x0 := dump["x0"].f
+                    var inscope x1 := dump["x1"].f
+                    let fae = c.n_frames - c.eos_frame
+                    set_metal_tower(false)
+                    rng_seed(sc.rng, uint64(c.seed))
+                    let fc = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                    var inscope cpu <- frame_rows(m, sc, fc)
+                    let rng_cpu = sc.rng
+                    set_metal_tower(true)
+                    let h0 = pocket_gpu_stats("frames")
+                    let e0 = metal_tower_stats().encodes
+                    rng_seed(sc.rng, uint64(c.seed))
+                    let fg = pocket_synthesize(m, ids, vs, man.temp, fae, x0, x1, tm, sc)
+                    let h1 = pocket_gpu_stats("frames")
+                    let e1 = metal_tower_stats().encodes
+                    return if (h1.served - h0.served != 1 && !tower_served(t, tag, "{metal_tower_declines()}"))
+                    t |> equal(fg, fc, "{tag}: the frame count")
+                    t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
+                    let batch = metal_pocket_frame_batch()
+                    t |> equal(e1 - e0, (fc + batch) / batch + 1l, "{tag}: one tower encode a batch of {batch}, and the codec's")
+                    var inscope gpu <- frame_rows(m, sc, fg)
+                    let dl = rel_rms(gpu.lat, cpu.lat)
+                    let o_gpu = rel_rms(gpu.lat, dump["latent"].f)
+                    let o_cpu = rel_rms(cpu.lat, dump["latent"].f)
+                    to_log(LOG_INFO, "pocket {tag}: rel-rms latents {dl} against the CPU chain over {fc} frames (bar {GPU_FRAME_SERVED_BAR}); against the f32 oracle the tower {o_gpu}, the CPU chain {o_cpu}\n")
+                    t |> success(dl <= GPU_FRAME_SERVED_BAR, "{tag}: the latents within {GPU_FRAME_SERVED_BAR}")
+                    var inscope w <- one_wrong(gpu.lat, cpu.lat, GPU_FRAME_SERVED_BAR)
+                    t |> success(rel_rms(w, cpu.lat) > GPU_FRAME_SERVED_BAR, "{tag}: one latent moved by twice the bar reds it (the bar's control)")
+                    var inscope x0x <- scaled(x0, 3.0)
+                    rng_seed(sc.rng, uint64(c.seed))
+                    let fx = pocket_synthesize(m, ids, vs, man.temp, fae, x0x, x1, tm, sc)
+                    var inscope gx <- frame_rows(m, sc, min(fx, fc))
+                    t |> success(rel_rms(gx.lat, cpu.lat) > GPU_FRAME_SERVED_BAR, "{tag}: the x3-scaled noise reds the bar (the compare's control)")
+                }
+                if (length(voices_seen) < 2) {
+                    t |> skip("{base_name(path)}: the oracle carries one voice's stage cases, so no second voice took the seat")
+                }
+            }
+            if (files == 0) {
+                t |> skip("neither served file is stocked")
+            }
+        }
+    } else {
+        t |> skip("no Metal module in this build")
+    }
+}
+
+//! The served synthesis across the tower knob on the served lane: every chunk's codec and frame
+//! loop on the tower, one codec encode a chunk, the knob-off leg declining both seats per chunk,
+//! both legs speaking.
+[test]
+def test_pocket_synthesis_metal(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            reset_pocket_q8()   //! the served lane is the unpinned default, whatever an earlier cell left
+            var inscope m <- load_tts_model(path)
+            let text = "The tower serves the codec, and the words still land. Then it slept."
+            set_metal_tower(false)
+            let h0 = pocket_gpu_stats("codec")
+            let f0 = pocket_gpu_stats("frames")
+            let d0 = metal_tower_declines()
+            var inscope a <- synthesize(m, text, "alba")
+            let h1 = pocket_gpu_stats("codec")
+            let f1 = pocket_gpu_stats("frames")
+            let d1 = metal_tower_declines()
+            set_metal_tower(true)
+            let e1 = metal_tower_stats().encodes
+            var inscope b <- synthesize(m, text, "alba")
+            let e2 = metal_tower_stats().encodes
+            let h2 = pocket_gpu_stats("codec")
+            let f2 = pocket_gpu_stats("frames")
+            return if (h2.served == h1.served && !tower_served(t, "pocket served lane", "{metal_tower_declines()}"))
+            let chunks = h1.calls - h0.calls
+            t |> success(chunks >= 1, "{chunks} chunk(s) reached the seat with the tower off")
+            t |> equal(f1.calls - f0.calls, chunks, "every chunk reached the frames seat with the tower off")
+            t |> equal(h1.served - h0.served, 0, "the tower-off chunks served nothing")
+            t |> equal(f1.served - f0.served, 0, "the tower-off frame loops served nothing")
+            t |> equal((d1?["knob"] ?? 0l) - (d0?["knob"] ?? 0l), 2l * int64(chunks), "every tower-off chunk recorded a knob decline at both seats")
+            t |> equal(h2.served - h1.served, chunks, "every chunk's codec served on the tower")
+            t |> equal(f2.served - f1.served, chunks, "every chunk's frame loop served on the tower")
+            t |> success(e2 - e1 > int64(chunks), "the tower encoded the frame batches and one codec pass a chunk ({e2 - e1} encodes over {chunks} chunk(s))")
+            t |> success(speech_stats(a.pcm).finite && speech_stats(b.pcm).finite, "both legs finite")
+            t |> success(length(a.pcm) > 24000 && length(b.pcm) > 24000, "both legs speak ({length(a.pcm)} and {length(b.pcm)} samples)")
+            to_log(LOG_INFO, "pocket served lane: CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
+        }
+    } else {
+        t |> skip("no Metal module in this build")
     }
 }
 
@@ -1161,8 +1669,21 @@ def test_pocket_long_chunk(t : T?) {
         t |> equal(length(chunks), 1, "an unsplittable text is one chunk")
         var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
         t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
-        var inscope a <- synthesize(m, text, "alba")
-        t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let knob_found = metal_tower_knob()
+            defer() {
+                set_metal_tower(knob_found)
+            }
+            set_metal_tower(true)
+            let d0 = metal_tower_declines()
+            var inscope a <- synthesize(m, text, "alba")
+            t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
+            let d1 = metal_tower_declines()
+            t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= 1l, "the chunk past the codec seat's frame cap declines by shape, and the CPU codec speaks it")
+        } else {
+            var inscope a <- synthesize(m, text, "alba")
+            t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
+        }
         var grown = 0l
         var first = 0l
         var need = 0l

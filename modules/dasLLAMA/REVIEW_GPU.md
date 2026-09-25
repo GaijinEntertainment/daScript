@@ -32,11 +32,15 @@ change, the arms that dispatch the old class at that shape.** An arm timing a bo
 kernel no longer runs at that shape measures the wrong kernel silently.
 
 **A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
-`dasllama/dasllama_vulkan_tower.das`), a kernel class or builder a tower dispatches, the
-`[metal_dispatch]` emission those builders are generated from (`dasllama/dasllama_metal_lens.das`),
-an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_vulkan_asr_dec.das`),
-a kernel class an ASR decoder dispatches or a builder it borrows, or
-`dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
+`dasllama/dasllama_vulkan_tower.das`), a kernel class or builder a tower dispatches, a
+kernel-argument struct the Metal tower fills for a dispatch (`dasllama/dasllama_metal_prefill.das`),
+the `[metal_dispatch]` emission those builders are generated from (`dasllama/dasllama_metal_lens.das`),
+a module-level `g_tw_*` seat outside `dasllama/dasllama_metal_tower.das` and
+`dasllama/dasllama_vulkan_tower.das`, an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
+`dasllama/dasllama_vulkan_asr_dec.das`), a kernel class an ASR decoder dispatches or a builder it
+borrows, `dasllama/dasllama_metal_common.das`, a `register_*` function that
+`dasllama_metal_tower_register` or `dasllama_vulkan_tower_register` calls with a hook, or a site
+that calls the hook such a function stores - applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a

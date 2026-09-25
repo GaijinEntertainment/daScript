@@ -36,8 +36,9 @@ be a fused multiply-add the CPU oracle's `mad` - a multiply, then an add - does 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
 fixed by the model architecture the class serves - never reaches a kernel class through a
 per-dispatch argument channel (a uniform, a `@push_constant` field, a kargs field, an `@off` bind
-offset): stamp it into the class as a `@template_constant`, or - for a class no template
-instantiates - compile it in as a module constant the class reads.**
+offset): stamp it into the class as a `@template_constant` where the class's stamps differ on it,
+or write it as a literal in the body.** A Metal kernel body reads no module constant - the MSL
+emitter refuses a global name.
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
 a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a

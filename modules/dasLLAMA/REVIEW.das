@@ -250,9 +250,12 @@ var private GPU_ROLES_VULKAN <- {
 // `st2_source_gate` in tests/test_metal_prefill_kernels.das reds on both resample laws (the
 // divisions approximate, the two-float cumsum's compensation folds away).
 var private FASTMATH_OFF_EXEMPT <- {
-    "metal_st2_src_low_msl" => "st2_source_gate",
-    "metal_st2_src_cumsum_msl" => "st2_source_gate",
-    "metal_st2_src_sines_msl" => "st2_source_gate"
+    "metal_st2_src_low_torch_msl" => "st2_source_gate",
+    "metal_st2_src_low_onnx_msl" => "st2_source_gate",
+    "metal_st2_src_cumsum_torch_msl" => "st2_source_gate",
+    "metal_st2_src_cumsum_onnx_msl" => "st2_source_gate",
+    "metal_st2_src_sines_torch_msl" => "st2_source_gate",
+    "metal_st2_src_sines_onnx_msl" => "st2_source_gate"
 }
 
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.

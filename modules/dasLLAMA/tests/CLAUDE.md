@@ -265,7 +265,7 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. The StyleTTS2
 chain's kernel cells (the prefill file): the gathering conv GEMM on a forward conv (40
 channels - the k-run tail past the taps, dilation 3 with pads off both ends, 45 rows padded to
-64) and a stride-6 transposed one on both stamps - the f16-staged one on f16-exact operands (every
+64) and a stride-6 transposed one, each direction's own stamp, on both precisions - the f16-staged one on f16-exact operands (every
 product exact, so the 1e-3 bar covers the accumulation order alone) and the f32-exact one on
 operands off the f16 lattice at 2e-6, where the f16-staged stamp on the same operands must miss
 the bar (the stamp's control); the im2col route at 22 channels on a whole chunk and an offset
@@ -275,12 +275,21 @@ gather with its adds off and on; the concat rows with and without the residual c
 depthwise transposed pool; both LSTM directions on one gate set against a CPU recurrence (the
 fixture centred off tanh's saturation, asserted); the ALBERT attention rows against the CPU
 `attention_rows` at 37 and 100 rows; the sigmoid sums; the tanh GELU past its clamp; the harmonic
-source trio on either resample law against the CPU source chain itself - the phase frames within
-one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
-accumulator where the two laws part by whole cycles, and the driver's own noise draw (finite,
-repeatable per seed, moving with it); the STFT on either pad law and the inverse STFT with and
-without the window envelope. Each carries a poisoned input. The census row is one kitten-nano
-synthesis on the file's planes (`cov_tower_styletts2`). Shared fixtures
+source trio on either resample law's stamps against the CPU source chain itself - the phase frames
+within one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
+accumulator where the two laws part by whole cycles, and the driver's own noise draw through the
+fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
+the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
+on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The Pocket chain's cells (the same
+file): the row copies with and without the ELU, the layer scale, the table rope, the attention
+row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
+unseen key's poison staying silent), the rope-and-store row against `rope_rows` with the caches'
+sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
+GEMV's ten stamps (f32 rows and a q8 blob, each under the bare dot, the normed and modulated x
+with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail) against
+an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
+codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
+the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures
 (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
 in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
@@ -1312,7 +1321,32 @@ multi-sentence texts, one sentence spoken with the family's own timing stages, a
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
 conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
-frame count and speech - the rig is the lane's quality gate); the published Q8_0 file
+frame count and speech - the rig is the lane's quality gate); the Metal cells - the codec seat
+against the CPU chain over the oracle's latents on the f32 lane within `GPU_CODEC_BAR` (1e-5;
+reads 1e-6 on the exact stamps on the M5 Max, 9e-4 on the f16-staged route, which is why the seat runs exact)
+with the bar's one-sample control and the x3-scaled latents as the compare's control, one tower
+encode a call, the knob-off leg bit-equal to the CPU chain with its decline recorded; the codec seat
+on the served planes of the q8 and kq files against each file's own CPU chain within
+`GPU_CODEC_SERVED_BAR` (5e-2; reads 1.3e-2 and 7.7e-3) with the x3-scaled latents as the compare's
+control; the frames
+seat against the CPU chain teacher-forced on the oracle's noise and frames, on the f32 lane: the
+latents, conditioning rows and EOS logits within `GPU_FRAME_BAR` (2e-5; reads 2e-6 on the M5 Max) with the
+bar's one-element control and the x3-scaled noise as the compare's control, the generator left
+where the CPU loop leaves it (the last batch's draws past the frames made rewound), one hook
+call, one encode a batch of frames, the knob-off leg bit-equal with its decline, then the free
+run - its own noise, every frame fed its own output - against the CPU chain's on the same seed
+within `GPU_FRAME_FREE_BAR` (1e-3; reads 1.5e-4) with the generator check, batches of three
+(one encode a batch, the latents within the bar, a batch below one clamping to one), and the
+seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
+the hook unreached then serving again); the served frames cell takes both oracle voices in turn
+on each file, so the second voice's slot displaces the first's, within `GPU_FRAME_SERVED_BAR` (1e-1; reads 1.9e-2 to 7.1e-2)
+with the x3-scaled noise as the compare's control; the seat record's refusal of a
+name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
+long chunk's codec seat declining by shape; and the served synthesis across the knob, every
+chunk's codec and frame loop served, the encodes
+past one a chunk, the knob-off chunks declining at both seats - where no Metal device serves all
+three skip loudly, a present device that declines is a red; the parity, stream and frames cells
+pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived
 as Q8_0 and no codec conv did, the same lane within a few percent; the quiet floor
 (`pocket-tts-en-kq.gguf` alone): the served lane's differenced quiet-window floor within 6 dB of

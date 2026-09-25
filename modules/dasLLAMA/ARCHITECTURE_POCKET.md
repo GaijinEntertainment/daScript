@@ -27,7 +27,13 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   `tests/test_tts_pocket.das` holds against `harness/pocket_oracle.py`. Every operator is the
   block home's: the transformer layer runs on `linear_rows`, `layernorm_rows`, `rope_rows`,
   `attention_causal_rows` over a `TtsKvCache`, `gelu`, `layer_scale_rows`; the codec on
-  `conv1d_rows`, `conv1d_rows_transposed_depthwise` and `elu_rows`. One language per file:
+  `conv1d_rows`, `conv1d_rows_transposed_depthwise` and `elu_rows`. The codec decoder and the
+  frame loop are the two seats of the family's hook record (`PocketGpuDriver`,
+  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER.md` sec.2.2av and
+  sec.2.2aw): a registered driver gets the first refusal of `pocket_decode_latents` and of the
+  loop inside `pocket_synthesize` (once the prompt's rows sit in the caches), and the CPU form
+  serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero.
+  One language per file:
   `pocket.language` names the package config the GGUF came from, and `lang` the code `caps`
   reports; every roster voice speaks that language.
 
